@@ -1,4 +1,4 @@
-use Card from "../../foundation/models.contract"
+use Card, CardPreview from "../../foundation/models.contract"
 use TitleCard, gutter from "./slots.contract"
 use Display, Eyebrow, IconButton, enter, expose, drift, stagger, dissolve, rise, open, drift from "./look.contract"
 
@@ -10,11 +10,15 @@ component TitleGrid
     still: bool
     selectTitle: action
     observe: action
+  state settled = false
+  // Browse grids never preview.
+  action quiet(id: string, rowId: string, on: bool)
+    settled = on
   view
     column display="grid" grid-template-columns=(small ? "repeat(auto-fill, minmax(140px, 1fr))" : "repeat(auto-fill, minmax(190px, 1fr))") column-gap=(small ? 12 : 20) row-gap=(small ? 22 : 34) padding-left=gutter(small) padding-right=gutter(small)
       for card, i in items key=card.id
         column width="100%" animation=enter(still, stagger(i, 30, 18))
-          TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=true)
+          TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=true, rowId="", previewable=false, preview=CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=0), intent=quiet)
 
 // The head of a browse page: a way back, an eyebrow, the display name, and the
 // collection's or library's own landscape art faded in behind it when it has one.

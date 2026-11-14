@@ -7,7 +7,7 @@ use Guide as CineGuide from "../skins/cinematic/guide.contract"
 use LiveControls as CineLiveControls, MiniGuide as CineMiniGuide from "../skins/cinematic/live.contract"
 use Guide as IndexGuide from "../skins/index/guide.contract"
 use LiveControls as IndexLiveControls from "../skins/index/live.contract"
-use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, LibraryNav, LibraryModel, QuickModel from "./models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, LibraryNav, LibraryModel, QuickModel, CardPreview from "./models.contract"
 use Status as CineStatus, Shell as CineShell, Home as CineHome, SearchSurface as CineSearchSurface, Row as CineRow, SearchField as CineSearchField, detailPresentation as CinePresentation, detailSplit as CineSplit from "../skins/cinematic/slots.contract"
 use Detail as CineDetail from "../skins/cinematic/detail.contract"
 use BrowsePage as CineBrowsePage from "../skins/cinematic/browse.contract"
@@ -90,6 +90,8 @@ component Home
     openLibrary: action
     live: action
     canLive: bool
+    cardPreview: CardPreview
+    previewIntent: action
   slot
   view
     if skin == "mochi"
@@ -108,7 +110,7 @@ component Home
             JellyHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, libraries=libraries, openLibrary=openLibrary, live=live, canLive=canLive)
               children
           else
-            CineHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading)
+            CineHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, cardPreview=cardPreview, previewIntent=previewIntent)
               children
 
 component SearchSurface

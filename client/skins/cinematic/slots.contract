@@ -1,4 +1,4 @@
-use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, cardName, skinLabel from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, CardPreview, cardName, skinLabel from "../../foundation/models.contract"
 use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill, FadeImage from "./look.contract"
 use Wordmark, Pulse from "./auth.contract"
 use SkinPicker, skinManifest from "../../foundation/skin-picker.contract"
@@ -174,16 +174,27 @@ component TitleCard
     selectTitle: action
     observe: action
     fill: bool
+    rowId: string
+    previewable: bool
+    preview: CardPreview
+    intent: action
   state lifted = false
+  derive previewing = previewable and preview.cardId == card.id and preview.url != ""
   action hoverCard(over: bool)
     lifted = over
+    if previewable
+      intent(card.id, rowId, over)
   action focusCard
     lifted = true
+    if previewable
+      intent(card.id, rowId, true)
   action restCard
     lifted = false
+    if previewable
+      intent(card.id, rowId, false)
   view
-    column width=(fill ? "100%" : small ? 132 : "clamp(150px, 12.4vw, 232px)") flex-shrink=0 gap=12 intersect=observe(card.receipt)
-      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=hoverCard focus=focusCard blur=restCard position="relative" width="100%" aspect-ratio="2 / 3" padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=(small ? 10 : 12) overflow="hidden" text-align="left" cursor="pointer" scale=(lifted and not still ? 1.045 : 1) translate=(lifted and not still ? "0px -6px" : "0px 0px") box-shadow=(lifted ? "0px 28px 50px -14px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)" : "0px 10px 24px -12px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.hairline)") transition=`scale ${base()}ms ${glide()}, translate ${base()}ms ${glide()}, box-shadow ${base()}ms ${glide()}`
+    column position="relative" width=(fill ? "100%" : small ? 132 : "clamp(150px, 12.4vw, 232px)") flex-shrink=0 gap=12 intersect=observe(card.receipt) hover=hoverCard
+      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=cardName(card) testId=`title-${card.id}` focus=focusCard blur=restCard position="relative" width="100%" aspect-ratio="2 / 3" padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=(small ? 10 : 12) overflow="hidden" text-align="left" cursor="pointer" scale=(lifted and not still ? 1.045 : 1) translate=(lifted and not still ? "0px -6px" : "0px 0px") box-shadow=(lifted ? "0px 28px 50px -14px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)" : "0px 10px 24px -12px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.hairline)") transition=`scale ${base()}ms ${glide()}, translate ${base()}ms ${glide()}, box-shadow ${base()}ms ${glide()}`
         :focus-visible
           box-shadow="0px 0px 0px 3px var(--ink.primary), 0px 28px 50px -14px var(--cinematic.card-shadow)"
         if card.poster != ""
@@ -202,6 +213,15 @@ component TitleCard
       column gap=4 padding="0px 2px" opacity=(lifted ? 1 : 0.86) transition=`opacity ${quick()}ms linear`
         text card.name font-size=(small ? 13 : 14) font-weight=600 line-clamp=1 color="ink.primary"
         text card.facts font-size=12 color="ink.quiet" line-clamp=1 font-variant-numeric="tabular-nums"
+      // A muted trailer preview: a landscape card that opens over the poster. The
+      // artwork shows at once; vela-preview fades its video in only once it plays.
+      if previewing
+        button press=selectTitle(card.id, card.kind, card.receipt) tabindex=-1 aria-hidden=true position="absolute" left=0 top=0 z-index=6 width="190%" aspect-ratio="16 / 9" translate="-23.7% 20%" padding=0 border="none" border-radius=14 overflow="hidden" background-color="media.ground" color="ink.primary" text-align="left" cursor="pointer" box-shadow="0px 40px 80px -20px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)" animation=(still ? "dissolve 200ms linear both" : "pop 420ms cubic-bezier(0.16, 1, 0.3, 1) both") -exact-exit-animation=(still ? "vanish 120ms linear both" : "vanish 220ms ease-in both")
+          FadeImage(src=(card.backdrop != "" ? card.backdrop : card.poster))
+          vela-preview url=preview.url active="true" still="false" expiresAt=preview.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+          column position="absolute" left=0 right=0 bottom=0 padding="40px 14px 12px" gap=3 background-image="linear-gradient(0deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-clear) 100%)"
+            text card.name font-size=14 font-weight=650 line-clamp=1 text-shadow="0px 1px 10px var(--cinematic.shadow)"
+            text card.facts font-size=11 color="ink.secondary" line-clamp=1 font-variant-numeric="tabular-nums"
 
 // A named shelf of cards, in server order, that slides horizontally.
 component Row
@@ -211,8 +231,12 @@ component Row
     still: bool
     selectTitle: action
     observe: action
+  state settled = false
+  // Rows outside the home never preview; their cards report intent nowhere.
+  action quiet(id: string, rowId: string, on: bool)
+    settled = on
   view
-    Shelf(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+    Shelf(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe, preview=CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=0), intent=quiet)
 
 // The shelf itself; a caller may add trailing content after the last card
 // (home rows add their end-of-row sentinel and a quiet loading mark there).
@@ -223,15 +247,20 @@ component Shelf
     still: bool
     selectTitle: action
     observe: action
+    preview: CardPreview
+    intent: action
   slot
+  action scrolled(x: number, y: number)
+    if row.previewOnFocus and preview.cardId != ""
+      intent("", row.id, false)
   view
     column position="relative" gap=(small ? 2 : 4) padding-bottom=(small ? 18 : 28)
       text row.name role="heading" aria-level=2 font-size=(small ? 18 : 21) font-weight=650 letter-spacing="-0.012em" padding-left=gutter(small) padding-right=gutter(small)
-      scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" mask-image="linear-gradient(90deg, black 0%, black 94%, transparent 100%)"
+      scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" mask-image="linear-gradient(90deg, black 0%, black 94%, transparent 100%)" scroll=scrolled
         row gap=(small ? 12 : 18) align-items="flex-start" padding-top=(small ? 14 : 16) padding-bottom=(small ? 18 : 22) padding-left=gutter(small) padding-right=gutter(small)
           for card, i in row.items key=card.id
-            column animation=enter(still, stagger(i, 45, 8))
-              TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
+            column position="relative" z-index=(preview.cardId == card.id ? 5 : 0) animation=enter(still, stagger(i, 45, 8))
+              TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false, rowId=row.id, previewable=row.previewOnFocus, preview=preview, intent=intent)
           children
 
 // A row-shaped placeholder while titles load.
@@ -264,6 +293,8 @@ component Home
     reachRowEnd: action
     homeMoreLoading: bool
     rowMoreLoading: string[]
+    cardPreview: CardPreview
+    previewIntent: action
   slot
   derive searching = query != ""
   derive shown = model.hero.slice(heroIndex, heroIndex + 1)
@@ -330,7 +361,7 @@ component Home
         column position="relative" padding-top=(small ? 14 : 22)
           for row, i in model.rows key=row.id
             column animation=enter(still, 520 + stagger(i, 90, 4)) -exact-exit-animation=(still ? "vanish 120ms linear both" : "vanish 220ms ease-in both")
-              Shelf(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+              Shelf(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe, preview=cardPreview, intent=previewIntent)
                 if row.nextCursor != ""
                   column width=(small ? 60 : 96) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
                     if rowMoreLoading.includes(row.id)
