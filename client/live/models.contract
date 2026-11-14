@@ -26,3 +26,10 @@ shape GuideModel
   nowOffset: number
   showNow: bool
   channels: GuideChannel[]
+
+shape LiveStatus
+  sessionId: string
+  reconnecting: bool
+  delivery: string
+  drift: number
+  canCatchUp: bool

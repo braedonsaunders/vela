@@ -1,0 +1,28 @@
+use GuideModel, LiveStatus from "../live/models.contract"
+
+members Client
+  state guideWindow = 0
+  state guideNow = 0
+  state lowDelay = false
+  resource guide = uiGuide(guideNow, guideWindow) when auth.authenticated and top(nav).name == "live" and guideNow > 0 as shape GuideModel
+  mutation liveState as shape LiveStatus queue
+  task startGuideClock when top(nav).name == "live" and auth.authenticated and guideNow == 0
+    after(1, tickGuide)
+  task guideClock when top(nav).name == "live" and auth.authenticated
+    every(60000, tickGuide)
+  action tickGuide
+    guideNow = time.epochAtZero + performanceNow()
+  action earlierGuide
+    guideWindow = guideWindow - 1
+  action laterGuide
+    guideWindow = guideWindow + 1
+  action watchChannel(id: string)
+    lowDelay = false
+    nav = push(nav, path("liveWatch", id))
+  action toggleLowDelay
+    lowDelay = not lowDelay
+    let next = commandId + 1
+    commandId = next
+    commandJson = `{"id":${next},"type":"lowDelay","enabled":${lowDelay}}`
+  action catchUpLive
+    playerCommand("catchUp")

@@ -3,6 +3,8 @@ import type { AISearchJob, ClientCapabilities, Device } from '../wire/v0/types';
 import { EtherAdapter } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, homeModel, detailModel } from './discovery/models';
+import { loadGuide } from './live/guide';
+import { liveStatus } from './live/player';
 import { InteractionQueue } from './telemetry';
 import { sessionEvents } from './protocol/events';
 
@@ -48,7 +50,18 @@ const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '
   return { authenticated: !!store.get('vela.session'), passwordAvailable: capabilities.features.passwordSignIn.available,
     quickAvailable: capabilities.features.quickConnect.available, error };
 };
+let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, canCatchUp: false };
 const sources: Sources = {
+  uiGuide: async ([epoch, window], store) => {
+    const start = Math.floor(epoch / 1800000) * 1800000 + window * 7200000;
+    return loadGuide(await session(store), new Date(start).toISOString(), new Date(start + 7200000).toISOString(), epoch);
+  },
+  liveEvent: async ([json]) => {
+    const event = JSON.parse(json);
+    const next = liveStatus(event);
+    if (next) lastLive = next;
+    return lastLive;
+  },
   uiAuth: async ([code], store) => {
     const api = server(store);
     if (code && !store.get('vela.session')) {
