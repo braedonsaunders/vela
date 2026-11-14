@@ -423,3 +423,33 @@ channel stream was opened while the guide was blocked. Chrome was closed for
 the server fix batch. Live channel and the clean single-flight Watch handoff
 remain pending; they are not passes. Earlier startup screenshots show playback,
 not proof of resume—the resume proof is specifically `lab-17`.
+
+### Completed real-server drive: 0.1.7 / Ether 0.3.11-lab.4
+
+Ether `cea628e57` repaired real channel/guide pagination and cursorless bootstrap
+refresh; no client change was needed for those fixes. The final drive used fresh
+real Chrome, one stream at a time, with no fault injection.
+
+| Check | Final result | Evidence |
+| --- | --- | --- |
+| Password / sign-out / same-viewer quick-connect | Passed | Password and revoke HTTP 200; portal approval as the test viewer returned Vela to authenticated Home. Final sign-out removed all private profile/Live controls. `lab-06`, `lab-24`. |
+| Hero / rows / image grants / receipts | Passed | Real server hero, Continue Watching and catalogue rows; image grants and fresh interaction POSTs HTTP 200. `lab-08`, `lab-14`. |
+| Search / AI honesty | Passed for requests and displayed results | “space exploration”: fast lane 50 items / 152.506 ms, descriptive lane zero items / 2.010 ms, both HTTP 200. AI unavailable; zero AI requests. Empty descriptive result is not semantic-search quality proof. `lab-22`. |
+| Movie / show detail and skins | Passed | Real 1917 and Gilded Age metadata; seasons/episodes/cast/crew; anchored profile and real Index Home/Detail. Stream facts omitted when unavailable. `lab-13`–`lab-15`. |
+| Movie play / seek / progress / stop / resume | Passed | Measurements above: 13.96 s first startup; +10 authorized seek; observations 200; stop 200 `ended`; distinct reopened session resumed at saved 515.163 s with actual decoded playback. `lab-17`. |
+| Live guide | Passed | 173 channels: page 1 = 100 / `more` + cursor; page 2 = 73 / `exhausted`. Guide = eight programmes / `exhausted` in the selected window. `lab-19-live-guide-fixed.png`. |
+| One live channel | Passed | BBC News, remux HLS, broker HTTP 200 / 2962 ms; first decoded frames 3436 ms after tune. Playing observations 200 through 35.520 → 36.521 s; stop 200 `ended` at 36.521 s. `lab-20-live-channel.png` captures first frames, before coalesced chrome settled. |
+| Reload after progress changed | Passed | Fresh root navigation and reload both bootstrap HTTP 200, authenticated Home and Continue Watching rendered; no repeat of cursorless 409. |
+| Clean console Watch handoff | Passed | Same-viewer console endpoint HTTP 200; exactly **one** redeem request, HTTP 200; authenticated Home and cleared fragment. `lab-23-single-flight-handoff.png`. |
+
+Audio/subtitle/locked-quality switching was unavailable in the real tested plan
+and browser/server capabilities, and was not simulated. Movie buffering and a
+dropped-frame sample are recorded above; this is not a zero-stall qualification.
+Live startup is not end-to-end broadcast latency: the server supplied adaptive
+mode without verified live-window anchors, so no live-edge latency claim is made.
+
+The final movie and live sessions each received acknowledged stop before another
+session; the viewer was signed out of Vela and the portal, and the dedicated
+Chrome was closed. The installer then verified 0.1.8 (UI-only live-control
+placement/visibility fix); its narrow installed visual check belongs to the UI
+worker. Engine/full-flow evidence here is specifically for 0.1.7 with lab.4.
