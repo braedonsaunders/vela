@@ -5,7 +5,7 @@ import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
 import { loadGuide, liveIdentity } from './live/guide';
 import { artworkURL } from './discovery/artwork';
-import { liveStatus, stopPlan } from './live/player';
+import { liveStatus } from './live/player';
 import { InteractionQueue } from './telemetry';
 import { sessionEvents } from './protocol/events';
 import { mediaPlan } from './protocol/media';
@@ -355,7 +355,6 @@ const sources: Sources = {
     return { accepted: true };
   },
   uiPlayer: ([planJson, eventJson, replyJson, localeJSON]) => withLocale(localeJSON, () => playerPresentation(planJson, eventJson, replyJson, localeJSON)),
-  liveStop: async ([planJson], store) => stopPlan(await session(store), planJson),
   uiPlayerCommand: async ([json], store) => {
     let sessionId = '';
     try {
