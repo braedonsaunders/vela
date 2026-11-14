@@ -1,4 +1,4 @@
-use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, libraryQuery from "./models.contract"
+use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, libraryQuery from "./models.contract"
 
 shape Time
   epochAtZero: number
@@ -150,6 +150,61 @@ members Client
     homeAt = time.epochAtZero + performanceNow()
     homeLocale = localeJSON
   resource home = uiBootstrap(homeAt) with localeJSON, artWidth when auth.authenticated and homeAt > 0 and homeLocale == localeJSON as shape HomeModel
+  state homeExtraRows: FeedRow[] = []
+  state homeUpdatedRows: FeedRow[] = []
+  state homeRowsCursor = ""
+  state homeRowsLoaded = false
+  state rowMoreLoading: string[] = []
+  derive allHomeRows = home.rows.concat(homeExtraRows).map(r => match first(homeUpdatedRows.filter(u => u.id == r.id)) { case some(u) => u, case none => r })
+  derive homeMoreCursor = (homeRowsLoaded ? homeRowsCursor : home.nextCursor)
+  derive homeSurface = HomeModel(home, rows=allHomeRows, nextCursor=homeMoreCursor)
+  derive homeMoreLoading = pending(homeRowsPage)
+  mutation homeRowsPage as shape HomeRowsPage queue then appendHomeRows
+  mutation homeRowPage as shape HomeRowPage queue then appendHomeRow
+  task resetHomePaging when current(home) key=`${homeAt}:${artWidth}:${home.nextCursor}:${home.hero.map(h => h.id).join(",")}`
+    change(clearHomePaging)
+  action clearHomePaging
+    homeExtraRows = []
+    homeUpdatedRows = []
+    homeRowsCursor = ""
+    homeRowsLoaded = false
+    rowMoreLoading = []
+  action loadMoreHome(entry: IntersectionObserverEntry)
+    if entry.isIntersecting and page.visibilityState == "visible" and top(nav).name == "home" and homeMoreCursor != "" and not pending(homeRowsPage)
+      send homeRowsPage = uiHomeRows(homeMoreCursor, home.hero.map(h => h.id), homeAt, localeJSON, artWidth)
+  action appendHomeRows
+    match homeRowsPage
+      case some(p)
+        if p.homeAt == homeAt and p.requestCursor == homeMoreCursor
+          homeExtraRows = homeExtraRows.concat(p.rows.filter(r => not allHomeRows.map(old => old.id).includes(r.id)))
+          homeRowsCursor = p.nextCursor
+          homeRowsLoaded = true
+      case none
+        homeRowsLoaded = homeRowsLoaded
+  action loadMoreRow(rowId: string, entry: IntersectionObserverEntry)
+    match first(allHomeRows.filter(r => r.id == rowId))
+      case some(row)
+        if entry.isIntersecting and page.visibilityState == "visible" and top(nav).name == "home" and row.nextCursor != "" and not rowMoreLoading.includes(rowId)
+          rowMoreLoading = rowMoreLoading.concat([rowId])
+          send homeRowPage = uiHomeRow(rowId, row.nextCursor, home.hero.map(h => h.id), homeAt, localeJSON, artWidth)
+      case none
+        rowMoreLoading = rowMoreLoading
+  action appendHomeRow
+    match homeRowPage
+      case some(p)
+        rowMoreLoading = rowMoreLoading.filter(id => id != p.rowId)
+        match first(allHomeRows.filter(r => r.id == p.rowId))
+          case some(row)
+            if p.homeAt == homeAt and p.requestCursor == row.nextCursor
+              homeUpdatedRows = homeUpdatedRows.filter(old => old.id != row.id).concat([FeedRow(row, items=row.items.concat(p.items.filter(item => not row.items.map(old => old.id).includes(item.id))), nextCursor=p.nextCursor, continuation=p.continuation)])
+          case none
+            homeUpdatedRows = homeUpdatedRows
+      case none
+        rowMoreLoading = rowMoreLoading
+  task clearFailedRowPaging when failed(homeRowPage)
+    after(1, forgetFailedRows)
+  action forgetFailedRows
+    rowMoreLoading = []
   task checkHomeAuth when failed(home) and auth.authenticated and not homeAuthChecked
     after(1, recheckHomeAuth)
   action recheckHomeAuth

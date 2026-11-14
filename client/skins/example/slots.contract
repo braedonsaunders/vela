@@ -84,6 +84,10 @@ component Home
     observe: action
     heroIndex: number
     pickHero: action
+    reachEnd: action
+    reachRowEnd: action
+    homeMoreLoading: bool
+    rowMoreLoading: string[]
   slot
   view
     column padding=16 gap=16
@@ -92,6 +96,14 @@ component Home
       if query == ""
         for row in model.rows key=row.id
           Row(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+          if row.nextCursor != ""
+            column height=1 intersect=reachRowEnd(row.id) aria-hidden=true
+            if rowMoreLoading.includes(row.id)
+              text t("ui.loadingMore") role="status" color="ink.secondary" padding="8px 4%"
+        if model.nextCursor != ""
+          column height=1 intersect=reachEnd aria-hidden=true
+          if homeMoreLoading
+            text t("ui.loadingMore") role="status" color="ink.secondary" padding="8px 4%"
 
 component SearchField
   props
@@ -123,14 +135,14 @@ component SearchSurface
         if loading
           text t("ui.findingTitles") role="status"
         else
-          Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
       if descriptive.query == query and descriptive.generation == generation
-        Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
       if aiAvailable and ai.query == query and ai.generation == generation
         if ai.aiStatus == "running" or ai.aiStatus == "queued"
           text t("ui.exploringYourDescription") role="status"
         if ai.items.length > 0
-          Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
 
 component Detail
   props
@@ -151,9 +163,9 @@ component Detail
           button press=play(title.id)
             text (model.resumeSeconds > 0 ? t("ui.resumeWatching") : t("ui.play"))
       if model.seasons.length > 0
-        Row(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        Row(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
       if model.episodes.length > 0
-        Row(row=FeedRow(id="episodes", name=t("ui.episodes"), receipt="", items=model.episodes), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        Row(row=FeedRow(id="episodes", name=t("ui.episodes"), receipt="", items=model.episodes, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
       for extra in model.extras key=extra.id
         button press=playExtra(extra.id) disabled=(not extra.ready)
           text extra.name

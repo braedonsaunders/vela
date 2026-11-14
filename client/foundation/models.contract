@@ -29,6 +29,8 @@ shape FeedRow
   name: string
   receipt: string
   items: Card[]
+  nextCursor: string
+  continuation: string
 
 // A cached, same-origin, unexpired preview grant for one featured title.
 shape HeroPreview
@@ -43,6 +45,7 @@ shape HomeModel
   hero: Card[]
   previews: HeroPreview[]
   rows: FeedRow[]
+  nextCursor: string
   liveAvailable: bool
   aiAvailable: bool
   descriptiveAvailable: bool
@@ -145,3 +148,18 @@ shape LibraryModel
   more: bool
 
 fn libraryQuery(sort: string, direction: string, kind: string, genre: string, year: string, played: string, favorite: string): string = `?sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(direction)}&kind=${encodeURIComponent(kind)}&genre=${encodeURIComponent(genre)}&year=${encodeURIComponent(year)}&played=${encodeURIComponent(played)}&fav=${encodeURIComponent(favorite)}`
+
+shape HomeRowsPage
+  rows: FeedRow[]
+  nextCursor: string
+  continuation: string
+  requestCursor: string
+  homeAt: number
+
+shape HomeRowPage
+  rowId: string
+  items: Card[]
+  nextCursor: string
+  continuation: string
+  requestCursor: string
+  homeAt: number

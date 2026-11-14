@@ -274,5 +274,6 @@
   "live.progress": "Programme progress",
   "live.nothingNow": "Nothing listed right now",
   "live.favourite": "Favourite",
-  "ui.switchingAudioSoon": "Switching audio in a moment…"
+  "ui.switchingAudioSoon": "Switching audio in a moment…",
+  "ui.loadingMore": "Loading more…"
 }

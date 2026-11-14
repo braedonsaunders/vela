@@ -165,6 +165,19 @@ component Row
     selectTitle: action
     observe: action
   view
+    Shelf(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+
+// The shelf itself; a caller may add trailing content after the last card
+// (home rows add their end-of-row sentinel and a quiet loading mark there).
+component Shelf
+  props
+    row: FeedRow
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  slot
+  view
     column position="relative" gap=(small ? 2 : 4) padding-bottom=(small ? 18 : 28)
       text row.name role="heading" aria-level=2 font-size=(small ? 18 : 21) font-weight=650 letter-spacing="-0.012em" padding-left=gutter(small) padding-right=gutter(small)
       scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" mask-image="linear-gradient(90deg, black 0%, black 94%, transparent 100%)"
@@ -172,6 +185,7 @@ component Row
           for card, i in row.items key=card.id
             column animation=enter(still, stagger(i, 45, 8))
               TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
+          children
 
 // A row-shaped placeholder while titles load.
 component RowSkeleton
@@ -199,6 +213,10 @@ component Home
     observe: action
     heroIndex: number
     pickHero: action
+    reachEnd: action
+    reachRowEnd: action
+    homeMoreLoading: bool
+    rowMoreLoading: string[]
   slot
   derive searching = query != ""
   derive shown = model.hero.slice(heroIndex, heroIndex + 1)
@@ -262,7 +280,15 @@ component Home
         column position="relative" padding-top=(small ? 14 : 22)
           for row, i in model.rows key=row.id
             column animation=enter(still, 520 + stagger(i, 90, 4)) -exact-exit-animation=(still ? "vanish 120ms linear both" : "vanish 220ms ease-in both")
-              Row(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+              Shelf(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+                if row.nextCursor != ""
+                  column width=(small ? 60 : 96) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
+                    if rowMoreLoading.includes(row.id)
+                      Pulse(still=still)
+          if model.nextCursor != ""
+            column height=120 align-items="center" justify-content="center" intersect=reachEnd
+              if homeMoreLoading
+                RowSkeleton(small=small, still=still)
           if model.rows.length == 0
             EmptyState(icon="symbol:sparkles", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"), still=still)
 
@@ -310,10 +336,10 @@ component SearchSurface
           if model.items.length == 0
             EmptyState(icon="symbol:search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"), still=still)
           else
-            Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+            Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
           column animation=enter(still, 120)
-            Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+            Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
           column gap=10 animation=enter(still, 160)
             row gap=10 align-items="center" padding-left=gutter(small) padding-right=gutter(small)
@@ -324,7 +350,7 @@ component SearchSurface
                 Pulse(still=still)
                 text t("ui.exploringYourDescription") color="ink.secondary" font-size=14
             if ai.items.length > 0
-              Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+              Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
             if ai.aiStatus == "failed"
               text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="ink.secondary" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
 

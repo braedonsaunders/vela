@@ -190,6 +190,21 @@ const sources: Sources = {
     features = bootstrap.capabilities.features;
     return withLocale(localeJSON, () => homeModel(bootstrap, API, at, artWidth));
   },
+  uiHomeRows: async ([cursor, heroIds, homeAt, localeJSON, artWidth], store) => {
+    if (!cursor) throw new Error('Home row cursor is missing');
+    const data = await (await session(store)).rows({ cursor, placement: 'home' });
+    if (data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) throw new Error('Invalid home row continuation');
+    const featured = new Set(heroIds), seen = new Set<string>();
+    return withLocale(localeJSON, () => ({ rows: data.items.filter(row => { if (seen.has(row.id)) return false; seen.add(row.id); return true; }).map(row => feedRow({ ...row, items: row.items.filter(item => item.kind !== 'title' || !featured.has(item.title.id)) }, API, artWidth)), nextCursor: data.nextCursor ?? '', continuation: data.continuation, requestCursor: cursor, homeAt }));
+  },
+  uiHomeRow: async ([rowId, cursor, heroIds, homeAt, localeJSON, artWidth], store) => {
+    if (!rowId || !cursor) throw new Error('Home item cursor is missing');
+    const data = await (await session(store)).row(rowId, cursor);
+    if (data.id !== rowId) throw new Error('Wrong row returned');
+    if (data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) throw new Error('Invalid home item continuation');
+    const featured = new Set(heroIds), seen = new Set<string>();
+    return withLocale(localeJSON, () => ({ rowId, items: data.items.filter(item => item.kind !== 'title' || !featured.has(item.title.id)).map(item => entry(item, API, artWidth)).filter(item => { if (seen.has(item.id)) return false; seen.add(item.id); return true; }), nextCursor: data.nextCursor ?? '', continuation: data.continuation, requestCursor: cursor, homeAt }));
+  },
   uiLibraries: async (_args, store) => {
     const api = await session(store);
     const items: { id: string; name: string; kind: string }[] = [];
