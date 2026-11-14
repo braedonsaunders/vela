@@ -97,6 +97,20 @@ unknown library IDs fail404. These demo views are all visible to the demo viewer
 Production visibility remains Ether's responsibility; no hidden production
 library rules or IDs are simulated as authoritative data.
 
+Trailer-preview fixture: features.trailerPreview is available and alternating home
+rows opt into previewOnFocus. POST /vela/v0/titles/:id/trailer-preview with normal
+{idempotencyKey,client} first returns preparing/retryAfterSeconds=1 for movies and
+shows; after a second, a fresh-key request returns a60-second preview grant if
+direct.mp4 exists and MP4/H.264/AAC is accepted. This is synthetic generated media,
+not the title's real trailer. Missing media/incompatible codecs/episode or season
+targets return unavailable with a reason. No timer or playback session is created
+while preparing. One preview per viewer, replacement revokes the previous grant,
+and /sessions/:id/commands kind=stop uses the grant generations. Preview media is
+scoped to direct.mp4; expiry/revocation/stop reject further reads. Preview sessions
+live in a separate store and never touch normal sessions, watch state or receipts.
+Bootstrap now supplies no eagerly-created normal-session preview; hero previews
+use this same on-demand endpoint. No media regeneration is needed.
+
 Home bootstrap starts with two rows of five entries. Its nextCursor continues
 the ordered row list through GET/rows?placement=home; each row's own nextCursor
 continues only that row through GET/rows/:id. Subsequent default pages remain

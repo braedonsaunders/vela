@@ -1,4 +1,5 @@
 import { renderArtwork } from './artwork';
+import { previewSessions, stopPreview, trailerPreview } from './previews';
 import { libraries, libraryEntries } from '../protocol/v0/fixtures/libraries';
 import { createHmac } from 'node:crypto';
 import type * as V from '../protocol/v0/types';
@@ -11,8 +12,8 @@ const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?
 const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
-const capabilities: V.ServerCapabilities = { protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.2.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, extras: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
-interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean; client?: V.ClientCapabilities; previewSessionId?: string }
+const capabilities: V.ServerCapabilities = { protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.2.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean; client?: V.ClientCapabilities }
 const grants = new Map<string, Grant>(), access = new Map<string, Grant>(), refresh = new Map<string, Grant>();
 function issue(device: V.Device): V.Tokens {
   if (!device?.id) fail('request', 'device_required', 'A device id is required');
@@ -65,7 +66,7 @@ const json = (data: unknown) => Response.json(data, { headers: { 'Cache-Control'
 interface Pairing { device: V.Device; code: string; expires: number; approved: boolean; result?: V.Tokens }
 const devices = new Map<string, Pairing>(), quick = new Map<string, Pairing>(), webCodes = new Map<string, number>();
 const idempotency = new Map<string, { body: string; response: Promise<Response>; expires: number }>();
-function revoke(g: Grant) { g.revoked = true; for (const s of sessions.values()) if (s.owner === g.id) { for (const close of s.listeners.values()) close(); s.listeners.clear(); } }
+function revoke(g: Grant) { g.revoked = true; for (const p of previewSessions.values()) if (p.owner === g.id) p.ended = true; for (const s of sessions.values()) if (s.owner === g.id) { for (const close of s.listeners.values()) close(); s.listeners.clear(); } }
 function currentSession(id: string, g: Grant): Session { const s = sessions.get(id); if (!s || s.owner !== g.id || s.expires <= Date.now()) fail('not-found', 'session_not_found', 'Session not found'); return s; }
 
 async function api(req: Request, url: URL, body: any): Promise<Response> {
@@ -132,18 +133,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
-    let trailer: V.Extra | undefined;
-    const extra = extras.find(e => e.parentId === titles[0]?.id);
-    if (extra && g.client && !faults.capacityExhausted && await Bun.file(`${mediaRoot}/direct.mp4`).exists()) {
-      let preview = g.previewSessionId && sessions.get(g.previewSessionId);
-      if (!preview || preview.expires <= Date.now() || preview.plan.state === 'ended') {
-        preview = await createSession(g.id, { idempotencyKey: `cached-preview:${g.id}`, client: g.client, extraId: extra.id, positionSeconds: 0, allowTranscode: false });
-        g.previewSessionId = preview.plan.sessionId;
-      }
-      const direct = preview.plan.paths.find(p => p.kind === 'direct' && p.readiness === 'ready');
-      if (direct) trailer = { ...extra, cachedPlayback: { status: 'ready', url: direct.url, expiresAt: new Date(Math.min(g.expires, preview.expires)).toISOString() } };
-    }
-    const heroes = featuredTitles.map((title): V.Hero => ({ title, receiptToken: receipt(g, `hero:${title.id}`), ...(trailer?.parentId === title.id ? { trailer } : {}) }));
+    const heroes = featuredTitles.map((title): V.Hero => ({ title, receiptToken: receipt(g, `hero:${title.id}`) }));
     const firstPage = new URL(url); firstPage.search = '';
     const home = homeRows(g, firstPage);
     return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}) } satisfies V.Bootstrap, g.id);
@@ -166,6 +156,17 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
   if (method === 'GET' && rowMatch) { const r = rows.find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
   const titleMatch = /^\/titles\/([^/]+)(?:\/(children|extras|watch))?$/.exec(path);
+  const previewMatch = /^\/titles\/([^/]+)\/trailer-preview$/.exec(path);
+  if (method === 'POST' && previewMatch) {
+    const title = allTitles.find(t => t.id === previewMatch[1]);
+    if (!title) fail('not-found', 'title_not_found', 'Title not found');
+    const client = body.client;
+    if (!client || client.device?.id !== g.device.id || !['containers','videoCodecs','audioCodecs'].every(key => Array.isArray(client[key]) && client[key].every((v: unknown) => typeof v === 'string'))) fail('request', 'invalid_client', 'A matching device and media capabilities are required');
+    const result = await trailerPreview(g.id, viewer.id, title, client, g.expires);
+    const response = json(result);
+    if (result.state === 'preparing') response.headers.set('Retry-After', String(result.retryAfterSeconds));
+    return response;
+  }
   if (titleMatch) {
     const d = detail(titleMatch[1]); if (!d) fail('not-found', 'title_not_found', 'Title not found');
     if (method === 'POST' && titleMatch[2] === 'watch') { const t = allTitles.find(t => t.id === titleMatch[1])!; t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false }; for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key]; return json({ accepted: true }); }
@@ -216,6 +217,13 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const match = /^\/sessions\/([^/]+)(?:\/(events|commands|observations))?$/.exec(path);
   if (match) {
+    const preview = previewSessions.get(match[1]);
+    if (preview) {
+      if (preview.owner !== g.id) fail('not-found', 'session_not_found', 'Preview not found');
+      if (method !== 'POST' || match[2] !== 'commands' || body.kind !== 'stop') fail('policy', 'preview_command_unavailable', 'Preview sessions accept only stop');
+      if (body.sourceGeneration !== preview.grant.sourceGeneration || body.seekGeneration !== preview.grant.seekGeneration) fail('conflict', 'stale_generation', 'Use preview grant generations', { currentGenerations: { sourceGeneration: preview.grant.sourceGeneration, seekGeneration: preview.grant.seekGeneration } });
+      return json(stopPreview(preview));
+    }
     const s = currentSession(match[1], g);
     if (method === 'GET') return match[2] === 'events' ? events(s, req, () => !g.revoked && g.expires > Date.now()) : json(snapshot(s));
     if (method === 'POST' && ['commands', 'observations'].includes(match[2])) {
@@ -246,6 +254,12 @@ async function dispatch(req: Request): Promise<Response> {
   }
   const media = /^\/sessions\/media\/([^/]+)\/([^/]+)\/(.+)$/.exec(url.pathname);
   if (media) {
+    const preview = previewSessions.get(media[1]);
+    if (preview) {
+      const owner = grants.get(preview.owner);
+      if (!owner || owner.revoked || owner.expires <= Date.now() || preview.expires <= Date.now() || preview.ended || preview.token !== media[2] || media[3] !== 'direct.mp4') fail('auth', 'invalid_preview_grant', 'Preview grant expired or revoked');
+      return serveMedia(req, 'direct.mp4');
+    }
     const s = sessions.get(media[1]), g = s && grants.get(s.owner);
     if (!s || !g || g.revoked || g.expires < Date.now() || s.expires <= Date.now() || s.mediaToken !== media[2] || s.plan.state === 'ended') fail('auth', 'invalid_media_grant', 'Invalid media grant');
     const response = await (media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3]));

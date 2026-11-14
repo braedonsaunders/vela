@@ -35,6 +35,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /titles/:id | — | TitleDetail |
 | GET | /titles/:id/children | cursor, limit (query) | Page<Title> |
 | GET | /titles/:id/extras | — | ExtrasResponse |
+| POST | /titles/:id/trailer-preview | TrailerPreviewRequest | TrailerPreviewResponse |
 | POST | /titles/:id/watch | WatchRequest | Ack |
 | POST | /search | SearchRequest | SearchResponse |
 | POST | /search/ai | AISearchRequest | AISearchJob |
@@ -86,9 +87,42 @@ policy-filter and deduplicate title IDs against each other and the home rows.
 Omission or an empty array means no featured source is currently available. There
 is no singular hero field or legacy fallback. Clients may rotate presentation in
 this order; they must not invent candidates, rank handles or playback readiness.
-An optional trailer is metadata; preview playback still requires an actual ready,
-unexpired cachedPlayback grant. The mock's four explicit demo selections have
+An optional trailer is metadata; on-demand preview playback requires a ready,
+unexpired broker grant from the trailer-preview endpoint. The mock's four explicit demo selections have
 grant-bound receipts and are absent from its home-row fixtures.
+
+### Trailer previews
+
+features.trailerPreview.available declares the actual preview cache/broker
+capability; absent/off disables preview requests. Row.previewOnFocus is an
+optional per-row opt-in (absent=false). Hero and focused-card previews use the
+same authenticated POST /titles/:id/trailer-preview, with a matching client device.
+The host authorizes the title before checking/preparing cached trailer media.
+Ready/preparing/unavailable are200 no-store results; a missing/hidden title is404.
+Unsupported feature is403 feature_unavailable, never a fake ready grant.
+
+TrailerPreviewResponse is ready with grant, preparing with retryAfterSeconds,
+or unavailable with reason. Preparing creates no session/grant and carries
+Retry-After; bounded cache preparation may continue after the UI cancels interest.
+Poll only while still interested, at the supplied delay, using a fresh idempotency
+key for each call; same-key retries replay the original result, including preparing.
+A ready grant has sessionId, URL, mimeType, expiry, purpose=preview and the source/
+seek generations needed for existing POST /sessions/:id/commands kind=stop.
+Preview stop returns an ended PlaybackPlan with purpose=preview. There is no new
+/sessions/:id/stop endpoint and no normal playback observation/SSE requirement for
+preview clients. Discarded late ready results must also be stopped.
+
+Preview sessions never count as movie playback/admission, warm the full movie,
+write watch/history/progress, or generate visible/selected/played receipts.
+Absent PlaybackPlan.purpose means playback; preview grants/plans explicitly say
+preview. Keep at most one active preview per viewer; replacement, expiry, stop,
+revocation and current viewer/device/media policy invalidate media access. URLs
+are same-origin broker /sessions/media grants, never provider URLs. Clients must
+check origin, path and expiry and stop/unmount on cancellation; browser mute or
+pause alone does not revoke a grant. Cache readiness and playable availability
+come from actual cached trailer bytes and broker capability, never Extras.Resolve
+or a normal movie playback session. Optional Extra.cachedPlayback metadata
+does not enable this feature when trailerPreview is absent/off.
 
 Artwork size width/height are delivered pixel dimensions when both are positive.
 Use0/0 for an unmeasured source URL; clients discover its natural dimensions from
