@@ -46,6 +46,14 @@ let interactions: InteractionQueue | undefined;
 let ready: Promise<void> | undefined;
 let activeQuick = "";
 let authVersion = 0;
+// Successful panel answers are kept only for this authentication session and display context.
+const librarySnapshots = new Map<string, { version: number; locale: string; width: number; value: Awaited<ReturnType<Sources['uiLibrary']>> }>();
+const libraryRequests = new Map<string, number>();
+function resetSessionSnapshots(): void {
+  authVersion++;
+  librarySnapshots.clear();
+  libraryRequests.clear();
+}
 let validation: { token: string; pending: Promise<Tokens | null> } | undefined;
 let redemption: { code: string; idempotencyKey: string; pending?: Promise<Tokens>; consumed: boolean } | undefined;
 let negotiation: { version: number; pending: Promise<void> } | undefined;
@@ -62,7 +70,7 @@ function server(store: Parameters<Sources['uiBootstrap']>[1], media?: MediaCapab
     client = { device, protocolVersions: [0], ...media };
     const credentials = new SessionCredentials(store, device, () => key(store));
     adapter = new EtherAdapter(API, credentials, JSON.stringify(client), () => {
-      authVersion++; ready = undefined; validation = undefined; negotiation = undefined; features = undefined; interactions = undefined; ai = undefined;
+      resetSessionSnapshots(); ready = undefined; validation = undefined; negotiation = undefined; features = undefined; interactions = undefined; ai = undefined;
     });
   }
   return adapter;
@@ -115,7 +123,7 @@ const sources: Sources = {
       if (redemption === current && version === authVersion && !store.get('vela.session')) {
         store.set('vela.session', JSON.stringify(tokens));
         current.consumed = true;
-        authVersion++; ready = undefined;
+        resetSessionSnapshots(); ready = undefined;
       }
     } else if (MOCK && store.get('vela.session') === null) await session(store);
     const stored = store.get('vela.session');
@@ -141,7 +149,7 @@ const sources: Sources = {
     const api = server(store);
     try {
       const tokens = await api.signIn({ username, password, device, idempotencyKey: key(store) });
-      store.set('vela.session', JSON.stringify(tokens)); authVersion++; ready = undefined;
+      store.set('vela.session', JSON.stringify(tokens)); resetSessionSnapshots(); ready = undefined;
       return authModel(store);
     } catch (error) { return authModel(store, error instanceof Error ? error.message : 'Sign in failed'); }
   },
@@ -156,7 +164,7 @@ const sources: Sources = {
     if (!secret || activeQuick !== secret) return authModel(store, 'Connection cancelled');
     const result = await api.pollQuickConnect({ secret, device, idempotencyKey: key(store) });
     if (activeQuick !== secret) return authModel(store, 'Connection cancelled');
-    if (result.status === 'approved') { store.set('vela.session', JSON.stringify(result.tokens)); activeQuick = ''; authVersion++; ready = undefined; }
+    if (result.status === 'approved') { store.set('vela.session', JSON.stringify(result.tokens)); activeQuick = ''; resetSessionSnapshots(); ready = undefined; }
     return authModel(store, result.status === 'expired' ? 'Code expired' : result.status === 'denied' ? 'Connection denied' : '');
   },
   signOut: async (_args, store) => {
@@ -166,7 +174,7 @@ const sources: Sources = {
     if (value) {
       const tokens = JSON.parse(value) as { refreshToken: string };
       await api.revoke({ refreshToken: tokens.refreshToken, idempotencyKey: key(store) });
-      if (version === authVersion) { store.set('vela.session', ''); authVersion++; ready = undefined; activeQuick = ''; ai = undefined; features = undefined; interactions = undefined; }
+      if (version === authVersion) { store.set('vela.session', ''); resetSessionSnapshots(); ready = undefined; activeQuick = ''; ai = undefined; features = undefined; interactions = undefined; }
     }
     return { authenticated: !!store.get('vela.session'), ...authOptions, error: '' };
   },
@@ -219,8 +227,14 @@ const sources: Sources = {
     }
     throw new Error('Library list exceeds page limit');
   },
+  uiLibrarySnapshots: ([_version, localeJSON, artWidth]) =>
+    [...librarySnapshots.values()].filter(s => s.version === authVersion && s.locale === localeJSON && s.width === artWidth).map(s => s.value),
   uiLibrary: async ([id, sort, direction, kind, genre, year, played, favorite, pages, localeJSON, artWidth], store) => {
     const api = await session(store);
+    const version = authVersion;
+    const snapshotKey = JSON.stringify([id, localeJSON, artWidth]);
+    const request = (libraryRequests.get(snapshotKey) ?? 0) + 1;
+    libraryRequests.set(snapshotKey, request);
     const query: LibraryBrowseQuery = {
       ...(sort && sort !== 'any' ? { sort: sort as LibrarySort } : {}), ...(direction && direction !== 'any' ? { direction: direction as SortDirection } : {}),
       ...(kind && kind !== 'any' ? { kind: kind as TitleKind } : {}), ...(genre && genre !== 'any' ? { genre } : {}), ...(year > 0 && Number.isInteger(year) ? { year } : {}),
@@ -236,7 +250,7 @@ const sources: Sources = {
       seen.add(cursor); result = await api.library(id, { ...query, cursor }); items.push(...result.items);
     }
     if (result.continuation === 'more' && !result.nextCursor) throw new Error('Invalid library continuation');
-    return withLocale(localeJSON, () => {
+    const model = withLocale(localeJSON, () => {
       const library = result.library, filters = library.browse.filters;
       const image = library.artwork.find(a => a.kind === 'backdrop');
       return { id: library.id, name: library.name, kind: library.kind,
@@ -249,6 +263,13 @@ const sources: Sources = {
         canYear: !!filters.year, canPlayed: !!filters.played, canFavorite: !!filters.favorite,
         items: items.map(item => entry(item, API, artWidth)), more: result.continuation === 'more' };
     });
+    if (version !== authVersion) throw new Error('Session changed during library read');
+    if (libraryRequests.get(snapshotKey) === request) {
+      librarySnapshots.delete(snapshotKey);
+      librarySnapshots.set(snapshotKey, { version, locale: localeJSON, width: artWidth, value: model });
+      if (librarySnapshots.size > 60) librarySnapshots.delete(librarySnapshots.keys().next().value!);
+    }
+    return model;
   },
   uiCollection: async ([id, localeJSON, artWidth], store) => {
     const data = await (await session(store)).collection(id);
