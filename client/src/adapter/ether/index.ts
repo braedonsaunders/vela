@@ -117,6 +117,7 @@ export class EtherAdapter implements ServerAdapter {
   negotiate(r: V.NegotiateRequest) { return this.request<V.NegotiateResponse>('POST', '/negotiate', r); }
   capabilities() { return this.request<V.ServerCapabilities>('GET', '/capabilities', undefined, false, true); }
   appearance() { return this.request<V.Appearance>('GET', '/appearance', undefined, false, true); }
+  issueWebCode(r: V.WebCodeIssueRequest) { return this.request<V.WebCodeIssueResponse>('POST', '/auth/web-code', r); }
   redeemWebCode(r: V.WebCodeRedeemRequest) { return this.request<V.Tokens>('POST', '/auth/web-code/redeem', r, false); }
   signIn(r: V.SignInRequest) { return this.request<V.Tokens>('POST', '/auth/sign-in', r, false); }
   deviceGrant(r: V.DeviceGrantRequest) { return this.request<V.DeviceGrant>('POST', '/auth/device', r, false); }
