@@ -1,5 +1,5 @@
 use QuickModel from "../../foundation/models.contract"
-use Icon, Wordmark, Spinner, Raised, Submit, Field, fadeIn, riseIn from "./look.contract"
+use Wordmark, Spinner, Raised, Submit, Field, fadeIn, riseIn from "./look.contract"
 
 // The signed-out page: the mark above a plain dark form, with a faint gradient wash.
 component AuthStage
@@ -10,7 +10,7 @@ component AuthStage
     column position="relative" min-height="100dvh" width="100%" box-sizing="border-box" align-items="center" padding="max(48px, 12vh) 18px 48px" background-color="jellytwin.page" color="jellytwin.ink" color-scheme="dark" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" overflow="hidden"
       column position="absolute" left="-20%" right="-20%" top="-40%" height="80%" aria-hidden=true pointer-events="none" opacity=0.22 background-image="linear-gradient(90deg, var(--jellytwin.violet) 0%, var(--jellytwin.accent) 100%)" mask-image="radial-gradient(closest-side, black 0%, transparent 100%)"
       column position="relative" width="100%" max-width=420 gap=36 align-items="center" animation=riseIn(still)
-        Wordmark(size=40)
+        Wordmark(size=46)
         column width="100%" -exact-layout-transition=(still ? "none" : "300ms ease-out")
           children
 
@@ -22,13 +22,11 @@ component AuthNotice
   view
     column gap=16 align-items="center" text-align="center" padding="12px 0px" role=(kind == "offline" ? "alert" : "status") animation=fadeIn(still)
       if kind == "offline"
-        column color="jellytwin.danger"
-          Icon(name="alert", size=40)
+        image "symbol:alert" width=40 height=40 color="jellytwin.danger" aria-hidden=true
         text t("ui.serverUnreachable") role="heading" aria-level=1 font-size=24 font-weight=600 color="jellytwin.ink-strong"
-        text t("ui.yourServerCouldNotBeReachedReopenVelaWhenTheConnectionIsRestored") font-size=15 line-height=1.5 color="jellytwin.secondary"
       else
         Spinner(size=48, still=still)
-        text (kind == "redeeming" ? t("ui.signingYouIn") : t("ui.connectingToYourLibrary")) font-size=15 color="jellytwin.secondary"
+      text (kind == "offline" ? t("ui.yourServerCouldNotBeReachedReopenVelaWhenTheConnectionIsRestored") : kind == "redeeming" ? t("ui.signingYouIn") : t("ui.connectingToYourLibrary")) font-size=15 line-height=1.5 color="jellytwin.secondary"
 
 component SignIn
   props
@@ -44,29 +42,26 @@ component SignIn
     submit: action
     quick: action
   view
-    column gap=20 animation=fadeIn(still)
-      text t("jellytwin.pleaseSignIn") role="heading" aria-level=1 font-size=28 font-weight=500 color="jellytwin.ink-strong" text-align="center"
+    column gap=8 animation=fadeIn(still)
+      text t("jellytwin.pleaseSignIn") role="heading" aria-level=1 font-size=28 font-weight=500 color="jellytwin.ink-strong" text-align="center" margin-bottom=12
       if error != ""
-        row role="alert" gap=10 align-items="flex-start" padding="10px 12px" border-radius=4 background-color="jellytwin.raised" border-left="4px solid var(--jellytwin.danger)"
-          text error font-size=14 line-height=1.45 color="jellytwin.ink-strong"
+        text error role="alert" font-size=14 line-height=1.45 color="jellytwin.ink-strong" padding="10px 12px" margin-bottom=8 border-radius=4 background-color="jellytwin.raised" border-left="4px solid var(--jellytwin.danger)"
       if passwordAvailable
-        column gap=18
-          column gap=6
-            text t("jellytwin.user") font-size=14 color="jellytwin.secondary"
-            input value=username input=editUsername autocomplete="username" autocapitalize="none" spellcheck=false aria-label=t("ui.username") testId="username" class=Field
-          column gap=6
-            text t("ui.password") font-size=14 color="jellytwin.secondary"
-            input type="password" value=password input=editPassword submit=submit autocomplete="current-password" aria-label=t("ui.password") testId="password" class=Field
-          button press=submit disabled=(busy or username.trim() == "" or password == "") class=Submit testId="sign-in" margin-top=8
-            if busy
-              Spinner(size=18, still=still)
-            text (busy ? t("ui.signingIn") : t("ui.signIn"))
+        text t("jellytwin.user") class=FieldLabel
+        input value=username input=editUsername autocomplete="username" autocapitalize="none" spellcheck=false aria-label=t("ui.username") testId="username" class=Field margin-bottom=10
+        text t("ui.password") class=FieldLabel
+        input type="password" value=password input=editPassword submit=submit autocomplete="current-password" aria-label=t("ui.password") testId="password" class=Field margin-bottom=18
+        button press=submit disabled=(busy or username.trim() == "" or password == "") class=Submit testId="sign-in"
+          text (busy ? t("ui.signingIn") : t("ui.signIn"))
       if quickAvailable
-        button press=quick disabled=busy class=Raised height=46 testId="quick-connect" margin-top=(passwordAvailable ? 0 : 8)
-          Icon(name="phone", size=18)
+        button press=quick disabled=busy class=Raised height=46 testId="quick-connect" margin-top=12
           text t("jellytwin.quickConnect")
       if not passwordAvailable and not quickAvailable
         text t("ui.noSignInMethodsOffered") role="status" font-size=14 line-height=1.5 color="jellytwin.secondary" text-align="center"
+
+style FieldLabel
+  font-size = 14
+  color = "jellytwin.secondary"
 
 component QuickConnect
   props
@@ -75,14 +70,13 @@ component QuickConnect
     still: bool
     cancel: action
   view
-    column gap=20 align-items="center" text-align="center" animation=fadeIn(still)
+    column gap=18 align-items="center" text-align="center" animation=fadeIn(still)
       text t("jellytwin.quickConnect") role="heading" aria-level=1 font-size=28 font-weight=500 color="jellytwin.ink-strong"
       text t("ui.approveThisCodeFromASignedInEtherDevice") font-size=15 line-height=1.5 color="jellytwin.secondary" max-width=320
       text model.code testId="connect-code" aria-label=model.code font-family="ui-monospace, \"SF Mono\", Menlo, Consolas, monospace" font-size=44 font-weight=600 letter-spacing="0.18em" color="jellytwin.accent" padding="10px 18px" border-radius=6 background-color="jellytwin.raised"
-      row gap=10 align-items="center" role="status"
-        if error == ""
-          Spinner(size=18, still=still)
-        text (error == "" ? t("ui.waitingForApproval") : error) font-size=14 color=(error == "" ? "jellytwin.secondary" : "jellytwin.ink-strong")
+      if error == ""
+        Spinner(size=22, still=still)
+      text (error == "" ? t("ui.waitingForApproval") : error) role="status" font-size=14 color=(error == "" ? "jellytwin.secondary" : "jellytwin.ink-strong")
       text t("ui.codeExpires", expiry=model.expiresLabel) font-size=13 color="jellytwin.quiet"
       button press=cancel class=Raised width="100%" height=46
         text t("ui.cancel")

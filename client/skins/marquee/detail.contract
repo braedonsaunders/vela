@@ -2,8 +2,6 @@ use Card, FeedRow, DetailModel, ExtraModel, CastPerson, cardName from "../../fou
 use Shelf, noPreview, unwatched, progressPct, subLine from "./slots.contract"
 use Glyph, Solid, Art, Primary, Secondary, Round, gutter, arrive, kindLabel from "./look.contract"
 
-fn personName(person: string): string = person.split(" · ").slice(0, 1).join("")
-fn personRole(person: string): string = person.split(" · ").slice(1).join(" · ")
 fn initials(name: string): string = name.split(" ").filter(w => w != "").slice(0, 2).map(w => w.slice(0, 1).toUpperCase()).join("")
 
 // A title page: the backdrop dimmed behind everything, the poster on the left and the
@@ -78,13 +76,13 @@ component Detail
               row gap=(small ? 14 : 22) padding-left=gutter(small) padding-right=gutter(small) padding-bottom=4 role="list"
                 for person, i in model.castPeople key=`${i}-${person.name}`
                   Person(person=person, small=small, still=still)
-        if model.crew.length > 0
+        if model.crewPeople.length > 0
           column gap=6 padding-left=gutter(small) padding-right=gutter(small) padding-bottom=(small ? 20 : 30) max-width="60rem"
-            for person in model.crew key=person
+            for person, i in model.crewPeople key=`${i}-${person.name}`
               row gap=10 align-items="baseline"
-                text personName(person) font-size=14 font-weight=600
-                if personRole(person) != ""
-                  text personRole(person) font-size=14 color="marquee.ink-faint"
+                text person.name font-size=14 font-weight=600
+                if person.role != ""
+                  text person.role font-size=14 color="marquee.ink-faint"
         for related in model.related key=related.id
           Shelf(row=related, place="detail", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
 
