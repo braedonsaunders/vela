@@ -48,7 +48,7 @@ component Client
                     if not current(home)
                       Status(skin=activeSkin, kind="home", message=t("ui.findingYourEvening"), small=homeSmall, still=still)
                     else
-                      Home(skin=activeSkin, model=home, active=(top(nav).name == "home" and page.visibilityState == "visible"), query=query, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe)
+                      Home(skin=activeSkin, model=home, active=(top(nav).name == "home" and page.visibilityState == "visible"), query=query, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroAt, pickHero=pickHero)
                         SearchField(skin=activeSkin, query=query, edit=edit)
                       if query != ""
                         SearchSurface(skin=activeSkin, query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe)
