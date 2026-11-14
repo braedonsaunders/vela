@@ -315,3 +315,63 @@ bytes, including nonzero starts, retirement and EOS. It does not establish full
 native-view recovery with video still direct, source-switch UI, lip-sync or a
 human listening pass. The dedicated browser, temporary HTTP server and owned
 media work were stopped. No lab stream was opened.
+
+## Original audio-track switch preparation
+
+`prepareOriginalAudioSwitch` in `audio/original-track.ts` returns an actual
+container ordinal, prepared audio options, optional observed source layout and
+actual track facts. It does not touch a controller, video or active output. The
+lead can call setAudioStreamIndex only after successful preparation, leaving old
+audio intact when preparation fails.
+
+The helper requires a complete broker audio inventory with unique IDs/source
+stream indices, checks it against the actual audio inventory in file order, and
+compares codec, count/rate/mask and optional expected language for each track.
+Two/three-letter language aliases are normalized; declared regional distinctions
+are retained. It never substitutes another track. Actual source masks remain
+nullable; unknown multichannel PCM positions and unqualified masks are rejected.
+It reads actual decoder configuration and native canDecode support before choosing
+an on-demand package; sample rate and output layout must have a qualified route.
+
+It opens the ORIGINAL through UrlSource with upstream HTTP range validation:
+actual HTTP requests capped at 256 KiB, cache 8 MiB, total metadata-read budget
+32 MiB, finite retries, per-read deadlines and a 30s preparation bound. A changed
+resource length/ETag refuses preparation. Range-ignored whole-file fallback is
+rejected, and the Input is always disposed before returning. No sink speaker mask
+is invented. Night algorithm changes still use the controller's existing output
+reconfiguration API; the upstream track-switch API omits that field.
+
+A read-only source-integration drive exercised real file bytes and the pinned
+demuxer through an in-process range-response adapter (not a network/server
+qualification). ALAC Matroska/MP4, MP2 Matroska and WMA v2 ASF returned ordinal 0,
+actual 48kHz format and their correct software package in a runtime without
+AudioDecoder. A mismatched expected FLAC codec for an ALAC track was refused.
+Eight metadata range requests were made, none larger than 262,144 bytes. Browser
+native support, a real mid-play switch and pending-state UI remain lead-owned.
+
+## Nested-worker asset diagnosis
+
+The playback lead's three native-view attempts produced zero frames and timed out
+while serving artifacts through a Playwright page.route overlay. The focused
+no-media diagnostic proved that the overlay intercepted the top-level worker but
+not the nested audio worker: the child load failed and only the parent's route
+handler ran. This was a qualification-environment failure, not evidence against
+the decoded audio formats.
+
+A temporary localhost:8794 server then served the lead's **real** complete
+client/modules/web tree with JS/WASM/JSON/bin MIME and byte-range support, and
+proxied the existing mock API/media without rewriting payloads, Range or
+Content-Range. Direct checks returned worker JS 200/application/javascript,
+output-stage and libdovi WASM 200/application/wasm, and a correct 206 range with
+WASM magic 0061736d01000000. The lead's actual worker bootstrap and in-worker
+WASM fetch/compile passed without a media source. Any further source attempt
+required the parent's renewed clearance after the three-attempt limit. This
+no-source proof does not itself qualify native-view playback.
+
+The parent's renewed clearance allowed one native-view original AVC/AAC attempt
+using that real same-origin asset/proxy server. The playback lead reported:
+first frame 830.6ms, 192 decoded/presented frames, ended at 8.0001s, no errors,
+zero late frames and worst measured frame/audio-clock lag 13.151ms. This was the
+synthetic eight-second mock source. It confirms native-view custom playback with
+real nested-worker assets; it does not qualify every decoder family, a human
+listening/lip-sync pass, a lab stream or physical surround output.

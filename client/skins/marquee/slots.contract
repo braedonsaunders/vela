@@ -254,15 +254,15 @@ style MenuRow
   :focus-visible
     box-shadow = "inset 0px 0px 0px 2px var(--marquee.amber)"
 
-// The middle of the top bar on a wide page. It sits under the shell's clear bar and
-// carries the bar's colour. Nothing between it and the section's panning track is
-// positioned, so it pins to the top of the section rather than scrolling with it.
+// The middle of the top bar on a wide page: a sticky strip at the top of the page's
+// scroll, under the shell's clear bar, in the bar's colour.
 component TopStrip
   props
     small: bool
+    raised: bool
   slot
   view
-    row position="absolute" top=0 left=0 right=0 z-index=15 height=barH(small) box-sizing="border-box" padding="0px 76px 0px 24px" align-items="center" justify-content="center" background-color="marquee.chrome-glass" backdrop-filter="blur(18px)"
+    row position="sticky" top=0 z-index=(raised ? 16 : 15) flex-shrink=0 margin-top=(raised ? 0 : 0 - barH(small)) height=barH(small) box-sizing="border-box" padding="0px 76px 0px 24px" align-items="center" justify-content="center" background-color="marquee.chrome-glass" backdrop-filter="blur(18px)"
       children
 
 // The search field: in the top bar on wide screens, under it on phones.
@@ -519,13 +519,13 @@ component Spotlight
         if not still
           for p in previews.filter(p => p.id == hero.id) key=p.id
             vela-preview url=p.url active=(active ? "true" : "false") still="false" expiresAt=p.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
-        column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--marquee.scrim) 0%, var(--marquee.scrim-soft) 40%, var(--marquee.scrim-clear) 72%), linear-gradient(0deg, var(--marquee.scrim-soft) 0%, var(--marquee.scrim-clear) 40%)" aria-hidden=true
+        column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--marquee.scrim) 0%, var(--marquee.scrim) 30%, var(--marquee.scrim-soft) 55%, var(--marquee.scrim-clear) 78%), linear-gradient(0deg, var(--marquee.scrim) 0%, var(--marquee.scrim-clear) 55%)" aria-hidden=true
       column position=(small ? "relative" : "absolute") left=0 bottom=0 box-sizing="border-box" width=(small ? "100%" : "min(620px, 62%)") padding=(small ? "0px 16px 16px" : "0px 36px 32px") gap=(small ? 8 : 10)
         text (match first(mine) { case some(a) => (a.reasonLabel != "" ? a.reasonLabel : t("ui.featured")), case none => t("ui.featured") }) font-size=12 font-weight=700 letter-spacing="0.08em" text-transform="uppercase" color="marquee.amber"
         text hero.name role="heading" aria-level=2 font-size=(small ? 22 : 34) font-weight=700 line-height=1.1 letter-spacing="-0.01em" line-clamp=2
         text ([hero.yearLabel].concat(hero.genres.slice(0, 3)).concat([hero.rating]).filter(f => f != "").join(" · ")) font-size=(small ? 13 : 14) color="marquee.ink-dim" font-variant-numeric="tabular-nums"
         if hero.summary != "" and not small
-          text hero.summary font-size=15 color="marquee.ink-dim" line-height=1.5 line-clamp=2
+          text hero.summary font-size=15 color="marquee.ink" line-height=1.5 line-clamp=2 text-shadow="0px 1px 8px var(--marquee.shadow)"
         row gap=10 align-items="center" margin-top=(small ? 4 : 8) flex-wrap="wrap"
           // The server's predicted action (play, resume, next episode) in amber, then More info.
           for act in primary key=act.heroId
@@ -573,29 +573,31 @@ component Home
   slot
   derive searching = query != ""
   view
-    column padding-top=(small ? barH(true) : barH(false) + 24) padding-bottom=(searching ? 0 : 48)
+    column
       if small
+        column height=barH(true) flex-shrink=0
         row padding="10px 14px 16px"
           children
       else
-        TopStrip(small=false)
+        TopStrip(small=false, raised=true)
           children
-      if not searching
-        for hero in model.hero.slice(heroIndex, heroIndex + 1) key=hero.id
-          Spotlight(hero=hero, heroes=model.hero, actions=model.heroActions, count=model.hero.length, index=heroIndex, small=small, still=still, selectTitle=selectTitle, observe=observe, pickHero=pickHero, playHero=playHero, previews=model.previews, active=active)
-        for row, i in model.rows key=row.id
-          column animation=arrive(still, min(i, 5) * 40)
-            Shelf(row=row, place="home", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=cardPreview, intent=previewIntent)
-              if row.nextCursor != ""
-                column width=(small ? 48 : 72) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
-                  if rowMoreLoading.includes(row.id)
-                    Spinner(size=24, still=still)
-        if model.nextCursor != ""
-          column min-height=120 intersect=reachEnd
-            if homeMoreLoading
-              ShelfBlocks(small=small, still=still)
-        if model.rows.length == 0 and model.hero.length == 0
-          Empty(glyph="stack", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"))
+      column padding-top=(small or searching ? 0 : 24) padding-bottom=(searching ? 0 : 48)
+        if not searching
+          for hero in model.hero.slice(heroIndex, heroIndex + 1) key=hero.id
+            Spotlight(hero=hero, heroes=model.hero, actions=model.heroActions, count=model.hero.length, index=heroIndex, small=small, still=still, selectTitle=selectTitle, observe=observe, pickHero=pickHero, playHero=playHero, previews=model.previews, active=active)
+          for row, i in model.rows key=row.id
+            column animation=arrive(still, min(i, 5) * 40)
+              Shelf(row=row, place="home", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=cardPreview, intent=previewIntent)
+                if row.nextCursor != ""
+                  column width=(small ? 48 : 72) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
+                    if rowMoreLoading.includes(row.id)
+                      Spinner(size=24, still=still)
+          if model.nextCursor != ""
+            column min-height=120 intersect=reachEnd
+              if homeMoreLoading
+                ShelfBlocks(small=small, still=still)
+          if model.rows.length == 0 and model.hero.length == 0
+            Empty(glyph="stack", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"))
 
 // A centred empty or failed moment, with what to do next when there is something.
 component Empty
@@ -628,9 +630,19 @@ component SearchSurface
   state asked = false
   action quiet(cardId: string, rowId: string, on: bool)
     asked = on
+  action backToField
+    scrollIntoView("vela-search", block="center")
+    focus("vela-search")
   view
     column gap=6 padding-bottom=60 animation=(still ? "mqFade 160ms linear both" : "mqFade 220ms linear both")
-      text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 font-size=(small ? 20 : 24) font-weight=700 padding-left=gutter(small) padding-right=gutter(small) padding-bottom=12 line-clamp=2
+      // Long results scroll the home's field away; this strip takes the bar's middle and leads back to it.
+      if not small
+        TopStrip(small=false, raised=false)
+          button press=backToField aria-label=t("ui.searchYourLibrary") class=SearchLaunch width="100%" max-width=560
+            row gap=10 align-items="center" min-width=0
+              Glyph(name="search", size=18)
+              text query font-size=15 color="marquee.ink" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+      text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 font-size=(small ? 20 : 24) font-weight=700 padding-left=gutter(small) padding-right=gutter(small) padding-top=(small ? 0 : 20) padding-bottom=12 line-clamp=2
       if error
         Empty(glyph="alert", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"))
       else
@@ -663,10 +675,10 @@ component Status
     small: bool
     still: bool
   view
-    column padding-top=(small ? barH(true) : barH(false)) animation="mqFade 200ms linear both"
+    column padding-top=(small or kind != "home" ? barH(small) : 0) animation="mqFade 200ms linear both"
       if kind == "home"
         if not small
-          TopStrip(small=false)
+          TopStrip(small=false, raised=true)
         column role="status" aria-label=message gap=0 padding-top=24
           column margin-left=gutter(small) margin-right=gutter(small) margin-bottom=30
             Block(width="100%", height=(small ? "200px" : "clamp(280px, 30vw, 380px)"), radius=6, still=still)
