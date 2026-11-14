@@ -76,7 +76,8 @@ try {
     cacheFiles.set(url, { url, sha256 }); return url;
   }
   const installUrl = await immutableUrl('pwa.js');
-  // Pin fixed-name entrypoints by content digest; imported chunks already have content-addressed names.
+  // Keep Exact's ESM URLs canonical. Its chunks can import back into app.js;
+  // query-qualifying only the HTML entry would evaluate that module twice.
   for (const name of ['index.html', 'shell.html']) {
     const path = join(dist, name);
     if (!await Bun.file(path).exists()) continue;
@@ -84,11 +85,10 @@ try {
     if (!html.includes('<base href="/">')) throw new Error(`Unexpected base tag in ${name}`);
     html = html.replace('<base href="/">', `<base href="/vela/"><meta name="theme-color" content="#0c1015"><link rel="apple-touch-icon" href="/vela/vela-icon-180.png"><script type="module" src="${installUrl}"></script>`);
     html = html.replace(/<link rel="icon"[^>]*>/, '<link rel="icon" type="image/svg+xml" href="/vela/vela-icon.svg">');
-    const references = [...html.matchAll(/(?:src|href)="\.\/([^"?#]+\.(?:js|css))"/g)].map(m => m[1]);
-    for (const asset of new Set(references)) html = html.replaceAll(`"./${asset}"`, `"${await immutableUrl(asset)}"`);
     await writeFile(path, html);
   }
-  // Only hashed chunks and explicitly digest-qualified shell URLs enter the SW cache.
+  // Cache content-addressed chunks and our standalone PWA/offline resources only.
+  // Exact's unversioned app.js, styles and native modules remain network-only.
   for (const name of await readdir(dist)) if (/-[A-Za-z0-9_-]{8,}\.(?:js|css|wasm)$/.test(name)) {
     const url = `/vela/${name}`; cacheFiles.set(url, { url, sha256: digest(await readFile(join(dist, name))) });
   }

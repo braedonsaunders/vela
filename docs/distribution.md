@@ -120,9 +120,13 @@ field records these required serving headers. Registration requires HTTPS or a
 browser-trusted localhost secure context. It never broadens to the origin root.
 
 The worker caches only exact allowlisted shell URLs, verified against build-time
-SHA-256 values. Fixed-name HTML entrypoint JS/CSS gets digest-qualified URLs;
-imported chunks already have content-addressed names. Unversioned native modules
-remain network-only. Navigations use network responses, with a static “You're
+SHA-256 values. Exact's entry, preloads and chunk imports retain their original
+canonical URLs: generated chunks can import back into app.js, so qualifying only
+the HTML entry with a cache query would create two ESM identities and boot twice.
+Unversioned app.js, styles and native modules remain network-only; only existing
+content-addressed chunks and the standalone digest-qualified PWA/offline resources
+enter this cache. Serve fixed-name JS/CSS with revalidation as well as HTML.
+Navigations use network responses, with a static “You're
 offline” page when the network fails. `/vela/v0/`, artwork grants,
 `/sessions/`, other media, non-GET and cross-origin requests bypass the worker.
 There are no dynamic cache admissions, credential storage, API cache or offline
