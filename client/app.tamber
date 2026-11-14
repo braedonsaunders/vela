@@ -35,6 +35,25 @@ theme
   cinematic.scrim-soft = #090b0e30  scheme=fixed
   cinematic.scrim-mid = #090b0e70  scheme=fixed
   cinematic.scrim-deep = #090b0ef0  scheme=fixed
+  cinematic.glass = #12151bb3  scheme=fixed
+  cinematic.glass-deep = #0c0e12e6  scheme=fixed
+  cinematic.glass-edge = #ffffff1a  scheme=fixed
+  cinematic.glass-edge-strong = #ffffff33  scheme=fixed
+  cinematic.control-hover = #ffffff26  scheme=fixed
+  cinematic.primary-hover = #ffffff  scheme=fixed
+  cinematic.focus-halo = #dcb99833  scheme=fixed
+  cinematic.skeleton = #ffffff0d  scheme=fixed
+  cinematic.skeleton-light = #ffffff12  scheme=fixed
+  cinematic.ring = #ffffff2e  scheme=fixed
+  cinematic.vignette = #000000b3  scheme=fixed
+  cinematic.ember = #c0703f  scheme=fixed
+  cinematic.tide = #1f5a6b  scheme=fixed
+  cinematic.dusk = #5b2a4a  scheme=fixed
+  cinematic.alert = #c0703f1f  scheme=fixed
+  cinematic.alert-edge = #c0703f4d  scheme=fixed
+  cinematic.player-top = #000000b8  scheme=fixed
+  cinematic.player-mid = #00000052  scheme=fixed
+  cinematic.player-bottom = #000000e0  scheme=fixed
 
   // Index light page palette, plus its independent light-on-video chrome.
   index.rail = #e3dfd3  scheme=fixed

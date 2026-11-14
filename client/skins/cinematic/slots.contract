@@ -1,4 +1,4 @@
-use Card, FeedRow, HomeModel, SearchModel, DetailModel, QuickModel, Viewport, cardName, skinLabel from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, cardName, skinLabel from "../../foundation/models.contract"
 
 keyframes arrive
   from opacity=0 translate="0px 10px"
@@ -34,18 +34,19 @@ component Shell
       focus("profile-menu-trigger")
   view
     column position="relative" key=menuKey height="100%" min-height=0 background-color="surface.page" color="ink.primary" color-scheme="dark" font-family="system-ui, sans-serif"
-      row role="navigation" aria-label=t("ui.mainNavigation") padding="20px 5%" align-items="center" gap=24
-        link href="/" color="ink.primary" text-decoration="none" aria-label=t("ui.velaHome")
-          text t("ui.vela") font-size=30 font-weight=600 letter-spacing="-1.5px"
-        if viewport.width >= 640
-          text t("ui.yourEveningReimagined") font-size=10 letter-spacing="2px" color="ink.quiet" flex=1
-        row flex=1 gap=16 justify-content="end"
-          if canLive
-            button press=live border="none" background-color="transparent" color="ink.secondary"
-              text t("ui.live")
-        if viewer != ""
-          button id="profile-menu-trigger" press=toggleMenu aria-expanded=menuOpen aria-controls="viewer-settings" aria-label=t("ui.profileAndAppearance") testId="profile-menu" background-color="surface.raised" border="1px solid var(--surface.line)" border-radius=24 padding=(viewport.width < 640 ? "10px 14px" : "10px 18px") color="ink.primary"
-            text (viewport.width < 640 ? viewer.slice(0, 1) : viewer) font-size=13
+      if viewer != ""
+        row role="navigation" aria-label=t("ui.mainNavigation") padding="20px 5%" align-items="center" gap=24
+          link href="/" color="ink.primary" text-decoration="none" aria-label=t("ui.velaHome")
+            text t("ui.vela") font-size=30 font-weight=600 letter-spacing="-1.5px"
+          if viewport.width >= 640
+            text t("ui.yourEveningReimagined") font-size=10 letter-spacing="2px" color="ink.quiet" flex=1
+          row flex=1 gap=16 justify-content="end"
+            if canLive
+              button press=live border="none" background-color="transparent" color="ink.secondary"
+                text t("ui.live")
+          if viewer != ""
+            button id="profile-menu-trigger" press=toggleMenu aria-expanded=menuOpen aria-controls="viewer-settings" aria-label=t("ui.profileAndAppearance") testId="profile-menu" background-color="surface.raised" border="1px solid var(--surface.line)" border-radius=24 padding=(viewport.width < 640 ? "10px 14px" : "10px 18px") color="ink.primary"
+              text (viewport.width < 640 ? viewer.slice(0, 1) : viewer) font-size=13
       if viewer != "" and menuOpen
         column id="viewer-settings" position="absolute" top=72 right="5%" z-index=30 margin=0 padding=22 gap=16 border="1px solid var(--surface.line)" border-radius=20 background-color="surface.raised" color="ink.primary" min-width=210
           text viewer font-weight=600
@@ -275,52 +276,6 @@ component Detail
       if model.related.length > 0
         for related in model.related key=related.id
           Row(row=related, small=small, still=still, selectTitle=selectTitle, observe=observe)
-
-component SignIn
-  props
-    username: string
-    password: string
-    passwordAvailable: bool
-    quickAvailable: bool
-    error: string
-    busy: bool
-    editUsername: action
-    editPassword: action
-    submit: action
-    quick: action
-  view
-    column max-width="23.75rem" width="85%" align-self="center" gap=20 padding="48px 0px"
-      text t("ui.welcomeToYourEvening") role="heading" aria-level=1 font-size=40 line-height=1.1 letter-spacing="-1px"
-      text t("ui.signInToYourLibrary") color="ink.secondary" font-size=15
-      if error != ""
-        text error role="alert" color="brand.warm"
-      if passwordAvailable
-        column gap=8
-          text t("ui.username") font-size=12 color="ink.secondary"
-          input value=username input=editUsername autocomplete="username" aria-label=t("ui.username") testId="username" padding=14 border-radius=12 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary"
-        column gap=8
-          text t("ui.password") font-size=12 color="ink.secondary"
-          input type="password" value=password input=editPassword submit=submit autocomplete="current-password" aria-label=t("ui.password") testId="password" padding=14 border-radius=12 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary"
-        button press=submit disabled=(busy or username.trim() == "" or password == "") padding=15 border-radius=24 border="none" background-color="ink.primary" color="ink.inverse" testId="sign-in"
-          text (busy ? t("ui.signingIn") : t("ui.signIn")) font-weight=600
-      if quickAvailable
-        button press=quick disabled=busy padding=15 border-radius=24 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary" testId="quick-connect"
-          text t("ui.connectWithACode")
-
-component QuickConnect
-  props
-    model: QuickModel
-    error: string
-    cancel: action
-  view
-    column max-width="26.25rem" width="85%" align-self="center" gap=24 padding="48px 0px" align-items="center"
-      text t("ui.anEasierWayIn") role="heading" aria-level=1 font-size=38 letter-spacing="-1px"
-      text t("ui.approveThisCodeFromASignedInEtherDevice") color="ink.secondary" text-align="center" line-height=1.6
-      text model.code font-size=44 font-weight=600 letter-spacing="8px" color="brand.warm" testId="connect-code"
-      text t("ui.expiresExpiry", expiry=model.expiresLabel) color="ink.secondary" font-size=12
-      text (error == "" ? t("ui.waitingForApproval") : error) role="status" color="ink.secondary"
-      button press=cancel border="1px solid var(--surface.line)" border-radius=24 padding="12px 28px" background-color="surface.raised" color="ink.primary"
-        text t("ui.cancel")
 
 fn detailPresentation(width: number): string = "fullscreen"
 fn detailSplit(width: number): string = "none"

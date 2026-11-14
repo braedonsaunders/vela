@@ -1,5 +1,9 @@
 use PlayerView from "../../foundation/player-models.contract"
+use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, chrome, enter, base, glide, spin, breathe, dissolve from "./look.contract"
 
+// A screening's controls: a top bar with the title, a centred spinner while the
+// engine waits, a failure card, and a bottom bar with the timeline and icon
+// transport. Chrome fades and slides with the foundation's visibility.
 component PlayerChrome
   props
     model: PlayerView
@@ -13,14 +17,24 @@ component PlayerChrome
     seek: action
     editing: action
     close: action
+  state scrubbing = false
   action menuChanged(e: ToggleEvent)
     editing(e.newState == "open")
+  action scrubFocus(on: bool)
+    scrubbing = on
+    editing(on)
   derive blocked = busy or model.state == "ended"
-  derive hasSettings = model.audio.length > 1 or model.subtitles.length > 0 or model.qualities.length > 1 or model.paths.length > 1
+  derive hasSettings = model.audio.length > 1 or model.subtitles.length > 0 or model.qualities.length > 1 or model.paths.length > 1 or model.chapters.length > 0
   derive failure = (serverError != "" ? serverError : model.reason)
+  derive failed = model.state == "failed" or serverError != ""
+  derive waiting = not failed and (model.waiting or model.state == "loading" or model.state == "buffering" or model.state == "recovering")
   derive shown = (visible or model.state != "playing")
+  derive level = (model.muted ? 0 : max(0, min(1, model.volume)))
+  derive gutter = (small ? 16 : 40)
   action scrub(v: number)
     seek(v)
+  action setVolume(v: number)
+    command("volume", `${v}`)
   action audio(v: string)
     command("audio", v)
   action subtitles(v: string)
@@ -37,95 +51,185 @@ component PlayerChrome
         editing(false)
   view
     column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="ink.primary"
-      row padding=(small ? "20px 18px 50px" : "28px 36px 72px") gap=20 align-items="center" background-image="linear-gradient(180deg, var(--cinematic.header-scrim), transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease")
-        button press=close pointer-events=(shown ? "auto" : "none") aria-label=t("ui.closePlayer") border="none" background-color="cinematic.control" color="ink.primary" border-radius=24 padding=12
-          image "symbol:close" width=20 height=20
-        column gap=5 flex=1
-          text t("ui.nowPlaying_586fa") font-size=9 letter-spacing="3px" color="ink.secondary"
-          text title font-size=(small ? 18 : 24) font-weight=550 letter-spacing="-0.5px" line-clamp=1
-        text t("ui.vela") font-size=25 letter-spacing="-1.5px" opacity=0.7
-      if model.state == "loading" or model.state == "buffering" or model.state == "recovering" or model.state == "failed" or serverError != ""
-        column align-self="center" align-items="center" gap=14 padding=24 max-width="30rem" border-radius=20 background-color="cinematic.scrim-strong" role="status" testId="player-status"
-          text (model.state == "recovering" ? t("ui.findingAWayForward") : model.state == "failed" or serverError != "" ? t("ui.playbackInterrupted") : model.state == "loading" ? t("ui.preparingYourScreening") : t("ui.buildingALittleBreathingRoom")) font-size=22 font-weight=500 text-align="center"
-          if model.preparation != "" and (model.state == "loading" or model.state == "buffering")
-            text model.preparation font-size=13 role="status"
+      // Top: close, and the title being screened.
+      row position="relative" padding=(small ? "18px 16px 64px" : "30px 40px 110px") gap=(small ? 14 : 20) align-items="center" background-image="linear-gradient(180deg, var(--cinematic.player-top) 0%, var(--cinematic.player-mid) 45%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or still ? "0px 0px" : "0px -14px") transition=chrome(still)
+        button press=close pointer-events=(shown ? "auto" : "none") aria-label=t("ui.closePlayer") class=IconButton width=46 height=46 padding=13 flex-shrink=0 transition=`background-color 180ms linear`
+          image "symbol:back" width=20 height=20
+        column gap=4 flex=1 min-width=0
+          text t("ui.nowPlaying") class=Eyebrow font-size=10 color="ink.quiet"
+          text title class=Display font-size=(small ? 24 : 32) line-clamp=1
+      // Centre: the engine is waiting, or playback has failed.
+      if failed
+        column pointer-events="auto" align-self="center" align-items="center" text-align="center" gap=14 padding=(small ? "26px 22px" : "34px 40px") margin="0px 16px" max-width=440 box-sizing="border-box" border-radius=24 background-color="cinematic.glass" backdrop-filter="blur(28px) saturate(1.3)" border="1px solid var(--cinematic.glass-edge)" box-shadow="0px 30px 90px var(--cinematic.shadow)" role="alert" testId="player-status" animation=enter(still, 0)
+          image "symbol:alert" width=26 height=26 color="brand.warm" aria-hidden=true
+          text t("ui.playbackInterrupted") class=Display font-size=30
           if failure != ""
-            text failure color="ink.secondary" font-size=13 line-height=1.5 text-align="center"
-          if model.state == "failed" or serverError != ""
-            button press=command("retry", "") pointer-events="auto" border="none" border-radius=22 padding="12px 24px" background-color="ink.primary" color="ink.inverse"
-              text t("ui.tryAgain")
-      column padding=(small ? "48px 18px 20px" : "80px 36px 30px") gap=18 background-image="linear-gradient(0deg, var(--cinematic.footer-scrim), var(--cinematic.shadow) 62%, transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease") pointer-events=(shown ? "auto" : "none")
+            text failure color="ink.secondary" font-size=14 line-height=1.55
+          row gap=10 margin-top=6 flex-wrap="wrap" justify-content="center"
+            button press=command("retry", "") class=PrimaryPill height=44 padding="0px 24px"
+              text t("ui.tryAgain") font-size=14
+            button press=close class=GhostPill height=44 padding="0px 22px"
+              text t("ui.closePlayer") font-size=14
+      else
+        if waiting
+          column align-self="center" align-items="center" gap=18 role="status" aria-label=(model.state == "recovering" ? t("ui.findingAWayForward") : model.state == "loading" ? t("ui.preparingYourScreening") : t("ui.buildingALittleBreathingRoom")) testId="player-status" animation=(still ? "dissolve 240ms linear both" : "dissolve 400ms ease-out 120ms both")
+            Spinner(size=(small ? 52 : 64), still=still)
+            if model.state == "loading" or model.state == "recovering"
+              text (model.state == "recovering" ? t("ui.findingAWayForward") : t("ui.preparingYourScreening")) class=Display font-size=(small ? 22 : 26) color="ink.primary" text-shadow="0px 2px 24px var(--cinematic.shadow)"
+      // Bottom: the timeline, then icon transport and screening controls.
+      column position="relative" padding=(small ? "64px 16px 18px" : "120px 40px 30px") gap=(small ? 10 : 14) background-image="linear-gradient(0deg, var(--cinematic.player-bottom) 0%, var(--cinematic.player-mid) 50%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or still ? "0px 0px" : "0px 18px") transition=chrome(still) pointer-events=(shown ? "auto" : "none")
         if model.actionError != "" and failure == ""
-          text model.actionError color="brand.warm" font-size=12 role="status"
-        row gap=14 align-items="center"
-          text model.elapsed font-size=12 font-variant-numeric="tabular-nums" min-width=38 color="ink.secondary"
-          column flex=1 position="relative" height=24 justify-content="center"
-            column position="absolute" left=0 right=0 height=3 border-radius=2 background-color="cinematic.track" overflow="hidden"
-              for range in model.buffered key=range.id
-                column position="absolute" top=0 bottom=0 left=`${range.left}%` width=`${range.width}%` background-color="cinematic.buffer"
-              column position="absolute" left=0 top=0 bottom=0 width=`${model.progress}%` background-color="brand.warm"
-            for chapter in model.chapters key=chapter.id
-              column position="absolute" left=`${chapter.percent}%` height=7 width=1 background-color="cinematic.marker" aria-hidden=true
-            input focus=editing(true) blur=editing(false) type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub aria-label=t("ui.playbackPosition") testId="player-scrub" disabled=(model.duration <= 0 or blocked) width="100%" opacity=0.15 accent-color="brand.warm"
+          text model.actionError color="brand.warm" font-size=13 role="status"
+        // Timeline: buffered ranges, played fill and a thumb over a transparent native range.
+        column position="relative" height=22 justify-content="center"
+          column position="absolute" left=0 right=0 height=(scrubbing ? 6 : 4) border-radius=3 background-color="cinematic.track" overflow="hidden" transition=(still ? "none" : `height ${base()}ms ${glide()}`)
+            for range in model.buffered key=range.id
+              column position="absolute" top=0 bottom=0 left=`${range.left}%` width=`${range.width}%` background-color="cinematic.buffer"
+            column position="absolute" left=0 top=0 bottom=0 width=`${model.progress}%` border-radius=3 background-color="ink.primary"
+          for chapter in model.chapters key=chapter.id
+            column position="absolute" left=`${chapter.percent}%` height=(scrubbing ? 6 : 4) width=2 background-color="cinematic.marker" aria-hidden=true
+          column position="absolute" left=`calc(${model.progress}% - 7px)` width=14 height=14 border-radius=7 background-color="ink.primary" box-shadow=(scrubbing ? "0px 0px 0px 6px var(--cinematic.focus-halo), 0px 2px 10px var(--cinematic.shadow)" : "0px 2px 10px var(--cinematic.shadow)") scale=(scrubbing or still ? 1 : 0.85) transition=(still ? "none" : `scale ${base()}ms ${glide()}, box-shadow ${base()}ms ${glide()}`) aria-hidden=true
+          input focus=scrubFocus(true) blur=scrubFocus(false) type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub aria-label=t("ui.playbackPosition") testId="player-scrub" disabled=(model.duration <= 0 or blocked) position="absolute" left=0 right=0 width="100%" height=22 margin=0 opacity=0 cursor="pointer"
+        row align-items="center" justify-content="space-between"
+          text model.elapsed font-size=12 font-variant-numeric="tabular-nums" color="ink.secondary"
           text model.remaining font-size=12 font-variant-numeric="tabular-nums" color="ink.secondary"
-        row gap=(small ? 12 : 22) align-items="center" flex-wrap="wrap"
-          button disabled=(model.state == "ended") press=command(model.playing ? "pause" : "play", "") aria-label=(model.state == "ended" ? t("ui.finished") : model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" padding=12 border="none" border-radius=26 background-color="ink.primary" color="ink.inverse"
-            text (model.state == "ended" ? t("ui.finished") : model.playing ? t("ui.pause") : t("ui.play")) font-size=13 font-weight=650
-          button disabled=blocked press=command("seekBy", "-10") aria-label=t("ui.back10Seconds") border="none" padding=8 background-color="transparent" color="ink.primary"
-            text t("ui.rewindAmount", seconds=formatNumber(10, "decimal")) font-size=14
-          button press=command("seekBy", "10") disabled=(model.duration <= 0 or blocked) aria-label=t("ui.forward10Seconds") border="none" padding=8 background-color="transparent" color="ink.primary"
-            text t("ui.forwardAmount", seconds=formatNumber(10, "decimal")) font-size=14
-          column gap=4 flex=1 min-width=100
-            text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 font-weight=550 testId="player-quality"
-            text (model.backend == "file" ? t("ui.originalQuality") : model.backend == "native-hls" ? t("ui.browserManaged") : model.qualities.length <= 1 ? t("ui.fixedQuality") : model.lockedQuality == "" ? t("ui.autoQuality") : t("ui.qualityLocked")) font-size=8 letter-spacing="1.5px" color="ink.quiet"
+        row gap=(small ? 4 : 8) align-items="center" margin-top=(small ? 0 : 2)
+          button disabled=(model.state == "ended") press=command(model.playing ? "pause" : "play", "") aria-label=(model.state == "ended" ? t("ui.finished") : model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" class=PrimaryPill width=(small ? 48 : 52) height=(small ? 48 : 52) padding=(small ? 14 : 15) box-sizing="border-box" flex-shrink=0 transition=`background-color 180ms linear`
+            image (model.playing ? "symbol:pause-fill" : "symbol:play-fill") width=22 height=22
+          button disabled=blocked press=command("seekBy", "-10") aria-label=t("ui.back10Seconds") class=Bare width=44 height=44 padding=8 flex-shrink=0
+            SkipIcon(forward=false)
+          button press=command("seekBy", "10") disabled=(model.duration <= 0 or blocked) aria-label=t("ui.forward10Seconds") class=Bare width=44 height=44 padding=8 flex-shrink=0
+            SkipIcon(forward=true)
+          button press=command("mute", "") aria-label=(model.muted ? t("ui.unmute") : t("ui.mute")) aria-pressed=model.muted testId="player-mute" class=Bare width=44 height=44 padding=11 flex-shrink=0
+            image (model.muted or model.volume <= 0 ? "symbol:speaker-mute" : "symbol:speaker") width=22 height=22
+          if not small
+            column position="relative" width=96 height=22 justify-content="center" flex-shrink=0
+              column position="absolute" left=0 right=0 height=4 border-radius=2 background-color="cinematic.track" overflow="hidden"
+                column height=4 width=`${level * 100}%` background-color="ink.primary"
+              input type="range" min=0 max=1 step=0.01 value=level change=setVolume focus=editing(true) blur=editing(false) aria-label=t("ui.volume") testId="player-volume" position="absolute" left=0 width="100%" height=22 margin=0 opacity=0 cursor="pointer"
+          row flex=1 min-width=0 justify-content="flex-end"
+            if not small
+              text t("ui.pathQuality", path=model.path, quality=model.quality) testId="player-quality" font-size=11 color="ink.quiet" letter-spacing="0.02em" line-clamp=1 padding="0px 10px"
+          if hasSettings
+            button popovertarget="player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" class=Bare width=44 height=44 padding=11 flex-shrink=0
+              image "symbol:adjust" width=22 height=22
+          if model.pip
+            button press=command("pip", "") aria-label=t("ui.pictureInPicture") class=Bare width=44 height=44 padding=10 flex-shrink=0
+              PipIcon()
+          if model.fullscreen
+            button press=command("fullscreen", "") aria-label=t("ui.fullscreen") class=Bare width=44 height=44 padding=10 flex-shrink=0
+              FullscreenIcon()
+      if hasSettings
+        column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=12 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 340) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=24 gap=18 border="1px solid var(--cinematic.glass-edge)" border-radius=22 background-color="cinematic.popover" backdrop-filter="blur(30px) saturate(1.4)" color="ink.primary" box-shadow="0px 30px 90px var(--cinematic.shadow), inset 0px 1px 0px var(--cinematic.ring)"
+          column gap=6
+            text t("ui.yourScreening") class=Eyebrow font-size=10 color="ink.quiet"
+            text t("ui.playbackSettings") class=Display font-size=26
+            text (model.backend == "file" ? t("ui.originalQuality") : model.backend == "native-hls" ? t("ui.browserManaged") : model.qualities.length <= 1 ? t("ui.fixedQuality") : model.lockedQuality == "" ? t("ui.autoQuality") : t("ui.qualityLocked")) class=Eyebrow font-size=9 color="brand.warm"
           if model.chapters.length > 0
-            select focus=editing(true) blur=editing(false) disabled=blocked value="" change=chapter aria-label=t("ui.chapters") background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
+            SettingLabel(label=t("ui.chapters"))
+            select focus=editing(true) blur=editing(false) disabled=blocked value="" change=chapter aria-label=t("ui.chapters") class=MenuSelect
               option value=""
                 text t("ui.chapters")
               for chapter in model.chapters key=chapter.id
                 option value=chapter.id
                   text chapter.label
-          if model.pip
-            button press=command("pip", "") aria-label=t("ui.pictureInPicture") border="none" padding=8 background-color="transparent" color="ink.primary"
-              text t("ui.pip") font-size=12
-          if model.fullscreen
-            button press=command("fullscreen", "") aria-label=t("ui.fullscreen") border="none" padding=8 background-color="transparent" color="ink.primary"
-              text t("ui.fullscreen") font-size=12
-          if hasSettings
-            button popovertarget="player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" border="none" padding=8 background-color="transparent" color="ink.primary"
-              text t("ui.tracksQuality") font-size=12
-      if hasSettings
-        column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=16 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 320) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=22 gap=16 border="1px solid var(--cinematic.track)" border-radius=18 background-color="cinematic.popover" color="ink.primary" box-shadow="0px 16px 60px var(--cinematic.shadow)"
-          text t("ui.yourScreening") font-size=10 letter-spacing="2px" color="ink.quiet"
-          text t("ui.playbackSettings") font-size=20 font-weight=550
           if model.audio.length > 1
-            text t("ui.audio") font-size=12 color="ink.secondary"
-            select disabled=blocked value=model.audioId change=audio aria-label=t("ui.audioTrack") background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
+            SettingLabel(label=t("ui.audio"))
+            select disabled=blocked value=model.audioId change=audio aria-label=t("ui.audioTrack") class=MenuSelect
               for track in model.audio key=track.id
                 option value=track.id
                   text track.label
           else
-            text model.audioLabel font-size=12 color="ink.secondary"
+            if model.audioLabel != ""
+              SettingLabel(label=t("ui.audio"))
+              text model.audioLabel font-size=13 color="ink.secondary"
           if model.subtitles.length > 0
-            text t("ui.subtitles") font-size=12 color="ink.secondary"
-            select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
+            SettingLabel(label=t("ui.subtitles"))
+            select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles" class=MenuSelect
               option value=""
                 text t("ui.off")
               for track in model.subtitles key=track.id
                 option value=track.id
                   text track.label
           if model.qualities.length > 1
-            text t("ui.quality") font-size=12 color="ink.secondary"
-            select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
+            SettingLabel(label=t("ui.quality"))
+            select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select" class=MenuSelect
               option value=""
                 text t("ui.autoAdaptToYourConnection")
               for quality in model.qualities key=quality.id
                 option value=quality.id
                   text quality.label
           if model.paths.length > 1
-            text t("ui.delivery") font-size=12 color="ink.secondary"
-            select disabled=blocked value=model.pathId change=path aria-label=t("ui.playbackPath") testId="player-path" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
+            SettingLabel(label=t("ui.delivery"))
+            select disabled=blocked value=model.pathId change=path aria-label=t("ui.playbackPath") testId="player-path" class=MenuSelect
               for path in model.paths key=path.id
                 option value=path.id
                   text path.label
-          text t("ui.spacePlayPauseSeekFFullscreen") font-size=10 line-height=1.5 color="ink.quiet"
+          if small
+            text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 color="ink.quiet"
+          text t("ui.spacePlayPauseSeekFFullscreen") font-size=10 line-height=1.5 letter-spacing="0.04em" color="ink.quiet"
+
+style Bare
+  border = "none"
+  border-radius = 999
+  background-color = "cinematic.scrim-clear"
+  color = "ink.primary"
+  box-sizing = "border-box"
+  flex-shrink = 0
+  :hover
+    background-color = "cinematic.control-hover"
+  :focus-visible
+    box-shadow = "0px 0px 0px 2px var(--brand.warm)"
+  :disabled
+    opacity = 0.35
+
+style MenuSelect
+  box-sizing = "border-box"
+  width = "100%"
+  height = 44
+  padding = "0px 14px"
+  border = "1px solid var(--cinematic.glass-edge)"
+  border-radius = 12
+  background-color = "cinematic.field"
+  color = "ink.primary"
+  font-size = 14
+
+component SettingLabel
+  props
+    label: string
+  view
+    text label class=Eyebrow font-size=10 color="ink.quiet" margin-top=4
+
+// A ring with a travelling arc: the engine is preparing, buffering or seeking.
+component Spinner
+  props
+    size: number
+    still: bool
+  view
+    column width=size height=size position="relative" aria-hidden=true
+      svg width=size height=size viewBox="0 0 48 48" position="absolute" inset=0
+        circle cx=24 cy=24 r=21 fill="none" stroke="var(--cinematic.track)" stroke-width=2.5
+      svg width=size height=size viewBox="0 0 48 48" position="absolute" inset=0 animation=(still ? "none" : "spin 1.1s cubic-bezier(0.5, 0.15, 0.5, 0.85) infinite")
+        circle cx=24 cy=24 r=21 fill="none" stroke="var(--ink.primary)" stroke-width=2.5 stroke-linecap="round" stroke-dasharray="34 98"
+      column position="absolute" left="50%" top="50%" width=8 height=8 margin-left=-4 margin-top=-4 border-radius=4 background-color="brand.warm" animation=(still ? "none" : "breathe 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite")
+
+// Circular arrow with "10": back (counter-clockwise) or forward.
+component SkipIcon
+  props
+    forward: bool
+  view
+    svg width=28 height=28 viewBox="0 0 24 24" aria-hidden=true
+      path d=(forward ? "M12 5.5a7.5 7.5 0 1 0 7.5 7.5" : "M12 5.5a7.5 7.5 0 1 1-7.5 7.5") fill="none" stroke="currentcolor" stroke-width=1.7 stroke-linecap="round"
+      path d=(forward ? "M11 2.6 14.2 5.5 11 8.4" : "M13 2.6 9.8 5.5 13 8.4") fill="none" stroke="currentcolor" stroke-width=1.7 stroke-linecap="round" stroke-linejoin="round"
+      text "10" x=12 y=16 font-size=7 font-weight=700 text-anchor="middle" fill="currentcolor"
+
+component PipIcon
+  view
+    svg width=24 height=24 viewBox="0 0 24 24" aria-hidden=true
+      rect x=2.5 y=4.5 width=19 height=15 rx=3 fill="none" stroke="currentcolor" stroke-width=1.7
+      rect x=12 y=11.5 width=7 height=5.5 rx=1.5 fill="currentcolor"
+
+component FullscreenIcon
+  view
+    svg width=24 height=24 viewBox="0 0 24 24" aria-hidden=true
+      path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15" fill="none" stroke="currentcolor" stroke-width=1.8 stroke-linecap="round"
