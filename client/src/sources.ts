@@ -232,7 +232,7 @@ const sources: Sources = {
   },
   uiHomeRow: async ([rowId, cursor, heroIds, homeAt, localeJSON, artWidth], store) => {
     if (!rowId || !cursor) throw new Error('Home item cursor is missing');
-    const data = await (await session(store)).row(rowId, cursor);
+    const data = await (await session(store)).row(rowId, cursor, 20);
     if (data.id !== rowId) throw new Error('Wrong row returned');
     if (data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) throw new Error('Invalid home item continuation');
     const featured = new Set(heroIds), seen = new Set<string>();
