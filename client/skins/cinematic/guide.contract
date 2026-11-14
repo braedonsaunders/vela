@@ -1,5 +1,5 @@
-use GuideModel, GuideChannel, GuideProgramme from "../../live/models.contract"
-use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, glide, quick, base from "./look.contract"
+use GuideModel, GuideChannel, GuideProgramme, LiveTile from "../../live/models.contract"
+use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, glide, quick, base, spin from "./look.contract"
 
 // The channel guide as an app: a preview of the focused programme, a toolbar of
 // days and filters, then one grid that scrolls on both axes inside its panel with
@@ -38,9 +38,14 @@ component Guide
     small: bool
     still: bool
     zoom: number
+    tile: LiveTile
     watch: action
     chooseDay: action
     setZoom: action
+    tileMessage: action
+    tileUnmute: action
+    tileTuneIn: action
+    retune: action
   state selChannel = ""
   state expanded = false
   state selProgramme = ""
@@ -98,8 +103,9 @@ component Guide
     colBase = col
     setZoom(z)
   action toggleExpanded
-    expanded = not expanded
-    if expanded
+    let next = not expanded
+    expanded = next
+    if next
       requestFullscreen("guide-page")
     else
       exitFullscreen()
@@ -138,10 +144,12 @@ component Guide
   action select(channel: string, programme: string)
     selChannel = channel
     selProgramme = programme
-  action press(channel: string, programme: string)
+  action press(channel: string, programme: string, airing: bool)
     selChannel = channel
     selProgramme = programme
     focusMin = -1
+    if airing
+      retune(channel)
   action move(index: number, at: number, airing: bool, channel: string, leftId: string, rightId: string, k: string, event: KeyboardEvent)
     if k == "Enter" and airing
       preventDefault()
@@ -176,8 +184,12 @@ component Guide
     column id="guide-page" key=pageKey height="100%" min-height=0 box-sizing="border-box" background-color="surface.page" padding-top=(expanded ? 96 : grid ? 0 : (small ? 116 : 112)) background-image="radial-gradient(ellipse 70% 60% at 82% 0%, var(--cinematic.guide-aura), transparent 70%)"
       text t("ui.channelGuide") role="heading" aria-level=1 position="absolute" width=1 height=1 overflow="hidden" opacity=0
       if grid and not expanded
-        for c in heroFallback key=`hero-${c.id}`
-          GuideHero(channel=c, programmeId=(selChannel == c.id and selProgramme != "" ? selProgramme : c.nowId), small=small, still=still, watch=watch)
+        column position="relative" flex-shrink=0 height=(small ? 196 : "calc(84px + clamp(128px, 16vh, 168px))") overflow="hidden"
+          for c in heroFallback key=`hero-${c.id}`
+            GuideHero(channel=c, programmeId=(selChannel == c.id and selProgramme != "" ? selProgramme : c.nowId), small=small, still=still, watch=watch)
+          if tile.state != "off"
+            column position="absolute" right=side(small) bottom=(small ? 12 : 14) z-index=2
+              GuideTile(tile=tile, small=small, still=still, watch=watch, message=tileMessage, unmute=tileUnmute, tuneIn=tileTuneIn)
       // Toolbar: days, the time stepper and filters. Phones put the view switch first and the days beneath.
       if small
         row flex-shrink=0 align-items="center" gap=10 padding-left=side(small) padding-right=side(small) padding-top=10 padding-bottom=(grid ? 8 : 12) role="toolbar" aria-label=t("live.guideControls")
@@ -283,7 +295,7 @@ component Guide
           else
             GuideNowList(rows=rows, still=still, watch=watch)
 
-// The preview: the selected programme over its artwork, with progress and Watch.
+// The preview: the selected programme over its artwork, compact beside the live tile.
 component GuideHero
   props
     channel: GuideChannel
@@ -293,62 +305,94 @@ component GuideHero
     watch: action
   derive picked = channel.programmes.filter(p => p.id == programmeId)
   view
-    column position="relative" flex-shrink=0 height=(small ? 252 : "calc(84px + clamp(190px, 27vh, 300px))") overflow="hidden"
+    column position="absolute" inset=0
       for p in picked key=`art-${p.id}`
         column position="absolute" inset=0 aria-hidden=true animation=(still ? "none" : `guideSwap 520ms ${glide()} both`)
           if p.art != ""
-            image p.art alt="" position="absolute" top=0 right=0 width=(small ? "100%" : "64%") height="100%" object-fit="cover" mask-image="linear-gradient(90deg, transparent 0%, black 46%)" opacity=(small ? 0.42 : 0.9)
+            image p.art alt="" position="absolute" top=0 right=0 width=(small ? "100%" : "70%") height="100%" object-fit="cover" mask-image="linear-gradient(90deg, transparent 0%, black 50%)" opacity=(small ? 0.32 : 0.55)
           if p.tone >= 0
-            column position="absolute" left="-8%" top="-30%" width="60%" height="140%" background-color=toneColor(p.tone) opacity=0.16 mask-image="radial-gradient(closest-side, black 0%, transparent 100%)"
-      if picked.length == 0 or picked.filter(p => p.art != "").length == 0
-        if channel.logo != "" and not small
-          column position="absolute" right=side(small) top=36 bottom=36 width="min(34vw, 420px)" align-items="center" justify-content="center" border-radius=22 overflow="hidden" class=GuideIdent aria-hidden=true
-            image channel.logo alt="" width="62%" height="62%" object-fit="contain" opacity=0.92
-      column position="absolute" inset=0 pointer-events="none" aria-hidden=true background-image="linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-clear) 38%), linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-mid) 36%, var(--cinematic.scrim-clear) 70%)"
-      column position="relative" height="100%" justify-content="flex-end" box-sizing="border-box" padding-left=side(small) padding-right=side(small) padding-bottom=(small ? 14 : 22) max-width=(small ? "none" : "52rem")
+            column position="absolute" left="-8%" top="-60%" width="60%" height="200%" background-color=toneColor(p.tone) opacity=0.14 mask-image="radial-gradient(closest-side, black 0%, transparent 100%)"
+      column position="absolute" inset=0 pointer-events="none" aria-hidden=true background-image="linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-mid) 45%, var(--cinematic.scrim-clear) 100%), linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-mid) 40%, var(--cinematic.scrim-soft) 100%)"
+      column position="relative" height="100%" justify-content="flex-end" box-sizing="border-box" padding-left=side(small) padding-right=(small ? "calc(16px + 132px)" : "calc(max(28px, 4vw) + clamp(214px, 28vh, 300px) + 28px)") padding-bottom=(small ? 12 : 16)
         for p in picked key=`copy-${p.id}`
-          column gap=(small ? 7 : 10) animation=(still ? "none" : `guideSwap 420ms ${glide()} both`) role="region" aria-label=t("live.selectedProgramme") aria-live="polite"
-            row gap=10 align-items="center" flex-wrap="wrap"
+          column gap=(small ? 4 : 7) min-width=0 animation=(still ? "none" : `guideSwap 420ms ${glide()} both`) role="region" aria-label=t("live.selectedProgramme") aria-live="polite"
+            row gap=10 align-items="center" min-width=0
               if p.airing
-                row gap=6 align-items="center" padding="3px 8px" border-radius=6 background-color="cinematic.guide-now"
+                row gap=6 align-items="center" padding="2px 7px" border-radius=6 background-color="cinematic.guide-now" flex-shrink=0
                   column width=6 height=6 border-radius=3 background-color="ink.primary" aria-hidden=true
                   text t("live.liveBadge") font-size=10 font-weight=750 letter-spacing="0.14em"
-              text `${channel.number} · ${channel.name}` class=Eyebrow font-size=10 letter-spacing="0.18em" color="ink.secondary" white-space="nowrap"
-              if p.genre != ""
-                row gap=6 align-items="center"
+              text `${channel.number} · ${channel.name}` class=Eyebrow font-size=10 letter-spacing="0.18em" color="ink.secondary" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
+              if p.genre != "" and not small
+                row gap=6 align-items="center" flex-shrink=0
                   column width=6 height=6 border-radius=3 background-color=toneColor(p.tone) aria-hidden=true
                   text p.genre font-size=12 color="ink.secondary"
-            text p.name class=Display font-size=(small ? 30 : 56) line-clamp=(small ? 1 : 2) text-shadow="0px 4px 40px var(--cinematic.shadow)"
-            row gap=12 align-items="center" flex-wrap="wrap"
-              text t("ui.startEnd", start=p.startLabel, end=p.endLabel) font-size=14 font-weight=600 font-variant-numeric="tabular-nums"
+            text p.name class=Display font-size=(small ? 24 : 38) white-space="nowrap" overflow="hidden" text-overflow="ellipsis" text-shadow="0px 4px 40px var(--cinematic.shadow)"
+            row gap=12 align-items="center" min-width=0
+              if not small
+                button press=watch(channel.id) class=PrimaryPill height=34 padding-left=14 padding-right=16 flex-shrink=0 testId="guide-watch"
+                  row gap=8 align-items="center"
+                    image "symbol:play-fill" width=13 height=13 aria-hidden=true
+                    text (p.airing ? t("live.watch") : t("ui.watchChannel", channel=channel.name)) font-size=13 white-space="nowrap"
+              text t("ui.startEnd", start=p.startLabel, end=p.endLabel) font-size=13 font-weight=600 font-variant-numeric="tabular-nums" white-space="nowrap"
               if p.airing
-                column width=(small ? 72 : 160) height=3 border-radius=2 background-color="cinematic.track-strong" overflow="hidden" role="progressbar" aria-label=t("live.progress") aria-valuemin=0 aria-valuemax=100 aria-valuenow=p.progress
+                column width=(small ? 48 : 120) height=3 flex-shrink=0 border-radius=2 background-color="cinematic.track-strong" overflow="hidden" role="progressbar" aria-label=t("live.progress") aria-valuemin=0 aria-valuemax=100 aria-valuenow=p.progress
                   column height=3 width=`${p.progress}%` background-color="brand.warm" transition=(still ? "none" : `width ${base()}ms ${glide()}`)
-                text p.remainingLabel font-size=13 color="brand.warm" font-variant-numeric="tabular-nums"
+                text p.remainingLabel font-size=12 color="brand.warm" font-variant-numeric="tabular-nums" white-space="nowrap"
               else
-                text (p.ended ? t("live.ended") : t("live.startsIn", minutes=p.startsInLabel)) font-size=13 color="ink.secondary"
+                text (p.ended ? t("live.ended") : t("live.startsIn", minutes=p.startsInLabel)) font-size=12 color="ink.secondary" white-space="nowrap"
               if p.episode != "" and not small
-                text p.episode font-size=13 color="ink.secondary"
-              if p.rating != ""
-                text p.rating font-size=10 font-weight=700 letter-spacing="0.06em" padding="2px 6px" border-radius=4 border="1px solid var(--cinematic.glass-edge-strong)" color="ink.secondary"
-            if p.summary != "" and not small
-              text p.summary font-size=15 line-height=1.55 color="ink.secondary" line-clamp=2 max-width="42rem"
-            if not small
-              row gap=12 margin-top=6 align-items="center"
-                button press=watch(channel.id) class=PrimaryPill height=48 padding-left=22 padding-right=26 testId="guide-watch"
-                  row gap=10 align-items="center"
-                    image "symbol:play-fill" width=16 height=16 aria-hidden=true
-                    text (p.airing ? t("live.watch") : t("ui.watchChannel", channel=channel.name)) font-size=15
+                text p.episode font-size=12 color="ink.secondary" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
+              if p.rating != "" and not small
+                text p.rating font-size=10 font-weight=700 letter-spacing="0.06em" padding="2px 6px" border-radius=4 border="1px solid var(--cinematic.glass-edge-strong)" color="ink.secondary" flex-shrink=0
         if picked.length == 0
-          column gap=10 animation=(still ? "none" : `guideSwap 420ms ${glide()} both`)
+          column gap=(small ? 4 : 7) min-width=0 animation=(still ? "none" : `guideSwap 420ms ${glide()} both`)
             text `${channel.number}` class=Eyebrow font-size=10 color="ink.secondary"
-            text channel.name class=Display font-size=(small ? 30 : 56)
-            text (channel.listed ? t("live.nothingNow") : t("live.noListings")) font-size=14 color="ink.secondary"
-            if not small
-              button press=watch(channel.id) class=PrimaryPill height=48 padding-left=22 padding-right=26 align-self="flex-start" margin-top=6
-                row gap=10 align-items="center"
-                  image "symbol:play-fill" width=16 height=16 aria-hidden=true
-                  text t("live.watch") font-size=15
+            text channel.name class=Display font-size=(small ? 24 : 38) white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+            row gap=12 align-items="center"
+              if not small
+                button press=watch(channel.id) class=PrimaryPill height=34 padding-left=14 padding-right=16
+                  row gap=8 align-items="center"
+                    image "symbol:play-fill" width=13 height=13 aria-hidden=true
+                    text t("live.watch") font-size=13
+              text (channel.listed ? t("live.nothingNow") : t("live.noListings")) font-size=13 color="ink.secondary"
+
+// The live preview tile: one muted ambient stream with its channel and an honest state.
+// Clicking it opens full watch; the speaker unmutes in place.
+component GuideTile
+  props
+    tile: LiveTile
+    small: bool
+    still: bool
+    watch: action
+    message: action
+    unmute: action
+    tuneIn: action
+  view
+    column position="relative" height=(small ? 72 : "clamp(120px, calc(16vh - 14px), 168px)") aspect-ratio="16 / 9" border-radius=(small ? 10 : 14) overflow="hidden" background-color="media.ground" border="1px solid var(--cinematic.glass-edge-strong)" box-shadow="0px 18px 50px var(--cinematic.shadow)"
+      if tile.planJson != "" and (tile.state == "connecting" or tile.state == "playing")
+        vela-player plan=tile.planJson playerCommand=tile.commandJson message=message ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+      if tile.state == "connecting"
+        column position="absolute" inset=0 align-items="center" justify-content="center" role="status" aria-label=t("live.tuning", channel=tile.channelName)
+          column width=18 height=18 border-radius=9 border="2px solid var(--cinematic.track-strong)" border-top-color="brand.warm" animation=(still ? "none" : "spin 900ms linear infinite") aria-hidden=true
+      if tile.state == "unavailable"
+        column position="absolute" inset=0 align-items="center" justify-content="center" padding=10 role="status"
+          text t("live.previewUnavailable") font-size=12 color="ink.secondary" text-align="center"
+      if tile.state == "tune-in"
+        button press=tuneIn aria-label=t("live.tuneInTo", channel=tile.channelName) position="absolute" inset=0 class=TileTuneIn
+          row gap=8 align-items="center" justify-content="center"
+            image "symbol:play-fill" width=12 height=12 aria-hidden=true
+            text t("live.tuneIn") font-size=13 font-weight=650
+      else
+        button press=watch(tile.channelId) aria-label=t("ui.watchChannel", channel=tile.channelName) position="absolute" inset=0 class=TileOpen testId="guide-tile"
+      row position="absolute" left=0 right=0 top=0 gap=6 align-items="center" padding=(small ? "5px 6px" : "8px 10px") background-image="linear-gradient(180deg, var(--cinematic.player-top) 0%, var(--cinematic.scrim-clear) 100%)" pointer-events="none"
+        row gap=4 align-items="center" padding="1px 5px" border-radius=4 background-color="cinematic.guide-now" flex-shrink=0
+          column width=5 height=5 border-radius=3 background-color="ink.primary" aria-hidden=true
+          text t("live.liveBadge") font-size=9 font-weight=750 letter-spacing="0.12em"
+        if not small
+          text tile.channelName font-size=11 font-weight=650 white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0 text-shadow="0px 1px 4px var(--cinematic.shadow)"
+      if tile.state == "playing"
+        button press=unmute aria-label=(tile.muted ? t("live.unmutePreview") : t("live.mutePreview")) aria-pressed=(not tile.muted) position="absolute" right=(small ? 4 : 8) bottom=(small ? 4 : 8) class=TileSpeaker width=(small ? 26 : 30) height=(small ? 26 : 30) padding=(small ? 6 : 7)
+          image (tile.muted ? "symbol:speaker-mute" : "symbol:speaker") width="100%" height="100%" aria-hidden=true
 
 // A channel's cell in the sticky rail: number, logo or monogram, name and what is on now.
 component GuideRail
@@ -406,7 +450,7 @@ component GuideCell
   derive w = programme.span * scale
   derive elapsed = (programme.airing ? max(0, min(w, (nowMinute - programme.at) * scale)) : 0)
   view
-    button id=`guide-${programme.id}` press=press(channel.id, programme.id) focus=select(channel.id, programme.id) key=move(index, programme.at, programme.airing, channel.id, programme.leftId, programme.rightId) role="gridcell" aria-selected=selected aria-label=t("ui.programmeStartToEndChannelProgrammeDetails", programme=programme.name, start=programme.startLabel, end=programme.endLabel, channel=channel.name) position="absolute" left=(rail + programme.at * scale + 2) top=5 width=max(2, w - 4) height=(row - 11) box-sizing="border-box" padding=0 display="flex" flex-direction="row" align-items="stretch" overflow="clip" text-align="left" class=GuideCell background-color=(programme.airing ? "cinematic.guide-live" : "cinematic.guide-cell") border=(programme.airing ? "1px solid var(--cinematic.guide-live-edge)" : "1px solid var(--cinematic.hairline)") opacity=(programme.ended ? 0.46 : 1) box-shadow=(selected ? "inset 0px 0px 0px 2px var(--brand.warm)" : "none") background-image=(programme.airing ? `linear-gradient(90deg, var(--cinematic.guide-live-fill) 0px, var(--cinematic.guide-live-fill) ${elapsed}px, transparent ${elapsed}px)` : "none")
+    button id=`guide-${programme.id}` press=press(channel.id, programme.id, programme.airing) focus=select(channel.id, programme.id) key=move(index, programme.at, programme.airing, channel.id, programme.leftId, programme.rightId) role="gridcell" aria-selected=selected aria-label=t("ui.programmeStartToEndChannelProgrammeDetails", programme=programme.name, start=programme.startLabel, end=programme.endLabel, channel=channel.name) position="absolute" left=(rail + programme.at * scale + 2) top=5 width=max(2, w - 4) height=(row - 11) box-sizing="border-box" padding=0 display="flex" flex-direction="row" align-items="stretch" overflow="clip" text-align="left" class=GuideCell background-color=(programme.airing ? "cinematic.guide-live" : "cinematic.guide-cell") border=(programme.airing ? "1px solid var(--cinematic.guide-live-edge)" : "1px solid var(--cinematic.hairline)") opacity=(programme.ended ? 0.46 : 1) box-shadow=(selected ? "inset 0px 0px 0px 2px var(--brand.warm)" : "none") background-image=(programme.airing ? `linear-gradient(90deg, var(--cinematic.guide-live-fill) 0px, var(--cinematic.guide-live-fill) ${elapsed}px, transparent ${elapsed}px)` : "none")
       if programme.tone >= 0 and w > 24
         column position="absolute" left=0 top=10 bottom=10 width=3 border-radius=2 background-color=toneColor(programme.tone) opacity=(programme.ended ? 0.5 : 0.9) aria-hidden=true
       if programme.airing
@@ -478,6 +522,35 @@ style GuideChip
     -exact-press-scale = 0.97
   :focus-visible
     box-shadow = "0px 0px 0px 2px var(--surface.page), 0px 0px 0px 4px var(--brand.warm)"
+
+style TileOpen
+  border = "none"
+  background-color = "transparent"
+  border-radius = 14
+  :hover
+    background-color = "cinematic.scrim-faint"
+  :focus-visible
+    box-shadow = "inset 0px 0px 0px 2px var(--brand.warm)"
+
+style TileTuneIn
+  border = "none"
+  background-color = "cinematic.scrim-mid"
+  color = "ink.primary"
+  :hover
+    background-color = "cinematic.scrim-soft"
+  :focus-visible
+    box-shadow = "inset 0px 0px 0px 2px var(--brand.warm)"
+
+style TileSpeaker
+  box-sizing = "border-box"
+  border = "1px solid var(--cinematic.glass-edge)"
+  border-radius = 999
+  background-color = "cinematic.glass-deep"
+  color = "ink.primary"
+  :hover
+    background-color = "cinematic.control-hover"
+  :focus-visible
+    box-shadow = "0px 0px 0px 2px var(--brand.warm)"
 
 style GuideSelect
   box-sizing = "border-box"

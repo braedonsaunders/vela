@@ -284,5 +284,11 @@
   "live.hours": "{hours} h",
   "live.hoursAcross": "Show {hours} hours across",
   "live.fullGuide": "Full-screen guide",
-  "live.exitFullGuide": "Exit full-screen guide"
+  "live.exitFullGuide": "Exit full-screen guide",
+  "live.tuning": "Tuning {channel}…",
+  "live.previewUnavailable": "Preview unavailable",
+  "live.tuneInTo": "Tune in to {channel}",
+  "live.tuneIn": "Tune in",
+  "live.unmutePreview": "Unmute preview",
+  "live.mutePreview": "Mute preview"
 }

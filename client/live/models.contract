@@ -55,6 +55,7 @@ shape GuideModel
   ticks: GuideTick[]
   days: GuideDay[]
   groups: string[]
+  tuneOrder: string[]
   channels: GuideChannel[]
 
 shape LiveStatus
@@ -70,6 +71,16 @@ shape GuideTick
   label: string
   minute: number
   hour: bool
+
+// The guide's live preview tile. state: off, tune-in (waits for the viewer), connecting, playing, unavailable.
+shape LiveTile
+  channelId: string
+  channelName: string
+  channelNumber: string
+  state: string
+  muted: bool
+  planJson: string
+  commandJson: string
 
 shape LiveIdentity
   title: string

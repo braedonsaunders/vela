@@ -27,6 +27,8 @@ export interface GuideModel {
   ticks: { id: string; label: string; minute: number; hour: boolean }[];
   days: { offset: number; label: string; date: string }[];
   groups: string[];
+  /** Channel ids in the server's own order, for choosing what a preview tunes to. */
+  tuneOrder: string[];
   channels: GuideChannel[];
 }
 
@@ -60,7 +62,7 @@ function listings(api: GuideApi, scope: string, from: number, until: number, now
   const hit = cache.get(key);
   if (hit && now >= hit.at && now - hit.at < FRESH) return hit.value;
   const value = (async () => {
-    const channels = (await allPages(cursor => api.channels(cursor, 100))).sort((a, b) => Number(b.favorite) - Number(a.favorite));
+    const channels = await allPages(cursor => api.channels(cursor, 100));
     const programmes = await allPages(cursor => api.guide({ from: new Date(from).toISOString(), until: new Date(until).toISOString(), cursor, limit: 100 }));
     return { channels, programmes };
   })();
@@ -147,7 +149,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
     const dayName = (offset: number, at: number) => offset === 0 ? msg('live.today') : offset === 1 ? msg('live.tomorrow') : weekday.format(at);
     const nowMinute = now >= start && now < end ? (now - start) / MINUTE : -1;
     const groups: string[] = [];
-    const channels: GuideChannel[] = window.channels.map(channel => {
+    const channels: GuideChannel[] = [...window.channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).map(channel => {
       if (channel.group && !groups.includes(channel.group)) groups.push(channel.group);
       const entries = grouped.get(channel.id) ?? [];
       const live = (currentByChannel.get(channel.id) ?? []);
@@ -187,6 +189,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       ticks: Array.from({ length: Math.floor(minutes / 30) }, (_, n) => ({ id: String(start + n * 1800000), label: time(start + n * 1800000), minute: n * 30, hour: n % 2 === 0 })),
       days: Array.from({ length: DAYS }, (_, offset) => { const at = midnight(now, offset) + 12 * HOUR; return { offset, label: dayName(offset, at), date: date.format(at) }; }),
       groups,
+      tuneOrder: window.channels.map(c => c.id),
       channels,
     };
     const cellId = (id: string) => `guide-${id}`;

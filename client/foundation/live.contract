@@ -1,11 +1,12 @@
-use GuideModel, LiveStatus, LiveIdentity from "../live/models.contract"
+use GuideModel, LiveStatus, LiveIdentity, LiveTile from "../live/models.contract"
+use PlaybackModel from "./models.contract"
+use PlayerView, PlayerCommandReply from "./player-models.contract"
 
 members Client
   state guideDay = 0
   state guideZoom = 1 persist
   state guideNow = 0
   state lowDelay = false
-  state saveData = false
   resource guide = uiGuide(guideNow, guideDay) with localeJSON when auth.authenticated and (top(nav).name == "live" or top(nav).name == "liveWatch") and guideNow > 0 as shape GuideModel else empty()
   // The minute clock re-projects the same day in place; only another day shows the loading state.
   derive guideReady = current(guide) or (guide.day == guideDay and guide.channels.length > 0)
@@ -37,6 +38,8 @@ members Client
     zapTarget = ""
     if target != "" and target != playingId and top(nav).name == "liveWatch"
       lowDelay = false
+      if tileViewer != ""
+        tileLast = `${tileViewer}\n${target}`
       nav = replace(nav, path("liveWatch", target))
   action stageKey(k: string, event: KeyboardEvent)
     let plain = not watchEditing and not event.metaKey and not event.ctrlKey and not event.altKey
@@ -54,6 +57,98 @@ members Client
           zapTarget = ""
         else
           watchKey(k, event)
+  // The guide's live preview tile: one muted ambient session, tuned to the viewer's last
+  // watched channel or the first that plays in server order. It exists only while the guide
+  // is the visible route; leaving, hiding the tab or opening full watch releases it, so only
+  // one stream ever runs. Save-Data and reduced motion wait for the viewer to tune in.
+  state tileLast = "" persist
+  state tileChannel = ""
+  state tileManual = false
+  state tileAttempt = 0
+  state tileGen = 0
+  state tileHeldPlan = ""
+  state tileEvent = ""
+  state tileCommandJson = ""
+  state tileCommandId = 0
+  state tileMuted = true
+  state tileGivenUp = false
+  state pendingWatch = ""
+  state saveData = false
+  derive tileViewer = (current(home) ? home.viewer : "")
+  derive tileRemembered = (tileViewer != "" and tileLast.startsWith(`${tileViewer}\n`) ? tileLast.slice(tileViewer.length + 1) : "")
+  derive tileCandidates = (tileRemembered != "" and guide.tuneOrder.includes(tileRemembered) ? [tileRemembered] : []).concat(guide.tuneOrder.filter(id => id != tileRemembered))
+  derive tileTarget = (tileChannel != "" ? tileChannel : match first(tileCandidates.slice(tileAttempt, tileAttempt + 1)) { case some(id) => id, case none => "" })
+  derive tileAllowed = tileManual or (not still and not saveData)
+  derive tileWanted = auth.authenticated and top(nav).name == "live" and page.visibilityState == "visible" and guideReady and tileAllowed and tileTarget != "" and pendingWatch == "" and not tileGivenUp
+  resource tilePlayback = uiPlayback(tileTarget, "channel", time.epochAtZero, `tile-${tileGen}`) when tileWanted as shape PlaybackModel transient
+  derive tilePlan = (tileWanted and current(tilePlayback) ? tilePlayback.planJson : "")
+  resource tileModel = uiPlayer(tilePlan, tileEvent, "", localeJSON) when tilePlan != "" as shape PlayerView
+  derive tileFailed = tileWanted and (failed(tilePlayback) or (tilePlan != "" and current(tileModel) and tileModel.state == "failed"))
+  derive tileState = (tileTarget == "" ? "off" : not tileAllowed ? "tune-in" : tileGivenUp ? "unavailable" : tilePlan != "" and current(tileModel) and tileModel.playing and not tileModel.waiting ? "playing" : "connecting")
+  derive tileName = match first(guide.channels.filter(c => c.id == tileTarget)) { case some(c) => c.name, case none => "" }
+  derive tileNumber = match first(guide.channels.filter(c => c.id == tileTarget)) { case some(c) => c.number, case none => "" }
+  derive tile = LiveTile(channelId=tileTarget, channelName=tileName, channelNumber=tileNumber, state=tileState, muted=tileMuted, planJson=tilePlan, commandJson=tileCommandJson)
+  mutation tileStopped as shape PlayerCommandReply queue then afterTileStop
+  // Hold every granted session until it is released, whatever the tile shows.
+  task tileHold when tilePlan != "" and tilePlan != tileHeldPlan
+    after(1, holdTile)
+  task tileRelease when tileHeldPlan != "" and not tileWanted
+    after(1, releaseTile)
+  // Leaving the guide forgets a retune and a failed run; the next visit tunes afresh.
+  task tileReset when top(nav).name != "live" and (tileGivenUp or tileAttempt > 0 or tileChannel != "" or tileManual)
+    after(1, resetTile)
+  // An automatic tile moves on to the next channel in server order when one cannot play;
+  // after three, or for a channel the viewer chose, it says so and holds nothing.
+  task tileFallback when tileFailed
+    after(10, nextTile)
+  task tilePendingWatch when pendingWatch != ""
+    after(2500, afterTileStop)
+  action holdTile
+    if tileHeldPlan != "" and tileHeldPlan != tilePlan
+      send tileStopped = liveStop(tileHeldPlan)
+    tileHeldPlan = tilePlan
+    tileEvent = ""
+  action stopTile
+    if tileHeldPlan != ""
+      send tileStopped = liveStop(tileHeldPlan)
+    tileHeldPlan = ""
+    tileEvent = ""
+    tileGen = tileGen + 1
+  action releaseTile
+    stopTile()
+    tileMuted = true
+    tileCommandJson = ""
+  action resetTile
+    tileGivenUp = false
+    tileAttempt = 0
+    tileChannel = ""
+    tileManual = false
+  action nextTile
+    stopTile()
+    if tileChannel == "" and tileAttempt < 2
+      tileAttempt = tileAttempt + 1
+    else
+      tileGivenUp = true
+  action afterTileStop
+    let id = pendingWatch
+    if id != ""
+      pendingWatch = ""
+      openLiveWatch(id)
+  action tileMessage(json: string)
+    tileEvent = json
+  action tileUnmute
+    let next = tileCommandId + 1
+    tileCommandId = next
+    tileMuted = not tileMuted
+    tileCommandJson = `{"id":${next},"type":"mute","value":"${tileMuted ? "false" : "true"}"}`
+  action tileTuneIn
+    tileManual = true
+  action retuneTile(id: string)
+    if id != tileTarget
+      stopTile()
+      tileChannel = id
+      tileAttempt = 0
+      tileGivenUp = false
   action receiveNetwork(json: string)
     saveData = json.includes("\"saveData\":true")
   action tickGuide
@@ -66,8 +161,17 @@ members Client
     guideZoom = max(0, min(2, zoom))
   action chooseGuideDay(day: number)
     guideDay = max(0, min(6, day))
+  // Full watch waits for the preview's stop, so the server never sees two of this viewer's streams.
   action watchChannel(id: string)
+    if tileHeldPlan != ""
+      pendingWatch = id
+      stopTile()
+    else
+      openLiveWatch(id)
+  action openLiveWatch(id: string)
     lowDelay = false
+    if tileViewer != ""
+      tileLast = `${tileViewer}\n${id}`
     nav = push(nav, path("liveWatch", id))
   action toggleLowDelay
     let enabled = not lowDelay
