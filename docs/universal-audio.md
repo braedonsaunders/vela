@@ -126,6 +126,9 @@ WebCodecs/Mediabunny for common formats. ALAC/MP2/WMA select the general module;
 owns re-prime/cancellation at the audio clock, and must advance to Ether if WASM
 fails. Native decoder support is measured by the lead's exact-config probe.
 
+Vela also enables the upstream linked limiter on stereo passthrough, since
+floating-point PCM may exceed full scale even without a downmix.
+
 The module consumes a VLA1 envelope with demux sample rate, count, explicit speaker
 mask, coded bits, block alignment, bitrate and original private bytes. Codec names
 in package manifests use hyphens per the upstream grammar; FFmpeg IDs use underscores.
