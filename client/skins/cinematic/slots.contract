@@ -75,8 +75,8 @@ component Home
               if hero.backdrop != ""
                 image hero.backdrop alt="" width="100%" height="100%" object-fit="cover" opacity=0.68
               column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e18 80%), linear-gradient(90deg, #090b0ed9, transparent)"
-            column padding="20px 7%" gap=12 max-width=700 animation=(still ? "none" : "arrive 500ms ease both")
-              text "SELECTED FOR YOU" font-size=10 letter-spacing="3px" color="brand.warm"
+            column padding="20px 7%" gap=12 max-width=700 intersect=observe(hero.receipt) animation=(still ? "none" : "arrive 500ms ease both")
+              text "SELECTED FOR YOU" font-size=10 letter-spacing="3px" color=(hero.accent == "" ? "brand.warm" : hero.accent)
               text hero.name role="heading" aria-level=1 font-size=(small ? 36 : 62) font-weight=550 letter-spacing="-2px" line-height=1.05
               text hero.facts font-size=12 color="ink.secondary"
               if not small
@@ -93,6 +93,9 @@ component SearchSurface
   props
     query: string
     model: SearchModel
+    descriptive: SearchModel
+    ai: SearchModel
+    generation: number
     loading: bool
     error: bool
     aiAvailable: bool
@@ -112,16 +115,16 @@ component SearchSurface
             text "No title matches. Try a name, a mood or a different description." role="status" color="ink.secondary"
           else
             Row(row=FeedRow(id="fast", name="Title matches", receipt="", items=model.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
-        if not loading and model.query == query and model.descriptive.length > 0
-          Row(row=FeedRow(id="vibe", name="The feeling you're looking for", receipt="", items=model.descriptive), small=small, still=still, selectTitle=selectTitle, observe=observe)
-        if not loading and model.query == query and aiAvailable and model.aiStatus != ""
+        if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
+          Row(row=FeedRow(id="vibe", name="The feeling you're looking for", receipt="", items=descriptive.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
           column gap=12
             text "A little further afield" role="heading" aria-level=2 font-size=22
-            if model.aiStatus == "queued" or model.aiStatus == "running"
+            if ai.aiStatus == "queued" or ai.aiStatus == "running"
               text "Exploring your description…" role="status" color="ink.secondary"
-            if model.ai.length > 0
-              Row(row=FeedRow(id="ai", name="Discovered for you", receipt="", items=model.ai), small=small, still=still, selectTitle=selectTitle, observe=observe)
-            if model.aiStatus == "failed"
+            if ai.items.length > 0
+              Row(row=FeedRow(id="ai", name="Discovered for you", receipt="", items=ai.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+            if ai.aiStatus == "failed"
               text "Discovery couldn't finish. Your title matches are ready above." color="ink.secondary"
 
 component Detail

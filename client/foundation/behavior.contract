@@ -17,6 +17,8 @@ members Client
   resource viewport = exactViewport() as shape Viewport
   resource home = uiBootstrap() as shape HomeModel
   resource results = uiSearch(query, generation, time.epochAtZero) when query.trim() != "" as shape SearchModel
+  resource descriptive = uiDescriptive(query, generation, time.epochAtZero) when query.trim() != "" and home.descriptiveAvailable as shape SearchModel
+  resource ai = uiAI(query, generation, time.epochAtZero) when query.trim() != "" and home.aiAvailable as shape SearchModel
   resource detail = uiDetail(detailId) when detailId != "" as shape DetailModel
   derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" ? top(nav).params.id : "")
   resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : "title", time.epochAtZero) when playingId != "" as shape PlaybackModel
@@ -28,11 +30,11 @@ members Client
   derive still = viewport.prefersReducedMotion
   derive activeSkin = (skin == "" ? home.defaultSkinId : skin)
 
-  task searchUpdates when query.trim() != ""
+  task searchUpdates when query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running")
     every(1500, updateSearch)
 
   action updateSearch
-    refresh results
+    refresh ai
 
   action edit(v: string)
     generation = generation + 1

@@ -31,9 +31,9 @@ component Client
                           button press=edit("") aria-label="Clear search" border="none" background-color="transparent" color="ink.secondary" padding=8
                             image "symbol:close"
                     if query != ""
-                      SearchSurface(query=query, model=results, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
+                      SearchSurface(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
         if e.name == "title"
-          column navigationKey=`${e.id}` navigationPresentation="modal" navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 background-color="surface.page" color="ink.primary"
+          column navigationKey=`${e.id}` navigationPresentation=(small ? "fullscreen" : "modal") navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 background-color="surface.page" color="ink.primary"
             row padding="16px 5%" align-items="center"
               button id="back" press=close aria-label="Back to browsing" border="none" border-radius=24 padding="10px 16px" background-color="surface.raised" color="ink.primary"
                 text "Back"

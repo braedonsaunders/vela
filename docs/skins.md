@@ -12,7 +12,7 @@ optional artwork, metadata and capabilities to these presentation records.
 | --- | --- |
 | Shell | `viewer:string`, `skin:string`, `skins:string[]`, `chooseSkin(string)`; one children slot containing the route scroll surface |
 | Home | `model:HomeModel`, `query:string`, `small:bool`, `still:bool`, `selectTitle(id,receipt)`, `observe(receipt,IntersectionObserverEntry)`; children slot holds the foundation search field |
-| SearchSurface | `query:string`, `model:SearchModel`, `loading:bool`, `error:bool`, `aiAvailable:bool`, `small`, `still`, `selectTitle`, `observe` |
+| SearchSurface | `query:string`, `model:SearchModel`, `descriptive:SearchModel`, `ai:SearchModel`, `generation:number`, `loading:bool`, `error:bool`, `aiAvailable:bool`, `small`, `still`, `selectTitle`, `observe` |
 | Row | `row:FeedRow`, `small`, `still`, `selectTitle`, `observe` |
 | TitleCard | `card:Card`, `small`, `still`, `selectTitle`, `observe` |
 | Detail | `model:DetailModel`, `small`, `still`, `play(id)`, `playExtra(id)`, `selectTitle`, `observe` |
