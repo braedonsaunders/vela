@@ -3,7 +3,7 @@ import type { AISearchJob, ClientCapabilities, Device } from '../wire/v0/types';
 import { EtherAdapter } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
-import { loadGuide } from './live/guide';
+import { loadGuide, liveIdentity } from './live/guide';
 import { liveStatus } from './live/player';
 import { InteractionQueue } from './telemetry';
 import { sessionEvents } from './protocol/events';
@@ -64,9 +64,10 @@ const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '
 };
 let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, canCatchUp: false };
 const sources: Sources = {
+  uiLiveIdentity: async ([channelId, epoch], store) => liveIdentity(await session(store), channelId, epoch),
   uiGuide: async ([epoch, window], store) => {
     const start = Math.floor(epoch / 1800000) * 1800000 + window * 7200000;
-    return loadGuide(await session(store), new Date(start).toISOString(), new Date(start + 7200000).toISOString(), epoch);
+    return loadGuide(await session(store), new Date(start).toISOString(), new Date(start + 7200000).toISOString(), epoch, API);
   },
   liveEvent: async ([json]) => {
     const event = JSON.parse(json);
@@ -123,7 +124,7 @@ const sources: Sources = {
     if (activeQuick === secret) activeQuick = '';
     return { accepted: true };
   },
-  uiBootstrap: async (_args, store) => homeModel(await (await session(store)).bootstrap(), API),
+  uiBootstrap: async ([at], store) => homeModel(await (await session(store)).bootstrap(), API, at),
   uiCollection: async ([id], store) => {
     const data = await (await session(store)).collection(id);
     return { name: data.collection.name, items: data.items.map(item => entry(item, API)) };
