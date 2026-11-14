@@ -334,3 +334,10 @@ position in the final server-ordered `items`, with at most ten entries. Clients
 keep that order, entry identities and receipt tokens. Omission uses the ordinary
 row surface. Landscape artwork may use existing backdrop/cover artwork; portrait
 artwork remains a fallback. No inferred rank or new receipt is issued by the client.
+
+`ServerCapabilities.secureOrigins?: string[]` advertises trusted HTTPS base
+origins from the host connection publisher (for example its plex.direct address).
+Values contain an origin only, without `/vela`, query or fragment. Omission means
+no advertised upgrade destination; clients must not manufacture one from a host
+name. Origin migration and credential handling remain an explicit client transport
+operation rather than an HTTP redirect.

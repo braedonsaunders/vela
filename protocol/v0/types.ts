@@ -13,6 +13,8 @@ export interface ClientCapabilities {
 }
 export interface Feature { available: boolean; reason?: string }
 export interface ServerCapabilities {
+  /** Trusted advertised HTTPS base origins; no path, query or fragment. */
+  secureOrigins?: string[];
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
     descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature; trailerPreview?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
