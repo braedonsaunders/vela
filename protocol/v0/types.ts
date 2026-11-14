@@ -59,7 +59,9 @@ export interface Row { id: ID; name: string; purpose: 'continue' | 'nextUp' | 'r
   receiptToken: string; style?: string; previewOnFocus?: boolean; items: RowEntry[]; nextCursor?: Cursor; continuation: 'more' | 'exhausted' | 'unknown' }
 export type HeroReason = 'resume' | 'nextEpisode' | 'newRelease' | 'forYou' | 'trending' | 'featured';
 export interface HeroAction { kind: 'resume' | 'play' | 'details'; titleId: ID; positionSeconds?: number }
-export interface Hero { title: Title; receiptToken: string; reason: HeroReason; action: HeroAction; label?: string; previewOnFocus?: boolean; trailer?: Extra }
+export interface Hero { title: Title; receiptToken: string; reason: HeroReason; action: HeroAction;
+  /** Short supporting/reason text, not the primary action button label. */
+  label?: string; previewOnFocus?: boolean; trailer?: Extra }
 export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID }
 export interface SearchRequest extends Mutation { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
@@ -145,3 +147,42 @@ export interface LibraryBrowseQuery extends LibrariesQuery {
   sort?: LibrarySort; direction?: SortDirection; kind?: TitleKind; genre?: string; year?: number; played?: boolean; favorite?: boolean;
 }
 export interface LibraryContents extends Page<RowEntry> { library: Library; sort: LibrarySort; direction: SortDirection }
+
+// Appearance: the server's default skin and the runtime skin packs it has installed.
+// A pack is data only (no code, no CSS text): validated colours, lengths, font files and
+// image URLs applied over one compiled layout engine. See docs/skin-distribution.md.
+/** `#rrggbb` or `#rrggbbaa`, lowercase. */
+export type PackColor = string;
+export interface PackFontFile { url: string; weight: number; style: 'normal' | 'italic' }
+export interface PackFont { family: string; files: PackFontFile[] }
+export interface SkinPack {
+  /** Pack schema; a client ignores a schema it does not implement. */
+  schema: 1;
+  id: ID; version: string; name: string; tagline?: string;
+  /** The compiled layout engine the pack styles (`cinematic`, `index`, ...). */
+  engine: ID;
+  /** Engine role -> colour. The engine derives its whole palette from these roles. */
+  palette: Record<string, PackColor>;
+  /** Exact token overrides by Tamber name; only tokens the engine exposes apply. */
+  tokens?: Record<string, PackColor>;
+  fonts?: { display?: PackFont; text?: PackFont };
+  /** Pixels. */
+  radius?: { card?: number; panel?: number; pill?: number };
+  /** Same-origin URLs under /vela/v0/appearance/. */
+  images?: { preview?: string; backdrop?: string; wordmark?: string };
+  /** Up to five colours the picker shows. */
+  swatches: PackColor[];
+}
+export interface Appearance {
+  /** Monotonic; a client applies only a newer revision. */
+  revision: number;
+  /** An engine id or an installed pack id. */
+  defaultSkinId: ID;
+  /** The engine `defaultSkinId` runs on (itself for an engine). */
+  defaultEngineId: ID;
+  /** Owner override: the default replaces viewers' own picks while true. */
+  force: boolean;
+  packs: SkinPack[];
+}
+/** Viewer-level server events (`GET /events`), distinct from playback SessionEvent. */
+export type ServerEvent = { cursor: Cursor } & ({ type: 'appearance'; appearance: Appearance });

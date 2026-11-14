@@ -1,6 +1,7 @@
 /** Local-only release packager. No publishing and no changes to vendor/exact. */
 import { generateLocales } from '../locales';
 import { writePwaAssets } from './pwa-assets';
+import { externalizeAssets } from './assets';
 import { createHash } from 'node:crypto';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -81,6 +82,7 @@ try {
   const pwa = JSON.parse(await readFile(pwaPath, 'utf8'));
   Object.assign(pwa, { id: '/vela', name: 'Vela', short_name: 'Vela', start_url: '/vela', scope: '/vela', display: 'standalone', theme_color: '#0c1015', background_color: '#0c1015', icons: [192,512].map(size => ({ src: `./vela-icon-${size}.png`, sizes: `${size}x${size}`, type: 'image/png', purpose: 'any maskable' })) });
   await writeFile(pwaPath, JSON.stringify(pwa, null, 2) + '\n');
+  console.log(JSON.stringify({ assets: await externalizeAssets(dist) }));
   const cacheFiles = new Map<string, { url: string; sha256: string }>();
   async function immutableUrl(name: string): Promise<string> {
     const sha256 = digest(await readFile(join(dist, name))), url = `/vela/${name}?v=${sha256}`;

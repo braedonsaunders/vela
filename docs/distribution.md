@@ -15,6 +15,11 @@ Version is `client/package.json`'s version when present, otherwise
 `tools/release/VERSION`. Increment it for each release; existing outputs are never
 overwritten. The checked-out Exact revision must match `EXACT_REVISION`.
 
+External image/font assets receive content-hashed filenames, and complete static
+data-URI images/fonts are emitted as hashed static files. ESM entry/import URLs
+remain canonical. Dynamic symbol/mask expressions stay with their owning runtime.
+See [bundle-size.md](bundle-size.md) for measured byte costs and remaining limits.
+
 Output under `~/.scratch/tmp/vela/release/`:
 
 - `vela-<version>.tar.gz`: `index.html` and the complete static tree at archive root.

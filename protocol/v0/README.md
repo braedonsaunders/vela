@@ -93,7 +93,10 @@ grant-bound receipts and are absent from its home-row fixtures.
 
 Each Hero has a required reason (resume, nextEpisode, newRelease, forYou, trending,
 featured), a required action {kind:resume|play|details,titleId,positionSeconds?},
-and an optional short label. The first slot is the host's top predicted action;
+and an optional short supporting/reason label (never the primary button text).
+Clients localize Resume/Play/More info from the action and actual target facts;
+"Popular this week" is a reason chip, not a play-button label.
+The first slot is the host's top predicted action;
 remaining personal picks are interspersed with trending. Fill to at least five
 whenever the authorized library can supply five distinct eligible candidates,
 using actual trending or recently added/released sources when needed; never pad
