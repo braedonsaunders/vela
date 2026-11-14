@@ -587,12 +587,29 @@ class PlaybackEngine {
     this.lowDelay = session.lowDelay ?? false;
     this.audio = session.audioTrackId ?? null;
     this.subtitle = session.subtitleTrackId ?? null;
-    const source = this.candidates().find((s) => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
+    const source = this.candidates().find((s) => s.id === session.selectedSourceId) ?? this.candidates().find((s) => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) {
       this.fail({ kind: "unsupported", message: "No browser-compatible source for this edition", recoverable: false });
       return;
     }
     await this.activate(source, session.position ?? 0, false, true);
+  }
+  updateSession(session) {
+    if (session.id !== this.session?.id)
+      throw new Error("Cannot update a different session");
+    this.session = session;
+    if ((session.subtitleTrackId ?? null) !== this.subtitle) {
+      this.subtitle = session.subtitleTrackId ?? null;
+      this.applySubtitle();
+    }
+    if ((session.audioTrackId ?? null) !== this.audio) {
+      const previous = this.audio;
+      this.audio = session.audioTrackId ?? null;
+      if (!this.applyNativeAudio()) {
+        this.audio = previous;
+        this.emit({ type: "error", failure: { kind: "action", message: "Audio change requires a new server source generation", recoverable: true } });
+      }
+    }
   }
   resetMedia() {
     this.video.pause();
@@ -858,6 +875,7 @@ function sessionFromPlan(plan) {
   const edition = selected.edition ?? "";
   return {
     id: plan.sessionId,
+    selectedSourceId: plan.selectedPathId,
     mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? "",
     edition,
     position: plan.positionSeconds,
@@ -964,7 +982,11 @@ function setProps(handle, json) {
     if (!session.id || !Array.isArray(session.sources))
       throw new Error("Invalid playback session");
     handle.sessionJson = input;
-    handle.engine.load(session);
+    const current = handle.engine.snapshot();
+    if (props.plan && current.sessionId === session.id && current.sourceId === session.selectedSourceId && current.sourceGeneration === session.sourceGeneration && current.seekGeneration === session.seekGeneration)
+      handle.engine.updateSession(session);
+    else
+      handle.engine.load(session);
   }
   applyCommand(handle, props);
 }

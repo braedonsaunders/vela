@@ -7,7 +7,7 @@ export interface Source {
   renditions?: Rendition[];
 }
 export interface PlaybackSession {
-  id: string; mediaId: string; edition: string; sources: Source[]; position?: number;
+  id: string; mediaId: string; edition: string; selectedSourceId?: string; sources: Source[]; position?: number;
   audioTracks: Track[]; subtitleTracks: Track[]; audioTrackId?: string;
   subtitleTrackId?: string; live?: boolean; liveWindowStart?: number; liveMaxDrift?: number; lowDelay?: boolean; sourceGeneration?: number; seekGeneration?: number;
 }

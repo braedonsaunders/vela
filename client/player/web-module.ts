@@ -37,7 +37,10 @@ export function setProps(handle: Handle, json: string) {
       session = sessionFromPlan(plan); handle.planRevision = plan.revision; handle.planSession = plan.sessionId;
     } else session = JSON.parse(input) as PlaybackSession;
     if (!session.id || !Array.isArray(session.sources)) throw new Error('Invalid playback session');
-    handle.sessionJson = input; void handle.engine.load(session);
+    handle.sessionJson = input;
+    const current = handle.engine.snapshot();
+    if (props.plan && current.sessionId === session.id && current.sourceId === session.selectedSourceId && current.sourceGeneration === session.sourceGeneration && current.seekGeneration === session.seekGeneration) handle.engine.updateSession(session);
+    else void handle.engine.load(session);
   }
   applyCommand(handle, props);
 }

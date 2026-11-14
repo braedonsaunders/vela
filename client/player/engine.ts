@@ -63,9 +63,21 @@ export class PlaybackEngine {
     this.source = undefined; this.failure = null; this.attempted.clear(); this.recovering = false;
     this.lowDelay = session.lowDelay ?? false;
     this.audio = session.audioTrackId ?? null; this.subtitle = session.subtitleTrackId ?? null;
-    const source = this.candidates().find(s => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
+    const source = this.candidates().find(s => s.id === session.selectedSourceId) ?? this.candidates().find(s => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) { this.fail({ kind: 'unsupported', message: 'No browser-compatible source for this edition', recoverable: false }); return; }
     await this.activate(source, session.position ?? 0, false, true);
+  }
+  /** A server readiness/observation revision is not a new playback attempt. */
+  updateSession(session: PlaybackSession) {
+    if (session.id !== this.session?.id) throw new Error('Cannot update a different session');
+    this.session = session;
+    if ((session.subtitleTrackId ?? null) !== this.subtitle) {
+      this.subtitle = session.subtitleTrackId ?? null; this.applySubtitle();
+    }
+    if ((session.audioTrackId ?? null) !== this.audio) {
+      const previous = this.audio; this.audio = session.audioTrackId ?? null;
+      if (!this.applyNativeAudio()) { this.audio = previous; this.emit({ type: 'error', failure: { kind: 'action', message: 'Audio change requires a new server source generation', recoverable: true } }); }
+    }
   }
   private resetMedia() {
     this.video.pause(); this.pipeline?.dispose(); this.pipeline = undefined;
