@@ -1,3 +1,4 @@
+import { serveAudioFixture } from './audio-fixtures';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 export const fixtureDurationSeconds = 180;
@@ -6,7 +7,8 @@ export interface Faults { bandwidthBps: number; failEvery: number; truncateEvery
 export const faults: Faults = { bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false };
 let segmentCount = 0;
 export async function serveMedia(req: Request, resource: string): Promise<Response> {
-  if (!/^(master\.m3u8|mse-master\.m3u8|ts-master\.m3u8|direct\.mp4|subtitles\.vtt|(?:v(?:360|540|720)|video(?:360|540|720)|a_(?:en|es))\/(?:index\.m3u8|init\.mp4|seg-\d+\.m4s)|ts(?:360|540|720)\/(?:index\.m3u8|seg-\d+\.ts))$/.test(resource)) return new Response('Not found', { status: 404 });
+  if (resource.startsWith('audio/')) return serveAudioFixture(req, resource.slice(6));
+  if (!/^(master\.m3u8|mse-master\.m3u8|ts-master\.m3u8|direct\.mp4|universal-avc\.mp4|subtitles\.vtt|(?:v(?:360|540|720)|video(?:360|540|720)|a_(?:en|es))\/(?:index\.m3u8|init\.mp4|seg-\d+\.m4s)|ts(?:360|540|720)\/(?:index\.m3u8|seg-\d+\.ts))$/.test(resource)) return new Response('Not found', { status: 404 });
   const file = Bun.file(join(mediaRoot, resource));
   if (!await file.exists()) return Response.json({ error: 'media_not_generated', message: 'Run bun mock-server/scripts/make-media.ts' }, { status: 503 });
   const f = { ...faults };

@@ -106,3 +106,47 @@ Index384,439; Example92,956; initialization594,648; shared/foundation/root/runti
 the remaining payload. The owner approved separate static engine builds and a
 tiny selector; Exact-supported static dispatch is used, without vendor changes or
 unsupported lazy Contract imports. Cold-load measurements remain pending that build.
+
+The skin owners traced the multiplier to `foundation/skin.contract`: each Shell
+branch receives `children`, so all root routes are compiled once per engine branch.
+This repeats other engines’ routes inside each branch, not just that engine’s own
+chrome. The section ledger above attributes the repeated code to its original
+creation source. Static single-engine dispatch removes this cross product; the
+AuthStage slot can cause a second smaller multiplier. This explains why reducing
+icon node counts alone did not reduce entry bytes proportionally.
+
+## Per-engine release0.1.23
+
+Clean source `35b2590`, one archive, six statically compiled engine builds. Final
+packaged app.js bytes use gzip9 from the release tool (Bun/node:zlib).
+
+| Engine | Raw bytes | Gzip bytes | Cold runtime ready, ms |
+|---|---:|---:|---:|
+| cinematic | 2,092,845 | 291,612 | 140.9 |
+| index | 966,631 | 184,481 | 93.5 |
+| jellytwin | 1,736,398 | 264,520 | 125.5 |
+| mochi | 2,436,689 | 304,175 | 167.8 |
+| marquee | 1,914,591 | 287,246 | 129.1 |
+| example | 765,702 | 168,627 | 87.2 |
+
+Cold measurements: local installed Chrome,1280×800, fresh browser contexts,
+gzip loopback server, explicit viewer pick. Readiness means Exact runtime ready
+and one main root; API was deliberately503, so these measure static boot, not
+authenticated catalogue or real-device/network latency. Every engine loaded only
+its own engine resources and had zero page errors. The native ABI handoff from
+Cinematic to Index retained the current canonical route and restored a135px
+scroll position. Cache inspection contained tiny root resources and requested
+Cinematic/Index files only; no API/media responses. No playback, previews or
+sign-in occurred. All measurement browsers/servers were closed.
+
+Ether installed this artifact client-only: all809 file hashes matched, root
+index/worker/engine list/version returned200, with rollback retained. No server
+restart or public upload occurred. Default entry gzip is292KB, below the1MB goal.
+
+Release0.1.24 is the isolated playback-host hotfix on the verified0.1.23 source:
+`a8e72e8` contains35b2590 plus84dfa99 and the version bump, excluding unfinished
+universal-runtime work. The0.1.23 bridge discriminator collided with the normal
+player’s `engine` field. All six rebuilt native modules have zero old guards and
+two unique `leaving` guards. Ether verified all809 installed hashes and served24,
+retaining rollback without restart. Static cold boot/handoff qualification did not
+exercise normal playback teardown; this follow-up is recorded separately.

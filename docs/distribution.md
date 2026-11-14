@@ -159,3 +159,28 @@ window. `install()` must be invoked in a trusted user gesture and resolves wheth
 the prompt was accepted. `applyUpdate()` returns false when no worker is waiting.
 Exact's data module cannot access this browser API directly; native-view controls
 bridge it without exposing credentials or arbitrary DOM access to skins.
+
+## Per-engine release layout
+
+The release packager compiles each installed layout engine as a separate supported
+static Exact app. `engines.json` lists their immutable versioned bases under
+`/vela/engines/<engine>/<version>/`, entry bytes and gzip9 bytes. The root
+`index.html` loads only the small selector; it reads the viewer engine pick from
+`vela.engine`, then the last server default from `vela.engine.default`. On a first
+visit it makes a bounded public negotiation request for the server default.
+Unknown or removed engines fall back to cinematic. The engine page is loaded at
+the existing URL, retaining `/vela/...` routes, query and fragment.
+
+Each engine uses the shared foundation and session storage. The native handoff
+bridge owns preference changes, scroll restoration and the dissolve. The loader
+exposes only the validated installed engine IDs through `window.velaEngines`.
+Contract code has no dynamic import boundary; release staging statically removes
+unselected dispatch arms through `prepareEngine`, with no Exact vendor changes.
+
+The root service worker pre-caches only the tiny selector/PWA/offline resources.
+Versioned engine files are digest-checked and cached when requested, so an unused
+engine is never downloaded speculatively. API responses, signed artwork and media
+are outside the immutable allowlist. Offline navigation shows the offline page.
+An update activates through the existing explicit update action, clears obsolete
+version caches and claims clients. The artifact remains one archive and manifest;
+Ether performs the same atomic installation and rollback as before.

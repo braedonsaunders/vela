@@ -1,4 +1,4 @@
-use Card, FeedRow, HomeModel, HeroAction, SearchModel, Viewport, LibraryNav, cardName from "../../foundation/models.contract"
+use Card, CardPreview, HeroPreview, FeedRow, HomeModel, HeroAction, SearchModel, Viewport, LibraryNav, cardName from "../../foundation/models.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use Glyph, Solid, Wordmark, Spinner, Block, Art, Primary, Secondary, Round, barH, gutter, gutterPx, quick, arrive, kindLabel, mqFade, mqGone, mqRise, mqDrop, mqSlide, mqSpin, mqPulse, mqSheen from "./look.contract"
 
@@ -21,6 +21,8 @@ fn resumeRow(row: FeedRow): bool = row.items.length > 0 and row.items.filter(c =
 
 fn subLine(card: Card): string = (card.kind == "episode" and card.episodeNumber > 0 ? (card.seasonNumber > 0 ? t("marquee.seasonEpisode", season=card.seasonNumberLabel, episode=card.episodeNumberLabel) : t("marquee.episodeNumber", episode=card.episodeNumberLabel)) : card.year > 0 ? card.yearLabel : "")
 fn unwatched(card: Card): bool = (card.kind == "movie" or card.kind == "episode") and not card.played and card.progressSeconds <= 0
+// No trailer preview: rows outside the home and pages without one pass this.
+fn noPreview(): CardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=0)
 fn progressPct(card: Card): number = (card.durationSeconds > 0 ? min(100, max(0, card.progressSeconds / card.durationSeconds * 100)) : 0)
 
 // The frame around every signed-in page: a left sidebar of Home and the libraries,
@@ -113,7 +115,7 @@ component Shell
             button id="marquee-menu-button" testId="marquee-menu" press=toggleRail aria-label=(phone ? t("marquee.openNavigation") : t("marquee.toggleSidebar")) aria-expanded=(phone ? drawer : not slim) class=Round width=44 height=44
               Glyph(name="menu", size=22)
             link href="/" aria-label=t("ui.velaHome") text-decoration="none" display="flex" align-items="center" padding="6px 4px" border-radius=4
-              Wordmark(size=(phone ? 22 : 24))
+              Wordmark(size=28)
           if phone
             column flex=1
             button press=findSomething aria-label=t("ui.search") class=Round width=44 height=44 pointer-events="auto"
@@ -152,7 +154,7 @@ component Shell
           row height=bar align-items="center" gap=4 padding-left=4 padding-right=4 flex-shrink=0
             button press=closeDrawer aria-label=t("marquee.closeNavigation") class=Round width=44 height=44
               Glyph(name="close", size=22)
-            Wordmark(size=22)
+            Wordmark(size=28)
           scroll flex=1 min-height=0
             Destinations(libraries=libraries, section=section, canLive=canLive, slim=false, still=still, home=goHome, live=goLive, openLibrary=goLibrary)
       if pickerOpen
@@ -252,15 +254,15 @@ style MenuRow
   :focus-visible
     box-shadow = "inset 0px 0px 0px 2px var(--marquee.amber)"
 
-// The middle of the top bar on a wide page. It sits under the shell's clear bar and
-// carries the bar's colour. Nothing between it and the section's panning track is
-// positioned, so it pins to the top of the section rather than scrolling with it.
+// The middle of the top bar on a wide page: a sticky strip at the top of the page's
+// scroll, under the shell's clear bar, in the bar's colour.
 component TopStrip
   props
     small: bool
+    raised: bool
   slot
   view
-    row position="absolute" top=0 left=0 right=0 z-index=15 height=barH(small) box-sizing="border-box" padding="0px 76px 0px 24px" align-items="center" justify-content="center" background-color="marquee.chrome-glass" backdrop-filter="blur(18px)"
+    row position="sticky" top=0 z-index=(raised ? 16 : 15) flex-shrink=0 margin-top=(raised ? 0 : 0 - barH(small)) height=barH(small) box-sizing="border-box" padding="0px 76px 0px 24px" align-items="center" justify-content="center" background-color="marquee.chrome-glass" backdrop-filter="blur(18px)"
       children
 
 // The search field: in the top bar on wide screens, under it on phones.
@@ -298,11 +300,16 @@ component TitleCard
     selectTitle: action
     observe: action
     fill: bool
+    preview: CardPreview
+    intent: action
   state hot = false
+  derive previewing = preview.cardId == card.id and preview.url != "" and not still
+  // Hover and focus also ask the foundation for this title's trailer; the row decides whether it may.
   action heat(on: bool)
     hot = on
+    intent(card.id, on)
   view
-    button press=selectTitle(card.id, card.kind, card.receipt) intersect=observe(card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=heat focus=heat(true) blur=heat(false) class=CardButton width=(fill ? "100%" : `${posterW(small)}px`)
+    button press=selectTitle(card.id, card.kind, card.receipt) intersect=observe(card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=heat focus=heat(true) blur=heat(false) class=CardButton position="relative" z-index=(previewing ? 5 : 0) width=(fill ? "100%" : `${posterW(small)}px`)
       column position="relative" width="100%" aspect-ratio="2 / 3" border-radius=4 overflow="hidden" background-color="marquee.raised" box-shadow="0px 4px 12px var(--marquee.scrim-faint)"
         if card.poster != ""
           Art(src=card.poster, still=still)
@@ -319,6 +326,12 @@ component TitleCard
         text card.name font-size=(small ? 13 : 14) font-weight=600 color=(hot ? "marquee.amber" : "marquee.ink") white-space="nowrap" overflow="hidden" text-overflow="ellipsis" transition="color 120ms linear"
         if subLine(card) != ""
           text subLine(card) font-size=(small ? 12 : 13) color="marquee.ink-faint" font-variant-numeric="tabular-nums" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+      // A granted trailer opens as a landscape panel over the poster; artwork shows until the video plays.
+      if previewing
+        column position="absolute" left="-40%" top="18%" width="180%" aspect-ratio="16 / 9" border-radius=4 overflow="hidden" background-color="media.ground" box-shadow="0px 18px 50px var(--marquee.shadow), inset 0px 0px 0px 2px var(--marquee.amber)" pointer-events="none" aria-hidden=true animation="mqFade 180ms linear both" -exact-exit-animation="mqGone 120ms linear both"
+          Art(src=(card.backdrop != "" ? card.backdrop : card.poster), still=still)
+          vela-preview url=preview.url active="true" still="false" expiresAt=preview.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%"
+          column position="absolute" inset=0 border-radius=4 box-shadow="inset 0px 0px 0px 2px var(--marquee.amber)"
 
 // A landscape still for part-watched titles and episodes, with its progress.
 component WideCard
@@ -329,9 +342,14 @@ component WideCard
     selectTitle: action
     observe: action
     fill: bool
+    preview: CardPreview
+    intent: action
   state hot = false
+  derive previewing = preview.cardId == card.id and preview.url != "" and not still
+  // Hover and focus also ask the foundation for this title's trailer; the row decides whether it may.
   action heat(on: bool)
     hot = on
+    intent(card.id, on)
   view
     button press=selectTitle(card.id, card.kind, card.receipt) intersect=observe(card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=heat focus=heat(true) blur=heat(false) class=CardButton width=(fill ? "100%" : `${wideW(small)}px`)
       column position="relative" width="100%" aspect-ratio="16 / 9" border-radius=4 overflow="hidden" background-color="marquee.raised" box-shadow="0px 4px 12px var(--marquee.scrim-faint)"
@@ -343,6 +361,8 @@ component WideCard
             image card.poster alt="" position="absolute" top="8%" bottom="8%" left="50%" translate="-50% 0px" height="84%" aspect-ratio="2 / 3" object-fit="cover" border-radius=3
           else
             Placeholder(card=card, small=small)
+        if previewing
+          vela-preview url=preview.url active="true" still="false" expiresAt=preview.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
         if card.progressSeconds > 0 and card.durationSeconds > 0 and not card.played
           column position="absolute" left=0 right=0 bottom=0 height=4 background-color="marquee.scrim" aria-hidden=true
             column height=4 width=`${progressPct(card)}%` background-color="marquee.amber"
@@ -392,16 +412,25 @@ component Shelf
     still: bool
     selectTitle: action
     observe: action
+    preview: CardPreview
+    intent: action
   slot
   state port = 1000
   state at = 0
-  derive wide = resumeRow(row)
-  derive span = row.items.length * ((wide ? wideW(small) : posterW(small)) + cardGap(small)) + 2 * gutterPx(small)
+  derive ranked = row.presentation == "ranked"
+  derive wide = not ranked and resumeRow(row)
+  derive span = row.items.length * ((wide ? wideW(small) : posterW(small)) + (ranked ? (small ? 50 : 80) : 0) + cardGap(small)) + 2 * gutterPx(small)
   derive id = `hub-${place}-${row.id}`
   action measured(w: number, h: number)
     port = w
+  // Only rows the server marks for previews ask for one; scrolling the shelf lets it go.
+  action cardIntent(cardId: string, on: bool)
+    if row.previewOnFocus
+      intent(cardId, row.id, on)
   action scrolled(x: number, y: number)
     at = x
+    if row.previewOnFocus and preview.cardId != ""
+      intent("", row.id, false)
   action page(dir: number)
     scrollBy(id, dir * max(200, port - 2 * gutterPx(small) - 60), 0)
   view
@@ -415,11 +444,17 @@ component Shelf
             Glyph(name="right", size=18)
       scroll id=id resize=measured scroll=scrolled overflow-x="auto" overflow-y="hidden" scrollbar-width="none" scroll-behavior=(still ? "auto" : "smooth") scroll-padding-left=gutter(small)
         row gap=cardGap(small) align-items="flex-start" padding-top=4 padding-bottom=4 padding-left=gutter(small) padding-right=gutter(small)
-          for card in row.items key=card.id
-            if wide
-              WideCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
+          for card, i in row.items key=card.id
+            if ranked
+              // A ranked row: the server's position as a large numeral the poster overlaps.
+              row align-items="flex-end" flex-shrink=0
+                text formatNumber(i + 1, "decimal") aria-hidden=true font-size=(small ? 96 : 150) font-weight=800 line-height=0.8 letter-spacing="-0.08em" color="marquee.raised" margin-right=(small ? -14 : -22) padding-bottom=(small ? 34 : 40)
+                TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false, preview=preview, intent=cardIntent)
             else
-              TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
+              if wide
+                WideCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false, preview=preview, intent=cardIntent)
+              else
+                TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false, preview=preview, intent=cardIntent)
           children
 
 component Row
@@ -429,8 +464,12 @@ component Row
     still: bool
     selectTitle: action
     observe: action
+  state asked = false
+  // Rows outside the home never preview.
+  action quiet(cardId: string, rowId: string, on: bool)
+    asked = on
   view
-    Shelf(row=row, place="row", small=small, still=still, selectTitle=selectTitle, observe=observe)
+    Shelf(row=row, place="row", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
 
 // A hub-shaped placeholder while titles load.
 component ShelfBlocks
@@ -461,6 +500,8 @@ component Spotlight
     observe: action
     pickHero: action
     playHero: action
+    previews: HeroPreview[]
+    active: bool
   derive mine = actions.filter(a => a.heroId == hero.id)
   derive primary = mine.filter(a => a.action != "details" and a.targetId != "").slice(0, 1)
   view
@@ -474,13 +515,17 @@ component Spotlight
         if hero.backdrop != ""
           for b in [hero.backdrop] key=b
             Art(src=b, still=still)
-        column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--marquee.scrim) 0%, var(--marquee.scrim-soft) 40%, var(--marquee.scrim-clear) 72%), linear-gradient(0deg, var(--marquee.scrim-soft) 0%, var(--marquee.scrim-clear) 40%)" aria-hidden=true
+        // A server-granted trailer plays muted over the art; the artwork shows until it plays.
+        if not still
+          for p in previews.filter(p => p.id == hero.id) key=p.id
+            vela-preview url=p.url active=(active ? "true" : "false") still="false" expiresAt=p.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+        column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--marquee.scrim) 0%, var(--marquee.scrim) 30%, var(--marquee.scrim-soft) 55%, var(--marquee.scrim-clear) 78%), linear-gradient(0deg, var(--marquee.scrim) 0%, var(--marquee.scrim-clear) 55%)" aria-hidden=true
       column position=(small ? "relative" : "absolute") left=0 bottom=0 box-sizing="border-box" width=(small ? "100%" : "min(620px, 62%)") padding=(small ? "0px 16px 16px" : "0px 36px 32px") gap=(small ? 8 : 10)
         text (match first(mine) { case some(a) => (a.reasonLabel != "" ? a.reasonLabel : t("ui.featured")), case none => t("ui.featured") }) font-size=12 font-weight=700 letter-spacing="0.08em" text-transform="uppercase" color="marquee.amber"
         text hero.name role="heading" aria-level=2 font-size=(small ? 22 : 34) font-weight=700 line-height=1.1 letter-spacing="-0.01em" line-clamp=2
         text ([hero.yearLabel].concat(hero.genres.slice(0, 3)).concat([hero.rating]).filter(f => f != "").join(" · ")) font-size=(small ? 13 : 14) color="marquee.ink-dim" font-variant-numeric="tabular-nums"
         if hero.summary != "" and not small
-          text hero.summary font-size=15 color="marquee.ink-dim" line-height=1.5 line-clamp=2
+          text hero.summary font-size=15 color="marquee.ink" line-height=1.5 line-clamp=2 text-shadow="0px 1px 8px var(--marquee.shadow)"
         row gap=10 align-items="center" margin-top=(small ? 4 : 8) flex-wrap="wrap"
           // The server's predicted action (play, resume, next episode) in amber, then More info.
           for act in primary key=act.heroId
@@ -523,32 +568,36 @@ component Home
     homeMoreLoading: bool
     rowMoreLoading: string[]
     playHero: action
+    cardPreview: CardPreview
+    previewIntent: action
   slot
   derive searching = query != ""
   view
-    column padding-top=(small ? barH(true) : barH(false) + 24) padding-bottom=(searching ? 0 : 48)
+    column
       if small
+        column height=barH(true) flex-shrink=0
         row padding="10px 14px 16px"
           children
       else
-        TopStrip(small=false)
+        TopStrip(small=false, raised=true)
           children
-      if not searching
-        for hero in model.hero.slice(heroIndex, heroIndex + 1) key=hero.id
-          Spotlight(hero=hero, heroes=model.hero, actions=model.heroActions, count=model.hero.length, index=heroIndex, small=small, still=still, selectTitle=selectTitle, observe=observe, pickHero=pickHero, playHero=playHero)
-        for row, i in model.rows key=row.id
-          column animation=arrive(still, min(i, 5) * 40)
-            Shelf(row=row, place="home", small=small, still=still, selectTitle=selectTitle, observe=observe)
-              if row.nextCursor != ""
-                column width=(small ? 48 : 72) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
-                  if rowMoreLoading.includes(row.id)
-                    Spinner(size=24, still=still)
-        if model.nextCursor != ""
-          column min-height=120 intersect=reachEnd
-            if homeMoreLoading
-              ShelfBlocks(small=small, still=still)
-        if model.rows.length == 0 and model.hero.length == 0
-          Empty(glyph="stack", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"))
+      column padding-top=(small or searching ? 0 : 24) padding-bottom=(searching ? 0 : 48)
+        if not searching
+          for hero in model.hero.slice(heroIndex, heroIndex + 1) key=hero.id
+            Spotlight(hero=hero, heroes=model.hero, actions=model.heroActions, count=model.hero.length, index=heroIndex, small=small, still=still, selectTitle=selectTitle, observe=observe, pickHero=pickHero, playHero=playHero, previews=model.previews, active=active)
+          for row, i in model.rows key=row.id
+            column animation=arrive(still, min(i, 5) * 40)
+              Shelf(row=row, place="home", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=cardPreview, intent=previewIntent)
+                if row.nextCursor != ""
+                  column width=(small ? 48 : 72) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
+                    if rowMoreLoading.includes(row.id)
+                      Spinner(size=24, still=still)
+          if model.nextCursor != ""
+            column min-height=120 intersect=reachEnd
+              if homeMoreLoading
+                ShelfBlocks(small=small, still=still)
+          if model.rows.length == 0 and model.hero.length == 0
+            Empty(glyph="stack", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"))
 
 // A centred empty or failed moment, with what to do next when there is something.
 component Empty
@@ -578,9 +627,22 @@ component SearchSurface
     still: bool
     selectTitle: action
     observe: action
+  state asked = false
+  action quiet(cardId: string, rowId: string, on: bool)
+    asked = on
+  action backToField
+    scrollIntoView("vela-search", block="center")
+    focus("vela-search")
   view
     column gap=6 padding-bottom=60 animation=(still ? "mqFade 160ms linear both" : "mqFade 220ms linear both")
-      text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 font-size=(small ? 20 : 24) font-weight=700 padding-left=gutter(small) padding-right=gutter(small) padding-bottom=12 line-clamp=2
+      // Long results scroll the home's field away; this strip takes the bar's middle and leads back to it.
+      if not small
+        TopStrip(small=false, raised=false)
+          button press=backToField aria-label=t("ui.searchYourLibrary") class=SearchLaunch width="100%" max-width=560
+            row gap=10 align-items="center" min-width=0
+              Glyph(name="search", size=18)
+              text query font-size=15 color="marquee.ink" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+      text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 font-size=(small ? 20 : 24) font-weight=700 padding-left=gutter(small) padding-right=gutter(small) padding-top=(small ? 0 : 20) padding-bottom=12 line-clamp=2
       if error
         Empty(glyph="alert", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"))
       else
@@ -591,9 +653,9 @@ component SearchSurface
           if model.items.length == 0
             Empty(glyph="search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"))
           else
-            Shelf(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
+            Shelf(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
         if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
-          Shelf(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Shelf(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
         if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
           column gap=8
             if ai.aiStatus == "queued" or ai.aiStatus == "running"
@@ -601,7 +663,7 @@ component SearchSurface
                 Spinner(size=18, still=still)
                 text t("ui.exploringYourDescription") color="marquee.ink-dim" font-size=14
             if ai.items.length > 0
-              Shelf(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
+              Shelf(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
             if ai.aiStatus == "failed"
               text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="marquee.ink-dim" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
 
@@ -613,10 +675,10 @@ component Status
     small: bool
     still: bool
   view
-    column padding-top=(small ? barH(true) : barH(false)) animation="mqFade 200ms linear both"
+    column padding-top=(small or kind != "home" ? barH(small) : 0) animation="mqFade 200ms linear both"
       if kind == "home"
         if not small
-          TopStrip(small=false)
+          TopStrip(small=false, raised=true)
         column role="status" aria-label=message gap=0 padding-top=24
           column margin-left=gutter(small) margin-right=gutter(small) margin-bottom=30
             Block(width="100%", height=(small ? "200px" : "clamp(280px, 30vw, 380px)"), radius=6, still=still)

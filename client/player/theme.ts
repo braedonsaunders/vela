@@ -85,7 +85,7 @@ function fontFaces(pack: Pack, name: string): FontFace[] {
     try { url = new URL(f.url, location.href); } catch { return []; }
     // The server's origin, which the data module pinned (the page's own in a release).
     if (url.origin !== pack.origin || !url.pathname.startsWith('/vela/v0/appearance/') || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname)) return [];
-    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, '')}")`, { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, font.sizeAdjust ?? 100))}%` });
+    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, '')}")`, { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, font.sizeAdjust ?? 100))}%` } as FontFaceDescriptors & { sizeAdjust: string });
     document.fonts.add(face);
     void face.load().catch(() => document.fonts.delete(face));
     return [face];

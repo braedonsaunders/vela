@@ -1,4 +1,5 @@
-use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, libraryQuery from "./models.contract"
+use buildEngine from "./engine.contract"
+use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, SecureSwitchReply, libraryQuery from "./models.contract"
 
 shape Time
   epochAtZero: number
@@ -37,12 +38,30 @@ members Client
   action receiveOrigin(origin: string)
     pageOrigin = origin
   derive localeJSON = `{"locale":"${time.locale}","formatLocale":"${time.formatLocale}","resolvedLocale":"${time.resolvedLocale}","timeZone":"${time.timeZone}","utcOffset":${time.utcOffset}}`
-  resource auth = uiAuth(webCode, time.epochAtZero, fragmentCode != "" or capturedFragment, pageOrigin, mediaCapabilitiesJSON, localeJSON) when current(time) and pageOrigin != "" and mediaCapabilitiesJSON != "" as shape AuthModel transient
+  resource auth = uiAuth(webCode, time.epochAtZero, fragmentCode != "" or capturedFragment, pageOrigin, mediaCapabilitiesJSON, localeJSON) when current(time) and pageOrigin != "" and mediaCapabilitiesJSON != "" and fragmentCode == "" and searchParam(top(nav), "webCode") == "" as shape AuthModel transient
   mutation cancelledAI as shape ReceiptReply
   task cancelEmptySearch when query.trim() == ""
     after(1, cancelSearch)
   action cancelSearch
     send cancelledAI = cancelAISearch(time.epochAtZero)
+  state secureNavigate = ""
+  derive secureOriginsJSON = (auth.secureOrigin == "" ? "[]" : `["${auth.secureOrigin}"]`)
+  mutation secureSwitch as shape SecureSwitchReply then finishSecureSwitch
+  derive secureBusy = pending(secureSwitch)
+  derive secureError = match secureSwitch { case some(r) => r.error, case none => "" }
+  action goSecure
+    if auth.secureOrigin != "" and not secureBusy
+      if auth.authenticated
+        send secureSwitch = issueSecureSwitch(auth.secureOrigin, time.epochAtZero + performanceNow())
+      else
+        secureNavigate = `${auth.secureOrigin}/vela/`
+  action finishSecureSwitch
+    match secureSwitch
+      case some(r)
+        if auth.authenticated and auth.secureOrigin != "" and r.error == "" and r.url != ""
+          secureNavigate = r.url
+      case none
+        homeAuthChecked = homeAuthChecked
   mutation signedOut as shape AuthModel refreshes auth
   state homeAuthChecked = false
   action logout
@@ -309,7 +328,7 @@ members Client
   state libraryPages = 1
   state libraryPagingEntry = ""
   derive activeLibraryPages = (libraryPagingEntry == libraryKey ? libraryPages : 1)
-  resource libraryModel = uiLibrary(libraryId, librarySort, libraryDirection, libraryKind, libraryGenre, libraryYear, libraryPlayed, libraryFavorite, activeLibraryPages) with localeJSON, artWidth when auth.authenticated and libraryId != "" as shape LibraryModel
+  resource libraryModel = uiLibrary(libraryId, librarySort, libraryDirection, libraryKind, libraryGenre, libraryYear, libraryPlayed, libraryFavorite, activeLibraryPages) with localeJSON, artWidth when auth.authenticated and libraryId != "" and libraryId != "@live" as shape LibraryModel
   derive libraryLoading = (activeLibraryPages <= 1 and (pending(libraryModel) or not current(libraryModel)))
   derive libraryMoreLoading = (activeLibraryPages > 1 and pending(libraryModel))
   // The last answer per library this session, so a revisited section shows at once.
@@ -320,7 +339,11 @@ members Client
   action bumpLibrarySnapshots
     snapshotVersion = snapshotVersion + 1
   derive browseLibraries = (auth.authenticated and current(libraries) ? libraries.filter(l => l.kind != "live") : [])
-  derive sectionIndex = (libraryId == "" ? 0 : 1 + max(0, browseLibraries.map(l => l.id).indexOf(libraryId)))
+  // Top-level sections in top-bar order: Home, then the server's libraries, a live library
+  // becoming the Live TV panel; Live TV comes last when the server has no live library.
+  derive canLiveSection = auth.authenticated and current(home) and home.liveAvailable
+  derive sectionIds = ["home"].concat(auth.authenticated and current(libraries) ? libraries.filter(l => l.kind != "live" or canLiveSection).map(l => (l.kind == "live" ? "@live" : l.id)) : []).concat(canLiveSection and not (auth.authenticated and current(libraries) and libraries.filter(l => l.kind == "live").length > 0) ? ["@live"] : [])
+  derive sectionIndex = max(0, sectionIds.indexOf(libraryId == "" ? "home" : libraryId))
   action openLibrary(id: string)
     libraryPages = 1
     nav = (top(nav).name == "home" ? replace(nav, path("home") + librarySection(id, "")) : open(nav, path("home") + librarySection(id, "")))
@@ -340,11 +363,28 @@ members Client
   action followLibraryLink
     if top(nav).name == "library"
       nav = open(nav, path("home") + librarySection(top(nav).params.id, ""))
+  // The guide stays mounted once visited; its tile and session follow guideOpen, not mounting.
+  state liveVisited = false
+  task markLiveVisited when libraryId == "@live" and not liveVisited
+    after(1, rememberLiveVisit)
+  action rememberLiveVisit
+    liveVisited = true
+  // /live opens the Live TV panel of the home surface.
+  task redirectLiveLink when top(nav).name == "live"
+    after(1, followLiveLink)
+  action followLiveLink
+    if top(nav).name == "live"
+      nav = open(nav, path("home") + librarySection("@live", ""))
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
   resource collection = uiCollection(collectionId) with localeJSON, artWidth when auth.authenticated and collectionId != "" as shape CollectionModel
   resource detail = uiDetail(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape DetailModel
   resource related = uiRelated(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape FeedRow[] else empty()
-  derive detailSurface = DetailModel(detail, related=(current(related) ? related : []))
+  // A show's seasons stay on the show's own visit: the chosen season is a query on it, and only
+  // its episodes are read, so picking a season never remounts the page or drops the tabs.
+  derive detailSeason = (top(nav).name == "title" ? searchParam(top(nav), "season") : "")
+  resource seasonDetail = uiDetail(detailSeason) with localeJSON, artWidth when auth.authenticated and detailSeason != "" as shape DetailModel else empty()
+  derive seasonReady = match first(seasonDetail.title) { case some(t) => t.id == detailSeason, case none => false }
+  derive detailSurface = DetailModel(detail, related=(current(related) ? related : []), episodes=(detailSeason != "" and seasonReady ? seasonDetail.episodes : detail.episodes))
   derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" ? top(nav).params.id : "")
   resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero, `${top(nav).id}`, searchParam(top(nav), "position")) when auth.authenticated and playingId != "" as shape PlaybackModel transient
   state streamAttempt = 0
@@ -373,7 +413,9 @@ members Client
   derive pageColor = (activeSkin == "mochi" ? "mochi.page" : indexSkin ? "index.page" : activeSkin == "jellytwin" ? "jellytwin.page" : activeSkin == "marquee" ? "marquee.page" : "surface.page")
   derive inkColor = (activeSkin == "mochi" ? "mochi.ink" : indexSkin ? "index.ink" : activeSkin == "jellytwin" ? "jellytwin.ink" : activeSkin == "marquee" ? "marquee.ink" : "ink.primary")
   // requestedSkin and activePack come from the server appearance (appearance.contract).
-  derive activeSkin = match activePack { case some(p) => p.engine, case none => (["cinematic", "index", "editorial", "example", "jellytwin", "mochi", "marquee"].includes(requestedSkin) ? requestedSkin : "cinematic") }
+  derive wantedSkin = match activePack { case some(p) => p.engine, case none => (["cinematic", "index", "editorial", "example", "jellytwin", "mochi", "marquee"].includes(requestedSkin) ? requestedSkin : "cinematic") }
+  // A single-engine build always presents its own engine; vela-engine hands off to the wanted one.
+  derive activeSkin = (buildEngine() == "" ? wantedSkin : buildEngine())
 
   task searchUpdates when auth.authenticated and query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running")
     every(1500, updateSearch)
@@ -399,7 +441,8 @@ members Client
   action openSearch
     nav = (top(nav).name == "home" ? replace(nav, path("home") + (query == "" ? "" : `?q=${encodeURIComponent(query)}`)) : open(nav, path("home")))
   action openLive
-    nav = push(nav, path("live"))
+    libraryPages = 1
+    nav = (top(nav).name == "home" ? replace(nav, path("home") + librarySection("@live", "")) : open(nav, path("home") + librarySection("@live", "")))
   action selectTitle(id: string, kind: string, token: string)
     if kind == "channel"
       nav = push(nav, path("liveWatch", id))
@@ -407,7 +450,10 @@ members Client
       if kind == "collection" or kind == "directory" or kind == "playlist"
         nav = push(nav, path("collection", id))
       else
-        nav = push(nav, path("title", id))
+        if kind == "season" and top(nav).name == "title" and current(detail) and detail.seasons.filter(x => x.id == id).length > 0
+          nav = replace(nav, path("title", detailId) + `?season=${encodeURIComponent(id)}`)
+        else
+          nav = push(nav, path("title", id))
     if token != ""
       send receipt = interaction(token, "selected", time.epochAtZero + performanceNow())
   action observe(token: string, entry: IntersectionObserverEntry)

@@ -142,3 +142,11 @@ sequence is marked EXT-X-GAP (and returns 410), or delays segment delivery. Zero
 disables each interval; delay is capped at sixty seconds. Reset both intervals
 to zero after a drive. All channels share the synthetic broadcast clock. Live
 offers English muxed audio only; VOD retains the alternate track fixture.
+
+For original-file decoder qualification, opt in with
+`bun mock-server/scripts/make-universal-avc.ts`. It adds only
+`~/.scratch/tmp/vela/media/universal-avc.mp4`:8s,640×360/24fps H.264 High,
+AAC48kHz stereo, explicit BT.709 primaries/transfer/matrix and limited range.
+The generator probes those actual encoded fields before exclusive publication
+and preserves any existing file. Existing broker media grants may serve that
+allowlisted filename; normal playback plans/media are unchanged.

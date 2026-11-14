@@ -1,4 +1,4 @@
-// player/media-capabilities.ts
+// client/player/media-capabilities.ts
 function mediaCapabilities() {
   const video = document.createElement("video");
   const supports = (mime) => video.canPlayType(mime) !== "";
@@ -20,7 +20,7 @@ function mediaCapabilities() {
   };
 }
 
-// player/install.ts
+// client/player/install.ts
 function createInstall(element, json, event) {
   let runtime = window.velaPwa;
   const button = document.createElement("button");
@@ -75,7 +75,7 @@ function createInstall(element, json, event) {
   } };
 }
 
-// player/preview.ts
+// client/player/preview.ts
 function apply(handle) {
   const video = handle.video;
   if (handle.expiryTimer)
@@ -166,7 +166,7 @@ function destroyPreview(handle) {
   handle.video.remove();
 }
 
-// player/theme.ts
+// client/player/theme.ts
 var ENGINES = {
   cinematic: {
     roles: {
@@ -269,9 +269,9 @@ function fontFaces(pack, name) {
     } catch {
       return [];
     }
-    if (url.origin !== location.origin || !url.pathname.startsWith("/vela/v0/appearance/") || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname))
+    if (url.origin !== pack.origin || !url.pathname.startsWith("/vela/v0/appearance/") || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname))
       return [];
-    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, "")}")`, { weight: String(f.weight), style: f.style === "italic" ? "italic" : "normal", display: "swap" });
+    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, "")}")`, { weight: String(f.weight), style: f.style === "italic" ? "italic" : "normal", display: "swap", sizeAdjust: `${Math.min(150, Math.max(50, font.sizeAdjust ?? 100))}%` });
     document.fonts.add(face);
     face.load().catch(() => document.fonts.delete(face));
     return [face];
@@ -315,12 +315,135 @@ function destroyTheme(handle) {
   handle.sheet.remove();
 }
 
-// player/model.ts
+// client/player/engine-handoff.ts
+var CHOSEN = "vela.engine";
+var DEFAULT = "vela.engine.default";
+var HANDOFF = "vela.handoff";
+var ENGINE = /^[a-z][a-z0-9-]{0,31}$/;
+var FRESH_MS = 15000;
+var installed = () => {
+  const list = window.velaEngines;
+  return Array.isArray(list) ? list.filter((e) => typeof e === "string" && ENGINE.test(e)) : [];
+};
+function store(key, value) {
+  try {
+    if (value)
+      localStorage.setItem(key, value);
+    else
+      localStorage.removeItem(key);
+  } catch {}
+}
+function readHandoff() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(HANDOFF) ?? "null");
+    return value && Date.now() - value.at < FRESH_MS ? value : undefined;
+  } catch {
+    return;
+  }
+}
+function scrollPositions() {
+  const out = {};
+  for (const el of Array.from(document.querySelectorAll("[id]")))
+    if (el.scrollTop > 0 && el.id.length <= 80)
+      out[el.id] = Math.round(el.scrollTop);
+  return out;
+}
+function veil(still, from, to) {
+  const el = document.createElement("div");
+  el.setAttribute("aria-hidden", "true");
+  el.style.cssText = `position:fixed;inset:0;z-index:2147483647;pointer-events:none;background:${getComputedStyle(document.body).backgroundColor || "#090b0e"};opacity:${from}`;
+  document.body.append(el);
+  if (!still)
+    el.animate([{ opacity: from }, { opacity: to }], { duration: 260, easing: "ease-out", fill: "forwards" });
+  else
+    el.style.opacity = String(to);
+  return el;
+}
+function leave(handle, from, to, still) {
+  const earlier = readHandoff();
+  if (earlier && earlier.from === to && earlier.to === from)
+    return;
+  handle.leaving = true;
+  const record = { from, to, at: Date.now(), url: location.href, scroll: scrollPositions(), window: Math.round(scrollY) };
+  try {
+    sessionStorage.setItem(HANDOFF, JSON.stringify(record));
+  } catch {}
+  handle.overlay = veil(still, 0, 1);
+  setTimeout(() => location.replace(location.href), still ? 0 : 280);
+}
+function arrive(handle, build, still) {
+  const record = readHandoff();
+  if (!record || record.to !== build || record.url !== location.href)
+    return;
+  handle.overlay = veil(true, 1, 1);
+  const pending = new Map(Object.entries(record.scroll));
+  const started = performance.now();
+  const step = () => {
+    if (handle.disposed)
+      return;
+    for (const [id, top] of pending) {
+      const el = document.getElementById(id);
+      if (el && el.scrollHeight - el.clientHeight >= top) {
+        el.scrollTop = top;
+        pending.delete(id);
+      }
+    }
+    if (record.window && document.documentElement.scrollHeight - innerHeight >= record.window) {
+      scrollTo(0, record.window);
+      record.window = 0;
+    }
+    if ((pending.size || record.window) && performance.now() - started < 2000) {
+      handle.restoring = requestAnimationFrame(step);
+      return;
+    }
+    const overlay = handle.overlay;
+    handle.overlay = undefined;
+    if (!overlay)
+      return;
+    if (still)
+      overlay.remove();
+    else
+      overlay.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: "ease-out", fill: "forwards" }).finished.then(() => overlay.remove(), () => overlay.remove());
+  };
+  handle.restoring = requestAnimationFrame(step);
+}
+function apply3(handle, json, first) {
+  if (handle.leaving || handle.disposed)
+    return;
+  const p = JSON.parse(json);
+  const build = ENGINE.test(p.build ?? "") ? p.build : "";
+  const still = p.still === true || p.still === "true";
+  if (first && build)
+    arrive(handle, build, still);
+  if (p.settled !== true && p.settled !== "true")
+    return;
+  store(CHOSEN, ENGINE.test(p.chosen ?? "") ? p.chosen : "");
+  if (ENGINE.test(p.fallback ?? ""))
+    store(DEFAULT, p.fallback);
+  const wanted = p.wanted ?? "";
+  if (build && ENGINE.test(wanted) && wanted !== build && installed().includes(wanted))
+    leave(handle, build, wanted, still);
+}
+function createEngine(json) {
+  const handle = { engine: true, leaving: false, disposed: false };
+  apply3(handle, json, true);
+  return handle;
+}
+var setEngine = (handle, json) => apply3(handle, json, false);
+function destroyEngine(handle) {
+  handle.disposed = true;
+  if (handle.restoring)
+    cancelAnimationFrame(handle.restoring);
+  if (!handle.leaving)
+    handle.overlay?.remove();
+}
+
+// client/player/model.ts
 function codecKnown(rendition) {
   return rendition.codecStatus !== "pending" && /codecs="[^"]+"/.test(rendition.mime);
 }
 
-// player/session.ts
+// client/player/session.ts
 class SessionController {
   sessionId = "";
   source = 0;
@@ -382,7 +505,7 @@ function delay(ms, signal) {
   });
 }
 
-// player/hls.ts
+// client/player/hls.ts
 function parsePlaylist(text, base) {
   if (!text.trimStart().startsWith("#EXTM3U"))
     throw new Error("Invalid HLS playlist");
@@ -421,7 +544,7 @@ function parsePlaylist(text, base) {
   return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
 }
 
-// player/buffer.ts
+// client/player/buffer.ts
 class PlaybackFault extends Error {
   kind;
   retryable;
@@ -476,7 +599,7 @@ async function appendBuffer(buffer, bytes, video, signal) {
   }
 }
 
-// player/audio.ts
+// client/player/audio.ts
 class AudioBuffer {
   media;
   video;
@@ -637,7 +760,7 @@ class AudioBuffer {
       await mutation(this.buffer, signal, () => this.buffer.remove(0, before));
   }
 }
-// player/abr.ts
+// client/player/abr.ts
 class BandwidthEstimator {
   fast = 0;
   slow = 0;
@@ -709,7 +832,7 @@ class AdaptiveBitrate {
   }
 }
 
-// player/pipeline.ts
+// client/player/pipeline.ts
 function mediaSourceClass() {
   return globalThis.ManagedMediaSource ?? globalThis.MediaSource;
 }
@@ -1135,7 +1258,7 @@ class SegmentPipeline {
   }
 }
 
-// player/native-hls.ts
+// client/player/native-hls.ts
 async function nativeMediaPlaylist(url, signal, depth = 0) {
   if (depth > 1)
     throw new Error("Nested HLS masters are unsupported");
@@ -1162,7 +1285,7 @@ async function nativeMediaPlaylist(url, signal, depth = 0) {
   return nativeMediaPlaylist(variant.href, signal, depth + 1);
 }
 
-// src/protocol/id.ts
+// client/src/protocol/id.ts
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = bytes[6] & 15 | 64;
@@ -1170,7 +1293,7 @@ function randomId() {
   return Array.from(bytes, (b, i) => `${i === 4 || i === 6 || i === 8 || i === 10 ? "-" : ""}${b.toString(16).padStart(2, "0")}`).join("");
 }
 
-// player/engine.ts
+// client/player/engine.ts
 class PlaybackEngine {
   video;
   deliver;
@@ -2019,7 +2142,7 @@ class PlaybackEngine {
   }
 }
 
-// player/protocol.ts
+// client/player/protocol.ts
 function sessionFromPlan(plan) {
   const selected = plan.paths.find((p) => p.id === plan.selectedPathId);
   if (!selected)
@@ -2093,10 +2216,12 @@ function observation(snapshot, sequence) {
   };
 }
 
-// player/web-module.ts
+// client/player/web-module.ts
 var abi = 1;
-var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false }, "vela-theme": { snapshot: false } };
+var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false }, "vela-theme": { snapshot: false }, "vela-engine": { snapshot: false } };
 function create(tag, element, json, event) {
+  if (tag === "vela-engine")
+    return createEngine(json);
   if (tag === "vela-theme")
     return createTheme(json);
   if (tag === "vela-install")
@@ -2104,12 +2229,13 @@ function create(tag, element, json, event) {
   if (tag === "vela-preview")
     return createPreview(element, json, event);
   if (tag === "vela-context") {
-    const handle = { context: true, disposed: false };
+    const handle = { context: true, disposed: false, lastNavigation: "", event };
     const props = JSON.parse(json);
     queueMicrotask(() => {
       if (!handle.disposed)
         event(8, props.probe === "media" ? JSON.stringify(mediaCapabilities()) : props.probe === "network" ? JSON.stringify({ saveData: navigator.connection?.saveData === true }) : location.origin);
     });
+    navigateSecurely(handle, props);
     return handle;
   }
   if (tag !== "vela-player")
@@ -2146,6 +2272,10 @@ function create(tag, element, json, event) {
   return handle;
 }
 function setProps(handle, json) {
+  if ("leaving" in handle) {
+    setEngine(handle, json);
+    return;
+  }
   if ("theme" in handle) {
     setTheme(handle, json);
     return;
@@ -2158,8 +2288,10 @@ function setProps(handle, json) {
     setPreview(handle, json);
     return;
   }
-  if ("context" in handle)
+  if ("context" in handle) {
+    navigateSecurely(handle, JSON.parse(json));
     return;
+  }
   const props = JSON.parse(json);
   if (props.serverError !== handle.serverError) {
     handle.serverError = props.serverError ?? "";
@@ -2237,6 +2369,10 @@ function applyCommand(handle, props) {
   }
 }
 function destroy(handle) {
+  if ("leaving" in handle) {
+    destroyEngine(handle);
+    return;
+  }
   if ("theme" in handle) {
     destroyTheme(handle);
     return;
@@ -2255,6 +2391,26 @@ function destroy(handle) {
   }
   handle.engine.dispose();
   handle.video.remove();
+}
+function navigateSecurely(handle, props) {
+  const target = props.secureNavigate;
+  if (!target || handle.disposed || target === handle.lastNavigation)
+    return;
+  try {
+    if (target.length > 8192)
+      throw new Error("Invalid secure handoff");
+    const url = new URL(target);
+    const allowed = JSON.parse(props.secureOrigins || "[]");
+    if (url.protocol !== "https:" || url.username || url.password || !["/vela", "/vela/"].includes(url.pathname) || !Array.isArray(allowed) || !allowed.some((origin) => typeof origin === "string" && origin === url.origin))
+      throw new Error("Invalid secure handoff");
+    handle.lastNavigation = target;
+    queueMicrotask(() => {
+      if (!handle.disposed)
+        location.replace(url.href);
+    });
+  } catch {
+    handle.event(8, JSON.stringify({ secureNavigation: "rejected" }));
+  }
 }
 export {
   abi,

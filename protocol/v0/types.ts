@@ -6,16 +6,20 @@ export interface Page<T> { items: T[]; nextCursor?: Cursor; continuation: 'more'
 export interface Mutation { idempotencyKey: string }
 export interface Ack { accepted: true }
 export interface Device { id: ID; name: string; platform: string; appVersion: string }
+export interface OriginalPlaybackCapabilities { version: 1; range: true; demuxContainers: string[]; videoDecoders: string[]; audioDecoders: string[]; webgpu: boolean }
 export interface ClientCapabilities {
+  originalPlayback?: OriginalPlaybackCapabilities;
   device: Device; protocolVersions: number[]; containers: string[]; videoCodecs: string[];
   audioCodecs: string[]; subtitleFormats: string[]; /** Native HLS acceptance, independent of MSE. */ hls: boolean; mse: boolean;
   maxWidth?: number; maxHeight?: number; maxBitrate?: number; hdr?: string[];
 }
 export interface Feature { available: boolean; reason?: string }
 export interface ServerCapabilities {
+  /** Trusted advertised HTTPS base origins; no path, query or fragment. */
+  secureOrigins?: string[];
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
-    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature; trailerPreview?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
+    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature; trailerPreview?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -51,7 +55,7 @@ export interface Chapter { id: ID; name: string; startSeconds: number; endSecond
 /** Verified source stream facts only; omitted when streams are estimated or unknown. */
 export interface MediaSummary { video: { codec?: string; width?: number; height?: number; bitDepth?: number; colorTransfer?: string; dolbyVisionProfile?: number }[]; audio: { codec?: string; channels?: number; language?: string }[] }
 export interface TitleDetail { title: Title; canPlay?: boolean; seasons?: Title[]; episodes?: Title[];
-  extras: Extra[]; chapters: Chapter[]; crew?: { name: string; role?: string }[]; mediaSummary?: MediaSummary; cast: { name: string; role?: string; artwork?: ArtworkRef }[] }
+  extras: Extra[]; chapters: Chapter[]; crew?: { name: string; role?: string; artwork?: ArtworkRef }[]; mediaSummary?: MediaSummary; cast: { name: string; role?: string; artwork?: ArtworkRef }[] }
 export type RowEntry = { id: ID; receiptToken: string } & (
   { kind: 'title'; title: Title } | { kind: 'channel'; channel: Channel } |
   { kind: 'collection' | 'playlist' | 'directory'; name: string; artwork: ArtworkRef[]; targetId: ID });
@@ -73,7 +77,7 @@ export interface Interaction { receiptToken: string; kind: 'visible' | 'selected
   /** Visible means actually in the visible viewport; never merely prefetched. */
   visibleMilliseconds?: number; sessionId?: ID }
 export interface InteractionsRequest extends Mutation { interactions: Interaction[] }
-export interface Track { id: ID; kind: 'audio' | 'subtitle'; language: string; name: string; codec: string;
+export interface Track { streamIndex?: number; id: ID; kind: 'audio' | 'subtitle'; language: string; name: string; codec: string;
   channels?: number; forced?: boolean; hearingImpaired?: boolean; default?: boolean; url?: string }
 export interface AudioRendition { trackId: ID; groupId: ID; url: string; mimeType: string; bitrate?: number }
 export interface Quality { id: ID; width: number; height: number; bitrate: number; videoCodec: string; audioCodec?: string; url: string; codecStatus?: 'pending' | 'verified'; audioGroupId?: ID }
@@ -85,10 +89,12 @@ export type TrailerPreviewResponse = { state: 'ready'; grant: PreviewGrant } |
 export interface SwitchBoundary { atSeconds: number; independent: boolean; timelineId: ID;
   /** Source replacement requires this compatibility proof, not just a matching title. */
   compatibility: 'same-source' | 'verified-timeline'; audioTrackIds: ID[]; subtitleTrackIds: ID[] }
-export interface PlaybackPath { id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
-  url: string; mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
+export interface OriginalVideo { codec?: string; width?: number; height?: number; bitDepth?: number; profile?: string; level?: number; frameRate?: number; colorPrimaries?: string; colorTransfer?: string; colorSpace?: string; colorRange?: string; dvProfile?: number; dvLevel?: number; dvBlSignalCompatibilityId?: number; rpuPresent?: boolean; elPresent?: boolean; blPresent?: boolean }
+export interface PlaybackPathBase { originalVideo?: OriginalVideo; original?: boolean; range?: boolean; byteLength?: number; id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
+  mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
   timelineOriginSeconds?: number; initialRenditionId?: ID; audioRenditions?: AudioRendition[];
-  readiness: 'ready' | 'preparing' | 'unavailable'; qualities: Quality[]; boundaries: SwitchBoundary[] }
+  qualities: Quality[]; boundaries: SwitchBoundary[] }
+export type PlaybackPath = PlaybackPathBase & ({ readiness: 'on-demand'; url?: never } | { readiness: 'ready' | 'preparing' | 'unavailable'; url: string });
 export interface Fallback { state: 'unsupported' | 'idle' | 'preparing' | 'ready' | 'unavailable' | 'capacity'; pathId?: ID; reason?: string }
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; purpose?: 'playback' | 'preview';
   state: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended'; positionSeconds: number; durationSeconds?: number;
@@ -119,7 +125,8 @@ export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'sourc
   code: string; message: string; retry: { allowed: boolean; afterSeconds?: number; maxAttempts?: number };
   requestId?: ID; currentGenerations?: Generations }
 export interface ErrorResponse { error: ProtocolError }
-export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string }
+export interface LiveGuide { id: ID; name: string }
+export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string; guides?: LiveGuide[] }
 export interface Programme { id: ID; channelId: ID; name: string; summary: string; start: Timestamp; end: Timestamp;
   titleId?: ID; episodeTitle?: string; seasonNumber?: number; episodeNumber?: number; artwork: ArtworkRef[]; rating?: string; genres?: string[] }
 export interface GuideQuery { from: Timestamp; until: Timestamp; channelIds?: ID[]; cursor?: Cursor; limit?: number }
@@ -187,3 +194,9 @@ export interface Appearance {
 }
 /** Viewer-level server events (`GET /events`), distinct from playback SessionEvent. */
 export type ServerEvent = { cursor: Cursor } & ({ type: 'appearance'; appearance: Appearance });
+
+export interface WebCodeIssueRequest extends Mutation { targetOrigin: string; device: Device }
+export interface WebCodeIssueResponse { code: string; targetOrigin: string; expiresAt: Timestamp }
+
+export interface AudioFallbackRequest extends Mutation, Generations { trackId: ID; positionSeconds: number; preferredCodec: 'aac' }
+export interface AudioFallbackResponse { id: ID; audioGeneration: number; trackId: ID; url: string; mimeType: 'application/vnd.apple.mpegurl'; codec: 'mp4a.40.2'; timelineOriginSeconds: 0 }

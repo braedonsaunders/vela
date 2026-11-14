@@ -21,6 +21,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | POST | /auth/sign-in | SignInRequest | Tokens |
 | POST | /auth/refresh | RefreshRequest | Tokens |
 | POST | /auth/revoke | RevokeRequest | Ack |
+| POST | /auth/web-code | WebCodeIssueRequest | WebCodeIssueResponse |
 | POST | /auth/web-code/redeem | WebCodeRedeemRequest | Tokens |
 | POST | /auth/device | DeviceGrantRequest | DeviceGrant |
 | POST | /auth/device/poll | DevicePollRequest | GrantPoll |
@@ -334,3 +335,71 @@ position in the final server-ordered `items`, with at most ten entries. Clients
 keep that order, entry identities and receipt tokens. Omission uses the ordinary
 row surface. Landscape artwork may use existing backdrop/cover artwork; portrait
 artwork remains a fallback. No inferred rank or new receipt is issued by the client.
+
+`ServerCapabilities.secureOrigins?: string[]` advertises trusted HTTPS base
+origins from the host connection publisher (for example its plex.direct address).
+Values contain an origin only, without `/vela`, query or fragment. Omission means
+no advertised upgrade destination; clients must not manufacture one from a host
+name. Origin migration and credential handling remain an explicit client transport
+operation rather than an HTTP redirect.
+
+### Original-file playback
+
+`ClientCapabilities.originalPlayback` version1 advertises installed demux and
+decoder families, range support and WebGPU availability. It does not prove that
+an individual stream can decode; exact stream probing remains a runtime decision.
+`PlaybackPath.original`, `range` and optional `byteLength` describe the brokered
+original. HTTP range responses remain authoritative. `Track.streamIndex` is the
+actual source ffmpeg stream index, not a client-generated track ordinal.
+Lazy fallback uses the existing generation-aware `switch` command with `pathId`
+and `atSeconds` on the pinned source; there is no separate select-path command.
+
+An `on-demand` playback path has no URL and is never fetched or considered ready.
+The generation-aware `switch` command authorizes preparation, then returns the
+actual broker plan. Existing ready/preparing/unavailable paths keep their URL rule.
+
+`POST /auth/web-code` requires bearer/device authentication. Its targetOrigin must
+exactly match an advertised trusted HTTPS origin; the server issues a short-lived
+single-use Vela web code bound to the account and target origin. The response echoes that origin.
+Clients carry only `#code=<encoded-code>` in the destination fragment and scrub it
+before the first fetch. HTTPS is a new browser device: the target generates its
+own device ID and redeems normally. The issuing device field validates the
+current authenticated request; it does not bind or transfer the grant. Codes are
+single-use for60 seconds, bound to the account, exact trusted TLS origin and Vela
+surface. Credentials are not forwarded by HTTP redirects.
+
+### Audio-only fallback
+
+`POST /sessions/:id/audio-fallback` accepts `AudioFallbackRequest` and returns
+`AudioFallbackResponse`. It authorizes a real local AAC pipeline on the selected
+source track; `features.audioFallback.available` is true only when that pipeline
+is available. Audio-only HLS is broker-scoped. Its fMP4 timestamps are title-absolute
+(`timelineOriginSeconds: 0`). It does not bump video source or seek generations.
+Replacement invalidates the previous audio URL and increments `audioGeneration`.
+Stale source/seek generations return409; capacity/source failures use the ordinary
+classified error model. `DELETE /sessions/:id/audio-fallback/:audioId` accepts
+`Mutation` and returns `Ack`, canceling only that audio pipeline idempotently.
+
+`PlaybackPath.originalVideo` contains only actual, non-estimated source-probe
+facts. Missing facts are omitted. Explicit false DV presence flags and compatibility
+ID0 are preserved; absence is not proof of a compatible base layer. These facts
+are admission input for the original-file decoder, not a promise of support.
+
+Cast and crew credits may each carry `artwork?: ArtworkRef`. Emit only known
+portrait grants authorized for the current title credit. Neutral `Person.ThumbPath`
+and `PersonArtwork` can supply detached known descriptors without a metadata
+lookup or provider refresh. Missing portraits are omitted, including legacy
+name-only director/writer credits; clients leave the portrait empty.
+
+### Named live Guides
+
+`Channel.guides?: LiveGuide[]` carries actual owner-defined Guide memberships,
+in owner order and filtered to the viewer. Each descriptor is `{id,name}`; IDs
+remain stable across rename, and a channel may belong to several Guides. Clients
+use IDs for membership/filter state and deduplicate descriptors by ID for tabs.
+Omission means membership is unknown; an empty array means known no membership.
+`Channel.group` remains the independent provider group string. There is no global
+empty-Guide catalogue or new endpoint; memberships arrive with channel pages.
+These named Guides are channel groupings, separate from `/live/guide` programme
+time windows. The mock includes provider-derived memberships and overlapping
+House picks for its first six channels.

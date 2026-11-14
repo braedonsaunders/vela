@@ -1,6 +1,8 @@
-vendor/
+vendor/*
+!vendor/webgpu-player
 .tools/
 node_modules/
 .exact/
 target/
 .DS_Store
+client/modules/web/universal/

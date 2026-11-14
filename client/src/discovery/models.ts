@@ -10,7 +10,7 @@ export function card(title: Title, receipt = '', origin?: string, artWidth = 256
   const posterWidth = Math.min(600, Math.ceil(artWidth / 6));
   const logoWidth = Math.min(800, Math.ceil(artWidth / 3));
   return { id: title.id, kind: title.kind, name: title.name, summary: title.summary, year: title.year ?? 0, rating: title.rating ?? '', durationSeconds: title.durationSeconds ?? 0, progressSeconds: title.watch?.positionSeconds ?? 0, played: title.watch?.played ?? false, seasonId: title.seasonId ?? '', seasonNumber: title.seasonNumber ?? 0, episodeNumber: title.episodeNumber ?? 0, genres: title.genres,
-    yearLabel: title.year ? number(title.year, { useGrouping: false }) : '', progressLabel: title.durationSeconds ? number(Math.min(1, Math.max(0, (title.watch?.positionSeconds ?? 0) / title.durationSeconds)), { style: 'percent', maximumFractionDigits: 0 }) : '', seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '', episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
+    durationLabel: title.durationSeconds ? minute(Math.round(title.durationSeconds / 60)) : '', yearLabel: title.year ? number(title.year, { useGrouping: false }) : '', progressLabel: title.durationSeconds ? number(Math.min(1, Math.max(0, (title.watch?.positionSeconds ?? 0) / title.durationSeconds)), { style: 'percent', maximumFractionDigits: 0 }) : '', seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '', episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
     facts: [title.year ? number(title.year, { useGrouping: false }) : '', title.rating ?? '', title.durationSeconds ? minute(Math.round(title.durationSeconds / 60)) : ''].filter(Boolean).join(' · '),
     poster: art(title.artwork, 'poster', posterWidth, Math.ceil(posterWidth * 1.5), origin), backdrop: art(title.artwork, 'backdrop', artWidth, Math.ceil(artWidth * 9 / 16), origin),
     logo: art(title.artwork, 'logo', logoWidth, Math.ceil(logoWidth / 2), origin), accent: title.artwork.find(a => a.color)?.color ?? '', receipt };
@@ -21,7 +21,7 @@ export function entry(item: RowEntry, origin?: string, artWidth = 2560) {
   if (item.kind === 'title') return card(item.title, item.receiptToken, origin, artWidth);
   const artwork = item.kind === 'channel' ? item.channel.artwork : item.artwork;
   return { id: item.kind === 'channel' ? item.channel.id : item.targetId, kind: item.kind,
-    name: item.kind === 'channel' ? item.channel.name : item.name, summary: '', facts: '', yearLabel: '', progressLabel: '', seasonNumberLabel: '', episodeNumberLabel: '', year: 0, rating: item.kind === 'channel' ? item.channel.rating ?? '' : '', durationSeconds: 0, progressSeconds: 0, played: false, seasonId: '', seasonNumber: 0, episodeNumber: 0, genres: [] as string[],
+    name: item.kind === 'channel' ? item.channel.name : item.name, summary: '', facts: '', yearLabel: '', durationLabel: '', progressLabel: '', seasonNumberLabel: '', episodeNumberLabel: '', year: 0, rating: item.kind === 'channel' ? item.channel.rating ?? '' : '', durationSeconds: 0, progressSeconds: 0, played: false, seasonId: '', seasonNumber: 0, episodeNumber: 0, genres: [] as string[],
     poster: art(artwork, 'poster', posterWidth, Math.ceil(posterWidth * 1.5), origin), backdrop: art(artwork, 'backdrop', artWidth, Math.ceil(artWidth * 9 / 16), origin),
     logo: art(artwork, 'logo', logoWidth, Math.ceil(logoWidth / 2), origin), accent: artwork.find(a => a.color)?.color ?? '', receipt: item.receiptToken };
 }
@@ -64,5 +64,12 @@ export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560)
   return { title: [card(data.title, '', origin, artWidth)], related: [], mediaFacts: facts, resumePosition: clock(data.title.watch?.positionSeconds ?? 0), crew: (data.crew ?? []).map(c => c.role ? `${c.name} · ${c.role}` : c.name), canPlay: data.canPlay ?? false, resumeSeconds: data.title.watch?.positionSeconds ?? 0,
     seasons: (data.seasons ?? []).map(t => card(t, '', origin, artWidth)), episodes: (data.episodes ?? []).map(t => card(t, '', origin, artWidth)),
     extras: data.extras.map(e => ({ id: e.id, name: e.name, kind: e.kind, ready: e.availability === 'ready' })),
-    cast: data.cast.map(c => c.role ? `${c.name} · ${c.role}` : c.name) };
+    cast: data.cast.map(c => c.role ? `${c.name} · ${c.role}` : c.name),
+    castPeople: data.cast.map(c => {
+      let portrait = '';
+      if (c.artwork) {
+        try { portrait = artworkURL(c.artwork, 160, 160, origin) ?? ''; } catch { /* Malformed optional artwork is unavailable. */ }
+      }
+      return { name: c.name, role: c.role ?? '', portrait };
+    }) };
 }

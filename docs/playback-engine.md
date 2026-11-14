@@ -825,3 +825,82 @@ Local Chrome check: ambient started muted/defaultMuted=true, made zero preferenc
 reads/writes through mute and volume commands, and unmuted in place; an ordinary
 instance still loaded saved volume 0.4/muted=false. Network probe returned
 saveData=false. No session was opened; all created views and Chrome were closed.
+
+## Universal Player adoption
+
+Owner decision: original-file client demux/decode/WebGPU presentation becomes the
+preferred eligible route. The existing HTML/MSE/native HLS engine remains a
+fallback. This supersedes the earlier optional-only research recommendation.
+The interface to Contract remains session snapshots, commands and observations;
+capabilities and failure reasons must describe the actual selected backend.
+
+First adoption milestone pins the independent MIT engine as an unmodified source
+submodule at `vendor/webgpu-player`, commit
+`a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2`. The licence is reproduced in
+THIRD_PARTY_NOTICES. The Jellyfin plugin is not adopted. Source presence alone
+does not enable the route or advertise universal decode capability.
+
+Evidence and boundaries at this revision:
+
+- `src/demux/CustomDecodeMediaSource.ts:1` defines URL byte-range or local File
+  input; seeking/demux belong to the pinned Mediabunny fork. The controller's
+  audio/video track indices are container ordinals, not FFmpeg stream indices
+  (`src/capability/CustomPlaybackEligibility.ts:423`). Vela must match tracks,
+  never equate those indices by coincidence.
+- `src/pipeline/CustomPlaybackControllerTypes.ts` provides audio output factories,
+  package selections, decoded PCM layout and clock. Reuse the complete upstream
+  audio path; the audio worker owns Vela's package registry and output policy
+  under `client/player/universal/audio/`, not a duplicate mixer/worklet.
+- `src/pipeline/CustomPlaybackFrameLoop.ts` presents frames against the audio
+  clock and returns bounded decode credits. Preserve its ownership/lifetime
+  semantics; decoded GPU frames must never leak across source/seek generations.
+- `src/presentation/PresentationSetup.ts` owns colour-route authorization and
+  `src/presentation/WebGPUPresenter.ts` rendering. Dolby Vision and HDR claims
+  require a qualified route, actual package assets and supported profile; they
+  are not inferred from a filename or WebGPU existence.
+- `scripts/library-assets.mjs` and `docs/src/embedding.md` require four built
+  workers, libdovi RPU WASM and audio output-stage WASM. The engine is not a lone
+  JavaScript drop-in. Decoder packages are independently loaded; the forked
+  Mediabunny and LGPL packages keep their notices and corresponding source.
+- `docs/src/formats.md` / `docs/src/architecture.md` qualify direct VOD only.
+  Incremental live TS, HLS adaptation and subtitle overlays are Vela integration
+  work. Do not advertise these as universal until implemented and measured.
+
+Broker wire agreed with Ether: optional negotiated
+`originalPlayback={version:1,range:true,demuxContainers,videoDecoders,audioDecoders,webgpu}`.
+Arrays describe installed decoder families, not exact-profile or real-time
+promises. A ready direct/file path carries `original:true,range:true`, source
+identity and optionally byteLength. HTTP must provide untouched bytes, bounded
+206/Content-Range, 416 and validators; a changed original invalidates retained
+bytes. Existing scoped grants and viewer/policy rules apply. Fallback uses the
+existing generation-authorized `switch` command at absolute title position,
+preserving edition and tracks. Grant refresh must preserve the source identity;
+its URL renewal handoff remains to be finalized with Ether.
+
+Exact-profile WebCodecs probing and package availability precede original route
+admission. Unsupported decode/presentation falls back explicitly rather than
+claiming that every device decodes every format. Subtitle PGS/ASS and software
+fallback coverage are separate qualification milestones. Audio failures must
+not be converted to silent playback success.
+
+Ether already supplies a publicly trusted plex.direct HTTPS origin on the lab;
+`secureOrigins` discovery is being added. WebGPU, WebCodecs and AudioWorklet
+qualification must use that origin, not the lab's plain HTTP address. No new lab
+stream is authorized by source adoption or capability probing.
+
+Runtime asset build: `bun tools/player/prepare-upstream.ts --bootstrap` initializes
+only the required Mediabunny submodule, installs the pinned engine dependencies
+and scratch-local Emscripten, then compiles WASM and workers. Later invocations
+omit `--bootstrap`. Output defaults to `client/modules/web/universal/` and can be
+changed with `--out=<absolute-directory>`. The generated asset manifest pins the
+source revision and content key; exact MPL fork source and notices accompany the
+separately loaded workers. This does not yet switch the native view to WebGPU.
+
+First asset build completed with content key `91f8cfddc70b7353`: four workers,
+libdovi parser, audio output stage and qualification vectors assembled; the Vela
+preparation command ran successfully and copied exact MPL source and notices.
+Chrome on the lab's HTTPS identity page reported secureContext=true, a real
+WebGPU adapter, VideoDecoder, AudioDecoder and AudioWorklet, with maximum output
+channels=2. This was capability-only: no viewer login, media fetch or stream.
+The owned browser and AudioContext were closed. No decode/render performance,
+HDR correctness or physical multichannel claim follows from this API probe.

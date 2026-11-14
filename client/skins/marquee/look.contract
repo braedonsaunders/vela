@@ -72,14 +72,16 @@ component SkipGlyph
   view
     image (forward ? "symbol:icon.marquee-skip-forward" : "symbol:icon.marquee-skip-back") width=size height=size flex-shrink=0 aria-hidden=true
 
-// The Vela wordmark, set for this skin: an amber sail beside a heavy lowercase name.
+// The Vela lockup for dark grounds: the two-tone searchlight V and the monoline name.
+// It keeps its 2.629:1 aspect; below 72 px wide the brand rules call for the symbol alone.
 component Wordmark
   props
     size: number
   view
-    row align-items="center" gap=(size * 0.3) aria-hidden=true
-      image "assets/marquee/sail.svg" alt="" width=(size * 0.9) height=size
-      text t("ui.vela") font-size=(size * 0.92) font-weight=800 letter-spacing="-0.03em" line-height=1 color="marquee.ink" text-transform="lowercase"
+    if size * 2.629 >= 72
+      image "assets/brand/vela-lockup.svg" alt="" width=(size * 2.629) height=size flex-shrink=0 aria-hidden=true
+    else
+      image "assets/brand/vela-symbol.svg" alt="" width=(size * 46 / 49.6) height=size flex-shrink=0 aria-hidden=true
 
 // The amber ring the skin waits with: one bordered box turning.
 component Spinner
