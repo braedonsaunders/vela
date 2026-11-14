@@ -16,8 +16,8 @@ keyframes guidePulse
 
 // Grid geometry, in CSS pixels. Minutes become pixels at `ppm` per minute.
 fn ppm(small: bool): number = (small ? 4 : 6)
-fn rowH(small: bool): number = (small ? 68 : 76)
-fn railW(small: bool): number = (small ? 84 : 248)
+fn rowH(small: bool): number = (small ? 68 : 72)
+fn railW(small: bool): number = (small ? 84 : 264)
 fn rulerH(): number = 44
 fn side(small: bool): string = (small ? "16px" : "max(28px, 4vw)")
 
@@ -47,6 +47,7 @@ component Guide
   state portW = 1200
   state portH = 640
   state focusMin = -1
+  state landed = -1
   derive rows = model.channels.filter(c => keep(c, filter))
   derive grid = not small or mode == "guide"
   derive scale = ppm(small)
@@ -63,6 +64,8 @@ component Guide
   derive heroFallback = (heroChannels.length == 0 ? model.channels.slice(0, 1) : heroChannels)
 
   action scrolled(x: number, y: number)
+    if landed < 0
+      landed = model.landing
     let r = floor(y / row / 4) * 4
     if r != rowBase
       rowBase = r
@@ -75,6 +78,7 @@ component Guide
   action pickDay(offset: number)
     rowBase = 0
     colBase = -1
+    landed = -1
     focusMin = -1
     selChannel = ""
     selProgramme = ""
@@ -84,6 +88,8 @@ component Guide
     rowBase = 0
   action pickMode(value: string)
     mode = value
+    landed = -1
+    colBase = -1
   action jumpNow
     if model.day != 0
       pickDay(0)
@@ -144,57 +150,61 @@ component Guide
       focus(match first(rows.slice(index, index + 1)) { case some(c) => cellAt(c, max(col * 30, model.nowMinute)), case none => "" })
 
   view
-    column height="100%" min-height=0 box-sizing="border-box" padding-top=(small ? 72 : 96) background-image="radial-gradient(ellipse 70% 60% at 82% 0%, var(--cinematic.guide-aura), transparent 70%)"
+    column height="100%" min-height=0 box-sizing="border-box" padding-top=(grid ? 0 : (small ? 72 : 96)) background-image="radial-gradient(ellipse 70% 60% at 82% 0%, var(--cinematic.guide-aura), transparent 70%)"
       text t("ui.channelGuide") role="heading" aria-level=1 position="absolute" width=1 height=1 overflow="hidden" opacity=0
       if grid
         for c in heroFallback key=`hero-${c.id}`
           GuideHero(channel=c, programmeId=(selChannel == c.id and selProgramme != "" ? selProgramme : c.nowId), small=small, still=still, watch=watch)
-      // Toolbar: days, the time stepper and filters.
-      row flex-shrink=0 align-items="center" gap=(small ? 10 : 14) padding-left=side(small) padding-right=side(small) padding-top=(small ? 10 : 6) padding-bottom=(small ? 12 : 16) role="toolbar" aria-label=t("live.guideControls")
-        if small
+      // Toolbar: days, the time stepper and filters. Phones put the view switch first and the days beneath.
+      if small
+        row flex-shrink=0 align-items="center" gap=10 padding-left=side(small) padding-right=side(small) padding-top=10 padding-bottom=(grid ? 8 : 12) role="toolbar" aria-label=t("live.guideControls")
           row gap=4 padding=4 border-radius=999 background-color="cinematic.control" border="1px solid var(--cinematic.glass-edge)" role="tablist" aria-label=t("live.view")
             button press=pickMode("now") role="tab" aria-selected=(mode == "now") class=GuideTab background-color=(mode == "now" ? "ink.primary" : "transparent") color=(mode == "now" ? "ink.inverse" : "ink.secondary")
-              text t("live.onNow") font-size=13 font-weight=650
+              text t("live.onNow") font-size=13 font-weight=650 white-space="nowrap"
             button press=pickMode("guide") role="tab" aria-selected=(mode == "guide") class=GuideTab background-color=(mode == "guide" ? "ink.primary" : "transparent") color=(mode == "guide" ? "ink.inverse" : "ink.secondary")
-              text t("live.guide") font-size=13 font-weight=650
+              text t("live.guide") font-size=13 font-weight=650 white-space="nowrap"
           column flex=1
-        if grid
-          row gap=6 align-items="center" overflow-x="auto" flex-shrink=(small ? 1 : 0) min-width=0 scrollbar-width="none" role="group" aria-label=t("live.day")
-            for d in model.days key=d.offset
-              button press=pickDay(d.offset) aria-pressed=(d.offset == model.day) class=GuideChip background-color=(d.offset == model.day ? "ink.primary" : "cinematic.control") color=(d.offset == model.day ? "ink.inverse" : "ink.primary") border-color=(d.offset == model.day ? "ink.primary" : "cinematic.glass-edge")
-                row gap=6 align-items="baseline"
-                  text d.label font-size=13 font-weight=650 white-space="nowrap"
-                  if not small and d.offset > 1
-                    text d.date font-size=12 opacity=0.62 white-space="nowrap"
-          if not small
-            row gap=6 align-items="center" flex-shrink=0
-              button press=shift(-2) aria-label=t("ui.earlierProgrammes") class=IconButton width=38 height=38 padding=11
-                image "symbol:back" width=16 height=16 aria-hidden=true
-              button press=jumpNow class=GuideChip height=38 padding-left=14 padding-right=16
-                row gap=9 align-items="center"
-                  column position="relative" width=8 height=8 aria-hidden=true
-                    column position="absolute" inset=0 border-radius=4 background-color="cinematic.guide-now" animation=(still ? "none" : "guidePulse 2.2s ease-out infinite")
-                    column position="absolute" inset=0 border-radius=4 background-color="cinematic.guide-now"
-                  text t("live.now") font-size=13 font-weight=650
-              button press=shift(2) aria-label=t("ui.laterProgrammes") class=IconButton width=38 height=38 padding=11
-                image "symbol:forward-chevron" width=16 height=16 aria-hidden=true
-        if not small
-          row flex=1 min-width=0 gap=6 align-items="center" justify-content="flex-end" overflow-x="auto" scrollbar-width="none" role="group" aria-label=t("live.filter") mask-image="linear-gradient(90deg, transparent 0px, black 24px, black 100%)" padding-left=24
-            GuideFilter(label=t("live.allChannels"), value="all", on=(filter == "all"), pick=pickFilter)
-            GuideFilter(label=t("live.favourites"), value="favourites", on=(filter == "favourites"), pick=pickFilter)
-            GuideFilter(label=t("live.withListings"), value="listed", on=(filter == "listed"), pick=pickFilter)
-            if model.groups.length > 0
-              column width=1 height=20 flex-shrink=0 background-color="cinematic.glass-edge" margin="0px 6px"
-              for g in model.groups key=g
-                GuideFilter(label=g, value=g, on=(filter == g), pick=pickFilter)
-        else
           button press=pickFilter(filter == "favourites" ? "all" : "favourites") aria-pressed=(filter == "favourites") aria-label=t("live.favourites") class=IconButton width=38 height=38 padding=10 color=(filter == "favourites" ? "brand.warm" : "ink.primary")
             image (filter == "favourites" ? "symbol:star-fill" : "symbol:star") width=17 height=17 aria-hidden=true
           if grid
-            button press=jumpNow aria-label=t("live.jumpToNow") class=GuideChip height=38 padding-left=12 padding-right=12
+            button press=jumpNow aria-label=t("live.jumpToNow") class=GuideChip height=38 padding-left=12 padding-right=14
               row gap=7 align-items="center"
                 column width=7 height=7 border-radius=4 background-color="cinematic.guide-now" aria-hidden=true
                 text t("live.now") font-size=13 font-weight=650
+        if grid
+          row flex-shrink=0 gap=6 align-items="center" overflow-x="auto" scrollbar-width="none" padding-left=side(small) padding-right=side(small) padding-bottom=12 role="group" aria-label=t("live.day")
+            for d in model.days key=d.offset
+              GuideDayChip(label=d.label, date=d.date, offset=d.offset, on=(d.offset == model.day), small=small, pick=pickDay)
+      else
+        row flex-shrink=0 align-items="center" gap=14 padding-left=side(small) padding-right=side(small) padding-top=6 padding-bottom=16 role="toolbar" aria-label=t("live.guideControls")
+          row gap=6 align-items="center" flex-shrink=0 role="group" aria-label=t("live.day")
+            for d in model.days key=d.offset
+              GuideDayChip(label=d.label, date=d.date, offset=d.offset, on=(d.offset == model.day), small=small, pick=pickDay)
+          row gap=6 align-items="center" flex-shrink=0
+            button press=shift(-2) aria-label=t("ui.earlierProgrammes") class=IconButton width=38 height=38 padding=11
+              image "symbol:back" width=16 height=16 aria-hidden=true
+            button press=jumpNow aria-label=t("live.jumpToNow") class=GuideChip height=38 padding-left=14 padding-right=16
+              row gap=9 align-items="center"
+                column position="relative" width=8 height=8 aria-hidden=true
+                  column position="absolute" inset=0 border-radius=4 background-color="cinematic.guide-now" animation=(still ? "none" : "guidePulse 2.2s ease-out infinite")
+                  column position="absolute" inset=0 border-radius=4 background-color="cinematic.guide-now"
+                text t("live.now") font-size=13 font-weight=650
+            button press=shift(2) aria-label=t("ui.laterProgrammes") class=IconButton width=38 height=38 padding=11
+              image "symbol:forward-chevron" width=16 height=16 aria-hidden=true
+          column flex=1
+          row gap=8 align-items="center" flex-shrink=0
+            button press=pickFilter(filter == "favourites" ? "all" : "favourites") aria-pressed=(filter == "favourites") aria-label=t("live.favourites") class=IconButton width=38 height=38 padding=10 color=(filter == "favourites" ? "brand.warm" : "ink.primary")
+              image (filter == "favourites" ? "symbol:star-fill" : "symbol:star") width=17 height=17 aria-hidden=true
+            select value=filter change=pickFilter aria-label=t("live.filter") class=GuideSelect
+              option value="all"
+                text t("live.allChannels")
+              option value="favourites"
+                text t("live.favourites")
+              option value="listed"
+                text t("live.withListings")
+              for g in model.groups key=g
+                option value=g
+                  text g
       if model.channels.length == 0
         column flex=1 align-items="center" justify-content="center" gap=10 padding=32
           text t("live.noChannels") role="status" font-size=17 color="ink.secondary"
@@ -208,7 +218,7 @@ component Guide
           if grid
             column flex=1 min-height=0 margin-left=(small ? 0 : side(small)) margin-right=(small ? 0 : side(small)) margin-bottom=(small ? 0 : 24) border-radius=(small ? 0 : 20) overflow="hidden" border=(small ? "none" : "1px solid var(--cinematic.glass-edge)") border-top="1px solid var(--cinematic.glass-edge)" background-color="cinematic.guide-panel" box-shadow=(small ? "none" : "0px 40px 120px var(--cinematic.shadow)")
               for day in [model.day] key=day
-                scroll id="guide-grid" scroll=scrolled resize=measured flex=1 min-height=0 overflow="auto" overscroll-behavior="contain" scroll-padding-left=rail scroll-padding-top=rulerH() role="grid" aria-label=t("ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch")
+                scroll id="guide-grid" testId="guide-grid" scroll=scrolled resize=measured scrollLeft=((landed < 0 ? model.landing : landed) * scale) flex=1 min-height=0 overflow="auto" overscroll-behavior="contain" scroll-padding-left=rail scroll-padding-top=rulerH() role="grid" aria-label=t("ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch")
                   column position="relative" width=(rail + width) height=(rulerH() + rows.length * row) flex-shrink=0
                     // Half-hour and hour lines under every row, drawn once.
                     column position="absolute" left=rail top=rulerH() width=width height=(rows.length * row) aria-hidden=true background-image=`repeating-linear-gradient(90deg, var(--cinematic.guide-hour) 0px 1px, transparent 1px ${30 * scale}px, var(--cinematic.guide-half) ${30 * scale}px ${30 * scale + 1}px, transparent ${30 * scale + 1}px ${60 * scale}px)`
@@ -225,11 +235,8 @@ component Guide
                             text tick.label padding-left=10 font-size=12 font-weight=(tick.hour ? 650 : 500) color=(tick.hour ? "ink.primary" : "ink.quiet") font-variant-numeric="tabular-nums" white-space="nowrap"
                         if model.nowMinute >= 0
                           column id="guide-now-anchor" position="absolute" left=(max(0, model.nowMinute - 30) * scale) top=0 width=1 height=1 aria-hidden=true
-                          column id="guide-landing" position="absolute" left=(model.landing * scale) top=0 width=1 height=1 aria-hidden=true
                           row position="absolute" left=(model.nowMinute * scale) bottom=7 translate="-50% 0px" z-index=2 gap=5 align-items="center" padding="3px 8px" border-radius=999 background-color="cinematic.guide-now" box-shadow="0px 4px 18px var(--cinematic.guide-now-glow)" aria-hidden=true
                             text model.nowLabel font-size=11 font-weight=700 color="ink.primary" font-variant-numeric="tabular-nums" white-space="nowrap"
-                        else
-                          column id="guide-landing" position="absolute" left=(model.landing * scale) top=0 width=1 height=1 aria-hidden=true
                     // Channel rows, windowed around the port.
                     for c, i in rows.slice(firstRow, lastRow) key=c.id
                       row position="absolute" left=0 top=(rulerH() + (firstRow + i) * row) width=(rail + width) height=row role="row" border-bottom="1px solid var(--cinematic.hairline)" box-sizing="border-box"
@@ -257,7 +264,7 @@ component GuideHero
     watch: action
   derive picked = channel.programmes.filter(p => p.id == programmeId)
   view
-    column position="relative" flex-shrink=0 height=(small ? 176 : "clamp(250px, 34vh, 360px)") overflow="hidden"
+    column position="relative" flex-shrink=0 height=(small ? 236 : "calc(84px + clamp(190px, 27vh, 300px))") overflow="hidden"
       for p in picked key=`art-${p.id}`
         column position="absolute" inset=0 aria-hidden=true animation=(still ? "none" : `guideSwap 520ms ${glide()} both`)
           if p.art != ""
@@ -375,21 +382,26 @@ component GuideCell
         column position="absolute" left=0 top=10 bottom=10 width=3 border-radius=2 background-color=toneColor(programme.tone) opacity=(programme.ended ? 0.5 : 0.9) aria-hidden=true
       if programme.airing
         column position="absolute" left=0 bottom=0 height=2 width=elapsed background-color="brand.warm" aria-hidden=true
-      if w > 30
+      if w >= 10 * scale
         column position="sticky" left=(rail + 12) height="100%" justify-content="center" gap=(small ? 3 : 4) padding-left=12 padding-right=10 box-sizing="border-box" max-width=max(0, w - 4) min-width=0 flex-shrink=1
           text programme.name font-size=(small ? 13 : 14) font-weight=(programme.airing ? 680 : 600) color="ink.primary" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
-          if w > 80
+          if w > 110
             text metaLine(programme) font-size=12 color=(programme.airing ? "brand.warm" : "ink.secondary") font-variant-numeric="tabular-nums" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
 
-component GuideFilter
+component GuideDayChip
   props
     label: string
-    value: string
+    date: string
+    offset: number
     on: bool
+    small: bool
     pick: action
   view
-    button press=pick(value) aria-pressed=on class=GuideChip flex-shrink=0 background-color=(on ? "ink.primary" : "cinematic.control") color=(on ? "ink.inverse" : "ink.primary") border-color=(on ? "ink.primary" : "cinematic.glass-edge")
-      text label font-size=13 font-weight=620 white-space="nowrap"
+    button press=pick(offset) aria-pressed=on class=GuideChip flex-shrink=0 background-color=(on ? "ink.primary" : "cinematic.control") color=(on ? "ink.inverse" : "ink.primary") border-color=(on ? "ink.primary" : "cinematic.glass-edge")
+      row gap=6 align-items="baseline"
+        text label font-size=13 font-weight=650 white-space="nowrap"
+        if offset > 1
+          text date font-size=12 opacity=0.62 white-space="nowrap"
 
 // Phones: every channel with what is on now and next, one tap from watching.
 component GuideNowList
@@ -437,6 +449,17 @@ style GuideChip
     -exact-press-scale = 0.97
   :focus-visible
     box-shadow = "0px 0px 0px 2px var(--surface.page), 0px 0px 0px 4px var(--brand.warm)"
+
+style GuideSelect
+  box-sizing = "border-box"
+  height = 38
+  padding = "0px 14px"
+  border = "1px solid var(--cinematic.glass-edge)"
+  border-radius = 999
+  background-color = "cinematic.control"
+  color = "ink.primary"
+  font-size = 13
+  font-weight = 600
 
 style GuideTab
   height = 30

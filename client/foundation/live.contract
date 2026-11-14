@@ -16,14 +16,6 @@ members Client
     after(1, tickGuide)
   task guideClock when (top(nav).name == "live" or top(nav).name == "liveWatch") and auth.authenticated
     every(60000, tickGuide)
-  // A day's grid opens half an hour before now (or at this time of day), once per route entry and day.
-  state guideLanded = ""
-  derive guideLandingKey = `${top(nav).id}:${guideDay}`
-  task landGuide when top(nav).name == "live" and guideReady and guideLanded != guideLandingKey
-    after(60, landGuide)
-  action landGuide
-    guideLanded = guideLandingKey
-    scrollIntoView("guide-landing", block="nearest", inline="start")
   action tickGuide
     guideNow = time.epochAtZero + performanceNow()
   action earlierGuide
