@@ -422,3 +422,11 @@ new endpoint and no invented receipt. Programme IDs and channel IDs match the li
 API; programme.channelId references a viewer-authorized tunable channel, and its
 start/end are authoritative. Descriptive and AI responses omit these live lanes.
 The mock searches its visible channel/Guide labels and a24-hour programme window.
+
+`LiveSearchResults.programmeChannels?: Channel[]` supplies deduplicated,
+viewer-authorized parents of the returned programme hits. It is metadata for
+looking up channel labels/artwork by ID, **not** channel search matches. Keep
+`live.channels` restricted to true channel matches. Missing or partial parent
+metadata leaves unknown labels/logos empty; clients do not infer names or make
+per-hit network lookups. The neutral source can supply parents in the same
+bounded policy query.

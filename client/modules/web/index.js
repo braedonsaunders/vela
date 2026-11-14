@@ -1,5 +1,96 @@
+// player/beta.ts
+var key = "vela.player.beta";
+var changed = "vela:player-beta";
+var volatile = null;
+function betaPlayerEnabled() {
+  if (volatile !== null)
+    return volatile;
+  try {
+    return localStorage.getItem(key) === "true";
+  } catch {
+    return false;
+  }
+}
+function setBetaPlayer(enabled) {
+  const previous = betaPlayerEnabled();
+  volatile = enabled;
+  try {
+    localStorage.setItem(key, String(enabled));
+  } catch {}
+  if (previous !== enabled)
+    window.dispatchEvent(new Event(changed));
+}
+function subscribeBetaPlayer(listener) {
+  const storage = (event) => {
+    if (event.key === key || event.key === null) {
+      volatile = null;
+      listener();
+    }
+  };
+  window.addEventListener(changed, listener);
+  window.addEventListener("storage", storage);
+  return () => {
+    window.removeEventListener(changed, listener);
+    window.removeEventListener("storage", storage);
+  };
+}
+
+// player/universal/loader.ts
+function canAttemptOriginal() {
+  return isSecureContext && !!navigator.gpu && typeof VideoFrame === "function" && typeof Worker === "function";
+}
+async function loadOriginalRuntime(options) {
+  if (!canAttemptOriginal())
+    throw new Error("Secure WebGPU, workers and VideoFrame are required for original playback");
+  const base = new URL("./universal/", import.meta.url);
+  const response = await fetch(new URL("assets.json", base), { signal: AbortSignal.any([options.signal, AbortSignal.timeout(1e4)]), credentials: "same-origin" });
+  if (!response.ok)
+    throw new Error(`Original runtime assets HTTP ${response.status}`);
+  const manifest = await response.json();
+  if (manifest.version !== 1 || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
+    throw new Error("Original runtime asset identity mismatch");
+  options.signal.throwIfAborted();
+  const moduleURL = new URL("runtime.js", base);
+  moduleURL.searchParams.set("v", manifest.assetKey);
+  const module = await import(moduleURL.href);
+  options.signal.throwIfAborted();
+  return new module.UniversalRuntime({ ...options, assets: { baseURL: new URL("libraries/", base).href, assetKey: manifest.assetKey, audioDecoderURL: new URL("libraries/audio-decoders/", base).href, videoDecoderURL: new URL("libraries/video-decoders/", base).href } });
+}
+async function originalPlaybackCapabilities(signal) {
+  if (!canAttemptOriginal())
+    return null;
+  let timer;
+  try {
+    const gpu = navigator.gpu;
+    const adapter = await Promise.race([gpu?.requestAdapter(), new Promise((resolve) => {
+      timer = setTimeout(() => resolve(null), 2000);
+    })]);
+    if (!adapter)
+      return null;
+  } finally {
+    if (timer)
+      clearTimeout(timer);
+  }
+  signal.throwIfAborted();
+  const response = await fetch(new URL("./universal/assets.json", import.meta.url), { credentials: "same-origin", signal: AbortSignal.any([signal, AbortSignal.timeout(1e4)]) });
+  if (!response.ok)
+    return null;
+  const manifest = await response.json();
+  if (manifest.version !== 1 || !/^[a-f0-9]{16}$/.test(manifest.assetKey ?? "") || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
+    return null;
+  const declaration = manifest.originalPlayback;
+  if (!declaration || declaration.version !== 1 || declaration.range !== true || declaration.webgpu !== true)
+    return null;
+  for (const list of [declaration.demuxContainers, declaration.videoDecoders, declaration.audioDecoders])
+    if (!Array.isArray(list) || !list.length || list.length > 32 || list.some((value) => typeof value !== "string" || !/^[a-z0-9_-]{1,40}$/.test(value)))
+      return null;
+  if (typeof VideoDecoder !== "function" || typeof AudioContext !== "function" || typeof AudioWorkletNode !== "function")
+    return null;
+  return declaration;
+}
+
 // player/media-capabilities.ts
-function mediaCapabilities() {
+async function mediaCapabilities(signal) {
   const video = document.createElement("video");
   const supports = (mime) => video.canPlayType(mime) !== "";
   const MS = globalThis.ManagedMediaSource ?? globalThis.MediaSource;
@@ -10,7 +101,9 @@ function mediaCapabilities() {
     ["av1", 'video/mp4; codecs="av01.0.05M.08"']
   ];
   const audioFormats = [["aac", 'audio/mp4; codecs="mp4a.40.2"'], ["opus", 'audio/webm; codecs="opus"'], ["ac3", 'audio/mp4; codecs="ac-3"'], ["eac3", 'audio/mp4; codecs="ec-3"']];
+  const originalPlayback = betaPlayerEnabled() ? await originalPlaybackCapabilities(signal).catch(() => null) : null;
   return {
+    ...originalPlayback ? { originalPlayback } : {},
     containers: [supports("video/mp4") ? "mp4" : "", supports("video/webm") ? "webm" : ""].filter(Boolean),
     videoCodecs: videoFormats.filter(([, mime]) => supports(mime)).map(([name]) => name),
     audioCodecs: audioFormats.filter(([, mime]) => supports(mime)).map(([name]) => name),
@@ -438,26 +531,11 @@ function destroyEngine(handle) {
     handle.overlay?.remove();
 }
 
-// player/universal/loader.ts
-function canAttemptOriginal() {
-  return isSecureContext && !!navigator.gpu && typeof VideoDecoder === "function";
-}
-async function loadOriginalRuntime(options) {
-  if (!canAttemptOriginal())
-    throw new Error("Secure WebGPU and WebCodecs are required for original playback");
-  const base = new URL("./universal/", import.meta.url);
-  const response = await fetch(new URL("assets.json", base), { signal: AbortSignal.any([options.signal, AbortSignal.timeout(1e4)]), credentials: "same-origin" });
-  if (!response.ok)
-    throw new Error(`Original runtime assets HTTP ${response.status}`);
-  const manifest = await response.json();
-  if (manifest.version !== 1 || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
-    throw new Error("Original runtime asset identity mismatch");
-  options.signal.throwIfAborted();
-  const moduleURL = new URL("runtime.js", base);
-  moduleURL.searchParams.set("v", manifest.assetKey);
-  const module = await import(moduleURL.href);
-  options.signal.throwIfAborted();
-  return new module.UniversalRuntime({ ...options, assets: { baseURL: new URL("libraries/", base).href, assetKey: manifest.assetKey, audioDecoderURL: new URL("libraries/audio-decoders/", base).href } });
+// player/universal/retry.ts
+function decoderRetry(reason) {
+  if (!reason.startsWith("Original decode: decode-failed"))
+    return null;
+  return { audio: true, video: true };
 }
 
 // player/model.ts
@@ -1326,6 +1404,7 @@ class PlaybackEngine {
   source;
   pipeline;
   original;
+  localDecoderRetries = new Set;
   originalClosing = Promise.resolve();
   status = "idle";
   backend = null;
@@ -1490,7 +1569,7 @@ class PlaybackEngine {
   }
   snapshot() {
     const ranges = this.video.buffered, quality = this.video.getVideoPlaybackQuality?.();
-    const audioTrackIds = this.backend === "mse" ? this.pipeline?.audioTracks ?? [] : this.session?.audioTracks.filter((t) => !!this.nativeAudio(t.id)).map((t) => t.id) ?? [];
+    const audioTrackIds = this.original ? this.original.audioTrackIds : this.backend === "mse" ? this.pipeline?.audioTracks ?? [] : this.session?.audioTracks.filter((t) => !!this.nativeAudio(t.id)).map((t) => t.id) ?? [];
     return {
       sessionId: this.session?.id ?? null,
       sourceGeneration: this.controller.source,
@@ -1517,7 +1596,7 @@ class PlaybackEngine {
       totalFrames: this.terminalMedia?.frames ?? this.original?.readout.frames ?? quality?.totalVideoFrames ?? null,
       audioTrackIds,
       audioTrackId: this.pipeline?.audioTrackId ?? this.audio,
-      pendingAudioTrackId: this.pipeline?.pendingAudioTrackId ?? null,
+      pendingAudioTrackId: this.original?.pendingAudioTrackId ?? this.pipeline?.pendingAudioTrackId ?? null,
       subtitleTrackId: this.subtitle,
       failure: this.failure
     };
@@ -1594,6 +1673,8 @@ class PlaybackEngine {
         this.checkWaiting();
         this.publish();
       }, 1000);
+    if (session.id !== this.session?.id || session.sourceGeneration !== this.controller.source || session.seekGeneration !== this.controller.seek)
+      this.localDecoderRetries.clear();
     const pending = this.pendingSwitch;
     const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && (pending.source + 1 === session.sourceGeneration && pending.seek === session.seekGeneration || pending.source === session.sourceGeneration && pending.seek + 1 === session.seekGeneration);
     const position = handoff ? Math.max(pending.position, this.position()) : session.position ?? 0;
@@ -1626,7 +1707,7 @@ class PlaybackEngine {
     this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? false;
     const preferred = this.audioPreference;
     const selected = session.sources.find((s) => s.id === session.selectedSourceId);
-    this.audio = preferred && selected?.audioRenditions?.some((a) => a.trackId === preferred) ? preferred : session.audioTrackId ?? null;
+    this.audio = preferred && (selected?.audioRenditions?.some((a) => a.trackId === preferred) || selected?.original && session.audioTracks.some((track) => track.id === preferred)) ? preferred : session.audioTrackId ?? null;
     this.subtitle = session.subtitleTrackId ?? null;
     const source = this.candidates().find((s) => s.id === session.selectedSourceId) ?? this.candidates().find((s) => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) {
@@ -1658,6 +1739,8 @@ class PlaybackEngine {
       this.applySubtitle();
     }
     if ((session.audioTrackId ?? null) !== this.audio) {
+      if (this.original && this.audioPreference === this.audio && session.audioTracks.some((track) => track.id === this.audio))
+        return;
       const previous = this.audio;
       const preferred = this.audioPreference;
       const selected = session.sources.find((s) => s.id === session.selectedSourceId);
@@ -1737,7 +1820,7 @@ class PlaybackEngine {
     this.video.load();
     this.video.playbackRate = 1;
   }
-  async activate(source, position, recovery = false, initial = false) {
+  async activate(source, position, recovery = false, initial = false, retry) {
     this.startupDeadlineMs = source.renditions?.some((r) => !codecKnown(r)) ? 60000 : 45000;
     this.resumePosition = position;
     this.waitSince = performance.now();
@@ -1765,6 +1848,7 @@ class PlaybackEngine {
         const original = await loadOriginalRuntime({
           surface: { container: parent, video: this.video },
           signal: token.signal,
+          retry,
           onFailure: (reason) => {
             if (this.controller.current(token))
               this.recover(new PlaybackFault(reason, "decoder"), token);
@@ -1804,7 +1888,7 @@ class PlaybackEngine {
           audio: (this.session?.audioTracks ?? []).map((t) => {
             if (t.streamIndex === undefined || !t.codec)
               throw new Error("Original audio identity is unavailable");
-            return { id: t.id, codec: t.codec, channels: t.channels, streamIndex: t.streamIndex };
+            return { id: t.id, codec: t.codec, channels: t.channels, language: t.language, streamIndex: t.streamIndex };
           }),
           selectedAudioId: this.audio
         });
@@ -1953,6 +2037,13 @@ class PlaybackEngine {
     this.failure = failure;
     this.publish();
     try {
+      const retry = this.backend === "webgpu" ? decoderRetry(failure.message) : null;
+      if (retry && this.source?.original && !this.localDecoderRetries.has(this.source.id)) {
+        this.localDecoderRetries.add(this.source.id);
+        this.recovering = false;
+        await this.activate(this.source, position, true, true, retry);
+        return;
+      }
       await delay(300, token.signal);
       if (!this.video.error && this.video.readyState >= 3 && (!this.video.paused || !this.wantsPlay)) {
         this.status = this.video.paused ? "paused" : "playing";
@@ -2177,6 +2268,15 @@ class PlaybackEngine {
         case "audio": {
           if (!this.session?.audioTracks.some((t) => t.id === command.trackId))
             throw new Error("Unknown audio track");
+          if (this.original) {
+            const original = this.original;
+            await original.selectAudio(command.trackId);
+            if (this.original !== original)
+              return;
+            this.audio = command.trackId;
+            this.audioPreference = command.trackId;
+            break;
+          }
           if (this.pipeline?.audioTracks.includes(command.trackId)) {
             this.audioPreference = command.trackId;
             try {
@@ -2350,13 +2450,17 @@ function create(tag, element, json, event) {
   if (tag === "vela-preview")
     return createPreview(element, json, event);
   if (tag === "vela-context") {
-    const handle = { context: true, disposed: false, lastNavigation: "", event };
+    const handle = { context: true, disposed: false, lastNavigation: "", probe: "", betaInput: "", revision: 0, abort: new AbortController, cleanup: () => {}, event };
     const props = JSON.parse(json);
+    handle.probe = props.probe ?? "";
+    if (handle.probe === "media" || handle.probe === "beta")
+      handle.cleanup = subscribeBetaPlayer(() => {
+        publishContext(handle);
+      });
+    updateContext(handle, props);
     queueMicrotask(() => {
-      if (!handle.disposed)
-        event(8, props.probe === "media" ? JSON.stringify(mediaCapabilities()) : props.probe === "network" ? JSON.stringify({ saveData: navigator.connection?.saveData === true }) : location.origin);
+      publishContext(handle);
     });
-    navigateSecurely(handle, props);
     return handle;
   }
   if (tag !== "vela-player")
@@ -2413,7 +2517,7 @@ function setProps(handle, json) {
     return;
   }
   if ("context" in handle) {
-    navigateSecurely(handle, JSON.parse(json));
+    updateContext(handle, JSON.parse(json));
     return;
   }
   const props = JSON.parse(json);
@@ -2511,6 +2615,8 @@ function destroy(handle) {
   }
   if ("context" in handle) {
     handle.disposed = true;
+    handle.abort.abort();
+    handle.cleanup();
     return;
   }
   handle.engine.dispose();
@@ -2535,6 +2641,21 @@ function navigateSecurely(handle, props) {
   } catch {
     handle.event(8, JSON.stringify({ secureNavigation: "rejected" }));
   }
+}
+function updateContext(handle, props) {
+  if (handle.probe === "beta" && (props.betaPlayer === "true" || props.betaPlayer === "false") && props.betaPlayer !== handle.betaInput) {
+    handle.betaInput = props.betaPlayer;
+    setBetaPlayer(props.betaPlayer === "true");
+  }
+  navigateSecurely(handle, props);
+}
+async function publishContext(handle) {
+  const revision = ++handle.revision;
+  try {
+    const payload = handle.probe === "media" ? JSON.stringify(await mediaCapabilities(handle.abort.signal)) : handle.probe === "beta" ? String(betaPlayerEnabled()) : handle.probe === "network" ? JSON.stringify({ saveData: navigator.connection?.saveData === true }) : location.origin;
+    if (!handle.disposed && revision === handle.revision)
+      handle.event(8, payload);
+  } catch {}
 }
 export {
   abi,

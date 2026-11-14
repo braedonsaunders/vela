@@ -1,12 +1,13 @@
 /** The source facts used for route selection. Actual decoder config is probed by
  * the demux/decode worker too; broker metadata is never proof of decode support. */
 export interface OriginalVideo {
-  codec: string; width: number; height: number; bitDepth?: number; profile?: string;
+  codec: string; width: number; height: number; bitDepth?: number; profile?: string; nativeSupported?: boolean;
+  isInterlaced?: boolean; fieldOrder?: 'progressive' | 'tt' | 'bb' | 'tb' | 'bt'; rotation?: number;
   level?: number; frameRate?: number; colorPrimaries?: string; colorTransfer?: string;
   colorSpace?: string; colorRange?: string; dvProfile?: number; dvLevel?: number;
   dvBlSignalCompatibilityId?: number; rpuPresent?: boolean; elPresent?: boolean; blPresent?: boolean;
 }
-export interface OriginalAudio { id: string; codec: string; channels?: number; sampleRate?: number; channelMask?: number | null; nativeSupported?: boolean; streamIndex: number }
+export interface OriginalAudio { id: string; codec: string; channels?: number; sampleRate?: number; language?: string; channelMask?: number | null; nativeSupported?: boolean; streamIndex: number }
 export interface OriginalMedia {
   url: string; container: string; duration: number | null; position: number;
   video: OriginalVideo; audio: OriginalAudio[]; selectedAudioId: string | null;
@@ -32,6 +33,7 @@ export function upstreamOptions(media: OriginalMedia) {
       Container: media.container, RunTimeTicks: media.duration === null ? null : Math.round(media.duration * 10000000),
       DefaultAudioStreamIndex: selected?.streamIndex ?? null,
       MediaStreams: [{ Type: 'Video', Codec: v.codec, Width: v.width, Height: v.height,
+        IsInterlaced: v.isInterlaced ?? null, Rotation: v.rotation ?? null,
         BitDepth: v.bitDepth ?? null, Profile: v.profile ?? null, Level: v.level ?? null,
         AverageFrameRate: v.frameRate ?? null, RealFrameRate: v.frameRate ?? null,
         ColorPrimaries: v.colorPrimaries ?? null, ColorTransfer: v.colorTransfer ?? null,

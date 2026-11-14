@@ -23,7 +23,7 @@ When byte attribution is requested, add `--map-report`: the same captured source
 produces `vela-<version>.bundle.json` with raw/gzip9 entry bytes and plan node
 counts by skin and component. This opt-in measurement is not part of routine builds.
 
-Output under `~/.scratch/tmp/vela/release/`:
+Output under `.artifacts/release/`:
 
 - `vela-<version>.tar.gz`: `index.html` and the complete static tree at archive root.
 - `vela-<version>.manifest.json`: schema version 1, client version, supported wire
@@ -184,3 +184,37 @@ are outside the immutable allowlist. Offline navigation shows the offline page.
 An update activates through the existing explicit update action, clears obsolete
 version caches and claims clients. The artifact remains one archive and manifest;
 Ether performs the same atomic installation and rollback as before.
+
+
+## Explicit Universal beta payload (gated)
+
+Normal builds do not assemble or fetch Universal assets. After the owner’s beta
+proof and UI/data gate, the packager may accept
+`bun tools/release/build.ts --committed --universal-assets=<prepared-payload-dir>`.
+The directory is the diagnostic payload root with `DIAGNOSTIC-MANIFEST.json`,
+`index.js` and `universal/`. Every listed file, byte size and digest is verified;
+extra files, links and unsafe paths fail closed. The runtime’s reviewed upstream
+revision, asset key and aggregate library/runtime hash must match. The supplied
+native diagnostic host is validated but never replaces the production host,
+which always comes from committed Vela source.
+
+The complete runtime, workers, codec packages, notices and corresponding sources
+are copied once to `/vela/universal/<assetKey>/`. Their individual digests remain
+in the release file inventory, and the release manifest records upstream revision
+and payload-manifest SHA-256. `engines.json` includes optional
+`universalAssets: {baseURL,assetKey}`. Before engine import the tiny loader validates
+that descriptor and publishes `window.velaUniversalAssets`; it does not fetch the
+runtime. The native host separately validates origin, exact key-addressed path and
+runtime manifest identity before use. No descriptor is published when the option
+is absent. Direct engine-build invocations cannot silently accept this option.
+
+The worker caches these immutable URLs only when requested (including the exact
+`?v=<assetKey>` alias). Neither runtime packages nor other engines are prefetched
+while beta is off. The descriptor does not by itself enable or qualify codecs,
+HDR, Dolby Vision or Universal playback; those remain native admission and release
+gates. No artifact build or installation is implied by adding this pipeline.
+
+Release output and temporary engine builds now live under `.artifacts/release/`
+in the current internal checkout. This directory is ignored. Worktrees and build
+outputs must not use the disconnected external Scratch drive; only regenerable
+media fixtures may remain under `~/.scratch/tmp/vela/media/`.

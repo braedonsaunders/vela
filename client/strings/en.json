@@ -47,7 +47,6 @@
   "ui.sSeasonEEpisodeTitle": "S{season} · E{episode} · {title}",
   "ui.closePlayer": "Close player",
   "ui.close": "Close",
-  "ui.velaIndex": "VELA / INDEX",
   "ui.playbackInterrupted": "Playback interrupted",
   "ui.preparingPlayback": "Preparing playback…",
   "ui.recoveringPlayback": "Recovering playback…",
@@ -389,5 +388,18 @@
   "secure.action": "Switch to the secure address",
   "ui.scrollBack": "Scroll back",
   "ui.scrollOn": "Scroll on",
-  "live.guides": "Guides"
+  "live.guides": "Guides",
+  "live.startsAt": "Starts at {time}",
+  "live.startsOn": "Starts {day} at {time}",
+  "live.startsTomorrow": "Starts tomorrow at {time}",
+  "search.lookingForVibe": "Looking for that vibe…",
+  "search.noMood": "Couldn't find that mood yet",
+  "search.noMoodMessage": "Try different words: a genre, a feeling, a setting or who it's for.",
+  "search.moodUnavailable": "Mood search couldn't finish",
+  "search.moodUnavailableMessage": "Try again in a moment, or search for a title by name.",
+  "search.moodUnavailableBelowTitles": "Mood search couldn't finish this time. Your title matches are above.",
+  "search.discoveryUnavailable": "Discovery couldn't finish this time. Try again in a moment.",
+  "search.discoveryEmpty": "Nothing further afield for that description yet.",
+  "player.beta.label": "New player (beta)",
+  "player.beta.help": "Applies to the next video. Requires a secure connection and WebGPU; unsupported media falls back."
 }

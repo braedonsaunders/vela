@@ -1,6 +1,6 @@
 # WebGPU Player review
 
-Status: research notes from reviewing the independent WebGPU Player and its Jellyfin plugin. No code from either is used in Vela.
+Status: historical research notes. Vela subsequently adopted the MIT standalone engine at a newer reviewed pin; see [the implementation and measured qualification](playback-engine.md#first-original-file-native-view-milestone). The Jellyfin plugin is not used.
 
 **Recommendation:** Keep Vela’s native `<video>` + MSE/ManagedMediaSource path as the default for Ether HLS/CMAF. Treat WebCodecs + WebGPU as a separately qualified, optional path for cases where native playback cannot provide acceptable HDR-to-SDR rendering or decode a needed codec. The independent player’s custom path currently supports direct-play VOD, **not HLS, DASH, live streams, or server transcodes**, so it is not a drop-in replacement for Vela’s pipeline. [formats.md](https://github.com/alchemyyy/WebGPU-Player/blob/a950fbf5b99b6f247314f4ed7e874fc80d99a597/docs/src/formats.md)
 

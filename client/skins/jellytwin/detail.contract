@@ -1,6 +1,6 @@
 use Card, FeedRow, DetailModel, ExtraModel, cardName from "../../foundation/models.contract"
 use Section, Poster, EmptyState from "./slots.contract"
-use Icon, IconBtn, side, tileColor, kindIcon, fadeIn from "./look.contract"
+use Icon, IconBtn, PlayedBadge, Tab, side, tileColor, kindIcon, fadeIn from "./look.contract"
 
 fn kindLabel(kind: string): string = (kind == "movie" ? t("ui.film") : kind == "show" ? t("ui.series") : kind == "season" ? t("ui.season") : t("ui.episode"))
 fn episodeTitle(e: Card): string = (e.episodeNumber > 0 ? t("ui.numberTitle", number=e.episodeNumberLabel, title=e.name) : e.name)
@@ -18,6 +18,8 @@ component Detail
     observe: action
   derive upNext = match first(model.episodes.filter(e => not e.played)) { case some(e) => [e], case none => [] }
   derive trailers = model.extras.filter(e => e.kind == "trailer" and e.ready)
+  // The foundation swaps a show's episodes in place for the chosen season; the shown episodes name it.
+  derive selectedSeason = match first(model.episodes) { case some(e) => e.seasonId, case none => match first(model.title.filter(t => t.kind == "season")) { case some(t) => t.id, case none => "" } }
   view
     column color="jellytwin.ink" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" padding-bottom=56 animation=fadeIn(still)
       for title in model.title key=title.id
@@ -80,11 +82,16 @@ component Detail
               if not small
                 button press=play(episode.id) aria-label=(episode.progressSeconds > 0 ? t("ui.resumeTitle", title=episode.name) : t("ui.playTitle", title=episode.name)) class=IconBtn width=56 height=56 background-color="jellytwin.raised"
                   Icon(name="symbol:play-fill", size=28)
-        if model.seasons.length > 0
+        if model.seasons.length > 0 and model.episodes.length == 0
           Section(row=FeedRow(id="detail-seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if model.episodes.length > 0
           column gap=4 padding-left=side(small) padding-right=side(small) padding-bottom=(small ? 18 : 26)
-            text t("ui.episodes") role="heading" aria-level=2 font-size=(small ? 17 : 21) font-weight=600 color="jellytwin.ink-strong" padding-bottom=8
+            text t("ui.episodes") role="heading" aria-level=2 class=DetailHeading padding-bottom=4
+            if model.seasons.length > 1
+              scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" margin-bottom=8 border-bottom="1px solid var(--jellytwin.line)"
+                row role="tablist" aria-label=t("ui.seasons") testId="season-picker"
+                  for season in model.seasons key=season.id
+                    SeasonTab(label=season.name, on=(season.id == selectedSeason), still=still, press=selectTitle(season.id, "season", season.receipt))
             for episode in model.episodes key=episode.id
               EpisodeRow(episode=episode, small=small, still=still, play=play, selectTitle=selectTitle)
         if model.extras.length > 0
@@ -101,7 +108,11 @@ component Detail
               row gap=(small ? 10 : 16) padding-left=side(small) padding-right=side(small) padding-bottom=6 role="list"
                 for person, i in model.castPeople key=`${i}`
                   column role="listitem" width=(small ? "26vw" : "clamp(110px, 8.6vw, 160px)") flex-shrink=0 gap=2 align-items="center" text-align="center"
-                    image (person.portrait != "" ? person.portrait : "symbol:person") alt="" width="100%" aspect-ratio="2 / 3" box-sizing="border-box" padding=(person.portrait != "" ? "0px" : "30%") border-radius=6 object-fit=(person.portrait != "" ? "cover" : "contain") background-color=tileColor(person.name) color="jellytwin.secondary" margin-bottom=4
+                    if person.portrait != ""
+                      image person.portrait alt="" width="100%" aspect-ratio="2 / 3" border-radius=6 object-fit="cover" margin-bottom=4
+                    else
+                      column width="100%" aspect-ratio="2 / 3" border-radius=6 margin-bottom=4 align-items="center" justify-content="center" background-color=tileColor(person.name) color="jellytwin.secondary" aria-hidden=true
+                        Icon(name="symbol:person", size=(small ? 34 : 46))
                     text person.name class=PersonName
                     if person.role != ""
                       text person.role class=PersonRole
@@ -160,7 +171,8 @@ component EpisodeRow
           column width=44 height=44 border-radius=22 align-items="center" justify-content="center" background-color="jellytwin.accent"
             Icon(name="symbol:play-fill", size=24)
         if episode.played
-          image "symbol:checkmark" position="absolute" top=6 right=6 width=14 height=14 padding=4 border-radius=11 background-color="jellytwin.accent" aria-hidden=true
+          column position="absolute" top=6 right=6 class=PlayedBadge aria-hidden=true
+            Icon(name="symbol:checkmark", size=14)
         if episode.progressSeconds > 0 and episode.durationSeconds > 0 and not episode.played
           column position="absolute" left=0 right=0 bottom=0 height=4 background-color="jellytwin.overlay" aria-hidden=true
             column height="100%" width=`${min(100, episode.progressSeconds / episode.durationSeconds * 100)}%` background-color="jellytwin.accent"
@@ -216,3 +228,16 @@ style PersonRole
   font-size = 12
   color = "jellytwin.secondary"
   line-clamp = 1
+
+// A season tab over the episode list; the current one carries the accent and gradient bar.
+component SeasonTab
+  props
+    label: string
+    on: bool
+    still: bool
+    press: action
+  view
+    button press=press() role="tab" aria-selected=on class=Tab color=(on ? "jellytwin.accent" : "jellytwin.ink") font-weight=(on ? 600 : 400)
+      text label
+      if on
+        column sharedElement="jt-season-tab" -exact-layout-transition=(still ? "none" : "300ms ease-out") position="absolute" left=12 right=12 bottom=0 height=3 border-radius=2 background-image="linear-gradient(90deg, var(--jellytwin.violet) 0%, var(--jellytwin.accent) 100%)" aria-hidden=true

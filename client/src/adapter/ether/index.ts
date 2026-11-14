@@ -26,6 +26,13 @@ export class EtherAdapter implements ServerAdapter {
   }
   constructor(private origin: string, private credentials: Credentials, private capabilityContext: string, private onSessionRejected?: () => void) {}
 
+  setCapabilityContext(context: string): void {
+    if (this.capabilityContext !== context) {
+      this.capabilityContext = context;
+      this.cache.clear();
+    }
+  }
+
   private boundURL(path: string): string {
     const url = new URL(path, `${this.origin}/`);
     if (url.origin !== this.origin || !url.pathname.startsWith('/vela/v0/')) throw new Error('Request outside bound server');

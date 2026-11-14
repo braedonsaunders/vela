@@ -3,6 +3,8 @@ import { cp, mkdir, readFile, copyFile, readdir } from 'node:fs/promises';
 import { resolve, join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import { audioPackages } from '../../client/player/universal/audio/packages';
+import decoderPins from '../../vendor/webgpu-player/tools/pinned-releases.json';
 import { transformUpstreamAudio } from '../../client/player/universal/audio/ffmpeg/upstream-transform';
 const root = resolve(import.meta.dir, '../..');
 const upstream = join(root, 'vendor/webgpu-player');
@@ -50,6 +52,8 @@ await build({...common, entryPoints:[join(root,'client/player/universal/runtime.
 await cp(join(root,'client/player/universal/audio/ffmpeg'), join(sourceDir,'vela-audio-hooks'), {recursive:true});
 const audioDirectory = Bun.argv.find(arg => arg.startsWith('--audio-dir='))?.slice(12);
 if (audioDirectory) await run([process.execPath, join(root,'client/player/universal/audio/install-packages.ts'), join(libraries,'audio-decoders'), `--from=${resolve(audioDirectory)}`], root);
+const videoDirectory = Bun.argv.find(arg => arg.startsWith('--video-dir='))?.slice(12);
+if (videoDirectory) await run([process.execPath, join(root,'client/player/universal/video/install-packages.ts'), join(libraries,'video-decoders'), `--from=${resolve(videoDirectory)}`], root);
 const hash = createHash('sha256');
 async function hashFiles(directory: string) {
   for (const entry of (await readdir(directory,{withFileTypes:true})).sort((a,b)=>a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
@@ -60,5 +64,23 @@ async function hashFiles(directory: string) {
 }
 await hashFiles(libraries); hash.update(await readFile(join(destination,'runtime.js')));
 const assetKey = hash.digest('hex').slice(0,16);
-await Bun.write(join(destination, 'assets.json'), JSON.stringify({ version:1, upstreamRevision:revision, assetKey, libraries:'./libraries/', sources:'./sources/' },null,2)+'\n');
+// Publish a route declaration only from this complete, verified asset set. It
+// names installed decoder families; per-source exact eligibility is still local.
+async function verified(directory: string, file: string, expected: string) {
+  const input = Bun.file(join(libraries,directory,file));
+  return await input.exists() && createHash('sha256').update(new Uint8Array(await input.arrayBuffer())).digest('hex') === expected;
+}
+const completeAudio = (await Promise.all(Object.values(audioPackages).map(entry => verified('audio-decoders',entry.file,entry.sha256)))).every(Boolean);
+const videoFamilies = {hevc:['hevc'],av1:['av1'],mpeg2:['mpeg1video','mpeg2video'],mpeg4:['mpeg4','h263','msmpeg4v1','msmpeg4v2','msmpeg4v3'],vc1:['vc1','wmv3'],jpeg2000:['jpeg2000']} as const;
+const installedVideo: string[] = [];
+for (const [id,codecs] of Object.entries(videoFamilies)) {
+  const file = `${id}.wasm` as keyof typeof decoderPins.decoders.files;
+  if (await verified('video-decoders',file,decoderPins.decoders.files[file])) installedVideo.push(...codecs);
+}
+const originalPlayback = completeAudio && installedVideo.includes('hevc') ? {
+  version:1,range:true,webgpu:true,demuxContainers:['mkv','mp4','mov','webm'],
+  videoDecoders:[...new Set(['h264','hevc','vp9','av1',...installedVideo])],
+  audioDecoders:['aac','ac3','eac3','truehd','dts','flac','opus','vorbis','mp3','alac','mp1','mp2','pcm_s16le','pcm_s24le','pcm_s32le','pcm_f32le','pcm_f64le'],
+} : undefined;
+await Bun.write(join(destination, 'assets.json'), JSON.stringify({ version:1, upstreamRevision:revision, assetKey, libraries:'./libraries/', sources:'./sources/', originalPlayback },null,2)+'\n');
 console.log(`Universal runtime assets assembled at ${destination}, key ${assetKey}`);

@@ -444,10 +444,11 @@ component SearchSurface
     selectTitle: action
     observe: action
   // Lanes in their fixed order: matches, the descriptive lane, then the AI lane.
-  // Each is shown only for the current query and generation; one Row draws them all.
+  // Each is shown only for the current query and generation, independently of the
+  // others (a failed or empty fast lane never hides the AI lane); one Row draws them all.
   derive vibeShown = descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
   derive aiShown = ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
-  derive lanes = (loading or error ? [] : [FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation="")]).concat(vibeShown and not error ? [FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation="")] : []).concat(aiShown and not error ? [FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation="")] : [])
+  derive lanes = (loading or error ? [] : [FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation="")]).concat(vibeShown ? [FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation="")] : []).concat(aiShown ? [FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation="")] : [])
   view
     column position="relative" gap=(small ? 12 : 18) padding-top=(small ? 8 : 14) padding-bottom=72 animation=hop(still, 80)
       column padding-left=gutter(small) padding-right=gutter(small)

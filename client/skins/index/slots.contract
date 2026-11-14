@@ -21,7 +21,7 @@ component Navigation
     openPicker: action
   view
     row role="navigation" aria-label=t("ui.mainNavigation") flex-wrap="wrap" gap=12 align-items="center" padding=(small ? 12 : 20) background-color="index.rail"
-      text t("ui.velaIndex") font-size=16 font-weight=700
+      image "assets/brand/vela-lockup-paper.svg" alt=t("ui.vela") width=58 height=22
       if viewer != ""
         button press=home background-color="transparent" color="index.ink" border="none" padding=4
           text t("ui.home")

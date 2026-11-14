@@ -11,6 +11,15 @@ try {
   const entries = Object.entries(manifest.engines ?? {}).filter(([id, entry]) => /^[a-z][a-z0-9-]*$/.test(id) && entry.base === `/vela/engines/${id}/${manifest.version}/`);
   const engines = Object.fromEntries(entries);
   if (!engines.cinematic) throw new Error('The default engine is missing.');
+  // Descriptor only. No runtime/worker request until the host's beta gate admits it.
+  delete window.velaUniversalAssets;
+  const universal = manifest.universalAssets;
+  if (universal !== undefined) {
+    if (!universal || !/^[a-f0-9]{16}$/.test(universal.assetKey) || typeof universal.baseURL !== 'string') throw new Error('Invalid universal asset descriptor');
+    const base = new URL(universal.baseURL, location.origin);
+    if (base.origin !== location.origin || base.pathname !== `/vela/universal/${universal.assetKey}/` || base.search || base.hash || base.username || base.password) throw new Error('Universal assets outside installed runtime');
+    window.velaUniversalAssets = Object.freeze({baseURL:base.href,assetKey:universal.assetKey});
+  }
   window.velaEngines = entries.map(([id]) => id);
   let picked = read('vela.engine'), serverDefault = read('vela.engine.default');
   if (picked && !engines[picked]) { write('vela.engine', null); picked = null; }
