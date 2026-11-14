@@ -6,6 +6,10 @@ shape GuideProgramme
   end: string
   startLabel: string
   endLabel: string
+  leftId: string
+  rightId: string
+  upId: string
+  downId: string
   offset: number
   width: number
 

@@ -1,9 +1,10 @@
 import type { PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, SessionEvent, SessionSnapshot } from '../protocol/v0/types';
 import { faults, mediaRoot } from './media';
+import { liveWindow } from './live';
 export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number }
 export const sessions = new Map<string, Session>();
 export function snapshot(s: Session): SessionSnapshot {
-  return { cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.paths.length ? [{ startSeconds: 0, endSeconds: 60 }] : [], lastObservationSequence: s.sequence };
+  return { cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: 60 }] : [], lastObservationSequence: s.sequence };
 }
 const encode = (event: SessionEvent) => new TextEncoder().encode(`id: ${event.cursor}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
 export function publish(s: Session) {
@@ -30,6 +31,16 @@ export async function createSession(owner: string, request: PlaybackRequest): Pr
     selectedAudioTrackId: request.audioTrackId ?? 'audio-en', selectedSubtitleTrackId: request.subtitleTrackId ?? null, chapters: [0,20,40].map((startSeconds, i) => ({ id: `chapter-${i + 1}`, name: ['Signal', 'Crossing', 'Homeward'][i], startSeconds, endSeconds: startSeconds + 20 })),
     fallback: { state: faults.fallbackUnavailable ? 'unavailable' : 'unsupported', reason: 'Mock serves pre-generated alternatives; no proactive encoder scheduler.' },
   };
+  if (request.channelId) {
+    plan.durationSeconds = undefined;
+    plan.live = { ...liveWindow(), mode: request.liveMode ?? 'adaptive' };
+    plan.positionSeconds = 0;
+    plan.paths = [{ id: 'live', kind: 'remux', transport: 'hls', url: `${base}/live/master.m3u8`, mimeType: 'application/vnd.apple.mpegurl', sourceId: 'synthetic-live', timelineId: 'synthetic-live', readiness: 'ready', boundaries: [],
+      qualities: [[360, 640, 700000], [540, 960, 1400000], [720, 1280, 2600000]].map(([height, width, bitrate]) => ({ id: `${height}p`, width, height, bitrate, videoCodec: 'avc1.64001f', audioCodec: 'mp4a.40.2', url: `${base}/live/v${height}/index.m3u8` })) }];
+    plan.selectedPathId = 'live';
+    plan.audioTracks = [tracks[0]]; plan.selectedAudioTrackId = tracks[0].id;
+    plan.subtitleTracks = []; plan.selectedSubtitleTrackId = null; plan.chapters = [];
+  }
   const s: Session = { owner, mediaToken: token, plan, history: [], listeners: new Map(), sequence: 0, expires: Date.now() + 86400000 };
   sessions.set(id, s); return s;
 }

@@ -7,8 +7,15 @@ component Guide
     watch: action
     previous: action
     next: action
+  action move(leftId: string, rightId: string, upId: string, downId: string, k: string, event: KeyboardEvent)
+    if not event.metaKey and not event.ctrlKey and not event.altKey
+      if k == "ArrowLeft" or k == "ArrowRight" or k == "ArrowUp" or k == "ArrowDown"
+        preventDefault()
+        let target = (k == "ArrowLeft" ? leftId : (k == "ArrowRight" ? rightId : (k == "ArrowUp" ? upId : downId)))
+        if target != ""
+          focus(target)
   view
-    column gap=20 padding="28px 5% 48px"
+    column gap=20 padding="36px 5% 64px" background-image="radial-gradient(ellipse at 85% 0%, #77533525, transparent 65%)"
       text "LIVE TELEVISION" color="brand.warm" font-size=11 letter-spacing="3px"
       text "Channel guide" role="heading" aria-level=1 font-size=(small ? 36 : 52) font-weight=550 letter-spacing="-1px"
       row gap=12 align-items="center"
@@ -29,16 +36,20 @@ component Guide
                 text `Next  ${channel.next}` color="ink.quiet"
       else
         scroll overflow-x="auto" overflow-y="hidden"
-          column width=1100 gap=3
+          column width=1100 gap=3 role="grid" aria-label="Programme guide. Use arrow keys to move and Enter to watch."
+            row height=32 padding-left=184 justify-content="space-between" color="ink.secondary" font-size=12
+              text model.fromLabel
+              text "LIVE · TWO HOUR GUIDE" color="brand.warm" letter-spacing="2px"
+              text model.untilLabel
             for channel in model.channels key=channel.id
-              row height=76 gap=4
+              row height=88 gap=4 role="row"
                 button press=watch(channel.id) aria-label=`Watch ${channel.name}` width=180 flex-shrink=0 padding=12 border="none" background-color="surface.raised" color="ink.primary" text-align="left"
                   text `${channel.number}  ${channel.name}${channel.favorite ? " ★" : ""}`
                 column flex=1 position="relative" background-color="surface.raised"
                   for programme in channel.programmes key=programme.id
-                    button press=watch(channel.id) aria-label=`${programme.name}, ${programme.startLabel} to ${programme.endLabel}. Watch ${channel.name}` position="absolute" left=`${programme.offset}%` width=`${programme.width}%` height="100%" padding=8 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary" text-align="left" overflow="hidden"
+                    button id=`guide-${programme.id}` key=move(programme.leftId, programme.rightId, programme.upId, programme.downId) press=watch(channel.id) aria-label=`${programme.name}, ${programme.startLabel} to ${programme.endLabel}. Watch ${channel.name}` position="absolute" left=`${programme.offset}%` width=`${programme.width}%` height="100%" padding=14 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary" text-align="left" overflow="hidden" border-radius=6
                       column gap=4
                         text programme.name font-weight=600 line-clamp=1
                         text `${programme.startLabel} – ${programme.endLabel}` font-size=11 color="ink.secondary"
                   if model.showNow
-                    column position="absolute" left=`${model.nowOffset}%` top=0 bottom=0 width=2 background-color="brand.warm"
+                    column position="absolute" left=`${model.nowOffset}%` top=0 bottom=0 width=2 background-color="brand.warm" pointer-events="none"

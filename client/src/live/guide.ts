@@ -8,6 +8,7 @@ export interface GuideApi {
 
 export interface GuideProgramme {
   id: string; name: string; summary: string; start: string; end: string;
+  leftId: string; rightId: string; upId: string; downId: string;
   startLabel: string; endLabel: string; offset: number; width: number;
 }
 export interface GuideChannel {
@@ -58,7 +59,7 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
     grouped.get(programme.channelId)!.push(programme);
   }
   const label = (value: number) => new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  return {
+  const model: GuideModel = {
     from, until, fromLabel: label(start), untilLabel: label(end), nowOffset: Math.max(0, Math.min(100, (now - start) / (end - start) * 100)),
     showNow: now >= start && now < end,
     channels: channels.map(channel => {
@@ -76,10 +77,24 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
         now: current?.name ?? '', next: next?.name ?? '',
         programmes: entries.map(p => {
           const a = Date.parse(p.start), b = Date.parse(p.end);
-          return { id: p.id, name: p.name, summary: p.summary, start: p.start, end: p.end,
+          return { leftId: '', rightId: '', upId: '', downId: '', id: p.id, name: p.name, summary: p.summary, start: p.start, end: p.end,
             startLabel: label(a), endLabel: label(b), offset: (Math.max(a, start) - start) / (end - start) * 100,
             width: (Math.min(b, end) - Math.max(a, start)) / (end - start) * 100 };
         }) };
     }),
   };
+  const cellId = (id: string) => `guide-${id}`;
+  model.channels.forEach((channel, row) => channel.programmes.forEach((p, col) => {
+    p.leftId = col > 0 ? cellId(channel.programmes[col - 1].id) : '';
+    p.rightId = col + 1 < channel.programmes.length ? cellId(channel.programmes[col + 1].id) : '';
+    const time = Math.max(start, Date.parse(p.start));
+    const vertical = (index: number) => {
+      const entries = model.channels[index]?.programmes ?? [];
+      const target = entries.find(q => Date.parse(q.start) <= time && Date.parse(q.end) > time)
+        ?? entries.reduce<GuideProgramme | undefined>((best, q) => !best || Math.abs(Date.parse(q.start) - time) < Math.abs(Date.parse(best.start) - time) ? q : best, undefined);
+      return target ? cellId(target.id) : '';
+    };
+    p.upId = vertical(row - 1); p.downId = vertical(row + 1);
+  }));
+  return model;
 }

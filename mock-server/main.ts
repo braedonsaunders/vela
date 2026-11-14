@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto';
 import type * as V from '../protocol/v0/types';
 import { allTitles, channels, detail, extras, guide, rows, titles } from '../protocol/v0/fixtures/catalogue';
 import { faults, mediaRoot, serveMedia } from './media';
+import { serveLive, liveFaults } from './live';
 import { applyCommand, createSession, events, observe, sessions, snapshot, type Session } from './sessions';
 
 const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
@@ -124,9 +125,9 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path === '/playback') {
     if (body.audioTrackId !== undefined || body.subtitleTrackId != null) fail('policy', 'feature_unavailable', 'Initial track selection is unavailable; use native HLS audio and sidecar subtitles');
     if (!body.client || [body.titleId, body.channelId, body.extraId].filter(Boolean).length !== 1) fail('request', 'invalid_target', 'Exactly one playback target required');
-    if (body.channelId) fail('source', 'live_fixture_unavailable', 'Guide fixtures have no real live source');
+    const channel = channels.find(c => c.id === body.channelId);
     const title = allTitles.find(t => t.id === body.titleId), extra = extras.find(e => e.id === body.extraId);
-    if (!title && !extra) fail('not-found', 'title_not_found', 'Playback target not found');
+    if (!title && !extra && !channel) fail('not-found', 'title_not_found', 'Playback target not found');
     if (title && !['movie', 'episode'].includes(title.kind)) fail('request', 'not_playable', 'Select an episode to play');
     if (faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted');
     if (!await Bun.file(`${mediaRoot}/master.m3u8`).exists()) fail('source', 'media_not_generated', 'Run mock-server/scripts/make-media.ts first');
@@ -157,13 +158,15 @@ async function dispatch(req: Request): Promise<Response> {
   const url = new URL(req.url);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204 });
   if (url.pathname.startsWith('/__admin/')) {
+    if (req.method === 'GET' && url.pathname === '/__admin/live-faults') return json(liveFaults);
+    if (req.method === 'POST' && url.pathname === '/__admin/live-faults') { const data = await req.json(); for (const key of Object.keys(liveFaults) as (keyof typeof liveFaults)[]) if (Number.isFinite(data[key]) && data[key] >= 0) liveFaults[key] = Math.min(60000, Math.floor(data[key])); return json(liveFaults); }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } return json(faults); }
     if (req.method === 'POST' && url.pathname === '/__admin/web-code') { const code = crypto.randomUUID(); webCodes.set(code, Date.now() + 60000); return json({ code, expiresAt: new Date(Date.now() + 60000).toISOString() }); }
     fail('not-found', 'endpoint_not_found', 'Admin endpoint not found');
   }
   const media = /^\/sessions\/media\/([^/]+)\/([^/]+)\/(.+)$/.exec(url.pathname);
-  if (media) { const s = sessions.get(media[1]), g = s && grants.get(s.owner); if (!s || !g || g.revoked || g.expires < Date.now() || s.mediaToken !== media[2] || s.plan.state === 'ended') fail('auth', 'invalid_media_grant', 'Invalid media grant'); return serveMedia(req, media[3]); }
+  if (media) { const s = sessions.get(media[1]), g = s && grants.get(s.owner); if (!s || !g || g.revoked || g.expires < Date.now() || s.mediaToken !== media[2] || s.plan.state === 'ended') fail('auth', 'invalid_media_grant', 'Invalid media grant'); return media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3]); }
   const art = /^\/vela\/v0\/artwork\/([a-z0-9-]+)$/.exec(url.pathname);
   if (art && req.method === 'GET') {
     // Only synthetic assets: no private or remotely fetched imagery.
