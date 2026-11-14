@@ -314,3 +314,22 @@ Relative skip buttons and J/L/arrows now send `seekBy` to the engine, which read
 the actual playhead rather than the coalesced UI position. One focused control
 check observed 1.228062 → requested 11.228062 seconds, exactly +10 seconds. Slider
 and chapter seeks remain absolute. Ended-state controls do not offer fake replay.
+
+## Real Ether lab drive
+
+Target: `http://192.168.68.65:32550/vela`, Ether `0.3.11-lab.1`, real Chrome,
+2026-11-13/14. One stream at a time; no fault injection. Mock/browser qualification
+above is separate from these real-server results.
+
+| Installed client / step | Result | Evidence |
+| --- | --- | --- |
+| 0.1.1 initial load | Failed before sign-in | No API requests; all 26 requests were static assets (HTTP 200). HTTP origin lacks `crypto.randomUUID`; device initialization called it before capabilities. |
+| 0.1.1 packaged module graph | Failed: two app instances | Both `/vela/app.js?v=…` and `/vela/app.js` executed; DOM contained two `main` roots. `client/.exact/lab-01-load-failed.png`. |
+| Ether console root | HTTP 401 | `GET /` returned an Unauthorized document, without a viewer sign-in form. Quick-connect approval and Watch handoff await a viewer-accessible console route. |
+
+Data fix `9c7c756` uses secure `getRandomValues` IDs and handles unavailable Web
+Crypto SHA-256 on HTTP LAN origins. Player fix `bd32218` reuses the same ID helper
+for seek and source-switch idempotency keys. Packaging removes the entry URL
+identity mismatch in 0.1.2. Further playback requires the corrected package to be
+installed: driving two app runtimes could violate the single-stream lab rule.
+No authenticated or playback pass is claimed for 0.1.1.
