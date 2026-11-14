@@ -1,6 +1,6 @@
 import type { Answer, Sources } from '../app.contract.d.ts';
 import type { AISearchJob, ClientCapabilities, Device, ServerCapabilities, Tokens } from '../wire/v0/types';
-import { EtherAdapter } from './adapter/ether';
+import { EtherAdapter, VelaError } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
 import { loadGuide, liveIdentity } from './live/guide';
@@ -258,7 +258,17 @@ const sources: Sources = {
       const event = JSON.parse(json);
       if (event.type !== 'session-command' || typeof event.sessionId !== 'string' || !event.command) throw new Error('Invalid player command');
       sessionId = event.sessionId;
-      const plan = await (await session(store)).command(sessionId, event.command);
+      const api = await session(store);
+      let plan;
+      try { plan = await api.command(sessionId, event.command); }
+      catch (error) {
+        // A stop can race an authorized seek or switch. Retry once only when
+        // the server supplies authoritative generations, with a new key because
+        // the rejected precondition is itself idempotently recorded.
+        const generations = error instanceof VelaError && error.detail.code === 'stale_generation' ? error.detail.currentGenerations : undefined;
+        if (event.command.kind !== 'stop' || !generations) throw error;
+        plan = await api.command(sessionId, { kind: 'stop', ...generations, idempotencyKey: key(store) });
+      }
       return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId, error: '' };
     } catch (error) {
       return { planJson: '', sessionId, error: error instanceof Error ? error.message : 'Playback command failed' };
