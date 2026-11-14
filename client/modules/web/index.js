@@ -893,7 +893,7 @@ class PlaybackEngine {
     if (session.id !== this.session?.id) {
       this.lowDelayOverride = undefined;
       this.localTransportIntent = undefined;
-      this.wantsPlay = false;
+      this.wantsPlay = session.serverState !== "paused" && session.serverState !== "ended";
     }
     this.controller.start(session.id, session.sourceGeneration, session.seekGeneration);
     this.resetMedia();

@@ -106,7 +106,12 @@ export class PlaybackEngine {
     const recovery = !!handoff && pending.recovery;
     this.pendingSwitch = undefined;
     const previousServerState = session.id === this.session?.id ? this.session.serverState : undefined;
-    if (session.id !== this.session?.id) { this.lowDelayOverride = undefined; this.localTransportIntent = undefined; this.wantsPlay = false; }
+    if (session.id !== this.session?.id) {
+      this.lowDelayOverride = undefined; this.localTransportIntent = undefined;
+      // Opening the watch view is a play request. Later ready revisions merely
+      // update metadata and must not override an explicit pause.
+      this.wantsPlay = session.serverState !== 'paused' && session.serverState !== 'ended';
+    }
     this.controller.start(session.id, session.sourceGeneration, session.seekGeneration); this.resetMedia(); this.session = session;
     if (session.serverState === 'ended') { this.source = session.sources.find(s => s.id === session.selectedSourceId); this.endPlayback(session.position ?? 0); return; }
     this.applyServerState(session.serverState, previousServerState, false);
