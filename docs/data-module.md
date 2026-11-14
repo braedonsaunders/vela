@@ -2,8 +2,11 @@
 
 The Ether adapter implements the v0 JSON endpoints used by discovery, authentication,
 search, interactions and session snapshots. Credentials are supplied through an
-interface: Exact secret storage and Contract sources are not connected yet. The
-adapter's origin and network grant must be configured together at build time.
+interface backed by Exact secret storage. Contract sources use opt-in mock sign-in
+when `VELA_MOCK=1`; real sign-in UI is still needed. `API_BASE_URL` configures
+the network grant and defaults to `http://127.0.0.1:7777`. The UI currently
+uses only fast search and sends receipts immediately; the bounded queue exists
+but is not yet connected. Playback sources require integration verification.
 
 Session events remain unimplemented. Exact supports HTTP SSE directly through a
 resource returning `fetch` with `exactStream` under `net.fetch` (reference.md,
