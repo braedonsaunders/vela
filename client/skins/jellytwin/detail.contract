@@ -52,9 +52,9 @@ component Detail
                     text t("jellytwin.played") font-size=14
               row gap=(small ? 14 : 12) align-items="flex-start" flex-wrap="wrap" justify-content=(small ? "center" : "flex-start") margin-top=4
                 if model.canPlay
-                  RoundAction(icon="play", label=(model.resumeSeconds > 0 ? t("jellytwin.resume") : t("ui.play")), primary=true, small=small, testId="detail-play", press=play(title.id))
+                  RoundAction(icon="symbol:play-fill", label=(model.resumeSeconds > 0 ? t("jellytwin.resume") : t("ui.play")), primary=true, small=small, testId="detail-play", press=play(title.id))
                 for trailer in trailers key=trailer.id
-                  RoundAction(icon="movie", label=t("jellytwin.trailer"), primary=false, small=small, testId=`detail-trailer-${trailer.id}`, press=playExtra(trailer.id))
+                  RoundAction(icon="symbol:icon.jelly-film", label=t("jellytwin.trailer"), primary=false, small=small, testId=`detail-trailer-${trailer.id}`, press=playExtra(trailer.id))
               if model.canPlay and model.resumeSeconds > 0 and title.durationSeconds > 0
                 column gap=6 width=(small ? "70%" : 320)
                   column height=5 border-radius=3 background-color="jellytwin.track" overflow="hidden" role="progressbar" aria-label=t("ui.watchProgress") aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=min(title.durationSeconds, max(0, model.resumeSeconds))
@@ -94,16 +94,17 @@ component Detail
               row gap=(small ? 10 : 16) padding-left=side(small) padding-right=side(small) padding-bottom=6
                 for extra in model.extras key=extra.id
                   ExtraCard(extra=extra, small=small, playExtra=playExtra)
-        if model.cast.length > 0
+        if model.castPeople.length > 0
           column gap=10 padding-bottom=(small ? 18 : 26)
-            text t("jellytwin.castAndCrew") role="heading" aria-level=2 font-size=(small ? 17 : 21) font-weight=600 color="jellytwin.ink-strong" padding-left=side(small) padding-right=side(small)
+            text t("jellytwin.castAndCrew") role="heading" aria-level=2 class=DetailHeading padding-left=side(small) padding-right=side(small)
             scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
               row gap=(small ? 10 : 16) padding-left=side(small) padding-right=side(small) padding-bottom=6 role="list"
-                for person in model.cast key=person
-                  column role="listitem" width=(small ? "26vw" : "clamp(110px, 8.6vw, 160px)") flex-shrink=0 gap=6 align-items="center"
-                    column width="100%" aspect-ratio="2 / 3" border-radius=6 background-color=tileColor(person) align-items="center" justify-content="center" color="jellytwin.secondary" aria-hidden=true
-                      Icon(name="symbol:person", size=(small ? 34 : 46))
-                    text person font-size=13 font-weight=500 color="jellytwin.ink-strong" text-align="center" line-clamp=2
+                for person, i in model.castPeople key=`${i}`
+                  column role="listitem" width=(small ? "26vw" : "clamp(110px, 8.6vw, 160px)") flex-shrink=0 gap=2 align-items="center" text-align="center"
+                    image (person.portrait != "" ? person.portrait : "symbol:person") alt="" width="100%" aspect-ratio="2 / 3" box-sizing="border-box" padding=(person.portrait != "" ? "0px" : "30%") border-radius=6 object-fit=(person.portrait != "" ? "cover" : "contain") background-color=tileColor(person.name) color="jellytwin.secondary" margin-bottom=4
+                    text person.name class=PersonName
+                    if person.role != ""
+                      text person.role class=PersonRole
         for related in model.related key=related.id
           Section(row=FeedRow(related, name=(related.name != "" ? related.name : t("jellytwin.moreLikeThis"))), small=small, still=still, selectTitle=selectTitle, observe=observe)
 
@@ -197,3 +198,21 @@ style ExtraHost
     box-shadow = "0px 0px 0px 3px var(--jellytwin.accent)"
   :focus-visible
     box-shadow = "0px 0px 0px 3px var(--jellytwin.accent)"
+
+style DetailHeading
+  font-size = 20
+  font-weight = 600
+  color = "jellytwin.ink-strong"
+
+style PersonName
+  width = "100%"
+  font-size = 13
+  font-weight = 500
+  color = "jellytwin.ink-strong"
+  line-clamp = 2
+
+style PersonRole
+  width = "100%"
+  font-size = 12
+  color = "jellytwin.secondary"
+  line-clamp = 1

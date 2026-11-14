@@ -69,7 +69,8 @@ export interface Hero { title: Title; receiptToken: string; reason: HeroReason; 
 export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID }
 export interface SearchRequest extends Mutation { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
-export interface SearchResponse extends Page<Title> { query: string; generation: number; receiptToken?: string }
+export interface LiveSearchResults { channels: Channel[]; programmes: Programme[] }
+export interface SearchResponse extends Page<Title> { query: string; generation: number; receiptToken?: string; live?: LiveSearchResults }
 export interface AISearchRequest extends Mutation { query: string; generation: number; previousJobId?: ID }
 export interface AISearchJob { id: ID; generation: number; status: 'queued' | 'running' | 'complete' | 'cancelled' | 'failed'; results?: SearchResponse; error?: ProtocolError }
 export interface CancelRequest extends Mutation { generation: number }

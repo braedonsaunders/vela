@@ -19,6 +19,8 @@ export interface GuideProgramme {
 }
 export interface GuideChannel {
   id: string; number: string; name: string; favorite: boolean; logo: string; group: string; listed: boolean;
+  /** The owner-defined Guides this channel belongs to, by id; empty when none or unknown. */
+  guideIds: string[];
   now: string; next: string; nowId: string; nowProgress: number; nowRemaining: string; nextLabel: string;
   programmes: GuideProgramme[];
 }
@@ -27,6 +29,8 @@ export interface GuideModel {
   ticks: { id: string; label: string; minute: number; hour: boolean }[];
   days: { offset: number; label: string; date: string }[];
   groups: string[];
+  /** Named Guides for tabs: first appearance in server channel order, one per id. */
+  guides: { id: string; name: string }[];
   /** Channel ids in the server's own order, for choosing what a preview tunes to. */
   tuneOrder: string[];
   channels: GuideChannel[];
@@ -149,6 +153,8 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
     const dayName = (offset: number, at: number) => offset === 0 ? msg('live.today') : offset === 1 ? msg('live.tomorrow') : weekday.format(at);
     const nowMinute = now >= start && now < end ? (now - start) / MINUTE : -1;
     const groups: string[] = [];
+    const guides: { id: string; name: string }[] = [];
+    for (const channel of window.channels) for (const g of channel.guides ?? []) if (!guides.some(known => known.id === g.id)) guides.push({ id: g.id, name: g.name });
     const channels: GuideChannel[] = [...window.channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).map(channel => {
       if (channel.group && !groups.includes(channel.group)) groups.push(channel.group);
       const entries = grouped.get(channel.id) ?? [];
@@ -158,6 +164,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       const airingEnd = airing ? Date.parse(airing.end) : 0, airingStart = airing ? Date.parse(airing.start) : 0;
       return {
         id: channel.id, number: channel.number, name: channel.name, favorite: channel.favorite, group: channel.group ?? '',
+        guideIds: [...new Set((channel.guides ?? []).map(g => g.id))],
         logo: picture(channel.artwork, ['logo', 'channel'], 160, 90, origin), listed: entries.length > 0,
         now: airing?.name ?? '', next: next?.name ?? '', nowId: airing?.id ?? '',
         nowProgress: airing ? Math.round((now - airingStart) / (airingEnd - airingStart) * 1000) / 10 : 0,
@@ -189,6 +196,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       ticks: Array.from({ length: Math.floor(minutes / 30) }, (_, n) => ({ id: String(start + n * 1800000), label: time(start + n * 1800000), minute: n * 30, hour: n % 2 === 0 })),
       days: Array.from({ length: DAYS }, (_, offset) => { const at = midnight(now, offset) + 12 * HOUR; return { offset, label: dayName(offset, at), date: date.format(at) }; }),
       groups,
+      guides,
       tuneOrder: window.channels.map(c => c.id),
       channels,
     };

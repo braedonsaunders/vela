@@ -25,7 +25,7 @@ fn side(small: bool): string = (small ? "16px" : "max(28px, 4vw)")
 // Server genres map to palette slots in the data module; -1 has no colour cue.
 fn toneColor(n: number): string = (n == 0 ? "cinematic.tone-news" : n == 1 ? "cinematic.tone-sport" : n == 2 ? "cinematic.tone-film" : n == 3 ? "cinematic.tone-kids" : n == 4 ? "cinematic.tone-factual" : n == 5 ? "cinematic.tone-drama" : n == 6 ? "cinematic.tone-comedy" : n == 7 ? "cinematic.tone-music" : n == 8 ? "cinematic.tone-life" : "cinematic.tone-other")
 
-fn keep(c: GuideChannel, filter: string): bool = (filter == "all" ? true : filter == "favourites" ? c.favorite : filter == "listed" ? c.listed : c.group == filter)
+fn keep(c: GuideChannel, filter: string, tab: string): bool = (tab == "" or c.guideIds.includes(tab)) and (filter == "all" ? true : filter == "favourites" ? c.favorite : filter == "listed" ? c.listed : c.group == filter)
 
 // The programme under `t` minutes in a row, else the next one, else the last; a row without listings focuses its rail cell.
 fn cellAt(c: GuideChannel, t: number): string = match first(c.programmes.filter(p => p.at + p.span > t)) { case some(p) => `guide-${p.id}`, case none => match first(c.programmes.slice(-1)) { case some(p) => `guide-${p.id}`, case none => `guide-rail-${c.id}` } }
@@ -50,6 +50,7 @@ component Guide
   state expanded = false
   state selProgramme = ""
   state filter = "all"
+  state guideTab = ""
   state mode = "now"
   state rowBase = 0
   state colBase = -1
@@ -57,7 +58,9 @@ component Guide
   state portH = 640
   state focusMin = -1
   state landed = -1
-  derive rows = model.channels.filter(c => keep(c, filter))
+  // A tab whose Guide left the lineup falls back to all channels.
+  derive tabOn = (model.guides.filter(g => g.id == guideTab).length > 0 ? guideTab : "")
+  derive rows = model.channels.filter(c => keep(c, filter, tabOn))
   derive grid = not small or mode == "guide"
   derive scale = ppm(small, zoom)
   derive row = rowH(small)
@@ -94,6 +97,9 @@ component Guide
     selChannel = ""
     selProgramme = ""
     chooseDay(offset)
+  action pickTab(id: string)
+    guideTab = id
+    rowBase = 0
   action pickFilter(value: string)
     filter = value
     rowBase = 0
@@ -246,6 +252,12 @@ component Guide
               for g in model.groups key=g
                 option value=g
                   text g
+      // The owner's named Guides, as tabs over the lineup; channels may sit in several.
+      if model.guides.length > 0
+        row flex-shrink=0 gap=(small ? 18 : 24) align-items="stretch" height=38 overflow-x="auto" scrollbar-width="none" padding-left=(small ? side(small) : `calc(${side(small)} + 6px)`) padding-right=side(small) margin-top=(small ? 0 : -6) margin-bottom=(small ? 8 : 10) role="tablist" aria-label=t("live.guides")
+          GuideTabButton(label=t("live.allChannels"), id="", on=(tabOn == ""), pick=pickTab)
+          for g in model.guides key=g.id
+            GuideTabButton(label=g.name, id=g.id, on=(tabOn == g.id), pick=pickTab)
       if model.channels.length == 0
         column flex=1 align-items="center" justify-content="center" gap=10 padding=32
           text t("live.noChannels") role="status" font-size=17 color="ink.secondary"
@@ -462,6 +474,16 @@ component GuideCell
           if w > 110
             text metaLine(programme) font-size=12 color=(programme.airing ? "brand.warm" : "ink.secondary") font-variant-numeric="tabular-nums" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
 
+component GuideTabButton
+  props
+    label: string
+    id: string
+    on: bool
+    pick: action
+  view
+    button press=pick(id) role="tab" aria-selected=on class=GuideTabText flex-shrink=0 color=(on ? "ink.primary" : "ink.quiet") border-bottom=(on ? "2px solid var(--brand.warm)" : "2px solid transparent")
+      text label font-size=14 font-weight=(on ? 650 : 550) white-space="nowrap"
+
 component GuideDayChip
   props
     label: string
@@ -552,6 +574,16 @@ style TileSpeaker
     background-color = "cinematic.control-hover"
   :focus-visible
     box-shadow = "0px 0px 0px 2px var(--brand.warm)"
+
+style GuideTabText
+  box-sizing = "border-box"
+  padding = "0px 2px"
+  border = "none"
+  background-color = "transparent"
+  :hover
+    color = "ink.primary"
+  :focus-visible
+    box-shadow = "inset 0px -2px 0px var(--brand.warm), 0px 0px 0px 2px var(--brand.warm)"
 
 style GuideSelect
   box-sizing = "border-box"
