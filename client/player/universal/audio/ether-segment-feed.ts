@@ -1,3 +1,4 @@
+import { assertEtherAudioTimeline } from './ether-fragment-timing';
 import type { AudioFallbackResponse } from '../../../../protocol/v0/types';
 import type { OwnedNativeMediaAudioBackendPort } from '../../../../vendor/webgpu-player/src/audio/native/CustomDecodeNativeAudioBridge';
 import { MAXIMUM_NATIVE_AUDIO_SEGMENT_BYTE_LENGTH, MAXIMUM_NATIVE_AUDIO_SEGMENT_DURATION_MICROSECONDS } from '../../../../vendor/webgpu-player/src/audio/native/NativeMediaAudioLimits';
@@ -15,6 +16,7 @@ export async function feedEtherAudio(descriptor: AudioFallbackResponse, position
   if (!Number.isFinite(positionSeconds) || positionSeconds < 0 || descriptor.timelineOriginSeconds !== 0 || descriptor.codec !== 'mp4a.40.2')
     throw new Error('Ether audio fallback needs its absolute-title AAC timeline');
   let nextSequence: number | null = null, nextStart = positionSeconds, initialization = '';
+  let pendingInit: Uint8Array | null = null;
   let lastProgress = performance.now();
   while (!signal.aborted) {
     const bytes = await read(descriptor.url, 4 * 1024 * 1024, signal, fetchResource);
@@ -33,11 +35,15 @@ export async function feedEtherAudio(descriptor: AudioFallbackResponse, position
         throw new Error('Ether audio fragment exceeds the native backend duration bound');
       if (initialization !== segment.init) {
         if (initialization) throw new Error('Ether audio initialization changed without a new audio generation');
-        const init = await read(segment.init, MAXIMUM_NATIVE_AUDIO_SEGMENT_BYTE_LENGTH, signal, fetchResource);
-        if (!await backend.appendInitializationSegment(generation, init)) return;
+        pendingInit = await read(segment.init, MAXIMUM_NATIVE_AUDIO_SEGMENT_BYTE_LENGTH, signal, fetchResource);
         initialization = segment.init;
       }
       const data = await read(segment.url, MAXIMUM_NATIVE_AUDIO_SEGMENT_BYTE_LENGTH, signal, fetchResource);
+      if (pendingInit) {
+        assertEtherAudioTimeline(pendingInit, data, positionSeconds);
+        if (!await backend.appendInitializationSegment(generation, pendingInit)) return;
+        pendingInit = null;
+      }
       // The playlist starts at relative segment 0; encoded tfdt PTS already use
       // absolute title time. This metadata anchors scheduling only; never rewrite PTS.
       const end = nextStart + segment.duration;
