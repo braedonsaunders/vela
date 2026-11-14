@@ -35,6 +35,8 @@ component Navigation
           for name in skins key=name
             option value=name
               text (name == "editorial" or name == "index" ? "Index" : "Cinematic")
+      vela-install pwaAction="install"
+      vela-install pwaAction="update"
       text viewer font-size=12
       button press=signOut background-color="transparent" color="#22221e" border="none" padding=4
         text "Sign out"

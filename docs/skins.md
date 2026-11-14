@@ -118,3 +118,9 @@ Both skins use shared cardName() labels including title, year and watched progre
 Cinematic show details select distinct season IDs, render episode progress and offer
 the first unfinished episode in the server's episode order. Crew, cast, verified media
 facts, extras and related rows are omitted when absent rather than filled with samples.
+
+The cinematic viewer popover and Index navigation include native vela-install views:
+pwaAction="install" appears only when installable; pwaAction="update" appears only
+when a service-worker update is ready and directly invokes applyUpdate on a trusted
+click. Unsupported or unavailable actions occupy no button. Auth/bootstrap waits for
+the host's real media capability probe as well as its trusted page origin.

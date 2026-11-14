@@ -40,6 +40,8 @@ component Shell
             for name in skins key=name
               option value=name
                 text (name == "editorial" or name == "index" ? "Index" : "Cinematic")
+        vela-install pwaAction="install"
+        vela-install pwaAction="update"
         button press=signOut background-color="transparent" border="none" color="ink.secondary" text-align="left" padding=0
           text "Sign out"
       children

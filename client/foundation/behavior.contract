@@ -20,9 +20,12 @@ members Client
   derive fragmentCode = match first(fragment(top(nav)).split("&").filter(p => p.startsWith("code=")).map(p => p.slice(5))) { case some(c) => c, case none => "" }
   derive webCode = (capturedWebCode != "" ? capturedWebCode : fragmentCode != "" ? fragmentCode : searchParam(top(nav), "webCode"))
   state pageOrigin = ""
+  state mediaCapabilitiesJSON = ""
+  action receiveCapabilities(json: string)
+    mediaCapabilitiesJSON = json
   action receiveOrigin(origin: string)
     pageOrigin = origin
-  resource auth = uiAuth(webCode, time.epochAtZero, fragmentCode != "" or capturedFragment, pageOrigin) when pageOrigin != "" as shape AuthModel
+  resource auth = uiAuth(webCode, time.epochAtZero, fragmentCode != "" or capturedFragment, pageOrigin, mediaCapabilitiesJSON) when pageOrigin != "" and mediaCapabilitiesJSON != "" as shape AuthModel
   mutation cancelledAI as shape ReceiptReply
   task cancelEmptySearch when query.trim() == ""
     after(1, cancelSearch)
