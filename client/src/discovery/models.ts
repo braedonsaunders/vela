@@ -29,7 +29,8 @@ export function feedRow(row: Row, origin?: string, artWidth = 2560) {
   return { id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin, artWidth)) };
 }
 export function homeModel(data: Bootstrap, origin?: string, now?: number, artWidth = 2560) {
-  const cached = data.hero?.trailer?.cachedPlayback;
+  const heroes = (data.heroes ?? []).slice(0, 5);
+  const cached = heroes[0]?.trailer?.cachedPlayback;
   let trailerUrl = '';
   if (cached?.status === 'ready' && origin && now !== undefined && Date.parse(cached.expiresAt) > now) {
     try {
@@ -38,7 +39,7 @@ export function homeModel(data: Bootstrap, origin?: string, now?: number, artWid
     } catch { /* Invalid grant: leave preview unavailable. */ }
   }
   return { viewer: data.viewer.name, defaultSkinId: data.defaultSkinId, skins: data.capabilities.skins.map(s => s.id),
-    hero: data.hero ? [card(data.hero.title, data.hero.receiptToken, origin, artWidth)] : [], trailerReady: trailerUrl !== '', trailerUrl, trailerExpiresAt: trailerUrl && cached ? Date.parse(cached.expiresAt) : 0,
+    hero: heroes.map(hero => card(hero.title, hero.receiptToken, origin, artWidth)), trailerReady: trailerUrl !== '', trailerUrl, trailerExpiresAt: trailerUrl && cached ? Date.parse(cached.expiresAt) : 0,
     rows: data.rows.map(row => feedRow(row, origin, artWidth)),
     liveAvailable: data.capabilities.features.liveTV.available, aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available };
 }
