@@ -6,7 +6,7 @@ export interface Faults { bandwidthBps: number; failEvery: number; truncateEvery
 export const faults: Faults = { bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false };
 let segmentCount = 0;
 export async function serveMedia(req: Request, resource: string): Promise<Response> {
-  if (!/^(master\.m3u8|direct\.mp4|subtitles\.vtt|[a-z0-9_-]+\/(index\.m3u8|init\.mp4|seg-\d+\.m4s))$/.test(resource)) return new Response('Not found', { status: 404 });
+  if (!/^(master\.m3u8|mse-master\.m3u8|direct\.mp4|subtitles\.vtt|(?:v(?:360|540|720)|video(?:360|540|720)|a_(?:en|es))\/(?:index\.m3u8|init\.mp4|seg-\d+\.m4s))$/.test(resource)) return new Response('Not found', { status: 404 });
   const file = Bun.file(join(mediaRoot, resource));
   if (!await file.exists()) return Response.json({ error: 'media_not_generated', message: 'Run bun mock-server/scripts/make-media.ts' }, { status: 503 });
   const f = { ...faults };
@@ -16,7 +16,8 @@ export async function serveMedia(req: Request, resource: string): Promise<Respon
   }
   const segment = resource.endsWith('.m4s'), count = segment ? ++segmentCount : 0;
   if (segment && f.failEvery > 0 && count % f.failEvery === 0) return new Response('Injected source failure', { status: 502 });
-  const headers = new Headers({ 'Content-Type': resource.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : resource.endsWith('.vtt') ? 'text/vtt' : resource.endsWith('.m4s') ? 'video/iso.segment' : 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' });
+  const audio = resource.startsWith('a_');
+  const headers = new Headers({ 'Content-Type': resource.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : resource.endsWith('.vtt') ? 'text/vtt' : resource.endsWith('.m4s') ? (audio ? 'audio/iso.segment' : 'video/iso.segment') : (audio ? 'audio/mp4' : 'video/mp4'), 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' });
   let start = 0, end = file.size - 1, status = 200;
   const range = req.headers.get('range');
   if (range) {

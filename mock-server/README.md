@@ -25,12 +25,28 @@ This is a real live delivery fixture, not a connection to a television provider.
 Generate media once: `bun mock-server/scripts/make-media.ts` (requires ffmpeg).
 Output: `~/.scratch/tmp/vela/media/`, synthetic three-minute H.264/AAC direct MP4,
 three aligned four-second fMP4 HLS qualities, two tone audio tracks and WebVTT.
-Each Quality URL is a complete muxed A/V media playlist, suitable for MSE.
+The existing remux/transcode Quality URLs remain complete muxed A/V playlists.
 Native HLS master includes alternate audio groups. Generated files are scratch;
 regenerate if aged out. Plan and media remain unavailable until generation finishes.
 Movie metadata describes fictional full-length titles; all playback is explicitly
 this three-minute test fixture. Remux copies the original 720p video; transcode
 alternatives are generated offline. No actual on-demand encoder scheduler exists.
+
+For existing media, `bun mock-server/scripts/make-media.ts --mse-only` adds
+video-only `video360/`, `video540/`, `video720/`, `mse-master.m3u8` and a local
+`mse.json` descriptor without overwriting any existing native/muxed/audio files.
+Full generation also creates these resources. Generation refuses to overwrite an
+existing MSE fixture; stop players before removing/replacing any generated files.
+After the descriptor is written, MSE-capable VOD clients additionally receive
+`transcode-mse`. Its Quality has `audioGroupId: fixture-audio` and no audioCodec;
+audioRenditions supplies the two existing audio-only AAC media playlists with
+`audio/mp4; codecs="mp4a.40.2"`. Video is copied from the matching muxed rendition,
+retaining four-second keyframes and its decode clock; audio retains the original
+AAC frame/encoder timing. Both tracks use the same three-minute source timeline.
+Choose this separate path explicitly when driving the alternate-audio pipeline;
+direct/native/muxed paths and live remain unchanged. The descriptor is local build
+metadata, not an unauthenticated HTTP resource. Media resources use session grants
+and the same fault injection as muxed segments.
 
 GET/POST `/__admin/faults` reads/patches:
 

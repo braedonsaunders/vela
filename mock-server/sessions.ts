@@ -1,6 +1,7 @@
 import type { PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, SessionEvent, SessionSnapshot } from '../protocol/v0/types';
 import { faults, mediaRoot, fixtureDurationSeconds } from './media';
 import { liveWindow } from './live';
+import { mseFixture } from './mse';
 export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number }
 export const sessions = new Map<string, Session>();
 export function snapshot(s: Session): SessionSnapshot {
@@ -31,6 +32,13 @@ export async function createSession(owner: string, request: PlaybackRequest): Pr
     selectedAudioTrackId: request.audioTrackId ?? 'audio-en', selectedSubtitleTrackId: request.subtitleTrackId ?? null, chapters: [0,60,120].map((startSeconds, i) => ({ id: `chapter-${i + 1}`, name: ['Signal', 'Crossing', 'Homeward'][i], startSeconds, endSeconds: startSeconds + 60 })),
     fallback: { state: faults.fallbackUnavailable ? 'unavailable' : 'unsupported', reason: 'Mock serves pre-generated alternatives; no proactive encoder scheduler.' },
   };
+  if (!request.channelId && available && request.client.mse && request.allowTranscode !== false && !faults.fallbackUnavailable) {
+    const mse = await mseFixture(base);
+    if (mse) plan.paths.push({ id: 'transcode-mse', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl',
+      sourceId: 'synthetic-original', timelineId: `synthetic-${fixtureDurationSeconds}`, readiness: 'ready', ...mse,
+      boundaries: Array.from({ length: fixtureDurationSeconds / 4 }, (_, n) => ({ atSeconds: n * 4, independent: true,
+        timelineId: `synthetic-${fixtureDurationSeconds}`, compatibility: 'same-source', audioTrackIds: ['audio-en', 'audio-es'], subtitleTrackIds: ['sub-en'] })) });
+  }
   if (request.channelId) {
     plan.durationSeconds = undefined;
     plan.live = { ...liveWindow(), mode: request.liveMode ?? 'adaptive' };
