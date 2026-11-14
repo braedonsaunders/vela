@@ -27,12 +27,12 @@ function createInstall(element, json, event) {
   button.type = "button";
   button.style.cssText = "font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:20px;padding:8px 14px;cursor:pointer";
   element.replaceChildren(button);
-  let disposed = false, action = "install";
+  let disposed = false, action = "install", label = "";
   const update = () => {
     if (disposed)
       return;
     button.hidden = action === "update" ? !runtime?.state.updateAvailable : !runtime?.state.installable;
-    button.textContent = action === "update" ? "Update ready, reload" : "Install Vela";
+    button.textContent = label || (action === "update" ? "Update ready, reload" : "Install Vela");
     button.setAttribute("aria-label", button.textContent);
     if (runtime)
       event(8, JSON.stringify(runtime.state));
@@ -40,6 +40,7 @@ function createInstall(element, json, event) {
   const setProps = (json) => {
     const props = JSON.parse(json);
     action = props.pwaAction === "update" ? "update" : "install";
+    label = props.buttonLabel ?? "";
     update();
   };
   let unsubscribe = runtime?.subscribe(update);
@@ -382,7 +383,7 @@ class SegmentPipeline {
   abr = new AdaptiveBitrate;
   current;
   lowDelay = false;
-  liveWindowStart = 0;
+  liveWindowStart = null;
   maxLiveDrift = 45;
   publishedEdge = null;
   publishedStart = null;
@@ -561,7 +562,7 @@ class SegmentPipeline {
     let list = await this.playlist(rendition, signal);
     if (live) {
       list.segments.forEach((s) => {
-        s.start += this.liveWindowStart;
+        s.start += this.liveWindowStart ?? 0;
       });
       this.published(list);
     }
@@ -674,6 +675,13 @@ class SegmentPipeline {
         signal.removeEventListener("abort", abort);
       }
       await this.append(bytes, signal);
+      if (first && live && this.liveWindowStart === null && this.buffer.buffered.length) {
+        const offset = this.buffer.buffered.start(0) - next.start;
+        list.segments.forEach((s) => {
+          s.start += offset;
+        });
+        this.published(list);
+      }
       if (first) {
         this.video.currentTime = live ? Math.max(next.start, position) : position;
         first = false;
@@ -922,7 +930,7 @@ class PlaybackEngine {
         this.backend = "mse";
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
         pipeline.lowDelay = this.lowDelay;
-        pipeline.liveWindowStart = this.session?.liveWindowStart ?? 0;
+        pipeline.liveWindowStart = this.session?.liveWindowStart ?? null;
         pipeline.maxLiveDrift = this.session?.liveMaxDrift ?? 45;
         pipeline.abr.manual = this.manualQuality;
         pipeline.run(source.renditions ?? [], position, !!this.session?.live, token.signal).catch((e) => {
@@ -1267,7 +1275,7 @@ function sessionFromPlan(plan) {
     mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? "",
     edition,
     position: plan.positionSeconds,
-    live: !!plan.live,
+    live: !!plan.channelId,
     liveWindowStart: plan.live?.windowStartSeconds,
     liveEdge: plan.live?.liveEdgeSeconds,
     liveMaxDrift: plan.live?.maxDriftSeconds,

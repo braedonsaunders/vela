@@ -7,15 +7,15 @@ export function createInstall(element: HTMLElement, json: string, event: (kind: 
   const button = document.createElement('button'); button.type = 'button';
   button.style.cssText = 'font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:20px;padding:8px 14px;cursor:pointer';
   element.replaceChildren(button);
-  let disposed = false, action = 'install';
+  let disposed = false, action = 'install', label = ''; 
   const update = () => {
     if (disposed) return;
     button.hidden = action === 'update' ? !runtime?.state.updateAvailable : !runtime?.state.installable;
-    button.textContent = action === 'update' ? 'Update ready, reload' : 'Install Vela';
+    button.textContent = label || (action === 'update' ? 'Update ready, reload' : 'Install Vela');
     button.setAttribute('aria-label', button.textContent);
     if (runtime) event(8, JSON.stringify(runtime.state));
   };
-  const setProps = (json: string) => { const props = JSON.parse(json) as Record<string, string>; action = props.pwaAction === 'update' ? 'update' : 'install'; update(); };
+  const setProps = (json: string) => { const props = JSON.parse(json) as Record<string, string>; action = props.pwaAction === 'update' ? 'update' : 'install'; label = props.buttonLabel ?? ''; update(); };
   let unsubscribe = runtime?.subscribe(update);
   const appeared = () => {
     const next = (window as Window & { velaPwa?: PwaRuntime }).velaPwa;

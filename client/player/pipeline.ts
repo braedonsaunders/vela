@@ -31,7 +31,7 @@ export class SegmentPipeline {
   readonly abr = new AdaptiveBitrate();
   current?: Rendition;
   lowDelay = false;
-  liveWindowStart = 0; maxLiveDrift = 45;
+  liveWindowStart: number | null = null; maxLiveDrift = 45;
   publishedEdge: number | null = null; publishedStart: number | null = null;
   retrying = false;
   private publicationPending = false; private upstreamGap = false;
@@ -133,7 +133,7 @@ export class SegmentPipeline {
     this.current = rendition; this.onRendition(rendition);
     this.buffer = media.addSourceBuffer(rendition.mime);
     let list = await this.playlist(rendition, signal);
-    if (live) { list.segments.forEach(s => { s.start += this.liveWindowStart; }); this.published(list); }
+    if (live) { list.segments.forEach(s => { s.start += this.liveWindowStart ?? 0; }); this.published(list); }
     if (!live && list.ended) media.duration = list.segments.reduce((sum, s) => sum + s.duration, 0);
     let next = live ? (position > 0 ? list.segments.find(s => s.start + s.duration > position) : undefined) ?? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find(s => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
     if (!next) throw new PlaybackFault('Position outside source timeline', 'source');
@@ -195,6 +195,10 @@ export class SegmentPipeline {
         rendition = abandon; list = await this.playlist(rendition, signal); this.current = rendition; this.onRendition(rendition); init = ''; continue;
       } finally { if (this.request === request) this.request = undefined; this.segmentStarted = null; clearTimeout(timeout); signal.removeEventListener('abort', abort); }
       await this.append(bytes, signal);
+      if (first && live && this.liveWindowStart === null && this.buffer.buffered.length) {
+        const offset = this.buffer.buffered.start(0) - next.start;
+        list.segments.forEach(s => { s.start += offset; }); this.published(list);
+      }
       if (first) { this.video.currentTime = live ? Math.max(next.start, position) : position; first = false; }
       sequence++;
       const retain = live ? 15 : 30;
