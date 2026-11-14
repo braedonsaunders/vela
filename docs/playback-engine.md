@@ -887,3 +887,20 @@ Ether already supplies a publicly trusted plex.direct HTTPS origin on the lab;
 `secureOrigins` discovery is being added. WebGPU, WebCodecs and AudioWorklet
 qualification must use that origin, not the lab's plain HTTP address. No new lab
 stream is authorized by source adoption or capability probing.
+
+Runtime asset build: `bun tools/player/prepare-upstream.ts --bootstrap` initializes
+only the required Mediabunny submodule, installs the pinned engine dependencies
+and scratch-local Emscripten, then compiles WASM and workers. Later invocations
+omit `--bootstrap`. Output defaults to `client/modules/web/universal/` and can be
+changed with `--out=<absolute-directory>`. The generated asset manifest pins the
+source revision and content key; exact MPL fork source and notices accompany the
+separately loaded workers. This does not yet switch the native view to WebGPU.
+
+First asset build completed with content key `91f8cfddc70b7353`: four workers,
+libdovi parser, audio output stage and qualification vectors assembled; the Vela
+preparation command ran successfully and copied exact MPL source and notices.
+Chrome on the lab's HTTPS identity page reported secureContext=true, a real
+WebGPU adapter, VideoDecoder, AudioDecoder and AudioWorklet, with maximum output
+channels=2. This was capability-only: no viewer login, media fetch or stream.
+The owned browser and AudioContext were closed. No decode/render performance,
+HDR correctness or physical multichannel claim follows from this API probe.
