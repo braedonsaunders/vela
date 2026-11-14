@@ -6,3 +6,4 @@ export { artworkURL } from './src/discovery/artwork';
 export { SearchCoordinator } from './src/search';
 export { InteractionQueue } from './src/telemetry';
 export { Session, SessionCredentials } from './src/session';
+export { homeModel, detailModel, card } from './src/discovery/models';
