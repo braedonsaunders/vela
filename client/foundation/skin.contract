@@ -125,7 +125,7 @@ component Home
             JellyHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, libraries=libraries, openLibrary=openLibrary, live=live, canLive=canLive)
               children
           else if skin == "marquee"
-            MarqueeHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, playHero=playHero)
+            MarqueeHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, playHero=playHero, cardPreview=cardPreview, previewIntent=previewIntent)
               children
           else
             CineHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, cardPreview=cardPreview, previewIntent=previewIntent, playHero=playHero)
