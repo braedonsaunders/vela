@@ -141,10 +141,11 @@ members Client
   state heroIndex = 0
   derive heroAt = (current(home) and home.hero.length > 0 ? heroIndex % home.hero.length : 0)
   derive heroHasPreview = (previewRow == "@hero" and cardPreview.cardId != "")
-  task rotateHero when top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and current(home) and home.hero.length > 1 and not heroHasPreview
+  task rotateHero when top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and current(home) and home.hero.length > 1 and previewTarget == "" and not heroHasPreview
     every(9000, nextHero)
   action nextHero
-    heroIndex = (heroAt + 1) % max(1, home.hero.length)
+    if previewTarget == ""
+      heroIndex = (heroAt + 1) % max(1, home.hero.length)
   action pickHero(i: number)
     heroIndex = i
   task captureHomeTime when auth.authenticated key=localeJSON
