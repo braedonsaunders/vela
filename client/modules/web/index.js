@@ -1,28 +1,60 @@
+// client/player/media-capabilities.ts
+function mediaCapabilities() {
+  const video = document.createElement("video");
+  const supports = (mime) => video.canPlayType(mime) !== "";
+  const MS = globalThis.ManagedMediaSource ?? globalThis.MediaSource;
+  const videoFormats = [
+    ["h264", 'video/mp4; codecs="avc1.42E01E"'],
+    ["hevc", 'video/mp4; codecs="hvc1.1.6.L93.B0"'],
+    ["vp9", 'video/webm; codecs="vp9"'],
+    ["av1", 'video/mp4; codecs="av01.0.05M.08"']
+  ];
+  const audioFormats = [["aac", 'audio/mp4; codecs="mp4a.40.2"'], ["opus", 'audio/webm; codecs="opus"'], ["ac3", 'audio/mp4; codecs="ac-3"'], ["eac3", 'audio/mp4; codecs="ec-3"']];
+  return {
+    containers: [supports("video/mp4") ? "mp4" : "", supports("video/webm") ? "webm" : ""].filter(Boolean),
+    videoCodecs: videoFormats.filter(([, mime]) => supports(mime)).map(([name]) => name),
+    audioCodecs: audioFormats.filter(([, mime]) => supports(mime)).map(([name]) => name),
+    subtitleFormats: typeof VTTCue === "function" ? ["webvtt"] : [],
+    hls: supports("application/vnd.apple.mpegurl"),
+    mse: !!MS && videoFormats.some(([, mime]) => MS.isTypeSupported(mime))
+  };
+}
+
 // client/player/install.ts
-function createInstall(element, event) {
+function createInstall(element, json, event) {
   const runtime = window.velaPwa;
   const button = document.createElement("button");
   button.type = "button";
-  button.textContent = "Install Vela";
-  button.setAttribute("aria-label", "Install Vela");
   button.style.cssText = "font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:20px;padding:8px 14px;cursor:pointer";
   element.replaceChildren(button);
-  let disposed = false;
+  let disposed = false, action = "install";
   const update = () => {
-    if (!disposed) {
-      button.hidden = !runtime?.state.installable;
-      if (runtime)
-        event(8, JSON.stringify(runtime.state));
-    }
+    if (disposed)
+      return;
+    button.hidden = action === "update" ? !runtime?.state.updateAvailable : !runtime?.state.installable;
+    button.textContent = action === "update" ? "Update ready, reload" : "Install Vela";
+    button.setAttribute("aria-label", button.textContent);
+    if (runtime)
+      event(8, JSON.stringify(runtime.state));
+  };
+  const setProps = (json) => {
+    const props = JSON.parse(json);
+    action = props.pwaAction === "update" ? "update" : "install";
+    update();
   };
   const unsubscribe = runtime?.subscribe(update);
   const clicked = () => {
-    if (runtime)
+    if (!runtime)
+      return;
+    if (action === "update")
+      runtime.applyUpdate();
+    else
       runtime.install().then(() => update(), () => update());
   };
   button.addEventListener("click", clicked);
+  setProps(json);
   queueMicrotask(update);
-  return { install: true, button, dispose() {
+  return { install: true, button, update: setProps, dispose() {
     disposed = true;
     unsubscribe?.();
     button.removeEventListener("click", clicked);
@@ -1217,14 +1249,15 @@ var abi = 1;
 var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false } };
 function create(tag, element, json, event) {
   if (tag === "vela-install")
-    return createInstall(element, event);
+    return createInstall(element, json, event);
   if (tag === "vela-preview")
     return createPreview(element, json, event);
   if (tag === "vela-context") {
     const handle = { context: true, disposed: false };
+    const props = JSON.parse(json);
     queueMicrotask(() => {
       if (!handle.disposed)
-        event(8, location.origin);
+        event(8, props.probe === "media" ? JSON.stringify(mediaCapabilities()) : location.origin);
     });
     return handle;
   }
@@ -1261,8 +1294,10 @@ function create(tag, element, json, event) {
   return handle;
 }
 function setProps(handle, json) {
-  if ("install" in handle)
+  if ("install" in handle) {
+    handle.update(json);
     return;
+  }
   if ("preview" in handle) {
     setPreview(handle, json);
     return;

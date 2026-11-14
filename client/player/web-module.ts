@@ -1,3 +1,4 @@
+import { mediaCapabilities } from './media-capabilities';
 import { createInstall, type InstallHandle } from './install';
 import { createPreview, setPreview, destroyPreview, type PreviewHandle } from './preview';
 import { PlaybackEngine } from './engine';
@@ -12,11 +13,12 @@ interface Handle {
   endedReport: string; serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
 }
 export function create(tag: string, element: HTMLElement, json: string, event: (kind: number, payload: string) => void): Handle | ContextHandle | PreviewHandle | InstallHandle {
-  if (tag === 'vela-install') return createInstall(element, event);
+  if (tag === 'vela-install') return createInstall(element, json, event);
   if (tag === 'vela-preview') return createPreview(element, json, event);
   if (tag === 'vela-context') {
     const handle: ContextHandle = { context: true, disposed: false };
-    queueMicrotask(() => { if (!handle.disposed) event(8, location.origin); });
+    const props = JSON.parse(json) as Record<string, string>;
+    queueMicrotask(() => { if (!handle.disposed) event(8, props.probe === 'media' ? JSON.stringify(mediaCapabilities()) : location.origin); });
     return handle;
   }
   if (tag !== 'vela-player') throw new Error(`Unknown player view: ${tag}`);
@@ -39,7 +41,7 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   return handle;
 }
 export function setProps(handle: Handle | ContextHandle | PreviewHandle | InstallHandle, json: string) {
-  if ('install' in handle) return;
+  if ('install' in handle) { handle.update(json); return; }
   if ('preview' in handle) { setPreview(handle, json); return; }
   if ('context' in handle) return;
   const props = JSON.parse(json) as Record<string, string>;
