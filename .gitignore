@@ -1,4 +1,5 @@
-vendor/
+vendor/*
+!vendor/webgpu-player
 .tools/
 node_modules/
 .exact/
