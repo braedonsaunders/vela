@@ -386,3 +386,22 @@ and correct error classification; credentials were not repeatedly retried.
 The previous failed movie session was independently confirmed expired and closed
 by Ether logs. Codec playback, seek, stop acknowledgement, resume and live remain
 unverified until an authenticated drive succeeds; installing fixes is not a pass.
+
+### 0.1.6 / lab.3 after the natural auth-window reset
+
+The shared LAN-IP login bucket reset at 03:54:32 UTC. One fresh password action
+after that reset returned HTTP 200; no limit was changed.
+
+| Step | Measured result |
+| --- | --- |
+| 1917 broker / first decoded frames | Broker HTTP 200 in 532 ms; first frames 13,960 ms after Play; native HLS transcode, readyState 4. Media MPEG-TS responses HTTP 206. `lab-11-playing.png`. |
+| Seek +10 seconds | Actual 22.816829 → requested/authorized 32.816829 seconds; command HTTP 200 in 55 ms, seek generation 2. Video resumed at the authorized position after 15,173 ms. |
+| Progress reporting | HTTP 200 observations with increasing playing positions, including 40.356585 → 42.356186 seconds after seek. |
+| Rendering / buffering sample | At 43.404 seconds: 257 decoded frames, 19 dropped. Buffering was observed after seek and near 52 seconds; this drive does **not** establish zero stalls. `lab-12-seek-settings.png`. |
+| Track / quality controls | Four source audio tracks advertised, but Chrome exposes no native audio-switch API and server session track changes are unavailable. No offered subtitle tracks or quality ladder. No switching pass claimed. Empty settings popover assigned to UI for removal. |
+| Explicit Close | Stop HTTP 200, authoritative `ended` at 52.062166 seconds; local video removed. No second stream before acknowledgement. |
+| Reopen / resume | **Failed**: playback POST replayed the same session with original `ready`, position 0. Vela reused its page/title idempotency key across watch openings. Assigned to data worker for stable per-opening identity. |
+
+The replay did not create a new broker session; the original was already ended.
+Chrome was closed after recording the resume failure. Live TV and clean
+single-flight handoff rechecks remain pending the next installed client batch.
