@@ -586,6 +586,8 @@ class PlaybackEngine {
       strategy: this.source?.strategy ?? null,
       backend: this.backend,
       renditionId: this.pipeline?.current?.id ?? null,
+      capabilities: { pip: !!document.pictureInPictureEnabled && !!this.video.requestPictureInPicture, fullscreen: !!this.fullscreenContainer.requestFullscreen || !!this.video.webkitEnterFullscreen, audioSwitch: (this.video.audioTracks?.length ?? 0) > 1 },
+      lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
       position: Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0,
       duration: Number.isFinite(this.video.duration) ? this.video.duration : null,
@@ -784,6 +786,32 @@ class PlaybackEngine {
         abort();
     });
   }
+  rejectCommand(message) {
+    if (message)
+      this.fail({ kind: "source", message, recoverable: false });
+  }
+  requestSeek(seconds) {
+    this.emit({ type: "session-command", sessionId: this.session.id, command: {
+      kind: "seek",
+      positionSeconds: seconds,
+      sourceGeneration: this.controller.source,
+      seekGeneration: this.controller.seek,
+      idempotencyKey: crypto.randomUUID()
+    } });
+  }
+  requestSwitch(source, position) {
+    const boundary = source.boundaries?.filter((at) => at <= position).sort((a, b) => b - a)[0];
+    if (boundary === undefined)
+      throw new Error("No independent switch boundary offered by server");
+    this.emit({ type: "session-command", sessionId: this.session.id, command: {
+      kind: "switch",
+      pathId: source.id,
+      atSeconds: boundary,
+      sourceGeneration: this.controller.source,
+      seekGeneration: this.controller.seek,
+      idempotencyKey: crypto.randomUUID()
+    } });
+  }
   fail(failure) {
     this.controller.cancel();
     this.pipeline?.dispose();
@@ -810,7 +838,10 @@ class PlaybackEngine {
         return;
       }
       this.recovering = false;
-      await this.activate(source, position, true);
+      if (this.session?.serverControlled)
+        this.requestSwitch(source, position);
+      else
+        await this.activate(source, position, true);
     } catch (e) {
       if (this.controller.current(token))
         this.fail({ kind, message: String(e), recoverable: false });
@@ -877,9 +908,29 @@ class PlaybackEngine {
           this.wantsPlay = false;
           this.video.pause();
           break;
+        case "retry":
+          if (this.session)
+            await this.load({ ...this.session, position: this.video.currentTime || this.resumePosition });
+          break;
+        case "switchPath": {
+          const source = this.candidates().find((s) => s.id === command.pathId);
+          if (!source || source.id === this.source?.id)
+            break;
+          if (source.recoveryAllowed === false)
+            throw new Error("Source has no compatibility proof");
+          if (this.session?.serverControlled)
+            this.requestSwitch(source, this.video.currentTime);
+          else
+            await this.activate(source, this.video.currentTime);
+          break;
+        }
         case "seek": {
           if (!Number.isFinite(command.seconds) || command.seconds < 0 || Number.isFinite(this.video.duration) && command.seconds > this.video.duration)
             throw new Error("Seek outside media timeline");
+          if (this.session?.serverControlled) {
+            this.requestSeek(command.seconds);
+            break;
+          }
           this.controller.changeSeek();
           if (this.backend === "mse" && this.source)
             await this.activate(this.source, command.seconds, false, true);
@@ -975,6 +1026,7 @@ function sessionFromPlan(plan) {
   const edition = selected.edition ?? "";
   return {
     id: plan.sessionId,
+    serverControlled: true,
     selectedSourceId: plan.selectedPathId,
     mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? "",
     edition,
@@ -999,7 +1051,8 @@ function sessionFromPlan(plan) {
       edition: p.edition ?? "",
       timeline: p.timelineId ?? `unverified:${p.id}`,
       audioTrackId: plan.selectedAudioTrackId,
-      recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some((b) => b.independent && b.compatibility === "verified-timeline" && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
+      boundaries: p.boundaries.filter((b) => b.independent).map((b) => b.atSeconds),
+      recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some((b) => b.independent && (b.compatibility === "verified-timeline" || b.compatibility === "same-source" && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
       renditions: p.qualities.map((q) => ({
         id: q.id,
         url: q.url,
@@ -1042,7 +1095,7 @@ function create(tag, element, json, event) {
   const video = document.createElement("video");
   video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000";
   root.replaceChildren(video);
-  const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0 };
+  const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0, serverError: "" };
   handle.engine = new PlaybackEngine(video, (value) => {
     event(8, JSON.stringify(value));
     const now = performance.now();
@@ -1089,11 +1142,40 @@ function setProps(handle, json) {
     else
       handle.engine.load(session);
   }
+  if (props.serverError !== handle.serverError) {
+    handle.serverError = props.serverError ?? "";
+    if (handle.serverError)
+      handle.engine.rejectCommand(handle.serverError);
+  }
   applyCommand(handle, props);
 }
 function applyCommand(handle, props) {
   if (props.playerCommand) {
-    const command = JSON.parse(props.playerCommand);
+    let command = JSON.parse(props.playerCommand);
+    const value = command.value;
+    if (typeof value === "string") {
+      const decoded = decodeURIComponent(value), base = { id: command.id, type: command.type };
+      switch (command.type) {
+        case "lowDelay":
+          command = { ...base, type: "lowDelay", enabled: decoded === "true" };
+          break;
+        case "seek":
+          command = { ...base, type: "seek", seconds: Number(decoded) };
+          break;
+        case "quality":
+          command = { ...base, type: "quality", renditionId: decoded || null };
+          break;
+        case "audio":
+          command = { ...base, type: "audio", trackId: decoded };
+          break;
+        case "subtitle":
+          command = { ...base, type: "subtitle", trackId: decoded || null };
+          break;
+        case "switchPath":
+          command = { ...base, type: "switchPath", pathId: decoded };
+          break;
+      }
+    }
     if (!Number.isSafeInteger(command.id))
       throw new Error("Command requires integer id");
     if (command.id > handle.lastCommand) {

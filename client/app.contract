@@ -23,7 +23,7 @@ component Client
     main navigationKey=`${top(nav).id}` navigationBack="back" navigate=follow width="100%" height="100%" background-color=pageColor color=inkColor color-scheme="dark"
       for e in stack(nav) key=e.id
         if e.name == "home"
-          column navigationKey=`${e.id}` navigationSplit=skinDetailSplit(activeSkin, viewport.width) navigationScroll="home-scroll" position="absolute" inset=0
+          column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width) : "none") navigationScroll="home-scroll" position="absolute" inset=0
             Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins, chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=home.liveAvailable, canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
               scroll id="home-scroll" flex=1 min-height=0
                 if failed(auth)
@@ -46,9 +46,6 @@ component Client
                         else
                           Home(skin=activeSkin, model=home, query=query, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe)
                             SearchField(skin=activeSkin, query=query, edit=edit)
-                          if query != ""
-                                button press=edit("") aria-label="Clear search" border="none" background-color="transparent" color="ink.secondary" padding=8
-                                  image "symbol:close"
                           if query != ""
                             SearchSurface(skin=activeSkin, query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe)
         if e.name == "live"
@@ -99,8 +96,8 @@ component Client
               if not current(playback)
                 text "Preparing playback…" role="status" margin="auto"
               else
-                vela-player plan=watchPlan playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%"
+                vela-player plan=(watchModel.planJson != "" ? watchModel.planJson : currentPlan) playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%"
                 if e.name == "liveWatch"
                   column position="absolute" top=16 right=16
                     LiveControls(lowDelay=lowDelay, reconnecting=(liveState.sessionId == playback.sessionId and liveState.reconnecting), delivery=(liveState.sessionId == playback.sessionId ? liveState.delivery : "unknown"), drift=(liveState.sessionId == playback.sessionId ? liveState.drift : -1), canCatchUp=(liveState.sessionId == playback.sessionId and liveState.canCatchUp), toggleLowDelay=toggleLowDelay, catchUp=catchUpLive)
-                PlayerChrome(model=watchModel, title=watchModel.title, visible=(not watchHidden or not watchModel.playing or watchEditing), small=small, still=still, serverError=watchReply.error, command=watchControl, seek=watchSeek, editing=editWatch, close=close)
+                PlayerChrome(model=watchModel, title=watchTitle, visible=(not watchHidden or not watchModel.playing or watchEditing), small=small, still=still, serverError=watchReply.error, command=watchControl, seek=watchSeek, editing=editWatch, close=close)

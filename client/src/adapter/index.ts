@@ -13,6 +13,7 @@ export interface ServerAdapter {
   bootstrap(): Promise<V.Bootstrap>;
   rows(query: V.RowsQuery): Promise<V.Page<V.Row>>;
   row(id: string, cursor?: string, limit?: number): Promise<V.Row>;
+  collection(id: string): Promise<V.CollectionContents>;
   detail(id: string): Promise<V.TitleDetail>;
   search(request: V.SearchRequest): Promise<V.SearchResponse>;
   startAI(request: V.AISearchRequest): Promise<V.AISearchJob>;

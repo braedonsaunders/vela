@@ -6,14 +6,14 @@ export const abi = 1;
 export const roster = { 'vela-player': { snapshot: false } };
 interface Handle {
   engine: PlaybackEngine; video: HTMLVideoElement; sessionJson: string; lastCommand: number;
-  planRevision: number; planSession: string; sequence: number; lastReport: number;
+  serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
 }
 export function create(tag: string, element: HTMLElement, json: string, event: (kind: number, payload: string) => void): Handle {
   if (tag !== 'vela-player') throw new Error(`Unknown player view: ${tag}`);
   const root = element.shadowRoot ?? element.attachShadow({ mode: 'open' });
   const video = document.createElement('video'); video.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:#000';
   root.replaceChildren(video);
-  const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0 };
+  const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0, serverError: '' };
   handle.engine = new PlaybackEngine(video, value => {
     event(8, JSON.stringify(value));
     const now = performance.now();
@@ -42,11 +42,24 @@ export function setProps(handle: Handle, json: string) {
     if (props.plan && current.sessionId === session.id && current.sourceId === session.selectedSourceId && current.sourceGeneration === session.sourceGeneration && current.seekGeneration === session.seekGeneration) handle.engine.updateSession(session);
     else void handle.engine.load(session);
   }
+  if (props.serverError !== handle.serverError) { handle.serverError = props.serverError ?? ''; if (handle.serverError) handle.engine.rejectCommand(handle.serverError); }
   applyCommand(handle, props);
 }
 function applyCommand(handle: Handle, props: Record<string, string>) {
   if (props.playerCommand) {
-    const command = JSON.parse(props.playerCommand) as Command;
+    let command = JSON.parse(props.playerCommand) as Command;
+    const value = (command as unknown as { value?: string }).value;
+    if (typeof value === 'string') {
+      const decoded = decodeURIComponent(value), base = { id: command.id, type: command.type };
+      switch (command.type) {
+        case 'lowDelay': command = { ...base, type: 'lowDelay', enabled: decoded === 'true' }; break;
+        case 'seek': command = { ...base, type: 'seek', seconds: Number(decoded) }; break;
+        case 'quality': command = { ...base, type: 'quality', renditionId: decoded || null }; break;
+        case 'audio': command = { ...base, type: 'audio', trackId: decoded }; break;
+        case 'subtitle': command = { ...base, type: 'subtitle', trackId: decoded || null }; break;
+        case 'switchPath': command = { ...base, type: 'switchPath', pathId: decoded }; break;
+      }
+    }
     if (!Number.isSafeInteger(command.id)) throw new Error('Command requires integer id');
     if (command.id > handle.lastCommand) { handle.lastCommand = command.id; void handle.engine.command(command); }
   }

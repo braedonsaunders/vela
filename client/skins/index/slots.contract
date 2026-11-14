@@ -31,7 +31,7 @@ component Navigation
         button press=library background-color="transparent" color="#22221e" border="none" padding=4
           text "Library"
       if skins.length > 1
-        select value=skin change=chooseSkin aria-label="Appearance" background-color="#ffffff" color="#22221e" padding=8
+        select value=skin change=chooseSkin aria-label="Appearance" testId="skin-picker" background-color="#ffffff" color="#22221e" padding=8
           for name in skins key=name
             option value=name
               text name

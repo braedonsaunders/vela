@@ -1,6 +1,7 @@
 import type { StreamEvent } from '../../app.contract.d.ts';
 import type { SessionEvent, SessionSnapshot, Tokens } from '../../wire/v0/types';
 import type { ServerAdapter } from '../adapter';
+import { mediaPlan } from './media';
 
 const cursors = new Map<string, string>();
 
@@ -17,7 +18,7 @@ export async function sessionEvents(api: ServerAdapter, origin: string, tokens: 
       if (typeof event.data !== 'string') throw new Error('Invalid session event');
       const value = JSON.parse(event.data) as SessionEvent;
       if (value.sessionId !== sessionId || !value.cursor || typeof value.revision !== 'number') throw new Error('Invalid session event');
-      if (value.revision < revision) return { planJson: JSON.stringify(snapshot.plan), sessionId };
+      if (value.revision < revision) return { planJson: JSON.stringify(mediaPlan(snapshot.plan, origin)), sessionId };
       switch (value.type) {
         case 'snapshot': snapshot = value.snapshot; break;
         case 'plan': snapshot = { ...snapshot, plan: value.plan, cursor: value.cursor, revision: value.revision }; break;
@@ -27,7 +28,7 @@ export async function sessionEvents(api: ServerAdapter, origin: string, tokens: 
       }
       revision = value.revision;
       cursors.set(sessionId, value.cursor);
-      return { planJson: JSON.stringify(snapshot.plan), sessionId };
+      return { planJson: JSON.stringify(mediaPlan(snapshot.plan, origin)), sessionId };
     },
   });
 }

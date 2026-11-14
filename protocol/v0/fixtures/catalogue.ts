@@ -24,7 +24,7 @@ export const titles: Title[] = collections.flatMap(([_, ...names], row) => names
     'Across one sleepless night, the lives of strangers intersect beneath the lights of a harbour city.',
   ][row]!, genres: genres[row]!, rating: row === 2 ? 'TV-14' : 'PG', durationSeconds: 5400 + n * 180,
   artwork: [artwork(`title-${row + 1}-${n + 1}`), artwork(`title-${row + 1}-${n + 1}`, 'backdrop')],
-  ...(row === 0 && n < 3 ? { watch: { positionSeconds: 1200 + n * 360, played: false, favorite: n === 0, watchlisted: false } } : {}),
+  ...(row === 0 && n < 3 ? { watch: { positionSeconds: 12 + n * 8, played: false, favorite: n === 0, watchlisted: false } } : {}),
 })));
 const show: Title = { id: 'show-meridian', kind: 'show', name: 'Meridian Station', summary: 'At a remote coastal weather station, a new team maps the strange rhythms of an isolated island.', year: 2025, genres: ['Drama', 'Mystery'], rating: 'TV-14', artwork: [artwork('show-meridian'), artwork('show-meridian', 'backdrop')] };
 export const seasons: Title[] = [1, 2].map(n => ({ ...show, id: `season-meridian-${n}`, kind: 'season', name: `Season ${n}`, showId: show.id, seasonNumber: n }));

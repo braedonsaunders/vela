@@ -21,11 +21,11 @@ members Client
     nav = push(nav, path("liveWatch", id))
   action toggleLowDelay
     lowDelay = not lowDelay
-    let next = commandId + 1
-    commandId = next
-    commandJson = `{"id":${next},"type":"lowDelay","enabled":${lowDelay}}`
+    let next = watchCommandId + 1
+    watchCommandId = next
+    watchCommandJson = `{"id":${next},"type":"lowDelay","enabled":${lowDelay}}`
   action catchUpLive
-    playerCommand("catchUp")
+    watchControl("catchUp", "")
   action liveWatchMessage(json: string)
     watchMessage(json)
     if top(nav).name == "liveWatch"

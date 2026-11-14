@@ -1,19 +1,20 @@
+import type { SessionCommand } from '../wire/v0/types';
 /** Local engine input. protocol.ts translates the versioned server plan here. */
 export interface Track { id: string; label: string; language?: string; url?: string }
 export interface Rendition { id: string; url: string; bandwidth: number; mime: string; height?: number }
 export interface Source {
   id: string; strategy: 'direct' | 'remux' | 'transcode'; delivery: 'file' | 'hls';
-  url: string; mime: string; timeline: string; edition: string; audioTrackId?: string; recoveryAllowed?: boolean;
+  url: string; mime: string; timeline: string; edition: string; audioTrackId?: string; recoveryAllowed?: boolean; boundaries?: number[];
   renditions?: Rendition[];
 }
 export interface PlaybackSession {
-  id: string; mediaId: string; edition: string; selectedSourceId?: string; sources: Source[]; position?: number;
+  id: string; mediaId: string; edition: string; selectedSourceId?: string; serverControlled?: boolean; sources: Source[]; position?: number;
   audioTracks: Track[]; subtitleTracks: Track[]; audioTrackId?: string;
   subtitleTrackId?: string; live?: boolean; liveWindowStart?: number; liveEdge?: number; liveMaxDrift?: number; lowDelay?: boolean; sourceGeneration?: number; seekGeneration?: number;
 }
 export type Command = { id: number } & (
-  { type: 'play' | 'pause' | 'pip' | 'fullscreen' | 'catchUp' } |
-  { type: 'seek'; seconds: number } | { type: 'volume'; value: number } |
+  { type: 'play' | 'pause' | 'pip' | 'fullscreen' | 'catchUp' | 'retry' } |
+  { type: 'switchPath'; pathId: string } | { type: 'seek'; seconds: number } | { type: 'volume'; value: number } |
   { type: 'audio'; trackId: string } | { type: 'subtitle'; trackId: string | null } |
   { type: 'quality'; renditionId: string | null } | { type: 'lowDelay'; enabled: boolean });
 export type FailureKind = 'network' | 'source' | 'decoder' | 'unsupported' | 'action';
@@ -30,10 +31,11 @@ export interface Snapshot {
   state: 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'recovering' | 'ended' | 'failed';
   sourceId: string | null; strategy: Source['strategy'] | null;
   backend: 'file' | 'native-hls' | 'mse' | null; renditionId: string | null;
+  capabilities: { pip: boolean; fullscreen: boolean; audioSwitch: boolean }; lockedQuality: string | null;
   live: LiveSnapshot | null;
   position: number; duration: number | null; playable: { start: number; end: number }[];
   throughputBps: number | null; droppedFrames: number | null; totalFrames: number | null;
   audioTrackId: string | null; subtitleTrackId: string | null; failure: Failure | null;
 }
 export type EngineEvent = { type: 'snapshot'; snapshot: Snapshot } |
-  { type: 'error'; failure: Failure };
+  { type: 'error'; failure: Failure } | { type: 'session-command'; sessionId: string; command: SessionCommand };

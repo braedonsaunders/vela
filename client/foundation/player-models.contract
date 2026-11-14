@@ -1,0 +1,44 @@
+shape PlayerOption
+  id: string
+  label: string
+shape PlayerChapter
+  id: string
+  label: string
+  seconds: number
+  percent: number
+shape PlayerBuffer
+  id: string
+  left: number
+  width: number
+shape PlayerView
+  planJson: string
+  ready: bool
+  state: string
+  playing: bool
+  position: number
+  duration: number
+  elapsed: string
+  remaining: string
+  progress: number
+  reason: string
+  actionError: string
+  path: string
+  backend: string
+  quality: string
+  lockedQuality: string
+  audioId: string
+  audioLabel: string
+  subtitleId: string
+  audio: PlayerOption[]
+  subtitles: PlayerOption[]
+  qualities: PlayerOption[]
+  paths: PlayerOption[]
+  pathId: string
+  chapters: PlayerChapter[]
+  buffered: PlayerBuffer[]
+  pip: bool
+  fullscreen: bool
+shape PlayerCommandReply
+  planJson: string
+  sessionId: string
+  error: string

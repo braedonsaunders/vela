@@ -96,6 +96,9 @@ Never reuse a key for polling a grant/job or successive telemetry observations.
 
 ## Playback and events
 
+Omitting PlaybackRequest.positionSeconds resumes the viewer's saved watch position
+(or zero when none exists); an explicit zero starts over.
+
 Source and seek generations start at 1. Every session command/observation includes
 both current generations. Stale values return 409 `stale_generation` with current
 values; they cannot change state. Seek increments seek generation; committed source

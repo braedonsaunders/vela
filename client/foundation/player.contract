@@ -1,0 +1,54 @@
+use PlayerView, PlayerCommandReply from "./player-models.contract"
+
+members Client
+  state watchEvent = ""
+  state watchCommandJson = ""
+  state watchCommandId = 0
+  state watchTouched = 0
+  state watchEditing = false
+  mutation watchAuthorized as shape PlayerCommandReply
+  derive watchReply = match watchAuthorized { case some(r) => r, case none => PlayerCommandReply(planJson="", sessionId="", error="") }
+  derive watchPlan = (watchReply.sessionId == playback.sessionId and watchReply.planJson != "" ? watchReply.planJson : currentPlan)
+  resource watchModel = uiPlayer(currentPlan, watchEvent, watchReply.planJson) when playingId != "" and watchPlan != "" as shape PlayerView
+  derive watchTitle = match first(detail.title) { case some(t) => t.name, case none => "Now playing" }
+  state watchHidden = false
+  task hideWatch when playingId != "" and watchModel.playing and not watchEditing key=watchTouched
+    after(3500, hideWatchChrome)
+  action hideWatchChrome
+    watchHidden = true
+  action touchWatch
+    watchTouched = performanceNow()
+    watchHidden = false
+  action editWatch(v: bool)
+    watchEditing = v
+    watchHidden = false
+  action watchMessage(json: string)
+    if json.startsWith("{\"type\":\"session-command\"")
+      send watchAuthorized = uiPlayerCommand(json)
+    else
+      if json.startsWith("{\"type\":\"observation\"")
+        playerMessage(json)
+      else
+        watchEvent = json
+  action watchControl(kind: string, value: string)
+    if kind == "retry"
+      watchAuthorized = none
+    let next = watchCommandId + 1
+    watchCommandId = next
+    watchCommandJson = `{"id":${next},"type":"${kind}","value":"${encodeURIComponent(value)}"}`
+    touchWatch()
+  action watchSeek(value: number)
+    watchControl("seek", `${value}`)
+  action watchKey(k: string, event: KeyboardEvent)
+    if not watchEditing and not event.isComposing and not event.metaKey and not event.ctrlKey and not event.altKey
+      if k == " " or k == "k" or k == "K"
+        preventDefault()
+        watchControl(watchModel.playing ? "pause" : "play", "")
+      if k == "ArrowLeft" or k == "j" or k == "J"
+        preventDefault()
+        watchSeek(max(0, watchModel.position - 10))
+      if k == "ArrowRight" or k == "l" or k == "L"
+        preventDefault()
+        watchSeek(min(watchModel.duration, watchModel.position + 10))
+      if (k == "f" or k == "F") and watchModel.fullscreen
+        watchControl("fullscreen", "")

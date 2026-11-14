@@ -6,16 +6,16 @@ function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, hei
   return ref ? artworkURL(ref, width, height, origin) ?? '' : '';
 }
 export function card(title: Title, receipt = '', origin?: string) {
-  return { id: title.id, kind: title.kind, name: title.name, summary: title.summary,
+  return { id: title.id, kind: title.kind, name: title.name, summary: title.summary, year: title.year ?? 0, rating: title.rating ?? '', durationSeconds: title.durationSeconds ?? 0, genres: title.genres,
     facts: [title.year, title.rating, title.durationSeconds ? `${Math.round(title.durationSeconds / 60)} min` : undefined].filter(x => x !== undefined).join(' · '),
     poster: art(title.artwork, 'poster', 400, 600, origin), backdrop: art(title.artwork, 'backdrop', 1280, 720, origin),
     logo: art(title.artwork, 'logo', 400, 200, origin), accent: title.artwork.find(a => a.color)?.color ?? '', receipt };
 }
-function entry(item: RowEntry, origin?: string) {
+export function entry(item: RowEntry, origin?: string) {
   if (item.kind === 'title') return card(item.title, item.receiptToken, origin);
   const artwork = item.kind === 'channel' ? item.channel.artwork : item.artwork;
   return { id: item.kind === 'channel' ? item.channel.id : item.targetId, kind: item.kind,
-    name: item.kind === 'channel' ? item.channel.name : item.name, summary: '', facts: '',
+    name: item.kind === 'channel' ? item.channel.name : item.name, summary: '', facts: '', year: 0, rating: item.kind === 'channel' ? item.channel.rating ?? '' : '', durationSeconds: 0, genres: [] as string[],
     poster: art(artwork, 'poster', 400, 600, origin), backdrop: art(artwork, 'backdrop', 1280, 720, origin),
     logo: art(artwork, 'logo', 400, 200, origin), accent: artwork.find(a => a.color)?.color ?? '', receipt: item.receiptToken };
 }
@@ -23,7 +23,7 @@ export function homeModel(data: Bootstrap, origin?: string) {
   return { viewer: data.viewer.name, defaultSkinId: data.defaultSkinId, skins: data.capabilities.skins.map(s => s.id),
     hero: data.hero ? [card(data.hero.title, data.hero.receiptToken, origin)] : [],
     rows: data.rows.map(row => ({ id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin)) })),
-    aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available };
+    liveAvailable: data.capabilities.features.liveTV.available, aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available };
 }
 export function detailModel(data: TitleDetail, origin?: string) {
   return { title: [card(data.title, '', origin)], canPlay: data.canPlay ?? false, resumeSeconds: data.title.watch?.positionSeconds ?? 0,
