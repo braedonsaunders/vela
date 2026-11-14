@@ -10,21 +10,23 @@ export class PlaybackEngine {
   private session?: PlaybackSession; private source?: Source; private pipeline?: SegmentPipeline;
   private status: Snapshot['state'] = 'idle'; private backend: Snapshot['backend'] = null;
   private failure: Failure | null = null; private audio: string | null = null; private subtitle: string | null = null;
-  private timer: ReturnType<typeof setInterval>; private listeners: (() => void)[] = [];
+  private timer: ReturnType<typeof setInterval> | undefined; private listeners: (() => void)[] = [];
   private attempted = new Set<string>(); private recovering = false; private disposed = false;
   private resumePosition = 0;
   private pendingSwitch?: { sessionId: string; sourceId: string; source: number; seek: number; position: number; recovery: boolean };
   private lowDelayOverride: boolean | undefined;
+  private terminalMedia?: { position: number; duration: number | null };
+  private localTransportIntent: 'playing' | 'paused' | undefined;
   private wantsPlay = false; private lowDelay = false; private manualQuality: string | null = null;
   private track?: HTMLTrackElement; private lastObservation = 0;
   constructor(readonly video: ExtendedVideo, private emit: (event: EngineEvent) => void, private fullscreenContainer: HTMLElement = video) {
     video.crossOrigin = 'anonymous'; video.playsInline = true; video.controls = false; video.preload = 'auto';
     for (const [name, handler] of Object.entries({
       playing: () => { this.status = 'playing'; this.failure = null; },
-      pause: () => { if (!['loading', 'recovering', 'failed'].includes(this.status)) this.status = 'paused'; },
-      waiting: () => { if (this.status !== 'recovering') this.status = 'buffering'; },
-      ended: () => { this.status = 'ended'; },
-      error: () => { const e = video.error; if (!e || !this.session || this.disposed || this.status === 'failed') return;
+      pause: () => { if (!['loading', 'recovering', 'failed', 'ended'].includes(this.status)) this.status = 'paused'; },
+      waiting: () => { if (!['recovering','ended','failed'].includes(this.status)) this.status = 'buffering'; },
+      ended: () => { this.endPlayback(); },
+      error: () => { const e = video.error; if (!e || !this.session || this.disposed || ['failed','ended'].includes(this.status)) return;
         const kind = e.code === 2 ? 'network' : e.code === 3 ? 'decoder' : 'source';
         void this.recover(new PlaybackFault(e.message || `Media error ${e.code}`, kind), this.controller.token()); },
     })) {
@@ -41,8 +43,8 @@ export class PlaybackEngine {
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? null,
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: (this.session?.audioTracks.length ?? 0) > 1 && !!this.session?.audioTracks.every(t => !!this.nativeAudio(t.id)) }, lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
-      position: Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0,
-      duration: Number.isFinite(this.video.duration) ? this.video.duration : null,
+      position: this.terminalMedia?.position ?? (Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0),
+      duration: this.terminalMedia?.duration ?? (Number.isFinite(this.video.duration) ? this.video.duration : null),
       playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: ranges.start(i), end: ranges.end(i) })),
       throughputBps: this.pipeline?.bandwidth.bps ?? null, droppedFrames: quality?.droppedVideoFrames ?? null,
       totalFrames: quality?.totalVideoFrames ?? null, audioTrackId: this.audio, subtitleTrackId: this.subtitle, failure: this.failure,
@@ -95,13 +97,17 @@ export class PlaybackEngine {
     return (this.session?.sources ?? []).filter(s => this.supported(s)).sort((a,b) => priority[a.strategy] - priority[b.strategy]);
   }
   async load(session: PlaybackSession) {
+    if (!this.timer) this.timer = setInterval(() => this.publish(), 1000);
     const pending = this.pendingSwitch;
     const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && pending.source === session.sourceGeneration && pending.seek === session.seekGeneration;
     const position = handoff ? Math.max(pending.position, this.video.currentTime) : session.position ?? 0;
     const recovery = !!handoff && pending.recovery;
     this.pendingSwitch = undefined;
-    if (session.id !== this.session?.id) this.lowDelayOverride = undefined;
+    const previousServerState = session.id === this.session?.id ? this.session.serverState : undefined;
+    if (session.id !== this.session?.id) { this.lowDelayOverride = undefined; this.localTransportIntent = undefined; this.wantsPlay = false; }
     this.controller.start(session.id, session.sourceGeneration, session.seekGeneration); this.resetMedia(); this.session = session;
+    if (session.serverState === 'ended') { this.source = session.sources.find(s => s.id === session.selectedSourceId); this.endPlayback(session.position ?? 0); return; }
+    this.applyServerState(session.serverState, previousServerState, false);
     this.source = undefined; this.failure = null; this.attempted.clear(); this.recovering = false;
     this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? false;
     this.audio = session.audioTrackId ?? null; this.subtitle = session.subtitleTrackId ?? null;
@@ -112,7 +118,10 @@ export class PlaybackEngine {
   /** A server readiness/observation revision is not a new playback attempt. */
   updateSession(session: PlaybackSession) {
     if (session.id !== this.session?.id) throw new Error('Cannot update a different session');
+    const previousState = this.session?.serverState;
     this.session = session;
+    this.applyServerState(session.serverState, previousState);
+    if (this.status === 'ended') return;
     this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? this.lowDelay;
     if (this.pipeline) { this.pipeline.lowDelay = this.lowDelay; this.pipeline.maxLiveDrift = session.liveMaxDrift ?? 45; }
     if ((session.subtitleTrackId ?? null) !== this.subtitle) {
@@ -123,7 +132,30 @@ export class PlaybackEngine {
       if (!this.applyNativeAudio()) { this.audio = previous; this.emit({ type: 'error', failure: { kind: 'action', message: 'Audio change requires a new server source generation', recoverable: true } }); }
     }
   }
+  private applyServerState(state: PlaybackSession['serverState'], previous: PlaybackSession['serverState'], touchVideo = true) {
+    if (state === 'ended') { this.endPlayback(); return; }
+    if (state !== 'paused' && state !== 'playing') return;
+    if (this.localTransportIntent) {
+      if (state === this.localTransportIntent) this.localTransportIntent = undefined;
+      return;
+    }
+    if (state === previous) return;
+    this.wantsPlay = state === 'playing';
+    if (!touchVideo) return;
+    if (state === 'paused') { this.video.pause(); this.status = 'paused'; this.publish(); }
+    else if (this.video.paused) void this.play();
+  }
+  private endPlayback(position?: number) {
+    if (this.status === 'ended' && this.terminalMedia) return;
+    this.terminalMedia = { position: position ?? this.video.currentTime, duration: Number.isFinite(this.video.duration) ? this.video.duration : null };
+    this.status = 'ended'; this.failure = null; this.wantsPlay = false; this.localTransportIntent = undefined;
+    this.controller.cancel(); this.pipeline?.dispose(); this.pipeline = undefined; this.track?.remove(); this.track = undefined;
+    if (this.timer) clearInterval(this.timer); this.timer = undefined;
+    this.video.pause(); this.video.removeAttribute('src'); this.video.load();
+    this.lastObservation = -Infinity; this.publish();
+  }
   private resetMedia() {
+    this.terminalMedia = undefined;
     this.video.pause(); this.pipeline?.dispose(); this.pipeline = undefined;
     this.track?.remove(); this.track = undefined; this.video.removeAttribute('src'); this.video.load(); this.video.playbackRate = 1;
   }
@@ -239,8 +271,8 @@ export class PlaybackEngine {
     if (this.disposed) return;
     try {
       switch (command.type) {
-        case 'play': this.wantsPlay = true; await this.play(); break;
-        case 'pause': this.wantsPlay = false; this.video.pause(); break;
+        case 'play': this.localTransportIntent = 'playing'; this.wantsPlay = true; await this.play(); break;
+        case 'pause': this.localTransportIntent = 'paused'; this.wantsPlay = false; this.video.pause(); break;
         case 'retry': if (this.session) await this.load({ ...this.session, position: this.video.currentTime || this.resumePosition }); break;
         case 'switchPath': {
           const source = this.candidates().find(s => s.id === command.pathId);

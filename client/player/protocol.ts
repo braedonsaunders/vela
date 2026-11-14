@@ -6,7 +6,7 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
   if (!selected) throw new Error('Plan selected path is absent');
   const edition = selected.edition ?? '';
   return {
-    id: plan.sessionId, serverControlled: true, selectedSourceId: plan.selectedPathId, mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? '', edition,
+    id: plan.sessionId, serverState: plan.state, serverControlled: true, selectedSourceId: plan.selectedPathId, mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? '', edition,
     position: plan.positionSeconds, live: !!plan.channelId, liveWindowStart: plan.live?.windowStartSeconds, liveEdge: plan.live?.liveEdgeSeconds, liveMaxDrift: plan.live?.maxDriftSeconds, lowDelay: plan.live?.mode === 'low-delay', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
     audioTrackId: plan.selectedAudioTrackId, subtitleTrackId: plan.selectedSubtitleTrackId ?? undefined,
     audioTracks: plan.audioTracks.map(t => ({ id: t.id, label: t.name, language: t.language })),

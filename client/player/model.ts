@@ -8,6 +8,7 @@ export interface Source {
   renditions?: Rendition[];
 }
 export interface PlaybackSession {
+  serverState?: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended';
   id: string; mediaId: string; edition: string; selectedSourceId?: string; serverControlled?: boolean; sources: Source[]; position?: number;
   audioTracks: Track[]; subtitleTracks: Track[]; audioTrackId?: string;
   subtitleTrackId?: string; live?: boolean; liveWindowStart?: number; liveEdge?: number; liveMaxDrift?: number; lowDelay?: boolean; sourceGeneration?: number; seekGeneration?: number;
