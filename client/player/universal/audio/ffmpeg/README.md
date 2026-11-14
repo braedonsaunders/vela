@@ -27,7 +27,7 @@ Rebundle CustomDecode.worker.js and CustomAudioDecode.worker.js with the hook.
 Resolve mediabunny to its src/index.ts so its ALAC box reader is transformed.
 Copy these hook sources alongside the upstream source distribution: the
 isobmff-demuxer.ts change modifies MPL-2.0 Mediabunny, while the engine worker
-and policy changes modify MIT WebGPU Player. The original upstream files stay
+policy and decoded-output limiter changes modify MIT WebGPU Player. The original upstream files stay
 pristine, and no Exact source is touched.
 
 The package declares the option name velaConfiguration as a host/worker protocol
@@ -38,3 +38,7 @@ codecs.json lists compiled decoder families, not an all-containers qualification
 claim. A demuxer still needs to expose packet boundaries, private headers and
 valid timing. Unknown channel masks fail rather than silently playing a guessed
 speaker mapping. AC-3, E-AC-3, DTS and TrueHD keep their specialized packages.
+
+Vela enables the linked peak limiter even for stereo passthrough: floating-point
+PCM is allowed to carry samples above full scale without a downmix. This adds
+limiter lookahead, which the existing pipeline/clock already accounts for.

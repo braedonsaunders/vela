@@ -36,6 +36,11 @@ export function transformUpstreamAudio(path: string, source: string): string | n
       '        return [1, 2, 3, 5, 6, 7, 8].includes(channelCount);\n    }\n\n' +
       '    if (isCustomMediabunnyPCMAudioCodec(codec) || isMediabunnyPCMDecoderCodec(codec)) {');
   }
+  if (name.endsWith('/audio/processing/DecodedAudioOutputStage.ts')) {
+    // Float PCM can legitimately exceed full scale even without a fold-down.
+    // Keep one linked limiter across all decoded channels, including stereo.
+    return replaceOnce(source, '            peakLimiterEnabled: false,', '            peakLimiterEnabled: true,');
+  }
   if (name.endsWith('/isobmff/isobmff-demuxer.ts')) {
     // Preserve the ALAC full-box atom without claiming it is a WebCodecs codec.
     return replaceOnce(source, "\t\t\tcase 'dOps': { // Used for Opus audio",
