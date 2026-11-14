@@ -10,6 +10,7 @@ export class PreviewCoordinator {
   private grant?: PreviewGrant;
   private tail: Promise<void> = Promise.resolve();
   constructor(private api: ServerAdapter, private origin: string, private client: ClientCapabilities, private key: () => string) {}
+  setClient(client: ClientCapabilities): void { this.client = client; }
   private async stop(grant: PreviewGrant): Promise<void> {
     await this.api.command(grant.sessionId, { kind: 'stop', idempotencyKey: this.key(), sourceGeneration: grant.sourceGeneration, seekGeneration: grant.seekGeneration });
   }

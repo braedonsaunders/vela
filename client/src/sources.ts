@@ -4,6 +4,7 @@ import { EtherAdapter, VelaError } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
 import { loadGuide, liveIdentity } from './live/guide';
+import { liveSearch } from './live/search';
 import { artworkURL } from './discovery/artwork';
 import { liveStatus, stopPlan } from './live/player';
 import { InteractionQueue } from './telemetry';
@@ -28,7 +29,7 @@ function bindOrigin(pageOrigin: string): void {
 }
 let device: Device;
 let client: ClientCapabilities;
-type MediaCapabilities = Pick<ClientCapabilities, 'containers' | 'videoCodecs' | 'audioCodecs' | 'subtitleFormats' | 'hls' | 'mse'>;
+type MediaCapabilities = Pick<ClientCapabilities, 'containers' | 'videoCodecs' | 'audioCodecs' | 'subtitleFormats' | 'hls' | 'mse' | 'originalPlayback'>;
 function parseMediaCapabilities(json: string): MediaCapabilities {
   const value = JSON.parse(json) as Record<string, unknown>;
   const list = (name: string): string[] => {
@@ -37,7 +38,20 @@ function parseMediaCapabilities(json: string): MediaCapabilities {
     return items;
   };
   if (typeof value?.hls !== 'boolean' || typeof value?.mse !== 'boolean') throw new Error('Invalid media capabilities');
-  return { containers: list('containers'), videoCodecs: list('videoCodecs'), audioCodecs: list('audioCodecs'), subtitleFormats: list('subtitleFormats'), hls: value.hls, mse: value.mse };
+  let originalPlayback: ClientCapabilities['originalPlayback'];
+  if (value.originalPlayback !== undefined) {
+    const original = value.originalPlayback;
+    if (!original || typeof original !== 'object' || Array.isArray(original)) throw new Error('Invalid original playback capabilities');
+    const candidate = original as Record<string, unknown>;
+    const names = (key: string): string[] => {
+      const items = candidate[key];
+      if (!Array.isArray(items) || items.length > 32 || items.some(item => typeof item !== 'string' || !item || item.length > 80)) throw new Error('Invalid original playback capabilities');
+      return items;
+    };
+    if (candidate.version !== 1 || candidate.range !== true || candidate.webgpu !== true) throw new Error('Invalid original playback capabilities');
+    originalPlayback = { version: 1, range: true, webgpu: true, demuxContainers: names('demuxContainers'), videoDecoders: names('videoDecoders'), audioDecoders: names('audioDecoders') };
+  }
+  return { containers: list('containers'), videoCodecs: list('videoCodecs'), audioCodecs: list('audioCodecs'), subtitleFormats: list('subtitleFormats'), hls: value.hls, mse: value.mse, ...(originalPlayback ? { originalPlayback } : {}) };
 }
 function key(store: Parameters<Sources['uiBootstrap']>[1]): string {
   const n = Number(store.get('vela.counter') || '0') + 1;
@@ -65,10 +79,10 @@ function resetSessionSnapshots(): void {
 }
 let validation: { token: string; pending: Promise<Tokens | null> } | undefined;
 let redemption: { code: string; idempotencyKey: string; pending?: Promise<Tokens>; consumed: boolean } | undefined;
-let negotiation: { version: number; pending: Promise<void> } | undefined;
+let negotiation: { version: number; context: string; pending: Promise<void> } | undefined;
 let features: ServerCapabilities['features'] | undefined;
 let ai: { epoch: number; generation: number; query: string; job?: AISearchJob; starting?: Promise<AISearchJob> } | undefined;
-const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable' });
+const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable', liveChannels: [], liveProgrammes: [] });
 function server(store: Parameters<Sources['uiBootstrap']>[1], media?: MediaCapabilities): EtherAdapter {
   if (!API) throw new Error('Server origin is unavailable');
   if (!adapter) {
@@ -81,6 +95,14 @@ function server(store: Parameters<Sources['uiBootstrap']>[1], media?: MediaCapab
     adapter = new EtherAdapter(API, credentials, JSON.stringify(client), () => {
       resetSessionSnapshots(); ready = undefined; validation = undefined; negotiation = undefined; features = undefined; interactions = undefined; ai = undefined;
     });
+  } else if (media) {
+    const updated = { device, protocolVersions: [0], ...media };
+    const context = JSON.stringify(updated);
+    if (context !== JSON.stringify(client)) {
+      client = updated;
+      adapter.setCapabilityContext(context);
+      previews?.setClient(client);
+    }
   }
   return adapter;
 }
@@ -98,6 +120,29 @@ async function session(store: Parameters<Sources['uiBootstrap']>[1]): Promise<Et
   if (validation) await validation.pending;
   if (!store.get('vela.session')) throw new Error('Sign in to your Vela server');
   return api;
+}
+async function ensureNegotiated(api: EtherAdapter, store: Parameters<Sources['uiBootstrap']>[1]): Promise<void> {
+  for (;;) {
+    const version = authVersion, context = JSON.stringify(client);
+    if (negotiation && (negotiation.version !== version || negotiation.context !== context)) {
+      const previous = negotiation;
+      try { await previous.pending; } catch { /* A newer declaration still needs its own negotiation. */ }
+      if (negotiation === previous) negotiation = undefined;
+      if (version !== authVersion) throw new Error('Session changed during negotiation');
+      continue;
+    }
+    if (!negotiation) {
+      const declared = client;
+      const current = { version, context, pending: Promise.resolve() };
+      current.pending = api.negotiate({ client: declared, idempotencyKey: key(store) }).then(() => {
+        if (authVersion !== version) throw new Error('Session changed during negotiation');
+      }).catch(error => { if (negotiation === current) negotiation = undefined; throw error; });
+      negotiation = current;
+    }
+    await negotiation.pending;
+    if (version !== authVersion) throw new Error('Session changed during negotiation');
+    if (context === JSON.stringify(client)) return;
+  }
 }
 let authOptions = { passwordAvailable: false, quickAvailable: false, secureOrigin: '' };
 function advertisedSecureOrigin(origins: string[] | undefined, requested?: string): string {
@@ -225,14 +270,7 @@ const sources: Sources = {
   uiBootstrap: async ([at, localeJSON, artWidth], store) => {
     const api = await session(store);
     const version = authVersion;
-    if (!negotiation || negotiation.version !== version) {
-      const current = { version, pending: Promise.resolve() };
-      current.pending = api.negotiate({ client, idempotencyKey: key(store) }).then(() => {
-        if (authVersion !== version) throw new Error('Session changed during negotiation');
-      }).catch(error => { if (negotiation === current) negotiation = undefined; throw error; });
-      negotiation = current;
-    }
-    await negotiation.pending;
+    await ensureNegotiated(api, store);
     const bootstrap = await api.bootstrap();
     if (authVersion !== version) throw new Error('Session changed during bootstrap');
     features = bootstrap.capabilities.features;
@@ -345,10 +383,10 @@ const sources: Sources = {
     return withLocale(localeJSON, () => data.items.map(row => feedRow(row, API, artWidth)));
   },
   uiDetail: async ([id, localeJSON, artWidth], store) => { const detail = await (await session(store)).detail(id); return withLocale(localeJSON, () => detailModel(detail, API, artWidth)); },
-  uiSearch: async ([query, generation, epoch, localeJSON, artWidth], store) => {
+  uiSearch: async ([query, generation, epoch, at, localeJSON, artWidth], store) => {
     const api = await session(store);
     const result = await api.search({ query, generation, mode: 'fast', idempotencyKey: `search-${epoch}-${generation}` });
-    return withLocale(localeJSON, () => ({ query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API, artWidth)), descriptive: [], ai: [], aiStatus: 'unavailable' }));
+    return withLocale(localeJSON, () => ({ query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API, artWidth)), descriptive: [], ai: [], aiStatus: 'unavailable', ...liveSearch(result.live, API, at) }));
   },
   uiDescriptive: async ([query, generation, epoch, localeJSON, artWidth], store) => {
     const api = await session(store);
@@ -363,11 +401,8 @@ const sources: Sources = {
       const previous = ai;
       const current = { epoch, generation, query } as NonNullable<typeof ai>;
       ai = current;
-      current.starting = (async () => {
-        if (previous?.job && (previous.job.status === 'running' || previous.job.status === 'queued'))
-          await api.cancelAI(previous.job.id, { generation: previous.generation, idempotencyKey: `cancel-${previous.epoch}-${previous.generation}` });
-        return api.startAI({ query, generation, idempotencyKey: `ai-${epoch}-${generation}` });
-      })();
+      const previousJobId = previous?.job && (previous.job.status === 'running' || previous.job.status === 'queued') ? previous.job.id : undefined;
+      current.starting = api.startAI({ query, generation, ...(previousJobId ? { previousJobId } : {}), idempotencyKey: `ai-${epoch}-${generation}` });
       current.job = await current.starting;
       current.starting = undefined;
       if (ai !== current) {
@@ -395,6 +430,7 @@ const sources: Sources = {
   },
   uiPlayback: async ([id, kind, epoch, entryId, positionText], store) => {
     const api = await session(store);
+    await ensureNegotiated(api, store);
     if (kind !== 'title' && kind !== 'extra' && kind !== 'channel') throw new Error('Unsupported playback target');
     const position = positionText === '' ? undefined : Number(positionText);
     if (position !== undefined && (!Number.isFinite(position) || position < 0)) throw new Error('Invalid playback position');

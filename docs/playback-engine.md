@@ -1021,3 +1021,39 @@ A/V drift, surround speaker mapping or CPU/GPU utilization. The post-end capture
 video-content evidence. The drive exposed upstream frame-count
 reset on internal audio decode restart; Vela now accumulates those counters within
 the same protocol playback generation so observations do not regress33→1.
+
+### Opt-in original-player beta
+
+The device preference is `vela.player.beta`, off by default. The hidden
+`vela-context probe="beta"` publishes the literal `true`/`false`; a `betaPlayer`
+string prop persists a user choice. `probe="media"` subscribes to changes and
+re-emits capabilities. The UI applies it to subsequent playback, leaving the
+current session intact. HTTPS/WebGPU/AudioWorklet absence or missing installed
+assets leaves the legacy declaration active, even if the preference is enabled.
+
+Only beta-on plus an actual WebGPU adapter and the verified asset build's
+`originalPlayback` declaration adds that field to negotiation. The declaration
+names installed families, not exact profiles or real-time guarantees. Local
+Chrome capability-only drive passed off→on→off: absent field, present version1
+installed-family declaration, absent field again; persisted final choice false.
+No media or lab session was opened for that check.
+
+A decode-failed callback can replace the local decoder once at the current audio
+clock without changing broker source/seek generations: software audio is prepared
+when available, and a matching GPU video package replaces a rejected native
+route. This retry is bounded per pinned source/seek. Range, source, network and
+policy failures skip repeating the same original. Exhaustion requests the
+advertised on-demand Ether HLS path through the authorized switch command, at the
+preserved absolute position and pinned edition. If the server or network cannot
+supply any path, the bounded failure state and Retry remain honest; beta does not
+promise playback of unavailable content. The local retry code is compiled but
+has not yet been fault-driven end to end. Native H.264/VP9 have no alternative
+video package in the reviewed release and therefore cannot gain an invented
+software-video retry.
+
+Installed0.1.25 was checked by the packager: it contains no universal/runtime
+assets. A lab qualification therefore needs a complete matching same-origin
+host+runtime+workers+decoder/source payload before opening the first original
+stream. No Playwright page routing overlay is used for those assets. Common SDR
+qualification precedes beta packaging; HDR/DV7, subtitle overlays, rotation
+rendering and live are follow-up gates, not claims of this beta.
