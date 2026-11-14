@@ -515,3 +515,130 @@ media delivered and viewer reservation released), and its channel broadcast
 stopped at 04:37:18.962 UTC. No cleanup mutation was needed for those resources.
 These log lines do not prove a playing observation or HTTP stop 200; current
 public broker-session state correlation remains with the coordinator.
+
+## Real Ether quality follow-up: source analysis, no new streams
+
+Revision inspected: Ether `cea628e57` (lab.4), using `git show`, and the coordinator's
+redacted `vela-lab/vela-1917-session.log`. No media/provider GET, stream, server
+change or new browser run was performed for this investigation.
+
+### Mechanism decision: broker fMP4, not client TS transmuxing
+
+Prefer Ether's existing fragmented-MP4 HLS output. Source evidence:
+
+- `internal/frontends/vela/playback.go:143–148` builds the direct-play profile
+  but fixes the HLS transcoding profile to `Container:"ts"`. `:224` constructs
+  the single primary path with `qualities:[]`. This prevents Vela's MSE ladder
+  from being selected even though the broker may expose variants.
+- `internal/sessions/media.go:642–687` generates master variants from the real
+  ladder: bandwidth, optional average bandwidth, resolution, RFC 6381 CODECS,
+  frame rate and per-rung media-playlist URLs. It emits no audio/subtitle
+  `EXT-X-MEDIA` groups. `internal/transcode/ladder.go:38–50,155–218` defines the
+  conditional 1080p8m / 720p4m / 480p1500k / 360p800k rungs below the base.
+- `internal/transcode/args.go:928–950` already emits `-hls_segment_type fmp4`,
+  an initialization file and fragment clock options; the alternate branch
+  emits MPEG-TS. `internal/transcode/playlist.go:64–90` emits version 7 and
+  `EXT-X-MAP` when an init segment exists, version 3 for TS. This establishes
+  fMP4 support, not comprehensive CMAF conformance for every codec/timeline.
+- Captured 1917 responses were MPEG-TS (`video/mp2t`, HTTP 206); encoder logs
+  explicitly select MPEG-TS, H.264 VideoToolbox and AAC stereo. Base output
+  requests 2160p/40 Mbps; ladder encodes use 4-second keyframe/segment targets,
+  while initial/base runs show 2-second targets. Master codec generation is
+  `internal/transcode/hls_attributes.go:12–85` and `dash.go:245–280` (e.g.
+  H.264 High 5.1 `avc1.640033` for the 2160 base, AAC `mp4a.40.2`). Exact
+  served CODECS strings, all variant EXTINF values and master text were **not
+  retained**, so these are source-derived output contracts, not captured bodies.
+
+Vela currently consumes clear, continuous fMP4 **media** playlists, not arbitrary
+masters: `player/hls.ts:3–29` requires `EXT-X-MAP`, rejects encryption, byte ranges,
+master tags and discontinuities. `pipeline.ts:115–139` opens the server-qualified
+rendition URLs; `engine.ts` chooses native HLS when no supported ladder is offered.
+Therefore Ether must publish the real variant list through `PlaybackPath.qualities`
+as well as selecting fMP4. Merely changing the master container is insufficient.
+Native HLS still produces position/range/frame observations and session recovery;
+client throughput estimation, ABR and abandonment are the bypassed pieces.
+
+### Startup: measured limits and source decision
+
+| Evidence | Timing / meaning |
+| --- | --- |
+| Original NRQ movie drive | Click → first frames 13.960 s; plan response 0.532 s. The remaining 13.428 s is aggregate client/media startup, not measured encoder time. |
+| Browser first-byte / first-segment publication for NRQ | Not retained. Cannot honestly split transport, publication, native buffering and decode from that total. |
+| Later F7 run, coordinator log lines 1–17 | Playback source starts 23:03:36.291 EST; transcode session .299; first ffmpeg .320; segment-0 fetch .347; selected 360 rung restarts ffmpeg .370; first segment ready / ready-to-send 23:03:37.128 (~0.78 s after fetch). |
+| Same F7 run, lines 17–46 | Segment-1 fetch 23:03:37.140; base-rung restart 23:03:44.398; ready-to-send 23:03:46.857 (9.717 s wait); segment 0 requested again, ready 23:03:49.144 after another restart. Server readiness is not browser TTFB. |
+| F7 browser measurement | 13.304 s initial first-frame measurement, separate from NRQ's 13.960 s. Clock alignment to individual server events is not sufficiently retained for a precise first-byte/decode split. |
+
+The selected source was a ~73.6 GB MKV UHD remux with HEVC Dolby Vision profile 7
+and TrueHD 7.1. The log explicitly states client rejection of MKV/HEVC/TrueHD,
+SDR tone mapping and AAC stereo conversion. For that source/profile, transcode
+is justified; this is not evidence that a compatible H.264/AAC MP4 could never
+direct-play. The adapter passes `DirectPlay:true` (`playback.go:112`) and maps the
+chosen decision to direct/remux/transcode (`:201–224`), but exposes only that
+decision. Investigate the log's additional “direct play not allowed by client”
+reason against the normalized capability profile rather than guessing a cause.
+The repeated serial-encoder rung/base restarts are a concrete latency concern
+(`transcode/ladder.go:11–23` documents one active encoder); short first segments
+alone do not remove that work or native-player startup buffering.
+
+### CHROMA error diagnosis and client fix
+
+The captured coexistence of four decoded frames and failure chrome does not
+prove whether the original parse error was transient, malformed media or a prior
+attachment event. No retained CHROMA manifest or generation-tagged event trace
+establishes that cause. The later browser reset is a separate unknown.
+
+Confirmed Vela races were fixed in `19417a7`: listeners were global, recovery
+could fail after its 300 ms delay even if media had resumed, `play()` could report
+playing without clearing failure, errors lacked session/generation identity,
+and presentation accepted old-generation snapshots. Media listeners now belong
+to the attachment generation; current error-free playback cancels delayed
+recovery; terminal failure unloads media and cannot be revived by late playing
+events; error/snapshot presentation is generation-scoped; state changes publish
+immediately. Failure teardown preserves the last position. This fixes client
+consistency, not a demonstrated underlying media parse defect.
+
+Preparation UI now distinguishes “Requesting playback session”, “Waiting for
+media metadata”, “Buffering initial media” and “Starting playback”. These are
+observed client stages, not assertions that an encoder is running or a segment
+has published. Broker-side stage text needs an authoritative stage event.
+Bundle + Contract/type-check passed. No new lab/browser verification is claimed;
+it requires coordinator clearance.
+
+### Consolidated Ether request
+
+1. For MSE-capable Vela clients, select the existing fMP4 HLS output instead of
+   forcing TS; return every actual rendition in `PlaybackPath.qualities` with
+   scoped media-playlist URL, bitrate, dimensions and exact encoded RFC 6381
+   video/audio codecs. Preserve native HLS fallback. Supply sanitized real master
+   and variant fixtures proving `EXT-X-MAP`, independent aligned boundaries,
+   continuous decode timestamps, actual EXTINF durations and correct MIME types.
+   Declare byte ranges/encryption/discontinuities if needed: Vela does not yet
+   support them. Confirm CMAF compatibility separately from fMP4 availability.
+2. Preserve direct-play preference for compatible codec/container/profile and
+   policy; choose copy-only remux when only packaging requires it, audio-only
+   conversion when necessary, full video transcode only with an explicit reason.
+   Expose selected source facts and rejected-path reasons. Resolve the observed
+   direct-play rejection against normalized profile/options. Avoid starting an
+   expensive 2160p/40 Mbps base just to cancel it for a startup rung; preserve one
+   shared segment clock across base/rungs and avoid restart/throttle stalls when
+   switching. Use short independently decodable initial segments when encoding,
+   then steady segments; keep advertised durations/keyframes truthful.
+3. Add correlated, generation-scoped timestamps/stages for source resolution,
+   decision, encoder launch, init ready, first segment publication and first byte
+   served; return meaningful preparing/readiness through session events. Client
+   captures will add manifest/segment responseStart, metadata and first-frame
+   times on the next cleared drive. Do not label publication as playable buffer.
+4. Publish stable audio IDs/languages/labels/defaults and actual output codecs;
+   alternate fMP4 audio playlists via master AUDIO groups plus typed group/URL
+   association to each rendition. MSE needs separate audio-buffer/selection work
+   in Vela; emitting a master group alone does not implement it. Alternatively
+   enable authorized session track changes with new generations and compatible
+   timelines, preserving position and preference. Expose scoped WebVTT tracks
+   (and SUBTITLES groups if supplied by master); PGS image subtitles cannot simply
+   be relabeled WebVTT—offer explicit burn-in/new generation or report unsupported.
+   Keep sessionTrackChanges false until actually implemented.
+5. For CHROMA's parse event, supply retained sanitized playlist/segment metadata
+   and error/publication sequence keyed to public session/source/seek generation;
+   confirm that a ready master never serves HTML, truncated init/TS, or mismatched
+   codec/segment timelines. No new stream/provider request is authorized by this
+   ask. Client consistency fixes need one separately cleared post-package drive.
