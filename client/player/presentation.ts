@@ -1,10 +1,11 @@
+import { clock, number, msg, setLocale } from '../foundation/i18n';
 import type { PlaybackPlan } from '../wire/v0/types';
 import type { Snapshot } from './model';
 const snapshots = new Map<string, Snapshot>();
 const errors = new Map<string, string>();
-const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 /** Pure presentation projection for Exact's data realm: no browser API or clock. */
-export function playerPresentation(planJson: string, eventJson: string, replyJson: string) {
+export function playerPresentation(planJson: string, eventJson: string, replyJson: string, localeJSON: string) {
+  setLocale(localeJSON);
   let plan = (planJson ? JSON.parse(planJson) : null) as PlaybackPlan | null;
   const reply = (replyJson ? JSON.parse(replyJson) : null) as PlaybackPlan | null;
   if (reply && (!plan || reply.sessionId === plan.sessionId && reply.revision > plan.revision)) plan = reply;
@@ -28,18 +29,18 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
   return {
     planJson: plan ? JSON.stringify(plan) : "",
     ready: !!snapshot && !['idle','loading'].includes(state), state, playing: state === 'playing', position, duration,
-    elapsed: clock(position), remaining: duration > 0 ? clock(Math.max(0, duration - position)) : 'LIVE',
+    elapsed: clock(position), remaining: duration > 0 ? clock(Math.max(0, duration - position)) : msg('data.live'),
     progress: duration > 0 ? Math.min(100, position / duration * 100) : 0,
     reason: snapshot?.failure?.message ?? '', actionError: plan ? errors.get(plan.sessionId) ?? '' : '',
     path: snapshot?.strategy ?? path?.kind ?? '', backend: snapshot?.backend ?? '',
-    quality: quality ? `${quality.height}p` : path?.kind === 'direct' ? 'Original' : snapshot?.backend === 'native-hls' ? 'Browser managed' : 'Starting',
+    quality: quality ? `${number(quality.height, {useGrouping:false})}p` : path?.kind === 'direct' ? msg('data.original') : snapshot?.backend === 'native-hls' ? msg('data.browserManaged') : msg('data.starting'),
     lockedQuality: snapshot?.lockedQuality ?? '',
-    audioId: snapshot?.audioTrackId ?? plan?.selectedAudioTrackId ?? '', audioLabel: selectedAudio?.name ?? 'Original audio',
+    audioId: snapshot?.audioTrackId ?? plan?.selectedAudioTrackId ?? '', audioLabel: selectedAudio?.name ?? msg('data.originalAudio'),
     subtitleId: snapshot?.subtitleTrackId ?? '',
     audio: capability?.audioSwitch ? (plan?.audioTracks ?? []).map(t => ({ id: t.id, label: t.name })) : [],
     subtitles: subtitles.map(t => ({ id: t.id, label: t.name })),
-    qualities: snapshot?.backend === 'mse' ? (path?.qualities ?? []).map(q => ({ id: q.id, label: `${q.height}p` })) : [],
-    paths: (plan?.paths ?? []).filter(p => p.readiness === 'ready' && (p.id === plan?.selectedPathId || p.boundaries.some(b => b.independent))).map(p => ({ id: p.id, label: p.kind === 'direct' ? 'Original · direct' : p.kind === 'remux' ? 'Original · remux' : 'Adaptive · transcode' })),
+    qualities: snapshot?.backend === 'mse' ? (path?.qualities ?? []).map(q => ({ id: q.id, label: `${number(q.height, {useGrouping:false})}p` })) : [],
+    paths: (plan?.paths ?? []).filter(p => p.readiness === 'ready' && (p.id === plan?.selectedPathId || p.boundaries.some(b => b.independent))).map(p => ({ id: p.id, label: msg(`data.${p.kind}`) })),
     pathId: path?.id ?? '',
     chapters: (plan?.chapters ?? []).map(c => ({ id: c.id, label: `${clock(c.startSeconds)} · ${c.name}`, seconds: c.startSeconds, percent: duration > 0 ? c.startSeconds / duration * 100 : 0 })),
     buffered: (snapshot?.playable ?? []).map((r,i) => ({ id: String(i), left: duration > 0 ? Math.max(0, r.start / duration * 100) : 0, width: duration > 0 ? Math.min(100, (r.end - r.start) / duration * 100) : 0 })),

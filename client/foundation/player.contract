@@ -10,9 +10,9 @@ members Client
   mutation watchAuthorized as shape PlayerCommandReply
   derive watchReply = match watchAuthorized { case some(r) => (r.sessionId == playback.sessionId ? r : PlayerCommandReply(planJson="", sessionId="", error="")), case none => PlayerCommandReply(planJson="", sessionId="", error="") }
   derive watchPlan = (watchReply.sessionId == playback.sessionId and watchReply.planJson != "" ? watchReply.planJson : currentPlan)
-  resource watchModel = uiPlayer(currentPlan, watchEvent, watchReply.planJson) when playingId != "" and watchPlan != "" as shape PlayerView
-  resource watchIdentity = uiDetail(playingId) when auth.authenticated and top(nav).name == "watch" and playingId != "" as shape DetailModel
-  derive watchTitle = match first(watchIdentity.title) { case some(t) => (t.kind == "episode" and t.seasonNumber > 0 and t.episodeNumber > 0 ? `S${t.seasonNumber} · E${t.episodeNumber} · ${t.name}` : t.name), case none => match first(detail.title) { case some(t) => t.name, case none => "Now playing" } }
+  resource watchModel = uiPlayer(currentPlan, watchEvent, watchReply.planJson, localeJSON) when playingId != "" and watchPlan != "" as shape PlayerView
+  resource watchIdentity = uiDetail(playingId) with localeJSON when auth.authenticated and top(nav).name == "watch" and playingId != "" as shape DetailModel
+  derive watchTitle = match first(watchIdentity.title) { case some(item) => (item.kind == "episode" and item.seasonNumber > 0 and item.episodeNumber > 0 ? t("ui.sSeasonEEpisodeTitle", season=item.seasonNumberLabel, episode=item.episodeNumberLabel, title=item.name) : item.name), case none => match first(detail.title) { case some(item) => item.name, case none => t("ui.nowPlaying") } }
   state watchHidden = false
   task resetWatch when playingId != "" key=playingId
     change(clearWatch)

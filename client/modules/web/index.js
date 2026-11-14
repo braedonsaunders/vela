@@ -729,6 +729,7 @@ class PlaybackEngine {
   recovering = false;
   disposed = false;
   resumePosition = 0;
+  pendingSwitch;
   lowDelayOverride;
   wantsPlay = false;
   lowDelay = false;
@@ -865,6 +866,11 @@ class PlaybackEngine {
     return (this.session?.sources ?? []).filter((s) => this.supported(s)).sort((a, b) => priority[a.strategy] - priority[b.strategy]);
   }
   async load(session) {
+    const pending = this.pendingSwitch;
+    const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && pending.source === session.sourceGeneration && pending.seek === session.seekGeneration;
+    const position = handoff ? Math.max(pending.position, this.video.currentTime) : session.position ?? 0;
+    const recovery = !!handoff && pending.recovery;
+    this.pendingSwitch = undefined;
     if (session.id !== this.session?.id)
       this.lowDelayOverride = undefined;
     this.controller.start(session.id, session.sourceGeneration, session.seekGeneration);
@@ -882,7 +888,7 @@ class PlaybackEngine {
       this.fail({ kind: "unsupported", message: "No browser-compatible source for this edition", recoverable: false });
       return;
     }
-    await this.activate(source, session.position ?? 0, false, true);
+    await this.activate(source, position, recovery, true);
   }
   updateSession(session) {
     if (session.id !== this.session?.id)
@@ -991,6 +997,7 @@ class PlaybackEngine {
     });
   }
   rejectCommand(message) {
+    this.pendingSwitch = undefined;
     if (message)
       this.fail({ kind: "source", message, recoverable: false });
   }
@@ -1003,10 +1010,11 @@ class PlaybackEngine {
       idempotencyKey: crypto.randomUUID()
     } });
   }
-  requestSwitch(source, position) {
+  requestSwitch(source, position, recovery = false) {
     const boundary = source.boundaries?.filter((at) => at <= position).sort((a, b) => b - a)[0];
     if (boundary === undefined)
       throw new Error("No independent switch boundary offered by server");
+    this.pendingSwitch = { sessionId: this.session.id, sourceId: source.id, source: this.controller.source + 1, seek: this.controller.seek, position, recovery };
     this.emit({ type: "session-command", sessionId: this.session.id, command: {
       kind: "switch",
       pathId: source.id,
@@ -1043,7 +1051,7 @@ class PlaybackEngine {
       }
       this.recovering = false;
       if (this.session?.serverControlled)
-        this.requestSwitch(source, position);
+        this.requestSwitch(source, position, true);
       else
         await this.activate(source, position, true);
     } catch (e) {

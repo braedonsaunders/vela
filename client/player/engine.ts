@@ -13,6 +13,7 @@ export class PlaybackEngine {
   private timer: ReturnType<typeof setInterval>; private listeners: (() => void)[] = [];
   private attempted = new Set<string>(); private recovering = false; private disposed = false;
   private resumePosition = 0;
+  private pendingSwitch?: { sessionId: string; sourceId: string; source: number; seek: number; position: number; recovery: boolean };
   private lowDelayOverride: boolean | undefined;
   private wantsPlay = false; private lowDelay = false; private manualQuality: string | null = null;
   private track?: HTMLTrackElement; private lastObservation = 0;
@@ -94,6 +95,11 @@ export class PlaybackEngine {
     return (this.session?.sources ?? []).filter(s => this.supported(s)).sort((a,b) => priority[a.strategy] - priority[b.strategy]);
   }
   async load(session: PlaybackSession) {
+    const pending = this.pendingSwitch;
+    const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && pending.source === session.sourceGeneration && pending.seek === session.seekGeneration;
+    const position = handoff ? Math.max(pending.position, this.video.currentTime) : session.position ?? 0;
+    const recovery = !!handoff && pending.recovery;
+    this.pendingSwitch = undefined;
     if (session.id !== this.session?.id) this.lowDelayOverride = undefined;
     this.controller.start(session.id, session.sourceGeneration, session.seekGeneration); this.resetMedia(); this.session = session;
     this.source = undefined; this.failure = null; this.attempted.clear(); this.recovering = false;
@@ -101,7 +107,7 @@ export class PlaybackEngine {
     this.audio = session.audioTrackId ?? null; this.subtitle = session.subtitleTrackId ?? null;
     const source = this.candidates().find(s => s.id === session.selectedSourceId) ?? this.candidates().find(s => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) { this.fail({ kind: 'unsupported', message: 'No browser-compatible source for this edition', recoverable: false }); return; }
-    await this.activate(source, session.position ?? 0, false, true);
+    await this.activate(source, position, recovery, true);
   }
   /** A server readiness/observation revision is not a new playback attempt. */
   updateSession(session: PlaybackSession) {
@@ -156,14 +162,15 @@ export class PlaybackEngine {
       if (this.video.readyState >= 1) done(); else if (token.signal.aborted) abort();
     });
   }
-  rejectCommand(message: string) { if (message) this.fail({ kind: 'source', message, recoverable: false }); }
+  rejectCommand(message: string) { this.pendingSwitch = undefined; if (message) this.fail({ kind: 'source', message, recoverable: false }); }
   private requestSeek(seconds: number) {
     this.emit({ type: 'session-command', sessionId: this.session!.id, command: { kind: 'seek', positionSeconds: seconds,
       sourceGeneration: this.controller.source, seekGeneration: this.controller.seek, idempotencyKey: crypto.randomUUID() } });
   }
-  private requestSwitch(source: Source, position: number) {
+  private requestSwitch(source: Source, position: number, recovery = false) {
     const boundary = source.boundaries?.filter(at => at <= position).sort((a,b) => b-a)[0];
     if (boundary === undefined) throw new Error('No independent switch boundary offered by server');
+    this.pendingSwitch = { sessionId: this.session!.id, sourceId: source.id, source: this.controller.source + 1, seek: this.controller.seek, position, recovery };
     this.emit({ type: 'session-command', sessionId: this.session!.id, command: { kind: 'switch', pathId: source.id, atSeconds: boundary,
       sourceGeneration: this.controller.source, seekGeneration: this.controller.seek, idempotencyKey: crypto.randomUUID() } });
   }
@@ -181,7 +188,7 @@ export class PlaybackEngine {
       if (!source) { this.fail({ ...this.failure!, recoverable: false }); return; }
       // Release the guard before activation so a failed replacement can advance again.
       this.recovering = false;
-      if (this.session?.serverControlled) this.requestSwitch(source, position);
+      if (this.session?.serverControlled) this.requestSwitch(source, position, true);
       else await this.activate(source, position, true);
     } catch (e) { if (this.controller.current(token)) this.fail({ kind, message: String(e), recoverable: false }); }
     finally { this.recovering = false; }
