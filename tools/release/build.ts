@@ -51,7 +51,10 @@ try {
     routeCount++; return `${prefix}"${path === "/" ? "/vela" : "/vela" + path}"`;
   });
   if (!routeCount) throw new Error('No route declarations found to mount under /vela/');
-  await writeFile(contractPath, routed);
+  // Exact permits a non-root first route only with an explicit unmatched-location fallback.
+  const mounted = routed.replace(/^(routes \w+\n)([\s\S]*?)(?=^\S)/m, (block, header, declarations) =>
+    /^  notfound(?:\s|$)/m.test(declarations) ? block : `${header}${declarations.trimEnd()}\n  notfound\n\n`);
+  await writeFile(contractPath, mounted);
   const env = { ...process.env, EXACT: join(root, 'vendor/exact'), EXACT2: join(root, 'vendor/exact'), API_BASE_URL: '', VELA_MOCK: '0', VELA_BUILD_VERSION: version, EXACT_VERSION: version };
   // --out selects Exact's production target (minified, no agent overlay).
   console.log(await run([process.execPath, 'player/build.ts'], client, env));
