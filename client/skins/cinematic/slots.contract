@@ -36,7 +36,7 @@ component TitleCard
     observe: action
   view
     column width=(small ? 142 : 190) flex-shrink=0 gap=10 intersect=observe(card.receipt)
-      button press=selectTitle(card.id, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease")
+      button disabled=(card.kind != "movie" and card.kind != "show" and card.kind != "season" and card.kind != "episode") press=selectTitle(card.id, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease")
         if card.poster != ""
           image card.poster alt="" width="100%" height=(small ? 206 : 274) object-fit="cover"
         else

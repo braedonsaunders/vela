@@ -25,6 +25,18 @@ members Client
   mutation quickStarted as shape QuickModel then afterQuickStart
   mutation quickPoll as shape AuthModel refreshes auth then afterQuickPoll
   mutation quickCancelled as shape ReceiptReply
+  state returnTo = ""
+  task requireSignIn when current(auth) and not auth.authenticated and top(nav).name != "home"
+    after(1, showSignIn)
+  action showSignIn
+    if top(nav).name == "title"
+      returnTo = path("title", top(nav).params.id)
+    else
+      if top(nav).name == "extra"
+        returnTo = path("extra", top(nav).params.id)
+      else
+        returnTo = path("watch", top(nav).params.id)
+    nav = open(nav, path("home"))
   state username = ""
   state password = ""
   state quickSecret = ""
@@ -56,6 +68,13 @@ members Client
       send signedIn = signIn(username.trim(), password, time.epochAtZero)
   action afterSignIn
     password = ""
+    match signedIn
+      case some(r)
+        if r.authenticated and returnTo != ""
+          nav = open(nav, returnTo)
+          returnTo = ""
+      case none
+        password = ""
   action startCode
     send quickStarted = startQuick(time.epochAtZero)
   action afterQuickStart
@@ -70,6 +89,9 @@ members Client
       case some(r)
         if r.authenticated or r.error != ""
           quickSecret = ""
+        if r.authenticated and returnTo != ""
+          nav = open(nav, returnTo)
+          returnTo = ""
       case none
         quickSecret = quickSecret
   action cancelCode
@@ -82,6 +104,13 @@ members Client
   resource detail = uiDetail(detailId) when auth.authenticated and detailId != "" as shape DetailModel
   derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" ? top(nav).params.id : "")
   resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : "title", time.epochAtZero) when auth.authenticated and playingId != "" as shape PlaybackModel
+  state streamAttempt = 0
+  resource sessionUpdate = sessionEvents(playback.sessionId, streamAttempt) when auth.authenticated and playingId != "" and playback.sessionId != "" as shape PlaybackModel
+  derive currentPlan = (current(sessionUpdate) and sessionUpdate.sessionId == playback.sessionId and sessionUpdate.planJson != "" ? sessionUpdate.planJson : playback.planJson)
+  task retrySession when failed(sessionUpdate) and streamAttempt < 3
+    after(1500, retryStream)
+  action retryStream
+    streamAttempt = streamAttempt + 1
   mutation playerReceipt as shape ReceiptReply queue
   state commandId = 0
   state commandJson = ""
@@ -125,7 +154,9 @@ members Client
     commandId = next
     commandJson = `{"id":${next},"type":"${kind}"}`
   action play(id: string)
+    streamAttempt = 0
     nav = push(nav, path("watch", id))
   action playExtra(id: string)
+    streamAttempt = 0
     nav = push(nav, path("extra", id))
 

@@ -71,5 +71,5 @@ component Client
                 text "Preparing playback…" role="status" padding=24
               else
                 column flex=1 min-height=0 position="relative"
-                  vela-player plan=playback.planJson playerCommand=commandJson message=playerMessage flex=1 min-height=240
+                  vela-player plan=currentPlan playerCommand=commandJson message=playerMessage flex=1 min-height=240
                   PlayerChrome(titleId=e.params.id, command=playerCommand)

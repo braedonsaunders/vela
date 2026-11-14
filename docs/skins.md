@@ -55,3 +55,7 @@ The v0 root exposes selection state; alternate compiled slot dispatch is added w
 the next skin package exists, rather than pretending a color change is another skin.
 
 Auth slots: `SignIn` receives username, password, passwordAvailable, quickAvailable, error, busy and editUsername/editPassword/submit/quick actions. `QuickConnect` receives model:QuickModel, error:string and cancel action. Foundation owns auth state, silent webCode redemption, URL cleanup, server poll interval and terminal grant handling.
+
+PlaybackModel carries `sessionId` and serialized `planJson`. The foundation seeds the
+engine from uiPlayback, then uses matching sessionEvents stream plans. Stream failures
+retry at most three times. Chrome never interprets the transport or invents recovery.

@@ -59,6 +59,7 @@ shape Viewport
 
 shape PlaybackModel
   planJson: string
+  sessionId: string
 
 shape AuthModel
   authenticated: bool
