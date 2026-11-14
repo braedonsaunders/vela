@@ -142,3 +142,11 @@ sign-in occurred. All measurement browsers/servers were closed.
 Ether installed this artifact client-only: all809 file hashes matched, root
 index/worker/engine list/version returned200, with rollback retained. No server
 restart or public upload occurred. Default entry gzip is292KB, below the1MB goal.
+
+Release0.1.24 is the isolated playback-host hotfix on the verified0.1.23 source:
+`a8e72e8` contains35b2590 plus84dfa99 and the version bump, excluding unfinished
+universal-runtime work. The0.1.23 bridge discriminator collided with the normal
+player’s `engine` field. All six rebuilt native modules have zero old guards and
+two unique `leaving` guards. Ether verified all809 installed hashes and served24,
+retaining rollback without restart. Static cold boot/handoff qualification did not
+exercise normal playback teardown; this follow-up is recorded separately.

@@ -384,20 +384,20 @@ component Banner
           for preview in model.previews.filter(p => p.id == hero.id) key=preview.id
             vela-preview url=preview.url active=(active ? "true" : "false") still="false" expiresAt=preview.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
         column position="absolute" inset=0 pointer-events="none" aria-hidden=true background-image=(small ? "linear-gradient(0deg, var(--mochi.scrim) 0%, var(--mochi.scrim) 30%, var(--mochi.scrim-clear) 75%)" : "linear-gradient(90deg, var(--mochi.scrim) 0%, var(--mochi.scrim-soft) 48%, var(--mochi.scrim-clear) 72%), linear-gradient(0deg, var(--mochi.scrim) 0%, var(--mochi.scrim-clear) 50%)")
-        column position="absolute" left=0 right=0 bottom=0 box-sizing="border-box" padding=(small ? "0px 20px 22px" : "0px 44px 40px") max-width=(small ? "none" : "46rem") gap=(small ? 10 : 14) color="mochi.night-ink"
-          row align-self="flex-start" gap=7 align-items="center" padding="5px 12px 5px 10px" border-radius=999 background-color="mochi.butter" color="mochi.ink" border="2.5px solid var(--mochi.ink)" animation=hop(still, 160)
+        column position="absolute" left=0 right=0 bottom=0 animation=hop(still, 160) box-sizing="border-box" padding=(small ? "0px 20px 22px" : "0px 44px 40px") max-width=(small ? "none" : "46rem") gap=(small ? 10 : 14) color="mochi.night-ink"
+          row align-self="flex-start" gap=7 align-items="center" padding="5px 12px 5px 10px" border-radius=999 background-color="mochi.butter" color="mochi.ink" border="2.5px solid var(--mochi.ink)"
             PixelIcon(name="heart", size=11)
             text t("mochi.pickedForYou") class=Label font-size=11
           if hero.logo != ""
-            image hero.logo alt=hero.name role="heading" aria-level=1 height=(small ? 84 : 130) width="auto" max-width=(small ? "80%" : "min(480px, 72%)") object-fit="contain" align-self="flex-start" filter="drop-shadow(3px 3px 0px var(--mochi.ink))" animation=hop(still, 220)
+            image hero.logo alt=hero.name role="heading" aria-level=1 height=(small ? 84 : 130) width="auto" max-width=(small ? "80%" : "min(480px, 72%)") object-fit="contain" align-self="flex-start" filter="drop-shadow(3px 3px 0px var(--mochi.ink))"
           else
-            text hero.name role="heading" aria-level=1 class=Title font-size=(small ? 38 : 64) line-clamp=2 color="mochi.night-ink" text-shadow="3px 3px 0px var(--mochi.ink)" animation=hop(still, 220)
-          row gap=6 flex-wrap="wrap" animation=hop(still, 280)
+            text hero.name role="heading" aria-level=1 class=Title font-size=(small ? 38 : 64) line-clamp=2 color="mochi.night-ink" text-shadow="3px 3px 0px var(--mochi.ink)"
+          row gap=6 flex-wrap="wrap"
             for fact in [hero.facts].concat(hero.genres.slice(0, 3)).filter(f => f != "") key=fact
               text fact font-size=12.5 font-weight=600 padding="3px 10px" border-radius=999 background-color="mochi.night-veil" border="1.5px solid var(--mochi.night-edge-strong)" color="mochi.night-ink" font-variant-numeric="tabular-nums"
           if hero.summary != ""
-            text hero.summary font-size=(small ? 14 : 16) line-height=1.5 line-clamp=(small ? 2 : 3) max-width="34rem" color="mochi.night-ink" text-shadow="0px 1px 8px var(--mochi.ink)" animation=hop(still, 330)
-          row margin-top=(small ? 4 : 8) animation=hop(still, 380)
+            text hero.summary font-size=(small ? 14 : 16) line-height=1.5 line-clamp=(small ? 2 : 3) max-width="34rem" color="mochi.night-ink" text-shadow="0px 1px 8px var(--mochi.ink)"
+          row margin-top=(small ? 4 : 8)
             button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) class=Candy height=(small ? 48 : 54) padding-left=(small ? 22 : 28) padding-right=(small ? 24 : 30)
               row gap=10 align-items="center"
                 PixelIcon(name="play", size=14)
@@ -443,26 +443,23 @@ component SearchSurface
     still: bool
     selectTitle: action
     observe: action
+  // Lanes in their fixed order: matches, the descriptive lane, then the AI lane.
+  // Each is shown only for the current query and generation; one Row draws them all.
+  derive vibeShown = descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
+  derive aiShown = ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
+  derive lanes = (loading or error ? [] : [FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation="")]).concat(vibeShown and not error ? [FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation="")] : []).concat(aiShown and not error ? [FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation="")] : [])
   view
     column position="relative" gap=(small ? 12 : 18) padding-top=(small ? 8 : 14) padding-bottom=72 animation=hop(still, 80)
       column padding-left=gutter(small) padding-right=gutter(small)
         text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 class=Title font-size=(small ? 28 : 40) line-clamp=2
-      if error
-        EmptyState(mood="sad", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"), still=still)
-      else
-        if loading
-          column align-items="center" padding="36px 0px"
-            Loader(message=t("ui.findingTitles"), size=64, still=still, night=false)
-        else
-          if model.items.length == 0
-            EmptyState(mood="sleepy", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"), still=still)
-          else
-            Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-        if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
-          column animation=hop(still, 120)
-            Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-        if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
-          column gap=8 animation=hop(still, 160)
+      if error or (not loading and model.items.length == 0)
+        EmptyState(mood=(error ? "sad" : "sleepy"), title=(error ? t("ui.searchUnavailable") : t("ui.noMatches")), message=(error ? t("ui.searchIsUnavailableTryAnotherQuery") : t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription")), still=still)
+      if loading and not error
+        column align-items="center" padding="36px 0px"
+          Loader(message=t("ui.findingTitles"), size=64, still=still, night=false)
+      for lane in lanes key=lane.id
+        column gap=8
+          if lane.id == "ai"
             row gap=10 align-items="center" padding-left=gutter(small) padding-right=gutter(small)
               Twinkle(size=20, color="mochi.lavender-deep", delay=0, still=still)
               text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 class=Title font-size=(small ? 24 : 28)
@@ -470,10 +467,10 @@ component SearchSurface
               row gap=12 align-items="center" padding-left=gutter(small) padding-right=gutter(small) role="status"
                 Hopper(size=30, still=still, mood="wow")
                 text t("ui.exploringYourDescription") color="mochi.ink-soft" font-size=15
-            if ai.items.length > 0
-              Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-            if ai.aiStatus == "failed"
-              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="mochi.ink-soft" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
+          if lane.items.length > 0
+            Row(row=lane, small=small, still=still, selectTitle=selectTitle, observe=observe)
+          if lane.id == "ai" and ai.aiStatus == "failed"
+            text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="mochi.ink-soft" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
 
 fn detailPresentation(width: number): string = "fullscreen"
 fn detailSplit(width: number): string = "none"
