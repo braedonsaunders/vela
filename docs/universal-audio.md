@@ -367,3 +367,11 @@ WASM magic 0061736d01000000. The lead's actual worker bootstrap and in-worker
 WASM fetch/compile passed without a media source. Any further source attempt
 required the parent's renewed clearance after the three-attempt limit. This
 no-source proof does not itself qualify native-view playback.
+
+The parent's renewed clearance allowed one native-view original AVC/AAC attempt
+using that real same-origin asset/proxy server. The playback lead reported:
+first frame 830.6ms, 192 decoded/presented frames, ended at 8.0001s, no errors,
+zero late frames and worst measured frame/audio-clock lag 13.151ms. This was the
+synthetic eight-second mock source. It confirms native-view custom playback with
+real nested-worker assets; it does not qualify every decoder family, a human
+listening/lip-sync pass, a lab stream or physical surround output.
