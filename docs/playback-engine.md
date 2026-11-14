@@ -904,3 +904,52 @@ WebGPU adapter, VideoDecoder, AudioDecoder and AudioWorklet, with maximum output
 channels=2. This was capability-only: no viewer login, media fetch or stream.
 The owned browser and AudioContext were closed. No decode/render performance,
 HDR correctness or physical multichannel claim follows from this API probe.
+
+### First original-file native-view milestone
+
+The native view now owns a separately loaded `UniversalRuntime` for an explicitly
+marked original file on a secure WebGPU/WebCodecs platform. It demuxes via the MPL
+fork with strict ranged responses, bounded retries, cache/read-ahead budgets,
+exact private WebCodecs configuration and actual source colour/sample-rate facts.
+The upstream controller, presenter and AudioWorklet own decode, presentation and
+audio-master timing. Existing commands/snapshots retain their shape; backend is
+`webgpu`. Late session/seek work is cancelled, startup is bounded, and fallback to
+an advertised on-demand path is an authorized broker switch, never a fetch of an
+unready URL. Both supported server switch-generation conventions are reconciled.
+
+This milestone DOES NOT advertise originalPlayback during negotiation yet.
+Video package fallback, in-player audio switching, subtitle overlays and live
+TS are unfinished. Unsupported selected subtitles require a compatible fallback;
+menus do not pretend an original overlay exists. PiP is not offered for the custom
+renderer. Fullscreen uses the actual containing surface. Legacy playback remains
+available and is the shipping default until the original route is qualified.
+
+Local qualification (2026-11-14), fixture `546c3a8`: actual eight-second 640x360
+24 fps H.264 High/level31 + AAC48k/stereo, tagged BT.709/limited range. Metadata was
+verified with ffprobe, and the same bytes came through the mock broker grant.
+The driver supplied the fixture plan explicitly; this was the real native-view
+bridge, but not an end-to-end negotiation or a real-library title.
+
+| Measurement | Result |
+|---|---|
+| Selected engine / source | WebGPU, direct original, source/seek generations 1/1 |
+| First GPU-submitted frame from trusted Start click | 830.6 ms |
+| Rendered file | 192 decoded and 192 presented frames; natural end at 8.0001 s, duration8 s |
+| Controller timing vs audio-master clock | Late frame count0; worst frame lag13.151 ms; clock reset count0 |
+| Failure | No engine error; no server transcode |
+| Cleanup | Broker stop HTTP200/ended, grant revoked, owned Chrome closed |
+
+This is a short software-timing qualification, not a physical lip-sync, human
+listening, HDR, 4K, multichannel, CPU/GPU utilization or long-run recovery result.
+Terminal snapshots now preserve the captured frame counters when releasing the
+custom renderer, rather than reading zero from the unused HTML video afterward.
+
+The first private-asset overlay attempts did not play. Root cause was proven with
+no-media workers: this Chrome routed a top-level worker and its fetch through
+Playwright page.route, but a nested worker load bypassed it (parent route called;
+child route never called; child load error). The adopted decoder spawns a nested
+audio worker. Serving all workers/WASM over real same-origin HTTP fixed startup;
+real worker bootstrap and WASM HTTP200/application/wasm/compile were verified
+before the single approved playback retry. Do not use a page routing overlay as
+an engine asset server. The earlier untagged MP4 correctly failed colour admission
+and was not re-labelled SDR just to pass the drive.
