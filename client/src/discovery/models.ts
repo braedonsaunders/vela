@@ -61,15 +61,16 @@ export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560)
     const value = [audio.codec, audio.channels ? msg(`data.audioChannels.${plural(audio.channels)}`, { count: number(audio.channels) }) : '', audio.language].filter(Boolean).join(' · ');
     if (value && !facts.includes(value)) facts.push(value);
   }
-  return { title: [card(data.title, '', origin, artWidth)], related: [], mediaFacts: facts, resumePosition: clock(data.title.watch?.positionSeconds ?? 0), crew: (data.crew ?? []).map(c => c.role ? `${c.name} · ${c.role}` : c.name), canPlay: data.canPlay ?? false, resumeSeconds: data.title.watch?.positionSeconds ?? 0,
+  const person = (value: { name: string; role?: string; artwork?: ArtworkRef }) => {
+    let portrait = '';
+    if (value.artwork) {
+      try { portrait = artworkURL(value.artwork, 160, 160, origin) ?? ''; } catch { /* Malformed optional artwork is unavailable. */ }
+    }
+    return { name: value.name, role: value.role ?? '', portrait };
+  };
+  return { title: [card(data.title, '', origin, artWidth)], related: [], mediaFacts: facts, resumePosition: clock(data.title.watch?.positionSeconds ?? 0), crew: (data.crew ?? []).map(c => c.role ? `${c.name} · ${c.role}` : c.name), crewPeople: (data.crew ?? []).map(person), canPlay: data.canPlay ?? false, resumeSeconds: data.title.watch?.positionSeconds ?? 0,
     seasons: (data.seasons ?? []).map(t => card(t, '', origin, artWidth)), episodes: (data.episodes ?? []).map(t => card(t, '', origin, artWidth)),
     extras: data.extras.map(e => ({ id: e.id, name: e.name, kind: e.kind, ready: e.availability === 'ready' })),
     cast: data.cast.map(c => c.role ? `${c.name} · ${c.role}` : c.name),
-    castPeople: data.cast.map(c => {
-      let portrait = '';
-      if (c.artwork) {
-        try { portrait = artworkURL(c.artwork, 160, 160, origin) ?? ''; } catch { /* Malformed optional artwork is unavailable. */ }
-      }
-      return { name: c.name, role: c.role ?? '', portrait };
-    }) };
+    castPeople: data.cast.map(person) };
 }
