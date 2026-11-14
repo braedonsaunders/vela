@@ -7,17 +7,19 @@ export interface OriginalBackend {
   position: number; readout: UniversalReadout;
   open(media: OriginalMedia): Promise<void>; pause(): void; resume(): void;
   setVolume(volume: number): void; setMuted(muted: boolean): void;
+  readonly audioTrackIds: string[]; readonly pendingAudioTrackId: string | null;
+  selectAudio(trackId: string): Promise<void>;
   seek(position: number): Promise<void>; dispose(): Promise<void>;
 }
 export interface OriginalRuntimeOptions {
   surface: {container: HTMLDivElement; video: HTMLVideoElement};
-  assets: {baseURL: string; assetKey: string; audioDecoderURL: string};
+  assets: {baseURL: string; assetKey: string; audioDecoderURL: string; videoDecoderURL: string};
   signal: AbortSignal; onEvent: (event: {type: string}) => void;
   onFailure: (reason: string, position: number) => void;
 }
-export function canAttemptOriginal() { return isSecureContext && !!(navigator as Navigator & {gpu?: unknown}).gpu && typeof VideoDecoder === 'function'; }
+export function canAttemptOriginal() { return isSecureContext && !!(navigator as Navigator & {gpu?: unknown}).gpu && typeof VideoFrame === 'function' && typeof Worker === 'function'; }
 export async function loadOriginalRuntime(options: Omit<OriginalRuntimeOptions, 'assets'>): Promise<OriginalBackend> {
-  if (!canAttemptOriginal()) throw new Error('Secure WebGPU and WebCodecs are required for original playback');
+  if (!canAttemptOriginal()) throw new Error('Secure WebGPU, workers and VideoFrame are required for original playback');
   const base = new URL('./universal/', import.meta.url);
   const response = await fetch(new URL('assets.json', base), {signal: AbortSignal.any([options.signal, AbortSignal.timeout(10000)]), credentials:'same-origin'});
   if (!response.ok) throw new Error(`Original runtime assets HTTP ${response.status}`);
@@ -27,5 +29,5 @@ export async function loadOriginalRuntime(options: Omit<OriginalRuntimeOptions, 
   const moduleURL = new URL('runtime.js', base); moduleURL.searchParams.set('v', manifest.assetKey);
   const module = await import(moduleURL.href) as {UniversalRuntime: new (options: OriginalRuntimeOptions) => OriginalBackend};
   options.signal.throwIfAborted();
-  return new module.UniversalRuntime({...options, assets: {baseURL: new URL('libraries/',base).href, assetKey: manifest.assetKey, audioDecoderURL: new URL('libraries/audio-decoders/',base).href}});
+  return new module.UniversalRuntime({...options, assets: {baseURL: new URL('libraries/',base).href, assetKey: manifest.assetKey, audioDecoderURL: new URL('libraries/audio-decoders/',base).href, videoDecoderURL: new URL('libraries/video-decoders/',base).href}});
 }

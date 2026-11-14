@@ -918,8 +918,8 @@ an advertised on-demand path is an authorized broker switch, never a fetch of an
 unready URL. Both supported server switch-generation conventions are reconciled.
 
 This milestone DOES NOT advertise originalPlayback during negotiation yet.
-Video package fallback, in-player audio switching, subtitle overlays and live
-TS are unfinished. Unsupported selected subtitles require a compatible fallback;
+Video package admission is wired but not yet device-qualified; in-player audio
+switching has the focused full-controller result below. Subtitle overlays and live TS remain unfinished. Unsupported selected subtitles require a compatible fallback;
 menus do not pretend an original overlay exists. PiP is not offered for the custom
 renderer. Fullscreen uses the actual containing surface. Legacy playback remains
 available and is the shipping default until the original route is qualified.
@@ -953,3 +953,71 @@ real worker bootstrap and WASM HTTP200/application/wasm/compile were verified
 before the single approved playback retry. Do not use a page routing overlay as
 an engine asset server. The earlier untagged MP4 correctly failed colour admission
 and was not re-labelled SDR just to pass the drive.
+
+
+### Original decoder admission and source scan facts
+
+The host now keeps exact-file native decode rejection separate from generic
+capability vectors. A rejected private WebCodecs configuration cannot be rescued
+by a passing baseline vector. Native routes remain preferred; if unavailable,
+the runtime lazily loads only the selected codec's independently served package,
+verifies its pinned SHA-256 and manifest, then asks the upstream presenter and
+eligibility selector for a compatible format/profile/device-buffer route. Package
+absence, incompatible profiles or device limits take the existing authorized
+fallback path. These upstream video packages use WASM parsers and WGSL GPU decode;
+they are **not** a general FFmpeg software-video decoder. There is no packaged
+H.264 or VP9 fallback in this pin. This is admission code, not a measured HEVC,
+Dolby Vision or performance qualification.
+
+Install the video modules and complete release source/licences with
+`bun client/player/universal/video/install-packages.ts <prepared-directory>`.
+The asset assembler accepts `--video-dir=<prepared-directory>` and rechecks module
+pins before copying them alongside the separately loaded runtime. Audio keeps its
+own installer and corresponding-source payload. Both installers support verified
+prepared input; build output never silently advertises missing decoder modules.
+
+Broker `originalVideo.isInterlaced`, `fieldOrder` and signed counterclockwise
+`rotation` are preserved. Actual demux field order may supplement omitted facts;
+positive broker SPS interlace evidence wins over a container progressive flag.
+Mediabunny's nonzero clockwise rotation is converted to the wire's opposite sign;
+an identity/default matrix does not manufacture a broker rotation fact. Dolby
+Vision raw admission requires explicitly known progressive video. This upstream
+pin rejects nonzero rotation and separate-field HEVC; those cases fall back rather
+than displaying an unrotated or incorrectly woven picture. Rotation transforms
+are still work to do.
+
+Original audio switching prepares against the complete advertised/demuxed ordered
+inventory, exact codec/private configuration, rate and layout before touching the
+controller. Only a successful started result commits the UI's selected ID. A
+pending ID reaches the existing skin spinner; seek/dispose cancels preparation,
+and a superseded session cannot publish its selected track. Upstream re-primes
+both decode generations at the current audio-master time, retaining the same
+original URL/session; it does not promise uninterrupted video frames. Universal capability advertisement remains disabled pending video-package, HDR,
+subtitle and broader source admission qualification.
+
+
+Focused native-view audio/seek drive (2026-11-14): real same-origin HTTP assets
+and an eight-second tagged BT.709 640x360 AVC Matroska file. The first audio stream
+was actual TrueHD48k/5.1(side), the alternate AAC48k/stereo. Synthetic tones,
+not Atmos or a 7.1 claim. The proxy's mock API was unavailable before playback,
+so the driver supplied an explicit diagnostic plan and a later authoritative seek
+revision. This proves the native view/controller and ranged file path, not broker
+negotiation, source authorization, progress persistence or server seek handling.
+
+| Measurement | Result |
+|---|---|
+| First GPU-presented frame after trusted Start | 688.5 ms |
+| TrueHD bed through package → PCM → AudioWorklet | 6 source channels → stereo output; clock advanced to1.20604 s; 75,840 submitted PCM frames |
+| Audio switch to AAC while paused | 21.8 ms to started; position1.20604 s before and after; pending then selected ID reported correctly |
+| AAC playback after switch | Advanced to2.2086 s; 54 presented frames; no engine error |
+| Seek to4 s | Target4/buffering exposed immediately; diagnostic seek-generation2 plan resumed to5.003177 s |
+| Output resilience counters | Underflow/overflow/dropped PCM frames0 at measured TrueHD, AAC and post-seek samples |
+| Video vs audio-master timing | Worst lag5.943 ms TrueHD,8.783 ms after AAC switch,3.348 ms after seek; late count0; clock reset count0 |
+| Cleanup | Native view destroyed, dedicated Chrome closed; owned diagnostic server stopped by audio partner |
+
+These are short software timing and queue counters, not human listening, physical
+A/V drift, surround speaker mapping or CPU/GPU utilization. The post-end capture
+`client/.exact/universal-audio-switch.png` shows the cleared surface; it is not
+video-content evidence. The drive exposed upstream frame-count
+reset on internal audio decode restart; Vela now accumulates those counters within
+the same protocol playback generation so observations do not regress33→1.

@@ -78,7 +78,7 @@ export class PlaybackEngine {
   get observationAllowed() { return this.session?.serverState !== 'ended'; }
   snapshot(): Snapshot {
     const ranges = this.video.buffered, quality = this.video.getVideoPlaybackQuality?.();
-    const audioTrackIds = this.backend === 'mse' ? this.pipeline?.audioTracks ?? [] : this.session?.audioTracks.filter(t => !!this.nativeAudio(t.id)).map(t => t.id) ?? [];
+    const audioTrackIds = this.original ? this.original.audioTrackIds : this.backend === 'mse' ? this.pipeline?.audioTracks ?? [] : this.session?.audioTracks.filter(t => !!this.nativeAudio(t.id)).map(t => t.id) ?? [];
     return {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.pendingSeek ? 'buffering' : this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
@@ -93,7 +93,7 @@ export class PlaybackEngine {
       duration: this.duration(),
       playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: this.nativeOrigin + ranges.start(i), end: this.nativeOrigin + ranges.end(i) })),
       throughputBps: this.pipeline?.bandwidth.bps ?? null, droppedFrames: this.terminalMedia?.dropped ?? this.original?.readout.dropped ?? quality?.droppedVideoFrames ?? null,
-      totalFrames: this.terminalMedia?.frames ?? this.original?.readout.frames ?? quality?.totalVideoFrames ?? null, audioTrackIds, audioTrackId: this.pipeline?.audioTrackId ?? this.audio, pendingAudioTrackId: this.pipeline?.pendingAudioTrackId ?? null, subtitleTrackId: this.subtitle, failure: this.failure,
+      totalFrames: this.terminalMedia?.frames ?? this.original?.readout.frames ?? quality?.totalVideoFrames ?? null, audioTrackIds, audioTrackId: this.pipeline?.audioTrackId ?? this.audio, pendingAudioTrackId: this.original?.pendingAudioTrackId ?? this.pipeline?.pendingAudioTrackId ?? null, subtitleTrackId: this.subtitle, failure: this.failure,
     };
   }
   private catchUpTarget(): number | null {
@@ -258,7 +258,7 @@ export class PlaybackEngine {
           video:{...info,codec:info?.codec ?? '',width:info?.width ?? 0,height:info?.height ?? 0},
           audio:(this.session?.audioTracks ?? []).map(t => {
             if (t.streamIndex === undefined || !t.codec) throw new Error('Original audio identity is unavailable');
-            return {id:t.id,codec:t.codec,channels:t.channels,streamIndex:t.streamIndex};
+            return {id:t.id,codec:t.codec,channels:t.channels,language:t.language,streamIndex:t.streamIndex};
           }),selectedAudioId:this.audio});
         cancelled(token.signal); this.status = original.readout.state; if (this.pendingSeek?.authorized && this.status === 'paused') this.pendingSeek = undefined; this.publish(); return;
       }
@@ -431,6 +431,11 @@ export class PlaybackEngine {
           this.manualQuality = command.renditionId; if (this.pipeline) this.pipeline.abr.manual = command.renditionId; break;
         case 'audio': {
           if (!this.session?.audioTracks.some(t => t.id === command.trackId)) throw new Error('Unknown audio track');
+          if (this.original) {
+            const original = this.original; await original.selectAudio(command.trackId);
+            if (this.original !== original) return;
+            this.audio = command.trackId; this.audioPreference = command.trackId; break;
+          }
           if (this.pipeline?.audioTracks.includes(command.trackId)) {
             this.audioPreference = command.trackId;
             try { await this.pipeline.selectAudio(command.trackId); } catch (error) { if (this.audioPreference === command.trackId) this.audioPreference = this.audio ?? undefined; throw error; }

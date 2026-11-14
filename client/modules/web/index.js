@@ -440,11 +440,11 @@ function destroyEngine(handle) {
 
 // client/player/universal/loader.ts
 function canAttemptOriginal() {
-  return isSecureContext && !!navigator.gpu && typeof VideoDecoder === "function";
+  return isSecureContext && !!navigator.gpu && typeof VideoFrame === "function" && typeof Worker === "function";
 }
 async function loadOriginalRuntime(options) {
   if (!canAttemptOriginal())
-    throw new Error("Secure WebGPU and WebCodecs are required for original playback");
+    throw new Error("Secure WebGPU, workers and VideoFrame are required for original playback");
   const base = new URL("./universal/", import.meta.url);
   const response = await fetch(new URL("assets.json", base), { signal: AbortSignal.any([options.signal, AbortSignal.timeout(1e4)]), credentials: "same-origin" });
   if (!response.ok)
@@ -457,7 +457,7 @@ async function loadOriginalRuntime(options) {
   moduleURL.searchParams.set("v", manifest.assetKey);
   const module = await import(moduleURL.href);
   options.signal.throwIfAborted();
-  return new module.UniversalRuntime({ ...options, assets: { baseURL: new URL("libraries/", base).href, assetKey: manifest.assetKey, audioDecoderURL: new URL("libraries/audio-decoders/", base).href } });
+  return new module.UniversalRuntime({ ...options, assets: { baseURL: new URL("libraries/", base).href, assetKey: manifest.assetKey, audioDecoderURL: new URL("libraries/audio-decoders/", base).href, videoDecoderURL: new URL("libraries/video-decoders/", base).href } });
 }
 
 // client/player/model.ts
@@ -1490,7 +1490,7 @@ class PlaybackEngine {
   }
   snapshot() {
     const ranges = this.video.buffered, quality = this.video.getVideoPlaybackQuality?.();
-    const audioTrackIds = this.backend === "mse" ? this.pipeline?.audioTracks ?? [] : this.session?.audioTracks.filter((t) => !!this.nativeAudio(t.id)).map((t) => t.id) ?? [];
+    const audioTrackIds = this.original ? this.original.audioTrackIds : this.backend === "mse" ? this.pipeline?.audioTracks ?? [] : this.session?.audioTracks.filter((t) => !!this.nativeAudio(t.id)).map((t) => t.id) ?? [];
     return {
       sessionId: this.session?.id ?? null,
       sourceGeneration: this.controller.source,
@@ -1517,7 +1517,7 @@ class PlaybackEngine {
       totalFrames: this.terminalMedia?.frames ?? this.original?.readout.frames ?? quality?.totalVideoFrames ?? null,
       audioTrackIds,
       audioTrackId: this.pipeline?.audioTrackId ?? this.audio,
-      pendingAudioTrackId: this.pipeline?.pendingAudioTrackId ?? null,
+      pendingAudioTrackId: this.original?.pendingAudioTrackId ?? this.pipeline?.pendingAudioTrackId ?? null,
       subtitleTrackId: this.subtitle,
       failure: this.failure
     };
@@ -1804,7 +1804,7 @@ class PlaybackEngine {
           audio: (this.session?.audioTracks ?? []).map((t) => {
             if (t.streamIndex === undefined || !t.codec)
               throw new Error("Original audio identity is unavailable");
-            return { id: t.id, codec: t.codec, channels: t.channels, streamIndex: t.streamIndex };
+            return { id: t.id, codec: t.codec, channels: t.channels, language: t.language, streamIndex: t.streamIndex };
           }),
           selectedAudioId: this.audio
         });
@@ -2177,6 +2177,15 @@ class PlaybackEngine {
         case "audio": {
           if (!this.session?.audioTracks.some((t) => t.id === command.trackId))
             throw new Error("Unknown audio track");
+          if (this.original) {
+            const original = this.original;
+            await original.selectAudio(command.trackId);
+            if (this.original !== original)
+              return;
+            this.audio = command.trackId;
+            this.audioPreference = command.trackId;
+            break;
+          }
           if (this.pipeline?.audioTracks.includes(command.trackId)) {
             this.audioPreference = command.trackId;
             try {
