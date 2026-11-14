@@ -1,3 +1,5 @@
+import { abortable } from './abortable';
+import { QUALIFIED_ORIGINAL_VIDEO } from './qualified';
 import { configureEngineAssets } from '../../../vendor/webgpu-player/src/EngineAssets';
 import { getCustomPlaybackRuntimeAvailability } from '../../../vendor/webgpu-player/src/capability/CustomPlaybackRuntime';
 import { probeCustomDecodeCapabilities, type CustomDecodeCapabilities } from '../../../vendor/webgpu-player/src/capability/CustomDecodeCapabilities';
@@ -17,6 +19,7 @@ import { videoPackageId, VideoPackages } from './video/packages';
 import { outputLayout } from './audio/policy';
 import type { DecoderRetry } from './retry';
 import type { UniversalReadout } from './loader';
+import { audioDifferences } from './diagnostics';
 import { probeOriginal } from './probe';
 import { upstreamOptions, type OriginalMedia } from './source';
 
@@ -35,6 +38,7 @@ export class UniversalRuntime {
   private controller?: Controller;
   private loop?: FrameLoop;
   private disposed = false;
+  private readonly lifetime = new AbortController();
   private failureSent = false;
   private wantsPlaying = true;
   private initialPosition = 0;
@@ -50,11 +54,11 @@ export class UniversalRuntime {
   get pendingAudioTrackId() { return this.pendingAudio; }
   private disposing?: Promise<void>;
   private initializing?: AbortSignal;
-  private readonly generation = 1;
+  private generation = 1;
   private readonly visibility = () => this.loop?.synchronizePageVisibility(!document.hidden);
   constructor(private options: RuntimeOptions) {
     configureEngineAssets({ baseURL: options.assets.baseURL, cacheKey: options.assets.assetKey });
-    this.presenter = new Presenter((reason) => this.failed(`WebGPU presentation: ${reason}`), () => this.loop?.schedule(false), () => this.failed('WebGPU device lost'));
+    this.presenter = new Presenter((_generation, reason) => this.failed(`WebGPU presentation: ${reason}`), () => this.loop?.schedule(false), () => this.failed('WebGPU device lost'));
     options.signal.addEventListener('abort', this.abort, { once: true });
     document.addEventListener('visibilitychange', this.visibility);
   }
@@ -77,6 +81,7 @@ export class UniversalRuntime {
     }
     return { state: state === 'playing' || state === 'paused' || state === 'ended' ? state : state === 'seeking' ? 'buffering' : state === 'error' || state === 'fallback' ? 'failed' : 'loading',
       position: this.position, duration: telemetry?.durationMicroseconds == null ? null : microsecondsToSeconds(telemetry.durationMicroseconds),
+      audioTrackId:this.media?.selectedAudioId ?? null, metadataDiscrepancies:this.media?.discrepancies ?? [], presentedFrames:this.presenter.getTelemetry().presentedFrameCount, decoderReady:!!this.controller,
       frames: this.carriedFrames + this.decodedFrames, dropped: this.carriedDropped + this.droppedFrames };
   }
   get presentationTelemetry() { return this.presenter.getTelemetry(); }
@@ -94,28 +99,35 @@ export class UniversalRuntime {
     this.initialPosition = media.position;
     const availability = getCustomPlaybackRuntimeAvailability(undefined, { audioOutput: media.selectedAudioId !== null, nativeVideoDecoder: false });
     if (!availability.available) throw new Error(`Original playback unavailable: ${availability.reason}`);
-    const signal = AbortSignal.any([this.options.signal, AbortSignal.timeout(60000)]);
+    const signal = AbortSignal.any([this.options.signal,this.lifetime.signal,AbortSignal.timeout(8000)]);
     this.initializing = signal; signal.addEventListener('abort', this.abort, {once:true});
     // Capture audio activation before asynchronous capability/package work.
-    const prewarm = media.selectedAudioId !== null ? prewarmBrowserAudioContext(48000) : null;
+    const prewarm = prewarmBrowserAudioContext(48000);
     try {
-      media = this.media = await probeOriginal(media, signal);
+      media = this.media = await abortable(probeOriginal(media,signal),signal);
+      if (!QUALIFIED_ORIGINAL_VIDEO.includes(media.video.codec)) throw new Error(`Original video ${media.video.codec} is not yet qualified; using compatible fallback`);
+      // Only the proven HDR10-compatible DV8 base is normalized by the probe.
+      // Full DV reconstruction (including profile7) has not passed its gate.
+      if (media.video.dvProfile !== undefined) throw new Error('Original Dolby Vision reconstruction is not yet qualified; using compatible fallback');
       const registry = this.audioRegistry = createAudioPackages(this.options.assets.audioDecoderURL);
       const maximumChannels = this.maximumChannels = prewarm?.audioContext.destination.maxChannelCount ?? null;
-      const preparedAudio = media.selectedAudioId ? await prepareOriginalAudioSwitch({url:media.url,
-        tracks:media.audio, trackId:media.selectedAudioId, registry, maximumOutputChannels:maximumChannels, signal, forceSoftware:this.options.retry?.audio}) : null;
-      if (preparedAudio) media = this.media = {...media, audio:media.audio.map(track =>
-        track.id === media.selectedAudioId ? preparedAudio.actualTrack : track)};
+      const preparedAudio = (media.audioTrackCount ?? media.audio.length) > 0 ? await abortable(prepareOriginalAudioSwitch({url:media.url,
+        tracks:media.audio, trackId:media.selectedAudioId ?? media.audio[0]?.id ?? '', registry, maximumOutputChannels:maximumChannels, signal, forceSoftware:this.options.retry?.audio}),signal) : null;
+      if (preparedAudio) audioDifferences(preparedAudio.discrepancies,media.audio.find(track => track.id === media.selectedAudioId),preparedAudio.actualTrack);
+      media = this.media = preparedAudio ? {...media, selectedAudioId:preparedAudio.actualTrack.id,
+        audio:[...media.audio.filter(track => track.id !== preparedAudio.actualTrack.id),preparedAudio.actualTrack],
+        discrepancies:[...new Set([...(media.discrepancies ?? []),...preparedAudio.discrepancies])].slice(0,32)}
+        : {...media,audio:[],selectedAudioId:null};
       const options = upstreamOptions(media);
       const audio = media.audio.find(a => a.id === media.selectedAudioId);
-      const packageSelection = preparedAudio?.audioOptions.audioDecoder ? await registry.load(preparedAudio.actualTrack.codec, signal) : null;
+      const packageSelection = preparedAudio?.audioOptions.audioDecoder ? await abortable(registry.load(preparedAudio.actualTrack.codec, signal),signal) : null;
       signal.throwIfAborted();
       this.presenter.startSession(this.generation);
       const input = readPresentationInput(options);
-      const [probedCapabilities, presentation] = await Promise.all([
+      const [probedCapabilities, presentation] = await abortable(Promise.all([
         probeCustomDecodeCapabilities(options.mediaSource),
         getCustomPresentationEligibilityOptions(this.presenter, { input, options, isCurrent: this.current, isHDRToneMappingEnabled: async () => true }),
-      ]);
+      ]),signal);
       signal.throwIfAborted();
       if (!presentation) throw new Error('Original presentation preparation superseded');
       // A generic vector cannot override the actual file's rejected config.
@@ -130,9 +142,9 @@ export class UniversalRuntime {
       // independently served GPU package when the native route cannot qualify.
       let eligibility = getCustomPlaybackEligibility(options, capabilities, eligibilityOptions);
       if (forceGPU || !media.video.nativeSupported || !eligibility.eligible) {
-        const decoder = await new VideoPackages(this.options.assets.videoDecoderURL).load(media.video.codec, signal);
+        const decoder = await abortable(new VideoPackages(this.options.assets.videoDecoderURL).load(media.video.codec, signal),signal);
         if (decoder) {
-          const gpuVideoDecoders = await getGPUVideoDecoderOffers(this.presenter, [decoder], options);
+          const gpuVideoDecoders = await abortable(getGPUVideoDecoderOffers(this.presenter, [decoder], options),signal);
           signal.throwIfAborted();
           eligibility = getCustomPlaybackEligibility(options, capabilities, {...eligibilityOptions, gpuVideoDecoders});
         }
@@ -141,12 +153,12 @@ export class UniversalRuntime {
       const aligned = alignPresentationInputBitDepth(input, eligibility.rawVideoFrameFormat);
       this.presenter.setDecodedFramePushMode(true, this.generation);
       this.presenter.attach(this.options.surface, this.generation);
-      const configured = await configurePresentationColorPipeline(this.presenter, {
+      const configured = await abortable(configurePresentationColorPipeline(this.presenter, {
         clearDetectedInputPeak: () => {}, createHDRRenderConfiguration: peak => ({ automaticInputPeakNits: true,
           settings: createHDRToSDRRenderSettings({ toneMapping: { inputPeakNits: peak } }) }),
         dolbyVisionProfile: eligibility.dolbyVisionProfile, eligibility, generation: this.generation,
         input: aligned, options, rawVideoFrameFormat: eligibility.rawVideoFrameFormat, videoOutputMode: eligibility.videoOutputMode,
-      });
+      }),signal);
       signal.throwIfAborted();
       if (!configured) throw new Error('Original colour pipeline could not be configured');
       const audioOptions = preparedAudio?.audioOptions ?? {};
@@ -164,11 +176,11 @@ export class UniversalRuntime {
       this.loop = new FrameLoop({ controller, presenter: this.presenter, presentationGeneration: this.generation,
         isCurrent: this.current, onFailure: () => this.failed('Original frame presentation failed') });
       this.visibility();
-      const starting = controller.play({ ...eligibility, ...audioOptions, audioMetadataLayout: preparedAudio?.audioMetadataLayout ?? getAudioMetadataLayout(eligibility),
+      const starting = controller.play({ ...eligibility, ...audioOptions, audioTrackIndex:preparedAudio?.ordinal ?? null, audioMetadataLayout: preparedAudio?.audioMetadataLayout ?? getAudioMetadataLayout(eligibility),
         audioOutputMode: audio ? 'decoded-pcm' : undefined, startTimeMicroseconds: secondsToMicroseconds(media.position),
         nativeHDRTransfer: eligibility.nativeHDRTransfer ?? null });
       if (!this.wantsPlaying) controller.pause();
-      const result = await starting;
+      const result = await abortable(starting,signal);
       signal.throwIfAborted();
       if (result.status !== 'started') throw new Error(`Original playback did not start: ${result.status}`);
       this.loop.schedule(true);
@@ -190,19 +202,31 @@ export class UniversalRuntime {
         registry:this.audioRegistry, maximumOutputChannels:this.maximumChannels, signal});
       signal.throwIfAborted();
       void this.readout; // Capture the retiring decode generation before restart.
+      this.advancePresentation();
       const result = await this.controller.setAudioStreamIndex(prepared.ordinal,
         {...prepared.audioOptions, audioMetadataLayout:prepared.audioMetadataLayout});
       signal.throwIfAborted();
       if (result.status !== 'started') throw new Error(`Original audio switch did not start: ${result.status}`);
-      this.media = {...this.media, selectedAudioId:trackId,
-        audio:this.media.audio.map(track => track.id === trackId ? prepared.actualTrack : track)};
+      audioDifferences(prepared.discrepancies,this.media.audio.find(track => track.id === trackId),prepared.actualTrack);
+      this.media = {...this.media, selectedAudioId:prepared.actualTrack.id,
+        audio:[...this.media.audio.filter(track => track.id !== prepared.actualTrack.id),prepared.actualTrack],
+        discrepancies:[...new Set([...(this.media.discrepancies ?? []),...prepared.discrepancies])].slice(0,32)};
       this.loop?.schedule(this.wantsPlaying);
     } finally { if (this.audioSwitch === job) { this.audioSwitch = undefined; this.pendingAudio = null; } }
   }
-  async seek(position: number) { this.audioSwitch?.abort(); void this.readout; await this.controller?.seek(secondsToMicroseconds(position)); this.loop?.schedule(true); }
+  private advancePresentation() {
+    const generation = ++this.generation;
+    this.loop?.setPresentationGeneration(generation);
+    this.presenter.seek(generation);
+  }
+  async seek(position: number) {
+    this.audioSwitch?.abort(); void this.readout; this.advancePresentation();
+    await this.controller?.seek(secondsToMicroseconds(position)); this.loop?.schedule(this.wantsPlaying);
+  }
   dispose(): Promise<void> {
     if (this.disposing) return this.disposing;
-    this.disposed = true; this.audioSwitch?.abort(); this.options.signal.removeEventListener('abort', this.abort);
+    if (this.disposed) return Promise.resolve();
+    this.disposed = true; this.lifetime.abort(); this.audioSwitch?.abort(); this.options.signal.removeEventListener('abort', this.abort);
     document.removeEventListener('visibilitychange', this.visibility);
     this.loop?.destroy();
     this.disposing = (async () => { try { await this.controller?.destroy(); } finally { this.presenter.destroy(); } })();

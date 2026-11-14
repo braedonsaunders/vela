@@ -14,7 +14,7 @@ export async function mediaCapabilities(signal: AbortSignal) {
   return {
     ...(originalPlayback ? {originalPlayback} : {}),
     containers: [supports('video/mp4') ? 'mp4' : '', supports('video/webm') ? 'webm' : ''].filter(Boolean),
-    videoCodecs: videoFormats.filter(([, mime]) => supports(mime)).map(([name]) => name),
+    videoCodecs: videoFormats.filter(([name,mime]) => name === 'h264' && supports(mime)).map(([name]) => name),
     audioCodecs: audioFormats.filter(([, mime]) => supports(mime)).map(([name]) => name),
     subtitleFormats: typeof VTTCue === 'function' ? ['webvtt'] : [],
     hls: supports('application/vnd.apple.mpegurl'),

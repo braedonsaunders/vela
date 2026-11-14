@@ -1,9 +1,10 @@
+import { QUALIFIED_ORIGINAL_VIDEO, QUALIFIED_ORIGINAL_AUDIO } from './qualified';
 import type { ClientCapabilities } from '../../wire/v0/types';
 import type { DecoderRetry } from './retry';
 import type { OriginalMedia } from './source';
 export interface UniversalReadout {
   state: 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'failed';
-  position: number; duration: number | null; frames: number; dropped: number;
+  position: number; duration: number | null; frames: number; dropped: number; audioTrackId: string | null; metadataDiscrepancies: string[]; presentedFrames: number; decoderReady: boolean;
 }
 export interface OriginalBackend {
   position: number; readout: UniversalReadout;
@@ -70,8 +71,10 @@ export async function originalPlaybackCapabilities(signal: AbortSignal): Promise
   if (!declaration || declaration.version !== 1 || declaration.range !== true || declaration.webgpu !== true) return null;
   for (const list of [declaration.demuxContainers,declaration.videoDecoders,declaration.audioDecoders])
     if (!Array.isArray(list) || !list.length || list.length>32 || list.some(value => typeof value !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(value))) return null;
-  // Native codec APIs are optional only when an installed package supplies that
-  // family. Current beta admission requires WebCodecs for the common video path.
+  // The common H.264 route requires WebCodecs; HEVC exact configurations can
+  // instead select the separately installed package after native probing.
   if (typeof VideoDecoder !== 'function' || typeof AudioContext !== 'function' || typeof AudioWorkletNode !== 'function') return null;
-  return declaration;
+  const videoDecoders = declaration.videoDecoders.filter(codec => QUALIFIED_ORIGINAL_VIDEO.includes(codec));
+  if (!videoDecoders.length) return null;
+  return {...declaration,videoDecoders,audioDecoders:declaration.audioDecoders.filter(codec => QUALIFIED_ORIGINAL_AUDIO.includes(codec))};
 }
