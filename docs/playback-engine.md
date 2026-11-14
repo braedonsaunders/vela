@@ -405,3 +405,21 @@ after that reset returned HTTP 200; no limit was changed.
 The replay did not create a new broker session; the original was already ended.
 Chrome was closed after recording the resume failure. Live TV and clean
 single-flight handoff rechecks remain pending the next installed client batch.
+
+### Installed 0.1.7: resume, skins, and live checkpoint
+
+| Step | Result / evidence |
+| --- | --- |
+| Profile and production skin switch | Passed. Opened anchored profile menu, switched to Index, browsed real Home and 1917 Detail: `lab-13-profile.png`, `lab-14-index-home.png`, `lab-15-index-detail.png`. |
+| Fresh watch-opening identity | Passed: new session rather than replaying the ended session. Initial resume 0 after 52 seconds is correct under Ether's deliberate 5% start threshold (356.9744 seconds for this movie), confirmed from the actual viewer watch row and server state rule. |
+| Eligible progress persistence | Chapter 8:20 authorized; real playing observation HTTP 200 at 515.163351 seconds, then stop HTTP 200 `ended` at that same position. |
+| Same-page reopen / saved resume | **Passed**. New distinct session, omitted request position, server resume 515.163351, actual decoded playback at 515.338811 (readyState 4, 12 frames) after 15,279 ms. `lab-17-resume-confirmed.png`. |
+| Empty settings removal | Passed: zero Playback settings triggers with no switchable tracks/ladder; normal chapter control retained. |
+| Live guide | Failed before guide request: authorized channels HTTP 200 contained 100 items, `continuation:unknown`, no cursor. Client correctly rejects incomplete enumeration. Ether confirmed server truncation of a complete neutral channel list and missing guide pagination. `lab-18-live-guide.png`. |
+| Reloaded bootstrap | Failed: GET `/vela/v0/bootstrap` with no cursor returned HTTP 409 `conflict/cursor_expired`, after negotiation HTTP 200. Handed to Ether. |
+
+The resumed movie was stopped and acknowledged ended before entering Live. No
+channel stream was opened while the guide was blocked. Chrome was closed for
+the server fix batch. Live channel and the clean single-flight Watch handoff
+remain pending; they are not passes. Earlier startup screenshots show playback,
+not proof of resume—the resume proof is specifically `lab-17`.
