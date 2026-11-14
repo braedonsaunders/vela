@@ -1,0 +1,43 @@
+use GuideModel from "../../live/models.contract"
+
+component Guide
+  props
+    model: GuideModel
+    small: bool
+    watch: action
+    previous: action
+    next: action
+  view
+    column gap=20 padding="28px 5% 48px"
+      text "LIVE TELEVISION" color="brand.warm" font-size=11 letter-spacing="3px"
+      text "Channel guide" role="heading" aria-level=1 font-size=(small ? 36 : 52) font-weight=550 letter-spacing="-1px"
+      row gap=12 align-items="center"
+        button press=previous aria-label="Earlier programmes" buttonStyle="bordered"
+          text "Earlier"
+        button press=next aria-label="Later programmes" buttonStyle="bordered"
+          text "Later"
+      if model.channels.length == 0
+        text "No channels are available." role="status" color="ink.secondary"
+      if small
+        for channel in model.channels key=channel.id
+          button press=watch(channel.id) aria-label=`Watch ${channel.name}` padding=16 border="none" border-radius=12 background-color="surface.raised" color="ink.primary" text-align="left"
+            column gap=6
+              text `${channel.number}  ${channel.name}${channel.favorite ? "  ·  Favourite" : ""}` font-weight=600
+              text (channel.now == "" ? "No current programme information" : `Now  ${channel.now}`) color="ink.secondary"
+              if channel.next != ""
+                text `Next  ${channel.next}` color="ink.quiet"
+      else
+        scroll overflow-x="auto" overflow-y="hidden"
+          column width=1100 gap=3
+            for channel in model.channels key=channel.id
+              row height=76 gap=4
+                button press=watch(channel.id) aria-label=`Watch ${channel.name}` width=180 flex-shrink=0 padding=12 border="none" background-color="surface.raised" color="ink.primary" text-align="left"
+                  text `${channel.number}  ${channel.name}${channel.favorite ? " ★" : ""}`
+                column flex=1 position="relative" background-color="surface.raised"
+                  for programme in channel.programmes key=programme.id
+                    button press=watch(channel.id) aria-label=`${programme.name}, ${programme.startLabel} to ${programme.endLabel}. Watch ${channel.name}` position="absolute" left=`${programme.offset}%` width=`${programme.width}%` height="100%" padding=8 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary" text-align="left" overflow="hidden"
+                      column gap=4
+                        text programme.name font-weight=600 line-clamp=1
+                        text `${programme.startLabel} – ${programme.endLabel}` font-size=11 color="ink.secondary"
+                  if model.showNow
+                    column position="absolute" left=`${model.nowOffset}%` top=0 bottom=0 width=2 background-color="brand.warm"

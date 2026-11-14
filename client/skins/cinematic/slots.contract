@@ -21,6 +21,8 @@ component Shell
             for name in skins key=name
               option value=name
                 text name
+        link href="/live" color="ink.secondary" text-decoration="none"
+          text "Live TV" font-size=12
         text viewer font-size=12 color="ink.secondary"
       children
 

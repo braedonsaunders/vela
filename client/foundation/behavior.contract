@@ -1,5 +1,7 @@
 use HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./models.contract"
 
+use GuideModel from "../live/models.contract"
+
 shape Time
   epochAtZero: number
 
@@ -7,6 +9,7 @@ shape PageState
   visibilityState: string
 
 members Client
+  state guideWindow = 0
   state generation = 0
   state skin = ""
   state observed: string[] = []
@@ -20,9 +23,11 @@ members Client
   resource descriptive = uiDescriptive(query, generation, time.epochAtZero) when query.trim() != "" and home.descriptiveAvailable as shape SearchModel
   resource ai = uiAI(query, generation, time.epochAtZero) when query.trim() != "" and home.aiAvailable as shape SearchModel
   resource detail = uiDetail(detailId) when detailId != "" as shape DetailModel
-  derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" ? top(nav).params.id : "")
-  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : "title", time.epochAtZero) when playingId != "" as shape PlaybackModel
+  resource guide = uiGuide(time.epochAtZero, guideWindow) when top(nav).name == "live" as shape GuideModel
+  derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" ? top(nav).params.id : "")
+  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero) when playingId != "" as shape PlaybackModel
   mutation playerReceipt as shape ReceiptReply queue
+  state lowDelay = false
   state commandId = 0
   state commandJson = ""
   mutation receipt as shape ReceiptReply queue
@@ -64,3 +69,16 @@ members Client
   action playExtra(id: string)
     nav = push(nav, path("extra", id))
 
+
+  action watchChannel(id: string)
+    lowDelay = false
+    nav = push(nav, path("liveWatch", id))
+  action earlierGuide
+    guideWindow = guideWindow - 1
+  action laterGuide
+    guideWindow = guideWindow + 1
+  action toggleLowDelay
+    lowDelay = not lowDelay
+    let next = commandId + 1
+    commandId = next
+    commandJson = `{"id":${next},"type":"lowDelay","enabled":${lowDelay}}`

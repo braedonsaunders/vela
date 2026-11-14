@@ -1,8 +1,12 @@
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./foundation/models.contract"
+use GuideModel from "./live/models.contract"
+use Guide from "./skins/cinematic/guide.contract"
 use Shell, Home, SearchSurface, Detail, PlayerChrome from "./skins/cinematic/slots.contract"
 
 routes nav
   home "/"
+    live "/live"
+    liveWatch "/live/:id"
     title "/title/:id"
     watch "/watch/:id"
     extra "/watch/extra/:id"
@@ -32,6 +36,17 @@ component Client
                             image "symbol:close"
                     if query != ""
                       SearchSurface(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if e.name == "live"
+          column navigationKey=`${e.id}` position="absolute" inset=0
+            Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins, chooseSkin=chooseSkin)
+              scroll flex=1 min-height=0
+                if failed(guide)
+                  text "The guide couldn't be loaded. Check your connection." role="status" padding=32
+                else
+                  if not current(guide)
+                    text "Loading the guide…" role="status" padding=32
+                  else
+                    Guide(model=guide, small=small, watch=watchChannel, previous=earlierGuide, next=laterGuide)
         if e.name == "title"
           column navigationKey=`${e.id}` navigationPresentation=(small ? "fullscreen" : "modal") navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 background-color="surface.page" color="ink.primary"
             row padding="16px 5%" align-items="center"
@@ -46,7 +61,7 @@ component Client
                   text "Opening title…" padding=32 role="status"
                 else
                   Detail(model=detail, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
-        if e.name == "watch" or e.name == "extra"
+        if e.name == "watch" or e.name == "extra" or e.name == "liveWatch"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color="surface.page"
             button id="back" press=close aria-label="Close player" padding=16
               text "Back"
@@ -58,4 +73,7 @@ component Client
               else
                 column flex=1 min-height=0 position="relative"
                   vela-player plan=playback.planJson playerCommand=commandJson message=playerMessage flex=1 min-height=240
+                  if e.name == "liveWatch"
+                    button press=toggleLowDelay aria-label="Toggle low delay" buttonStyle="bordered"
+                      text (lowDelay ? "Low delay on" : "Low delay off")
                   PlayerChrome(titleId=e.params.id, command=playerCommand)

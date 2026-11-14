@@ -3,6 +3,7 @@ import type { AISearchJob, ClientCapabilities, Device } from '../wire/v0/types';
 import { EtherAdapter } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, homeModel, detailModel } from './discovery/models';
+import { loadGuide } from './live/guide';
 
 export function createAnswer(API: string, MOCK: boolean): Answer {
 const device: Device = { id: 'vela-dev', name: 'Vela browser', platform: 'web', appVersion: '0.1' };
@@ -34,6 +35,10 @@ async function session(store: Parameters<Sources['uiBootstrap']>[1]): Promise<Et
   return api;
 }
 const sources: Sources = {
+  uiGuide: async ([epoch, window], store) => {
+    const start = Math.floor(epoch / 1800000) * 1800000 + window * 7200000;
+    return loadGuide(await session(store), new Date(start).toISOString(), new Date(start + 7200000).toISOString(), epoch);
+  },
   uiBootstrap: async (_args, store) => homeModel(await (await session(store)).bootstrap()),
   uiDetail: async ([id], store) => detailModel(await (await session(store)).detail(id)),
   uiSearch: async ([query, generation, epoch], store) => {
@@ -82,8 +87,8 @@ const sources: Sources = {
   },
   uiPlayback: async ([id, kind, epoch], store) => {
     const api = await session(store);
-    if (kind !== 'title' && kind !== 'extra') throw new Error('Unsupported playback target');
-    const plan = await api.playback({ ...(kind === 'extra' ? { extraId: id } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${kind}-${id}` });
+    if (kind !== 'title' && kind !== 'extra' && kind !== 'channel') throw new Error('Unsupported playback target');
+    const plan = await api.playback({ ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${kind}-${id}` });
     return { planJson: JSON.stringify(plan) };
   },
   playerEvent: async ([json], store) => {

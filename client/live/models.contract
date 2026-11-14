@@ -1,0 +1,26 @@
+shape GuideProgramme
+  id: string
+  name: string
+  summary: string
+  start: string
+  end: string
+  startLabel: string
+  endLabel: string
+  offset: number
+  width: number
+
+shape GuideChannel
+  id: string
+  number: string
+  name: string
+  favorite: bool
+  now: string
+  next: string
+  programmes: GuideProgramme[]
+
+shape GuideModel
+  from: string
+  until: string
+  nowOffset: number
+  showNow: bool
+  channels: GuideChannel[]

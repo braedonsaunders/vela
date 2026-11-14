@@ -17,7 +17,7 @@ optional artwork, metadata and capabilities to these presentation records.
 | TitleCard | `card:Card`, `small`, `still`, `selectTitle`, `observe` |
 | Detail | `model:DetailModel`, `small`, `still`, `play(id)`, `playExtra(id)`, `selectTitle`, `observe` |
 | PlayerChrome | `titleId:string`, `command(kind:string)`; foundation owns plan and engine-event forwarding, chrome sends play/pause/pip/fullscreen commands |
-| Guide | Initial unavailable placeholder; live worker owns the final guide contract |
+| Guide | `model:GuideModel`, `small:bool`, `watch(channelId)`, `previous()`, `next()`; channels and programmes are supplied in server order, with window-relative programme positions and the current-time position. |
 
 Action props are declared `action` in Exact; arguments above document their inferred
 signatures. Every prop is required. See models.contract for exact field definitions.
