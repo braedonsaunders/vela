@@ -250,3 +250,66 @@ runtime reports installable; `pwaAction="update"` renders the explicit update/re
 control only when an update is available. Runtime absence leaves it hidden. Late
 runtime availability is observed through the runtime's state event. Install/update
 prompts still require actual production/browser qualification by the release owner.
+
+## Manual Firefox / WebKit qualification
+
+Exact's pinned `playwright-core` **1.64.1** drove Firefox **157.0** (revision 1555)
+and Playwright WebKit **27.2** (revision 2370) on this Mac. The matching browser
+builds were installed once into the shared host cache. Browser processes ran
+outside the tool sandbox; app/mock ownership stayed with `bun tools/dev.ts`.
+These were temporary manual app drives, not an added test suite.
+
+**Playwright WebKit is not real Safari or iOS.** It exercises WebKit APIs on this
+Mac, including ManagedMediaSource here, but does not qualify Apple's Safari UI,
+iOS power/background policies, touch/device decode limits, AirPlay or OS PiP.
+
+| Check | Firefox 157.0 | Playwright WebKit 27.2 |
+| --- | --- | --- |
+| Selected adaptive backend | MediaSource | ManagedMediaSource (actual constructor observed) |
+| Initial VOD waiting → playing | 0.237 s | 0.875 s |
+| VOD seek and continued progress | Passed, seek generation advanced | Passed, seek generation advanced |
+| WebVTT off → English | 4 cues loaded, showing | 4 cues loaded, showing |
+| Audio selection | No native audio API: menu honestly absent | Spanish native track `spa` enabled; English restored before the English-only MSE ladder |
+| Collapse 6 → 1 Mbps | 720p → 540p after 10.75 s, 18.80 s buffer ahead; then 360p | 720p → 360p after 10.84 s, 10.02 s buffer ahead |
+| Restore → conservative up-switch | 540p after 17.70 s; 720p after 33.76 s | 540p after 25.53 s; 720p not reached in the 50 s restoration window |
+| Waiting/stalled after collapse | 0 / 0 | 0 / 0 |
+| Final decode counters | 0 dropped / 1,689 total frames | 0 dropped / 1,608 total frames |
+| Final measured throughput | 4.63 Mbps | 4.06 Mbps |
+| Managed streaming lifecycle | Not applicable | 1 startstreaming and 2 endstreaming events observed after instrumentation attached; no false recovery |
+| Authoritative pause / resume / end | Passed; terminal source removed and video paused | Passed; terminal source removed and video paused |
+| Install/update unavailable in dev | Both hidden and computed display:none | Both hidden and computed display:none |
+| Visible path label | Adaptive transcode | Adaptive transcode |
+
+Startup above is the observed video waiting interval, excluding sign-in and page
+bootstrap. Rendition times are the first emitted/coalesced snapshots, not an exact
+decoder transition timestamp. The two engines shared the same fault schedule,
+with the mock's documented per-response cap; this is one local trace per engine,
+not a statistical performance claim. Both started at selected 720p, returned to
+Auto, and warmed at least 12 seconds of buffer before collapse. The source-stable
+adaptation replay followed the track/seek drive; a pass disrupted by the shared
+bootstrap fix was excluded from timing results.
+
+The first pass exposed Firefox redacting Resource Timing transferSize to zero.
+That is not proof of a browser cache hit: no-store responses and cross-origin
+privacy-redacted timings now retain their measured bytes/time samples. Managed
+streaming pauses also used to erase up-switch eligibility whenever the buffer
+fell below the high-buffer gate. Throughput stability now survives those pauses;
+the actual up-switch still requires sufficient buffer and the 12-second guard.
+
+Other fixes qualified here: anonymous CORS media mode for brokered VTT, native
+track mapping by exact ID or unique canonical language (never array index),
+actual browser-enabled PiP/fullscreen checks, authoritative server pause/end,
+and preservation of the presentation position while decoding from the authorized
+independent boundary. PiP is unavailable without a decoded frame or after end.
+OS floating-window/fullscreen presentation itself remains unqualified here.
+
+The WebKit mobile-viewport look used **390×844**. The video occupied the full
+viewport and document scrollWidth stayed 390; paused chrome showed Play and the
+real title. Screenshots: `.exact/watch-webkit-mobile-controls.png` (visible paused
+chrome) and `.exact/watch-webkit-mobile.png` (playing/idle chrome hidden). Those
+are viewport checks, not iOS device qualification.
+
+Relative skip buttons and J/L/arrows now send `seekBy` to the engine, which reads
+the actual playhead rather than the coalesced UI position. One focused control
+check observed 1.228062 → requested 11.228062 seconds, exactly +10 seconds. Slider
+and chapter seeks remain absolute. Ended-state controls do not offer fake replay.

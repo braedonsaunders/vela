@@ -15,7 +15,7 @@ export interface PlaybackSession {
 }
 export type Command = { id: number } & (
   { type: 'play' | 'pause' | 'pip' | 'fullscreen' | 'catchUp' | 'retry' } |
-  { type: 'switchPath'; pathId: string } | { type: 'seek'; seconds: number } | { type: 'volume'; value: number } |
+  { type: 'seekBy'; seconds: number } | { type: 'switchPath'; pathId: string } | { type: 'seek'; seconds: number } | { type: 'volume'; value: number } |
   { type: 'audio'; trackId: string } | { type: 'subtitle'; trackId: string | null } |
   { type: 'quality'; renditionId: string | null } | { type: 'lowDelay'; enabled: boolean });
 export type FailureKind = 'network' | 'source' | 'decoder' | 'unsupported' | 'action';

@@ -14,6 +14,7 @@ component PlayerChrome
     editing: action
     close: action
   derive shown = (visible or model.state != "playing")
+  derive blocked = busy or model.state == "ended"
   derive failure = (serverError != "" ? serverError : model.reason)
   action menuChanged(e: ToggleEvent)
     editing(e.newState == "open")
@@ -54,14 +55,14 @@ component PlayerChrome
           text model.actionError role="status" font-size=13
         row gap=14 align-items="center"
           text model.elapsed font-variant-numeric="tabular-nums" font-size=13
-          input focus=editing(true) blur=editing(false) type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub disabled=(model.duration <= 0 or busy) aria-label=t("ui.playbackPosition") testId="player-scrub" flex=1 min-width=0 accent-color="ink.primary"
+          input focus=editing(true) blur=editing(false) type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub disabled=(model.duration <= 0 or blocked) aria-label=t("ui.playbackPosition") testId="player-scrub" flex=1 min-width=0 accent-color="ink.primary"
           text model.remaining font-variant-numeric="tabular-nums" font-size=13
         row gap=18 align-items="center" flex-wrap="wrap"
           button disabled=(model.state == "ended") press=command(model.playing ? "pause" : "play", "") aria-label=(model.state == "ended" ? t("ui.finished") : model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" padding="9px 18px" border="1px solid var(--surface.line)" background-color="transparent" color="ink.primary"
             text (model.state == "ended" ? t("ui.finished") : model.playing ? t("ui.pause") : t("ui.play"))
-          button disabled=busy press=seek(max(0, model.position - 10)) aria-label=t("ui.back10Seconds") border="none" background-color="transparent" color="ink.primary" padding=6
+          button disabled=blocked press=command("seekBy", "-10") aria-label=t("ui.back10Seconds") border="none" background-color="transparent" color="ink.primary" padding=6
             text t("ui.rewindAmount", seconds=formatNumber(10, "decimal"))
-          button disabled=(busy or model.duration <= 0) press=seek(min(model.duration, model.position + 10)) aria-label=t("ui.forward10Seconds") border="none" background-color="transparent" color="ink.primary" padding=6
+          button disabled=(blocked or model.duration <= 0) press=command("seekBy", "10") aria-label=t("ui.forward10Seconds") border="none" background-color="transparent" color="ink.primary" padding=6
             text t("ui.forwardAmount", seconds=formatNumber(10, "decimal"))
           text t("ui.pathQuality", path=model.path, quality=model.quality) flex=1 font-size=12 testId="player-quality"
           if model.pip
@@ -75,33 +76,33 @@ component PlayerChrome
       column id="index-player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=16 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 340) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=24 gap=16 border="1px solid var(--surface.line)" background-color="surface.page" color="ink.primary"
         text t("ui.playbackSettings") font-size=24
         if model.audio.length > 1
-          select value=model.audioId change=audio aria-label=t("ui.audioTrack")
+          select disabled=blocked value=model.audioId change=audio aria-label=t("ui.audioTrack")
             for track in model.audio key=track.id
               option value=track.id
                 text track.label
         else
           text model.audioLabel font-size=13
         if model.subtitles.length > 0
-          select value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles"
+          select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles"
             option value=""
               text t("ui.off")
             for track in model.subtitles key=track.id
               option value=track.id
                 text track.label
         if model.qualities.length > 1
-          select value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select"
+          select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select"
             option value=""
               text t("ui.autoAdaptToYourConnection")
             for quality in model.qualities key=quality.id
               option value=quality.id
                 text quality.label
         if model.paths.length > 1
-          select disabled=busy value=model.pathId change=delivery aria-label=t("ui.playbackPath") testId="player-path"
+          select disabled=blocked value=model.pathId change=delivery aria-label=t("ui.playbackPath") testId="player-path"
             for path in model.paths key=path.id
               option value=path.id
                 text path.label
         if model.chapters.length > 0
-          select disabled=busy value="" change=chapter aria-label=t("ui.chapters")
+          select disabled=blocked value="" change=chapter aria-label=t("ui.chapters")
             option value=""
               text t("ui.chapters")
             for item in model.chapters key=item.id

@@ -1174,7 +1174,7 @@ class PlaybackEngine {
     return true;
   }
   pipAvailable() {
-    if (this.video.disablePictureInPicture)
+    if (this.video.disablePictureInPicture || this.video.readyState < 2 || this.video.videoWidth <= 0 || this.status === "ended")
       return false;
     return !!document.pictureInPictureEnabled && !!this.video.requestPictureInPicture || !!this.video.webkitSetPresentationMode && !!this.video.webkitSupportsPresentationMode?.("picture-in-picture");
   }
@@ -1235,6 +1235,13 @@ class PlaybackEngine {
             this.requestSwitch(source, this.video.currentTime);
           else
             await this.activate(source, this.video.currentTime);
+          break;
+        }
+        case "seekBy": {
+          if (!Number.isFinite(command.seconds))
+            throw new Error("Invalid relative seek");
+          const upper = Number.isFinite(this.video.duration) ? this.video.duration : Infinity;
+          await this.command({ id: command.id, type: "seek", seconds: Math.max(0, Math.min(upper, this.video.currentTime + command.seconds)) });
           break;
         }
         case "seek": {
@@ -1512,6 +1519,9 @@ function applyCommand(handle, props) {
       switch (command.type) {
         case "lowDelay":
           command = { ...base, type: "lowDelay", enabled: decoded === "true" };
+          break;
+        case "seekBy":
+          command = { ...base, type: "seekBy", seconds: Number(decoded) };
           break;
         case "seek":
           command = { ...base, type: "seek", seconds: Number(decoded) };

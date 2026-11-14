@@ -249,7 +249,7 @@ export class PlaybackEngine {
     return true;
   }
   private pipAvailable() {
-    if (this.video.disablePictureInPicture) return false;
+    if (this.video.disablePictureInPicture || this.video.readyState < 2 || this.video.videoWidth <= 0 || this.status === 'ended') return false;
     return !!document.pictureInPictureEnabled && !!this.video.requestPictureInPicture ||
       !!this.video.webkitSetPresentationMode && !!this.video.webkitSupportsPresentationMode?.('picture-in-picture');
   }
@@ -282,6 +282,11 @@ export class PlaybackEngine {
           if (this.session?.serverControlled) this.requestSwitch(source, this.video.currentTime);
           else await this.activate(source, this.video.currentTime);
           break;
+        }
+        case 'seekBy': {
+          if (!Number.isFinite(command.seconds)) throw new Error('Invalid relative seek');
+          const upper = Number.isFinite(this.video.duration) ? this.video.duration : Infinity;
+          await this.command({ id: command.id, type: 'seek', seconds: Math.max(0, Math.min(upper, this.video.currentTime + command.seconds)) }); break;
         }
         case 'seek': {
           if (!Number.isFinite(command.seconds) || command.seconds < 0 || Number.isFinite(this.video.duration) && command.seconds > this.video.duration) throw new Error('Seek outside media timeline');

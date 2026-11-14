@@ -43,7 +43,7 @@ members Client
   action watchControl(kind: string, value: string)
     if kind == "retry"
       watchAuthorized = none
-    if not pending(watchAuthorized) or (kind != "seek" and kind != "switchPath")
+    if not pending(watchAuthorized) or (kind != "seek" and kind != "seekBy" and kind != "switchPath")
       let next = watchCommandId + 1
       watchCommandId = next
       watchCommandJson = `{"id":${next},"type":"${kind}","value":"${encodeURIComponent(value)}"}`
@@ -58,9 +58,9 @@ members Client
         watchControl(watchModel.playing ? "pause" : "play", "")
       if k == "ArrowLeft" or k == "j" or k == "J"
         preventDefault()
-        watchSeek(max(0, watchModel.position - 10))
+        watchControl("seekBy", "-10")
       if k == "ArrowRight" or k == "l" or k == "L"
         preventDefault()
-        watchSeek(min(watchModel.duration, watchModel.position + 10))
+        watchControl("seekBy", "10")
       if (k == "f" or k == "F") and watchModel.fullscreen
         watchControl("fullscreen", "")
