@@ -5,7 +5,7 @@ import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
 import { loadGuide, liveIdentity } from './live/guide';
 import { artworkURL } from './discovery/artwork';
-import { liveStatus } from './live/player';
+import { liveStatus, stopPlan } from './live/player';
 import { InteractionQueue } from './telemetry';
 import { sessionEvents } from './protocol/events';
 import { mediaPlan } from './protocol/media';
@@ -84,6 +84,10 @@ async function session(store: Parameters<Sources['uiBootstrap']>[1]): Promise<Et
     store.set('vela.session', JSON.stringify(tokens));
   })().catch(e => { ready = undefined; throw e; });
   await ready;
+  // Auth can be revalidating or rotating the stored credentials while resources
+  // become active. All authenticated reads must use the settled session.
+  if (validation) await validation.pending;
+  if (!store.get('vela.session')) throw new Error('Sign in to your Vela server');
   return api;
 }
 let authOptions = { passwordAvailable: false, quickAvailable: false };
@@ -351,6 +355,7 @@ const sources: Sources = {
     return { accepted: true };
   },
   uiPlayer: ([planJson, eventJson, replyJson, localeJSON]) => withLocale(localeJSON, () => playerPresentation(planJson, eventJson, replyJson, localeJSON)),
+  liveStop: async ([planJson], store) => stopPlan(await session(store), planJson),
   uiPlayerCommand: async ([json], store) => {
     let sessionId = '';
     try {
