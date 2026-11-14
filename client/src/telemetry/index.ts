@@ -1,4 +1,4 @@
-import type { Interaction } from '../../../protocol/v0/types';
+import type { Interaction } from '../../wire/v0/types';
 import type { ServerAdapter } from '../adapter';
 
 /** Only enqueue events supplied by the UI. A failed batch remains queued for retry. */

@@ -1,4 +1,4 @@
-import type { ArtworkRef, Bootstrap, RowEntry, Title, TitleDetail } from '../../../protocol/v0/types';
+import type { ArtworkRef, Bootstrap, RowEntry, Title, TitleDetail } from '../../wire/v0/types';
 import { artworkURL } from './artwork';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number): string {

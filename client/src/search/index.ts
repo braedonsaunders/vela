@@ -1,4 +1,4 @@
-import type { AISearchJob, SearchRequest, SearchResponse } from '../../../protocol/v0/types';
+import type { AISearchJob, SearchRequest, SearchResponse } from '../../wire/v0/types';
 import type { ServerAdapter } from '../adapter';
 
 /** One coordinator per search surface. Callers provide unique mutation keys. */

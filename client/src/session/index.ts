@@ -1,4 +1,4 @@
-import type { Device, DevicePollRequest, GrantPoll, QuickPollRequest, SignInRequest, Tokens } from '../../../protocol/v0/types';
+import type { Device, DevicePollRequest, GrantPoll, QuickPollRequest, SignInRequest, Tokens } from '../../wire/v0/types';
 import type { ServerAdapter } from '../adapter';
 import type { Credentials } from '../adapter/ether';
 

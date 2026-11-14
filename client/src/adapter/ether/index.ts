@@ -1,4 +1,4 @@
-import type * as V from '../../../../protocol/v0/types';
+import type * as V from '../../../wire/v0/types';
 import type { ServerAdapter } from '../index';
 
 export class VelaError extends Error {

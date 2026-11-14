@@ -1,4 +1,4 @@
-import type * as V from '../../../protocol/v0/types';
+import type * as V from '../../wire/v0/types';
 
 /** Server-independent operations used by Vela's data layer. */
 export interface ServerAdapter {

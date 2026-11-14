@@ -23,5 +23,10 @@
   "env": [
     "API_BASE_URL",
     "VELA_MOCK"
-  ]
+  ],
+  "typescript": {
+    "sources": {
+      "wire": "../protocol"
+    }
+  }
 }

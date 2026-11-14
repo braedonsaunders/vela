@@ -1,4 +1,4 @@
-import type { ArtworkRef } from '../../../protocol/v0/types';
+import type { ArtworkRef } from '../../wire/v0/types';
 
 /** Select the smallest supplied image that covers the requested display size. */
 export function artworkURL(artwork: ArtworkRef, width: number, height: number): string | undefined {
