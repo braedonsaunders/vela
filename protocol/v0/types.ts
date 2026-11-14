@@ -98,6 +98,8 @@ export interface OriginalVideo { isInterlaced?: boolean; fieldOrder?: 'progressi
 export interface PlaybackPathBase { originalVideo?: OriginalVideo; original?: boolean; range?: boolean; byteLength?: number; id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
   mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
   timelineOriginSeconds?: number; initialRenditionId?: ID; audioRenditions?: AudioRendition[];
+  /** Target output dimensions and bits/second; no codec or readiness claim. */
+  quality?: { width: number; height: number; bitrate: number };
   qualities: Quality[]; boundaries: SwitchBoundary[] }
 export type PlaybackPath = PlaybackPathBase & ({ readiness: 'on-demand'; url?: never } | { readiness: 'ready' | 'preparing' | 'unavailable'; url: string });
 export interface Fallback { state: 'unsupported' | 'idle' | 'preparing' | 'ready' | 'unavailable' | 'capacity'; pathId?: ID; reason?: string }
