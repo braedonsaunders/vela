@@ -240,3 +240,18 @@ theme
   jellytwin.cat-film = #a43b76  scheme=fixed
   jellytwin.cat-kids = #d38b1c  scheme=fixed
   jellytwin.cat-other = #5b5b5b  scheme=fixed
+
+icons
+  icon.jelly-film = icon(svg "icons/jelly-film.svg")
+  icon.jelly-tv = icon(svg "icons/jelly-tv.svg")
+  icon.jelly-folder = icon(svg "icons/jelly-folder.svg")
+  icon.jelly-fullscreen = icon(svg "icons/jelly-fullscreen.svg")
+  icon.jelly-pip = icon(svg "icons/jelly-pip.svg")
+  icon.jelly-subtitles = icon(svg "icons/jelly-subtitles.svg")
+  icon.jelly-left = icon(svg "icons/jelly-left.svg")
+  icon.jelly-right = icon(svg "icons/jelly-right.svg")
+  icon.jelly-up = icon(svg "icons/jelly-up.svg")
+  icon.jelly-down = icon(svg "icons/jelly-down.svg")
+  icon.jelly-rewind = icon(svg "icons/jelly-rewind.svg")
+  icon.jelly-fastforward = icon(svg "icons/jelly-fastforward.svg")
+  icon.jelly-bolt = icon(svg "icons/jelly-bolt.svg")

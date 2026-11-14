@@ -33,111 +33,16 @@ keyframes jtRise
 fn fadeIn(still: bool): string = (still ? "none" : "jtFade 260ms ease-out both")
 fn riseIn(still: bool): string = (still ? "jtFade 200ms linear both" : "jtRise 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
 
-// Line icons drawn for this skin on a 24-unit grid; `currentcolor` follows the control.
+// Icons: the platform's roles where one matches, else the skin's own single-path
+// templates (assets/icons/jelly-*.svg, declared in app.tamber). One image node each.
+fn iconSrc(name: string): string = (name == "menu" ? "symbol:menu" : name == "search" ? "symbol:search" : name == "user" ? "symbol:person" : name == "back" ? "symbol:back" : name == "home" ? "symbol:home" : name == "movie" ? "symbol:icon.jelly-film" : name == "tv" ? "symbol:icon.jelly-tv" : name == "live" ? "symbol:radio" : name == "folder" ? "symbol:icon.jelly-folder" : name == "play" ? "symbol:play-fill" : name == "pause" ? "symbol:pause-fill" : name == "rewind" ? "symbol:icon.jelly-rewind" : name == "forward" ? "symbol:icon.jelly-fastforward" : name == "subtitles" ? "symbol:icon.jelly-subtitles" : name == "audio" ? "symbol:waveform" : name == "settings" ? "symbol:settings" : name == "fullscreen" ? "symbol:icon.jelly-fullscreen" : name == "pip" ? "symbol:icon.jelly-pip" : name == "volume" ? "symbol:speaker" : name == "muted" ? "symbol:speaker-mute" : name == "check" ? "symbol:checkmark" : name == "heart" ? "symbol:heart" : name == "heart-fill" ? "symbol:heart-fill" : name == "sort" ? "symbol:sort" : name == "filter" ? "symbol:filter" : name == "left" ? "symbol:icon.jelly-left" : name == "right" ? "symbol:icon.jelly-right" : name == "up" ? "symbol:icon.jelly-up" : name == "down" ? "symbol:icon.jelly-down" : name == "close" ? "symbol:close" : name == "info" ? "symbol:info" : name == "star" ? "symbol:star-fill" : name == "logout" ? "symbol:sign-out" : name == "palette" ? "symbol:sparkles" : name == "phone" ? "symbol:smartphone" : name == "alert" ? "symbol:alert" : name == "chapters" ? "symbol:list" : name == "lowdelay" ? "symbol:icon.jelly-bolt" : "symbol:circle")
+
 component Icon
   props
     name: string
     size: number
   view
-    svg width=size height=size viewBox="0 0 24 24" aria-hidden=true flex-shrink=0 fill="none" stroke="currentcolor" stroke-width=2 stroke-linecap="round" stroke-linejoin="round"
-      if name == "menu"
-        path d="M3.5 6.5h17M3.5 12h17M3.5 17.5h17"
-      if name == "search"
-        circle cx=10.5 cy=10.5 r=6.5
-        path d="M15.5 15.5 20.5 20.5"
-      if name == "user"
-        circle cx=12 cy=8.5 r=4
-        path d="M4.5 20.5c0-4.2 3.4-6.5 7.5-6.5s7.5 2.3 7.5 6.5"
-      if name == "back"
-        path d="M20 12H5M11 5.5 4.5 12l6.5 6.5"
-      if name == "home"
-        path d="M3.5 11 12 4l8.5 7M6 9v11h4.5v-5.5h3V20H18V9"
-      if name == "movie"
-        rect x=3.5 y=4.5 width=17 height=15 rx=2
-        path d="M7.5 4.5v15M16.5 4.5v15M3.5 9.5h4M3.5 14.5h4M16.5 9.5h4M16.5 14.5h4"
-      if name == "tv"
-        rect x=2.5 y=5 width=19 height=12.5 rx=2
-        path d="M8 21h8M12 17.5V21"
-      if name == "live"
-        circle cx=12 cy=12 r=1.8 fill="currentcolor"
-        path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.3 5.3a9.5 9.5 0 0 0 0 13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4"
-      if name == "folder"
-        path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4l2 2.5h8A1.5 1.5 0 0 1 20.5 9.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"
-      if name == "play"
-        path d="M8 5.5v13l10.5-6.5z" fill="currentcolor" stroke-width=1.5
-      if name == "pause"
-        path d="M7 5.5v13M17 5.5v13" stroke-width=3.6 stroke-linecap="butt"
-      if name == "rewind"
-        path d="M11.5 6.5v11L4 12zM20 6.5v11L12.5 12z" fill="currentcolor" stroke-width=1.4
-      if name == "forward"
-        path d="M12.5 6.5v11L20 12zM4 6.5v11l7.5-5.5z" fill="currentcolor" stroke-width=1.4
-      if name == "subtitles"
-        rect x=3 y=5 width=18 height=14 rx=2.5
-        path d="M6.5 12.5h4M13 12.5h4.5M6.5 15.5h7M16 15.5h1.5"
-      if name == "audio"
-        path d="M9 17V5.5l10-2V15"
-        circle cx=6.5 cy=17 r=2.5 fill="currentcolor"
-        circle cx=16.5 cy=15 r=2.5 fill="currentcolor"
-      if name == "settings"
-        circle cx=12 cy=12 r=3
-        circle cx=12 cy=12 r=7
-        path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"
-      if name == "fullscreen"
-        path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"
-      if name == "pip"
-        rect x=2.5 y=4.5 width=19 height=15 rx=2
-        rect x=12 y=11.5 width=7 height=5.5 rx=1 fill="currentcolor" stroke-width=1
-      if name == "volume"
-        path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentcolor" stroke-width=1.5
-        path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"
-      if name == "muted"
-        path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentcolor" stroke-width=1.5
-        path d="M16 9.5l5 5M21 9.5l-5 5"
-      if name == "check"
-        path d="M5 12.5 9.5 17 19 7.5" stroke-width=2.6
-      if name == "heart"
-        path d="M12 19.5s-7.5-4.4-7.5-9.7A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5c0 5.3-7.5 9.7-7.5 9.7z"
-      if name == "heart-fill"
-        path d="M12 19.5s-7.5-4.4-7.5-9.7A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5c0 5.3-7.5 9.7-7.5 9.7z" fill="currentcolor"
-      if name == "sort"
-        path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5"
-      if name == "filter"
-        path d="M3.5 5h17l-6.5 8v6l-4 1.5V13z"
-      if name == "left"
-        path d="M15 5 8 12l7 7"
-      if name == "right"
-        path d="M9 5l7 7-7 7"
-      if name == "up"
-        path d="M5 15l7-7 7 7"
-      if name == "down"
-        path d="M5 9l7 7 7-7"
-      if name == "close"
-        path d="M6 6l12 12M18 6 6 18"
-      if name == "info"
-        circle cx=12 cy=12 r=9
-        path d="M12 11v6M12 7.6v.2"
-      if name == "star"
-        path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z" fill="currentcolor" stroke-width=1.2
-      if name == "guide"
-        rect x=3 y=4.5 width=18 height=15 rx=2
-        path d="M3 9.5h18M9 9.5v10M3 14.5h18"
-      if name == "logout"
-        path d="M14.5 4H18a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 18 20h-3.5M10 8l-4 4 4 4M6 12h10"
-      if name == "palette"
-        path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.2 0 1.8-.8 1.5-1.8-.4-1.2.4-2.2 1.6-2.2H17a3.5 3.5 0 0 0 3.5-3.5c0-5-3.8-9.5-8.5-9.5z"
-        circle cx=7.8 cy=11.5 r=1.1 fill="currentcolor" stroke="none"
-        circle cx=10.5 cy=7.6 r=1.1 fill="currentcolor" stroke="none"
-        circle cx=15 cy=8 r=1.1 fill="currentcolor" stroke="none"
-      if name == "phone"
-        rect x=6.5 y=2.5 width=11 height=19 rx=2.5
-        path d="M10.5 18.5h3"
-      if name == "alert"
-        path d="M12 3.5 21.5 20h-19z"
-        path d="M12 10v4.5M12 17.2v.2"
-      if name == "chapters"
-        path d="M4 6h16M4 12h10M4 18h13"
-      if name == "lowdelay"
-        path d="M13 3 5 13.5h6L10 21l8-10.5h-6z" fill="currentcolor" stroke-width=1.2
+    image iconSrc(name) width=size height=size flex-shrink=0 aria-hidden=true
 
 // The Vela mark (the four-pointed sail) and wordmark, painted in the skin's gradient.
 component Wordmark
