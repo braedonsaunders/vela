@@ -16,10 +16,8 @@ const pill = (primary: boolean): Style => ({
   'font-weight': primary ? '650' : '600', transition: 'background-color 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)',
 } as Style);
 
-const wordmark = (size: number): Node => ({ type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: `${size * 0.18}px` }, children: [
-  { type: 'image', src: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/star.svg', alt: '', style: { width: `${size * 0.42}px`, height: `${size * 0.42}px`, animation: 'none' } },
-  { type: 'text', text: '{s:vela}', style: { 'font-family': 'cinematic.display', 'font-style': 'italic', 'font-size': `${size}px`, 'letter-spacing': '-0.02em', 'line-height': '1', color: 'ink.primary' } },
-] });
+// The brand lockup (client/assets/brand, two-tone), one image node.
+const wordmark = (size: number): Node => ({ type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: `${Math.round(size * 2.629)}px`, height: `${size}px` } });
 
 const navItem: Node = { type: 'box', group: true, press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}',
   style: { position: 'relative', display: 'flex', 'align-items': 'center', height: '40px', padding: '0px 14px', 'border-radius': '999px', color: 'ink.secondary', 'font-weight': '550', 'font-size': '15px', 'white-space': 'nowrap' },
@@ -150,8 +148,8 @@ const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '
         { type: 'box', when: [{ test: 'card.played' }], style: { position: 'absolute', top: '8px', right: '8px', width: '24px', height: '24px', 'border-radius': '12px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': 'cinematic.glass', 'backdrop-filter': 'blur(12px)' }, children: [
           { type: 'icon', symbol: 'checkmark', style: { width: '12px', height: '12px', color: 'ink.primary' } },
         ] },
-        { type: 'box', when: [{ test: 'card.hasProgress' }], style: { position: 'absolute', left: '0px', right: '0px', bottom: '0px', height: '36px', 'background-image': 'linear-gradient(0deg, var(--cinematic.scrim-strong) 0%, var(--cinematic.scrim-clear) 100%)' } },
-        { type: 'box', when: [{ test: 'card.hasProgress' }], style: { position: 'absolute', left: '10px', right: '10px', bottom: '10px', height: '3px', 'border-radius': '2px', 'background-color': 'cinematic.track-strong', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
+        { type: 'box', when: [{ test: 'card.hasProgress' }, { test: 'card.played', not: true }], style: { position: 'absolute', left: '0px', right: '0px', bottom: '0px', height: '36px', 'background-image': 'linear-gradient(0deg, var(--cinematic.scrim-strong) 0%, var(--cinematic.scrim-clear) 100%)' } },
+        { type: 'box', when: [{ test: 'card.hasProgress' }, { test: 'card.played', not: true }], style: { position: 'absolute', left: '10px', right: '10px', bottom: '10px', height: '3px', 'border-radius': '2px', 'background-color': 'cinematic.track-strong', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
           { type: 'box', style: { height: '3px', width: '{card.progressPct}%', 'background-color': 'brand.warm' } },
         ] },
       ] },
@@ -183,7 +181,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 export const cinematicDoc: SkinDocument = {
   schema: 1, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg', swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
-  strings: { en: { vela: 'vela', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles' } },
+  strings: { en: { velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles' } },
   motion: {
     ...enterPresets,
     navIn: { keyframes: 'dissolve', duration: 900, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 240 } },
