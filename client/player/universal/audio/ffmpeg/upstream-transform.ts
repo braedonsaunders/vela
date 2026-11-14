@@ -32,7 +32,7 @@ export function transformUpstreamAudio(path: string, source: string): string | n
     const before = source.slice(0, at), body = source.slice(at);
     return before + replaceOnce(body,
       "    if (isCustomMediabunnyPCMAudioCodec(codec) || isMediabunnyPCMDecoderCodec(codec)) {",
-      `    if (${JSON.stringify(codecs.map(([codec]) => codec))}.includes(codec)) {\n` +
+      `    if (${JSON.stringify(codecs.map(([codec]) => codec.replaceAll('_', '-')))}.includes(codec)) {\n` +
       '        return [1, 2, 3, 5, 6, 7, 8].includes(channelCount);\n    }\n\n' +
       '    if (isCustomMediabunnyPCMAudioCodec(codec) || isMediabunnyPCMDecoderCodec(codec)) {');
   }

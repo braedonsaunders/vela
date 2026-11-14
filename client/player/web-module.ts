@@ -9,7 +9,7 @@ import type { PlaybackPlan } from '../../protocol/v0/types';
 import { observation, sessionFromPlan } from './protocol';
 export const abi = 1;
 export const roster = { 'vela-player': { snapshot: false }, 'vela-context': { snapshot: false }, 'vela-preview': { snapshot: false }, 'vela-install': { snapshot: false }, 'vela-theme': { snapshot: false }, 'vela-engine': { snapshot: false } };
-interface ContextHandle { context: true; disposed: boolean }
+interface ContextHandle { context: true; disposed: boolean; lastNavigation: string; event: (kind: number, payload: string) => void }
 interface Handle {
   engine: PlaybackEngine; video: HTMLVideoElement; sessionJson: string; lastCommand: number;
   endedReport: string; serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
@@ -20,9 +20,10 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   if (tag === 'vela-install') return createInstall(element, json, event);
   if (tag === 'vela-preview') return createPreview(element, json, event);
   if (tag === 'vela-context') {
-    const handle: ContextHandle = { context: true, disposed: false };
+    const handle: ContextHandle = { context: true, disposed: false, lastNavigation: '', event };
     const props = JSON.parse(json) as Record<string, string>;
     queueMicrotask(() => { if (!handle.disposed) event(8, props.probe === 'media' ? JSON.stringify(mediaCapabilities()) : props.probe === 'network' ? JSON.stringify({ saveData: (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true }) : location.origin); });
+    navigateSecurely(handle, props);
     return handle;
   }
   if (tag !== 'vela-player') throw new Error(`Unknown player view: ${tag}`);
@@ -46,11 +47,11 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   return handle;
 }
 export function setProps(handle: Handle | ContextHandle | PreviewHandle | InstallHandle | ThemeHandle | EngineHandle, json: string) {
-  if ('engine' in handle) { setEngine(handle, json); return; }
+  if ('leaving' in handle) { setEngine(handle, json); return; }
   if ('theme' in handle) { setTheme(handle, json); return; }
   if ('install' in handle) { handle.update(json); return; }
   if ('preview' in handle) { setPreview(handle, json); return; }
-  if ('context' in handle) return;
+  if ('context' in handle) { navigateSecurely(handle, JSON.parse(json) as Record<string, string>); return; }
   const props = JSON.parse(json) as Record<string, string>;
   if (props.serverError !== handle.serverError) { handle.serverError = props.serverError ?? ''; if (handle.serverError) handle.engine.rejectCommand(handle.serverError); }
   const input = props.plan || props.session || '';
@@ -92,4 +93,22 @@ function applyCommand(handle: Handle, props: Record<string, string>) {
     if (command.id > handle.lastCommand) { handle.lastCommand = command.id; void handle.engine.command(command); }
   }
 }
-export function destroy(handle: Handle | ContextHandle | PreviewHandle | InstallHandle | ThemeHandle | EngineHandle) { if ('engine' in handle) { destroyEngine(handle); return; } if ('theme' in handle) { destroyTheme(handle); return; } if ('install' in handle) { handle.dispose(); return; } if ('preview' in handle) { destroyPreview(handle); return; } if ('context' in handle) { handle.disposed = true; return; } handle.engine.dispose(); handle.video.remove(); }
+export function destroy(handle: Handle | ContextHandle | PreviewHandle | InstallHandle | ThemeHandle | EngineHandle) { if ('leaving' in handle) { destroyEngine(handle); return; } if ('theme' in handle) { destroyTheme(handle); return; } if ('install' in handle) { handle.dispose(); return; } if ('preview' in handle) { destroyPreview(handle); return; } if ('context' in handle) { handle.disposed = true; return; } handle.engine.dispose(); handle.video.remove(); }
+
+/** The data realm issues the one-time code and validates the server identity;
+ * the host enforces the advertised HTTPS destination and never logs the code. */
+function navigateSecurely(handle: ContextHandle, props: Record<string, string>) {
+  const target = props.secureNavigate;
+  if (!target || handle.disposed || target === handle.lastNavigation) return;
+  try {
+    if (target.length > 8192) throw new Error('Invalid secure handoff');
+    const url = new URL(target);
+    const allowed = JSON.parse(props.secureOrigins || '[]') as unknown;
+    if (url.protocol !== 'https:' || url.username || url.password || !['/vela', '/vela/'].includes(url.pathname)
+      || !Array.isArray(allowed) || !allowed.some(origin => typeof origin === 'string' && origin === url.origin)) throw new Error('Invalid secure handoff');
+    handle.lastNavigation = target;
+    queueMicrotask(() => { if (!handle.disposed) location.replace(url.href); });
+  } catch {
+    handle.event(8, JSON.stringify({ secureNavigation: 'rejected' }));
+  }
+}
