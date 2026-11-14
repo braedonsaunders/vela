@@ -35,6 +35,15 @@ members Client
   state mediaCapabilitiesJSON = ""
   action receiveCapabilities(json: string)
     mediaCapabilitiesJSON = json
+  // The new player (beta) is a per-device preference the host persists. betaIntent is
+  // only a request to the host ("" asks for nothing); betaEnabled is what it reports.
+  state betaIntent = ""
+  state betaEnabled = false
+  action receiveBeta(value: string)
+    betaEnabled = value == "true"
+    betaIntent = ""
+  action toggleBeta
+    betaIntent = (betaEnabled ? "false" : "true")
   action receiveOrigin(origin: string)
     pageOrigin = origin
   derive localeJSON = `{"locale":"${time.locale}","formatLocale":"${time.formatLocale}","resolvedLocale":"${time.resolvedLocale}","timeZone":"${time.timeZone}","utcOffset":${time.utcOffset}}`
@@ -311,6 +320,11 @@ members Client
   resource results = uiSearch(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" as shape SearchModel transient
   resource descriptive = uiDescriptive(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel transient
   resource ai = uiAI(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel transient
+  // Each optional search lane's honest state for this query: "off" when the server does
+  // not advertise it, "loading" until its answer for this exact query arrives, then
+  // "failed" or "ready" (the lane's items may still be empty).
+  derive descriptiveState = (not home.descriptiveAvailable ? "off" : failed(descriptive) and not pending(descriptive) ? "failed" : pending(descriptive) or not current(descriptive) or descriptive.query != query or descriptive.generation != generation ? "loading" : "ready")
+  derive aiState = (not home.aiAvailable ? "off" : failed(ai) and not pending(ai) ? "failed" : pending(ai) or not current(ai) or ai.query != query or ai.generation != generation ? "loading" : "ready")
   resource libraries = uiLibraries() when auth.authenticated as shape LibraryNav[] else empty()
   // Home and the server's libraries are one surface: the active library and its
   // browse query live on the root home visit, so opening a title over a library
