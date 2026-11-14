@@ -1,41 +1,4 @@
-// player/beta.ts
-var key = "vela.player.beta";
-var changed = "vela:player-beta";
-var volatile = null;
-function betaPlayerEnabled() {
-  if (volatile !== null)
-    return volatile;
-  try {
-    return localStorage.getItem(key) === "true";
-  } catch {
-    return false;
-  }
-}
-function setBetaPlayer(enabled) {
-  const previous = betaPlayerEnabled();
-  volatile = enabled;
-  try {
-    localStorage.setItem(key, String(enabled));
-  } catch {}
-  if (previous !== enabled)
-    window.dispatchEvent(new Event(changed));
-}
-function subscribeBetaPlayer(listener) {
-  const storage = (event) => {
-    if (event.key === key || event.key === null) {
-      volatile = null;
-      listener();
-    }
-  };
-  window.addEventListener(changed, listener);
-  window.addEventListener("storage", storage);
-  return () => {
-    window.removeEventListener(changed, listener);
-    window.removeEventListener("storage", storage);
-  };
-}
-
-// player/universal/loader.ts
+// client/player/universal/loader.ts
 function assetLocation() {
   const descriptor = window.velaUniversalAssets;
   if (descriptor === undefined)
@@ -104,8 +67,11 @@ async function originalPlaybackCapabilities(signal) {
   return declaration;
 }
 
-// player/media-capabilities.ts
+// client/player/media-capabilities.ts
 async function mediaCapabilities(signal) {
+  try {
+    localStorage.removeItem("vela.player.beta");
+  } catch {}
   const video = document.createElement("video");
   const supports = (mime) => video.canPlayType(mime) !== "";
   const MS = globalThis.ManagedMediaSource ?? globalThis.MediaSource;
@@ -116,7 +82,7 @@ async function mediaCapabilities(signal) {
     ["av1", 'video/mp4; codecs="av01.0.05M.08"']
   ];
   const audioFormats = [["aac", 'audio/mp4; codecs="mp4a.40.2"'], ["opus", 'audio/webm; codecs="opus"'], ["ac3", 'audio/mp4; codecs="ac-3"'], ["eac3", 'audio/mp4; codecs="ec-3"']];
-  const originalPlayback = betaPlayerEnabled() ? await originalPlaybackCapabilities(signal).catch(() => null) : null;
+  const originalPlayback = await originalPlaybackCapabilities(signal).catch(() => null);
   return {
     ...originalPlayback ? { originalPlayback } : {},
     containers: [supports("video/mp4") ? "mp4" : "", supports("video/webm") ? "webm" : ""].filter(Boolean),
@@ -128,7 +94,7 @@ async function mediaCapabilities(signal) {
   };
 }
 
-// player/install.ts
+// client/player/install.ts
 function createInstall(element, json, event) {
   let runtime = window.velaPwa;
   const button = document.createElement("button");
@@ -183,7 +149,7 @@ function createInstall(element, json, event) {
   } };
 }
 
-// player/preview.ts
+// client/player/preview.ts
 function apply(handle) {
   const video = handle.video;
   if (handle.expiryTimer)
@@ -274,7 +240,7 @@ function destroyPreview(handle) {
   handle.video.remove();
 }
 
-// player/theme.ts
+// client/player/theme.ts
 var ENGINES = {
   cinematic: {
     roles: {
@@ -423,7 +389,7 @@ function destroyTheme(handle) {
   handle.sheet.remove();
 }
 
-// player/engine-handoff.ts
+// client/player/engine-handoff.ts
 var CHOSEN = "vela.engine";
 var DEFAULT = "vela.engine.default";
 var HANDOFF = "vela.handoff";
@@ -546,19 +512,19 @@ function destroyEngine(handle) {
     handle.overlay?.remove();
 }
 
-// player/universal/retry.ts
+// client/player/universal/retry.ts
 function decoderRetry(reason) {
   if (!reason.startsWith("Original decode: decode-failed"))
     return null;
   return { audio: true, video: true };
 }
 
-// player/model.ts
+// client/player/model.ts
 function codecKnown(rendition) {
   return rendition.codecStatus !== "pending" && /codecs="[^"]+"/.test(rendition.mime);
 }
 
-// player/session.ts
+// client/player/session.ts
 class SessionController {
   sessionId = "";
   source = 0;
@@ -620,7 +586,7 @@ function delay(ms, signal) {
   });
 }
 
-// player/hls.ts
+// client/player/hls.ts
 function parsePlaylist(text, base) {
   if (!text.trimStart().startsWith("#EXTM3U"))
     throw new Error("Invalid HLS playlist");
@@ -659,7 +625,7 @@ function parsePlaylist(text, base) {
   return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
 }
 
-// player/buffer.ts
+// client/player/buffer.ts
 class PlaybackFault extends Error {
   kind;
   retryable;
@@ -714,7 +680,7 @@ async function appendBuffer(buffer, bytes, video, signal) {
   }
 }
 
-// player/audio.ts
+// client/player/audio.ts
 class AudioBuffer {
   media;
   video;
@@ -875,7 +841,7 @@ class AudioBuffer {
       await mutation(this.buffer, signal, () => this.buffer.remove(0, before));
   }
 }
-// player/abr.ts
+// client/player/abr.ts
 class BandwidthEstimator {
   fast = 0;
   slow = 0;
@@ -947,7 +913,7 @@ class AdaptiveBitrate {
   }
 }
 
-// player/pipeline.ts
+// client/player/pipeline.ts
 function mediaSourceClass() {
   return globalThis.ManagedMediaSource ?? globalThis.MediaSource;
 }
@@ -1373,7 +1339,7 @@ class SegmentPipeline {
   }
 }
 
-// player/native-hls.ts
+// client/player/native-hls.ts
 async function nativeMediaPlaylist(url, signal, depth = 0) {
   if (depth > 1)
     throw new Error("Nested HLS masters are unsupported");
@@ -1400,7 +1366,7 @@ async function nativeMediaPlaylist(url, signal, depth = 0) {
   return nativeMediaPlaylist(variant.href, signal, depth + 1);
 }
 
-// src/protocol/id.ts
+// client/src/protocol/id.ts
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = bytes[6] & 15 | 64;
@@ -1408,7 +1374,7 @@ function randomId() {
   return Array.from(bytes, (b, i) => `${i === 4 || i === 6 || i === 8 || i === 10 ? "-" : ""}${b.toString(16).padStart(2, "0")}`).join("");
 }
 
-// player/engine.ts
+// client/player/engine.ts
 class PlaybackEngine {
   video;
   deliver;
@@ -2375,7 +2341,7 @@ class PlaybackEngine {
   }
 }
 
-// player/protocol.ts
+// client/player/protocol.ts
 function sessionFromPlan(plan) {
   const selected = plan.paths.find((p) => p.id === plan.selectedPathId);
   if (!selected)
@@ -2452,7 +2418,7 @@ function observation(snapshot, sequence) {
   };
 }
 
-// player/web-module.ts
+// client/player/web-module.ts
 var abi = 1;
 var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false }, "vela-theme": { snapshot: false }, "vela-engine": { snapshot: false } };
 function create(tag, element, json, event) {
@@ -2465,14 +2431,10 @@ function create(tag, element, json, event) {
   if (tag === "vela-preview")
     return createPreview(element, json, event);
   if (tag === "vela-context") {
-    const handle = { context: true, disposed: false, lastNavigation: "", probe: "", betaInput: "", revision: 0, abort: new AbortController, cleanup: () => {}, event };
+    const handle = { context: true, disposed: false, lastNavigation: "", probe: "", revision: 0, abort: new AbortController, event };
     const props = JSON.parse(json);
     handle.probe = props.probe ?? "";
-    if (handle.probe === "media" || handle.probe === "beta")
-      handle.cleanup = subscribeBetaPlayer(() => {
-        publishContext(handle);
-      });
-    updateContext(handle, props);
+    navigateSecurely(handle, props);
     queueMicrotask(() => {
       publishContext(handle);
     });
@@ -2486,8 +2448,10 @@ function create(tag, element, json, event) {
   video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000";
   const surface = document.createElement("div");
   surface.style.cssText = "position:relative;width:100%;height:100%";
+  const style = document.createElement("style");
+  style.textContent = ".webgpuPlayerCanvas{position:absolute;display:block;z-index:1;opacity:0;pointer-events:none}.webgpuPlayerCanvas-visible{opacity:1}";
   surface.append(video);
-  root.replaceChildren(surface);
+  root.replaceChildren(style, surface);
   const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0, serverError: "", endedReport: "", reportedFailure: "" };
   handle.engine = new PlaybackEngine(video, (value) => {
     event(8, JSON.stringify(value));
@@ -2535,7 +2499,7 @@ function setProps(handle, json) {
     return;
   }
   if ("context" in handle) {
-    updateContext(handle, JSON.parse(json));
+    navigateSecurely(handle, JSON.parse(json));
     return;
   }
   const props = JSON.parse(json);
@@ -2634,7 +2598,6 @@ function destroy(handle) {
   if ("context" in handle) {
     handle.disposed = true;
     handle.abort.abort();
-    handle.cleanup();
     return;
   }
   handle.engine.dispose();
@@ -2660,19 +2623,10 @@ function navigateSecurely(handle, props) {
     handle.event(8, JSON.stringify({ secureNavigation: "rejected" }));
   }
 }
-function updateContext(handle, props) {
-  if (props.betaPlayer === "")
-    handle.betaInput = "";
-  if (handle.probe === "beta" && (props.betaPlayer === "true" || props.betaPlayer === "false") && props.betaPlayer !== handle.betaInput) {
-    handle.betaInput = props.betaPlayer;
-    setBetaPlayer(props.betaPlayer === "true");
-  }
-  navigateSecurely(handle, props);
-}
 async function publishContext(handle) {
   const revision = ++handle.revision;
   try {
-    const payload = handle.probe === "media" ? JSON.stringify(await mediaCapabilities(handle.abort.signal)) : handle.probe === "beta" ? String(betaPlayerEnabled()) : handle.probe === "network" ? JSON.stringify({ saveData: navigator.connection?.saveData === true }) : location.origin;
+    const payload = handle.probe === "media" ? JSON.stringify(await mediaCapabilities(handle.abort.signal)) : handle.probe === "network" ? JSON.stringify({ saveData: navigator.connection?.saveData === true }) : location.origin;
     if (!handle.disposed && revision === handle.revision)
       handle.event(8, payload);
   } catch {}

@@ -186,33 +186,34 @@ version caches and claims clients. The artifact remains one archive and manifest
 Ether performs the same atomic installation and rollback as before.
 
 
-## Explicit Universal beta payload (gated)
+## Required player payload
 
-Normal builds do not assemble or fetch Universal assets. After the owner’s beta
-proof and UI/data gate, the packager may accept
+Vela has one player: the Universal engine. Every production release requires
 `bun tools/release/build.ts --committed --universal-assets=<prepared-payload-dir>`.
-The directory is the diagnostic payload root with `DIAGNOSTIC-MANIFEST.json`,
-`index.js` and `universal/`. Every listed file, byte size and digest is verified;
-extra files, links and unsafe paths fail closed. The runtime’s reviewed upstream
-revision, asset key and aggregate library/runtime hash must match. The supplied
-native diagnostic host is validated but never replaces the production host,
-which always comes from committed Vela source.
+There is no player toggle or persisted player choice. Secure capable devices
+advertise originalPlayback after the host capability probe. Native/MSE backends
+are internal automatic fallbacks; Ether HLS is the last resort.
 
-The complete runtime, workers, codec packages, notices and corresponding sources
-are copied once to `/vela/universal/<assetKey>/`. Their individual digests remain
-in the release file inventory, and the release manifest records upstream revision
-and payload-manifest SHA-256. `engines.json` includes optional
-`universalAssets: {baseURL,assetKey}`. Before engine import the tiny loader validates
-that descriptor and publishes `window.velaUniversalAssets`; it does not fetch the
-runtime. The native host separately validates origin, exact key-addressed path and
-runtime manifest identity before use. No descriptor is published when the option
-is absent. Direct engine-build invocations cannot silently accept this option.
+The directory contains `DIAGNOSTIC-MANIFEST.json`, `index.js` and `universal/`.
+Every listed file, byte size and digest is verified; extra files, links and unsafe
+paths fail closed. The reviewed upstream revision, asset key and aggregate
+library/runtime hash must match. The diagnostic host is validated but never
+replaces the production host, which comes from committed Vela source.
 
-The worker caches these immutable URLs only when requested (including the exact
-`?v=<assetKey>` alias). Neither runtime packages nor other engines are prefetched
-while beta is off. The descriptor does not by itself enable or qualify codecs,
-HDR, Dolby Vision or Universal playback; those remain native admission and release
-gates. No artifact build or installation is implied by adding this pipeline.
+Runtime, workers, codec packages, notices and corresponding sources are copied
+once to `/vela/universal/<assetKey>/`. Their digests remain in the release
+inventory; the manifest records upstream revision and payload-manifest SHA-256.
+`engines.json` always supplies `universalAssets: {baseURL,assetKey}`. Before engine
+import the entry validates and publishes `window.velaUniversalAssets`; a missing
+or invalid descriptor fails closed. The native host also validates origin, the
+exact key-addressed path and runtime identity. Direct engine-build invocations
+cannot produce a standalone production release without this shared payload.
+
+The service worker caches immutable URLs only on request, including exact
+`?v=<assetKey>` aliases. Unused codec packages and layout engines are not eagerly
+prefetched. Installed codec families still undergo per-stream admission; payload
+presence is not a promise of HDR, Dolby Vision or every format's support. Release
+qualification and stream clearance remain separate from payload preparation.
 
 Release output and temporary engine builds now live under `.artifacts/release/`
 in the current internal checkout. This directory is ignored. Worktrees and build

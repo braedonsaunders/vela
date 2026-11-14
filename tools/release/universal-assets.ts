@@ -1,4 +1,4 @@
-/** Explicit prebuilt input only: never runs a compiler, fetches packages or enables beta. */
+/** Verified prebuilt player input: never runs a compiler or fetches packages. */
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { copyFile, lstat, mkdir, readFile, readdir } from 'node:fs/promises';
