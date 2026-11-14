@@ -111,3 +111,30 @@ retains seek generation, and does not claim a seamless transition.
 
 Exact reserves `command` as a host attribute. The native view prop is
 `playerCommand`; the JSON payload retains its `type` field.
+
+## Manual evidence (2026-11-13)
+
+Engine strict browser TypeScript compilation passed. The one Exact Contract build
+reported concurrently edited UI errors (forwarded to the UI owner); it did not
+report engine errors. No Exact maintainer checks or test suites were run.
+
+A temporary Chrome page loaded the shipping web-module artifact and drove its
+actual HTMLVideoElement. Direct MP4 reached 3.2859 seconds / 84 decoded frames,
+zero dropped frames, and no engine errors. A clear fMP4 fixture generated from
+Exact's 10-second motion clip exercised MSE (50 seconds, 2-second segments).
+MSE reached 3.7018 seconds / 94 frames with accepted buffer through 34 seconds.
+Persistent HTTP 502s on the primary caused bounded retries and a visible switch
+to the compatible fallback. The corrected resume path retained a 35-second target,
+then played through 38.0751 seconds / 79 decoded frames with zero dropped frames
+and no engine errors. Throughput stayed null because tiny local transfers are
+intentionally excluded from estimation. This was an engine drive, not an
+end-to-end authenticated app drive; the mock media generator was not ready.
+Temporary browsers, server, fixture and driver were removed after the drive.
+
+The drive found and fixed relative playlist URL resolution, superseded play
+promise reporting, teardown of an uninitialized MediaSource, and resume-position
+retention when a request fails before the seek target is buffered. Chrome now
+advertises native HLS: selection explicitly prefers the MSE ladder there,
+while Apple browsers retain the native HLS preference. This evidence does not
+qualify Safari/ManagedMediaSource, Firefox, Android, audio switching, subtitles,
+PiP/fullscreen, multi-rendition ABR or live playback on real devices.

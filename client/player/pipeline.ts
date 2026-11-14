@@ -38,7 +38,6 @@ export class SegmentPipeline {
   constructor(private video: HTMLVideoElement, private onRendition: (r: Rendition) => void) {}
   dispose() {
     if (this.buffer?.updating) { try { this.buffer.abort(); } catch {} }
-    if (this.media?.readyState === 'open') { try { this.media.endOfStream(); } catch {} }
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     this.buffer = undefined; this.media = undefined; this.objectUrl = undefined;
   }
@@ -81,7 +80,7 @@ export class SegmentPipeline {
     }
   }
   private async playlist(r: Rendition, signal: AbortSignal): Promise<Playlist> {
-    return parsePlaylist(new TextDecoder().decode(await this.bytes(r.url, signal)), r.url);
+    return parsePlaylist(new TextDecoder().decode(await this.bytes(r.url, signal)), new URL(r.url, document.baseURI).href);
   }
   private async append(bytes: ArrayBuffer, signal: AbortSignal) {
     const buffer = this.buffer!;

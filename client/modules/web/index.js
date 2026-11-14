@@ -230,11 +230,6 @@ class SegmentPipeline {
         this.buffer.abort();
       } catch {}
     }
-    if (this.media?.readyState === "open") {
-      try {
-        this.media.endOfStream();
-      } catch {}
-    }
     if (this.objectUrl)
       URL.revokeObjectURL(this.objectUrl);
     this.buffer = undefined;
@@ -296,7 +291,7 @@ class SegmentPipeline {
     }
   }
   async playlist(r, signal) {
-    return parsePlaylist(new TextDecoder().decode(await this.bytes(r.url, signal)), r.url);
+    return parsePlaylist(new TextDecoder().decode(await this.bytes(r.url, signal)), new URL(r.url, document.baseURI).href);
   }
   async append(bytes, signal) {
     const buffer = this.buffer;
@@ -489,6 +484,7 @@ class PlaybackEngine {
   attempted = new Set;
   recovering = false;
   disposed = false;
+  resumePosition = 0;
   wantsPlay = false;
   lowDelay = false;
   manualQuality = null;
@@ -519,7 +515,7 @@ class PlaybackEngine {
       },
       error: () => {
         const e = video.error;
-        if (!e || !this.session || this.disposed)
+        if (!e || !this.session || this.disposed || this.status === "failed")
           return;
         const kind = e.code === 2 ? "network" : e.code === 3 ? "decoder" : "source";
         this.recover(new PlaybackFault(e.message || `Media error ${e.code}`, kind), this.controller.token());
@@ -572,6 +568,11 @@ class PlaybackEngine {
       return !!this.video.canPlayType(source.mime);
     return !!this.video.canPlayType("application/vnd.apple.mpegurl") || !!source.renditions?.some((r) => mediaSourceClass()?.isTypeSupported(r.mime));
   }
+  useNativeHls(source) {
+    const native = !!this.video.canPlayType("application/vnd.apple.mpegurl");
+    const segmented = !!source.renditions?.some((r) => mediaSourceClass()?.isTypeSupported(r.mime));
+    return native && (!segmented || navigator.vendor === "Apple Computer, Inc.");
+  }
   candidates() {
     const priority = { direct: 0, remux: 1, transcode: 2 };
     return (this.session?.sources ?? []).filter((s) => this.supported(s)).sort((a, b) => priority[a.strategy] - priority[b.strategy]);
@@ -622,6 +623,7 @@ class PlaybackEngine {
     this.video.playbackRate = 1;
   }
   async activate(source, position, recovery = false, initial = false) {
+    this.resumePosition = position;
     const token = this.controller.changeSource(!initial);
     this.resetMedia();
     this.source = source;
@@ -630,7 +632,7 @@ class PlaybackEngine {
     this.failure = null;
     this.publish();
     try {
-      if (source.delivery === "hls" && !this.video.canPlayType("application/vnd.apple.mpegurl")) {
+      if (source.delivery === "hls" && !this.useNativeHls(source)) {
         this.backend = "mse";
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
         pipeline.lowDelay = this.lowDelay;
@@ -708,7 +710,7 @@ class PlaybackEngine {
       return;
     this.recovering = true;
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError" ? "network" : "source";
-    const position = this.video.currentTime || this.session?.position || 0;
+    const position = this.video.currentTime || this.resumePosition;
     this.status = "recovering";
     this.failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
     this.publish();
@@ -729,9 +731,12 @@ class PlaybackEngine {
     }
   }
   async play() {
+    const token = this.controller.token();
     try {
       await this.video.play();
     } catch (e) {
+      if (!this.controller.current(token))
+        return;
       this.emit({ type: "error", failure: { kind: "action", message: e instanceof Error ? e.message : String(e), recoverable: true } });
     }
   }

@@ -12,6 +12,7 @@ export class PlaybackEngine {
   private failure: Failure | null = null; private audio: string | null = null; private subtitle: string | null = null;
   private timer: ReturnType<typeof setInterval>; private listeners: (() => void)[] = [];
   private attempted = new Set<string>(); private recovering = false; private disposed = false;
+  private resumePosition = 0;
   private wantsPlay = false; private lowDelay = false; private manualQuality: string | null = null;
   private track?: HTMLTrackElement; private lastObservation = 0;
   constructor(readonly video: ExtendedVideo, private emit: (event: EngineEvent) => void, private fullscreenContainer: HTMLElement = video) {
@@ -21,7 +22,7 @@ export class PlaybackEngine {
       pause: () => { if (!['loading', 'recovering', 'failed'].includes(this.status)) this.status = 'paused'; },
       waiting: () => { if (this.status !== 'recovering') this.status = 'buffering'; },
       ended: () => { this.status = 'ended'; },
-      error: () => { const e = video.error; if (!e || !this.session || this.disposed) return;
+      error: () => { const e = video.error; if (!e || !this.session || this.disposed || this.status === 'failed') return;
         const kind = e.code === 2 ? 'network' : e.code === 3 ? 'decoder' : 'source';
         void this.recover(new PlaybackFault(e.message || `Media error ${e.code}`, kind), this.controller.token()); },
     })) {
@@ -54,6 +55,11 @@ export class PlaybackEngine {
     if (source.delivery === 'file') return !!this.video.canPlayType(source.mime);
     return !!this.video.canPlayType('application/vnd.apple.mpegurl') || !!source.renditions?.some(r => mediaSourceClass()?.isTypeSupported(r.mime));
   }
+  private useNativeHls(source: Source) {
+    const native = !!this.video.canPlayType('application/vnd.apple.mpegurl');
+    const segmented = !!source.renditions?.some(r => mediaSourceClass()?.isTypeSupported(r.mime));
+    return native && (!segmented || navigator.vendor === 'Apple Computer, Inc.');
+  }
   private candidates() {
     const priority = { direct: 0, remux: 1, transcode: 2 };
     return (this.session?.sources ?? []).filter(s => this.supported(s)).sort((a,b) => priority[a.strategy] - priority[b.strategy]);
@@ -84,11 +90,12 @@ export class PlaybackEngine {
     this.track?.remove(); this.track = undefined; this.video.removeAttribute('src'); this.video.load(); this.video.playbackRate = 1;
   }
   private async activate(source: Source, position: number, recovery = false, initial = false) {
+    this.resumePosition = position;
     const token = this.controller.changeSource(!initial); this.resetMedia(); this.source = source;
     this.attempted.add(source.id); this.status = recovery ? 'recovering' : 'loading'; this.failure = null;
     this.publish();
     try {
-      if (source.delivery === 'hls' && !this.video.canPlayType('application/vnd.apple.mpegurl')) {
+      if (source.delivery === 'hls' && !this.useNativeHls(source)) {
         this.backend = 'mse';
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
         pipeline.lowDelay = this.lowDelay; pipeline.liveWindowStart = this.session?.liveWindowStart ?? 0; pipeline.maxLiveDrift = this.session?.liveMaxDrift ?? 45; pipeline.abr.manual = this.manualQuality;
@@ -122,7 +129,7 @@ export class PlaybackEngine {
     if (!this.controller.current(token) || this.recovering) return;
     this.recovering = true;
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === 'TimeoutError' ? 'network' : 'source';
-    const position = this.video.currentTime || this.session?.position || 0;
+    const position = this.video.currentTime || this.resumePosition;
     this.status = 'recovering'; this.failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true }; this.publish();
     try {
       // Requests already retry twice; source handoff is bounded by plan length.
@@ -135,8 +142,9 @@ export class PlaybackEngine {
     finally { this.recovering = false; }
   }
   private async play() {
+    const token = this.controller.token();
     try { await this.video.play(); }
-    catch (e) { this.emit({ type: 'error', failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true } }); }
+    catch (e) { if (!this.controller.current(token)) return; this.emit({ type: 'error', failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true } }); }
   }
   private applyNativeAudio() {
     const tracks = this.video.audioTracks;
