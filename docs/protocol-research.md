@@ -2,6 +2,8 @@
 
 Status: research notes and candidate design directions, not a ratified wire specification. No protocol implementation exists in this repository yet.
 
+The [proposed architecture](protocol-design.md) expands these principles into session behavior, a recovery walkthrough and the first end-to-end proof.
+
 ## Objective
 
 Design an Ether-native protocol that enables fast discovery and resilient, high-quality playback. Distinguish the application/session contract from media transport and containers. Own the former; evaluate established HTTP media delivery and segment formats for the latter. Novelty is useful only when measurements show an improvement in reliability, efficiency or experience.
