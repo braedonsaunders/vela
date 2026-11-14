@@ -1,5 +1,5 @@
 import type { Answer, Sources } from '../app.contract.d.ts';
-import type { AISearchJob, ClientCapabilities, Device } from '../wire/v0/types';
+import type { AISearchJob, ClientCapabilities, Device, ServerCapabilities } from '../wire/v0/types';
 import { EtherAdapter } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
@@ -9,6 +9,7 @@ import { InteractionQueue } from './telemetry';
 import { sessionEvents } from './protocol/events';
 import { mediaPlan } from './protocol/media';
 import { playerPresentation } from '../player/presentation';
+import { setLocale, time } from '../foundation/i18n';
 
 export function createAnswer(devOrigin: string, MOCK: boolean, version: string): Answer {
 let API = '';
@@ -44,6 +45,7 @@ let ready: Promise<void> | undefined;
 let activeQuick = "";
 let authVersion = 0;
 let negotiation: { version: number; pending: Promise<void> } | undefined;
+let features: ServerCapabilities['features'] | undefined;
 let ai: { epoch: number; generation: number; query: string; job?: AISearchJob; starting?: Promise<AISearchJob> } | undefined;
 const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable' });
 function server(store: Parameters<Sources['uiBootstrap']>[1], media?: MediaCapabilities): EtherAdapter {
@@ -75,7 +77,7 @@ const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '
   return { authenticated: !!store.get('vela.session'), passwordAvailable: capabilities.features.passwordSignIn.available,
     quickAvailable: capabilities.features.quickConnect.available, error };
 };
-let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, canCatchUp: false };
+let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, driftLabel: '', canCatchUp: false };
 const sources: Sources = {
   uiLiveIdentity: async ([channelId, epoch], store) => liveIdentity(await session(store), channelId, epoch),
   uiGuide: async ([epoch, window], store) => {
@@ -88,7 +90,8 @@ const sources: Sources = {
     if (next) lastLive = next;
     return lastLive;
   },
-  uiAuth: async ([code, _epoch, isFragment, pageOrigin, mediaJSON], store) => {
+  uiAuth: async ([code, _epoch, isFragment, pageOrigin, mediaJSON, localeJSON], store) => {
+    setLocale(localeJSON);
     bindOrigin(pageOrigin);
     const api = server(store, parseMediaCapabilities(mediaJSON));
     if (code && !store.get('vela.session')) {
@@ -111,7 +114,7 @@ const sources: Sources = {
     const api = server(store);
     const grant = await api.quickConnect({ device, idempotencyKey: key(store) });
     activeQuick = grant.secret;
-    return { ...grant, status: 'pending' };
+    return { ...grant, expiresLabel: time(Date.parse(grant.expiresAt)), status: 'pending' };
   },
   pollQuick: async ([secret], store) => {
     const api = server(store);
@@ -129,7 +132,7 @@ const sources: Sources = {
       while (interactions?.size) await interactions.flush(key(store));
       const tokens = JSON.parse(value) as { refreshToken: string };
       await api.revoke({ refreshToken: tokens.refreshToken, idempotencyKey: key(store) });
-      if (version === authVersion) { store.set('vela.session', ''); authVersion++; ready = undefined; activeQuick = ''; ai = undefined; interactions = undefined; }
+      if (version === authVersion) { store.set('vela.session', ''); authVersion++; ready = undefined; activeQuick = ''; ai = undefined; features = undefined; interactions = undefined; }
     }
     return authModel(store);
   },
@@ -148,7 +151,10 @@ const sources: Sources = {
       negotiation = current;
     }
     await negotiation.pending;
-    return homeModel(await api.bootstrap(), API, at);
+    const bootstrap = await api.bootstrap();
+    if (authVersion !== version) throw new Error('Session changed during bootstrap');
+    features = bootstrap.capabilities.features;
+    return homeModel(bootstrap, API, at);
   },
   uiCollection: async ([id], store) => {
     const data = await (await session(store)).collection(id);
@@ -174,13 +180,13 @@ const sources: Sources = {
   },
   uiDescriptive: async ([query, generation, epoch], store) => {
     const api = await session(store);
-    if (!(await api.capabilities()).features.descriptiveSearch.available) return lane(query, generation);
+    if (!features?.descriptiveSearch.available) return lane(query, generation);
     const result = await api.search({ query, generation, mode: 'descriptive', idempotencyKey: `descriptive-${epoch}-${generation}` });
     return { ...lane(result.query, result.generation), items: result.items.map(t => card(t, '', API)) };
   },
   uiAI: async ([query, generation, epoch], store) => {
     const api = await session(store);
-    if (!(await api.capabilities()).features.aiSearch.available) return lane(query, generation);
+    if (!features?.aiSearch.available) return lane(query, generation);
     if (!ai || ai.epoch !== epoch || ai.generation !== generation || ai.query !== query) {
       const previous = ai;
       const current = { epoch, generation, query } as NonNullable<typeof ai>;
@@ -228,7 +234,7 @@ const sources: Sources = {
     while (interactions?.size) await interactions.flush(key(store));
     return { accepted: true };
   },
-  uiPlayer: ([planJson, eventJson, replyJson]) => playerPresentation(planJson, eventJson, replyJson),
+  uiPlayer: ([planJson, eventJson, replyJson, localeJSON]) => { setLocale(localeJSON); return playerPresentation(planJson, eventJson, replyJson, localeJSON); },
   uiPlayerCommand: async ([json], store) => {
     let sessionId = '';
     try {

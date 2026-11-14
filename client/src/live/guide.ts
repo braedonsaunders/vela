@@ -1,4 +1,5 @@
 import { artworkURL } from '../discovery/artwork';
+import { msg, number, time } from '../../foundation/i18n';
 import type { Channel, GuideQuery, GuideResponse, Page, Programme } from '../../wire/v0/types';
 
 /** A single bounded guide window. Times remain the server's original timestamps. */
@@ -8,7 +9,7 @@ export interface GuideApi {
 }
 
 export interface GuideProgramme {
-  id: string; name: string; summary: string; start: string; end: string; airing: boolean; ended: boolean; startsIn: number;
+  id: string; name: string; summary: string; start: string; end: string; airing: boolean; ended: boolean; startsIn: number; startsInLabel: string;
   leftId: string; rightId: string; upId: string; downId: string;
   startLabel: string; endLabel: string; offset: number; width: number;
 }
@@ -59,7 +60,7 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
     if (!grouped.has(programme.channelId)) grouped.set(programme.channelId, []);
     grouped.get(programme.channelId)!.push(programme);
   }
-  const label = (value: number) => new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const label = (value: number) => time(value);
   const model: GuideModel = {
     from, until, fromLabel: label(start), untilLabel: label(end), nowOffset: Math.max(0, Math.min(100, (now - start) / (end - start) * 100)),
     showNow: now >= start && now < end,
@@ -82,7 +83,7 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
         now: current?.name ?? '', next: next?.name ?? '',
         programmes: entries.map(p => {
           const a = Date.parse(p.start), b = Date.parse(p.end);
-          return { leftId: '', rightId: '', upId: '', downId: '', airing: a <= now && now < b, ended: b <= now, startsIn: Math.max(0, Math.ceil((a - now) / 60000)), id: p.id, name: p.name, summary: p.summary, start: p.start, end: p.end,
+          return { leftId: '', rightId: '', upId: '', downId: '', airing: a <= now && now < b, ended: b <= now, startsIn: Math.max(0, Math.ceil((a - now) / 60000)), startsInLabel: number(Math.max(0, Math.ceil((a - now) / 60000))), id: p.id, name: p.name, summary: p.summary, start: p.start, end: p.end,
             startLabel: label(a), endLabel: label(b), offset: (Math.max(a, start) - start) / (end - start) * 100,
             width: (Math.min(b, end) - Math.max(a, start)) / (end - start) * 100 };
         }) };
@@ -106,7 +107,7 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
 
 export async function liveIdentity(api: GuideApi, channelId: string, now: number) {
   const channel = (await allPages(cursor => api.channels(cursor, 100))).find(c => c.id === channelId);
-  if (!channel) return { title: 'Live television' };
+  if (!channel) return { title: msg('ui.liveTelevisionTitle') };
   const programmes = await allPages(cursor => api.guide({ from: new Date(now).toISOString(), until: new Date(now + 60000).toISOString(), channelIds: [channelId], cursor, limit: 100 }));
   const current = programmes.find(p => Date.parse(p.start) <= now && now < Date.parse(p.end));
   return { title: current ? `${channel.name} · ${current.name}` : channel.name };
