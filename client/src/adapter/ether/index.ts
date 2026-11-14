@@ -44,7 +44,7 @@ export class EtherAdapter implements ServerAdapter {
     const cached = cacheable ? this.cache.get(key) : undefined;
     const send = (token: V.Tokens | null, useCache = true) => fetch(`${this.origin}/vela/v0${path}`, {
       method, headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        ...(token ? { Authorization: `Bearer ${token.accessToken}` } : {}),
+        ...(token ? { Authorization: `Bearer ${token.accessToken}`, 'X-Vela-Device-Id': this.credentials.device.id } : {}),
         ...(cached && useCache ? { 'If-None-Match': cached.etag } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
@@ -64,6 +64,7 @@ export class EtherAdapter implements ServerAdapter {
     return value;
   }
   capabilities() { return this.request<V.ServerCapabilities>('GET', '/capabilities', undefined, false, true); }
+  redeemWebCode(r: V.WebCodeRedeemRequest) { return this.request<V.Tokens>('POST', '/auth/web-code/redeem', r, false); }
   signIn(r: V.SignInRequest) { return this.request<V.Tokens>('POST', '/auth/sign-in', r, false); }
   deviceGrant(r: V.DeviceGrantRequest) { return this.request<V.DeviceGrant>('POST', '/auth/device', r, false); }
   pollDevice(r: V.DevicePollRequest) { return this.request<V.GrantPoll>('POST', '/auth/device/poll', r, false); }
