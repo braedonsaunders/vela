@@ -1,4 +1,4 @@
-// client/player/media-capabilities.ts
+// player/media-capabilities.ts
 function mediaCapabilities() {
   const video = document.createElement("video");
   const supports = (mime) => video.canPlayType(mime) !== "";
@@ -20,7 +20,7 @@ function mediaCapabilities() {
   };
 }
 
-// client/player/install.ts
+// player/install.ts
 function createInstall(element, json, event) {
   let runtime = window.velaPwa;
   const button = document.createElement("button");
@@ -75,7 +75,7 @@ function createInstall(element, json, event) {
   } };
 }
 
-// client/player/preview.ts
+// player/preview.ts
 function apply(handle) {
   const video = handle.video;
   if (handle.expiryTimer)
@@ -166,12 +166,161 @@ function destroyPreview(handle) {
   handle.video.remove();
 }
 
-// client/player/model.ts
+// player/theme.ts
+var ENGINES = {
+  cinematic: {
+    roles: {
+      page: "surface.page",
+      raised: "surface.raised",
+      ink: "ink.primary",
+      inkSecondary: "ink.secondary",
+      inkQuiet: "ink.quiet",
+      inkInverse: "ink.inverse",
+      accent: "brand.warm",
+      ember: "cinematic.ember",
+      tide: "cinematic.tide",
+      dusk: "cinematic.dusk",
+      live: "cinematic.guide-now"
+    },
+    prefixes: ["--x-cinematic-", "--x-surface-", "--x-ink-", "--x-brand-", "--x-media-"]
+  }
+};
+var SELECTOR = '[data-x-modes*="pack=installed"][data-x-modes*="pack=installed"]';
+var HEX = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i;
+var NEAR = 48;
+var property = (token) => `--x-${token.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+var rgb = (hex) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+var toHex = (c, alpha = "") => `#${c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("")}${alpha}`;
+function houseValues(own) {
+  const out = new Map;
+  for (const sheet of Array.from(document.styleSheets)) {
+    if (sheet.ownerNode === own)
+      continue;
+    let rules;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    for (const rule of Array.from(rules)) {
+      if (!(rule instanceof CSSStyleRule) || !rule.selectorText.includes("pack=installed"))
+        continue;
+      for (const name of Array.from(rule.style))
+        if (name.startsWith("--x-"))
+          out.set(name, rule.style.getPropertyValue(name).trim());
+    }
+  }
+  return out;
+}
+function declarations(pack, house, fontName) {
+  const engine = ENGINES[pack.engine];
+  if (!engine)
+    return [];
+  const roles = [];
+  for (const [role, token] of Object.entries(engine.roles)) {
+    const from = HEX.exec(house.get(property(token)) ?? ""), to = HEX.exec(pack.palette[role] ?? "");
+    if (from && to)
+      roles.push({ from: rgb(from[1]), to: rgb(to[1]) });
+  }
+  const out = [];
+  for (const [name, value] of house) {
+    if (!engine.prefixes.some((p) => name.startsWith(p)))
+      continue;
+    const m = HEX.exec(value);
+    if (!m)
+      continue;
+    const c = rgb(m[1]);
+    let best, distance = Infinity;
+    for (const r of roles) {
+      const d = Math.hypot(c[0] - r.from[0], c[1] - r.from[1], c[2] - r.from[2]);
+      if (d < distance) {
+        distance = d;
+        best = r;
+      }
+    }
+    if (best && distance <= NEAR)
+      out.push(`${name}:${toHex(c.map((v, i) => best.to[i] + v - best.from[i]), m[2] ?? "")}`);
+  }
+  for (const [token, colour] of Object.entries(pack.tokens)) {
+    const name = property(token);
+    if (HEX.test(colour) && house.has(name) && engine.prefixes.some((p) => name.startsWith(p)))
+      out.push(`${name}:${colour}`);
+  }
+  const display = house.get("--x-cinematic-display");
+  if (fontName && display)
+    out.push(`--x-cinematic-display:"${fontName}", ${display}`);
+  const px = (token, v, max) => {
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max && house.has(property(token)))
+      out.push(`${property(token)}:${Math.round(v)}px`);
+  };
+  px("cinematic.radius-card", pack.radius.card, 48);
+  px("cinematic.radius-panel", pack.radius.panel, 48);
+  px("cinematic.radius-pill", pack.radius.pill, 999);
+  return out;
+}
+function fontFaces(pack, name) {
+  const font = pack.fonts.display;
+  if (!font || typeof FontFace !== "function")
+    return [];
+  return font.files.flatMap((f) => {
+    let url;
+    try {
+      url = new URL(f.url, location.href);
+    } catch {
+      return [];
+    }
+    if (url.origin !== location.origin || !url.pathname.startsWith("/vela/v0/appearance/") || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname))
+      return [];
+    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, "")}")`, { weight: String(f.weight), style: f.style === "italic" ? "italic" : "normal", display: "swap" });
+    document.fonts.add(face);
+    face.load().catch(() => document.fonts.delete(face));
+    return [face];
+  });
+}
+function apply2(handle, json) {
+  const props = JSON.parse(json);
+  const packJson = props.pack ?? "";
+  if (packJson === handle.json)
+    return;
+  handle.json = packJson;
+  for (const face of handle.fonts)
+    document.fonts.delete(face);
+  handle.fonts = [];
+  if (!packJson) {
+    handle.sheet.textContent = "";
+    return;
+  }
+  const pack = JSON.parse(packJson);
+  if (!/^[a-z][a-z0-9-]{0,31}$/.test(pack.id)) {
+    handle.sheet.textContent = "";
+    return;
+  }
+  const fontName = pack.fonts?.display ? `vela-pack-${pack.id}-display` : "";
+  handle.fonts = fontName ? fontFaces(pack, fontName) : [];
+  const lines = declarations({ ...pack, tokens: pack.tokens ?? {}, radius: pack.radius ?? {}, fonts: pack.fonts ?? {} }, houseValues(handle.sheet), handle.fonts.length ? fontName : "");
+  handle.sheet.textContent = lines.length ? `${SELECTOR}{${lines.join(";")}}` : "";
+}
+function createTheme(json) {
+  const sheet = document.createElement("style");
+  sheet.setAttribute("data-vela-pack", "");
+  document.head.append(sheet);
+  const handle = { theme: true, sheet, fonts: [], json: "" };
+  apply2(handle, json);
+  return handle;
+}
+var setTheme = apply2;
+function destroyTheme(handle) {
+  for (const face of handle.fonts)
+    document.fonts.delete(face);
+  handle.sheet.remove();
+}
+
+// player/model.ts
 function codecKnown(rendition) {
   return rendition.codecStatus !== "pending" && /codecs="[^"]+"/.test(rendition.mime);
 }
 
-// client/player/session.ts
+// player/session.ts
 class SessionController {
   sessionId = "";
   source = 0;
@@ -233,7 +382,7 @@ function delay(ms, signal) {
   });
 }
 
-// client/player/hls.ts
+// player/hls.ts
 function parsePlaylist(text, base) {
   if (!text.trimStart().startsWith("#EXTM3U"))
     throw new Error("Invalid HLS playlist");
@@ -272,7 +421,7 @@ function parsePlaylist(text, base) {
   return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
 }
 
-// client/player/buffer.ts
+// player/buffer.ts
 class PlaybackFault extends Error {
   kind;
   retryable;
@@ -327,7 +476,7 @@ async function appendBuffer(buffer, bytes, video, signal) {
   }
 }
 
-// client/player/audio.ts
+// player/audio.ts
 class AudioBuffer {
   media;
   video;
@@ -488,7 +637,7 @@ class AudioBuffer {
       await mutation(this.buffer, signal, () => this.buffer.remove(0, before));
   }
 }
-// client/player/abr.ts
+// player/abr.ts
 class BandwidthEstimator {
   fast = 0;
   slow = 0;
@@ -560,7 +709,7 @@ class AdaptiveBitrate {
   }
 }
 
-// client/player/pipeline.ts
+// player/pipeline.ts
 function mediaSourceClass() {
   return globalThis.ManagedMediaSource ?? globalThis.MediaSource;
 }
@@ -986,7 +1135,7 @@ class SegmentPipeline {
   }
 }
 
-// client/player/native-hls.ts
+// player/native-hls.ts
 async function nativeMediaPlaylist(url, signal, depth = 0) {
   if (depth > 1)
     throw new Error("Nested HLS masters are unsupported");
@@ -1013,7 +1162,7 @@ async function nativeMediaPlaylist(url, signal, depth = 0) {
   return nativeMediaPlaylist(variant.href, signal, depth + 1);
 }
 
-// client/src/protocol/id.ts
+// src/protocol/id.ts
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = bytes[6] & 15 | 64;
@@ -1021,7 +1170,7 @@ function randomId() {
   return Array.from(bytes, (b, i) => `${i === 4 || i === 6 || i === 8 || i === 10 ? "-" : ""}${b.toString(16).padStart(2, "0")}`).join("");
 }
 
-// client/player/engine.ts
+// player/engine.ts
 class PlaybackEngine {
   video;
   deliver;
@@ -1870,7 +2019,7 @@ class PlaybackEngine {
   }
 }
 
-// client/player/protocol.ts
+// player/protocol.ts
 function sessionFromPlan(plan) {
   const selected = plan.paths.find((p) => p.id === plan.selectedPathId);
   if (!selected)
@@ -1944,10 +2093,12 @@ function observation(snapshot, sequence) {
   };
 }
 
-// client/player/web-module.ts
+// player/web-module.ts
 var abi = 1;
-var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false } };
+var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false }, "vela-theme": { snapshot: false } };
 function create(tag, element, json, event) {
+  if (tag === "vela-theme")
+    return createTheme(json);
   if (tag === "vela-install")
     return createInstall(element, json, event);
   if (tag === "vela-preview")
@@ -1995,6 +2146,10 @@ function create(tag, element, json, event) {
   return handle;
 }
 function setProps(handle, json) {
+  if ("theme" in handle) {
+    setTheme(handle, json);
+    return;
+  }
   if ("install" in handle) {
     handle.update(json);
     return;
@@ -2082,6 +2237,10 @@ function applyCommand(handle, props) {
   }
 }
 function destroy(handle) {
+  if ("theme" in handle) {
+    destroyTheme(handle);
+    return;
+  }
   if ("install" in handle) {
     handle.dispose();
     return;

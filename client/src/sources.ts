@@ -9,6 +9,7 @@ import { liveStatus, stopPlan } from './live/player';
 import { InteractionQueue } from './telemetry';
 import { PreviewCoordinator } from './discovery/preview';
 import { sessionEvents } from './protocol/events';
+import { appearanceModel, appearanceStream } from './appearance';
 import { mediaPlan } from './protocol/media';
 import { randomId } from './protocol/id';
 import { playerPresentation } from '../player/presentation';
@@ -371,6 +372,11 @@ const sources: Sources = {
     if (position !== undefined && (!Number.isFinite(position) || position < 0)) throw new Error('Invalid playback position');
     const plan = await api.playback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}` });
     return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId };
+  },
+  uiAppearance: async (_args, store) => appearanceModel(await server(store).appearance(), API),
+  appearanceEvents: async ([_attempt, floor], store) => {
+    const api = await session(store);
+    return appearanceStream(API, mapper => api.streamEvents(mapper), floor);
   },
   sessionEvents: async ([id], store) => {
     const api = await session(store);

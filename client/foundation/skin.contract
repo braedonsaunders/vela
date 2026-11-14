@@ -411,6 +411,8 @@ component AuthStage
   props
     skin: string
     still: bool
+    backdrop: string
+    wordmark: string
   slot
   view
     if skin == "mochi"
@@ -421,7 +423,7 @@ component AuthStage
         JellyAuthStage(still=still)
           children
       else
-        CineAuthStage(still=still)
+        CineAuthStage(still=still, backdrop=backdrop, wordmark=wordmark)
           children
 
 component AuthNotice

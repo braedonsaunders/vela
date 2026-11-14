@@ -43,6 +43,13 @@ export class EtherAdapter implements ServerAdapter {
     return this.fetchBound(`/vela/v0/sessions/${encodeURIComponent(id)}/events`, { headers: { 'Last-Event-ID': cursor }, exactStream: mapper }, token);
   }
 
+  /** The viewer-level server event stream; its first event is the current appearance. */
+  async streamEvents<T>(mapper: (event: StreamEvent) => T): Promise<T> {
+    const token = await this.credentials.get();
+    if (!token) throw new Error('Sign in required');
+    return this.fetchBound('/vela/v0/events', { exactStream: mapper }, token);
+  }
+
   private async refresh(tokens: V.Tokens): Promise<V.Tokens> {
     if (!this.refreshing) {
       this.refreshing = (async () => {
@@ -109,6 +116,7 @@ export class EtherAdapter implements ServerAdapter {
   }
   negotiate(r: V.NegotiateRequest) { return this.request<V.NegotiateResponse>('POST', '/negotiate', r); }
   capabilities() { return this.request<V.ServerCapabilities>('GET', '/capabilities', undefined, false, true); }
+  appearance() { return this.request<V.Appearance>('GET', '/appearance', undefined, false, true); }
   redeemWebCode(r: V.WebCodeRedeemRequest) { return this.request<V.Tokens>('POST', '/auth/web-code/redeem', r, false); }
   signIn(r: V.SignInRequest) { return this.request<V.Tokens>('POST', '/auth/sign-in', r, false); }
   deviceGrant(r: V.DeviceGrantRequest) { return this.request<V.DeviceGrant>('POST', '/auth/device', r, false); }
