@@ -237,10 +237,10 @@ const sources: Sources = {
     if (kind !== 'visible' || interactions.size >= 16) await interactions.flush(key(store), at);
     return { accepted: !interactions.disabled };
   },
-  uiPlayback: async ([id, kind, epoch], store) => {
+  uiPlayback: async ([id, kind, epoch, entryId], store) => {
     const api = await session(store);
     if (kind !== 'title' && kind !== 'extra' && kind !== 'channel') throw new Error('Unsupported playback target');
-    const plan = await api.playback({ ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${kind}-${id}` });
+    const plan = await api.playback({ ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}` });
     return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId };
   },
   sessionEvents: async ([id], store) => {
