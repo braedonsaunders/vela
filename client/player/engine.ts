@@ -137,7 +137,7 @@ export class PlaybackEngine {
       cancelled(token.signal);
       if (this.backend !== 'mse' && position > 0) this.video.currentTime = position;
       this.applySubtitle(); this.applyNativeAudio();
-      this.status = 'paused';
+      this.status = this.video.paused ? 'paused' : this.video.readyState >= 3 ? 'playing' : 'buffering';
       if (this.wantsPlay) await this.play();
       this.publish();
     } catch (e) { if (this.controller.current(token)) await this.recover(e, token); }
@@ -185,7 +185,7 @@ export class PlaybackEngine {
   }
   private async play() {
     const token = this.controller.token();
-    try { await this.video.play(); }
+    try { await this.video.play(); if (this.controller.current(token)) { this.status = 'playing'; this.publish(); } }
     catch (e) { if (!this.controller.current(token)) return; this.emit({ type: 'error', failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true } }); }
   }
   private applyNativeAudio() {

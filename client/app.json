@@ -19,7 +19,9 @@
   },
   "modules": [
     "vela-player",
-    "vela-context"
+    "vela-context",
+    "vela-preview",
+    "vela-install"
   ],
   "env": [
     "API_BASE_URL",

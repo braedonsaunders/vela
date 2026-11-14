@@ -7,11 +7,14 @@ component PlayerChrome
     visible: bool
     small: bool
     still: bool
+    busy: bool
     serverError: string
     command: action
     seek: action
     editing: action
     close: action
+  action menuChanged(e: ToggleEvent)
+    editing(e.newState == "open")
   derive failure = (serverError != "" ? serverError : model.reason)
   derive shown = (visible or model.state != "playing")
   action scrub(v: number)
@@ -29,7 +32,7 @@ component PlayerChrome
       case some(c)
         seek(c.seconds)
       case none
-        command("play", "")
+        editing(false)
   view
     column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="ink.primary"
       row padding=(small ? "20px 18px 50px" : "28px 36px 72px") gap=20 align-items="center" background-image="linear-gradient(180deg, #000000c9, transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease")
@@ -47,7 +50,7 @@ component PlayerChrome
           if model.state == "failed" or serverError != ""
             button press=command("retry", "") pointer-events="auto" border="none" border-radius=22 padding="12px 24px" background-color="ink.primary" color="ink.inverse"
               text "Try again"
-      column padding=(small ? "48px 18px 20px" : "80px 36px 30px") gap=18 background-image="linear-gradient(0deg, #000000f0, #00000099 62%, transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease") pointer-events=(shown ? "auto" : "none") focusin=editing(true) focusout=editing(false)
+      column padding=(small ? "48px 18px 20px" : "80px 36px 30px") gap=18 background-image="linear-gradient(0deg, #000000f0, #00000099 62%, transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease") pointer-events=(shown ? "auto" : "none")
         if model.actionError != "" and failure == ""
           text model.actionError color="brand.warm" font-size=12 role="status"
         row gap=14 align-items="center"
@@ -59,20 +62,20 @@ component PlayerChrome
               column position="absolute" left=0 top=0 bottom=0 width=`${model.progress}%` background-color="brand.warm"
             for chapter in model.chapters key=chapter.id
               column position="absolute" left=`${chapter.percent}%` height=7 width=1 background-color="#000000d9" aria-hidden=true
-            input type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub aria-label="Playback position" testId="player-scrub" disabled=(model.duration <= 0) width="100%" opacity=0.15 accent-color="brand.warm"
+            input focus=editing(true) blur=editing(false) type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub aria-label="Playback position" testId="player-scrub" disabled=(model.duration <= 0 or busy) width="100%" opacity=0.15 accent-color="brand.warm"
           text model.remaining font-size=12 font-variant-numeric="tabular-nums" color="ink.secondary"
         row gap=(small ? 12 : 22) align-items="center" flex-wrap="wrap"
           button press=command(model.playing ? "pause" : "play", "") aria-label=(model.playing ? "Pause" : "Play") testId="player-toggle" padding=12 border="none" border-radius=26 background-color="ink.primary" color="ink.inverse"
             text (model.playing ? "Pause" : "Play") font-size=13 font-weight=650
-          button press=seek(max(0, model.position - 10)) aria-label="Back 10 seconds" border="none" padding=8 background-color="transparent" color="ink.primary"
+          button disabled=busy press=seek(max(0, model.position - 10)) aria-label="Back 10 seconds" border="none" padding=8 background-color="transparent" color="ink.primary"
             text "−10" font-size=14
-          button press=seek(min(model.duration, model.position + 10)) disabled=(model.duration <= 0) aria-label="Forward 10 seconds" border="none" padding=8 background-color="transparent" color="ink.primary"
+          button press=seek(min(model.duration, model.position + 10)) disabled=(model.duration <= 0 or busy) aria-label="Forward 10 seconds" border="none" padding=8 background-color="transparent" color="ink.primary"
             text "+10" font-size=14
           column gap=4 flex=1 min-width=100
             text `${model.path} · ${model.quality}` font-size=12 font-weight=550 testId="player-quality"
             text (model.backend == "file" ? "ORIGINAL QUALITY" : model.backend == "native-hls" ? "BROWSER MANAGED" : model.qualities.length <= 1 ? "FIXED QUALITY" : model.lockedQuality == "" ? "AUTO QUALITY" : "QUALITY LOCKED") font-size=8 letter-spacing="1.5px" color="ink.quiet"
           if model.chapters.length > 0
-            select value="" change=chapter aria-label="Chapters" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
+            select focus=editing(true) blur=editing(false) disabled=busy value="" change=chapter aria-label="Chapters" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
               option value=""
                 text "Chapters"
               for chapter in model.chapters key=chapter.id
@@ -84,32 +87,39 @@ component PlayerChrome
           if model.fullscreen
             button press=command("fullscreen", "") aria-label="Fullscreen" border="none" padding=8 background-color="transparent" color="ink.primary"
               text "Fullscreen" font-size=12
-        row gap=12 align-items="center" flex-wrap="wrap"
-          if model.audio.length > 1
-            select value=model.audioId change=audio aria-label="Audio track" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
-              for track in model.audio key=track.id
-                option value=track.id
-                  text track.label
-          else
-            text model.audioLabel color="ink.quiet" font-size=11
-          if model.subtitles.length > 0
-            select value=model.subtitleId change=subtitles aria-label="Subtitles" testId="player-subtitles" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
-              option value=""
-                text "Subtitles off"
-              for track in model.subtitles key=track.id
-                option value=track.id
-                  text track.label
-          if model.qualities.length > 1
-            select value=model.lockedQuality change=quality aria-label="Quality" testId="player-quality-select" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
-              option value=""
-                text "Auto quality"
-              for quality in model.qualities key=quality.id
-                option value=quality.id
-                  text quality.label
-          if model.paths.length > 1
-            select value=model.pathId change=path aria-label="Playback path" testId="player-path" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
-              for path in model.paths key=path.id
-                option value=path.id
-                  text path.label
-          if not small
-            text "SPACE play / pause   ·   ← → seek   ·   F fullscreen" margin-left="auto" color="ink.quiet" font-size=10
+          button popovertarget="player-settings" aria-label="Playback settings" testId="player-settings-button" border="none" padding=8 background-color="transparent" color="ink.primary"
+            text "Tracks & quality" font-size=12
+      column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=16 toggle=menuChanged pointer-events="auto" role="dialog" aria-label="Playback settings" width=(small ? "calc(100vw - 32px)" : 320) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=22 gap=16 border="1px solid #ffffff25" border-radius=18 background-color="#111419f5" color="ink.primary" box-shadow="0px 16px 60px #00000099"
+        text "YOUR SCREENING" font-size=10 letter-spacing="2px" color="ink.quiet"
+        text "Playback settings" font-size=20 font-weight=550
+        if model.audio.length > 1
+          text "Audio" font-size=12 color="ink.secondary"
+          select value=model.audioId change=audio aria-label="Audio track" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=10
+            for track in model.audio key=track.id
+              option value=track.id
+                text track.label
+        else
+          text model.audioLabel font-size=12 color="ink.secondary"
+        if model.subtitles.length > 0
+          text "Subtitles" font-size=12 color="ink.secondary"
+          select value=model.subtitleId change=subtitles aria-label="Subtitles" testId="player-subtitles" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=10
+            option value=""
+              text "Off"
+            for track in model.subtitles key=track.id
+              option value=track.id
+                text track.label
+        if model.qualities.length > 1
+          text "Quality" font-size=12 color="ink.secondary"
+          select value=model.lockedQuality change=quality aria-label="Quality" testId="player-quality-select" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=10
+            option value=""
+              text "Auto · adapt to your connection"
+            for quality in model.qualities key=quality.id
+              option value=quality.id
+                text quality.label
+        if model.paths.length > 1
+          text "Delivery" font-size=12 color="ink.secondary"
+          select disabled=busy value=model.pathId change=path aria-label="Playback path" testId="player-path" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=10
+            for path in model.paths key=path.id
+              option value=path.id
+                text path.label
+        text "SPACE play / pause · ← → seek · F fullscreen" font-size=10 line-height=1.5 color="ink.quiet"

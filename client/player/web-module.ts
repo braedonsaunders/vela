@@ -1,15 +1,19 @@
+import { createInstall, type InstallHandle } from './install';
+import { createPreview, setPreview, destroyPreview, type PreviewHandle } from './preview';
 import { PlaybackEngine } from './engine';
 import type { Command, PlaybackSession } from './model';
 import type { PlaybackPlan } from '../../protocol/v0/types';
 import { observation, sessionFromPlan } from './protocol';
 export const abi = 1;
-export const roster = { 'vela-player': { snapshot: false }, 'vela-context': { snapshot: false } };
+export const roster = { 'vela-player': { snapshot: false }, 'vela-context': { snapshot: false }, 'vela-preview': { snapshot: false }, 'vela-install': { snapshot: false } };
 interface ContextHandle { context: true; disposed: boolean }
 interface Handle {
   engine: PlaybackEngine; video: HTMLVideoElement; sessionJson: string; lastCommand: number;
   endedReport: string; serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
 }
-export function create(tag: string, element: HTMLElement, json: string, event: (kind: number, payload: string) => void): Handle | ContextHandle {
+export function create(tag: string, element: HTMLElement, json: string, event: (kind: number, payload: string) => void): Handle | ContextHandle | PreviewHandle | InstallHandle {
+  if (tag === 'vela-install') return createInstall(element, event);
+  if (tag === 'vela-preview') return createPreview(element, json, event);
   if (tag === 'vela-context') {
     const handle: ContextHandle = { context: true, disposed: false };
     queueMicrotask(() => { if (!handle.disposed) event(8, location.origin); });
@@ -34,7 +38,9 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   try { setProps(handle, json); } catch (error) { handle.engine.dispose(); video.remove(); throw error; }
   return handle;
 }
-export function setProps(handle: Handle | ContextHandle, json: string) {
+export function setProps(handle: Handle | ContextHandle | PreviewHandle | InstallHandle, json: string) {
+  if ('install' in handle) return;
+  if ('preview' in handle) { setPreview(handle, json); return; }
   if ('context' in handle) return;
   const props = JSON.parse(json) as Record<string, string>;
   if (props.serverError !== handle.serverError) { handle.serverError = props.serverError ?? ''; if (handle.serverError) handle.engine.rejectCommand(handle.serverError); }
@@ -74,4 +80,4 @@ function applyCommand(handle: Handle, props: Record<string, string>) {
     if (command.id > handle.lastCommand) { handle.lastCommand = command.id; void handle.engine.command(command); }
   }
 }
-export function destroy(handle: Handle | ContextHandle) { if ('context' in handle) { handle.disposed = true; return; } handle.engine.dispose(); handle.video.remove(); }
+export function destroy(handle: Handle | ContextHandle | PreviewHandle | InstallHandle) { if ('install' in handle) { handle.dispose(); return; } if ('preview' in handle) { destroyPreview(handle); return; } if ('context' in handle) { handle.disposed = true; return; } handle.engine.dispose(); handle.video.remove(); }
