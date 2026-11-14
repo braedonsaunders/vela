@@ -1100,3 +1100,31 @@ it does not rebuild the compiler toolchain or fetch media. This recovered the
 build after the external scratch drive disconnected. The diagnostic screenshot
 was on that disconnected drive and is unavailable; the measured results above
 were retained independently in the drive transcript.
+
+### Second cleared lab attempt and relative-URL correction
+
+The corrected diagnostic retained the actual failure: `Failed to construct 'URL':
+Invalid URL`, before any GPU frame. Its original broker URL was origin-relative.
+The manual diagnostic bypassed the normal data adapter's `mediaPlan` URL
+normalization: demux accepted the relative URL, then audio preparation's strict
+`new URL(url)` rejected it. This is a diagnostic/runtime boundary defect, not
+proof that the normal app adapter fails. Runtime `open` now resolves a nonempty
+URL against `document.baseURI` once before every demux/audio consumer, rejecting
+non-HTTP schemes and embedded credentials.
+
+| Second lab attempt | Result |
+|---|---|
+| Plan response |99.3 ms |
+| Original first frame, sync and seek |No GPU frame; sync/seek unqualified; exact URL-construction failure captured |
+| Automatic fallback |Same-session remux HLS playing;52.418297 s,1,261 frames,0 dropped |
+| Cleanup |Stop200/ended, revoke200, native view removed, dedicated Chrome closed |
+
+One local drive then supplied the **relative** path
+`/diagnostic/universal-avc.mp4` through the real native view: eight-second tagged
+BT.709 AVC/AAC fixture, stereo44,100Hz source. The runtime resolved the expected
+same-origin absolute URL. First GPU frame757.3ms; measured sample37 decoded/
+33 presented frames at1.342251s,0 dropped frames,0 PCM underrun/overflow/drop,
+late-frame count0, worst video/audio-master lag8.416ms. Native view and browser
+were closed afterward. This qualifies the relative-URL fix locally; a further
+real original attempt still requires fresh owner-idle clearance. No HDR, physical
+lip-sync, real-title seek or production beta pass is claimed.
