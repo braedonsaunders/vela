@@ -138,6 +138,13 @@ response; document/handle the auth error rather than inventing a denial reason.
   `E/frontend.go:219` and the mock. README:178 clarifies delivered subtitle codec and
   no-publication-proof semantics rather than asking a backend to invent measurements.
 
+- C6: `client/player/model.ts:11` and `protocol.ts:9` now carry authoritative
+  plan state to the engine; `engine.ts:133` applies paused/playing/ended transitions
+  without treating repeated telemetry plans as play commands. Terminal state cancels
+  media and suppresses an observation echo in `web-module.ts:32`. This completes
+  C1's native-host effect for `E/playback.go:275–279` and V types:83. Playback owner
+  landed and bundled it in `ce92fd1` and `f1129f3` while retaining slice ownership.
+
 Compile evidence: one client Contract build returned [], mock tsc and standalone
 player protocol tsc passed for the corrections. No Ether checks or browser loops
 were run for this source review. Later source changes, fixes and lab E2E need their
