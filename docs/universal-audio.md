@@ -338,13 +338,24 @@ unqualified mask is omitted so the compressed decoder can establish its layout;
 unknown multichannel raw PCM positions remain unsafe and require fallback.
 No speaker positions are inferred from a broker description.
 
-It opens the ORIGINAL through UrlSource with upstream HTTP range validation:
+With only a URL it opens the ORIGINAL through UrlSource with upstream HTTP range validation:
 actual HTTP requests capped at 256 KiB, cache 8 MiB, total metadata-read budget
 32 MiB, finite retries, per-read deadlines and a 30s preparation bound. A changed
 resource length/ETag refuses preparation. Range-ignored whole-file fallback is
-rejected, and the Input is always disposed before returning. No sink speaker mask
+rejected, and the owned Input is always disposed before returning. No sink speaker mask
 is invented. Night algorithm changes still use the controller's existing output
 reconfiguration API; the upstream track-switch API omits that field.
+
+The optional `input?: Input` borrows an already-open, validated source, allowing
+the video probe and audio preparation to share its demux/cache. This path uses
+the caller's common signal without adding an abort listener, creating another
+source or disposing the Input on any path. The caller must keep it alive until
+both operations settle, own cancellation of its reads, and bound its wait on
+unabortable browser support checks. Actual audio mapping, format validation and
+decoder selection are unchanged. Compressed native audio uses one exact
+`AudioDecoder.isConfigSupported` check; it no longer repeats that same check via
+`track.canDecode`. PCM retains its Mediabunny decodability check. The helper's
+return shape is unchanged; sharing an Input does not share decoder state.
 
 A read-only source-integration drive exercised real file bytes and the pinned
 demuxer through an in-process range-response adapter (not a network/server
