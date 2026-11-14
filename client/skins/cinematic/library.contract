@@ -74,7 +74,7 @@ component Library
         if model.items.length == 0
           EmptyState(icon="symbol:filter", title=t("library.empty"), message=t("library.emptyHint"), still=still)
         else
-          column opacity=(loading ? 0.45 : 1) transition=`opacity ${base()}ms ${glide()}` aria-busy=loading
+          column aria-busy=loading
             TitleGrid(items=model.items, small=small, still=still, selectTitle=selectTitle, observe=observe)
           if model.more
             row justify-content="center" padding-top=12

@@ -11,6 +11,9 @@ shape Time
 shape PageState
   visibilityState: string
 
+// The home visit's query for a library section and its browse query.
+fn librarySection(id: string, query: string): string = (query == "" ? `?lib=${encodeURIComponent(id)}` : `${query}&lib=${encodeURIComponent(id)}`)
+
 members Client
   state generation = 0
   state skin = "" persist
@@ -138,7 +141,7 @@ members Client
   state heroIndex = 0
   derive heroAt = (current(home) and home.hero.length > 0 ? heroIndex % home.hero.length : 0)
   derive heroHasPreview = (current(home) and home.hero.length > 0 ? home.previews.filter(p => home.hero.slice(heroAt, heroAt + 1).map(h => h.id).includes(p.id)).length > 0 : false)
-  task rotateHero when top(nav).name == "home" and query == "" and page.visibilityState == "visible" and not still and current(home) and home.hero.length > 1 and not heroHasPreview
+  task rotateHero when top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and current(home) and home.hero.length > 1 and not heroHasPreview
     every(9000, nextHero)
   action nextHero
     heroIndex = (heroAt + 1) % max(1, home.hero.length)
@@ -214,34 +217,53 @@ members Client
   resource descriptive = uiDescriptive(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel transient
   resource ai = uiAI(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel transient
   resource libraries = uiLibraries() when auth.authenticated as shape LibraryNav[] else empty()
-  derive libraryId = (top(nav).name == "library" ? top(nav).params.id : "")
-  derive librarySort = searchParam(top(nav), "sort")
-  derive libraryDirection = searchParam(top(nav), "dir")
-  derive libraryKind = searchParam(top(nav), "kind")
-  derive libraryGenre = searchParam(top(nav), "genre")
-  derive libraryYearText = searchParam(top(nav), "year")
+  // Home and the server's libraries are one surface: the active library and its
+  // browse query live on the root home visit, so opening a title over a library
+  // never deactivates it and switching sections never remounts the surface.
+  derive libraryId = match first(stack(nav)) { case some(e) => searchParam(e, "lib"), case none => "" }
+  derive librarySort = match first(stack(nav)) { case some(e) => searchParam(e, "sort"), case none => "" }
+  derive libraryDirection = match first(stack(nav)) { case some(e) => searchParam(e, "dir"), case none => "" }
+  derive libraryKind = match first(stack(nav)) { case some(e) => searchParam(e, "kind"), case none => "" }
+  derive libraryGenre = match first(stack(nav)) { case some(e) => searchParam(e, "genre"), case none => "" }
+  derive libraryYearText = match first(stack(nav)) { case some(e) => searchParam(e, "year"), case none => "" }
   derive libraryYear = match parseNumber(libraryYearText) { case some(n) => n, case none => 0 }
-  derive libraryPlayed = searchParam(top(nav), "played")
-  derive libraryFavorite = searchParam(top(nav), "fav")
+  derive libraryPlayed = match first(stack(nav)) { case some(e) => searchParam(e, "played"), case none => "" }
+  derive libraryFavorite = match first(stack(nav)) { case some(e) => searchParam(e, "fav"), case none => "" }
+  derive libraryKey = `${libraryId}${libraryQuery(librarySort, libraryDirection, libraryKind, libraryGenre, libraryYearText, libraryPlayed, libraryFavorite)}`
   state libraryPages = 1
   state libraryPagingEntry = ""
-  derive activeLibraryPages = (libraryPagingEntry == `${top(nav).id}` ? libraryPages : 1)
+  derive activeLibraryPages = (libraryPagingEntry == libraryKey ? libraryPages : 1)
   resource libraryModel = uiLibrary(libraryId, librarySort, libraryDirection, libraryKind, libraryGenre, libraryYear, libraryPlayed, libraryFavorite, activeLibraryPages) with localeJSON, artWidth when auth.authenticated and libraryId != "" as shape LibraryModel
   derive libraryLoading = (activeLibraryPages <= 1 and (pending(libraryModel) or not current(libraryModel)))
   derive libraryMoreLoading = (activeLibraryPages > 1 and pending(libraryModel))
+  // The last answer per library this session, so a revisited section shows at once.
+  state snapshotVersion = 0
+  resource librarySnapshots = uiLibrarySnapshots(snapshotVersion) with localeJSON, artWidth when auth.authenticated as shape LibraryModel[] else empty()
+  task recordLibrarySnapshot when current(libraryModel) and libraryModel.id != "" key=`${libraryModel.id}:${libraryModel.sort}:${libraryModel.direction}:${libraryModel.items.length}:${libraryKey}`
+    after(1, bumpLibrarySnapshots)
+  action bumpLibrarySnapshots
+    snapshotVersion = snapshotVersion + 1
+  derive browseLibraries = (auth.authenticated and current(libraries) ? libraries.filter(l => l.kind != "live") : [])
+  derive sectionIndex = (libraryId == "" ? 0 : 1 + max(0, browseLibraries.map(l => l.id).indexOf(libraryId)))
   action openLibrary(id: string)
     libraryPages = 1
-    nav = push(nav, path("library", id))
+    nav = (top(nav).name == "home" ? replace(nav, path("home") + librarySection(id, "")) : open(nav, path("home") + librarySection(id, "")))
   action setLibrarySort(id: string, direction: string)
     libraryPages = 1
-    nav = replace(nav, path("library", libraryId) + libraryQuery(id, direction, libraryKind, libraryGenre, libraryYearText, libraryPlayed, libraryFavorite))
+    nav = replace(nav, path("home") + librarySection(libraryId, libraryQuery(id, direction, libraryKind, libraryGenre, libraryYearText, libraryPlayed, libraryFavorite)))
   action setLibraryFilter(name: string, value: string)
     libraryPages = 1
-    nav = replace(nav, path("library", libraryId) + libraryQuery(librarySort, libraryDirection, (name == "kind" ? value : libraryKind), (name == "genre" ? value : libraryGenre), (name == "year" ? value : libraryYearText), (name == "played" ? value : libraryPlayed), (name == "favorite" ? value : libraryFavorite)))
+    nav = replace(nav, path("home") + librarySection(libraryId, libraryQuery(librarySort, libraryDirection, (name == "kind" ? value : libraryKind), (name == "genre" ? value : libraryGenre), (name == "year" ? value : libraryYearText), (name == "played" ? value : libraryPlayed), (name == "favorite" ? value : libraryFavorite))))
   action moreLibrary
     if current(libraryModel) and libraryModel.more and not pending(libraryModel)
       libraryPages = activeLibraryPages + 1
-      libraryPagingEntry = `${top(nav).id}`
+      libraryPagingEntry = libraryKey
+  // Links from builds before the shared surface used /library/:id.
+  task redirectLibraryLink when top(nav).name == "library"
+    after(1, followLibraryLink)
+  action followLibraryLink
+    if top(nav).name == "library"
+      nav = open(nav, path("home") + librarySection(top(nav).params.id, ""))
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
   resource collection = uiCollection(collectionId) with localeJSON, artWidth when auth.authenticated and collectionId != "" as shape CollectionModel
   resource detail = uiDetail(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape DetailModel
@@ -291,9 +313,9 @@ members Client
   action close
     nav = back(nav)
   action goHome
-    nav = open(nav, path("home"))
+    nav = (top(nav).name == "home" ? replace(nav, path("home")) : open(nav, path("home")))
   action openSearch
-    nav = open(nav, path("home"))
+    nav = (top(nav).name == "home" ? replace(nav, path("home") + (query == "" ? "" : `?q=${encodeURIComponent(query)}`)) : open(nav, path("home")))
   action openLive
     nav = push(nav, path("live"))
   action selectTitle(id: string, kind: string, token: string)
