@@ -8,7 +8,7 @@ component AuthStage
   slot
   view
     column position="relative" min-height="100dvh" width="100%" box-sizing="border-box" align-items="center" justify-content="center" padding="max(32px, 8vh) 16px" gap=28 background-color="marquee.chrome" background-image="radial-gradient(ellipse 80% 60% at 50% 0%, var(--marquee.raised) 0%, var(--marquee.chrome) 70%)" color="marquee.ink" color-scheme="dark" -exact-exit-animation="mqGone 200ms linear both"
-      Wordmark(size=40)
+      Wordmark(size=44)
       column width="100%" max-width=420 box-sizing="border-box" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif" padding="clamp(24px, 5vw, 36px)" border-radius=8 background-color="marquee.page" box-shadow="0px 24px 60px var(--marquee.shadow), 0px 0px 0px 1px var(--marquee.line)" animation=arrive(still, 0)
         children
 

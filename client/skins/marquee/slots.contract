@@ -113,7 +113,7 @@ component Shell
             button id="marquee-menu-button" testId="marquee-menu" press=toggleRail aria-label=(phone ? t("marquee.openNavigation") : t("marquee.toggleSidebar")) aria-expanded=(phone ? drawer : not slim) class=Round width=44 height=44
               Glyph(name="menu", size=22)
             link href="/" aria-label=t("ui.velaHome") text-decoration="none" display="flex" align-items="center" padding="6px 4px" border-radius=4
-              Wordmark(size=(phone ? 22 : 24))
+              Wordmark(size=28)
           if phone
             column flex=1
             button press=findSomething aria-label=t("ui.search") class=Round width=44 height=44 pointer-events="auto"
@@ -152,7 +152,7 @@ component Shell
           row height=bar align-items="center" gap=4 padding-left=4 padding-right=4 flex-shrink=0
             button press=closeDrawer aria-label=t("marquee.closeNavigation") class=Round width=44 height=44
               Glyph(name="close", size=22)
-            Wordmark(size=22)
+            Wordmark(size=28)
           scroll flex=1 min-height=0
             Destinations(libraries=libraries, section=section, canLive=canLive, slim=false, still=still, home=goHome, live=goLive, openLibrary=goLibrary)
       if pickerOpen
@@ -395,8 +395,9 @@ component Shelf
   slot
   state port = 1000
   state at = 0
-  derive wide = resumeRow(row)
-  derive span = row.items.length * ((wide ? wideW(small) : posterW(small)) + cardGap(small)) + 2 * gutterPx(small)
+  derive ranked = row.presentation == "ranked"
+  derive wide = not ranked and resumeRow(row)
+  derive span = row.items.length * ((wide ? wideW(small) : posterW(small)) + (ranked ? (small ? 50 : 80) : 0) + cardGap(small)) + 2 * gutterPx(small)
   derive id = `hub-${place}-${row.id}`
   action measured(w: number, h: number)
     port = w
@@ -415,11 +416,17 @@ component Shelf
             Glyph(name="right", size=18)
       scroll id=id resize=measured scroll=scrolled overflow-x="auto" overflow-y="hidden" scrollbar-width="none" scroll-behavior=(still ? "auto" : "smooth") scroll-padding-left=gutter(small)
         row gap=cardGap(small) align-items="flex-start" padding-top=4 padding-bottom=4 padding-left=gutter(small) padding-right=gutter(small)
-          for card in row.items key=card.id
-            if wide
-              WideCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
+          for card, i in row.items key=card.id
+            if ranked
+              // A ranked row: the server's position as a large numeral the poster overlaps.
+              row align-items="flex-end" flex-shrink=0
+                text formatNumber(i + 1, "decimal") aria-hidden=true font-size=(small ? 96 : 150) font-weight=800 line-height=0.8 letter-spacing="-0.08em" color="marquee.raised" margin-right=(small ? -14 : -22) padding-bottom=(small ? 34 : 40)
+                TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
             else
-              TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
+              if wide
+                WideCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
+              else
+                TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
           children
 
 component Row

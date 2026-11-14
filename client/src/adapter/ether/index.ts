@@ -89,7 +89,7 @@ export class EtherAdapter implements ServerAdapter {
     return this.refreshing;
   }
 
-  private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown, auth = true, cacheable = false, retryAuth = true): Promise<T> {
+  private async request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown, auth = true, cacheable = false, retryAuth = true): Promise<T> {
     let tokens = auth ? await this.credentials.get() : null;
     if (auth && !tokens) throw new Error('Sign in required');
     const key = JSON.stringify([this.origin, tokens?.viewer.id ?? '', tokens?.viewer.policyRevision ?? '', this.capabilityContext, 0, path]);
@@ -147,6 +147,8 @@ export class EtherAdapter implements ServerAdapter {
   cancelAI(id: string, r: V.CancelRequest) { return this.request<V.AISearchJob>('POST', `/search/ai/${encodeURIComponent(id)}/cancel`, r); }
   interactions(r: V.InteractionsRequest) { return this.request<V.Ack>('POST', '/interactions', r); }
   playback(r: V.PlaybackRequest) { return this.request<V.PlaybackPlan>('POST', '/playback', r); }
+  createAudioFallback(id: string, r: V.AudioFallbackRequest) { return this.request<V.AudioFallbackResponse>('POST', `/sessions/${encodeURIComponent(id)}/audio-fallback`, r); }
+  cancelAudioFallback(id: string, audioId: string, r: V.Mutation) { return this.request<V.Ack>('DELETE', `/sessions/${encodeURIComponent(id)}/audio-fallback/${encodeURIComponent(audioId)}`, r); }
   observe(id: string, r: V.PlayerObservation) { return this.request<V.Ack>('POST', `/sessions/${encodeURIComponent(id)}/observations`, r); }
   command(id: string, r: V.SessionCommand) { return this.request<V.PlaybackPlan>('POST', `/sessions/${encodeURIComponent(id)}/commands`, r); }
   channels(cursor?: string, limit?: number) { return this.request<V.Page<V.Channel>>('GET', `/live/channels${query({ cursor, limit })}`, undefined, true, true); }

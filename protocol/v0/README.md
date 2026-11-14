@@ -367,3 +367,20 @@ own device ID and redeems normally. The issuing device field validates the
 current authenticated request; it does not bind or transfer the grant. Codes are
 single-use for60 seconds, bound to the account, exact trusted TLS origin and Vela
 surface. Credentials are not forwarded by HTTP redirects.
+
+### Audio-only fallback
+
+`POST /sessions/:id/audio-fallback` accepts `AudioFallbackRequest` and returns
+`AudioFallbackResponse`. It authorizes a real local AAC pipeline on the selected
+source track; `features.audioFallback.available` is true only when that pipeline
+is available. Audio-only HLS is broker-scoped. Its fMP4 timestamps are title-absolute
+(`timelineOriginSeconds: 0`). It does not bump video source or seek generations.
+Replacement invalidates the previous audio URL and increments `audioGeneration`.
+Stale source/seek generations return409; capacity/source failures use the ordinary
+classified error model. `DELETE /sessions/:id/audio-fallback/:audioId` accepts
+`Mutation` and returns `Ack`, canceling only that audio pipeline idempotently.
+
+`PlaybackPath.originalVideo` contains only actual, non-estimated source-probe
+facts. Missing facts are omitted. Explicit false DV presence flags and compatibility
+ID0 are preserved; absence is not proof of a compatible base layer. These facts
+are admission input for the original-file decoder, not a promise of support.
