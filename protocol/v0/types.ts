@@ -13,9 +13,9 @@ export interface ClientCapabilities {
 }
 export interface Feature { available: boolean; reason?: string }
 export interface ServerCapabilities {
-  protocolVersion: 0; server: { id: ID; name: string; version: string };
+  protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
-    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature };
+    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -74,7 +74,7 @@ export interface SwitchBoundary { atSeconds: number; independent: boolean; timel
   /** Source replacement requires this compatibility proof, not just a matching title. */
   compatibility: 'same-source' | 'verified-timeline'; audioTrackIds: ID[]; subtitleTrackIds: ID[] }
 export interface PlaybackPath { id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
-  url: string; mimeType: string; sourceId: ID; timelineId: ID; edition?: string;
+  url: string; mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
   readiness: 'ready' | 'preparing' | 'unavailable'; qualities: Quality[]; boundaries: SwitchBoundary[] }
 export interface Fallback { state: 'unsupported' | 'idle' | 'preparing' | 'ready' | 'unavailable' | 'capacity'; pathId?: ID; reason?: string }
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID;
@@ -114,3 +114,5 @@ export interface GuideResponse extends Page<Programme> { from: Timestamp; until:
 export interface ExtrasResponse { items: Extra[] }
 /** One-use console Watch hand-off; redeem against the same Ether instance. */
 export interface WebCodeRedeemRequest extends Mutation { code: string; device: Device }
+
+export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean }

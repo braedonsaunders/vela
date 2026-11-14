@@ -111,3 +111,67 @@ retains seek generation, and does not claim a seamless transition.
 
 Exact reserves `command` as a host attribute. The native view prop is
 `playerCommand`; the JSON payload retains its `type` field.
+
+## Manual evidence (2026-11-13)
+
+Engine strict browser TypeScript compilation passed. The one Exact Contract build
+reported concurrently edited UI errors (forwarded to the UI owner); it did not
+report engine errors. No Exact maintainer checks or test suites were run.
+
+A temporary Chrome page loaded the shipping web-module artifact and drove its
+actual HTMLVideoElement. Direct MP4 reached 3.2859 seconds / 84 decoded frames,
+zero dropped frames, and no engine errors. A clear fMP4 fixture generated from
+Exact's 10-second motion clip exercised MSE (50 seconds, 2-second segments).
+MSE reached 3.7018 seconds / 94 frames with accepted buffer through 34 seconds.
+Persistent HTTP 502s on the primary caused bounded retries and a visible switch
+to the compatible fallback. The corrected resume path retained a 35-second target,
+then played through 38.0751 seconds / 79 decoded frames with zero dropped frames
+and no engine errors. Throughput stayed null because tiny local transfers are
+intentionally excluded from estimation. This was an engine drive, not an
+end-to-end authenticated app drive; the mock media generator was not ready.
+Temporary browsers, server, fixture and driver were removed after the drive.
+
+The drive found and fixed relative playlist URL resolution, superseded play
+promise reporting, teardown of an uninitialized MediaSource, and resume-position
+retention when a request fails before the seek target is buffered. Chrome now
+advertises native HLS: selection explicitly prefers the MSE ladder there,
+while Apple browsers retain the native HLS preference. This evidence does not
+qualify Safari/ManagedMediaSource, Firefox, Android, audio switching, subtitles,
+PiP/fullscreen, multi-rendition ABR or live playback on real devices.
+
+## Live observations and catch-up
+
+Snapshot `live` is null for VOD; otherwise it contains:
+
+- `edgeSeconds`, `windowStartSeconds`, `driftSeconds`: seconds on the source
+  timeline, nullable when unknown. Drift is nonnegative edge minus playhead.
+- `edgeSource`: `playlist` (last published segment end), `seekable` (browser's
+  current seekable range), `server` (last plan), or null. None is a promise that
+  the edge is downloaded or playable; server/playlist positions are observations
+  at their last update and are not extrapolated using elapsed wall time.
+- `reconnecting`: source recovery or a retry actually observed by the engine.
+  Native browser internal reconnects are not observable.
+- `delivery`: `available`, `waiting-for-publication`, `segment-delayed`,
+  `upstream-gap`, or `unknown`. Waiting means the next sequence is not yet in
+  the current playlist when needed. Delayed means a requested segment is being
+  retried or has exceeded the greater of its duration and one second. Only an
+  explicit publisher EXT-X-GAP tag proves an upstream gap; 404s and stalls do not.
+  Native HLS reports unknown because the browser owns these requests.
+- `canCatchUp`: a newer usable target exists in accepted MSE buffer or the
+  native browser's seekable range. This is deliberately stronger than having
+  a server-advertised edge.
+
+`{id,type:"catchUp"}` seeks within the latest usable range, retaining six
+seconds in low-delay mode or eighteen in adaptive mode (clamped to the range).
+It preserves pause/play intent, advances seek generation, and uses ordinary
+seek cancellation/recovery. It reports an action error when no newer usable
+range exists. It cannot jump to unpublished or undownloaded MSE media merely
+because a server reported a newer edge. EXT-X-GAP triggers visible source recovery.
+
+One Chrome manual drive used the actual mock muxed fMP4 fixture with ENDLIST
+removed to model a fixed live publication window. The snapshot reported playlist
+edge 60s, playhead 52s, drift 8s and canCatchUp=true. Catch-up advanced seek
+generation to 1, retained source generation 0, and accepted playhead 54.021332s
+(drift 5.978668s). This checks the live observation/control boundary; it does not
+qualify a moving live window, reconnect traces or a physical tuner. The temporary
+browser and server were stopped after this drive.

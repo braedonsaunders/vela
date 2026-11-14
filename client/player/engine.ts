@@ -1,4 +1,4 @@
-import type { Command, EngineEvent, Failure, PlaybackSession, Snapshot, Source } from './model';
+import type { Command, EngineEvent, Failure, LiveSnapshot, PlaybackSession, Snapshot, Source } from './model';
 import { SessionController, cancelled, delay, type Generation } from './session';
 import { mediaSourceClass, PlaybackFault, SegmentPipeline } from './pipeline';
 
@@ -12,6 +12,7 @@ export class PlaybackEngine {
   private failure: Failure | null = null; private audio: string | null = null; private subtitle: string | null = null;
   private timer: ReturnType<typeof setInterval>; private listeners: (() => void)[] = [];
   private attempted = new Set<string>(); private recovering = false; private disposed = false;
+  private resumePosition = 0;
   private wantsPlay = false; private lowDelay = false; private manualQuality: string | null = null;
   private track?: HTMLTrackElement; private lastObservation = 0;
   constructor(readonly video: ExtendedVideo, private emit: (event: EngineEvent) => void, private fullscreenContainer: HTMLElement = video) {
@@ -21,7 +22,7 @@ export class PlaybackEngine {
       pause: () => { if (!['loading', 'recovering', 'failed'].includes(this.status)) this.status = 'paused'; },
       waiting: () => { if (this.status !== 'recovering') this.status = 'buffering'; },
       ended: () => { this.status = 'ended'; },
-      error: () => { const e = video.error; if (!e || !this.session || this.disposed) return;
+      error: () => { const e = video.error; if (!e || !this.session || this.disposed || this.status === 'failed') return;
         const kind = e.code === 2 ? 'network' : e.code === 3 ? 'decoder' : 'source';
         void this.recover(new PlaybackFault(e.message || `Media error ${e.code}`, kind), this.controller.token()); },
     })) {
@@ -36,12 +37,38 @@ export class PlaybackEngine {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? null,
+      live: this.liveSnapshot(),
       position: Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0,
       duration: Number.isFinite(this.video.duration) ? this.video.duration : null,
       playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: ranges.start(i), end: ranges.end(i) })),
       throughputBps: this.pipeline?.bandwidth.bps ?? null, droppedFrames: quality?.droppedVideoFrames ?? null,
       totalFrames: quality?.totalVideoFrames ?? null, audioTrackId: this.audio, subtitleTrackId: this.subtitle, failure: this.failure,
     };
+  }
+  private catchUpTarget(): number | null {
+    const ranges = this.backend === 'mse' ? this.video.buffered : this.video.seekable;
+    if (!this.session?.live || !ranges.length) return null;
+    const index = ranges.length - 1, start = ranges.start(index), end = ranges.end(index);
+    if (end - start < 0.25) return null;
+    const target = Math.max(start + 0.05, end - (this.lowDelay ? 6 : 18));
+    return target > this.video.currentTime + 0.25 ? Math.min(target, end - 0.1) : null;
+  }
+  private liveSnapshot(): LiveSnapshot | null {
+    if (!this.session?.live) return null;
+    const seekable = this.video.seekable;
+    let edge = this.pipeline?.publishedEdge ?? null;
+    let start = this.pipeline?.publishedStart ?? null;
+    let source: LiveSnapshot['edgeSource'] = edge === null ? null : 'playlist';
+    if (edge === null && seekable.length) {
+      edge = seekable.end(seekable.length - 1); start = seekable.start(0); source = 'seekable';
+    }
+    if (edge === null && Number.isFinite(this.session.liveEdge)) {
+      edge = this.session.liveEdge!; start = this.session.liveWindowStart ?? null; source = 'server';
+    }
+    return { edgeSeconds: edge, windowStartSeconds: start,
+      driftSeconds: edge === null ? null : Math.max(0, edge - this.video.currentTime), edgeSource: source,
+      reconnecting: this.status === 'recovering' || !!this.pipeline?.retrying,
+      delivery: this.pipeline?.delivery ?? 'unknown', canCatchUp: this.catchUpTarget() !== null };
   }
   private publish() {
     if (this.disposed) return;
@@ -54,6 +81,11 @@ export class PlaybackEngine {
     if (source.delivery === 'file') return !!this.video.canPlayType(source.mime);
     return !!this.video.canPlayType('application/vnd.apple.mpegurl') || !!source.renditions?.some(r => mediaSourceClass()?.isTypeSupported(r.mime));
   }
+  private useNativeHls(source: Source) {
+    const native = !!this.video.canPlayType('application/vnd.apple.mpegurl');
+    const segmented = !!source.renditions?.some(r => mediaSourceClass()?.isTypeSupported(r.mime));
+    return native && (!segmented || navigator.vendor === 'Apple Computer, Inc.');
+  }
   private candidates() {
     const priority = { direct: 0, remux: 1, transcode: 2 };
     return (this.session?.sources ?? []).filter(s => this.supported(s)).sort((a,b) => priority[a.strategy] - priority[b.strategy]);
@@ -63,20 +95,35 @@ export class PlaybackEngine {
     this.source = undefined; this.failure = null; this.attempted.clear(); this.recovering = false;
     this.lowDelay = session.lowDelay ?? false;
     this.audio = session.audioTrackId ?? null; this.subtitle = session.subtitleTrackId ?? null;
-    const source = this.candidates().find(s => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
+    const source = this.candidates().find(s => s.id === session.selectedSourceId) ?? this.candidates().find(s => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) { this.fail({ kind: 'unsupported', message: 'No browser-compatible source for this edition', recoverable: false }); return; }
     await this.activate(source, session.position ?? 0, false, true);
+  }
+  /** A server readiness/observation revision is not a new playback attempt. */
+  updateSession(session: PlaybackSession) {
+    if (session.id !== this.session?.id) throw new Error('Cannot update a different session');
+    this.session = session;
+    this.lowDelay = session.lowDelay ?? this.lowDelay;
+    if (this.pipeline) { this.pipeline.lowDelay = this.lowDelay; this.pipeline.maxLiveDrift = session.liveMaxDrift ?? 45; }
+    if ((session.subtitleTrackId ?? null) !== this.subtitle) {
+      this.subtitle = session.subtitleTrackId ?? null; this.applySubtitle();
+    }
+    if ((session.audioTrackId ?? null) !== this.audio) {
+      const previous = this.audio; this.audio = session.audioTrackId ?? null;
+      if (!this.applyNativeAudio()) { this.audio = previous; this.emit({ type: 'error', failure: { kind: 'action', message: 'Audio change requires a new server source generation', recoverable: true } }); }
+    }
   }
   private resetMedia() {
     this.video.pause(); this.pipeline?.dispose(); this.pipeline = undefined;
     this.track?.remove(); this.track = undefined; this.video.removeAttribute('src'); this.video.load(); this.video.playbackRate = 1;
   }
   private async activate(source: Source, position: number, recovery = false, initial = false) {
+    this.resumePosition = position;
     const token = this.controller.changeSource(!initial); this.resetMedia(); this.source = source;
     this.attempted.add(source.id); this.status = recovery ? 'recovering' : 'loading'; this.failure = null;
     this.publish();
     try {
-      if (source.delivery === 'hls' && !this.video.canPlayType('application/vnd.apple.mpegurl')) {
+      if (source.delivery === 'hls' && !this.useNativeHls(source)) {
         this.backend = 'mse';
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
         pipeline.lowDelay = this.lowDelay; pipeline.liveWindowStart = this.session?.liveWindowStart ?? 0; pipeline.maxLiveDrift = this.session?.liveMaxDrift ?? 45; pipeline.abr.manual = this.manualQuality;
@@ -110,7 +157,7 @@ export class PlaybackEngine {
     if (!this.controller.current(token) || this.recovering) return;
     this.recovering = true;
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === 'TimeoutError' ? 'network' : 'source';
-    const position = this.video.currentTime || this.session?.position || 0;
+    const position = this.video.currentTime || this.resumePosition;
     this.status = 'recovering'; this.failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true }; this.publish();
     try {
       // Requests already retry twice; source handoff is bounded by plan length.
@@ -123,8 +170,9 @@ export class PlaybackEngine {
     finally { this.recovering = false; }
   }
   private async play() {
+    const token = this.controller.token();
     try { await this.video.play(); }
-    catch (e) { this.emit({ type: 'error', failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true } }); }
+    catch (e) { if (!this.controller.current(token)) return; this.emit({ type: 'error', failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true } }); }
   }
   private applyNativeAudio() {
     const tracks = this.video.audioTracks;
@@ -157,6 +205,11 @@ export class PlaybackEngine {
           if (this.backend === 'mse' && this.source) await this.activate(this.source, command.seconds, false, true);
           else this.video.currentTime = command.seconds;
           break;
+        }
+        case 'catchUp': {
+          const target = this.catchUpTarget();
+          if (target === null) throw new Error('No newer usable live buffer or seekable range');
+          await this.command({ id: command.id, type: 'seek', seconds: target }); break;
         }
         case 'volume': if (!Number.isFinite(command.value) || command.value < 0 || command.value > 1) throw new Error('Volume outside 0–1'); this.video.volume = command.value; break;
         case 'quality':

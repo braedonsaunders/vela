@@ -1,0 +1,7 @@
+{
+  "name": "vela-mock-server",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "bun main.ts", "media": "bun scripts/make-media.ts" },
+  "devDependencies": { "@types/bun": "^1.3.0", "typescript": "^5.9.0" }
+}

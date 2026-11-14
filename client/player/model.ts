@@ -7,22 +7,30 @@ export interface Source {
   renditions?: Rendition[];
 }
 export interface PlaybackSession {
-  id: string; mediaId: string; edition: string; sources: Source[]; position?: number;
+  id: string; mediaId: string; edition: string; selectedSourceId?: string; sources: Source[]; position?: number;
   audioTracks: Track[]; subtitleTracks: Track[]; audioTrackId?: string;
-  subtitleTrackId?: string; live?: boolean; liveWindowStart?: number; liveMaxDrift?: number; lowDelay?: boolean; sourceGeneration?: number; seekGeneration?: number;
+  subtitleTrackId?: string; live?: boolean; liveWindowStart?: number; liveEdge?: number; liveMaxDrift?: number; lowDelay?: boolean; sourceGeneration?: number; seekGeneration?: number;
 }
 export type Command = { id: number } & (
-  { type: 'play' | 'pause' | 'pip' | 'fullscreen' } |
+  { type: 'play' | 'pause' | 'pip' | 'fullscreen' | 'catchUp' } |
   { type: 'seek'; seconds: number } | { type: 'volume'; value: number } |
   { type: 'audio'; trackId: string } | { type: 'subtitle'; trackId: string | null } |
   { type: 'quality'; renditionId: string | null } | { type: 'lowDelay'; enabled: boolean });
 export type FailureKind = 'network' | 'source' | 'decoder' | 'unsupported' | 'action';
 export interface Failure { kind: FailureKind; message: string; recoverable: boolean }
+export interface LiveSnapshot {
+  edgeSeconds: number | null; windowStartSeconds: number | null; driftSeconds: number | null;
+  edgeSource: 'playlist' | 'seekable' | 'server' | null;
+  reconnecting: boolean;
+  delivery: 'available' | 'waiting-for-publication' | 'segment-delayed' | 'upstream-gap' | 'unknown';
+  canCatchUp: boolean;
+}
 export interface Snapshot {
   sessionId: string | null; sourceGeneration: number; seekGeneration: number;
   state: 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'recovering' | 'ended' | 'failed';
   sourceId: string | null; strategy: Source['strategy'] | null;
   backend: 'file' | 'native-hls' | 'mse' | null; renditionId: string | null;
+  live: LiveSnapshot | null;
   position: number; duration: number | null; playable: { start: number; end: number }[];
   throughputBps: number | null; droppedFrames: number | null; totalFrames: number | null;
   audioTrackId: string | null; subtitleTrackId: string | null; failure: Failure | null;

@@ -3,6 +3,7 @@ import type * as V from '../../wire/v0/types';
 /** Server-independent operations used by Vela's data layer. */
 export interface ServerAdapter {
   capabilities(): Promise<V.ServerCapabilities>;
+  redeemWebCode(request: V.WebCodeRedeemRequest): Promise<V.Tokens>;
   signIn(request: V.SignInRequest): Promise<V.Tokens>;
   deviceGrant(request: V.DeviceGrantRequest): Promise<V.DeviceGrant>;
   pollDevice(request: V.DevicePollRequest): Promise<V.GrantPoll>;
@@ -21,5 +22,7 @@ export interface ServerAdapter {
   playback(request: V.PlaybackRequest): Promise<V.PlaybackPlan>;
   observe(id: string, request: V.PlayerObservation): Promise<V.Ack>;
   command(id: string, request: V.SessionCommand): Promise<V.PlaybackPlan>;
+  channels(cursor?: string, limit?: number): Promise<V.Page<V.Channel>>;
+  guide(query: V.GuideQuery): Promise<V.GuideResponse>;
   snapshot(id: string): Promise<V.SessionSnapshot>;
 }

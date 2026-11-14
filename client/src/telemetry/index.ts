@@ -7,6 +7,7 @@ export class InteractionQueue {
   private batch?: { idempotencyKey: string; interactions: Interaction[] };
   private sending?: Promise<void>;
   constructor(private adapter: ServerAdapter, private limit = 256) {}
+  get size(): number { return this.pending.length + (this.batch?.interactions.length ?? 0); }
   add(interaction: Interaction): boolean {
     if (this.pending.length + (this.batch?.interactions.length ?? 0) >= this.limit) return false;
     if (interaction.kind === 'visible') {

@@ -1,0 +1,20 @@
+import { mkdir } from 'node:fs/promises';
+import { mediaRoot } from '../media';
+await mkdir(mediaRoot, { recursive: true });
+async function ff(args: string[]) {
+  const p = Bun.spawn(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', ...args], { stdout: 'inherit', stderr: 'inherit' });
+  if (await p.exited) throw new Error('ffmpeg failed');
+}
+// Synthetic imagery and tones only. Fixed keyframes align all renditions at 4 seconds.
+await ff(['-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=24', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-f', 'lavfi', '-i', 'sine=frequency=660:sample_rate=48000', '-t', '60', '-map', '0:v', '-map', '1:a', '-map', '2:a', '-c:v', 'libx264', '-preset', 'veryfast', '-profile:v', 'high', '-level:v', '3.1', '-pix_fmt', 'yuv420p', '-b:v', '2200k', '-g', '96', '-keyint_min', '96', '-sc_threshold', '0', '-c:a', 'aac', '-ac', '2', '-b:a', '128k', '-metadata:s:a:0', 'language=eng', '-metadata:s:a:1', 'language=spa', '-movflags', '+faststart', `${mediaRoot}/direct.mp4`]);
+for (const [height, bitrate] of [[360, '500k'], [540, '1100k'], [720, '2200k']] as const) {
+  const dir = `${mediaRoot}/v${height}`; await mkdir(dir, { recursive: true });
+  await ff(['-i', `${mediaRoot}/direct.mp4`, '-map', '0:v:0', '-map', '0:a:0', ...(height === 720 ? ['-c:v', 'copy'] : ['-vf', `scale=-2:${height}`, '-c:v', 'libx264', '-preset', 'veryfast', '-profile:v', 'high', '-level:v', '3.1', '-b:v', bitrate, '-g', '96', '-keyint_min', '96', '-sc_threshold', '0']), '-c:a', 'copy', '-f', 'hls', '-hls_time', '4', '-hls_playlist_type', 'vod', '-hls_segment_type', 'fmp4', '-hls_flags', 'independent_segments', '-hls_fmp4_init_filename', 'init.mp4', '-hls_segment_filename', `${dir}/seg-%03d.m4s`, `${dir}/index.m3u8`]);
+}
+for (const [n, lang] of ['en', 'es'].entries()) {
+  const dir = `${mediaRoot}/a_${lang}`; await mkdir(dir, { recursive: true });
+  await ff(['-i', `${mediaRoot}/direct.mp4`, '-map', `0:a:${n}`, '-c:a', 'copy', '-f', 'hls', '-hls_time', '4', '-hls_playlist_type', 'vod', '-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', 'init.mp4', '-hls_segment_filename', `${dir}/seg-%03d.m4s`, `${dir}/index.m3u8`]);
+}
+await Bun.write(`${mediaRoot}/master.m3u8`, '#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,URI="a_en/index.m3u8"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Spanish",LANGUAGE="es",DEFAULT=NO,AUTOSELECT=YES,URI="a_es/index.m3u8"\n' + [[360,640,700000],[540,960,1400000],[720,1280,2600000]].map(([h,w,b]) => `#EXT-X-STREAM-INF:BANDWIDTH=${b},RESOLUTION=${w}x${h},CODECS="avc1.64001f,mp4a.40.2",AUDIO="audio"\nv${h}/index.m3u8\n`).join(''));
+await Bun.write(`${mediaRoot}/subtitles.vtt`, 'WEBVTT\n\n00:00:00.000 --> 00:00:08.000\nVela synthetic playback fixture.\n\n00:00:08.000 --> 00:00:20.000\nAligned four-second CMAF segments, three qualities.\n\n00:00:20.000 --> 00:00:40.000\nAudio tones identify the English and Spanish fixture tracks.\n\n00:00:40.000 --> 00:01:00.000\nAll media is generated locally.\n');
+console.log(`Media ready: ${mediaRoot}`);

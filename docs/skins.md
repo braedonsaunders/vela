@@ -10,7 +10,7 @@ optional artwork, metadata and capabilities to these presentation records.
 
 | Slot | Props and content |
 | --- | --- |
-| Shell | `viewer:string`, `skin:string`, `skins:string[]`, `chooseSkin(string)`; one children slot containing the route scroll surface |
+| Shell | `viewer:string`, `skin:string`, `skins:string[]`, `chooseSkin(string)`, `signOut()`; one children slot containing the route scroll surface |
 | Home | `model:HomeModel`, `query:string`, `small:bool`, `still:bool`, `selectTitle(id,receipt)`, `observe(receipt,IntersectionObserverEntry)`; children slot holds the foundation search field |
 | SearchSurface | `query:string`, `model:SearchModel`, `descriptive:SearchModel`, `ai:SearchModel`, `generation:number`, `loading:bool`, `error:bool`, `aiAvailable:bool`, `small`, `still`, `selectTitle`, `observe` |
 | Row | `row:FeedRow`, `small`, `still`, `selectTitle`, `observe` |
@@ -53,3 +53,16 @@ tokens and choose entirely different layout, typography and geometry. Asset acce
 continues to follow server viewer policy. Unknown skin IDs fall back to cinematic.
 The v0 root exposes selection state; alternate compiled slot dispatch is added when
 the next skin package exists, rather than pretending a color change is another skin.
+
+Auth slots: `SignIn` receives username, password, passwordAvailable, quickAvailable, error, busy and editUsername/editPassword/submit/quick actions. `QuickConnect` receives model:QuickModel, error:string and cancel action. Foundation owns auth state, silent webCode redemption, URL cleanup, server poll interval and terminal grant handling.
+
+PlaybackModel carries `sessionId` and serialized `planJson`. The foundation seeds the
+engine from uiPlayback, then uses matching sessionEvents stream plans. Stream failures
+retry at most three times. Chrome never interprets the transport or invents recovery.
+
+## Contract gaps
+
+- Shell has no viewport input or route actions, so Index cannot recompose its rail for mobile or offer Search, Live and Library navigation honestly. Add responsive state and supported navigation actions, with capability information for unavailable destinations.
+- The Home child is a fully styled cinematic search field. A search field slot receiving query and edit action would let each skin control its presentation while keeping search behaviour shared.
+- Detail is wrapped in a root-owned modal, preventing Index from choosing a true split-pane route. Expose presentation selection to the root while preserving the navigation stack and focus restoration.
+- Cards expose a preformatted facts string rather than structured metadata, limiting accessible table columns; expose stable display fields alongside the formatted string.

@@ -1,6 +1,4 @@
-use HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./models.contract"
-
-use GuideModel from "../live/models.contract"
+use HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel from "./models.contract"
 
 shape Time
   epochAtZero: number
@@ -9,33 +7,124 @@ shape PageState
   visibilityState: string
 
 members Client
-  state guideWindow = 0
   state generation = 0
-  state skin = ""
+  state skin = "" persist
   state observed: string[] = []
   derive query = match first(stack(nav)) { case some(e) => searchParam(e, "q"), case none => "" }
   derive detailId = (top(nav).name == "title" ? top(nav).params.id : "")
   resource page = exactPage() as shape PageState
   resource time = exactTime() as shape Time
   resource viewport = exactViewport() as shape Viewport
-  resource home = uiBootstrap() as shape HomeModel
-  resource results = uiSearch(query, generation, time.epochAtZero) when query.trim() != "" as shape SearchModel
-  resource descriptive = uiDescriptive(query, generation, time.epochAtZero) when query.trim() != "" and home.descriptiveAvailable as shape SearchModel
-  resource ai = uiAI(query, generation, time.epochAtZero) when query.trim() != "" and home.aiAvailable as shape SearchModel
-  resource detail = uiDetail(detailId) when detailId != "" as shape DetailModel
-  resource guide = uiGuide(time.epochAtZero, guideWindow) when top(nav).name == "live" as shape GuideModel
-  derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" ? top(nav).params.id : "")
-  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero) when playingId != "" as shape PlaybackModel
+  derive webCode = searchParam(top(nav), "webCode")
+  resource auth = uiAuth(webCode, time.epochAtZero) as shape AuthModel
+  mutation signedOut as shape AuthModel refreshes auth
+  action logout
+    send signedOut = signOut(time.epochAtZero)
+    nav = open(nav, path("home"))
+  mutation signedIn as shape AuthModel refreshes auth then afterSignIn
+  mutation quickStarted as shape QuickModel then afterQuickStart
+  mutation quickPoll as shape AuthModel refreshes auth then afterQuickPoll
+  mutation quickCancelled as shape ReceiptReply
+  state returnTo = ""
+  task requireSignIn when current(auth) and not auth.authenticated and top(nav).name != "home"
+    after(1, showSignIn)
+  action showSignIn
+    if top(nav).name == "title"
+      returnTo = path("title", top(nav).params.id)
+    else
+      if top(nav).name == "extra"
+        returnTo = path("extra", top(nav).params.id)
+      else
+        returnTo = path("watch", top(nav).params.id)
+    nav = open(nav, path("home"))
+  state username = ""
+  state password = ""
+  state quickSecret = ""
+  derive authError = match signedIn { case some(r) => r.error, case none => (quickError != "" ? quickError : auth.error) }
+  derive quickModel = match quickStarted { case some(r) => r, case none => QuickModel(secret="", code="", expiresAt="", status="", pollIntervalSeconds=2) }
+  derive quickError = match quickPoll { case some(r) => r.error, case none => "" }
+  state nextQuickPoll = 0
+  task quickPolling when quickSecret != ""
+    every(1000, pollCode)
+  task cleanWebCode when auth.authenticated and webCode != ""
+    after(1, removeWebCode)
+  action removeWebCode
+    if top(nav).name == "home"
+      nav = replace(nav, path("home") + (query == "" ? "" : `?q=${encodeURIComponent(query)}`))
+    else
+      if top(nav).name == "title"
+        nav = replace(nav, path("title", top(nav).params.id))
+      else
+        if top(nav).name == "watch"
+          nav = replace(nav, path("watch", top(nav).params.id))
+        else
+          nav = replace(nav, path("extra", top(nav).params.id))
+  action editUsername(v: string)
+    username = v
+  action editPassword(v: string)
+    password = v
+  action submitSignIn
+    if username.trim() != "" and password != "" and not pending(signedIn)
+      send signedIn = signIn(username.trim(), password, time.epochAtZero)
+  action afterSignIn
+    password = ""
+    match signedIn
+      case some(r)
+        if r.authenticated and returnTo != ""
+          nav = open(nav, returnTo)
+          returnTo = ""
+      case none
+        password = ""
+  action startCode
+    send quickStarted = startQuick(time.epochAtZero)
+  action afterQuickStart
+    quickSecret = quickModel.secret
+    nextQuickPoll = performanceNow() + max(1, quickModel.pollIntervalSeconds) * 1000
+  action pollCode
+    if not pending(quickPoll) and performanceNow() >= nextQuickPoll
+      nextQuickPoll = performanceNow() + max(1, quickModel.pollIntervalSeconds) * 1000
+      send quickPoll = pollQuick(quickSecret, time.epochAtZero)
+  action afterQuickPoll
+    match quickPoll
+      case some(r)
+        if r.authenticated or r.error != ""
+          quickSecret = ""
+        if r.authenticated and returnTo != ""
+          nav = open(nav, returnTo)
+          returnTo = ""
+      case none
+        quickSecret = quickSecret
+  action cancelCode
+    send quickCancelled = cancelQuick(quickSecret, time.epochAtZero)
+    quickSecret = ""
+  resource home = uiBootstrap() when auth.authenticated as shape HomeModel
+  resource results = uiSearch(query, generation, time.epochAtZero) when auth.authenticated and query.trim() != "" as shape SearchModel
+  resource descriptive = uiDescriptive(query, generation, time.epochAtZero) when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel
+  resource ai = uiAI(query, generation, time.epochAtZero) when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel
+  resource detail = uiDetail(detailId) when auth.authenticated and detailId != "" as shape DetailModel
+  derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" ? top(nav).params.id : "")
+  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : "title", time.epochAtZero) when auth.authenticated and playingId != "" as shape PlaybackModel
+  state streamAttempt = 0
+  resource sessionUpdate = sessionEvents(playback.sessionId, streamAttempt) when auth.authenticated and playingId != "" and playback.sessionId != "" as shape PlaybackModel
+  derive currentPlan = (current(sessionUpdate) and sessionUpdate.sessionId == playback.sessionId and sessionUpdate.planJson != "" ? sessionUpdate.planJson : playback.planJson)
+  task retrySession when failed(sessionUpdate) and streamAttempt < 3
+    after(1500, retryStream)
+  action retryStream
+    streamAttempt = streamAttempt + 1
   mutation playerReceipt as shape ReceiptReply queue
-  state lowDelay = false
   state commandId = 0
   state commandJson = ""
+  mutation flushed as shape ReceiptReply
+  task flushOnHide when page.visibilityState == "hidden"
+    after(1, flushReceipts)
+  action flushReceipts
+    send flushed = flushInteractions(time.epochAtZero)
   mutation receipt as shape ReceiptReply queue
   derive small = viewport.width < 640
   derive still = viewport.prefersReducedMotion
   derive activeSkin = (skin == "" ? home.defaultSkinId : skin)
 
-  task searchUpdates when query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running")
+  task searchUpdates when auth.authenticated and query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running")
     every(1500, updateSearch)
 
   action updateSearch
@@ -65,20 +154,9 @@ members Client
     commandId = next
     commandJson = `{"id":${next},"type":"${kind}"}`
   action play(id: string)
+    streamAttempt = 0
     nav = push(nav, path("watch", id))
   action playExtra(id: string)
+    streamAttempt = 0
     nav = push(nav, path("extra", id))
 
-
-  action watchChannel(id: string)
-    lowDelay = false
-    nav = push(nav, path("liveWatch", id))
-  action earlierGuide
-    guideWindow = guideWindow - 1
-  action laterGuide
-    guideWindow = guideWindow + 1
-  action toggleLowDelay
-    lowDelay = not lowDelay
-    let next = commandId + 1
-    commandId = next
-    commandJson = `{"id":${next},"type":"lowDelay","enabled":${lowDelay}}`

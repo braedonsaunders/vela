@@ -8,7 +8,8 @@ IDs, continuation cursors, receipt tokens and source identities are opaque.
 
 All endpoints require `Authorization: Bearer <accessToken>` except capabilities,
 sign-in, refresh, grant initiation/polling, quick-connect initiation/polling and
-web-code redemption. Device identity binds credentials and sessions. All POSTs
+web-code redemption. Authenticated calls also require `X-Vela-Device-Id: <device.id>`.
+Device identity binds credentials and sessions. All POSTs
 require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 
 | Method | Path | Request | Response |
@@ -31,6 +32,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /titles/:id | — | TitleDetail |
 | GET | /titles/:id/children | cursor, limit (query) | Page<Title> |
 | GET | /titles/:id/extras | — | ExtrasResponse |
+| POST | /titles/:id/watch | WatchRequest | Ack |
 | POST | /search | SearchRequest | SearchResponse |
 | POST | /search/ai | AISearchRequest | AISearchJob |
 | GET | /search/ai/:id | — | AISearchJob |
@@ -141,3 +143,9 @@ ignore unknown object fields and handle unrecognized events by fetching a snapsh
 Do not assume optional feature support from server version. A required field/type,
 unit or semantic change needs a new URL major version. New enum values require
 capability gating until old clients can safely ignore them.
+
+`compatibleClientBuilds`, when present, is a semver interval [minInclusive,maxExclusive).
+Ether initially supports >=0.1.0 <0.2.0. Optional initialTrackSelection,
+sessionTrackChanges and extraPlayback features describe these separate operations.
+Absent feature means unsupported; clients handle feature_unavailable without retry.
+Source/timeline IDs are omitted when unknown; absence never proves compatibility.
