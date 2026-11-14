@@ -1,4 +1,5 @@
 /** Local-only release packager. No publishing and no changes to vendor/exact. */
+import { writePwaAssets } from './pwa-assets';
 import { createHash } from 'node:crypto';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -60,18 +61,39 @@ try {
   console.log(await run([process.execPath, 'player/build.ts'], client, env));
   const dist = join(client, 'dist');
   console.log(await run([process.execPath, 'exact.mjs', 'web-build', '--out', dist, '--render', 'none'], client, env));
-  // Exact's generated shell defaults to /. Change only our staged output.
+  await writePwaAssets(dist);
+  await copyFile(join(import.meta.dir, 'pwa.js'), join(dist, 'pwa.js'));
+  await writeFile(join(dist, 'offline.html'), '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0c1015"><title>Vela · Offline</title><style>body{margin:0;min-height:100vh;display:grid;place-content:center;gap:1rem;padding:2rem;box-sizing:border-box;background:#0c1015;color:#f2e9d6;font:18px system-ui}h1,p{margin:0}a{color:inherit}</style><h1>You’re offline</h1><p>Reconnect to browse and play from your server.</p><a href="/vela">Try again</a></html>');
+  const pwaPath = join(dist, 'manifest.json');
+  const pwa = JSON.parse(await readFile(pwaPath, 'utf8'));
+  Object.assign(pwa, { id: '/vela', name: 'Vela', short_name: 'Vela', start_url: '/vela', scope: '/vela', display: 'standalone', theme_color: '#0c1015', background_color: '#0c1015', icons: [192,512].map(size => ({ src: `./vela-icon-${size}.png`, sizes: `${size}x${size}`, type: 'image/png', purpose: 'any maskable' })) });
+  await writeFile(pwaPath, JSON.stringify(pwa, null, 2) + '\n');
+  const cacheFiles = new Map<string, { url: string; sha256: string }>();
+  async function immutableUrl(name: string): Promise<string> {
+    const sha256 = digest(await readFile(join(dist, name))), url = `/vela/${name}?v=${sha256}`;
+    cacheFiles.set(url, { url, sha256 }); return url;
+  }
+  const installUrl = await immutableUrl('pwa.js');
+  // Pin fixed-name entrypoints by content digest; imported chunks already have content-addressed names.
   for (const name of ['index.html', 'shell.html']) {
     const path = join(dist, name);
     if (!await Bun.file(path).exists()) continue;
-    const html = await readFile(path, 'utf8');
+    let html = await readFile(path, 'utf8');
     if (!html.includes('<base href="/">')) throw new Error(`Unexpected base tag in ${name}`);
-    await writeFile(path, html.replace('<base href="/">', '<base href="/vela/">'));
+    html = html.replace('<base href="/">', `<base href="/vela/"><meta name="theme-color" content="#0c1015"><link rel="apple-touch-icon" href="/vela/vela-icon-180.png"><script type="module" src="${installUrl}"></script>`);
+    const references = [...html.matchAll(/(?:src|href)="\.\/([^"?#]+\.(?:js|css))"/g)].map(m => m[1]);
+    for (const asset of new Set(references)) html = html.replaceAll(`"./${asset}"`, `"${await immutableUrl(asset)}"`);
+    await writeFile(path, html);
   }
-  const pwaPath = join(dist, 'manifest.json');
-  const pwa = JSON.parse(await readFile(pwaPath, 'utf8'));
-  pwa.start_url = '/vela'; pwa.scope = '/vela';
-  await writeFile(pwaPath, JSON.stringify(pwa, null, 2) + '\n');
+  // Only hashed chunks and explicitly digest-qualified shell URLs enter the SW cache.
+  for (const name of await readdir(dist)) if (/-[A-Za-z0-9_-]{8,}\.(?:js|css|wasm)$/.test(name)) {
+    const url = `/vela/${name}`; cacheFiles.set(url, { url, sha256: digest(await readFile(join(dist, name))) });
+  }
+  const offlineUrl = await immutableUrl('offline.html');
+  const filesToCache = [...cacheFiles.values()];
+  const shell = { version, digest: digest(JSON.stringify(filesToCache)).slice(0,16), offlineUrl, files: filesToCache };
+  const worker = (await readFile(join(import.meta.dir, 'sw.js'), 'utf8')).replace('const shell = __VELA_SHELL__;', `const shell = ${JSON.stringify(shell)};`);
+  await writeFile(join(dist, 'sw.js'), worker);
   // Build metadata is host-local and is not an installer/runtime input.
   await rm(join(dist, '.exact-build.json'), { force: true });
   const cards: { path: string; bytes: number; sha256: string }[] = [];
@@ -88,7 +110,7 @@ try {
   const archive = join(work, archiveName);
   await run(['tar', '--format=ustar', '-czf', archive, '-C', dist, '.'], root, { ...process.env, COPYFILE_DISABLE: '1' });
   const archiveBytes = await readFile(archive), archiveSha256 = digest(archiveBytes);
-  const manifest = { schemaVersion: 1, version, protocolVersions: [0], exactRevision, buildTime: new Date().toISOString(), sourceRevision, sourceDirty, apiOrigin: 'same-origin', basePath: '/vela/', archive: { file: archiveName, bytes: archiveBytes.length, sha256: archiveSha256 }, files: cards };
+  const manifest = { schemaVersion: 1, version, protocolVersions: [0], exactRevision, buildTime: new Date().toISOString(), sourceRevision, sourceDirty, apiOrigin: 'same-origin', basePath: '/vela/', serviceWorker: { path: '/vela/sw.js', scope: '/vela', headers: { 'Service-Worker-Allowed': '/vela', 'Cache-Control': 'no-cache' } }, archive: { file: archiveName, bytes: archiveBytes.length, sha256: archiveSha256 }, files: cards };
   const manifestBytes = JSON.stringify(manifest, null, 2) + '\n';
   await copyFile(archive, join(releases, archiveName));
   await writeFile(join(releases, manifestName), manifestBytes);

@@ -74,7 +74,7 @@ Serve index/shell/manifest with revalidation. Content-hashed assets can be cache
 immutably only while their owning release remains retrievable. Avoid mixing
 files from different releases: retain the previous static tree through existing
 page lifetimes or use version-qualified asset roots before turning on aggressive
-caching. No service worker/offline cache is installed by this packager.
+caching. The packager emits the narrowly scoped shell service worker described below.
 
 ## Compatibility and rollback
 
@@ -104,3 +104,42 @@ scheme grants, while Vela enforces the narrower same-origin runtime policy. This
 is an application policy boundary, not an Exact native `self` grant. Artwork and
 media URLs must satisfy that boundary and redirects must not escape it. No
 installer rewriting, instance hostname or viewer token belongs in the archive.
+
+## PWA installation and updates
+
+Exact emits the base manifest and icon links; it does not provide Vela's service
+worker or install-prompt lifecycle. The release adds original sail-mark SVG and
+180/192/512 pixel PNGs, Vela's standalone manifest, dark theme/background, an
+Apple touch icon, and `pwa.js`. The canonical start URL and manifest/SW scope are
+`/vela`; the asset base remains `/vela/`.
+
+Ether must serve `/vela/sw.js` with `Service-Worker-Allowed: /vela` (needed because
+the canonical `/vela` URL is above the script's default `/vela/` directory scope),
+JavaScript MIME type and `Cache-Control: no-cache`. The manifest's serviceWorker
+field records these required serving headers. Registration requires HTTPS or a
+browser-trusted localhost secure context. It never broadens to the origin root.
+
+The worker caches only exact allowlisted shell URLs, verified against build-time
+SHA-256 values. Fixed-name HTML entrypoint JS/CSS gets digest-qualified URLs;
+imported chunks already have content-addressed names. Unversioned native modules
+remain network-only. Navigations use network responses, with a static “You're
+offline” page when the network fails. `/vela/v0/`, artwork grants,
+`/sessions/`, other media, non-GET and cross-origin requests bypass the worker.
+There are no dynamic cache admissions, credential storage, API cache or offline
+media features. The cache name includes both version and shell digest.
+
+New workers install in the background and wait. `applyUpdate()` explicitly asks
+the waiting worker to activate; activation removes only older Vela shell caches,
+claims this scope and reloads existing controlled pages. An update can interrupt
+playback, so the UI should offer it at a suitable moment. Installation or worker
+failure never gates ordinary online browsing. Platform install prompts are offered
+only when the browser actually emits beforeinstallprompt; Safari can use its own
+Add to Home Screen flow without a fake installable state.
+
+Page-host integration: `window.velaPwa.state` returns installable, installed,
+updateAvailable and offline booleans. `subscribe(callback)` immediately reports
+state and returns an unsubscribe function; `vela:pwa-state` is also dispatched on
+window. `install()` must be invoked in a trusted user gesture and resolves whether
+the prompt was accepted. `applyUpdate()` returns false when no worker is waiting.
+Exact's data module cannot access this browser API directly; native-view controls
+bridge it without exposing credentials or arbitrary DOM access to skins.
