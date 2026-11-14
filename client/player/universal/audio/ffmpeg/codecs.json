@@ -15,7 +15,7 @@
 ["adpcm_ima_wav","adpcm_ima_wav","ADPCM_IMA_WAV"],["adpcm_ima_qt","adpcm_ima_qt","ADPCM_IMA_QT"],
 ["adpcm_ms","adpcm_ms","ADPCM_MS"],["ape","ape","APE"],["wavpack","wavpack","WAVPACK"],
 ["tta","tta","TTA"],["shorten","shorten","SHORTEN"],["speex","speex","SPEEX"],
-["cook","cook","COOK"],["ra_144","real_144","RA_144"],["ra_288","ra_288","RA_288"],
+["cook","cook","COOK"],["ra_144","ra_144","RA_144"],["ra_288","ra_288","RA_288"],
 ["atrac1","atrac1","ATRAC1"],["atrac3","atrac3","ATRAC3"],["atrac3p","atrac3p","ATRAC3P"],
 ["qdm2","qdm2","QDM2"],["gsm","gsm","GSM"],["gsm_ms","gsm_ms","GSM_MS"]
 ]
