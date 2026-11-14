@@ -246,3 +246,41 @@ mapping or long-run synchronization. Generate/remux it with
 `bun mock-server/scripts/make-audio-reference-media.ts`; it verifies the source
 hash and preserves the adjacent Apache licence/provenance. The session-granted
 mock resource is `audio/truehd-bed-7.1.mkv`.
+
+## Ether segment feeder and MSE timestamp gate
+
+`feedEtherAudio(descriptor, requestedPosition, existingBackend, generation, signal)`
+feeds the existing OwnedNativeMediaAudioBackendPort. It creates no clock or media
+source of its own. Its owner starts the backend, controls playback/gain, and reads
+that backend's qualified clock. It fetches one <=2 MiB fragment at a time, delegates
+backpressure to the backend, rejects >2s fragments, bounds/retries network reads,
+and anchors relative playlist segment 0 at the absolute requested position.
+
+Prepared decoder assets can be installed without recompiling:
+
+    bun client/player/universal/audio/install-packages.ts <served-dir> --from=<prepared-dir>
+
+That mode verifies all four module hashes and requires matching source archives,
+licences and offers. The audio worker's prepared directory is
+`~/.scratch/tmp/vela/audio-packages/`; it is scratch, not a durable release store.
+
+Ether fragment-bound fix e036a0c94 uses 1.536s AAC fragments with bounded folded
+tails and TARGETDURATION 2. Its worker measured all fragment spans <=2s and sizes
+<2 MiB. This resolved the existing native backend's fragment limits.
+
+A subsequent local Chrome MSE drive caught a **separate timeline defect** in the
+representative FFmpeg muxing: FFprobe reported first audio PTS 3.978667 for a 4s
+start, but the actual first tfdt was 0. The init carried a two-entry elst with an
+empty edit for the offset. Chrome MSE ignored that lead-in, producing a zero-based
+buffer. A requested 4s start reached the 4.032s audio end; a requested 6s replacement
+never qualified its clock. Old-generation stop correctly returned false after the
+new generation started, but this was **not** a timeline/playback pass.
+
+`use_editlist=0` alone removed elst but left tfdt at zero, so it was insufficient.
+Ether's coordinator kept audioFallback unadvertised and assigned a mux/real-MSE
+fix. `assertEtherAudioTimeline` now checks the actual init/audio track/timescale,
+rejects edit lists, and requires the first fragment tfdt within 125ms of the
+requested title time **before any media is appended**. It does not rewrite PTS
+or infer an offset from the request. A broken producer fails explicitly instead
+of exposing the wrong audio master clock. Full fixed-producer/native-view
+qualification remains pending.
