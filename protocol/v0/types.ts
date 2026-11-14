@@ -8,7 +8,7 @@ export interface Ack { accepted: true }
 export interface Device { id: ID; name: string; platform: string; appVersion: string }
 export interface ClientCapabilities {
   device: Device; protocolVersions: number[]; containers: string[]; videoCodecs: string[];
-  audioCodecs: string[]; subtitleFormats: string[]; hls: boolean; mse: boolean;
+  audioCodecs: string[]; subtitleFormats: string[]; /** Native HLS acceptance, independent of MSE. */ hls: boolean; mse: boolean;
   maxWidth?: number; maxHeight?: number; maxBitrate?: number; hdr?: string[];
 }
 export interface Feature { available: boolean; reason?: string }

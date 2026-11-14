@@ -7,7 +7,7 @@ builds or tests. This is a contract review, not an E2E qualification.
 
 Vela corrections landed in `002b710`. Protocol types remain the schema authority.
 `E` paths below are relative to Ether `internal/frontends/vela/`; `V` paths are
-relative to this repository. The numbered findings below are proposals for Ether,
+relative to this repository. The numbered entries below are proposals for Ether, with F3 withdrawn as a current-client defect after checking its native-only probe,
 not claims that remediation has landed.
 
 ## Shared request/response fields
@@ -39,7 +39,7 @@ not claims that remediation has landed.
   selectedPathId/tracks/selected-track IDs/chapters/fallback match names and units
   (`E/playback.go:194,223`, V types:71–100). Source identity is omitted when unknown;
   empty boundaries and unsupported fallback correctly avoid fabricating continuity.
-  Readiness for MSE, delivered subtitle format and live mode need F3/F4/F9.
+  Delivered subtitle format and live mode need F4/F9. F3 records the native-HLS clarification.
 - Snapshot cursor/revision/plan/publishedRanges/lastObservationSequence and event
   cursor/revision/sessionId/type plus snapshot/plan/reason match
   `E/playback.go:262,275,473`, V types:101–106. Empty publishedRanges is no proof of
@@ -102,7 +102,7 @@ response; document/handle the auth error rather than inventing a denial reason.
 |---|---|---|---|
 | F1 | `frontend.go:304–330`: no collections route; catchall404 | `protocol/v0/README.md:32,157`; `types.ts:122`; adapter/ether/index.ts:104 | Implement authorized collection/playlist/directory contents with ordered RowEntry receipts and ETag/pagination. Until available, do not advertise destinations that always404. |
 | F2 | `playback.go:18–30`: optional HDR slice has no omitempty; negotiate marshals struct at frontend.go:354. Omitted hdr becomes null. | `types.ts:12`: hdr is absent or string[], never null | Preserve declared optional presence with omitempty/pointers or a dedicated response mapper. Do not widen the client type to accept invalid null arrays. |
-| F3 | `playback.go:115` always proposes TS; :194 advertises ready HLS with qualities=[] regardless of MSE need; plan.HLSContainer unused | `types.ts:9,73,78`; `client/player/engine.ts:81–89` accepts non-native HLS only with a supported qualified rendition | Emit compatible muxed fMP4 media-playlist qualities with delivered RFC6381 codec facts when client is MSE-only, or reject decoder/422. Do not return an unusable ready HLS plan or choose TS outside declared container capability. Empty qualities is valid for native-HLS clients only. |
+| F3 (clarified, not a current defect) | `playback.go:115,171–175,194`: non-direct plans require client.hls; otherwise decoder/422. Native HLS has qualities=[] | `client/player/media-capabilities.ts:16` declares hls from the native HLS MIME probe, independently of mse at :17; `types.ts:11` and README now explicitly document this | Current client does not declare HLS merely for MSE availability, so the originally reported MSE-only ready-plan scenario is not reached. Keep fail-closed rejection explicit; future MSE rendition support must provide actual compatible qualities, never invented codecs. |
 | F4 | `playback.go:205,212,216`: t.codec keeps source codec but URL requests vtt | `types.ts:71`; README:178; player/protocol.ts:13 filters delivered VTT/WebVTT | Set wire subtitle codec to webvtt/vtt when delivering VTT; retain original codec only in source mediaSummary. |
 | F5 | `playback.go:380–384,431`: observed audioTrackId/subtitleTrackId are not read; every plan keeps old selected values. Buffering also does not update/publish recovering state. | `types.ts:96–100`; README:108; player/protocol.ts:11,37 | Validate actual observed selections against offered tracks and preserve them, including null/off, without claiming broker track-command support. Publish an honest recovering state for buffering observations. Otherwise the next SSE plan resets a locally selected subtitle. |
 | F6 | `frontend.go:96–111` misses ErrSessionBusy/ErrSourceGone and discards typed RetryAfter; problem():94 always denies retry. playback.go:157 uses source/503. | README:135–139; types.ts:107; neutral session_busy.go:11 and sessions/media.go:61,100 prove error classes exist | Classify admission busy as capacity, retired source as source; use source/502 consistently. When backend supplies bounded retry delay, propagate retry.allowed/afterSeconds/maxAttempts and Retry-After rather than telling clients never to retry temporary admission exhaustion. |
@@ -142,3 +142,9 @@ Compile evidence: one client Contract build returned [], mock tsc and standalone
 player protocol tsc passed for the corrections. No Ether checks or browser loops
 were run for this source review. Later source changes, fixes and lab E2E need their
 own qualification; this document deliberately pins the reviewed Ether commit.
+
+Implementer review: Ether accepted F1/F2/F4–F14 for remediation (F1 will suppress
+unsupported destinations until a neutral ordered receipt-bearing contents service
+exists). F3 was corrected after checking the current client probe: it is a contract
+clarification, not a current interoperability defect. Follow-up fixes are not
+assumed present at the pinned SHA above.

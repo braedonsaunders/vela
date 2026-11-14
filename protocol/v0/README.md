@@ -178,3 +178,8 @@ Mode is the initial player buffering preference, not a server latency guarantee.
 Track.codec describes the delivered track format (for example WebVTT for a VTT
 sidecar), while mediaSummary retains source codec facts. Empty publishedRanges
 means no publication proof was reported; it does not prove a media outage.
+
+ClientCapabilities.hls declares native HLS acceptance (the browser's HLS MIME
+probe); mse separately declares MSE availability. MSE alone does not promise TS
+demux or make an unqualified master playlist playable. A server may offer native
+HLS with empty qualities; an MSE path needs explicit compatible rendition metadata.
