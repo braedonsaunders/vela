@@ -42,10 +42,13 @@ members Client
     if json.startsWith("{\"type\":\"session-command\"")
       send watchAuthorized = uiPlayerCommand(json)
     else
-      if json.startsWith("{\"type\":\"observation\"")
-        playerMessage(json)
+      if json.startsWith("{\"type\":\"session-refresh\"")
+        streamAttempt = streamAttempt + 1
       else
-        watchEvent = json
+        if json.startsWith("{\"type\":\"observation\"")
+          playerMessage(json)
+        else
+          watchEvent = json
   action watchControl(kind: string, value: string)
     if kind == "retry"
       watchAuthorized = none

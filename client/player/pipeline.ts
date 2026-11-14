@@ -5,7 +5,7 @@ export { PlaybackFault } from './buffer';
 import { AdaptiveBitrate, BandwidthEstimator } from './abr';
 import { parsePlaylist, type Playlist } from './hls';
 import { cancelled, delay } from './session';
-import type { LiveSnapshot, Rendition } from './model';
+import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 
 type MediaSourceClass = typeof MediaSource;
 export function mediaSourceClass(): MediaSourceClass | undefined {
@@ -19,6 +19,26 @@ export function bufferAhead(video: HTMLVideoElement) {
 export class SegmentPipeline {
   readonly bandwidth = new BandwidthEstimator();
   readonly abr = new AdaptiveBitrate();
+  private ladder: Rendition[] = [];
+  updateRenditions(ladder: Rendition[]) { this.ladder = [...ladder]; }
+  private playable() { const MS = mediaSourceClass(); return this.ladder.filter(r => codecKnown(r) && MS?.isTypeSupported(r.mime)); }
+  get qualityIds() { return this.playable().filter(r => !this.current || r.mime === this.current.mime && r.audioGroupId === this.current.audioGroupId).map(r => r.id); }
+  private async verified(expected: Rendition, signal: AbortSignal) {
+    const started = performance.now(), deadline = started + 2000;
+    let refreshed = false;
+    for (;;) {
+      cancelled(signal);
+      const rendition = this.ladder.find(r => r.id === expected.id && r.url === expected.url);
+      if (!rendition) throw new PlaybackFault('Prepared rendition identity changed', 'source');
+      if (codecKnown(rendition)) {
+        if (!mediaSourceClass()?.isTypeSupported(rendition.mime)) throw new PlaybackFault('Prepared codec is not supported by this browser', 'source');
+        return rendition;
+      }
+      if (performance.now() >= deadline) throw new PlaybackFault('Codec verification did not arrive after initialization', 'source');
+      if (!refreshed && performance.now() - started >= 500) { refreshed = true; this.refreshPlan(); }
+      await delay(100, signal);
+    }
+  }
   current?: Rendition; audioRenditions: AudioRendition[] = []; initialAudioTrackId: string | null = null;
   private audio?: AudioBuffer;
   get audioTrackId() { return this.audio?.trackId ?? null; }
@@ -45,7 +65,7 @@ export class SegmentPipeline {
   private media?: MediaSource; private objectUrl?: string; private buffer?: SourceBuffer;
   private dropPrevious = { dropped: 0, total: 0 }; private dropRatio = 0;
   private driftPenalty = 0;
-  constructor(private video: HTMLVideoElement, private onRendition: (r: Rendition) => void) {}
+  constructor(private video: HTMLVideoElement, private onRendition: (r: Rendition) => void, private refreshPlan: () => void) {}
   dispose() {
     this.audio?.dispose(); this.audio = undefined;
     this.detachStreaming?.(); this.detachStreaming = undefined; this.request?.abort(); this.request = undefined;
@@ -53,9 +73,9 @@ export class SegmentPipeline {
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     this.buffer = undefined; this.media = undefined; this.objectUrl = undefined;
   }
-  private async fetchBytes(url: string, signal: AbortSignal, progress?: (bytes: number, elapsed: number) => void): Promise<ArrayBuffer> {
+  private async fetchBytes(url: string, signal: AbortSignal, progress?: (bytes: number, elapsed: number) => void, timeoutMs = 12000): Promise<ArrayBuffer> {
     const started = performance.now();
-    const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(12000)]), credentials: 'same-origin' });
+    const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]), credentials: 'same-origin' });
     if (!response.ok) throw new PlaybackFault(`Media HTTP ${response.status}`, 'network', response.status === 408 || response.status === 429 || response.status >= 500 || response.status === 404);
     const chunks: Uint8Array[] = []; let size = 0;
     if (response.body) {
@@ -103,8 +123,9 @@ export class SegmentPipeline {
   }
   async run(ladder: Rendition[], position: number, live: boolean, signal: AbortSignal) {
     const MS = mediaSourceClass(); if (!MS) throw new PlaybackFault('MediaSource unavailable', 'source');
-    const playable = ladder.filter(r => MS.isTypeSupported(r.mime));
-    if (!playable.length) throw new PlaybackFault('No supported segmented codec', 'source');
+    this.updateRenditions(ladder);
+    const candidates = ladder.filter(r => !codecKnown(r) || MS.isTypeSupported(r.mime));
+    if (!candidates.length) throw new PlaybackFault('No supported segmented codec', 'source');
     const media = this.media = new MS();
     this.streamingAllowed = !('streaming' in media) || !!(media as MediaSource & { streaming: boolean }).streaming;
     const start = () => { this.streamingAllowed = true; };
@@ -120,13 +141,21 @@ export class SegmentPipeline {
       media.addEventListener('sourceopen', open, { once: true }); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort();
     });
     cancelled(signal);
-    let rendition = playable.find(r => r.id === this.initialRenditionId) ?? playable[0];
+    let rendition = candidates.find(r => r.id === this.initialRenditionId) ?? candidates[0];
     this.abr.expensive = this.expensiveSwitches; let startupBuffered = false;
-    this.current = rendition; this.onRendition(rendition);
-    this.buffer = media.addSourceBuffer(rendition.mime);
     let list = await this.playlist(rendition, signal);
     if (!live && this.timelineOriginSeconds) list.segments.forEach(s => { s.start += this.timelineOriginSeconds; });
     if (live) { list.segments.forEach(s => { s.start += this.liveWindowStart ?? 0; }); this.published(list); }
+    // Lazy encoders do not know their RFC6381 tokens until this exact init exists.
+    // Starting one selected init is preparation, never speculative ABR probing.
+    let preparedInit: { url: string; bytes: ArrayBuffer } | undefined;
+    if (!codecKnown(rendition)) {
+      const url = list.segments.find(s => s.start + s.duration > position)?.init ?? list.segments[0].init;
+      preparedInit = { url, bytes: await this.fetchBytes(url, signal, undefined, 50000) };
+      rendition = await this.verified(rendition, signal);
+    }
+    this.current = rendition; this.onRendition(rendition);
+    this.buffer = media.addSourceBuffer(rendition.mime);
     if (rendition.audioGroupId) {
       this.audio = new AudioBuffer(media, this.video, this.audioRenditions, (url, signal) => this.bytes(url, signal), mime => MS.isTypeSupported(mime));
       await this.audio.start(rendition.audioGroupId, this.initialAudioTrackId, list, signal);
@@ -150,6 +179,7 @@ export class SegmentPipeline {
         }
       }
       if (ahead >= 12 && this.video.readyState >= 3 && !this.video.paused) startupBuffered = true;
+      const playable = this.playable();
       const proposed = this.abr.choose(playable.filter(r => r.mime === rendition.mime && r.audioGroupId === rendition.audioGroupId), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
       const choice = startupBuffered || this.abr.manual ? proposed : rendition;
       if (choice.id !== rendition.id) {
@@ -181,7 +211,7 @@ export class SegmentPipeline {
       }
       this.publicationPending = false;
       if (next.gap) { this.upstreamGap = true; throw new PlaybackFault('Publisher marked segment unavailable (EXT-X-GAP)', 'source'); }
-      if (next.init !== init) { await this.append(await this.bytes(next.init, signal), signal); init = next.init; }
+      if (next.init !== init) { await this.append(preparedInit?.url === next.init ? preparedInit.bytes : await this.bytes(next.init, signal), signal); init = next.init; preparedInit = undefined; }
       this.segmentStarted = performance.now(); this.segmentDuration = next.duration;
       const request = this.request = new AbortController();
       const abort = () => request.abort(); signal.addEventListener('abort', abort, { once: true });

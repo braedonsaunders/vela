@@ -2,6 +2,9 @@ import type { SessionCommand, AudioRendition } from '../wire/v0/types';
 /** Local engine input. protocol.ts translates the versioned server plan here. */
 export interface Track { id: string; label: string; language?: string; url?: string }
 export interface Rendition { id: string; url: string; bandwidth: number; mime: string; height?: number; audioGroupId?: string; codecStatus?: 'pending' | 'verified' }
+export function codecKnown(rendition: Rendition) {
+  return rendition.codecStatus !== 'pending' && /codecs="[^"]+"/.test(rendition.mime);
+}
 export interface Source {
   id: string; strategy: 'direct' | 'remux' | 'transcode'; delivery: 'file' | 'hls';
   url: string; mime: string; timeline: string; edition: string; audioTrackId?: string; recoveryAllowed?: boolean; boundaries?: number[];
@@ -31,7 +34,7 @@ export interface Snapshot {
   sessionId: string | null; sourceGeneration: number; seekGeneration: number;
   state: 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'recovering' | 'ended' | 'failed';
   sourceId: string | null; strategy: Source['strategy'] | null;
-  backend: 'file' | 'native-hls' | 'mse' | null; renditionId: string | null;
+  backend: 'file' | 'native-hls' | 'mse' | null; renditionId: string | null; qualityIds: string[];
   capabilities: { pip: boolean; fullscreen: boolean; audioSwitch: boolean }; lockedQuality: string | null;
   live: LiveSnapshot | null;
   seekTarget: number | null; waiting: boolean; volume: number; muted: boolean;
@@ -41,4 +44,4 @@ export interface Snapshot {
   audioTrackIds: string[]; audioTrackId: string | null; pendingAudioTrackId: string | null; subtitleTrackId: string | null; failure: Failure | null;
 }
 export type EngineEvent = { type: 'snapshot'; snapshot: Snapshot } |
-  { type: 'error'; failure: Failure; sessionId?: string | null; sourceGeneration?: number; seekGeneration?: number } | { type: 'session-command'; sessionId: string; command: SessionCommand };
+  { type: 'error'; failure: Failure; sessionId?: string | null; sourceGeneration?: number; seekGeneration?: number } | { type: 'session-command'; sessionId: string; command: SessionCommand } | { type: 'session-refresh'; sessionId: string };

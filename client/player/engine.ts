@@ -1,3 +1,4 @@
+import { codecKnown } from './model';
 import type { Command, EngineEvent, Failure, LiveSnapshot, PlaybackSession, Snapshot, Source } from './model';
 import { SessionController, cancelled, delay, type Generation } from './session';
 import { mediaSourceClass, PlaybackFault, SegmentPipeline } from './pipeline';
@@ -20,6 +21,7 @@ export class PlaybackEngine {
   private lowDelayOverride: boolean | undefined;
   private terminalMedia?: { position: number; duration: number | null };
   private localTransportIntent: 'playing' | 'paused' | undefined;
+  private startupDeadlineMs = 45000;
   private nativeOrigin = 0;
   private pendingSeek?: { position: number; startedAt: number; authorized: boolean };
   private waitSince = 0; private everPlayed = false; private lastPosition = 0; private lastAdvance = 0;
@@ -43,8 +45,8 @@ export class PlaybackEngine {
     if (!this.session || !this.source || !this.wantsPlay || ['failed','ended','recovering'].includes(this.status)) return;
     const now = performance.now();
     if (this.position() > this.lastPosition + 0.02 && !this.video.paused) { this.everPlayed = true; this.lastAdvance = now; this.lastPosition = this.position(); return; }
-    const expired = !this.everPlayed ? now - this.waitSince > 45000 : now - this.lastAdvance > 30000;
-    if (expired) void this.recover(new PlaybackFault(this.everPlayed ? 'Playback stalled for 30 seconds' : 'Playback did not start within 45 seconds', 'network'), this.controller.token());
+    const expired = !this.everPlayed ? now - this.waitSince > this.startupDeadlineMs : now - this.lastAdvance > 30000;
+    if (expired) void this.recover(new PlaybackFault(this.everPlayed ? 'Playback stalled for 30 seconds' : `Playback did not start within ${this.startupDeadlineMs / 1000} seconds`, 'network'), this.controller.token());
   }
   private detachMedia() { for (const remove of this.listeners) remove(); this.listeners = []; }
   private bindMedia(token: Generation) {
@@ -72,7 +74,7 @@ export class PlaybackEngine {
     return {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.pendingSeek ? 'buffering' : this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
-      backend: this.backend, renditionId: this.pipeline?.current?.id ?? null,
+      backend: this.backend, renditionId: this.pipeline?.current?.id ?? null, qualityIds: this.pipeline?.qualityIds ?? [],
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 }, lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
       seekTarget: this.pendingSeek?.position ?? null,
@@ -121,13 +123,14 @@ export class PlaybackEngine {
   private supported(source: Source) {
     if (source.edition !== this.session?.edition) return false;
     if (source.delivery === 'file') return !!this.video.canPlayType(source.mime);
-    return !!this.video.canPlayType('application/vnd.apple.mpegurl') || !!source.renditions?.some(r => mediaSourceClass()?.isTypeSupported(r.mime));
+    return !!this.video.canPlayType('application/vnd.apple.mpegurl') || !!source.renditions?.some(r => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass()!.isTypeSupported(r.mime)));
   }
   private useNativeHls(source: Source) {
     const native = !!this.video.canPlayType('application/vnd.apple.mpegurl');
-    const segmented = !!source.renditions?.some(r => mediaSourceClass()?.isTypeSupported(r.mime));
+    const segmented = !!source.renditions?.some(r => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass()!.isTypeSupported(r.mime)));
+    const pending = !!source.renditions?.some(r => !codecKnown(r));
     const managed = 'ManagedMediaSource' in globalThis;
-    return native && (!segmented || navigator.vendor === 'Apple Computer, Inc.' && !managed);
+    return native && (!segmented || navigator.vendor === 'Apple Computer, Inc.' && !managed && !pending);
   }
   private candidates() {
     const priority = { direct: 0, remux: 1, transcode: 2 };
@@ -166,6 +169,8 @@ export class PlaybackEngine {
     if (session.id !== this.session?.id) throw new Error('Cannot update a different session');
     const previousState = this.session?.serverState;
     this.session = session;
+    const source = session.sources.find(s => s.id === this.source?.id);
+    if (source) { this.source = source; this.pipeline?.updateRenditions(source.renditions ?? []); }
     this.applyServerState(session.serverState, previousState);
     if (this.status === 'ended') return;
     this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? this.lowDelay;
@@ -209,6 +214,7 @@ export class PlaybackEngine {
     this.track?.remove(); this.track = undefined; this.video.removeAttribute('src'); this.video.load(); this.video.playbackRate = 1;
   }
   private async activate(source: Source, position: number, recovery = false, initial = false) {
+    this.startupDeadlineMs = source.renditions?.some(r => !codecKnown(r)) ? 60000 : 45000;
     this.resumePosition = position; this.waitSince = performance.now(); this.lastAdvance = this.waitSince; this.lastPosition = position; this.everPlayed = false;
     const token = this.controller.changeSource(!initial); this.resetMedia(); this.source = source;
     this.bindMedia(token);
@@ -217,7 +223,7 @@ export class PlaybackEngine {
     try {
       if (source.delivery === 'hls' && !this.useNativeHls(source)) {
         this.backend = 'mse';
-        const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
+        const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish(), () => { if (this.controller.current(token) && this.session) this.emit({ type: 'session-refresh', sessionId: this.session.id }); });
         pipeline.timelineOriginSeconds = source.timelineOriginSeconds ?? 0;
         pipeline.audioRenditions = source.audioRenditions ?? []; pipeline.initialAudioTrackId = this.audio;
         pipeline.expensiveSwitches = source.strategy === 'transcode'; pipeline.initialRenditionId = source.initialRenditionId; pipeline.lowDelay = this.lowDelay; pipeline.liveWindowStart = this.session?.liveWindowStart ?? null; pipeline.maxLiveDrift = this.session?.liveMaxDrift ?? 45; pipeline.abr.manual = this.manualQuality;
@@ -246,7 +252,7 @@ export class PlaybackEngine {
       const done = () => { clean(); resolve(); };
       const abort = () => { clean(); reject(new DOMException('Superseded', 'AbortError')); };
       const error = () => { clean(); reject(new PlaybackFault('Media metadata unavailable', 'source')); };
-      const timer = setTimeout(() => { clean(); reject(new PlaybackFault('Metadata deadline exceeded', 'network', true)); }, 45000);
+      const timer = setTimeout(() => { clean(); reject(new PlaybackFault('Metadata deadline exceeded', 'network', true)); }, this.startupDeadlineMs);
       const clean = () => { clearTimeout(timer); this.video.removeEventListener('loadedmetadata', done); this.video.removeEventListener('error', error); token.signal.removeEventListener('abort', abort); };
       this.video.addEventListener('loadedmetadata', done, { once: true }); this.video.addEventListener('error', error, { once: true }); token.signal.addEventListener('abort', abort, { once: true });
       if (this.video.readyState >= 1) done(); else if (token.signal.aborted) abort();
@@ -374,7 +380,7 @@ export class PlaybackEngine {
         case 'volume': if (!Number.isFinite(command.value) || command.value < 0 || command.value > 1) throw new Error('Volume outside 0–1'); this.video.volume = command.value; if (command.value > 0) this.video.muted = false; this.saveVolume(); this.lastObservation = -Infinity; break;
         case 'quality':
           if (this.backend !== 'mse') throw new Error('Quality is controlled by the browser on this playback path');
-          if (command.renditionId && !this.source?.renditions?.some(r => r.id === command.renditionId)) throw new Error('Unknown rendition');
+          if (command.renditionId && !this.pipeline?.qualityIds.includes(command.renditionId)) throw new Error('Rendition codec is not verified and playable');
           this.manualQuality = command.renditionId; if (this.pipeline) this.pipeline.abr.manual = command.renditionId; break;
         case 'audio': {
           if (!this.session?.audioTracks.some(t => t.id === command.trackId)) throw new Error('Unknown audio track');

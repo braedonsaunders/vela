@@ -757,6 +757,48 @@ Chrome local mock `transcode-mse` drive (2026-11-14):
 This is local fixture qualification, not a real Ether alternate-track pass.
 Ether currently plans to omit separate audio groups until it genuinely packages
 them; its alternative is an authorized generation-changing tracks command.
-Pending-codec qualities also require a separate client integration before that
-server branch can deploy; the installed client must not receive empty codec
-strings as if they were verified.
+At that qualification point, pending-codec qualities still required the client
+integration recorded below; they must never be interpreted as verified tokens.
+
+### Pending codec preparation (paired Ether playback branch)
+
+The client now supports the lazy encoder contract agreed with Ether
+`w0311/vela-playback` through `23c664a8e` (including `0f1e8dd3e`). An advertised
+quality is a real scoped resource, but `codecStatus: pending` or an empty
+`videoCodec` is not a usable codec claim. Startup honors `initialRenditionId` or
+the first advertised eligible rung. It fetches that media playlist and exactly
+one init, which starts that rung only. It does not probe other pending rungs or
+fall back to native HLS merely because exact codecs are not available yet.
+
+The selected init GET has a 50-second deadline, aligned with Ether's 45-second
+production wait. Its bytes are retained while the pipeline waits up to two more
+seconds for exact init-derived codecs in the latest plan. An earlier event is
+retained too. Reconciliation requires the same session/source/seek generations,
+rendition ID and URL. After 500 ms without verification the engine emits
+`session-refresh`; Contract restarts its session resource, obtaining a fresh
+snapshot before reconnecting SSE. There is one refresh per preparation attempt.
+Cancellation/stop aborts all of this. The enclosing first-frame deadline is
+60 seconds for pending startup; already-known startup remains 45 seconds.
+
+Only verified codecs accepted by `MediaSource.isTypeSupported` create a
+SourceBuffer. `snapshot.qualityIds` exposes the verified compatible rungs; menus,
+manual quality commands and ABR use this set. A newer plan updates the existing
+pipeline's ladder without resetting the media, buffer or playhead. Other pending
+rungs remain hidden until their own init was genuinely produced and verified.
+Missing or unsupported verification fails explicitly rather than waiting forever.
+
+Local Chrome/mock opt-in fixture `4269ed1`, 2026-11-14 (no lab streams):
+
+| Check | Measured evidence |
+|---|---|
+| All qualities initially pending with empty tokens | Initial qualityIds empty; only v360 playlist/init/segments requested by the engine |
+| Exact codec arrives over SSE | Plan revision 2 at 272.7 ms; first SourceBuffer at 325.8 ms, after 360p was verified; MIME avc1.64001f + mp4a.40.2; playing at 17.352 s |
+| Unprepared 720p command | Rejected with “Rendition codec is not verified and playable”; no 720p resource request |
+| Another rung becomes ready | Driver explicitly fetched mock v540 init; newer plan exposed 360p + 540p, preserving the same SourceBuffer, MediaSource and generations 1/1 |
+| Verification never arrives | Explicit failed state “Codec verification did not arrive after initialization”; zero SourceBuffers, one refresh request |
+| SSE deliberately absent | One snapshot refresh recovered verified 360p; SourceBuffer created at 611.3 ms; playback reached 18.024 s / 435 frames, no failure |
+| Cleanup | All three owned mock sessions stopped HTTP 200; final ended state confirmed, mock grant revoked, owned Chrome closed |
+
+The player browser TypeScript and shared Contract build passed. This is paired
+source readiness for the full Ether branch, not a real-server playback pass; a
+new client package must be installed before deploying pending-codec output.

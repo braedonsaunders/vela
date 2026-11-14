@@ -49,7 +49,7 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
     subtitleId: snapshot?.subtitleTrackId ?? '',
     audio: capability?.audioSwitch ? (plan?.audioTracks ?? []).filter(t => snapshot?.audioTrackIds?.includes(t.id) ?? true).map(t => ({ id: t.id, label: t.name })) : [],
     subtitles: subtitles.map(t => ({ id: t.id, label: t.name })),
-    qualities: snapshot?.backend === 'mse' ? (path?.qualities ?? []).map(q => ({ id: q.id, label: `${number(q.height, {useGrouping:false})}p` })) : [],
+    qualities: snapshot?.backend === 'mse' ? (path?.qualities ?? []).filter(q => snapshot?.qualityIds?.includes(q.id)).map(q => ({ id: q.id, label: `${number(q.height, {useGrouping:false})}p` })) : [],
     paths: (plan?.paths ?? []).filter(p => p.readiness === 'ready' && (p.id === plan?.selectedPathId || p.boundaries.some(b => b.independent))).map(p => ({ id: p.id, label: msg(`data.${p.kind}`) })),
     pathId: path?.id ?? '',
     chapters: (plan?.chapters ?? []).map(c => ({ id: c.id, label: `${clock(c.startSeconds)} · ${c.name}`, seconds: c.startSeconds, percent: duration > 0 ? c.startSeconds / duration * 100 : 0 })),
