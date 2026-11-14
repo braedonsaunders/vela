@@ -104,3 +104,40 @@ shape CollectionModel
 fn cardName(card: Card): string = t("ui.openTitleYearProgress", title=card.name, year=(card.year > 0 ? t("ui.year", year=card.yearLabel) : ""), progress=(card.played ? t("ui.watched") : card.progressSeconds > 0 and card.durationSeconds > 0 ? t("ui.progressComplete", progress=card.progressLabel) : ""))
 
 fn skinLabel(id: string): string = (id == "cinematic" ? t("ui.cinematic") : id == "index" or id == "editorial" ? t("ui.index") : id == "example" ? t("example.name") : id)
+
+shape LibraryOption
+  id: string
+  label: string
+
+shape LibrarySortOption
+  id: string
+  label: string
+  directions: string[]
+
+shape LibraryNav
+  id: string
+  name: string
+  kind: string
+
+shape LibraryModel
+  id: string
+  name: string
+  kind: string
+  backdrop: string
+  sorts: LibrarySortOption[]
+  sort: string
+  direction: string
+  kinds: LibraryOption[]
+  genres: LibraryOption[]
+  kindFilter: string
+  genreFilter: string
+  playedFilter: string
+  favoriteFilter: bool
+  yearFilter: number
+  canYear: bool
+  canPlayed: bool
+  canFavorite: bool
+  items: Card[]
+  more: bool
+
+fn libraryQuery(sort: string, direction: string, kind: string, genre: string, year: string, played: string, favorite: string): string = `?sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(direction)}&kind=${encodeURIComponent(kind)}&genre=${encodeURIComponent(genre)}&year=${encodeURIComponent(year)}&played=${encodeURIComponent(played)}&fav=${encodeURIComponent(favorite)}`

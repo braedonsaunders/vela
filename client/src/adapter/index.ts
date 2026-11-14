@@ -14,6 +14,8 @@ export interface ServerAdapter {
   bootstrap(): Promise<V.Bootstrap>;
   rows(query: V.RowsQuery): Promise<V.Page<V.Row>>;
   row(id: string, cursor?: string, limit?: number): Promise<V.Row>;
+  libraries(query: V.LibrariesQuery): Promise<V.Page<V.Library>>;
+  library(id: string, query: V.LibraryBrowseQuery): Promise<V.LibraryContents>;
   collection(id: string): Promise<V.CollectionContents>;
   detail(id: string): Promise<V.TitleDetail>;
   search(request: V.SearchRequest): Promise<V.SearchResponse>;

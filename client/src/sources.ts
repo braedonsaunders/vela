@@ -1,16 +1,17 @@
 import type { Answer, Sources } from '../app.contract.d.ts';
-import type { AISearchJob, ClientCapabilities, Device, ServerCapabilities, Tokens } from '../wire/v0/types';
+import type { AISearchJob, ClientCapabilities, Device, ServerCapabilities, Tokens, LibraryBrowseQuery, LibrarySort, SortDirection, TitleKind } from '../wire/v0/types';
 import { EtherAdapter, VelaError } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
 import { loadGuide, liveIdentity } from './live/guide';
+import { artworkURL } from './discovery/artwork';
 import { liveStatus } from './live/player';
 import { InteractionQueue } from './telemetry';
 import { sessionEvents } from './protocol/events';
 import { mediaPlan } from './protocol/media';
 import { randomId } from './protocol/id';
 import { playerPresentation } from '../player/presentation';
-import { setLocale, time, withLocale } from '../foundation/i18n';
+import { msg, setLocale, time, withLocale } from '../foundation/i18n';
 
 export function createAnswer(devOrigin: string, MOCK: boolean, version: string): Answer {
 let API = '';
@@ -188,6 +189,51 @@ const sources: Sources = {
     if (authVersion !== version) throw new Error('Session changed during bootstrap');
     features = bootstrap.capabilities.features;
     return withLocale(localeJSON, () => homeModel(bootstrap, API, at, artWidth));
+  },
+  uiLibraries: async (_args, store) => {
+    const api = await session(store);
+    const items: { id: string; name: string; kind: string }[] = [];
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    for (let n = 0; n < 100; n++) {
+      const page = await api.libraries({ cursor, limit: 100 });
+      items.push(...page.items.map(({ id, name, kind }) => ({ id, name, kind })));
+      if (page.continuation === 'exhausted') return items;
+      if (page.continuation !== 'more' || !page.nextCursor || seen.has(page.nextCursor)) throw new Error('Library list is incomplete');
+      cursor = page.nextCursor; seen.add(cursor);
+    }
+    throw new Error('Library list exceeds page limit');
+  },
+  uiLibrary: async ([id, sort, direction, kind, genre, year, played, favorite, pages, localeJSON, artWidth], store) => {
+    const api = await session(store);
+    const query: LibraryBrowseQuery = {
+      ...(sort && sort !== 'any' ? { sort: sort as LibrarySort } : {}), ...(direction && direction !== 'any' ? { direction: direction as SortDirection } : {}),
+      ...(kind && kind !== 'any' ? { kind: kind as TitleKind } : {}), ...(genre && genre !== 'any' ? { genre } : {}), ...(year > 0 && Number.isInteger(year) ? { year } : {}),
+      ...(played === 'true' || played === 'false' ? { played: played === 'true' } : {}),
+      ...(favorite === 'true' || favorite === 'false' ? { favorite: favorite === 'true' } : {}), limit: 100,
+    };
+    let result = await api.library(id, query);
+    const items = [...result.items], seen = new Set<string>();
+    const pageCount = Math.max(1, Math.floor(pages));
+    for (let n = 1; n < pageCount && result.continuation === 'more'; n++) {
+      const cursor = result.nextCursor;
+      if (!cursor || seen.has(cursor)) throw new Error('Invalid library continuation');
+      seen.add(cursor); result = await api.library(id, { ...query, cursor }); items.push(...result.items);
+    }
+    if (result.continuation === 'more' && !result.nextCursor) throw new Error('Invalid library continuation');
+    return withLocale(localeJSON, () => {
+      const library = result.library, filters = library.browse.filters;
+      const image = library.artwork.find(a => a.kind === 'backdrop');
+      return { id: library.id, name: library.name, kind: library.kind,
+        backdrop: image ? artworkURL(image, artWidth, Math.ceil(artWidth * 9 / 16), API) ?? '' : '',
+        sorts: library.browse.sorts.map(s => ({ id: s.id, label: msg(`library.sort.${s.id}`), directions: s.directions })),
+        sort: result.sort, direction: result.direction,
+        kinds: (filters.kind ?? []).map(k => ({ id: k, label: msg(`library.kind.${k}`) })),
+        genres: (filters.genre ? filters.genres ?? [] : []).map(g => ({ id: g, label: g })),
+        kindFilter: query.kind ?? '', genreFilter: query.genre ?? '', playedFilter: query.played === undefined ? '' : String(query.played), favoriteFilter: query.favorite === true, yearFilter: query.year ?? 0,
+        canYear: !!filters.year, canPlayed: !!filters.played, canFavorite: !!filters.favorite,
+        items: items.map(item => entry(item, API, artWidth)), more: result.continuation === 'more' };
+    });
   },
   uiCollection: async ([id, localeJSON, artWidth], store) => {
     const data = await (await session(store)).collection(id);

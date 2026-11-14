@@ -1,4 +1,4 @@
-use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel from "./models.contract"
+use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, libraryQuery from "./models.contract"
 
 shape Time
   epochAtZero: number
@@ -148,6 +148,36 @@ members Client
   resource results = uiSearch(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" as shape SearchModel transient
   resource descriptive = uiDescriptive(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel transient
   resource ai = uiAI(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel transient
+  resource libraries = uiLibraries() when auth.authenticated as shape LibraryNav[] else empty()
+  derive libraryId = (top(nav).name == "library" ? top(nav).params.id : "")
+  derive librarySort = searchParam(top(nav), "sort")
+  derive libraryDirection = searchParam(top(nav), "dir")
+  derive libraryKind = searchParam(top(nav), "kind")
+  derive libraryGenre = searchParam(top(nav), "genre")
+  derive libraryYearText = searchParam(top(nav), "year")
+  derive libraryYear = match parseNumber(libraryYearText) { case some(n) => n, case none => 0 }
+  derive libraryPlayed = searchParam(top(nav), "played")
+  derive libraryFavorite = searchParam(top(nav), "fav")
+  state libraryPages = 1
+  task resetLibraryOnNavigation when libraryId != "" key=top(nav).id
+    change(resetLibraryPages)
+  action resetLibraryPages
+    libraryPages = 1
+  resource libraryModel = uiLibrary(libraryId, librarySort, libraryDirection, libraryKind, libraryGenre, libraryYear, libraryPlayed, libraryFavorite, libraryPages) with localeJSON, artWidth when auth.authenticated and libraryId != "" as shape LibraryModel
+  derive libraryLoading = (libraryPages <= 1 and (pending(libraryModel) or not current(libraryModel)))
+  derive libraryMoreLoading = (libraryPages > 1 and pending(libraryModel))
+  action openLibrary(id: string)
+    libraryPages = 1
+    nav = push(nav, path("library", id))
+  action setLibrarySort(id: string, direction: string)
+    libraryPages = 1
+    nav = replace(nav, path("library", libraryId) + libraryQuery(id, direction, libraryKind, libraryGenre, libraryYearText, libraryPlayed, libraryFavorite))
+  action setLibraryFilter(name: string, value: string)
+    libraryPages = 1
+    nav = replace(nav, path("library", libraryId) + libraryQuery(librarySort, libraryDirection, (name == "kind" ? value : libraryKind), (name == "genre" ? value : libraryGenre), (name == "year" ? value : libraryYearText), (name == "played" ? value : libraryPlayed), (name == "favorite" ? value : libraryFavorite)))
+  action moreLibrary
+    if current(libraryModel) and libraryModel.more and not pending(libraryModel)
+      libraryPages = libraryPages + 1
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
   resource collection = uiCollection(collectionId) with localeJSON, artWidth when auth.authenticated and collectionId != "" as shape CollectionModel
   resource detail = uiDetail(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape DetailModel
