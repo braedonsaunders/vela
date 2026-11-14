@@ -1,11 +1,14 @@
 use GuideModel, LiveStatus, LiveIdentity from "../live/models.contract"
 
 members Client
-  state guideWindow = 0
+  state guideDay = 0
   state guideNow = 0
   state lowDelay = false
-  resource guide = uiGuide(guideNow, guideWindow) with localeJSON when auth.authenticated and top(nav).name == "live" and guideNow > 0 as shape GuideModel
-  resource liveIdentity = uiLiveIdentity(playingId, guideNow) with localeJSON when auth.authenticated and top(nav).name == "liveWatch" and guideNow > 0 as shape LiveIdentity
+  resource guide = uiGuide(guideNow, guideDay) with localeJSON when auth.authenticated and top(nav).name == "live" and guideNow > 0 as shape GuideModel else empty()
+  // The minute clock re-projects the same day in place; only another day shows the loading state.
+  derive guideReady = current(guide) or (guide.day == guideDay and guide.channels.length > 0)
+  derive guideMinute = floor(guideNow / 60000)
+  resource liveIdentity = uiLiveIdentity(playingId, guideMinute * 60000) with localeJSON when auth.authenticated and top(nav).name == "liveWatch" and guideNow > 0 as shape LiveIdentity
   mutation liveState as shape LiveStatus queue
   derive liveView = match liveState { case some(r) => r, case none => LiveStatus(sessionId="", reconnecting=false, delivery="unknown", driftLabel="", drift=-1, canCatchUp=false) }
   derive liveControlsVisible = watchChromeVisible or (liveView.sessionId == playback.sessionId and (liveView.reconnecting or liveView.canCatchUp or liveView.delivery == "upstream-gap" or liveView.delivery == "segment-delayed" or liveView.delivery == "waiting-for-publication"))
@@ -16,9 +19,11 @@ members Client
   action tickGuide
     guideNow = time.epochAtZero + performanceNow()
   action earlierGuide
-    guideWindow = guideWindow - 1
+    guideDay = max(0, guideDay - 1)
   action laterGuide
-    guideWindow = guideWindow + 1
+    guideDay = min(6, guideDay + 1)
+  action chooseGuideDay(day: number)
+    guideDay = max(0, min(6, day))
   action watchChannel(id: string)
     lowDelay = false
     nav = push(nav, path("liveWatch", id))

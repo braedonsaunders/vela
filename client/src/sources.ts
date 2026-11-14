@@ -88,10 +88,7 @@ const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '
 let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, driftLabel: '', canCatchUp: false };
 const sources: Sources = {
   uiLiveIdentity: async ([channelId, epoch, localeJSON], store) => liveIdentity(await session(store), channelId, epoch, localeJSON),
-  uiGuide: async ([epoch, window, localeJSON], store) => {
-    const start = Math.floor(epoch / 1800000) * 1800000 + window * 7200000;
-    return loadGuide(await session(store), new Date(start).toISOString(), new Date(start + 7200000).toISOString(), epoch, API, localeJSON);
-  },
+  uiGuide: async ([epoch, day, localeJSON], store) => loadGuide(await session(store), day, epoch, store.get('vela.session') ?? '', API, localeJSON),
   liveEvent: async ([json, localeJSON]) => {
     const event = JSON.parse(json);
     const next = withLocale(localeJSON, () => liveStatus(event));

@@ -248,5 +248,10 @@
   "library.empty": "Nothing matches these filters",
   "library.emptyHint": "Try another genre or clear a filter.",
   "library.collection": "Collection",
-  "library.library": "Library"
+  "library.library": "Library",
+  "live.today": "Today",
+  "live.tomorrow": "Tomorrow",
+  "live.minutesLeft": "{minutes} min left",
+  "live.nextAt": "{time} · {programme}",
+  "live.seasonEpisode": "S{season} E{episode}"
 }

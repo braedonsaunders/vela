@@ -5,17 +5,22 @@ shape GuideProgramme
   airing: bool
   ended: bool
   startsInLabel: string
-  startsIn: number
-  start: string
-  end: string
   startLabel: string
   endLabel: string
   leftId: string
   rightId: string
   upId: string
   downId: string
-  offset: number
-  width: number
+  at: number
+  span: number
+  progress: number
+  remainingLabel: string
+  durationLabel: string
+  episode: string
+  rating: string
+  genre: string
+  tone: number
+  art: string
 
 shape GuideChannel
   id: string
@@ -23,18 +28,32 @@ shape GuideChannel
   name: string
   favorite: bool
   logo: string
+  group: string
+  listed: bool
   now: string
   next: string
+  nowId: string
+  nowProgress: number
+  nowRemaining: string
+  nextLabel: string
   programmes: GuideProgramme[]
 
+shape GuideDay
+  offset: number
+  label: string
+  date: string
+
 shape GuideModel
-  from: string
-  until: string
+  day: number
+  dayLabel: string
   fromLabel: string
   untilLabel: string
-  nowOffset: number
-  showNow: bool
+  minutes: number
+  nowMinute: number
+  landing: number
   ticks: GuideTick[]
+  days: GuideDay[]
+  groups: string[]
   channels: GuideChannel[]
 
 shape LiveStatus
@@ -48,7 +67,8 @@ shape LiveStatus
 shape GuideTick
   id: string
   label: string
-  offset: number
+  minute: number
+  hour: bool
 
 shape LiveIdentity
   title: string
