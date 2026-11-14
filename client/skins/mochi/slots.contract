@@ -459,10 +459,10 @@ component SearchSurface
           if model.items.length == 0
             EmptyState(mood="sleepy", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"), still=still)
           else
-            Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+            Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
           column animation=hop(still, 120)
-            Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+            Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
           column gap=8 animation=hop(still, 160)
             row gap=10 align-items="center" padding-left=gutter(small) padding-right=gutter(small)
@@ -473,7 +473,7 @@ component SearchSurface
                 Hopper(size=30, still=still, mood="wow")
                 text t("ui.exploringYourDescription") color="mochi.ink-soft" font-size=15
             if ai.items.length > 0
-              Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+              Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
             if ai.aiStatus == "failed"
               text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="mochi.ink-soft" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
 
