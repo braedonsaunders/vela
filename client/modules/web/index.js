@@ -1,4 +1,4 @@
-// client/player/beta.ts
+// player/beta.ts
 var key = "vela.player.beta";
 var changed = "vela:player-beta";
 var volatile = null;
@@ -35,7 +35,7 @@ function subscribeBetaPlayer(listener) {
   };
 }
 
-// client/player/universal/loader.ts
+// player/universal/loader.ts
 function assetLocation() {
   const descriptor = window.velaUniversalAssets;
   if (descriptor === undefined)
@@ -104,7 +104,7 @@ async function originalPlaybackCapabilities(signal) {
   return declaration;
 }
 
-// client/player/media-capabilities.ts
+// player/media-capabilities.ts
 async function mediaCapabilities(signal) {
   const video = document.createElement("video");
   const supports = (mime) => video.canPlayType(mime) !== "";
@@ -128,7 +128,7 @@ async function mediaCapabilities(signal) {
   };
 }
 
-// client/player/install.ts
+// player/install.ts
 function createInstall(element, json, event) {
   let runtime = window.velaPwa;
   const button = document.createElement("button");
@@ -183,7 +183,7 @@ function createInstall(element, json, event) {
   } };
 }
 
-// client/player/preview.ts
+// player/preview.ts
 function apply(handle) {
   const video = handle.video;
   if (handle.expiryTimer)
@@ -274,7 +274,7 @@ function destroyPreview(handle) {
   handle.video.remove();
 }
 
-// client/player/theme.ts
+// player/theme.ts
 var ENGINES = {
   cinematic: {
     roles: {
@@ -423,7 +423,7 @@ function destroyTheme(handle) {
   handle.sheet.remove();
 }
 
-// client/player/engine-handoff.ts
+// player/engine-handoff.ts
 var CHOSEN = "vela.engine";
 var DEFAULT = "vela.engine.default";
 var HANDOFF = "vela.handoff";
@@ -546,19 +546,19 @@ function destroyEngine(handle) {
     handle.overlay?.remove();
 }
 
-// client/player/universal/retry.ts
+// player/universal/retry.ts
 function decoderRetry(reason) {
   if (!reason.startsWith("Original decode: decode-failed"))
     return null;
   return { audio: true, video: true };
 }
 
-// client/player/model.ts
+// player/model.ts
 function codecKnown(rendition) {
   return rendition.codecStatus !== "pending" && /codecs="[^"]+"/.test(rendition.mime);
 }
 
-// client/player/session.ts
+// player/session.ts
 class SessionController {
   sessionId = "";
   source = 0;
@@ -620,7 +620,7 @@ function delay(ms, signal) {
   });
 }
 
-// client/player/hls.ts
+// player/hls.ts
 function parsePlaylist(text, base) {
   if (!text.trimStart().startsWith("#EXTM3U"))
     throw new Error("Invalid HLS playlist");
@@ -659,7 +659,7 @@ function parsePlaylist(text, base) {
   return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
 }
 
-// client/player/buffer.ts
+// player/buffer.ts
 class PlaybackFault extends Error {
   kind;
   retryable;
@@ -714,7 +714,7 @@ async function appendBuffer(buffer, bytes, video, signal) {
   }
 }
 
-// client/player/audio.ts
+// player/audio.ts
 class AudioBuffer {
   media;
   video;
@@ -875,7 +875,7 @@ class AudioBuffer {
       await mutation(this.buffer, signal, () => this.buffer.remove(0, before));
   }
 }
-// client/player/abr.ts
+// player/abr.ts
 class BandwidthEstimator {
   fast = 0;
   slow = 0;
@@ -947,7 +947,7 @@ class AdaptiveBitrate {
   }
 }
 
-// client/player/pipeline.ts
+// player/pipeline.ts
 function mediaSourceClass() {
   return globalThis.ManagedMediaSource ?? globalThis.MediaSource;
 }
@@ -1373,7 +1373,7 @@ class SegmentPipeline {
   }
 }
 
-// client/player/native-hls.ts
+// player/native-hls.ts
 async function nativeMediaPlaylist(url, signal, depth = 0) {
   if (depth > 1)
     throw new Error("Nested HLS masters are unsupported");
@@ -1400,7 +1400,7 @@ async function nativeMediaPlaylist(url, signal, depth = 0) {
   return nativeMediaPlaylist(variant.href, signal, depth + 1);
 }
 
-// client/src/protocol/id.ts
+// src/protocol/id.ts
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = bytes[6] & 15 | 64;
@@ -1408,7 +1408,7 @@ function randomId() {
   return Array.from(bytes, (b, i) => `${i === 4 || i === 6 || i === 8 || i === 10 ? "-" : ""}${b.toString(16).padStart(2, "0")}`).join("");
 }
 
-// client/player/engine.ts
+// player/engine.ts
 class PlaybackEngine {
   video;
   deliver;
@@ -2375,7 +2375,7 @@ class PlaybackEngine {
   }
 }
 
-// client/player/protocol.ts
+// player/protocol.ts
 function sessionFromPlan(plan) {
   const selected = plan.paths.find((p) => p.id === plan.selectedPathId);
   if (!selected)
@@ -2452,7 +2452,7 @@ function observation(snapshot, sequence) {
   };
 }
 
-// client/player/web-module.ts
+// player/web-module.ts
 var abi = 1;
 var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false }, "vela-theme": { snapshot: false }, "vela-engine": { snapshot: false } };
 function create(tag, element, json, event) {

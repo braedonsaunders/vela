@@ -22,7 +22,8 @@ import { mountRoutes, prepareEngine } from './engine';
 import { finalizeEngineRoot } from './release/engine-root';
 
 const root = resolve(import.meta.dir, '..');
-const out = join(homedir(), '.scratch/tmp/vela/skins');
+// Build output stays on the internal disk, inside the checkout (gitignored), never on ~/.scratch.
+const out = join(root, '.artifacts/skins');
 const keys = join(homedir(), '.config/vela/keys');
 /** The extension slot ABI a package implements (foundation/skin.contract's example dispatch). */
 const SLOT_API = 1;

@@ -4,4 +4,4 @@
 fn buildEngine(): string = ""
 
 // The engine a skin id runs on (a pack's engine is resolved before this).
-fn engineOf(skin: string): string = (skin == "editorial" ? "index" : ["cinematic", "index", "example", "jellytwin", "mochi", "marquee"].includes(skin) ? skin : "cinematic")
+fn engineOf(skin: string): string = (skin == "editorial" ? "index" : ["cinematic", "index", "example", "jellytwin", "mochi", "marquee", "doc"].includes(skin) ? skin : "cinematic")

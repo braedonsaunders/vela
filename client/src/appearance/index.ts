@@ -12,7 +12,8 @@ const TOKEN = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$/;
 const MAX_PACK_BYTES = 65536;
 
 export interface PackEntryModel { id: string; name: string; tagline: string; engine: string; preview: string; backdrop: string; wordmark: string; swatches: string[]; packJson: string }
-export interface AppearanceModel { revision: number; defaultSkinId: string; defaultEngineId: string; force: boolean; packs: PackEntryModel[] }
+export interface DocEntryModel { id: string; name: string; tagline: string; url: string; preview: string; swatches: string[] }
+export interface AppearanceModel { revision: number; defaultSkinId: string; defaultEngineId: string; force: boolean; packs: PackEntryModel[]; docs: DocEntryModel[] }
 
 const text = (v: unknown, max: number): string => typeof v === 'string' && v.length <= max ? v : '';
 const colour = (v: unknown): string | undefined => typeof v === 'string' && COLOUR.test(v) ? v : undefined;
@@ -60,7 +61,12 @@ function pack(p: SkinPack, origin: string): PackEntryModel | undefined {
 export function appearanceModel(a: Appearance, origin: string): AppearanceModel {
   if (!a || typeof a.revision !== 'number' || typeof a.defaultSkinId !== 'string') throw new Error('Invalid appearance');
   const packs = (Array.isArray(a.packs) ? a.packs.slice(0, 32) : []).flatMap(p => pack(p, origin) ?? []);
-  return { revision: a.revision, defaultSkinId: text(a.defaultSkinId, 64), defaultEngineId: text(a.defaultEngineId, 64), force: a.force === true, packs };
+  const docs = (Array.isArray(a.documents) ? a.documents.slice(0, 32) : []).flatMap(d => {
+    const url = asset(d?.url, origin, /\.json$/);
+    return d && typeof d.id === 'string' && NAME.test(d.id) && !ENGINES.includes(d.id) && url ? [{ id: d.id, name: text(d.name, 40), tagline: text(d.tagline, 120), url,
+      preview: asset(d.preview, origin, /\.(svg|png|jpe?g|webp|avif)$/), swatches: (Array.isArray(d.swatches) ? d.swatches : []).slice(0, 5).flatMap(c => colour(c) ?? []) }] : [];
+  });
+  return { revision: a.revision, defaultSkinId: text(a.defaultSkinId, 64), defaultEngineId: text(a.defaultEngineId, 64), force: a.force === true, packs, docs };
 }
 
 /** Each `appearance` event's model; an older revision keeps the newest seen. */

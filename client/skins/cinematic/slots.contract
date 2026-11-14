@@ -1,5 +1,5 @@
 use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, CardPreview, cardName, skinLabel from "../../foundation/models.contract"
-use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill, FadeImage, GhostPill, BetaSwitch from "./look.contract"
+use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill, FadeImage, GhostPill, BetaSwitch, breathe from "./look.contract"
 use Wordmark, Pulse from "./auth.contract"
 use SkinPicker, skinManifest from "../../foundation/skin-picker.contract"
 
@@ -443,12 +443,18 @@ component SearchSurface
     small: bool
     still: bool
     selectTitle: action
+    openLiveProgramme: action
     observe: action
   // Several words read as a description, not a name: an empty answer is then about the
   // mood, never "nothing by that name".
   derive describing = query.trim().split(" ").filter(w => w != "").length > 1 and descriptiveState != "off"
   derive vibes = (descriptiveState == "ready" ? descriptive.items : [])
   derive titlesFound = not loading and not error and model.items.length > 0
+  // Live hits come with the fast lane: channels and programmes airing now, then what's coming up on the guide.
+  derive airing = (loading or error ? [] : model.liveProgrammes.filter(p => p.airing))
+  derive upcoming = (loading or error ? [] : model.liveProgrammes.filter(p => not p.airing))
+  derive channels = (loading or error ? [] : model.liveChannels)
+  derive liveFound = channels.length > 0 or airing.length > 0 or upcoming.length > 0
   derive aiRunning = aiState == "loading" or (aiState == "ready" and (ai.aiStatus == "queued" or ai.aiStatus == "running"))
   derive aiFailed = aiState == "failed" or (aiState == "ready" and ai.aiStatus == "failed")
   derive aiShown = aiAvailable and (aiRunning or aiFailed or (aiState == "ready" and ai.aiStatus == "complete"))
@@ -462,8 +468,8 @@ component SearchSurface
           RowSkeleton(small=small, still=still)
       else if titlesFound
         Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-      else if descriptiveState == "loading" or vibes.length > 0 or aiRunning
-        // The title lane came up empty but a slower lane is still answering; its own state shows below.
+      else if liveFound or descriptiveState == "loading" or vibes.length > 0 or aiRunning
+        // No titles, but live hits or a slower lane answer below.
         column
       else if error
         EmptyState(icon="symbol:alert", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"), still=still)
@@ -473,6 +479,16 @@ component SearchSurface
         EmptyState(icon="symbol:search", title=t("search.noMood"), message=t("search.noMoodMessage"), still=still)
       else
         EmptyState(icon="symbol:search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"), still=still)
+      if channels.length > 0 or airing.length > 0
+        LiveLane(name=t("live.onNow"), small=small, still=still)
+          for channel in channels key=`c-${channel.id}`
+            LiveTile(title=(channel.nowTitle != "" ? channel.nowTitle : channel.name), detail=(channel.nowEndLabel != "" ? t("search.live.until", channel=channel.name, time=channel.nowEndLabel) : t("search.live.channel", number=channel.number)), artwork="", logo=channel.logo, mark=channel.name, live=(channel.nowTitle != ""), progress=channel.nowProgress, chip="", enabled=true, small=small, still=still, open=selectTitle(channel.id, "channel", ""))
+          for p in airing key=`p-${p.id}`
+            LiveTile(title=p.name, detail=t("search.live.until", channel=(p.episode != "" ? `${p.episode} · ${p.channelName}` : p.channelName), time=p.endLabel), artwork=p.artwork, logo=p.channelLogo, mark=p.channelName, live=true, progress=p.progress, chip="", enabled=p.navigable, small=small, still=still, open=openLiveProgramme(p.id))
+      if upcoming.length > 0
+        LiveLane(name=t("search.live.comingUp"), small=small, still=still)
+          for p in upcoming key=`p-${p.id}`
+            LiveTile(title=p.name, detail=(p.episode != "" ? `${p.episode} · ${p.channelName}` : p.channelName), artwork=p.artwork, logo=p.channelLogo, mark=p.channelName, live=false, progress=0, chip=p.startLabel, enabled=p.navigable, small=small, still=still, open=openLiveProgramme(p.id))
       if descriptiveState == "loading" and not loading
         row gap=12 align-items="center" padding-left=gutter(small) padding-right=gutter(small) role="status" animation=enter(still, 80)
           Pulse(still=still)
@@ -497,6 +513,67 @@ component SearchSurface
             text (titlesFound ? t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") : t("search.discoveryUnavailable")) color="ink.secondary" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
           if aiState == "ready" and ai.aiStatus == "complete" and ai.items.length == 0
             text t("search.discoveryEmpty") color="ink.secondary" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
+
+// A lane of live hits under search: a heading and a horizontal scroller of tiles.
+component LiveLane
+  props
+    name: string
+    small: bool
+    still: bool
+  slot
+  view
+    column gap=(small ? 2 : 4) animation=enter(still, 60)
+      text name role="heading" aria-level=2 font-size=(small ? 18 : 21) font-weight=650 letter-spacing="-0.012em" padding-left=gutter(small) padding-right=gutter(small)
+      scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" mask-image="linear-gradient(90deg, black 0%, black 94%, transparent 100%)"
+        row gap=(small ? 12 : 18) align-items="flex-start" padding-top=(small ? 14 : 16) padding-bottom=(small ? 18 : 22) padding-left=gutter(small) padding-right=gutter(small)
+          children
+
+// One live hit: landscape artwork (or the channel's logo on a quiet ground), a LIVE
+// chip with how far through it is, or when it starts; then its name and channel.
+component LiveTile
+  props
+    title: string
+    detail: string
+    artwork: string
+    logo: string
+    mark: string
+    live: bool
+    progress: number
+    chip: string
+    enabled: bool
+    small: bool
+    still: bool
+    open: action
+  state lifted = false
+  action lift(over: bool)
+    lifted = over
+  view
+    button press=open hover=lift disabled=(not enabled) aria-label=(chip != "" ? `${title}, ${detail}, ${chip}` : `${title}, ${detail}`) display="flex" flex-direction="column" gap=10 width=(small ? 220 : "clamp(240px, 19vw, 320px)") flex-shrink=0 padding=0 border="none" background-color="cinematic.scrim-clear" color="ink.primary" text-align="left" cursor=(enabled ? "pointer" : "default") opacity=(enabled ? 1 : 0.6) translate=(lifted and enabled and not still ? "0px -4px" : "0px 0px") transition=`translate ${base()}ms cubic-bezier(0.16, 1, 0.3, 1)` -exact-press-scale=0.97
+      :focus-visible
+        box-shadow = "0px 0px 0px 3px var(--brand.warm)"
+      column position="relative" width="100%" aspect-ratio="16 / 9" border-radius=12 overflow="hidden" background-image="linear-gradient(160deg, var(--cinematic.placeholder-top) 0%, var(--cinematic.placeholder-bottom) 100%)" box-shadow="0px 10px 24px -12px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.hairline)"
+        if artwork != ""
+          FadeImage(src=artwork)
+        else if logo != ""
+          column position="absolute" inset=0 padding="18% 24%" box-sizing="border-box"
+            image logo alt="" width="100%" height="100%" object-fit="contain"
+        else
+          column position="absolute" inset=0 align-items="center" justify-content="center" padding=16
+            text mark class=Display font-size=(small ? 22 : 26) text-align="center" line-clamp=2
+        if artwork != "" and logo != ""
+          column position="absolute" left=10 bottom=(live ? 16 : 10) width=56 height=32 padding=4 box-sizing="border-box" border-radius=8 background-color="cinematic.glass" backdrop-filter="blur(12px)"
+            image logo alt="" width="100%" height="100%" object-fit="contain"
+        if live
+          row position="absolute" top=10 left=10 gap=6 align-items="center" padding="3px 8px" border-radius=6 background-color="brand.warm" color="ink.inverse"
+            column width=6 height=6 border-radius=3 background-color="ink.inverse" animation=(still ? "none" : "breathe 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite")
+            text t("live.liveBadge") font-size=10 font-weight=750 letter-spacing="0.12em"
+          column position="absolute" left=0 right=0 bottom=0 height=4 background-color="cinematic.track-strong"
+            column height=4 width=`${progress * 100}%` background-color="brand.warm"
+        else if chip != ""
+          text chip position="absolute" top=10 left=10 padding="3px 8px" border-radius=6 background-color="cinematic.glass" backdrop-filter="blur(12px)" font-size=11 font-weight=600 font-variant-numeric="tabular-nums"
+      column gap=3 padding="0px 2px"
+        text title font-size=14 font-weight=600 line-clamp=1
+        text detail font-size=12 color="ink.quiet" line-clamp=1 font-variant-numeric="tabular-nums"
 
 fn detailPresentation(width: number): string = "fullscreen"
 fn detailSplit(width: number): string = "none"

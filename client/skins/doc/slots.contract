@@ -1,0 +1,126 @@
+// The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
+// through the generated renderer. Slots a document leaves out use cinematic's.
+use HomeModel, Viewport, LibraryNav from "../../foundation/models.contract"
+use Style, Env, Ctx, DocSlot, SkinDoc, L1, heroActFor, num, styleAt, rootCtx from "../../renderer/levels.contract"
+use SkinPicker from "../../foundation/skin-picker.contract"
+
+fn part(s: string, i: number): string = match s.split("|").at(i) { case some(x) => x, case none => "" }
+fn toggled(flags: string[], f: string): string[] = (flags.includes(f) ? flags.filter(x => x != f) : flags.concat([f]))
+fn detailPresentation(doc: SkinDoc, width: number): string = (width < 640 ? doc.detailSmall : doc.detailWide)
+
+// The root container a slot's tree hangs from.
+component Root
+  props
+    s: Style
+  slot
+  view
+    column display=s.display position="relative" width=s.width height=s.height min-height=s.minHeight flex-direction=s.flexDirection gap=s.gap padding=s.padding overflow-x=s.overflowX overflow-y=s.overflowY color=s.color background-color=s.backgroundColor background-image=s.backgroundImage font-family=s.fontFamily font-size=s.fontSize
+      children
+
+// Where the foundation's content sits among a slot's nodes: its flex order, an outer
+// box and an inner one (a centred, width-capped search field, a filling route).
+component SlotBox
+  props
+    order: string
+    s: Style
+    inner: Style
+    e: Env
+  slot
+  view
+    column order=num(order) position="relative" display=s.display flex-direction=s.flexDirection flex-grow=s.flexGrow flex-shrink=s.flexShrink flex-basis=s.flexBasis min-height=s.minHeight height=s.height width=s.width padding=s.padding padding-top=s.paddingTop padding-right=s.paddingRight padding-bottom=s.paddingBottom padding-left=s.paddingLeft margin=s.margin align-items=s.alignItems justify-content=s.justifyContent box-sizing=s.boxSizing
+      column position="relative" width=inner.width max-width=inner.maxWidth height=inner.height min-height=inner.minHeight flex-grow=inner.flexGrow flex-shrink=inner.flexShrink display=inner.display flex-direction=inner.flexDirection animation=(e.still ? "none" : inner.animation)
+        children
+
+component Shell
+  props
+    doc: SkinDoc
+    viewer: string
+    skin: string
+    skins: string[]
+    chooseSkin: action
+    signOut: action
+    viewport: Viewport
+    canLive: bool
+    home: action
+    search: action
+    live: action
+    libraries: LibraryNav[]
+    section: string
+    openLibrary: action
+  slot
+  state flags: string[] = []
+  state pickerOpen = false
+  derive env = Env(styles=doc.styles, home=[], libraries=libraries, viewer=viewer, section=section, query="", heroIndex=0, small=viewport.width < 640, still=viewport.prefersReducedMotion, canLive=canLive, flags=flags)
+  action act(name: string, arg: string)
+    if name == "home"
+      flags = []
+      home()
+    if name == "search"
+      flags = []
+      search()
+    if name == "live"
+      flags = []
+      live()
+    if name == "library"
+      flags = []
+      openLibrary(arg)
+    if name == "toggle"
+      flags = toggled(flags, arg)
+    if name == "open"
+      flags = (flags.includes(arg) ? flags : flags.concat([arg]))
+    if name == "close"
+      flags = flags.filter(x => x != arg)
+    if name == "openPicker"
+      flags = []
+      pickerOpen = true
+    if name == "signOut"
+      flags = []
+      signOut()
+  action seen(token: string)
+    flags = flags
+  action pick(value: string)
+    pickerOpen = false
+    chooseSkin(value)
+  action dismiss
+    pickerOpen = false
+  view
+    Root(s=styleAt(doc.styles, doc.shell.root))
+      SlotBox(order=doc.shell.slotOrder, s=styleAt(doc.styles, doc.shell.slotStyle), inner=styleAt(doc.styles, doc.shell.slotInner), e=env)
+        children
+      for n, i in doc.shell.nodes key=`${i}`
+        L1(n=n, c=rootCtx(), e=env, act=act, obs=seen)
+      if pickerOpen
+        SkinPicker(skins=skins, current=skin, small=env.small, still=env.still, choose=pick, dismiss=dismiss)
+
+component Home
+  props
+    doc: SkinDoc
+    model: HomeModel
+    query: string
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+    heroIndex: number
+    pickHero: action
+    playHero: action
+  slot
+  state flags: string[] = []
+  derive env = Env(styles=doc.styles, home=[model], libraries=[], viewer=model.viewer, section="home", query=query, heroIndex=heroIndex, small=small, still=still, canLive=model.liveAvailable, flags=flags)
+  action act(name: string, arg: string)
+    if name == "select"
+      selectTitle(part(arg, 0), part(arg, 1), part(arg, 2))
+    if name == "play"
+      playHero(heroActFor(model, arg).map(a => a.targetId).join(""), num(heroActFor(model, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(model, arg).map(a => a.hasPosition).includes(true))
+    if name == "pickHero"
+      pickHero(match parseNumber(arg) { case some(x) => x, case none => 0 })
+    if name == "toggle"
+      flags = toggled(flags, arg)
+  view
+    Root(s=styleAt(doc.styles, doc.home.root))
+      SlotBox(order=doc.home.slotOrder, s=styleAt(doc.styles, doc.home.slotStyle), inner=styleAt(doc.styles, doc.home.slotInner), e=env)
+        children
+      for n, i in doc.home.nodes key=`${i}`
+        L1(n=n, c=rootCtx(), e=env, act=act, obs=observe)
+
+fn emptyDoc(): SkinDoc = SkinDoc(id="", styles=[], shell=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), detailWide="fullscreen", detailSmall="fullscreen")

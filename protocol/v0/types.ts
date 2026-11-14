@@ -192,7 +192,11 @@ export interface Appearance {
   /** Owner override: the default replaces viewers' own picks while true. */
   force: boolean;
   packs: SkinPack[];
+  /** Installed skin documents (protocol/v0/skin.ts), drawn by the client's renderer. */
+  documents?: SkinDocumentRef[];
 }
+/** Where a skin document is served (same-origin, under /vela/v0/appearance/), with its picker card. */
+export interface SkinDocumentRef { id: ID; name: string; version: string; url: string; tagline?: string; preview?: string; swatches: PackColor[] }
 /** Viewer-level server events (`GET /events`), distinct from playback SessionEvent. */
 export type ServerEvent = { cursor: Cursor } & ({ type: 'appearance'; appearance: Appearance });
 

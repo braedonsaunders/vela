@@ -436,7 +436,7 @@ members Client
   derive pageColor = (activeSkin == "mochi" ? "mochi.page" : indexSkin ? "index.page" : activeSkin == "jellytwin" ? "jellytwin.page" : activeSkin == "marquee" ? "marquee.page" : "surface.page")
   derive inkColor = (activeSkin == "mochi" ? "mochi.ink" : indexSkin ? "index.ink" : activeSkin == "jellytwin" ? "jellytwin.ink" : activeSkin == "marquee" ? "marquee.ink" : "ink.primary")
   // requestedSkin and activePack come from the server appearance (appearance.contract).
-  derive wantedSkin = match activePack { case some(p) => p.engine, case none => (["cinematic", "index", "editorial", "example", "jellytwin", "mochi", "marquee"].includes(requestedSkin) ? requestedSkin : "cinematic") }
+  derive wantedSkin = match activePack { case some(p) => p.engine, case none => (docReady ? "doc" : ["cinematic", "index", "editorial", "example", "jellytwin", "mochi", "marquee"].includes(requestedSkin) ? requestedSkin : "cinematic") }
   // A single-engine build always presents its own engine; vela-engine hands off to the wanted one.
   derive activeSkin = (buildEngine() == "" ? wantedSkin : buildEngine())
 
