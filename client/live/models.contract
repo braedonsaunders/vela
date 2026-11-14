@@ -29,6 +29,7 @@ shape GuideChannel
   favorite: bool
   logo: string
   group: string
+  guideIds: string[]
   listed: bool
   now: string
   next: string
@@ -37,6 +38,10 @@ shape GuideChannel
   nowRemaining: string
   nextLabel: string
   programmes: GuideProgramme[]
+
+shape GuideTab
+  id: string
+  name: string
 
 shape GuideDay
   offset: number
@@ -55,6 +60,7 @@ shape GuideModel
   ticks: GuideTick[]
   days: GuideDay[]
   groups: string[]
+  guides: GuideTab[]
   tuneOrder: string[]
   channels: GuideChannel[]
 

@@ -389,5 +389,6 @@
   "secure.body": "Your server also answers at {origin}. Continue there so your password and viewing stay private.",
   "secure.action": "Switch to the secure address",
   "ui.scrollBack": "Scroll back",
-  "ui.scrollOn": "Scroll on"
+  "ui.scrollOn": "Scroll on",
+  "live.guides": "Guides"
 }
