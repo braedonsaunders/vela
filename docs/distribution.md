@@ -7,6 +7,10 @@ the production deployment. Nothing in the release tool publishes or uploads.
 ## Local packaging
 
 Run `source tools/env.sh` then `bun tools/release/build.ts` from this repository.
+For an approved committed release while other workers have edits in progress, use
+`bun tools/release/build.ts --committed`. It archives the captured HEAD's client
+and protocol inputs without touching the shared working tree. Release tooling
+must itself be committed. The manifest's sourceDirty describes those build inputs.
 Version is `client/package.json`'s version when present, otherwise
 `tools/release/VERSION`. Increment it for each release; existing outputs are never
 overwritten. The checked-out Exact revision must match `EXACT_REVISION`.

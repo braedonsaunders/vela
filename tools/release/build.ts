@@ -7,6 +7,7 @@ import { homedir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '../..');
+const committed = process.argv.includes('--committed');
 const releases = join(homedir(), '.scratch/tmp/vela/release');
 const pkg = await Bun.file(join(root, 'client/package.json')).json();
 const version = String(pkg.version ?? (await readFile(join(import.meta.dir, 'VERSION'), 'utf8')).trim());
@@ -24,7 +25,9 @@ async function run(cmd: string[], cwd = root, env: Record<string, string | undef
 const actualExact = (await run(['git', '-C', join(root, 'vendor/exact'), 'rev-parse', 'HEAD'])).trim();
 if (actualExact !== exactRevision) throw new Error(`Exact checkout is ${actualExact}, expected ${exactRevision}`);
 const sourceRevision = (await run(['git', 'rev-parse', 'HEAD'])).trim();
-const sourceDirty = !!(await run(['git', 'status', '--porcelain', '--', 'client', 'protocol', 'tools/release', 'tools/locales.ts', 'EXACT_REVISION'])).trim();
+const toolDirty = !!(await run(['git', 'status', '--porcelain', '--', 'tools/release', 'tools/locales.ts', 'EXACT_REVISION'])).trim();
+if (committed && toolDirty) throw new Error('Commit release tooling before building a committed snapshot');
+const sourceDirty = committed ? false : !!(await run(['git', 'status', '--porcelain', '--', 'client', 'protocol', 'tools/release', 'tools/locales.ts', 'EXACT_REVISION'])).trim();
 await mkdir(releases, { recursive: true });
 const archiveName = `vela-${version}.tar.gz`, manifestName = `vela-${version}.manifest.json`;
 for (const name of [archiveName, manifestName, `${archiveName}.sha256`, `${manifestName}.sha256`]) {
@@ -32,13 +35,21 @@ for (const name of [archiveName, manifestName, `${archiveName}.sha256`, `${manif
 }
 const work = await mkdtemp(join(releases, '.build-'));
 try {
-  // Copy only repository inputs, including current edits, so the build never rewrites shared source files.
+  if (committed) {
+    const tar = join(work, 'source.tar');
+    const archive = Bun.spawn(['git', 'archive', '--format=tar', sourceRevision, 'client', 'protocol'], { cwd: root, stdout: Bun.file(tar), stderr: 'inherit' });
+    if (await archive.exited) throw new Error('Could not archive committed source');
+    await run(['tar', '-xf', tar, '-C', work]);
+    await rm(tar);
+  } else {
+  // Copy repository inputs without rewriting shared source files.
   const files = (await run(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', 'client', 'protocol'])).split('\0').filter(Boolean);
   for (const path of files) {
     const from = join(root, path), to = join(work, path);
     await mkdir(dirname(to), { recursive: true });
     if ((await lstat(from)).isSymbolicLink()) await symlink(await readlink(from), to);
     else await copyFile(from, to);
+  }
   }
   const client = join(work, 'client');
   await generateLocales(client);
