@@ -249,6 +249,7 @@ component Home
   slot
   derive searching = query != ""
   derive shown = model.hero.slice(heroIndex, heroIndex + 1)
+  derive previewing = not still and not searching and model.previews.filter(p => shown.map(h => h.id).includes(p.id)).length > 0
   derive rotating = model.hero.length > 1 and active and not searching and not still and model.previews.filter(p => shown.map(h => h.id).includes(p.id)).length == 0
   view
     column position="relative"
@@ -267,6 +268,7 @@ component Home
               for preview in model.previews.filter(p => p.id == hero.id) key=preview.id
                 vela-preview url=preview.url active=(active and not searching ? "true" : "false") still=(still ? "true" : "false") expiresAt=preview.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
           column position="absolute" left="-10%" bottom="8%" width="75%" height="70%" background-color=(hero.accent == "" ? "brand.warm" : hero.accent) opacity=0.2 mask-image="radial-gradient(closest-side, black 0%, transparent 100%)"
+          column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-strong) 34%, var(--cinematic.scrim-mid) 52%, var(--cinematic.scrim-clear) 78%)" opacity=(previewing ? 1 : 0) transition=`opacity ${slow()}ms ${glide()}`
           column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-mid) 32%, var(--cinematic.scrim-clear) 68%), linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-strong) 22%, var(--cinematic.scrim-clear) 58%), linear-gradient(180deg, var(--cinematic.nav-scrim) 0%, var(--cinematic.scrim-clear) 20%), radial-gradient(ellipse 120% 100% at 60% 35%, var(--cinematic.scrim-clear) 50%, var(--cinematic.vignette) 100%)"
           image "assets/grain.svg" alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="fill" opacity=0.05
           if hero.backdrop == "" and hero.poster != "" and not small
@@ -283,9 +285,9 @@ component Home
                 image hero.logo alt=hero.name role="heading" aria-level=1 height=(small ? 96 : 150) width="auto" max-width=(small ? "78%" : "min(520px, 70%)") object-fit="contain" align-self="flex-start" animation=enter(still, 300)
               else
                 text hero.name role="heading" aria-level=1 class=Display font-size=(small ? 48 : 84) text-shadow="0px 4px 40px var(--cinematic.shadow)" animation=enter(still, 300)
-              text ([hero.facts].concat(hero.genres.slice(0, 3)).filter(f => f != "").join(" · ")) font-size=(small ? 13 : 14) color="ink.secondary" font-variant-numeric="tabular-nums" animation=enter(still, 380)
+              text ([hero.facts].concat(hero.genres.slice(0, 3)).filter(f => f != "").join(" · ")) font-size=(small ? 13 : 14) color="ink.secondary" text-shadow="0px 1px 12px var(--cinematic.shadow)" font-variant-numeric="tabular-nums" animation=enter(still, 380)
               if hero.summary != ""
-                text hero.summary font-size=(small ? 14 : 16) color="ink.secondary" line-clamp=(small ? 2 : 3) line-height=1.55 max-width="36rem" animation=enter(still, 440)
+                text hero.summary font-size=(small ? 14 : 16) color=(previewing ? "ink.primary" : "ink.secondary") text-shadow="0px 1px 14px var(--cinematic.shadow)" line-clamp=(small ? 2 : 3) line-height=1.55 max-width="36rem" animation=enter(still, 440)
               row margin-top=(small ? 4 : 8) animation=enter(still, 500)
                 button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) class=PrimaryPill height=(small ? 46 : 52) padding-left=(small ? 22 : 28) padding-right=(small ? 22 : 28) transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
                   row gap=10 align-items="center"
