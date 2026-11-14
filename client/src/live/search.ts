@@ -25,7 +25,7 @@ export function liveSearch(data: LiveSearchResults | undefined, origin: string, 
       const channel = byId.get(p.channelId), { start, end } = dates(p), airing = active(p, now);
       const episode = [p.seasonNumber !== undefined && p.episodeNumber !== undefined ? msg('live.seasonEpisode', { season: number(p.seasonNumber), episode: number(p.episodeNumber) }) : '', p.episodeTitle ?? ''].filter(Boolean).join(' · ');
       return { id: p.id, channelId: p.channelId, channelName: channel?.name ?? '', channelLogo: channel ? image(channel.artwork, ['channel', 'logo'], origin, 160, 90) : '', name: p.name,
-        startLabel: startTime.format(start), endLabel: time(end), airing, progress: progress(p, now), startsInLabel: airing ? '' : msg('live.startsIn', { minutes: number(Math.max(0, Math.ceil((start - now) / 60000))) }),
+        startLabel: startTime.format(start), endLabel: time(end), airing, progress: progress(p, now), startsInLabel: airing || start - now > 3600000 ? '' : msg('live.startsIn', { minutes: number(Math.max(0, Math.ceil((start - now) / 60000))) }),
         episode, artwork: image(p.artwork, ['still', 'backdrop', 'poster'], origin, 600, 338), startISO: p.start, endISO: p.end, startMs: start, endMs: end, navigable: airing || start - now <= 6 * 86400000 };
     }),
   };
