@@ -16,9 +16,10 @@ members Client
   resource time = exactTime() as shape Time
   resource viewport = exactViewport() as shape Viewport
   state capturedWebCode = ""
+  state capturedFragment = false
   derive fragmentCode = match first(fragment(top(nav)).split("&").filter(p => p.startsWith("code=")).map(p => p.slice(5))) { case some(c) => c, case none => "" }
   derive webCode = (capturedWebCode != "" ? capturedWebCode : fragmentCode != "" ? fragmentCode : searchParam(top(nav), "webCode"))
-  resource auth = uiAuth(webCode, time.epochAtZero) as shape AuthModel
+  resource auth = uiAuth(webCode, time.epochAtZero, fragmentCode != "" or capturedFragment) as shape AuthModel
   mutation cancelledAI as shape ReceiptReply
   task cancelEmptySearch when query.trim() == ""
     after(1, cancelSearch)
@@ -57,10 +58,12 @@ members Client
     after(1, forgetCode)
   action forgetCode
     capturedWebCode = ""
+    capturedFragment = false
   task cleanWebCode when fragmentCode != "" or searchParam(top(nav), "webCode") != ""
     after(1, removeWebCode)
   action removeWebCode
     capturedWebCode = webCode
+    capturedFragment = fragmentCode != ""
     if top(nav).name == "home"
       nav = replace(nav, path("home") + (query == "" ? "" : `?q=${encodeURIComponent(query)}`))
     else
