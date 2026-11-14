@@ -5,6 +5,10 @@ shape Card
   name: string
   summary: string
   facts: string
+  year: number
+  rating: string
+  durationSeconds: number
+  genres: string[]
   poster: string
   backdrop: string
   logo: string
@@ -23,6 +27,7 @@ shape HomeModel
   skins: string[]
   hero: Card[]
   rows: FeedRow[]
+  liveAvailable: bool
   aiAvailable: bool
   descriptiveAvailable: bool
 
@@ -73,3 +78,7 @@ shape QuickModel
   expiresAt: string
   status: string
   pollIntervalSeconds: number
+
+shape CollectionModel
+  name: string
+  items: Card[]

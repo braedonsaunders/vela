@@ -1,4 +1,4 @@
-use Card, FeedRow, HomeModel, SearchModel, DetailModel, QuickModel from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, QuickModel, Viewport from "../../foundation/models.contract"
 
 keyframes arrive
   from opacity=0 translate="0px 10px"
@@ -10,13 +10,25 @@ component Shell
     skins: string[]
     chooseSkin: action
     signOut: action
+    viewport: Viewport
+    canLive: bool
+    canLibrary: bool
+    home: action
+    search: action
+    live: action
+    library: action
   slot
   view
     column height="100%" min-height=0 background-color="surface.page" color="ink.primary" color-scheme="dark" font-family="system-ui, sans-serif"
       row padding="20px 5%" align-items="center" gap=24
         link href="/" color="ink.primary" text-decoration="none" aria-label="Vela home"
           text "vela" font-size=30 font-weight=600 letter-spacing="-1.5px"
-        text "YOUR EVENING, REIMAGINED" font-size=10 letter-spacing="2px" color="ink.quiet" flex=1
+        if viewport.width >= 640
+          text "YOUR EVENING, REIMAGINED" font-size=10 letter-spacing="2px" color="ink.quiet" flex=1
+        row flex=1 gap=16 justify-content="end"
+          if canLive
+            button press=live border="none" background-color="transparent" color="ink.secondary"
+              text "Live"
         if skins.length > 1
           select value=skin change=chooseSkin aria-label="Appearance" background-color="surface.raised" color="ink.primary" border="none" padding=8 border-radius=8
             for name in skins key=name
@@ -36,7 +48,7 @@ component TitleCard
     observe: action
   view
     column width=(small ? 142 : 190) flex-shrink=0 gap=10 intersect=observe(card.receipt)
-      button disabled=(card.kind != "movie" and card.kind != "show" and card.kind != "season" and card.kind != "episode") press=selectTitle(card.id, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease")
+      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease")
         if card.poster != ""
           image card.poster alt="" width="100%" height=(small ? 206 : 274) object-fit="cover"
         else
@@ -78,13 +90,15 @@ component Home
               if hero.backdrop != ""
                 image hero.backdrop alt="" width="100%" height="100%" object-fit="cover" opacity=0.68
               column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e18 80%), linear-gradient(90deg, #090b0ed9, transparent)"
-            column padding="20px 7%" gap=12 max-width=700 intersect=observe(hero.receipt) animation=(still ? "none" : "arrive 500ms ease both")
-              text "SELECTED FOR YOU" font-size=10 letter-spacing="3px" color=(hero.accent == "" ? "brand.warm" : hero.accent)
+            column position="relative" padding="20px 7%" gap=12 max-width=700 intersect=observe(hero.receipt) animation=(still ? "none" : "arrive 500ms ease both")
+              row gap=10 align-items="center"
+                column width=22 height=3 border-radius=2 background-color=(hero.accent == "" ? "brand.warm" : hero.accent)
+                text "SELECTED FOR YOU" font-size=10 letter-spacing="3px" color="brand.warm"
               text hero.name role="heading" aria-level=1 font-size=(small ? 36 : 62) font-weight=550 letter-spacing="-2px" line-height=1.05
               text hero.facts font-size=12 color="ink.secondary"
               if not small
                 text hero.summary font-size=15 color="ink.secondary" line-clamp=2 line-height=1.6
-              button press=selectTitle(hero.id, hero.receipt) background-color="ink.primary" color="ink.inverse" padding="12px 22px" border="none" border-radius=24 align-self="start"
+              button press=selectTitle(hero.id, hero.kind, hero.receipt) background-color="ink.primary" color="ink.inverse" padding="12px 22px" border="none" border-radius=24 align-self="start"
                 text "Explore title" font-size=13 font-weight=600
         column padding=(small ? "20px 5% 28px" : "26px 18% 38px")
           children
@@ -172,21 +186,6 @@ component Detail
           text "Featuring" role="heading" aria-level=2 font-size=24
           text model.cast.join(" · ") color="ink.secondary" line-height=1.6
 
-component PlayerChrome
-  props
-    titleId: string
-    command: action
-  view
-    row padding=20 gap=14 flex-wrap="wrap" justify-content="center" background-color="surface.raised"
-      button press=command("play") aria-label="Play" buttonStyle="bordered"
-        text "Play"
-      button press=command("pause") aria-label="Pause" buttonStyle="bordered"
-        text "Pause"
-      button press=command("pip") aria-label="Picture in picture" buttonStyle="bordered"
-        text "Picture in picture"
-      button press=command("fullscreen") aria-label="Fullscreen" buttonStyle="bordered"
-        text "Fullscreen"
-
 component Guide
   view
     column padding=24
@@ -237,3 +236,20 @@ component QuickConnect
       text (error == "" ? "Waiting for approval…" : error) role="status" color="ink.secondary"
       button press=cancel border="1px solid var(--surface.line)" border-radius=24 padding="12px 28px" background-color="surface.raised" color="ink.primary"
         text "Cancel"
+
+fn detailPresentation(width: number): string = (width < 640 ? "fullscreen" : "modal")
+fn detailSplit(width: number): string = "none"
+
+component SearchField
+  props
+    query: string
+    edit: action
+  view
+    row align-items="center" gap=12 padding="8px 18px" border-radius=32 background-color="surface.glass" border="1px solid var(--surface.line)" box-shadow="0px 16px 50px #00000040"
+      image "symbol:search" color="ink.secondary" width=20 height=20
+      input value=query input=edit placeholder="A title, a feeling, a world to get lost in…" aria-label="Search your library" testId="search" border-radius=14 flex=1 min-width=0 padding="12px 0px" border="none" background-color="transparent" color="ink.primary" font-size=15
+        ::placeholder
+          color="ink.secondary"
+      if query != ""
+        button press=edit("") aria-label="Clear search" border="none" background-color="transparent" color="ink.secondary" padding=8
+          image "symbol:close"
