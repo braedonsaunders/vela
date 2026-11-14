@@ -20,7 +20,7 @@ export const STYLE: [string, string][] = [
   ['color', 'color'], ['backgroundColor', 'background-color'], ['backgroundImage', 'background-image'], ['opacity', 'opacity'],
   ['borderWidth', 'border-width'], ['borderStyle', 'border-style'], ['borderColor', 'border-color'], ['borderRadius', 'border-radius'], ['boxShadow', 'box-shadow'], ['filter', 'filter'], ['backdropFilter', 'backdrop-filter'], ['maskImage', 'mask-image'],
   ['fontFamily', 'font-family'], ['fontSize', 'font-size'], ['fontWeight', 'font-weight'], ['fontStyle', 'font-style'], ['lineHeight', 'line-height'], ['letterSpacing', 'letter-spacing'], ['textTransform', 'text-transform'],
-  ['textAlign', 'text-align'], ['textShadow', 'text-shadow'], ['lineClamp', 'line-clamp'], ['whiteSpace', 'white-space'], ['fontVariantNumeric', 'font-variant-numeric'],
+  ['textAlign', 'text-align'], ['textShadow', 'text-shadow'], ['textStroke', '-webkit-text-stroke'], ['lineClamp', 'line-clamp'], ['whiteSpace', 'white-space'], ['fontVariantNumeric', 'font-variant-numeric'],
   ['objectFit', 'object-fit'], ['transformOrigin', 'transform-origin'], ['translate', 'translate'], ['scale', 'scale'],
   ['transition', 'transition'], ['animation', 'animation'], ['pointerEvents', 'pointer-events'], ['cursor', 'cursor'],
 ];
@@ -51,7 +51,7 @@ const rows = (indent: string) => STYLE.map(([field, row]) => {
 }).join(' ');
 
 function shape(d: number): string {
-  const fields = ['t: string', 's: number', 'hs: number', 'fs: number', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gs: number', 'fade: bool', 'pos: number', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
+  const fields = ['t: string', 's: number', 'hs: number', 'fs: number', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gs: number', 'hs2: number', 'fs2: number', 'gs2: number', 'fade: bool', 'pos: number', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
     'sym: string', 'act: string', 'role: string', 'level: number', 'test: Part[]', 'rep: string', 'lim: number',
     'mk: string', 'md: number', 'mdl: number', 'me: string', 'mf: string', 'mit: string', 'mdir: string', 'msk: string', 'msd: number', 'step: number', 'cap: number',
     ...BINDABLE.map(([, f]) => `${f}: Part[]`)];
@@ -74,7 +74,8 @@ function level(d: number): string {
   state over = false
   state focused = false
   state ready = false
-  derive st = styleAt(e.styles, over and n.hh ? n.hs : focused and n.hf ? n.fs : c.hot and n.hg ? n.gs : n.s)
+  // Under reduced motion the overlays drop their transforms (the resolver's *2 styles).
+  derive st = styleAt(e.styles, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : c.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)
   action hovering(v: bool)
     over = v
   action focusing

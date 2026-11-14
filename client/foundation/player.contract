@@ -30,6 +30,12 @@ members Client
     watchEditing = false
   task hideWatch when playingId != "" and watchModel.playing and not watchEditing key=watchTouched
     after(3500, hideWatchChrome)
+  // Keys reach the player from the first frame: the stage takes focus whenever a
+  // watch route opens (the button that opened it is gone).
+  task focusWatchStage when top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" key=top(nav).id
+    after(1, focusStage)
+  action focusStage
+    focus("watch-stage")
   action hideWatchChrome
     watchHidden = true
   action touchWatch
