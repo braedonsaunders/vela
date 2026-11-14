@@ -156,7 +156,7 @@ members Client
   task flushOnHide when page.visibilityState == "hidden"
     after(1, flushReceipts)
   action flushReceipts
-    send flushed = flushInteractions(time.epochAtZero)
+    send flushed = flushInteractions(time.epochAtZero + performanceNow())
   mutation receipt as shape ReceiptReply queue
   derive small = viewport.width < 640
   derive still = viewport.prefersReducedMotion
