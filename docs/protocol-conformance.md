@@ -239,3 +239,29 @@ blocking divergence was found in the changed code reviewed here. The missing
 collection endpoint remains an explicit feature/conformance limitation, not an
 implemented service. Implementer-reported identity/handler checks were not rerun
 here; browser behavior and the On Air Lab install/E2E remain separate gates.
+
+## Live pagination follow-up read: cea628e57
+
+Fetched Ether main and inspected `cea628e5749404124d4155792bfbb396b26763b6`
+(included in merge `bd9da61f95c8f45572b603c7dad7a09ce0ead40f`) with git
+show/git grep only. This supersedes the original live endpoint matrix entries:
+channels and guide now have real continuation rather than rejecting cursors and
+returning unknown at the response cap. No Ether checkout, edits, checks, browser
+or lab deployment were performed for this read.
+
+| Contract / consumer | Reviewed Ether behavior and evidence |
+|---|---|
+| `protocol/v0/types.ts:5,111–115`; README:47–53 | `internal/frontends/vela/live.go:10–55` pages the complete authorized channel order, returns more plus nextCursor when entries remain, and exhausted only at the end. :57–119 accepts guide window/channelIds/cursor/limit and returns original programme times plus from/until and a real continuation. Required fields retain their existing wire shapes; unavailable optional artwork remains an empty array. |
+| README:88–89; opaque, scoped, expiring cursors | `live_cursor.go:19–24` binds viewer/policy/device scope (`rows.go:18–19`) and stable grant family. :27–44 validates authenticated encryption, length, query, expiry, positive offset and snapshot. The ten-minute expiry is preserved across pages; :47–57 seals the next offset and snapshot. Channel query includes the effective limit (`live.go:25`); guide query also includes normalized window and requested channel list (:87). Cross-query or cross-scope reuse fails closed. |
+| README:88–89; changed snapshot returns409 cursor_expired | `live.go:36–39` checks the channel snapshot before slicing. `internal/app/frontend_livetv.go:138–167` fingerprints authorized programme order and validates the previous snapshot before enriching the selected page. `internal/frontends/vela/frontend.go:101–102` maps stale live snapshots to conflict/409 cursor_expired. |
+| README:83–87; authenticate before cache selection | `live.go:11–24,58–85` validates bearer/device and grant scope before reading page data. Both routes retain `cache` at :55/:119; `frontend.go:143–159` supplies private/must-revalidate, ETag, Vary and conditional304. Invalid cursors and authorization failures remain no-store errors. These GETs require no mutation idempotency keys. |
+| `client/src/live/guide.ts:24–36,45–51`; complete pages required | `internal/frontend/live_tv.go:38–55` adds an optional neutral LiveGuidePager without changing the v0 schema. `internal/app/frontend_livetv.go:145–169` selects offset/limit plus one to determine More, then :170–196 enriches only returned entries. `internal/frontends/vela/live.go:107–117` refuses empty/inconsistent More pages and advances by the actual response length. `frontend.go:389–394` advertises liveTV only when that pager is implemented. The existing strict client allPages behavior remains correct. |
+| README:88–89; explicit old row identities must stay stale | `internal/frontends/vela/catalog.go:105–112` retries a stale first home visit once with Refresh=true only when no row id or cursor was supplied; :158 passes the refresh request to the neutral row service. Explicit row ids/cursors retain the existing stale409 behavior. |
+
+No new blocking wire divergence was found in this delta. This is source
+conformance evidence, not proof of lab guide rendering or live playback. The
+neutral source still materializes and fingerprints the selected guide window on
+each page (`internal/app/frontend_livetv.go:120–163`); only subsequent metadata
+enrichment is page-bounded. It does not claim bounded upstream materialization,
+an exact library count, or a fabricated exhausted result. SSE, media and mutation
+semantics are unchanged by this delta and were not requalified here.
