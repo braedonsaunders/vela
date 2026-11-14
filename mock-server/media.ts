@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+export const fixtureDurationSeconds = 180;
 export const mediaRoot = join(homedir(), '.scratch/tmp/vela/media');
 export interface Faults { bandwidthBps: number; failEvery: number; truncateEvery: number; stallMs: number; fallbackUnavailable: boolean; capacityExhausted: boolean }
 export const faults: Faults = { bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false };

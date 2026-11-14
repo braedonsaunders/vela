@@ -11,7 +11,7 @@ Use returned bearer plus `X-Vela-Device-Id: vela-dev` on authenticated API calls
 Optional `VELA_MOCK_TOKEN=dev-token` seeds that fixed bearer/device for development.
 For device/quick-connect pairing, approve the displayed code using an already
 signed-in grant. Poll every three seconds; pairing expires after ten minutes.
-POST `/__admin/web-code` issues a single-use sixty-second console handoff code.
+POST `/__admin/web-code` issues a single-use three-minute console handoff code.
 
 API and caching follow [v0](../protocol/v0/README.md). All state is in memory;
 restarts invalidate credentials, cursors, receipts and sessions. The fixtures are
@@ -23,13 +23,13 @@ every four seconds, with media sequences and programme date times and no ENDLIST
 This is a real live delivery fixture, not a connection to a television provider.
 
 Generate media once: `bun mock-server/scripts/make-media.ts` (requires ffmpeg).
-Output: `~/.scratch/tmp/vela/media/`, synthetic sixty-second H.264/AAC direct MP4,
+Output: `~/.scratch/tmp/vela/media/`, synthetic three-minute H.264/AAC direct MP4,
 three aligned four-second fMP4 HLS qualities, two tone audio tracks and WebVTT.
 Each Quality URL is a complete muxed A/V media playlist, suitable for MSE.
 Native HLS master includes alternate audio groups. Generated files are scratch;
 regenerate if aged out. Plan and media remain unavailable until generation finishes.
 Movie metadata describes fictional full-length titles; all playback is explicitly
-this sixty-second test fixture. Remux copies the original 720p video; transcode
+this three-minute test fixture. Remux copies the original 720p video; transcode
 alternatives are generated offline. No actual on-demand encoder scheduler exists.
 
 GET/POST `/__admin/faults` reads/patches:

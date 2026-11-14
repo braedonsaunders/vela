@@ -1,10 +1,10 @@
 import type { PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, SessionEvent, SessionSnapshot } from '../protocol/v0/types';
-import { faults, mediaRoot } from './media';
+import { faults, mediaRoot, fixtureDurationSeconds } from './media';
 import { liveWindow } from './live';
 export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number }
 export const sessions = new Map<string, Session>();
 export function snapshot(s: Session): SessionSnapshot {
-  return { cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: 60 }] : [], lastObservationSequence: s.sequence };
+  return { cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: fixtureDurationSeconds }] : [], lastObservationSequence: s.sequence };
 }
 const encode = (event: SessionEvent) => new TextEncoder().encode(`id: ${event.cursor}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
 export function publish(s: Session) {
@@ -20,15 +20,15 @@ export async function createSession(owner: string, request: PlaybackRequest): Pr
   const available = await Bun.file(`${mediaRoot}/master.m3u8`).exists();
   const tracks = ['en', 'es'].map((language, n) => ({ id: `audio-${language}`, kind: 'audio' as const, language, name: n ? 'Spanish · test tone' : 'English · test tone', codec: 'aac', channels: 2, default: n === 0 }));
   const plan: PlaybackPlan = { sessionId: id, revision: 1, sourceGeneration: 1, seekGeneration: 1,
-    titleId: request.titleId, channelId: request.channelId, extraId: request.extraId, state: 'ready', positionSeconds: request.positionSeconds ?? 0, durationSeconds: 60,
+    titleId: request.titleId, channelId: request.channelId, extraId: request.extraId, state: 'ready', positionSeconds: request.positionSeconds ?? 0, durationSeconds: fixtureDurationSeconds,
     paths: available ? [
-      { id: 'direct', kind: 'direct', transport: 'file', url: `${base}/direct.mp4`, mimeType: 'video/mp4', sourceId: 'synthetic-original', timelineId: 'synthetic-60', readiness: 'ready', qualities: [], boundaries: [] },
-      { id: 'remux', kind: 'remux', transport: 'hls', url: `${base}/v720/index.m3u8`, mimeType: 'application/vnd.apple.mpegurl', sourceId: 'synthetic-original', timelineId: 'synthetic-60', readiness: 'ready', qualities: [{ id: '720p', width: 1280, height: 720, bitrate: 2200000, videoCodec: 'avc1.64001f', audioCodec: 'mp4a.40.2', url: `${base}/v720/index.m3u8` }], boundaries: [] },
-      ...(request.allowTranscode === false || faults.fallbackUnavailable ? [] : [{ id: 'transcode', kind: 'transcode' as const, transport: 'hls' as const, url: `${base}/master.m3u8`, mimeType: 'application/vnd.apple.mpegurl', sourceId: 'synthetic-original', timelineId: 'synthetic-60', readiness: 'ready' as const,
+      { id: 'direct', kind: 'direct', transport: 'file', url: `${base}/direct.mp4`, mimeType: 'video/mp4', sourceId: 'synthetic-original', timelineId: `synthetic-${fixtureDurationSeconds}`, readiness: 'ready', qualities: [], boundaries: [] },
+      { id: 'remux', kind: 'remux', transport: 'hls', url: `${base}/v720/index.m3u8`, mimeType: 'application/vnd.apple.mpegurl', sourceId: 'synthetic-original', timelineId: `synthetic-${fixtureDurationSeconds}`, readiness: 'ready', qualities: [{ id: '720p', width: 1280, height: 720, bitrate: 2200000, videoCodec: 'avc1.64001f', audioCodec: 'mp4a.40.2', url: `${base}/v720/index.m3u8` }], boundaries: [] },
+      ...(request.allowTranscode === false || faults.fallbackUnavailable ? [] : [{ id: 'transcode', kind: 'transcode' as const, transport: 'hls' as const, url: `${base}/master.m3u8`, mimeType: 'application/vnd.apple.mpegurl', sourceId: 'synthetic-original', timelineId: `synthetic-${fixtureDurationSeconds}`, readiness: 'ready' as const,
         qualities: [[360, 640, 500000], [540, 960, 1100000], [720, 1280, 2200000]].map(([height, width, bitrate]) => ({ id: `${height}p`, width, height, bitrate, videoCodec: 'avc1.64001f', audioCodec: 'mp4a.40.2', url: `${base}/v${height}/index.m3u8` })),
-        boundaries: Array.from({ length: 15 }, (_, n) => ({ atSeconds: n * 4, independent: true, timelineId: 'synthetic-60', compatibility: 'same-source' as const, audioTrackIds: tracks.map(t => t.id), subtitleTrackIds: ['sub-en'] })) }]),
+        boundaries: Array.from({ length: fixtureDurationSeconds / 4 }, (_, n) => ({ atSeconds: n * 4, independent: true, timelineId: `synthetic-${fixtureDurationSeconds}`, compatibility: 'same-source' as const, audioTrackIds: tracks.map(t => t.id), subtitleTrackIds: ['sub-en'] })) }]),
     ] : [], selectedPathId: 'direct', audioTracks: tracks, subtitleTracks: [{ id: 'sub-en', kind: 'subtitle', language: 'en', name: 'English', codec: 'webvtt', url: `${base}/subtitles.vtt` }],
-    selectedAudioTrackId: request.audioTrackId ?? 'audio-en', selectedSubtitleTrackId: request.subtitleTrackId ?? null, chapters: [0,20,40].map((startSeconds, i) => ({ id: `chapter-${i + 1}`, name: ['Signal', 'Crossing', 'Homeward'][i], startSeconds, endSeconds: startSeconds + 20 })),
+    selectedAudioTrackId: request.audioTrackId ?? 'audio-en', selectedSubtitleTrackId: request.subtitleTrackId ?? null, chapters: [0,60,120].map((startSeconds, i) => ({ id: `chapter-${i + 1}`, name: ['Signal', 'Crossing', 'Homeward'][i], startSeconds, endSeconds: startSeconds + 60 })),
     fallback: { state: faults.fallbackUnavailable ? 'unavailable' : 'unsupported', reason: 'Mock serves pre-generated alternatives; no proactive encoder scheduler.' },
   };
   if (request.channelId) {
