@@ -35,7 +35,7 @@ for (const name of [archiveName, manifestName, `${archiveName}.sha256`, `${manif
 const work = await mkdtemp(join(releases, '.build-'));
 try {
   // Copy only repository inputs, including current edits, so the build never rewrites shared source files.
-  const files = (await run(['git', 'ls-files', '-z', '--', 'client', 'protocol'])).split('\0').filter(Boolean);
+  const files = (await run(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', 'client', 'protocol'])).split('\0').filter(Boolean);
   for (const path of files) {
     const from = join(root, path), to = join(work, path);
     await mkdir(dirname(to), { recursive: true });
@@ -45,7 +45,7 @@ try {
   const client = join(work, 'client');
   const manifestPath = join(client, 'app.json');
   const app = JSON.parse(await readFile(manifestPath, 'utf8'));
-  app.start_url = '/vela/'; app.scope = '/vela/';
+  app.start_url = '/vela/';
   await writeFile(manifestPath, JSON.stringify(app, null, 2) + '\n');
   const contractPath = join(client, 'app.contract');
   const contract = await readFile(contractPath, 'utf8');
@@ -69,6 +69,10 @@ try {
     if (!html.includes('<base href="/">')) throw new Error(`Unexpected base tag in ${name}`);
     await writeFile(path, html.replace('<base href="/">', '<base href="/vela/">'));
   }
+  const pwaPath = join(dist, 'manifest.json');
+  const pwa = JSON.parse(await readFile(pwaPath, 'utf8'));
+  pwa.start_url = '/vela/'; pwa.scope = '/vela/';
+  await writeFile(pwaPath, JSON.stringify(pwa, null, 2) + '\n');
   // Build metadata is host-local and is not an installer/runtime input.
   await rm(join(dist, '.exact-build.json'), { force: true });
   const cards: { path: string; bytes: number; sha256: string }[] = [];
