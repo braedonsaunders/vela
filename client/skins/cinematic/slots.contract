@@ -1,4 +1,4 @@
-use Card, FeedRow, HomeModel, SearchModel, DetailModel, QuickModel, Viewport, cardName from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, QuickModel, Viewport, cardName, skinLabel from "../../foundation/models.contract"
 
 keyframes arrive
   from opacity=0 translate="0px 10px"
@@ -20,30 +20,30 @@ component Shell
   slot
   view
     column height="100%" min-height=0 background-color="surface.page" color="ink.primary" color-scheme="dark" font-family="system-ui, sans-serif"
-      row role="navigation" aria-label="Main navigation" padding="20px 5%" align-items="center" gap=24
-        link href="/" color="ink.primary" text-decoration="none" aria-label="Vela home"
-          text "vela" font-size=30 font-weight=600 letter-spacing="-1.5px"
+      row role="navigation" aria-label=t("ui.mainNavigation") padding="20px 5%" align-items="center" gap=24
+        link href="/" color="ink.primary" text-decoration="none" aria-label=t("ui.velaHome")
+          text t("ui.vela") font-size=30 font-weight=600 letter-spacing="-1.5px"
         if viewport.width >= 640
-          text "YOUR EVENING, REIMAGINED" font-size=10 letter-spacing="2px" color="ink.quiet" flex=1
+          text t("ui.yourEveningReimagined") font-size=10 letter-spacing="2px" color="ink.quiet" flex=1
         row flex=1 gap=16 justify-content="end"
           if canLive
             button press=live border="none" background-color="transparent" color="ink.secondary"
-              text "Live"
+              text t("ui.live")
         if viewer != ""
-          button popovertarget="viewer-settings" aria-label="Profile and appearance" testId="profile-menu" background-color="surface.raised" border="1px solid var(--surface.line)" border-radius=24 padding=(viewport.width < 640 ? "10px 14px" : "10px 18px") color="ink.primary"
+          button popovertarget="viewer-settings" aria-label=t("ui.profileAndAppearance") testId="profile-menu" background-color="surface.raised" border="1px solid var(--surface.line)" border-radius=24 padding=(viewport.width < 640 ? "10px 14px" : "10px 18px") color="ink.primary"
             text (viewport.width < 640 ? viewer.slice(0, 1) : viewer) font-size=13
       column id="viewer-settings" popover="auto" position="absolute" top=72 right="5%" left="auto" bottom="auto" margin=0 padding=22 gap=16 border="1px solid var(--surface.line)" border-radius=20 background-color="surface.raised" color="ink.primary" min-width=210
         text viewer font-weight=600
         if skins.length > 1
-          text "Appearance" font-size=12 color="ink.secondary"
-          select value=skin change=chooseSkin aria-label="Appearance" testId="skin-picker" background-color="surface.page" color="ink.primary" border="1px solid var(--surface.line)" padding=10 border-radius=10
+          text t("ui.appearance") font-size=12 color="ink.secondary"
+          select value=skin change=chooseSkin aria-label=t("ui.appearance") testId="skin-picker" background-color="surface.page" color="ink.primary" border="1px solid var(--surface.line)" padding=10 border-radius=10
             for name in skins key=name
               option value=name
-                text (name == "editorial" or name == "index" ? "Index" : "Cinematic")
-        vela-install pwaAction="install"
-        vela-install pwaAction="update"
+                text skinLabel(name)
+        vela-install pwaAction="install" buttonLabel=t("pwa.install")
+        vela-install pwaAction="update" buttonLabel=t("pwa.update")
         button press=signOut background-color="transparent" border="none" color="ink.secondary" text-align="left" padding=0
-          text "Sign out"
+          text t("ui.signOut")
       children
 
 component TitleCard
@@ -113,13 +113,13 @@ component Home
             column position="relative" padding="20px 7%" gap=12 max-width=700 intersect=observe(hero.receipt) animation=(still ? "none" : "arrive 500ms ease both")
               row gap=10 align-items="center"
                 column width=22 height=3 border-radius=2 background-color=(hero.accent == "" ? "brand.warm" : hero.accent)
-                text "SELECTED FOR YOU" font-size=10 letter-spacing="3px" color="brand.warm"
+                text t("ui.selectedForYou") font-size=10 letter-spacing="3px" color="brand.warm"
               text hero.name role="heading" aria-level=1 font-size=(small ? 36 : 62) font-weight=550 letter-spacing="-2px" line-height=1.05
               text hero.facts font-size=12 color="ink.secondary"
               if not small
                 text hero.summary font-size=15 color="ink.secondary" line-clamp=2 line-height=1.6
               button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) background-color="ink.primary" color="ink.inverse" padding="12px 22px" border="none" border-radius=24 align-self="start"
-                text "Explore title" font-size=13 font-weight=600
+                text t("ui.exploreTitle") font-size=13 font-weight=600
         column padding=(small ? "20px 5% 28px" : "26px 18% 38px")
           children
       if query == ""
@@ -142,28 +142,28 @@ component SearchSurface
     observe: action
   view
     column gap=22 padding="0px 0px 40px" animation=(still ? "none" : "arrive 200ms ease both")
-      text `Results for “${query}”` role="heading" aria-level=1 font-size=24 padding="0px 5%"
+      text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 font-size=24 padding="0px 5%"
       if error
-        text "Search is unavailable. Try another query." role="status" color="ink.secondary"
+        text t("ui.searchIsUnavailableTryAnotherQuery") role="status" color="ink.secondary"
       else
         if loading
-          text "Finding titles…" role="status" color="ink.secondary"
+          text t("ui.findingTitles") role="status" color="ink.secondary"
         else
           if model.items.length == 0
-            text "No title matches. Try a name, a mood or a different description." role="status" color="ink.secondary"
+            text t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription") role="status" color="ink.secondary"
           else
-            Row(row=FeedRow(id="fast", name="Title matches", receipt="", items=model.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+            Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
-          Row(row=FeedRow(id="vibe", name="The feeling you're looking for", receipt="", items=descriptive.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
           column gap=12
-            text "A little further afield" role="heading" aria-level=2 font-size=22
+            text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 font-size=22
             if ai.aiStatus == "queued" or ai.aiStatus == "running"
-              text "Exploring your description…" role="status" color="ink.secondary"
+              text t("ui.exploringYourDescription") role="status" color="ink.secondary"
             if ai.items.length > 0
-              Row(row=FeedRow(id="ai", name="Discovered for you", receipt="", items=ai.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+              Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
             if ai.aiStatus == "failed"
-              text "Discovery couldn't finish. Your title matches are ready above." color="ink.secondary"
+              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="ink.secondary"
 
 component Detail
   props
@@ -186,7 +186,7 @@ component Detail
             image title.backdrop alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover" opacity=0.9
           column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e30 90%), linear-gradient(90deg, #090b0ed9, #090b0e10)"
           column position="relative" padding=(small ? "80px 7% 32px" : "110px 7% 42px") max-width="52rem" gap=18
-            text (title.kind == "movie" ? "Film" : title.kind == "show" ? "Series" : title.kind == "season" ? "Season" : "Episode") color="brand.warm" text-transform="uppercase" letter-spacing="3px" font-size=11
+            text (title.kind == "movie" ? t("ui.film") : title.kind == "show" ? t("ui.series") : title.kind == "season" ? t("ui.season") : t("ui.episode")) color="brand.warm" text-transform="uppercase" letter-spacing="3px" font-size=11
             if title.logo != ""
               image title.logo alt=title.name width=260 height=100 object-fit="contain"
             else
@@ -200,71 +200,66 @@ component Detail
             text title.summary color="ink.primary" font-size=16 line-height=1.6
             if model.canPlay
               button press=play(title.id) background-color="ink.primary" color="ink.inverse" border="none" border-radius=28 padding="15px 28px" align-self="start" testId="detail-play"
-                text (model.resumeSeconds > 0 ? `Resume · ${floor(model.resumeSeconds / 60)} min in` : "Play") font-weight=650
+                text (model.resumeSeconds > 0 ? t("ui.resumePositionIn", position=model.resumePosition) : t("ui.play")) font-weight=650
               if model.resumeSeconds > 0 and title.durationSeconds > 0
-                column width=230 height=3 border-radius=2 background-color="surface.line" role="progressbar" aria-label="Watch progress" aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=min(title.durationSeconds, max(0, model.resumeSeconds))
+                column width=230 height=3 border-radius=2 background-color="surface.line" role="progressbar" aria-label=t("ui.watchProgress") aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=min(title.durationSeconds, max(0, model.resumeSeconds))
                   column height=3 width=`${min(100, model.resumeSeconds / title.durationSeconds * 100)}%` background-color="brand.warm"
             for trailer in model.extras.filter(e => e.kind == "trailer" and e.ready) key=trailer.id
               button press=playExtra(trailer.id) align-self="start" border="1px solid var(--surface.line)" border-radius=28 background-color="surface.glass" color="ink.primary" padding="13px 24px"
-                text "Watch trailer"
+                text t("ui.watchTrailer")
       if model.seasons.length > 0 or model.episodes.length > 0
         column padding="0px 7%" gap=22
           row align-items="center" justify-content="space-between" flex-wrap="wrap" gap=16 padding-right=(small ? 52 : 0)
-            text "Episodes" role="heading" aria-level=2 font-size=28 font-weight=550
+            text t("ui.episodes") role="heading" aria-level=2 font-size=28 font-weight=550
             if model.seasons.length > 0
-              select value=selectedSeason change=pickSeason aria-label="Season" testId="season-picker" padding="12px 18px" border="1px solid var(--surface.line)" border-radius=12 background-color="surface.raised" color="ink.primary"
+              select value=selectedSeason change=pickSeason aria-label=t("ui.season") testId="season-picker" padding="12px 18px" border="1px solid var(--surface.line)" border-radius=12 background-color="surface.raised" color="ink.primary"
                 for season in model.seasons key=season.id
                   option value=season.id
                     text season.name
           for episode in upNext key=episode.id
             row flex-direction=(small ? "column" : "row") align-items=(small ? "stretch" : "center") justify-content="space-between" gap=18 padding=24 border-radius=18 background-color="surface.raised"
               column gap=6 flex=1
-                text (episode.progressSeconds > 0 ? "CONTINUE WATCHING" : "UP NEXT") color="brand.warm" font-size=10 letter-spacing="2px"
+                text (episode.progressSeconds > 0 ? t("ui.continueWatching") : t("ui.upNext")) color="brand.warm" font-size=10 letter-spacing="2px"
                 text episode.name role="heading" aria-level=3 font-size=24
-              button align-self=(small ? "stretch" : "center") press=play(episode.id) aria-label=`${episode.progressSeconds > 0 ? "Resume" : "Play"} ${episode.name}` padding="13px 24px" border-radius=26 background-color="ink.primary" color="ink.inverse" border="none"
-                text (episode.progressSeconds > 0 ? "Resume episode" : "Play episode") font-weight=600
+              button align-self=(small ? "stretch" : "center") press=play(episode.id) aria-label=(episode.progressSeconds > 0 ? t("ui.resumeTitle", title=episode.name) : t("ui.playTitle", title=episode.name)) padding="13px 24px" border-radius=26 background-color="ink.primary" color="ink.inverse" border="none"
+                text (episode.progressSeconds > 0 ? t("ui.resumeEpisode") : t("ui.playEpisode")) font-weight=600
           for episode in model.episodes key=episode.id
             row gap=(small ? 14 : 24) align-items="center" padding="18px 0px" border-bottom="1px solid var(--surface.line)"
               button press=selectTitle(episode.id, episode.kind, episode.receipt) aria-label=cardName(episode) testId=`episode-${episode.id}` padding=0 border="none" border-radius=10 overflow="hidden" background-color="surface.raised" color="ink.primary" flex-shrink=0
                 if episode.backdrop != ""
                   image episode.backdrop alt="" width=(small ? 100 : 180) height=(small ? 66 : 102) object-fit="cover"
                 else
-                  text (episode.episodeNumber > 0 ? episode.episodeNumber.toString() : "Episode") width=(small ? 100 : 180) padding="22px 0px"
+                  text (episode.episodeNumber > 0 ? episode.episodeNumberLabel : t("ui.episode")) width=(small ? 100 : 180) padding="22px 0px"
               column flex=1 min-width=0 gap=8
-                text `${episode.episodeNumber > 0 ? episode.episodeNumber.toString() + ". " : ""}${episode.name}` role="heading" aria-level=3 font-size=(small ? 16 : 20) font-weight=550
-                text `${episode.facts}${episode.played ? " · Watched" : ""}` color="ink.secondary" font-size=12
+                text (episode.episodeNumber > 0 ? t("ui.numberTitle", number=episode.episodeNumberLabel, title=episode.name) : episode.name) role="heading" aria-level=3 font-size=(small ? 16 : 20) font-weight=550
+                text (episode.played ? t("ui.factsWatched", facts=episode.facts) : episode.facts) color="ink.secondary" font-size=12
                 if not small
                   text episode.summary color="ink.secondary" font-size=14 line-clamp=2 line-height=1.5
                 if episode.progressSeconds > 0 and episode.durationSeconds > 0
-                  column height=3 border-radius=2 background-color="surface.line" role="progressbar" aria-label=`${episode.name} watch progress` aria-valuemin=0 aria-valuemax=episode.durationSeconds aria-valuenow=min(episode.durationSeconds, max(0, episode.progressSeconds))
+                  column height=3 border-radius=2 background-color="surface.line" role="progressbar" aria-label=t("ui.titleWatchProgress", title=episode.name) aria-valuemin=0 aria-valuemax=episode.durationSeconds aria-valuenow=min(episode.durationSeconds, max(0, episode.progressSeconds))
                     column height=3 width=`${min(100, episode.progressSeconds / episode.durationSeconds * 100)}%` border-radius=2 background-color="brand.warm"
-              button press=play(episode.id) aria-label=`Play ${episode.name}` border="1px solid var(--surface.line)" border-radius=24 width=44 height=44 padding=10 box-sizing="border-box" background-color="surface.glass" color="ink.primary"
+              button press=play(episode.id) aria-label=t("ui.playTitle", title=episode.name) border="1px solid var(--surface.line)" border-radius=24 width=44 height=44 padding=10 box-sizing="border-box" background-color="surface.glass" color="ink.primary"
                 image "symbol:play-fill"
       if model.extras.length > 0
         column padding="0px 7%" gap=14
-          text "Extras" role="heading" aria-level=2 font-size=24
+          text t("ui.extras") role="heading" aria-level=2 font-size=24
           for extra in model.extras key=extra.id
             button press=playExtra(extra.id) disabled=(not extra.ready) background-color="surface.raised" color="ink.primary" border="none" padding=16 border-radius=12 text-align="left"
-              text `${extra.name}${extra.ready ? "" : " · Not available"}`
+              text (extra.ready ? extra.name : t("ui.titleNotAvailable", title=extra.name))
       if model.cast.length > 0
         column padding="0px 7%" gap=12
-          text "Featuring" role="heading" aria-level=2 font-size=24
+          text t("ui.featuring") role="heading" aria-level=2 font-size=24
           scroll overflow-x="auto" height=88
             row gap=12
               for person in model.cast key=person
                 text person padding="20px 24px" border-radius=12 background-color="surface.raised" color="ink.secondary" flex-shrink=0
       if model.crew.length > 0
         column padding="0px 7%" gap=12
-          text "Behind the story" role="heading" aria-level=2 font-size=24
+          text t("ui.behindTheStory") role="heading" aria-level=2 font-size=24
           text model.crew.join(" · ") line-height=1.6
       if model.related.length > 0
         for related in model.related key=related.id
           Row(row=related, small=small, still=still, selectTitle=selectTitle, observe=observe)
-
-component Guide
-  view
-    column padding=24
-      text "Live guide is not available." role="status" color="ink.secondary"
 
 component SignIn
   props
@@ -280,22 +275,22 @@ component SignIn
     quick: action
   view
     column max-width=380 width="85%" align-self="center" gap=20 padding="48px 0px"
-      text "Welcome to your evening." role="heading" aria-level=1 font-size=40 line-height=1.1 letter-spacing="-1px"
-      text "Sign in to your library." color="ink.secondary" font-size=15
+      text t("ui.welcomeToYourEvening") role="heading" aria-level=1 font-size=40 line-height=1.1 letter-spacing="-1px"
+      text t("ui.signInToYourLibrary") color="ink.secondary" font-size=15
       if error != ""
         text error role="alert" color="brand.warm"
       if passwordAvailable
         column gap=8
-          text "Username" font-size=12 color="ink.secondary"
-          input value=username input=editUsername autocomplete="username" aria-label="Username" testId="username" padding=14 border-radius=12 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary"
+          text t("ui.username") font-size=12 color="ink.secondary"
+          input value=username input=editUsername autocomplete="username" aria-label=t("ui.username") testId="username" padding=14 border-radius=12 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary"
         column gap=8
-          text "Password" font-size=12 color="ink.secondary"
-          input type="password" value=password input=editPassword submit=submit autocomplete="current-password" aria-label="Password" testId="password" padding=14 border-radius=12 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary"
+          text t("ui.password") font-size=12 color="ink.secondary"
+          input type="password" value=password input=editPassword submit=submit autocomplete="current-password" aria-label=t("ui.password") testId="password" padding=14 border-radius=12 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary"
         button press=submit disabled=(busy or username.trim() == "" or password == "") padding=15 border-radius=24 border="none" background-color="ink.primary" color="ink.inverse" testId="sign-in"
-          text (busy ? "Signing in…" : "Sign in") font-weight=600
+          text (busy ? t("ui.signingIn") : t("ui.signIn")) font-weight=600
       if quickAvailable
         button press=quick disabled=busy padding=15 border-radius=24 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary" testId="quick-connect"
-          text "Connect with a code"
+          text t("ui.connectWithACode")
 
 component QuickConnect
   props
@@ -304,13 +299,13 @@ component QuickConnect
     cancel: action
   view
     column max-width=420 width="85%" align-self="center" gap=24 padding="48px 0px" align-items="center"
-      text "An easier way in." role="heading" aria-level=1 font-size=38 letter-spacing="-1px"
-      text "Approve this code from a signed-in Ether device." color="ink.secondary" text-align="center" line-height=1.6
+      text t("ui.anEasierWayIn") role="heading" aria-level=1 font-size=38 letter-spacing="-1px"
+      text t("ui.approveThisCodeFromASignedInEtherDevice") color="ink.secondary" text-align="center" line-height=1.6
       text model.code font-size=44 font-weight=600 letter-spacing="8px" color="brand.warm" testId="connect-code"
-      text `Expires ${model.expiresAt}` color="ink.secondary" font-size=12
-      text (error == "" ? "Waiting for approval…" : error) role="status" color="ink.secondary"
+      text t("ui.expiresExpiry", expiry=model.expiresLabel) color="ink.secondary" font-size=12
+      text (error == "" ? t("ui.waitingForApproval") : error) role="status" color="ink.secondary"
       button press=cancel border="1px solid var(--surface.line)" border-radius=24 padding="12px 28px" background-color="surface.raised" color="ink.primary"
-        text "Cancel"
+        text t("ui.cancel")
 
 fn detailPresentation(width: number): string = "fullscreen"
 fn detailSplit(width: number): string = "none"
@@ -322,9 +317,9 @@ component SearchField
   view
     row align-items="center" gap=12 padding="8px 18px" border-radius=32 background-color="surface.glass" border="1px solid var(--surface.line)" box-shadow="0px 16px 50px #00000040"
       image "symbol:search" color="ink.secondary" width=20 height=20
-      input value=query input=edit placeholder="A title, a feeling, a world to get lost in…" aria-label="Search your library" testId="search" border-radius=14 flex=1 min-width=0 padding="12px 0px" border="none" background-color="transparent" color="ink.primary" font-size=15
+      input value=query input=edit placeholder=t("ui.aTitleAFeelingAWorldToGetLostIn") aria-label=t("ui.searchYourLibrary") testId="search" border-radius=14 flex=1 min-width=0 padding="12px 0px" border="none" background-color="transparent" color="ink.primary" font-size=15
         ::placeholder
           color="ink.secondary"
       if query != ""
-        button press=edit("") aria-label="Clear search" border="none" background-color="transparent" color="ink.secondary" padding=8
+        button press=edit("") aria-label=t("ui.clearSearch") border="none" background-color="transparent" color="ink.secondary" padding=8
           image "symbol:close"

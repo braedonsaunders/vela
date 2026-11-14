@@ -2,6 +2,11 @@ use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, Playba
 
 shape Time
   epochAtZero: number
+  locale: string
+  formatLocale: string
+  resolvedLocale: string
+  timeZone: string
+  utcOffset: number
 
 shape PageState
   visibilityState: string
@@ -25,7 +30,8 @@ members Client
     mediaCapabilitiesJSON = json
   action receiveOrigin(origin: string)
     pageOrigin = origin
-  resource auth = uiAuth(webCode, time.epochAtZero, fragmentCode != "" or capturedFragment, pageOrigin, mediaCapabilitiesJSON) when pageOrigin != "" and mediaCapabilitiesJSON != "" as shape AuthModel
+  derive localeJSON = `{"locale":"${time.locale}","formatLocale":"${time.formatLocale}","resolvedLocale":"${time.resolvedLocale}","timeZone":"${time.timeZone}","utcOffset":${time.utcOffset}}`
+  resource auth = uiAuth(webCode, time.epochAtZero, fragmentCode != "" or capturedFragment, pageOrigin, mediaCapabilitiesJSON, localeJSON) when current(time) and pageOrigin != "" and mediaCapabilitiesJSON != "" as shape AuthModel
   mutation cancelledAI as shape ReceiptReply
   task cancelEmptySearch when query.trim() == ""
     after(1, cancelSearch)
@@ -55,7 +61,7 @@ members Client
   state password = ""
   state quickSecret = ""
   derive authError = match signedIn { case some(r) => r.error, case none => (quickError != "" ? quickError : auth.error) }
-  derive quickModel = match quickStarted { case some(r) => r, case none => QuickModel(secret="", code="", expiresAt="", status="", pollIntervalSeconds=2) }
+  derive quickModel = match quickStarted { case some(r) => r, case none => QuickModel(secret="", code="", expiresAt="", expiresLabel="", status="", pollIntervalSeconds=2) }
   derive quickError = match quickPoll { case some(r) => r.error, case none => "" }
   state nextQuickPoll = 0
   task quickPolling when quickSecret != ""
@@ -97,7 +103,7 @@ members Client
       case none
         password = ""
   action startCode
-    send quickStarted = startQuick(time.epochAtZero)
+    send quickStarted = startQuick(time.epochAtZero, localeJSON)
   action afterQuickStart
     quickSecret = quickModel.secret
     nextQuickPoll = performanceNow() + max(1, quickModel.pollIntervalSeconds) * 1000
@@ -119,18 +125,20 @@ members Client
     send quickCancelled = cancelQuick(quickSecret, time.epochAtZero)
     quickSecret = ""
   state homeAt = 0
-  task captureHomeTime when auth.authenticated
+  state homeLocale = ""
+  task captureHomeTime when auth.authenticated key=localeJSON
     after(1, stampHomeTime)
   action stampHomeTime
     homeAt = time.epochAtZero + performanceNow()
-  resource home = uiBootstrap(homeAt) when auth.authenticated and homeAt > 0 as shape HomeModel
-  resource results = uiSearch(query, generation, time.epochAtZero) when auth.authenticated and query.trim() != "" as shape SearchModel
-  resource descriptive = uiDescriptive(query, generation, time.epochAtZero) when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel
-  resource ai = uiAI(query, generation, time.epochAtZero) when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel
+    homeLocale = localeJSON
+  resource home = uiBootstrap(homeAt) with localeJSON when auth.authenticated and homeAt > 0 and homeLocale == localeJSON as shape HomeModel
+  resource results = uiSearch(query, generation, time.epochAtZero) with localeJSON when auth.authenticated and query.trim() != "" as shape SearchModel
+  resource descriptive = uiDescriptive(query, generation, time.epochAtZero) with localeJSON when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel
+  resource ai = uiAI(query, generation, time.epochAtZero) with localeJSON when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
-  resource collection = uiCollection(collectionId) when auth.authenticated and collectionId != "" as shape CollectionModel
-  resource detail = uiDetail(detailId) when auth.authenticated and detailId != "" as shape DetailModel
-  resource related = uiRelated(detailId) when auth.authenticated and detailId != "" as shape FeedRow[] else empty()
+  resource collection = uiCollection(collectionId) with localeJSON when auth.authenticated and collectionId != "" as shape CollectionModel
+  resource detail = uiDetail(detailId) with localeJSON when auth.authenticated and detailId != "" as shape DetailModel
+  resource related = uiRelated(detailId) with localeJSON when auth.authenticated and detailId != "" as shape FeedRow[] else empty()
   derive detailSurface = DetailModel(detail, related=(current(related) ? related : []))
   derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" ? top(nav).params.id : "")
   resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero) when auth.authenticated and playingId != "" as shape PlaybackModel
@@ -157,7 +165,8 @@ members Client
   derive shellViewport = Viewport(viewport, width=(homeSmall and not small ? 360 : viewport.width))
   derive pageColor = (indexSkin ? "index.page" : "surface.page")
   derive inkColor = (indexSkin ? "index.ink" : "ink.primary")
-  derive activeSkin = (skin == "" ? home.defaultSkinId : skin)
+  derive requestedSkin = (skin == "" ? home.defaultSkinId : skin)
+  derive activeSkin = (["cinematic", "index", "editorial", "example"].includes(requestedSkin) ? requestedSkin : "cinematic")
 
   task searchUpdates when auth.authenticated and query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running")
     every(1500, updateSearch)

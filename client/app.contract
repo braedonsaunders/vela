@@ -1,5 +1,5 @@
 use Guide, LiveControls from "./foundation/skin.contract"
-use PlayerChrome from "./skins/cinematic/player.contract"
+use PlayerChrome from "./foundation/skin.contract"
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./foundation/models.contract"
 use SignIn, QuickConnect from "./skins/cinematic/slots.contract"
 use Shell, Home, SearchSurface, Detail, SearchField, Row, skinDetailPresentation, skinDetailSplit from "./foundation/skin.contract"
@@ -25,13 +25,13 @@ component Client
       for e in stack(nav) key=e.id
         if e.name == "home"
           column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width) : "none") navigationScroll="home-scroll" position="absolute" inset=0
-            Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins, chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=home.liveAvailable, canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
-              scroll id="home-scroll" role="region" aria-label="Browse and search" flex=1 min-height=0
+            Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins.filter(id => ["cinematic", "index", "editorial", "example"].includes(id)), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=home.liveAvailable, canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
+              scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") flex=1 min-height=0
                 if failed(auth)
-                  text "Your server could not be reached. Reopen Vela when the connection is restored." padding=32 role="status"
+                  text t("ui.yourServerCouldNotBeReachedReopenVelaWhenTheConnectionIsRestored") padding=32 role="status"
                 else
                   if not current(auth)
-                    text "Connecting to your library…" padding=32 role="status"
+                    text t("ui.connectingToYourLibrary") padding=32 role="status"
                   else
                     if not auth.authenticated
                       if quickSecret != ""
@@ -40,10 +40,10 @@ component Client
                         SignIn(username=username, password=password, passwordAvailable=auth.passwordAvailable, quickAvailable=auth.quickAvailable, error=authError, busy=(pending(signedIn) or pending(quickStarted)), editUsername=editUsername, editPassword=editPassword, submit=submitSignIn, quick=startCode)
                     else
                       if failed(home)
-                        text "Your library couldn't be reached. Check your server connection." padding=32 role="status"
+                        text t("ui.yourLibraryCouldnTBeReachedCheckYourServerConnection") padding=32 role="status"
                       else
                         if not current(home)
-                          text "Finding your evening…" padding=32 role="status"
+                          text t("ui.findingYourEvening") padding=32 role="status"
                         else
                           Home(skin=activeSkin, model=home, active=(top(nav).name == "home" and page.visibilityState == "visible"), query=query, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe)
                             SearchField(skin=activeSkin, query=query, edit=edit)
@@ -51,53 +51,53 @@ component Client
                             SearchSurface(skin=activeSkin, query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe)
         if e.name == "live"
           column navigationKey=`${e.id}` navigationPresentation="fullscreen" position="absolute" inset=0 background-color=pageColor color=inkColor
-            Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins, chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=home.liveAvailable, canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
+            Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins.filter(id => ["cinematic", "index", "editorial", "example"].includes(id)), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=home.liveAvailable, canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
               scroll flex=1 min-height=0
                 if failed(guide)
-                  text "The guide couldn't be loaded. Check your connection." role="status" padding=32
+                  text t("ui.theGuideCouldnTBeLoadedCheckYourConnection") role="status" padding=32
                 else
                   if not current(guide)
-                    text "Loading the guide…" role="status" padding=32
+                    text t("ui.loadingTheGuide") role="status" padding=32
                   else
                     Guide(skin=activeSkin, model=guide, small=small, watch=watchChannel, previous=earlierGuide, next=laterGuide)
         if e.name == "title"
           column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=skinDetailPresentation(activeSkin, viewport.width) navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 box-sizing="border-box" padding=(indexSkin or small ? "0px" : "5vh 5vw") background-color=(indexSkin ? pageColor : "#000000bf") color=inkColor
             column position="relative" flex=1 min-height=0 overflow="hidden" border-radius=(indexSkin or small ? 0 : 24) background-color=pageColor
-              button id="back" press=close aria-label="Close title" testId="detail-close" position="absolute" top=18 right=20 z-index=10 box-sizing="border-box" width=44 height=44 border="1px solid var(--surface.line)" border-radius=22 padding=12 background-color="surface.glass" color="ink.primary"
+              button id="back" press=close aria-label=t("ui.closeTitle") testId="detail-close" position="absolute" top=18 right=20 z-index=10 box-sizing="border-box" width=44 height=44 border="1px solid var(--surface.line)" border-radius=22 padding=12 background-color="surface.glass" color="ink.primary"
                 image "symbol:close"
-              scroll id=`detail-scroll-${e.id}` role="region" aria-label="Title details" flex=1 min-height=0
+              scroll id=`detail-scroll-${e.id}` role="region" aria-label=t("ui.titleDetails") flex=1 min-height=0
                 if failed(detail)
-                  text "This title couldn't be opened. It may no longer be available." padding=32 role="status"
+                  text t("ui.thisTitleCouldnTBeOpenedItMayNoLongerBeAvailable") padding=32 role="status"
                 else
                   if not current(detail)
-                    text "Opening title…" padding=32 role="status"
+                    text t("ui.openingTitle") padding=32 role="status"
                   else
                     Detail(skin=activeSkin, model=detailSurface, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observeDetail)
         if e.name == "collection"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor color=inkColor
-            button press=close aria-label="Back" padding=16
-              text "Back"
+            button press=close aria-label=t("ui.back") padding=16
+              text t("ui.back")
             scroll flex=1 min-height=0
               if failed(collection)
-                text "This collection couldn't be opened." padding=24 role="status"
+                text t("ui.thisCollectionCouldnTBeOpened") padding=24 role="status"
               else
                 if not current(collection)
-                  text "Opening collection…" padding=24 role="status"
+                  text t("ui.openingCollection") padding=24 role="status"
                 else
                   Row(skin=activeSkin, row=FeedRow(id=e.params.id, name=collection.name, receipt="", items=collection.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if e.name == "watch" or e.name == "extra" or e.name == "liveWatch"
           column navigationKey=`${e.id}` navigationPresentation="fullscreen" id="watch-stage" testId="watch-stage" key=watchKey pointermove=touchWatch pointerdown=touchWatch position="absolute" inset=0 background-color="#000000" color="ink.primary" tabindex=0
             if failed(playback)
               column margin="auto" padding=32 gap=16
-                text "Playback couldn't be started." role="alert"
+                text t("ui.playbackCouldnTBeStarted") role="alert"
                 button press=close
-                  text "Back to title"
+                  text t("ui.backToTitle")
             else
               if not current(playback)
-                text "Preparing playback…" role="status" margin="auto"
+                text t("ui.preparingPlayback") role="status" margin="auto"
               else
                 vela-player plan=(watchModel.planJson != "" ? watchModel.planJson : currentPlan) playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%"
                 if e.name == "liveWatch"
                   column position="absolute" top=(small ? 88 : 16) right=(small ? 12 : 16) max-width=(small ? "calc(100% - 24px)" : "none")
-                    LiveControls(skin=activeSkin, lowDelay=lowDelay, reconnecting=(liveView.sessionId == playback.sessionId and liveView.reconnecting), delivery=(liveView.sessionId == playback.sessionId ? liveView.delivery : "unknown"), drift=(liveView.sessionId == playback.sessionId ? liveView.drift : -1), canCatchUp=(liveView.sessionId == playback.sessionId and liveView.canCatchUp), toggleLowDelay=toggleLowDelay, catchUp=catchUpLive)
-                PlayerChrome(model=watchModel, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : "Live television") : watchTitle), busy=pending(watchAuthorized), visible=(not watchHidden or not watchModel.playing or watchEditing), small=small, still=still, serverError=watchReply.error, command=watchControl, seek=watchSeek, editing=editWatch, close=close)
+                    LiveControls(skin=activeSkin, lowDelay=lowDelay, reconnecting=(liveView.sessionId == playback.sessionId and liveView.reconnecting), delivery=(liveView.sessionId == playback.sessionId ? liveView.delivery : "unknown"), drift=(liveView.sessionId == playback.sessionId ? liveView.drift : -1), driftLabel=(liveView.sessionId == playback.sessionId ? liveView.driftLabel : ""), canCatchUp=(liveView.sessionId == playback.sessionId and liveView.canCatchUp), toggleLowDelay=toggleLowDelay, catchUp=catchUpLive)
+                PlayerChrome(skin=activeSkin, model=watchModel, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : t("ui.liveTelevisionTitle")) : watchTitle), busy=pending(watchAuthorized), visible=(not watchHidden or not watchModel.playing or watchEditing), small=small, still=still, serverError=watchReply.error, command=watchControl, seek=watchSeek, editing=editWatch, close=close)

@@ -37,7 +37,7 @@ component Guide
         text t("live.index") font-size=10 letter-spacing="2px" font-family="system-ui, sans-serif"
         text t("live.schedule") role="heading" aria-level=1 font-size=(small ? 30 : 44) font-weight=700
         row gap=16 align-items="center" flex-wrap="wrap"
-          text `${model.fromLabel} — ${model.untilLabel}` font-size=13 flex=1 font-variant-numeric="tabular-nums"
+          text t("ui.startEnd_72d28", start=model.fromLabel, end=model.untilLabel) font-size=13 flex=1 font-variant-numeric="tabular-nums"
           button press=previous aria-label=t("live.previous") border="1px solid #bcb8ae" padding="8px 12px" background-color="transparent" color="#22221e"
             text t("live.previous") font-size=12
           button press=next aria-label=t("live.next") border="1px solid #bcb8ae" padding="8px 12px" background-color="transparent" color="#22221e"
@@ -47,7 +47,7 @@ component Guide
           column id="index-programme" tabindex=-1 key=detailKey role="region" aria-label=programme.name gap=10 padding=20 background-color="#e3dfd3" border-left="3px solid #813b31"
             text channel.name font-size=11 font-family="system-ui, sans-serif" color="#55554d"
             text programme.name font-size=24 font-weight=700
-            text `${programme.startLabel} — ${programme.endLabel}` font-size=13
+            text t("ui.startEnd_72d28", start=programme.startLabel, end=programme.endLabel) font-size=13
             if programme.summary != ""
               text programme.summary font-size=14 line-height=1.5
             row gap=18 align-items="center" flex-wrap="wrap"
@@ -55,7 +55,7 @@ component Guide
                 button press=watch(channel.id) background-color="#22221e" color="#f3f0e8" border="none" padding="10px 16px"
                   text t("live.watch")
               else
-                text (programme.ended ? t("live.ended") : t("live.startsIn", minutes=formatNumber(programme.startsIn, "decimal"))) font-size=13
+                text (programme.ended ? t("live.ended") : t("live.startsIn", minutes=programme.startsInLabel)) font-size=13
               button press=dismiss background-color="transparent" color="#22221e" border="none" padding=8
                 text t("live.close") font-size=12
       if model.channels.length == 0
@@ -73,16 +73,16 @@ component Guide
                 row gap=10 align-items="center"
                   text channel.number font-size=12 width=28 color="#55554d" font-variant-numeric="tabular-nums"
                   column gap=4 flex=1
-                    text `${channel.name}${channel.favorite ? " ★" : ""}` font-size=15 font-weight=700
+                    text (channel.favorite ? t("ui.channel", channel=channel.name) : channel.name) font-size=15 font-weight=700
                     if small
                       text (channel.now == "" ? t("live.noProgrammes") : `${t("live.now")} · ${channel.now}`) font-size=12 color="#55554d"
                       if channel.next != ""
-                        text `${t("live.nextProgramme")} · ${channel.next}` font-size=11 color="#55554d"
+                        text t("ui.nextProgramme_30572", programme=channel.next) font-size=11 color="#55554d"
               column flex=1 min-width=0 width=(small ? "100%" : "auto")
                 if channel.programmes.length == 0
                   text t("live.noProgrammes") font-size=12 color="#55554d" padding=8
                 for programme in channel.programmes key=programme.id
-                  button id=`guide-${programme.id}` key=move(channel.id, programme.airing, programme.leftId, programme.rightId, programme.upId, programme.downId) press=choose(channel.id, programme.id) aria-label=`${programme.startLabel} · ${programme.name}` width="100%" box-sizing="border-box" padding="10px 0px" border="none" border-bottom="1px solid #d6d1c6" background-color=(programme.airing ? "#e9e1d3" : "transparent") color="#22221e" text-align="left" opacity=(programme.ended ? 0.5 : 1)
+                  button id=`guide-${programme.id}` key=move(channel.id, programme.airing, programme.leftId, programme.rightId, programme.upId, programme.downId) press=choose(channel.id, programme.id) aria-label=t("ui.timeProgramme", time=programme.startLabel, programme=programme.name) width="100%" box-sizing="border-box" padding="10px 0px" border="none" border-bottom="1px solid #d6d1c6" background-color=(programme.airing ? "#e9e1d3" : "transparent") color="#22221e" text-align="left" opacity=(programme.ended ? 0.5 : 1)
                     row gap=(small ? 10 : 20) align-items="baseline"
                       text programme.startLabel width=(small ? 74 : 132) flex-shrink=0 font-size=12 font-variant-numeric="tabular-nums" color="#55554d"
                       column flex=1 min-width=0 gap=4

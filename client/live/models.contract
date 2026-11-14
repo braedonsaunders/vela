@@ -4,6 +4,7 @@ shape GuideProgramme
   summary: string
   airing: bool
   ended: bool
+  startsInLabel: string
   startsIn: number
   start: string
   end: string
@@ -40,6 +41,7 @@ shape LiveStatus
   sessionId: string
   reconnecting: bool
   delivery: string
+  driftLabel: string
   drift: number
   canCatchUp: bool
 

@@ -4,25 +4,26 @@ component LiveControls
     reconnecting: bool
     delivery: string
     drift: number
+    driftLabel: string
     canCatchUp: bool
     toggleLowDelay: action
     catchUp: action
   view
     column gap=10 padding="12px 20px" border-radius=12 background-color="surface.raised"
-      text (lowDelay ? "LIVE · LOW DELAY" : "LIVE · ADAPTIVE") color="brand.warm" font-size=11 letter-spacing="2px"
+      text (lowDelay ? t("ui.liveLowDelay") : t("ui.liveAdaptive")) color="brand.warm" font-size=11 letter-spacing="2px"
       if reconnecting
-        text "Reconnecting to the live stream…" role="status" color="ink.secondary"
+        text t("live.reconnecting") role="status" color="ink.secondary"
       if delivery == "upstream-gap"
-        text "The broadcaster has a gap in this stream." role="status" color="ink.secondary"
+        text t("live.gap") role="status" color="ink.secondary"
       if delivery == "segment-delayed"
-        text "Waiting for a delayed segment…" role="status" color="ink.secondary"
+        text t("live.delayed") role="status" color="ink.secondary"
       if delivery == "waiting-for-publication"
-        text "Waiting for the next segment…" role="status" color="ink.secondary"
+        text t("live.publication") role="status" color="ink.secondary"
       if drift > 0
-        text `${drift} seconds behind live` role="status" color="ink.secondary"
+        text t("live.behind", seconds=driftLabel) role="status" color="ink.secondary"
       row gap=12
-        button press=toggleLowDelay buttonStyle="bordered" aria-label="Toggle low delay" aria-pressed=lowDelay
-          text (lowDelay ? "Low delay on" : "Use low delay")
+        button press=toggleLowDelay buttonStyle="bordered" aria-label=t("ui.toggleLowDelay") aria-pressed=lowDelay
+          text (lowDelay ? t("ui.lowDelayOn") : t("ui.useLowDelay"))
         if canCatchUp and drift > 0
           button press=catchUp buttonStyle="bordered"
-            text "Catch up to live"
+            text t("live.catchUp")

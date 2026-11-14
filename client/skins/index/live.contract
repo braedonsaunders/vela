@@ -4,6 +4,7 @@ component LiveControls
     reconnecting: bool
     delivery: string
     drift: number
+    driftLabel: string
     canCatchUp: bool
     toggleLowDelay: action
     catchUp: action
@@ -21,7 +22,7 @@ component LiveControls
       if delivery == "waiting-for-publication"
         text t("live.publication") role="status" font-size=12
       if drift > 0
-        text t("live.behind", seconds=formatNumber(drift, "decimal")) font-size=11 color="#55554d"
+        text t("live.behind", seconds=driftLabel) font-size=11 color="#55554d"
       row gap=12 flex-wrap="wrap"
         button press=toggleLowDelay aria-pressed=lowDelay border="1px solid #bcb8ae" padding="8px 10px" background-color="transparent" color="#22221e"
           text t("live.lowDelay") font-size=12

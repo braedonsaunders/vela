@@ -5,6 +5,10 @@ shape Card
   name: string
   summary: string
   facts: string
+  yearLabel: string
+  progressLabel: string
+  seasonNumberLabel: string
+  episodeNumberLabel: string
   year: number
   rating: string
   seasonId: string
@@ -56,6 +60,7 @@ shape ExtraModel
 shape DetailModel
   title: Card[]
   canPlay: bool
+  resumePosition: string
   resumeSeconds: number
   seasons: Card[]
   episodes: Card[]
@@ -86,6 +91,7 @@ shape AuthModel
 shape QuickModel
   secret: string
   code: string
+  expiresLabel: string
   expiresAt: string
   status: string
   pollIntervalSeconds: number
@@ -94,4 +100,6 @@ shape CollectionModel
   name: string
   items: Card[]
 
-fn cardName(card: Card): string = `Open ${card.name}${card.year > 0 ? ", " + card.year.toString() : ""}${card.played ? ", watched" : card.progressSeconds > 0 and card.durationSeconds > 0 ? ", " + floor(min(100, card.progressSeconds / card.durationSeconds * 100)).toString() + " percent complete" : ""}`
+fn cardName(card: Card): string = t("ui.openTitleYearProgress", title=card.name, year=(card.year > 0 ? t("ui.year", year=card.yearLabel) : ""), progress=(card.played ? t("ui.watched") : card.progressSeconds > 0 and card.durationSeconds > 0 ? t("ui.progressComplete", progress=card.progressLabel) : ""))
+
+fn skinLabel(id: string): string = (id == "cinematic" ? t("ui.cinematic") : id == "index" or id == "editorial" ? t("ui.index") : id == "example" ? t("example.name") : id)

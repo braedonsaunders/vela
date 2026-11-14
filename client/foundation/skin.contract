@@ -1,3 +1,7 @@
+use Shell as ExampleShell, Home as ExampleHome, SearchSurface as ExampleSearchSurface, Row as ExampleRow, Detail as ExampleDetail, SearchField as ExampleSearchField, PlayerChrome as ExamplePlayerChrome, Guide as ExampleGuide, LiveControls as ExampleLiveControls, detailPresentation as ExamplePresentation, detailSplit as ExampleSplit from "../skins/example/slots.contract"
+use PlayerView from "./player-models.contract"
+use PlayerChrome as CinePlayerChrome from "../skins/cinematic/player.contract"
+use PlayerChrome as IndexPlayerChrome from "../skins/index/player.contract"
 use GuideModel from "../live/models.contract"
 use Guide as CineGuide from "../skins/cinematic/guide.contract"
 use LiveControls as CineLiveControls from "../skins/cinematic/live.contract"
@@ -7,8 +11,8 @@ use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport from "./models.
 use Shell as CineShell, Home as CineHome, SearchSurface as CineSearchSurface, Row as CineRow, Detail as CineDetail, SearchField as CineSearchField, detailPresentation as CinePresentation, detailSplit as CineSplit from "../skins/cinematic/slots.contract"
 use Shell as IndexShell, Home as IndexHome, SearchSurface as IndexSearchSurface, Row as IndexRow, Detail as IndexDetail, SearchField as IndexSearchField, detailPresentation as IndexPresentation, detailSplit as IndexSplit from "../skins/index/slots.contract"
 
-fn skinDetailPresentation(skin: string, width: number): string = (skin == "index" or skin == "editorial" ? IndexPresentation(width) : CinePresentation(width))
-fn skinDetailSplit(skin: string, width: number): string = (skin == "index" or skin == "editorial" ? IndexSplit(width) : CineSplit(width))
+fn skinDetailPresentation(skin: string, width: number): string = (skin == "example" ? ExamplePresentation(width) : skin == "index" or skin == "editorial" ? IndexPresentation(width) : CinePresentation(width))
+fn skinDetailSplit(skin: string, width: number): string = (skin == "example" ? ExampleSplit(width) : skin == "index" or skin == "editorial" ? IndexSplit(width) : CineSplit(width))
 
 component Shell
   props
@@ -26,12 +30,16 @@ component Shell
     library: action
   slot
   view
-    if skin == "index" or skin == "editorial"
-      IndexShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library)
+    if skin == "example"
+      ExampleShell(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library)
         children
     else
-      CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library)
-        children
+      if skin == "index" or skin == "editorial"
+        IndexShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library)
+          children
+      else
+        CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library)
+          children
 
 component Home
   props
@@ -45,12 +53,16 @@ component Home
     observe: action
   slot
   view
-    if skin == "index" or skin == "editorial"
-      IndexHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe)
+    if skin == "example"
+      ExampleHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe)
         children
     else
-      CineHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe)
-        children
+      if skin == "index" or skin == "editorial"
+        IndexHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe)
+          children
+      else
+        CineHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe)
+          children
 
 component SearchSurface
   props
@@ -68,10 +80,13 @@ component SearchSurface
     selectTitle: action
     observe: action
   view
-    if skin == "index" or skin == "editorial"
-      IndexSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
+    if skin == "example"
+      ExampleSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
     else
-      CineSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
+      if skin == "index" or skin == "editorial"
+        IndexSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
+      else
+        CineSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
 
 component Row
   props
@@ -82,10 +97,13 @@ component Row
     selectTitle: action
     observe: action
   view
-    if skin == "index" or skin == "editorial"
-      IndexRow(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+    if skin == "example"
+      ExampleRow(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
     else
-      CineRow(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+      if skin == "index" or skin == "editorial"
+        IndexRow(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+      else
+        CineRow(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
 
 component Detail
   props
@@ -98,10 +116,13 @@ component Detail
     selectTitle: action
     observe: action
   view
-    if skin == "index" or skin == "editorial"
-      IndexDetail(model=model, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
+    if skin == "example"
+      ExampleDetail(model=model, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
     else
-      CineDetail(model=model, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
+      if skin == "index" or skin == "editorial"
+        IndexDetail(model=model, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
+      else
+        CineDetail(model=model, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
 
 component SearchField
   props
@@ -109,10 +130,13 @@ component SearchField
     query: string
     edit: action
   view
-    if skin == "index" or skin == "editorial"
-      IndexSearchField(query=query, edit=edit)
+    if skin == "example"
+      ExampleSearchField(query=query, edit=edit)
     else
-      CineSearchField(query=query, edit=edit)
+      if skin == "index" or skin == "editorial"
+        IndexSearchField(query=query, edit=edit)
+      else
+        CineSearchField(query=query, edit=edit)
 
 component Guide
   props
@@ -123,10 +147,13 @@ component Guide
     previous: action
     next: action
   view
-    if skin == "index" or skin == "editorial"
-      IndexGuide(model=model, small=small, watch=watch, previous=previous, next=next)
+    if skin == "example"
+      ExampleGuide(model=model, small=small, watch=watch, previous=previous, next=next)
     else
-      CineGuide(model=model, small=small, watch=watch, previous=previous, next=next)
+      if skin == "index" or skin == "editorial"
+        IndexGuide(model=model, small=small, watch=watch, previous=previous, next=next)
+      else
+        CineGuide(model=model, small=small, watch=watch, previous=previous, next=next)
 
 component LiveControls
   props
@@ -135,11 +162,38 @@ component LiveControls
     reconnecting: bool
     delivery: string
     drift: number
+    driftLabel: string
     canCatchUp: bool
     toggleLowDelay: action
     catchUp: action
   view
-    if skin == "index" or skin == "editorial"
-      IndexLiveControls(lowDelay=lowDelay, reconnecting=reconnecting, delivery=delivery, drift=drift, canCatchUp=canCatchUp, toggleLowDelay=toggleLowDelay, catchUp=catchUp)
+    if skin == "example"
+      ExampleLiveControls(lowDelay=lowDelay, reconnecting=reconnecting, delivery=delivery, drift=drift, driftLabel=driftLabel, canCatchUp=canCatchUp, toggleLowDelay=toggleLowDelay, catchUp=catchUp)
     else
-      CineLiveControls(lowDelay=lowDelay, reconnecting=reconnecting, delivery=delivery, drift=drift, canCatchUp=canCatchUp, toggleLowDelay=toggleLowDelay, catchUp=catchUp)
+      if skin == "index" or skin == "editorial"
+        IndexLiveControls(lowDelay=lowDelay, reconnecting=reconnecting, delivery=delivery, drift=drift, driftLabel=driftLabel, canCatchUp=canCatchUp, toggleLowDelay=toggleLowDelay, catchUp=catchUp)
+      else
+        CineLiveControls(lowDelay=lowDelay, reconnecting=reconnecting, delivery=delivery, drift=drift, driftLabel=driftLabel, canCatchUp=canCatchUp, toggleLowDelay=toggleLowDelay, catchUp=catchUp)
+
+component PlayerChrome
+  props
+    skin: string
+    model: PlayerView
+    title: string
+    visible: bool
+    small: bool
+    still: bool
+    busy: bool
+    serverError: string
+    command: action
+    seek: action
+    editing: action
+    close: action
+  view
+    if skin == "example"
+      ExamplePlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
+    else
+      if skin == "index" or skin == "editorial"
+        IndexPlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
+      else
+        CinePlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
