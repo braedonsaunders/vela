@@ -7,16 +7,21 @@ import { dirname, join, resolve } from 'node:path';
 import { createConnection } from 'node:net';
 
 const root = resolve(import.meta.dir, '..');
-const statePath = join(homedir(), '.scratch/tmp/vela/dev/owner.json');
-interface Owner { pid: number; repo: string; token: string; controlPort: number; startedAt: string }
+// Ownership metadata is tiny and must survive external scratch-drive disconnects.
+const statePath = join(root, '.tools/vela-dev/owner.json');
+const legacyStatePath = join(homedir(), '.scratch/tmp/vela/dev/owner.json');
+interface Owner { pid: number; repo: string; token: string; controlPort: number; startedAt: string; stateFile?: string }
 const mockPort = 7777, webPort = 8765;
 const urls = { app: `http://127.0.0.1:${webPort}`, mock: `http://127.0.0.1:${mockPort}` };
 function alive(pid: number): boolean { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code !== 'ESRCH'; } }
 async function readOwner(): Promise<Owner | undefined> {
-  try { return JSON.parse(await readFile(statePath, 'utf8')); }
-  catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw new Error(`Cannot read Vela owner file ${statePath}; another instance may be starting`); }
+  for (const path of [statePath, legacyStatePath]) {
+    try { return { ...JSON.parse(await readFile(path, 'utf8')), stateFile: path }; }
+    catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`Cannot read Vela owner file ${path}; another instance may be starting`); }
+  }
 }
-async function removeOwnState(owner: Owner) { const current = await readOwner(); if (current?.token === owner.token) await unlink(statePath); }
+async function removeOwnState(owner: Owner) { const current = await readOwner(); if (current?.token === owner.token) await unlink(current.stateFile ?? statePath); }
+
 const command = process.argv[2];
 if (command && command !== 'stop') throw new Error('Usage: bun tools/dev.ts [stop]');
 const previous = await readOwner();

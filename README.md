@@ -31,7 +31,7 @@ ports, and shuts down both process groups on Ctrl-C or terminal exit.
 
 From another terminal, `bun tools/dev.ts stop` requests shutdown of that owner.
 It never adopts or stops an unrelated listener. The owner record lives under
-`~/.scratch/tmp/vela/dev/`; a stale record is removed only when its PID is gone.
+`.tools/vela-dev/` (small metadata stays on the stable repository disk); a stale record is removed only when its PID is gone.
 Do not launch separate mock or Exact servers alongside this command.
 
 Generate synthetic media when no viewer is using it:
