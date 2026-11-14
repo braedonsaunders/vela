@@ -17,8 +17,10 @@ API and caching follow [v0](../protocol/v0/README.md). All state is in memory;
 restarts invalidate credentials, cursors, receipts and sessions. The fixtures are
 fictional titles and synthetic SVG artwork; no copyrighted images are fetched.
 Descriptive search uses text/genre matching. AI and proactive preparation are
-unavailable. Live channels/guide are metadata fixtures; starting live playback
-returns source/live_fixture_unavailable rather than presenting VOD as live.
+unavailable. Live channels use a synthetic broadcast that loops the generated
+CMAF ladder with rebased decode timestamps. Its 48-second HLS window advances
+every four seconds, with media sequences and programme date times and no ENDLIST.
+This is a real live delivery fixture, not a connection to a television provider.
 
 Generate media once: `bun mock-server/scripts/make-media.ts` (requires ffmpeg).
 Output: `~/.scratch/tmp/vela/media/`, synthetic sixty-second H.264/AAC direct MP4,
@@ -55,3 +57,10 @@ real, but the mock cannot reconfigure an active muxed MSE source. Unsupported tr
 commands return policy/feature_unavailable rather than only changing metadata.
 SSE replacement, revocation, session end and disconnect release heartbeat timers;
 streams also close when their bearer grant expires.
+
+Live-specific faults are independent of VOD: GET/POST `/__admin/live-faults`
+accepts `{"gapEvery":0,"delayEvery":0,"delayMs":8000}`. Every Nth broadcast
+sequence is marked EXT-X-GAP (and returns 410), or delays segment delivery. Zero
+disables each interval; delay is capped at sixty seconds. Reset both intervals
+to zero after a drive. All channels share the synthetic broadcast clock. Live
+offers English muxed audio only; VOD retains the alternate track fixture.
