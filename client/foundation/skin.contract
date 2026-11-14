@@ -1,3 +1,5 @@
+use Shell as DocShell, Home as DocHome, detailPresentation as DocPresentation from "../skins/doc/slots.contract"
+use SkinDoc from "../renderer/levels.contract"
 use Shell as ExampleShell, Home as ExampleHome, SearchSurface as ExampleSearchSurface, Row as ExampleRow, Detail as ExampleDetail, SearchField as ExampleSearchField, PlayerChrome as ExamplePlayerChrome, Guide as ExampleGuide, LiveControls as ExampleLiveControls, detailPresentation as ExamplePresentation, detailSplit as ExampleSplit from "../skins/example/slots.contract"
 use PlayerView from "./player-models.contract"
 use PlayerChrome as CinePlayerChrome from "../skins/cinematic/player.contract"
@@ -36,7 +38,7 @@ use Guide as MarqueeGuide from "../skins/marquee/guide.contract"
 use LiveControls as MarqueeLiveControls from "../skins/marquee/live.contract"
 use AuthStage as MarqueeAuthStage, AuthNotice as MarqueeAuthNotice, SignIn as MarqueeSignIn, QuickConnect as MarqueeQuickConnect from "../skins/marquee/auth.contract"
 
-fn skinDetailPresentation(skin: string, width: number): string = (skin == "mochi" ? MochiPresentation(width) : skin == "example" ? ExamplePresentation(width) : skin == "index" or skin == "editorial" ? IndexPresentation(width) : skin == "jellytwin" ? JellyPresentation(width) : skin == "marquee" ? MarqueePresentation(width) : CinePresentation(width))
+fn skinDetailPresentation(skin: string, width: number, doc: SkinDoc): string = (skin == "doc" ? DocPresentation(doc, width) : skin == "mochi" ? MochiPresentation(width) : skin == "example" ? ExamplePresentation(width) : skin == "index" or skin == "editorial" ? IndexPresentation(width) : skin == "jellytwin" ? JellyPresentation(width) : skin == "marquee" ? MarqueePresentation(width) : CinePresentation(width))
 fn skinDetailSplit(skin: string, width: number): string = (skin == "mochi" ? MochiSplit(width) : skin == "example" ? ExampleSplit(width) : skin == "index" or skin == "editorial" ? IndexSplit(width) : skin == "jellytwin" ? JellySplit(width) : skin == "marquee" ? MarqueeSplit(width) : CineSplit(width))
 
 component Shell
@@ -56,29 +58,34 @@ component Shell
     libraries: LibraryNav[]
     section: string
     openLibrary: action
+    doc: SkinDoc
   slot
   view
-    if skin == "mochi"
-      MochiShell(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
+    if skin == "doc"
+      DocShell(doc=doc, viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, home=home, search=search, live=live, libraries=libraries, section=section, openLibrary=openLibrary)
         children
     else
-      if skin == "example"
-        ExampleShell(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
+      if skin == "mochi"
+        MochiShell(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
           children
       else
-        if skin == "index" or skin == "editorial"
-          IndexShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
+        if skin == "example"
+          ExampleShell(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
             children
         else
-          if skin == "jellytwin"
-            JellyShell(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
-              children
-          else if skin == "marquee"
-            MarqueeShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
+          if skin == "index" or skin == "editorial"
+            IndexShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
               children
           else
-            CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
-              children
+            if skin == "jellytwin"
+              JellyShell(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
+                children
+            else if skin == "marquee"
+              MarqueeShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
+                children
+            else
+              CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
+                children
 
 component Home
   props
@@ -103,29 +110,34 @@ component Home
     cardPreview: CardPreview
     previewIntent: action
     playHero: action
+    doc: SkinDoc
   slot
   view
-    if skin == "mochi"
-      MochiHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading)
+    if skin == "doc"
+      DocHome(doc=doc, model=model, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, playHero=playHero)
         children
     else
-      if skin == "example"
-        ExampleHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading)
+      if skin == "mochi"
+        MochiHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading)
           children
       else
-        if skin == "index" or skin == "editorial"
-          IndexHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading)
+        if skin == "example"
+          ExampleHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading)
             children
         else
-          if skin == "jellytwin"
-            JellyHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, libraries=libraries, openLibrary=openLibrary, live=live, canLive=canLive)
-              children
-          else if skin == "marquee"
-            MarqueeHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, playHero=playHero)
+          if skin == "index" or skin == "editorial"
+            IndexHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading)
               children
           else
-            CineHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, cardPreview=cardPreview, previewIntent=previewIntent, playHero=playHero)
-              children
+            if skin == "jellytwin"
+              JellyHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, libraries=libraries, openLibrary=openLibrary, live=live, canLive=canLive)
+                children
+            else if skin == "marquee"
+              MarqueeHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, playHero=playHero)
+                children
+            else
+              CineHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, cardPreview=cardPreview, previewIntent=previewIntent, playHero=playHero)
+                children
 
 component SearchSurface
   props
