@@ -29,14 +29,19 @@ component Shell
           if canLive
             button press=live border="none" background-color="transparent" color="ink.secondary"
               text "Live"
+        if viewer != ""
+          button popovertarget="viewer-settings" aria-label="Profile and appearance" testId="profile-menu" background-color="surface.raised" border="1px solid var(--surface.line)" border-radius=24 padding=(viewport.width < 640 ? "10px 14px" : "10px 18px") color="ink.primary"
+            text (viewport.width < 640 ? viewer.slice(0, 1) : viewer) font-size=13
+      column id="viewer-settings" popover="auto" position="absolute" top=72 right="5%" left="auto" bottom="auto" margin=0 padding=22 gap=16 border="1px solid var(--surface.line)" border-radius=20 background-color="surface.raised" color="ink.primary" min-width=210
+        text viewer font-weight=600
         if skins.length > 1
-          select value=skin change=chooseSkin aria-label="Appearance" testId="skin-picker" background-color="surface.raised" color="ink.primary" border="none" padding=8 border-radius=8
+          text "Appearance" font-size=12 color="ink.secondary"
+          select value=skin change=chooseSkin aria-label="Appearance" testId="skin-picker" background-color="surface.page" color="ink.primary" border="1px solid var(--surface.line)" padding=10 border-radius=10
             for name in skins key=name
               option value=name
-                text name
-        if viewer != ""
-          button press=signOut aria-label="Sign out" background-color="transparent" border="none" color="ink.secondary"
-            text viewer font-size=12
+                text (name == "editorial" or name == "index" ? "Index" : "Cinematic")
+        button press=signOut background-color="transparent" border="none" color="ink.secondary" text-align="left" padding=0
+          text "Sign out"
       children
 
 component TitleCard
@@ -46,14 +51,24 @@ component TitleCard
     still: bool
     selectTitle: action
     observe: action
+  state lifted = false
+  action hoverCard(over: bool)
+    lifted = over
+  action focusCard
+    lifted = true
+  action restCard
+    lifted = false
   view
     column width=(small ? 142 : 190) flex-shrink=0 gap=10 intersect=observe(card.receipt)
-      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease")
+      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` hover=hoverCard focus=focusCard blur=restCard position="relative" scale=(lifted and not still ? 1.035 : 1) translate=(lifted and not still ? "0px -5px" : "0px 0px") box-shadow=(lifted ? "0px 18px 38px #00000088" : "none") padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease, translate 180ms ease, box-shadow 180ms ease")
         if card.poster != ""
           image card.poster alt="" width="100%" height=(small ? 206 : 274) object-fit="cover"
         else
           column height=(small ? 206 : 274) padding=16 justify-content="end"
             text card.name font-size=22 font-weight=600
+        if card.progressSeconds > 0 and card.durationSeconds > 0
+          column position="absolute" left=10 right=10 bottom=10 height=3 border-radius=2 background-color="surface.line"
+            column height=3 width=`${min(100, card.progressSeconds / card.durationSeconds * 100)}%` border-radius=2 background-color="brand.warm"
       text card.name font-size=14 font-weight=600 line-clamp=2
       text card.facts font-size=11 color="ink.quiet" line-clamp=1
 
@@ -88,8 +103,8 @@ component Home
           for hero in model.hero key=hero.id
             column position="absolute" inset=0
               if hero.backdrop != ""
-                image hero.backdrop alt="" width="100%" height="100%" object-fit="cover" opacity=0.68
-              column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e18 80%), linear-gradient(90deg, #090b0ed9, transparent)"
+                image hero.backdrop alt="" width="100%" height="100%" object-fit="cover" opacity=0.92
+              column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e00 65%), linear-gradient(90deg, #090b0ef0 0%, #090b0e70 45%, #090b0e10 100%)"
             column position="relative" padding="20px 7%" gap=12 max-width=700 intersect=observe(hero.receipt) animation=(still ? "none" : "arrive 500ms ease both")
               row gap=10 align-items="center"
                 column width=22 height=3 border-radius=2 background-color=(hero.accent == "" ? "brand.warm" : hero.accent)
@@ -121,7 +136,7 @@ component SearchSurface
     selectTitle: action
     observe: action
   view
-    column gap=22 padding="0px 5% 40px" animation=(still ? "none" : "arrive 200ms ease both")
+    column gap=22 padding="0px 0px 40px" animation=(still ? "none" : "arrive 200ms ease both")
       if error
         text "Search is unavailable. Try another query." role="status" color="ink.secondary"
       else
@@ -156,21 +171,32 @@ component Detail
   view
     column gap=28 padding-bottom=48 animation=(still ? "none" : "arrive 250ms ease both")
       for title in model.title key=title.id
-        column position="relative" min-height=(small ? 410 : 490) justify-content="end" overflow="hidden"
+        column position="relative" min-height=(small ? 520 : 600) justify-content="end" overflow="hidden"
           if title.backdrop != ""
-            image title.backdrop alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover" opacity=0.65
-          column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e, #090b0e10 100%)"
-          column position="relative" padding="32px 7%" max-width=780 gap=18
-            text title.kind color="brand.warm" text-transform="uppercase" letter-spacing="3px" font-size=11
+            image title.backdrop alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover" opacity=0.9
+          column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e30 90%), linear-gradient(90deg, #090b0ed9, #090b0e10)"
+          column position="relative" padding=(small ? "80px 7% 32px" : "110px 7% 42px") max-width="52rem" gap=18
+            text (title.kind == "movie" ? "Film" : title.kind == "show" ? "Series" : title.kind == "season" ? "Season" : "Episode") color="brand.warm" text-transform="uppercase" letter-spacing="3px" font-size=11
             if title.logo != ""
               image title.logo alt=title.name width=260 height=100 object-fit="contain"
             else
-              text title.name role="heading" aria-level=1 font-size=(small ? 38 : 60) line-height=1.05 font-weight=550 letter-spacing="-1.5px"
+              text title.name role="heading" aria-level=1 font-size=(small ? 42 : 76) line-height=1.05 font-weight=550 letter-spacing="-1.5px"
             text title.facts color="ink.secondary" font-size=13
+            text title.genres.join(" · ") color="ink.secondary" font-size=13
+            if model.mediaFacts.length > 0
+              row gap=12 flex-wrap="wrap"
+                for fact in model.mediaFacts key=fact
+                  text fact font-size=12 color="brand.warm" border="1px solid var(--surface.line)" padding="4px 8px" border-radius=5
             text title.summary color="ink.primary" font-size=16 line-height=1.6
             if model.canPlay
               button press=play(title.id) background-color="ink.primary" color="ink.inverse" border="none" border-radius=28 padding="15px 28px" align-self="start" testId="detail-play"
-                text (model.resumeSeconds > 0 ? "Resume watching" : "Play") font-weight=650
+                text (model.resumeSeconds > 0 ? `Resume · ${floor(model.resumeSeconds / 60)} min in` : "Play") font-weight=650
+              if model.resumeSeconds > 0 and title.durationSeconds > 0
+                column width=230 height=3 border-radius=2 background-color="surface.line" role="progressbar" aria-label="Watch progress" aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=model.resumeSeconds
+                  column height=3 width=`${min(100, model.resumeSeconds / title.durationSeconds * 100)}%` background-color="brand.warm"
+            for trailer in model.extras.filter(e => e.kind == "trailer" and e.ready) key=trailer.id
+              button press=playExtra(trailer.id) align-self="start" border="1px solid var(--surface.line)" border-radius=28 background-color="surface.glass" color="ink.primary" padding="13px 24px"
+                text "Watch trailer"
       if model.seasons.length > 0
         Row(row=FeedRow(id="seasons", name="Seasons", receipt="", items=model.seasons), small=small, still=still, selectTitle=selectTitle, observe=observe)
       if model.episodes.length > 0
@@ -184,7 +210,13 @@ component Detail
       if model.cast.length > 0
         column padding="0px 7%" gap=12
           text "Featuring" role="heading" aria-level=2 font-size=24
-          text model.cast.join(" · ") color="ink.secondary" line-height=1.6
+          scroll overflow-x="auto" height=88
+            row gap=12
+              for person in model.cast key=person
+                text person padding="20px 24px" border-radius=12 background-color="surface.raised" color="ink.secondary" flex-shrink=0
+      if model.related.length > 0
+        for related in model.related key=related.id
+          Row(row=related, small=small, still=still, selectTitle=selectTitle, observe=observe)
 
 component Guide
   view
@@ -237,7 +269,7 @@ component QuickConnect
       button press=cancel border="1px solid var(--surface.line)" border-radius=24 padding="12px 28px" background-color="surface.raised" color="ink.primary"
         text "Cancel"
 
-fn detailPresentation(width: number): string = (width < 640 ? "fullscreen" : "modal")
+fn detailPresentation(width: number): string = "fullscreen"
 fn detailSplit(width: number): string = "none"
 
 component SearchField

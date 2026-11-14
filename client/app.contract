@@ -61,19 +61,18 @@ component Client
                   else
                     Guide(model=guide, small=small, watch=watchChannel, previous=earlierGuide, next=laterGuide)
         if e.name == "title"
-          column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=skinDetailPresentation(activeSkin, viewport.width) navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 background-color=pageColor color=inkColor
-            row padding="16px 5%" align-items="center"
-              button id="back" press=close aria-label="Back to browsing" border="none" border-radius=24 padding="10px 16px" background-color="surface.raised" color="ink.primary"
-                text "Back"
-              text "vela" flex=1 text-align="center" color="ink.secondary" font-size=22
-            scroll id=`detail-scroll-${e.id}` flex=1 min-height=0
-              if failed(detail)
-                text "This title couldn't be opened. It may no longer be available." padding=32 role="status"
-              else
-                if not current(detail)
-                  text "Opening title…" padding=32 role="status"
+          column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=skinDetailPresentation(activeSkin, viewport.width) navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 box-sizing="border-box" padding=(indexSkin or small ? "0px" : "5vh 5vw") background-color=(indexSkin ? pageColor : "#000000bf") color=inkColor
+            column position="relative" flex=1 min-height=0 overflow="hidden" border-radius=(indexSkin or small ? 0 : 24) background-color=pageColor
+              button id="back" press=close aria-label="Close title" testId="detail-close" position="absolute" top=18 right=20 z-index=10 width=44 height=44 border="1px solid var(--surface.line)" border-radius=24 padding=12 background-color="surface.glass" color="ink.primary"
+                image "symbol:close"
+              scroll id=`detail-scroll-${e.id}` flex=1 min-height=0
+                if failed(detail)
+                  text "This title couldn't be opened. It may no longer be available." padding=32 role="status"
                 else
-                  Detail(skin=activeSkin, model=detail, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
+                  if not current(detail)
+                    text "Opening title…" padding=32 role="status"
+                  else
+                    Detail(skin=activeSkin, model=detail, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
         if e.name == "collection"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor color=inkColor
             button press=close aria-label="Back" padding=16

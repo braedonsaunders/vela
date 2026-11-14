@@ -70,7 +70,7 @@ slot receives that skin's SearchField, with shared behaviour in the foundation.
 Each skin exports `detailPresentation(width:number):string` (modal, fullscreen or
 empty for ordinary stack presentation) and `detailSplit(width:number):string`
 (none or the split list width). The root binds these to Exact navigation attributes.
-Index splits at 900 pixels; cinematic uses an overlay and mobile fullscreen sheet.
+Index splits at 900 pixels; cinematic uses a fullscreen route with a 90vw by 90vh artwork overlay on desktop and a full-screen mobile sheet.
 Retained stack entries preserve browse state, scroll and focus across both.
 
 Card additionally exposes year:number (0 means absent), rating:string,
@@ -98,3 +98,8 @@ Focused controls and paused/recovering playback keep chrome visible. Skins recei
 Source/seek authorization comes back as a PlaybackPlan; the newest revision wins
 over an older command reply. Controls never claim a local source change when the
 server rejects fallback availability or capacity.
+
+Cinematic profile controls live in a viewer popover. Cards receive progressSeconds
+for an optional watched-progress indicator; lift/scale is disabled for reduced motion.
+DetailModel mediaFacts contains only server-verified format/audio information; absent
+resolution/HDR/audio metadata produces no badge. Related rows remain server-ordered.
