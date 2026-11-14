@@ -4,7 +4,7 @@ use PlayerChrome as CinePlayerChrome from "../skins/cinematic/player.contract"
 use PlayerChrome as IndexPlayerChrome from "../skins/index/player.contract"
 use GuideModel from "../live/models.contract"
 use Guide as CineGuide from "../skins/cinematic/guide.contract"
-use LiveControls as CineLiveControls from "../skins/cinematic/live.contract"
+use LiveControls as CineLiveControls, MiniGuide as CineMiniGuide from "../skins/cinematic/live.contract"
 use Guide as IndexGuide from "../skins/index/guide.contract"
 use LiveControls as IndexLiveControls from "../skins/index/live.contract"
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, LibraryNav, LibraryModel from "./models.contract"
@@ -184,6 +184,7 @@ component LiveControls
     canCatchUp: bool
     toggleLowDelay: action
     catchUp: action
+    zap: action
   view
     if skin == "example"
       ExampleLiveControls(lowDelay=lowDelay, reconnecting=reconnecting, delivery=delivery, drift=drift, driftLabel=driftLabel, canCatchUp=canCatchUp, toggleLowDelay=toggleLowDelay, catchUp=catchUp)
@@ -191,7 +192,21 @@ component LiveControls
       if skin == "index" or skin == "editorial"
         IndexLiveControls(lowDelay=lowDelay, reconnecting=reconnecting, delivery=delivery, drift=drift, driftLabel=driftLabel, canCatchUp=canCatchUp, toggleLowDelay=toggleLowDelay, catchUp=catchUp)
       else
-        CineLiveControls(lowDelay=lowDelay, reconnecting=reconnecting, delivery=delivery, drift=drift, driftLabel=driftLabel, canCatchUp=canCatchUp, toggleLowDelay=toggleLowDelay, catchUp=catchUp)
+        CineLiveControls(lowDelay=lowDelay, reconnecting=reconnecting, delivery=delivery, drift=drift, driftLabel=driftLabel, canCatchUp=canCatchUp, toggleLowDelay=toggleLowDelay, catchUp=catchUp, zap=zap)
+
+// Channel flicking works in every skin; skins without a mini guide show none.
+component MiniGuide
+  props
+    skin: string
+    model: GuideModel
+    playing: string
+    target: string
+    small: bool
+    still: bool
+    tune: action
+  view
+    if skin != "example" and skin != "index" and skin != "editorial"
+      CineMiniGuide(model=model, playing=playing, target=target, small=small, still=still, tune=tune)
 
 component PlayerChrome
   props

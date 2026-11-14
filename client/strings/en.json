@@ -275,5 +275,9 @@
   "live.nothingNow": "Nothing listed right now",
   "live.favourite": "Favourite",
   "ui.switchingAudioSoon": "Switching audio in a moment…",
-  "ui.loadingMore": "Loading more…"
+  "ui.loadingMore": "Loading more…",
+  "live.channelUp": "Previous channel",
+  "live.channelDown": "Next channel",
+  "live.channels": "Channels",
+  "live.watching": "Watching"
 }

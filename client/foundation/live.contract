@@ -4,7 +4,7 @@ members Client
   state guideDay = 0
   state guideNow = 0
   state lowDelay = false
-  resource guide = uiGuide(guideNow, guideDay) with localeJSON when auth.authenticated and top(nav).name == "live" and guideNow > 0 as shape GuideModel else empty()
+  resource guide = uiGuide(guideNow, guideDay) with localeJSON when auth.authenticated and (top(nav).name == "live" or top(nav).name == "liveWatch") and guideNow > 0 as shape GuideModel else empty()
   // The minute clock re-projects the same day in place; only another day shows the loading state.
   derive guideReady = current(guide) or (guide.day == guideDay and guide.channels.length > 0)
   derive guideMinute = floor(guideNow / 60000)
@@ -16,6 +16,42 @@ members Client
     after(1, tickGuide)
   task guideClock when (top(nav).name == "live" or top(nav).name == "liveWatch") and auth.authenticated
     every(60000, tickGuide)
+  // Channel flicking: up/down moves a pending target through the guide's order; it tunes once
+  // the viewer pauses, so holding a key never opens a session per channel passed.
+  state zapTarget = ""
+  state zapSeq = 0
+  task zapCommit when zapTarget != "" key=zapSeq
+    after(1100, tuneZap)
+  action zap(step: number)
+    let ids = guide.channels.map(c => c.id)
+    let n = ids.length
+    if n > 0 and top(nav).name == "liveWatch"
+      let i = ids.indexOf(zapTarget != "" ? zapTarget : playingId)
+      let j = ((i < 0 ? 0 : i + step) % n + n) % n
+      zapTarget = match first(ids.slice(j, j + 1)) { case some(id) => id, case none => "" }
+      zapSeq = zapSeq + 1
+  action tuneZap
+    let target = zapTarget
+    zapTarget = ""
+    if target != "" and target != playingId and top(nav).name == "liveWatch"
+      lowDelay = false
+      nav = replace(nav, path("liveWatch", target))
+  action stageKey(k: string, event: KeyboardEvent)
+    let plain = not watchEditing and not event.metaKey and not event.ctrlKey and not event.altKey
+    if top(nav).name == "liveWatch" and plain and (k == "ArrowUp" or k == "ArrowDown" or k == "PageUp" or k == "PageDown" or k == "ChannelUp" or k == "ChannelDown")
+      preventDefault()
+      touchWatch()
+      zap(k == "ArrowUp" or k == "PageUp" or k == "ChannelUp" ? -1 : 1)
+    else
+      if zapTarget != "" and plain and k == "Enter"
+        preventDefault()
+        tuneZap()
+      else
+        if zapTarget != "" and k == "Escape"
+          preventDefault()
+          zapTarget = ""
+        else
+          watchKey(k, event)
   action tickGuide
     guideNow = time.epochAtZero + performanceNow()
   action earlierGuide

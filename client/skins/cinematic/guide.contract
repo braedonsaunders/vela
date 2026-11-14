@@ -150,7 +150,7 @@ component Guide
       focus(match first(rows.slice(index, index + 1)) { case some(c) => cellAt(c, max(col * 30, model.nowMinute)), case none => "" })
 
   view
-    column height="100%" min-height=0 box-sizing="border-box" padding-top=(grid ? 0 : (small ? 72 : 96)) background-image="radial-gradient(ellipse 70% 60% at 82% 0%, var(--cinematic.guide-aura), transparent 70%)"
+    column height="100%" min-height=0 box-sizing="border-box" padding-top=(grid ? 0 : (small ? 116 : 112)) background-image="radial-gradient(ellipse 70% 60% at 82% 0%, var(--cinematic.guide-aura), transparent 70%)"
       text t("ui.channelGuide") role="heading" aria-level=1 position="absolute" width=1 height=1 overflow="hidden" opacity=0
       if grid
         for c in heroFallback key=`hero-${c.id}`
@@ -264,7 +264,7 @@ component GuideHero
     watch: action
   derive picked = channel.programmes.filter(p => p.id == programmeId)
   view
-    column position="relative" flex-shrink=0 height=(small ? 236 : "calc(84px + clamp(190px, 27vh, 300px))") overflow="hidden"
+    column position="relative" flex-shrink=0 height=(small ? 252 : "calc(84px + clamp(190px, 27vh, 300px))") overflow="hidden"
       for p in picked key=`art-${p.id}`
         column position="absolute" inset=0 aria-hidden=true animation=(still ? "none" : `guideSwap 520ms ${glide()} both`)
           if p.art != ""
