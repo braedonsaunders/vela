@@ -16,9 +16,9 @@ integration with the native view and the pinned MIT engine in
    into upstream play options; supply the demuxer's qualified `audioMetadataLayout`
    separately. Package load failure rejects before disrupting the old audio.
 3. Use the upstream `createBrowserCustomAudioOutputFactory()` for
-   `audioOutputFactory`. This needs the separately built
-   `libraries/audio-output-stage/audio-output-stage.wasm` for its resampler and
-   limiter. It owns the bounded PCM worklet, backpressure, output timestamp
+   `audioOutputFactory`. Its WASM kernels load from the separately built
+   `libraries/audio-output-stage/audio-output-stage.wasm`; if that load fails,
+   upstream uses JavaScript reference kernels for the resampler and limiter. It owns the bounded PCM worklet, backpressure, output timestamp
    correction, gap handling and underflow clock. No SharedArrayBuffer is required.
    Read controller `currentTimeMicroseconds / 1e6` as the video presentation clock.
    Do not advance a wall-clock timer independently of audio during underruns.
@@ -87,7 +87,8 @@ The browser drive caught and fixed an unbound window.fetch call. It also caught
 FFmpeg silently reducing requested TrueHD 7.1 to 5.1: this encoder supports at
 most 5.1(side). The generator now calls it truehd-5.1 and verifies actual output
 channel counts. Do not use the obsolete scratch truehd-7.1 filename as evidence.
-FLAC/ALAC/PCM fixtures are genuinely encoded 7.1; ffmpeg cannot encode DTS-HD MA
+FLAC/PCM fixtures are encoded 7.1. ALAC was subsequently corrected to
+5.1 because this encoder silently converts standard 7.1 to 6.1(back); ffmpeg cannot encode DTS-HD MA
 or Atmos metadata. The other package support claims above describe upstream
 capabilities, not local qualification of DTS-HD MA, JOC or Atmos assets.
 
@@ -98,21 +99,107 @@ byte ranges. Local handler check returned 206, bytes 0-15/1186771, 16-byte body
 for the initial TrueHD sample. Paths and traversal are allowlisted; ordinary
 session ownership/token/expiry checks still run before the fixture handler.
 
-## Remaining requirements
+## General WASM fallback milestone (2026-11-14)
 
-The pinned upstream supports WebCodecs AAC/Opus/Vorbis/FLAC/MP3 and Mediabunny PCM
-formats. It has **no ALAC codec admission/decoder**, and these common WebCodecs
-codecs lack a general WASM fallback in this release. The route policy reports an
-explicit Ether requirement when no local decoder remains; it does not create an
-Ether audio transcode or claim that server capability exists. A true audio-only
-Ether replacement requires the protocol/server track transport plus runtime
-recovery wiring. No such request was sent. Replacing only the audio decoder after
-a runtime native failure still needs playback-lead integration and qualification.
+The playback lead installed the pinned Emscripten 4.0.13 toolchain in his scratch
+worktree, built audio-output-stage.wasm and libdovi, and assembled engine assets
+(key 91f8cfddc70b7353). The audio worker reused that SDK; no duplicate install.
 
-The full engine output requires building audio-output-stage.wasm; Emscripten is
-not on this Mac's PATH at this milestone. Full integration, real 7.1 mapping,
-DTS-HD MA, ALAC and Atmos/JOC vectors, drift, track-switch listening, and native
-failure → WASM → Ether audio-only fallback remain unqualified.
+`ffmpeg/build.ts` builds **vela-audio.wasm**, 1,546,896 bytes, SHA-256
+`9ed0aa482117fadc992a914e29560244bb69c9d23ccb1a0260755db8270fe23d`.
+It contains 46 decoder families from the same pinned LGPL FFmpeg, including ALAC,
+Vorbis, MP1/MP2/MP3, AAC, Opus, FLAC, WMA families, integer/float/G.711 PCM,
+ADPCM, and additional lossless/legacy formats. `ffmpeg/codecs.json` is the exact
+compiled list. This describes module contents, not a claim about every container.
+GPL, nonfree and version-3 code are explicitly disabled and checked after configure.
+Decoder linear memory is bounded to 256 MiB. All code remains separately loaded.
+
+Run the stock installer with `--general` and EMSDK set to the pinned SDK to build
+the generic package too. Distribution includes exact FFmpeg source archive,
+vela-audio-source.tar.gz, LGPL text, VELA-AUDIO-SOURCE.txt and a generated manifest.
+Matching source and licence files must ship beside the WASM file. `--general`
+is an actual build, not a download from a nonexistent published Vela release.
+
+`prepareAudioOptions(..., nightMode, forceSoftware)` normally retains native
+WebCodecs/Mediabunny for common formats. ALAC/MP2/WMA select the general module;
+`forceSoftware=true` selects it after a native decode failure. The caller still
+owns re-prime/cancellation at the audio clock, and must advance to Ether if WASM
+fails. Native decoder support is measured by the lead's exact-config probe.
+
+The module consumes a VLA1 envelope with demux sample rate, count, explicit speaker
+mask, coded bits, block alignment, bitrate and original private bytes. Codec names
+in package manifests use hyphens per the upstream grammar; FFmpeg IDs use underscores.
+`transformUpstreamAudio(path,source)` applies checked build-time hooks to the
+worker/policy and preserves MP4 ALAC atoms in the MPL Mediabunny fork. Only packages
+with the velaConfiguration marker receive this envelope. Stock TrueHD/DTS/E-AC-3
+remain unchanged. Both modified worker bundles compiled with esbuild against the
+pinned sources. Vendor files remain pristine; the source offer includes the hooks.
+
+A Chrome drive used the real module and original ffprobe-extracted packets/private
+bytes, including negative codec-priming timestamps. Each decoder was drained.
+
+| Fixture | Output frames | Layout observed |
+| --- | ---: | --- |
+| ALAC Matroska, 10s | 480,000 | 6 channels, mask 0x3f |
+| ALAC MP4, 2s | 96,000 | Stereo |
+| FLAC, 10s | 480,000 | 8 channels, mask 0x63f |
+| PCM s24le, 10s, explicit fixture speaker mask | 480,000 | 8 channels, mask 0x63f |
+| Vorbis, 2s | 96,256 | Stereo |
+| Opus, 2s | 96,840 | Stereo |
+| MP2, 2s | 96,768 | Stereo |
+| WMA v2, 2s | 94,208 | Stereo |
+| AAC, 2s | 97,280 | Stereo |
+| PCM float64, 2s | 96,000 | Stereo |
+
+Compressed counts include codec priming/padding; they are not proof that container
+trim metadata is integrated. Unknown multichannel PCM masks were deliberately
+refused; explicit fixture-source 7.1 metadata then decoded correctly. No mask
+was guessed from eight channels. The original scratch alac-7.1 filename was also
+found to hold seven channels (encoder conversion); the generator now uses ALAC
+5.1. Neither obsolete filename is valid surround qualification evidence.
+
+The decoded ALAC 5.1 output then passed through the **built WASM output stage**,
+standard Lo/Ro and enabled peak limiter, then the real AudioWorklet/AudioContext.
+The stage produced 480,000 frames without timestamp deviation, gap fill, drops or
+trims. During a three-second output window, telemetry observed 139,264 consumed
+frames, zero underruns, overflows, dropped/nonfinite/clipped samples, and peak
+0.048 at volume 0.4. The rate was 48kHz throughout; this does not qualify a rate
+conversion or severe limiter attack. No human listening pass is claimed.
+
+Generate additional stereo fixtures with
+`bun mock-server/scripts/make-audio-fallback-media.ts`. Both fixture sets are
+served behind existing mock session media grants by the allowlisted audio handler.
+
+## Ether audio-only fallback and remaining integration
+
+Ether worker thr_5ker2zriyv implemented server branch w0312/vela-original-playback,
+commit d70ab267d53b39e56df6493edfac25f5c8693c9c. Its offline FFmpeg/ffprobe check
+reported exactly one AAC audio stream with absolute-title PTS near the requested
+4s position, and no video. The independent job can replace/cancel audio without
+changing the original video URL/source pin. This is server-worker evidence, not
+an installed Vela end-to-end drive.
+
+The canonical v0 API is POST /sessions/:id/audio-fallback with Mutation,
+sourceGeneration, seekGeneration, trackId, positionSeconds and preferredCodec:aac.
+Response is AudioFallbackResponse. DELETE /sessions/:id/audio-fallback/:audioId
+uses Mutation. Capability features.audioFallback is advertised only when real.
+The first playlist entry is relative segment 0 even at a nonzero requested
+position; **schedule it at the requested absolute position**. fMP4 PTS remain
+absolute and timelineOriginSeconds is 0. Do not apply the position twice.
+
+`EtherAudioFallback` owns independent audio jobs, serializes POSTs, suppresses
+stale responses, and DELETEs old/late jobs. Authenticated EtherAdapter methods own
+network credentials. Optional AbortSignal support bounds requests and aborts
+one shared-token-refresh waiter without canceling rotation for other callers.
+The lead requested that the external AAC/native-audio clock bridge be integrated
+after the first original-file custom runtime works; no parallel clock API was
+introduced. Until that bridge and recovery wiring are active, this is **not** a
+claim that audio-only recovery is working in the installed native view.
+
+Remaining qualification: full native-view hookup, real 7.1 physical mapping,
+DTS-HD MA and Atmos/JOC vectors, rate conversion, long-run drift/lip-sync,
+track-switch listening, native → generic WASM → Ether audio-only runtime recovery,
+and container-specific priming/trimming. This Mac exposes a stereo physical sink.
 
 The lab HTTPS page loaded without a DNS rebinding problem. Capability-only probe
 at `https://192-168-68-65.9cf6a8a376b9403baf1de133251c4c46.plex.direct:32550`
