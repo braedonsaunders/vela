@@ -1,5 +1,5 @@
 import type { Answer, Sources } from '../app.contract.d.ts';
-import type { AISearchJob, ClientCapabilities, Device, ServerCapabilities } from '../wire/v0/types';
+import type { AISearchJob, ClientCapabilities, Device, ServerCapabilities, Tokens } from '../wire/v0/types';
 import { EtherAdapter } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
@@ -45,6 +45,7 @@ let interactions: InteractionQueue | undefined;
 let ready: Promise<void> | undefined;
 let activeQuick = "";
 let authVersion = 0;
+let redemption: { code: string; idempotencyKey: string; pending?: Promise<Tokens>; consumed: boolean } | undefined;
 let negotiation: { version: number; pending: Promise<void> } | undefined;
 let features: ServerCapabilities['features'] | undefined;
 let ai: { epoch: number; generation: number; query: string; job?: AISearchJob; starting?: Promise<AISearchJob> } | undefined;
@@ -74,8 +75,10 @@ async function session(store: Parameters<Sources['uiBootstrap']>[1]): Promise<Et
   return api;
 }
 let authOptions = { passwordAvailable: false, quickAvailable: false };
+let authCapabilities: Promise<ServerCapabilities> | undefined;
 const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '') => {
-  const capabilities = await server(store).capabilities();
+  if (!authCapabilities) authCapabilities = server(store).capabilities().finally(() => { authCapabilities = undefined; });
+  const capabilities = await authCapabilities;
   authOptions = { passwordAvailable: capabilities.features.passwordSignIn.available, quickAvailable: capabilities.features.quickConnect.available };
   return { authenticated: !!store.get('vela.session'), ...authOptions, error };
 };
@@ -99,8 +102,20 @@ const sources: Sources = {
     if (code && !store.get('vela.session')) {
       let decoded = code;
       try { if (isFragment) decoded = decodeURIComponent(code); } catch { /* Preserve malformed input for the server to reject. */ }
-      const tokens = await api.redeemWebCode({ code: decoded, device, idempotencyKey: key(store) });
-      store.set('vela.session', JSON.stringify(tokens));
+      if (!redemption || redemption.code !== decoded) redemption = { code: decoded, idempotencyKey: key(store), consumed: false };
+      const current = redemption;
+      if (current.consumed) throw new Error('The sign-in link has already been used');
+      const version = authVersion;
+      if (!current.pending) {
+        current.pending = api.redeemWebCode({ code: decoded, device, idempotencyKey: current.idempotencyKey })
+          .catch(error => { current.pending = undefined; throw error; });
+      }
+      const tokens = await current.pending;
+      if (redemption === current && version === authVersion && !store.get('vela.session')) {
+        store.set('vela.session', JSON.stringify(tokens));
+        current.consumed = true;
+        authVersion++; ready = undefined;
+      }
     } else if (MOCK && store.get('vela.session') === null) await session(store);
     return authModel(store);
   },
