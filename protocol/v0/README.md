@@ -27,6 +27,8 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | POST | /auth/quick-connect/poll | QuickPollRequest | GrantPoll |
 | POST | /auth/quick-connect/approve | QuickApproveRequest | Ack |
 | GET | /bootstrap | — | Bootstrap |
+| GET | /libraries | LibrariesQuery (query) | Page<Library> |
+| GET | /libraries/:id/items | LibraryBrowseQuery (query) | LibraryContents |
 | GET | /rows | RowsQuery (query) | Page<Row> |
 | GET | /rows/:id | cursor, limit (query) | Row |
 | GET | /collections/:id | cursor, limit (query) | CollectionContents |
@@ -80,13 +82,43 @@ source substitution must validate edition, timeline, codecs and track mappings.
 
 ## Cache and mutation semantics
 
-Cacheable GETs: capabilities, bootstrap, rows, detail/children/extras, channels and
+Cacheable GETs: capabilities, bootstrap, libraries/library items, rows, detail/children/extras, channels and
 guide. Return `ETag`, `Cache-Control: private, max-age=0, must-revalidate` and honor
 `If-None-Match` with 304. Cache keys include instance, viewer, policy revision,
 query, device capability context and protocol version. Never reuse across viewers.
 Auth, search jobs, sessions, events and mutation responses use `no-store`.
 Opaque cursors bind viewer, query, ranking snapshot and policy; invalid/expired
 cursors return 409 `cursor_expired`, requiring refresh from the first page.
+
+Libraries are the host's viewer-visible published views in server order. IDs are
+opaque; names and kinds come from the host. Do not synthesize a Live library from
+channel availability when no real library ID exists. Unknown/hidden library IDs
+return404. Artwork is an empty array when no authorized library artwork exists.
+Per-library browse returns a paged RowEntry grid (title or live channel entries),
+plus the library and effective sort/direction. Pages default50, maximum100; no
+exact count is required. Preserve host order and issued receipts. Empty
+receiptToken means no receipt was issued: clients skip interaction reporting for
+that entry rather than manufacturing attribution.
+
+Library.browse advertises only implemented sorts/directions and filters, with
+defaults. `server` means the unchanged source order and supports asc only. Other
+sort names map to actual neutral catalogue orders, not client sorting. A missing
+filter field or false support flag means unsupported. Query filters are single
+kind/genre/year values and exact `true`/`false` played/favorite values; omitted
+filters impose no additional restriction. Unsupported or malformed options
+return400 request/invalid_library_query. Owner libraryfilter and viewer policy
+apply before filters, ordering and pagination; search-only visibility exceptions
+must not leak into library browsing. Cursors bind the effective query, library,
+authorized snapshot, viewer/policy/device and grant family. Policy or membership
+changes invalidate old cursors with409 cursor_expired; never fake exhausted on a
+bounded source that cannot prove it. Reauthorize before returning cached pages.
+
+Ether mapping: neutral Experience.Views/LibraryItems and ItemQuery supply the
+published view IDs/order, kinds, catalogue sorts and optional Watched/Favorite
+filters (`internal/frontend/contracts.go`). MediaBrowser UserViews and Items use
+these same services. Use NoTotal where supported; do not resolve releases, wait
+for providers, walk the library for exact counts, or invent ranked receipts for
+plain LibraryItems pages. Real live views may use the authorized live pager.
 
 Idempotency is scoped to authenticated grant (or pre-auth device), method and path,
 retained at least 24 hours. Same key/body replays the original status and response;

@@ -123,3 +123,18 @@ export interface WatchRequest extends Mutation { played?: boolean; favorite?: bo
 
 export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[] }
 export interface CollectionContents extends Page<RowEntry> { collection: Collection }
+
+export type LibrarySort = 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated';
+export type SortDirection = 'asc' | 'desc';
+export interface LibraryBrowseOptions {
+  sorts: { id: LibrarySort; directions: SortDirection[] }[];
+  defaultSort: LibrarySort; defaultDirection: SortDirection;
+  /** Boolean fields declare support; kind lists supported values. */
+  filters: { kind?: TitleKind[]; genre?: boolean; year?: boolean; played?: boolean; favorite?: boolean };
+}
+export interface Library { id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
+export interface LibrariesQuery { cursor?: Cursor; limit?: number }
+export interface LibraryBrowseQuery extends LibrariesQuery {
+  sort?: LibrarySort; direction?: SortDirection; kind?: TitleKind; genre?: string; year?: number; played?: boolean; favorite?: boolean;
+}
+export interface LibraryContents extends Page<RowEntry> { library: Library; sort: LibrarySort; direction: SortDirection }
