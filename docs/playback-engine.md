@@ -685,3 +685,48 @@ dedicated browser closed. The UI worker's supervisor was left under its owner.
 Ether confirmed client-only 0.1.9 installation (43/43 file hashes, app/SW HTTP
 200), with lab.4 server unchanged. No owner-session or lab playback was opened
 for qualification; real Other Mommy/MobLand validation remains with the owner.
+
+### Absolute seek clock and immediate target (0.1.12 source)
+
+The chrome now reads `snapshot.seekTarget` while an authorized seek is pending;
+`position` and observation reports retain the real playhead. The target is
+published before the command leaves the engine, with buffering/waiting enabled.
+The target clears when the authorized generation resumes (or a paused seek
+finishes); rejection, deadline or terminal state clears it with an honest result.
+
+`PlaybackPath.timelineOriginSeconds` is the absolute title time corresponding to
+native HLS presentation time zero. Native currentTime, buffered ranges and media
+duration are translated at the engine boundary; direct files retain origin zero.
+For older Ether VOD plans without the field, an origin is inferred only when the
+finite ENDLIST playlist duration plus requested position matches the known title
+duration within 250 ms. Otherwise origin remains zero. MSE keeps original fMP4
+decode timestamps; only playlist segment scheduling is anchored to the explicit
+origin. It does not apply a second SourceBuffer timestamp offset.
+
+| Local manual check (2026-11-14) | Measured result |
+|---|---|
+| Direct mock seek, actual playhead 15.886 s → target 80 s | Immediate snapshot target 80, state buffering, waiting true; actual position remained 15.886 s |
+| Authorization and reconciliation | Command HTTP 200; subsequent playback at 92.630 s, target null, waiting false |
+| Cleanup | Both owned mock sessions stopped HTTP 200; owned Chrome closed |
+| Offset native fixture simulation | Altered TS and fMP4 playlists failed native demux before frames; no native offset playback pass claimed. Real Ether qualification remains pending clearance |
+
+The engine browser module type-checks and bundles. The shared Contract build at
+this point was blocked by concurrent guide schema edits (`GuideTick.offset`,
+`GuideModel.showNow/nowOffset`); no guide code was changed by playback.
+
+Read-only Oak Street evidence (`oak-street-0800.log`, coordinator capture): all
+requests stayed on track 0, with no early player-paused report. Initial segments
+were produced in 0.854 s and 0.933 s; the ramp restart took 2.086 s for segment 2
+and 5.514 s for segment 3, then 1.167 s for segment 4. The first ahead=5 throttle
+was later, after that production wait. These server production waits can explain
+buffer pressure; the capture does not include browser buffer/transfer timings
+needed to attribute every visible stall. The source was 1608p/40 Mbps HEVC DV8,
+converted to H.264 SDR/AAC. No client ABR rung churn is present in this run.
+
+The same log confirms a separate seek-clock defect: a broker offset of 1433.5 s
+was also applied as native currentTime, leading to a segment around 2865.5 s.
+The origin translation above removes that double application. Ether's matching
+ask is to emit the actual offset on every initial/seek/track-restart path and
+retain original title timestamps for MSE fMP4. A lighter capability-driven SDR
+base and shorter production waits remain Ether-side work; no new lab stream was
+opened for this analysis.

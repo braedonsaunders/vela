@@ -26,7 +26,7 @@ export class SegmentPipeline {
   get audioTracks() { return this.current?.audioGroupId ? this.audio?.available(this.current.audioGroupId) ?? [] : []; }
   selectAudio(trackId: string) { return this.audio ? this.audio.select(trackId) : Promise.reject(new Error('No alternate audio buffer')); }
   lowDelay = false; expensiveSwitches = false; initialRenditionId?: string;
-  liveWindowStart: number | null = null; maxLiveDrift = 45;
+  timelineOriginSeconds = 0; liveWindowStart: number | null = null; maxLiveDrift = 45;
   publishedEdge: number | null = null; publishedStart: number | null = null;
   retrying = false;
   private publicationPending = false; private upstreamGap = false;
@@ -125,12 +125,13 @@ export class SegmentPipeline {
     this.current = rendition; this.onRendition(rendition);
     this.buffer = media.addSourceBuffer(rendition.mime);
     let list = await this.playlist(rendition, signal);
+    if (!live && this.timelineOriginSeconds) list.segments.forEach(s => { s.start += this.timelineOriginSeconds; });
     if (live) { list.segments.forEach(s => { s.start += this.liveWindowStart ?? 0; }); this.published(list); }
     if (rendition.audioGroupId) {
       this.audio = new AudioBuffer(media, this.video, this.audioRenditions, (url, signal) => this.bytes(url, signal), mime => MS.isTypeSupported(mime));
       await this.audio.start(rendition.audioGroupId, this.initialAudioTrackId, list, signal);
     }
-    if (!live && list.ended) media.duration = list.segments.reduce((sum, s) => sum + s.duration, 0);
+    if (!live && list.ended) media.duration = this.timelineOriginSeconds + list.segments.reduce((sum, s) => sum + s.duration, 0);
     let next = live ? (position > 0 ? list.segments.find(s => s.start + s.duration > position) : undefined) ?? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find(s => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
     if (!next) throw new PlaybackFault('Position outside source timeline', 'source');
     let sequence = next.sequence, init = '', first = true;

@@ -7,7 +7,7 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
   const edition = selected.edition ?? '';
   return {
     id: plan.sessionId, serverState: plan.state, serverControlled: true, selectedSourceId: plan.selectedPathId, mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? '', edition,
-    position: plan.positionSeconds, live: !!plan.channelId, liveWindowStart: plan.live?.windowStartSeconds, liveEdge: plan.live?.liveEdgeSeconds, liveMaxDrift: plan.live?.maxDriftSeconds, lowDelay: plan.live?.mode === 'low-delay', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+    position: plan.positionSeconds, duration: plan.durationSeconds, live: !!plan.channelId, liveWindowStart: plan.live?.windowStartSeconds, liveEdge: plan.live?.liveEdgeSeconds, liveMaxDrift: plan.live?.maxDriftSeconds, lowDelay: plan.live?.mode === 'low-delay', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
     audioTrackId: plan.selectedAudioTrackId, subtitleTrackId: plan.selectedSubtitleTrackId ?? undefined,
     audioTracks: plan.audioTracks.map(t => ({ id: t.id, label: t.name, language: t.language })),
     subtitleTracks: plan.subtitleTracks.filter(t => t.codec.toLowerCase() === 'webvtt' || t.codec.toLowerCase() === 'vtt').map(t => ({ id: t.id, label: t.name, language: t.language, url: t.url })),
@@ -17,7 +17,7 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
       audioTrackId: plan.selectedAudioTrackId,
       boundaries: p.boundaries.filter(b => b.independent).map(b => b.atSeconds),
       recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some(b => b.independent && (b.compatibility === 'verified-timeline' || b.compatibility === 'same-source' && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
-      initialRenditionId: p.initialRenditionId, audioRenditions: p.audioRenditions,
+      timelineOriginSeconds: p.timelineOriginSeconds, initialRenditionId: p.initialRenditionId, audioRenditions: p.audioRenditions,
       renditions: p.qualities.map(q => ({ id: q.id, url: q.url, bandwidth: q.bitrate, height: q.height, audioGroupId: q.audioGroupId, codecStatus: q.codecStatus,
         mime: `video/mp4; codecs="${q.videoCodec}${q.audioCodec ? `,${q.audioCodec}` : ''}"` })),
     })),

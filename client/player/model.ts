@@ -5,11 +5,11 @@ export interface Rendition { id: string; url: string; bandwidth: number; mime: s
 export interface Source {
   id: string; strategy: 'direct' | 'remux' | 'transcode'; delivery: 'file' | 'hls';
   url: string; mime: string; timeline: string; edition: string; audioTrackId?: string; recoveryAllowed?: boolean; boundaries?: number[];
-  audioRenditions?: AudioRendition[]; initialRenditionId?: string; renditions?: Rendition[];
+  timelineOriginSeconds?: number; audioRenditions?: AudioRendition[]; initialRenditionId?: string; renditions?: Rendition[];
 }
 export interface PlaybackSession {
   serverState?: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended';
-  id: string; mediaId: string; edition: string; selectedSourceId?: string; serverControlled?: boolean; sources: Source[]; position?: number;
+  id: string; mediaId: string; edition: string; selectedSourceId?: string; serverControlled?: boolean; sources: Source[]; position?: number; duration?: number;
   audioTracks: Track[]; subtitleTracks: Track[]; audioTrackId?: string;
   subtitleTrackId?: string; live?: boolean; liveWindowStart?: number; liveEdge?: number; liveMaxDrift?: number; lowDelay?: boolean; sourceGeneration?: number; seekGeneration?: number;
 }
@@ -34,7 +34,7 @@ export interface Snapshot {
   backend: 'file' | 'native-hls' | 'mse' | null; renditionId: string | null;
   capabilities: { pip: boolean; fullscreen: boolean; audioSwitch: boolean }; lockedQuality: string | null;
   live: LiveSnapshot | null;
-  waiting: boolean; volume: number; muted: boolean;
+  seekTarget: number | null; waiting: boolean; volume: number; muted: boolean;
   preparation: 'media-metadata' | 'initial-buffer' | 'starting' | null;
   position: number; duration: number | null; playable: { start: number; end: number }[];
   throughputBps: number | null; droppedFrames: number | null; totalFrames: number | null;

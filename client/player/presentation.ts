@@ -21,10 +21,10 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
   if (errors.size > 8) errors.delete(errors.keys().next().value!);
   const cached = plan ? snapshots.get(plan.sessionId) : undefined;
   const snapshot = cached && currentGeneration(cached) ? cached : undefined;
-  const position = snapshot?.position ?? plan?.positionSeconds ?? 0;
+  const position = snapshot?.seekTarget ?? snapshot?.position ?? plan?.positionSeconds ?? 0;
   const duration = snapshot?.duration ?? plan?.durationSeconds ?? 0;
   const path = plan?.paths.find(p => p.id === (snapshot?.sourceId ?? plan.selectedPathId));
-  const state = snapshot?.state ?? 'loading';
+  const state = snapshot?.seekTarget != null ? 'buffering' : snapshot?.state ?? 'loading';
   const quality = path?.qualities.find(q => q.id === snapshot?.renditionId);
   const capability = snapshot?.capabilities;
   const selectedAudio = plan?.audioTracks.find(t => t.id === snapshot?.audioTrackId || !snapshot && t.id === plan.selectedAudioTrackId);

@@ -590,6 +590,7 @@ class SegmentPipeline {
   lowDelay = false;
   expensiveSwitches = false;
   initialRenditionId;
+  timelineOriginSeconds = 0;
   liveWindowStart = null;
   maxLiveDrift = 45;
   publishedEdge = null;
@@ -762,6 +763,10 @@ class SegmentPipeline {
     this.onRendition(rendition);
     this.buffer = media.addSourceBuffer(rendition.mime);
     let list = await this.playlist(rendition, signal);
+    if (!live && this.timelineOriginSeconds)
+      list.segments.forEach((s) => {
+        s.start += this.timelineOriginSeconds;
+      });
     if (live) {
       list.segments.forEach((s) => {
         s.start += this.liveWindowStart ?? 0;
@@ -773,7 +778,7 @@ class SegmentPipeline {
       await this.audio.start(rendition.audioGroupId, this.initialAudioTrackId, list, signal);
     }
     if (!live && list.ended)
-      media.duration = list.segments.reduce((sum, s) => sum + s.duration, 0);
+      media.duration = this.timelineOriginSeconds + list.segments.reduce((sum, s) => sum + s.duration, 0);
     let next = live ? (position > 0 ? list.segments.find((s) => s.start + s.duration > position) : undefined) ?? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find((s) => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
     if (!next)
       throw new PlaybackFault("Position outside source timeline", "source");
@@ -933,7 +938,9 @@ class SegmentPipeline {
 }
 
 // client/player/native-hls.ts
-async function nativeMediaPlaylist(url, signal) {
+async function nativeMediaPlaylist(url, signal, depth = 0) {
+  if (depth > 1)
+    throw new Error("Nested HLS masters are unsupported");
   const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), credentials: "same-origin" });
   if (!response.ok)
     throw new TypeError(`HLS manifest HTTP ${response.status}`);
@@ -943,15 +950,18 @@ async function nativeMediaPlaylist(url, signal) {
     throw new Error("Invalid HLS manifest");
   const lines = text.split(/\r?\n/).map((line) => line.trim());
   const first = lines.findIndex((line) => line.startsWith("#EXT-X-STREAM-INF:"));
-  if (first < 0)
-    return response.url;
+  if (first < 0) {
+    const durations = lines.filter((line) => line.startsWith("#EXTINF:")).map((line) => Number(line.slice(8).split(",")[0]));
+    const duration = lines.includes("#EXT-X-ENDLIST") && durations.length > 0 && durations.every((d) => Number.isFinite(d) && d > 0) ? durations.reduce((a, b) => a + b, 0) : null;
+    return { url: response.url, duration };
+  }
   const uri = lines.slice(first + 1).find((line) => line && !line.startsWith("#"));
   if (!uri)
     throw new Error("HLS default variant is missing");
   const variant = new URL(uri, response.url);
   if (variant.origin !== new URL(response.url).origin || variant.username || variant.password)
     throw new Error("HLS variant outside broker origin");
-  return variant.href;
+  return nativeMediaPlaylist(variant.href, signal, depth + 1);
 }
 
 // client/src/protocol/id.ts
@@ -987,6 +997,8 @@ class PlaybackEngine {
   lowDelayOverride;
   terminalMedia;
   localTransportIntent;
+  nativeOrigin = 0;
+  pendingSeek;
   waitSince = 0;
   everPlayed = false;
   lastPosition = 0;
@@ -1023,6 +1035,12 @@ class PlaybackEngine {
       seekGeneration: this.controller.seek
     } : event);
   }
+  position() {
+    return this.terminalMedia?.position ?? (this.video.readyState >= 1 && Number.isFinite(this.video.currentTime) ? this.nativeOrigin + this.video.currentTime : this.resumePosition);
+  }
+  duration() {
+    return this.terminalMedia?.duration ?? (Number.isFinite(this.video.duration) ? this.nativeOrigin + this.video.duration : this.session?.duration ?? null);
+  }
   saveVolume() {
     try {
       localStorage.setItem("vela.player.volume", String(this.video.volume));
@@ -1030,6 +1048,10 @@ class PlaybackEngine {
     } catch {}
   }
   checkWaiting() {
+    if (this.pendingSeek && !this.pendingSeek.authorized && performance.now() - this.pendingSeek.startedAt > 15000) {
+      this.fail({ kind: "network", message: "Seek authorization timed out", recoverable: true });
+      return;
+    }
     if (this.pendingSwitch && performance.now() - this.pendingSwitch.startedAt > 15000) {
       this.pendingSwitch = undefined;
       this.fail({ kind: "network", message: "Source switch authorization timed out", recoverable: true });
@@ -1038,10 +1060,10 @@ class PlaybackEngine {
     if (!this.session || !this.source || !this.wantsPlay || ["failed", "ended", "recovering"].includes(this.status))
       return;
     const now = performance.now();
-    if (this.video.currentTime > this.lastPosition + 0.02 && !this.video.paused) {
+    if (this.position() > this.lastPosition + 0.02 && !this.video.paused) {
       this.everPlayed = true;
       this.lastAdvance = now;
-      this.lastPosition = this.video.currentTime;
+      this.lastPosition = this.position();
       return;
     }
     const expired = !this.everPlayed ? now - this.waitSince > 45000 : now - this.lastAdvance > 30000;
@@ -1064,7 +1086,13 @@ class PlaybackEngine {
         if (!this.video.paused && !this.video.error && this.video.readyState >= 3) {
           this.status = "playing";
           this.failure = null;
+          if (this.pendingSeek?.authorized)
+            this.pendingSeek = undefined;
         }
+      },
+      seeked: () => {
+        if (this.pendingSeek?.authorized && !this.wantsPlay && this.video.readyState >= 2)
+          this.pendingSeek = undefined;
       },
       pause: () => {
         if (!this.wantsPlay && !["loading", "recovering", "failed", "ended"].includes(this.status))
@@ -1109,7 +1137,7 @@ class PlaybackEngine {
       sessionId: this.session?.id ?? null,
       sourceGeneration: this.controller.source,
       seekGeneration: this.controller.seek,
-      state: this.status,
+      state: this.pendingSeek ? "buffering" : this.status,
       sourceId: this.source?.id ?? null,
       strategy: this.source?.strategy ?? null,
       backend: this.backend,
@@ -1117,13 +1145,14 @@ class PlaybackEngine {
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 },
       lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
-      waiting: ["loading", "buffering", "recovering"].includes(this.status) || this.wantsPlay && this.video.seeking,
+      seekTarget: this.pendingSeek?.position ?? null,
+      waiting: !!this.pendingSeek || ["loading", "buffering", "recovering"].includes(this.status) || this.wantsPlay && this.video.seeking,
       volume: this.video.volume,
       muted: this.video.muted,
       preparation: ["loading", "buffering"].includes(this.status) && (quality?.totalVideoFrames ?? 0) === 0 ? this.video.readyState < 1 ? "media-metadata" : this.video.paused ? "starting" : "initial-buffer" : null,
-      position: this.terminalMedia?.position ?? (Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0),
-      duration: this.terminalMedia?.duration ?? (Number.isFinite(this.video.duration) ? this.video.duration : null),
-      playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: ranges.start(i), end: ranges.end(i) })),
+      position: this.position(),
+      duration: this.duration(),
+      playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: this.nativeOrigin + ranges.start(i), end: this.nativeOrigin + ranges.end(i) })),
       throughputBps: this.pipeline?.bandwidth.bps ?? null,
       droppedFrames: quality?.droppedVideoFrames ?? null,
       totalFrames: quality?.totalVideoFrames ?? null,
@@ -1207,9 +1236,13 @@ class PlaybackEngine {
       }, 1000);
     const pending = this.pendingSwitch;
     const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && pending.source === session.sourceGeneration && pending.seek === session.seekGeneration;
-    const position = handoff ? Math.max(pending.position, this.video.currentTime) : session.position ?? 0;
+    const position = handoff ? Math.max(pending.position, this.position()) : session.position ?? 0;
     const recovery = !!handoff && pending.recovery;
     this.pendingSwitch = undefined;
+    if (session.id !== this.session?.id)
+      this.pendingSeek = undefined;
+    else if (this.pendingSeek && session.seekGeneration !== this.controller.seek)
+      this.pendingSeek = { ...this.pendingSeek, position: session.position ?? this.pendingSeek.position, authorized: true };
     const previousServerState = session.id === this.session?.id ? this.session.serverState : undefined;
     if (session.id !== this.session?.id) {
       this.audioPreference = undefined;
@@ -1297,7 +1330,8 @@ class PlaybackEngine {
   endPlayback(position) {
     if (this.status === "ended" && this.terminalMedia)
       return;
-    this.terminalMedia = { position: position ?? this.video.currentTime, duration: Number.isFinite(this.video.duration) ? this.video.duration : null };
+    this.terminalMedia = { position: position ?? this.position(), duration: this.duration() };
+    this.pendingSeek = undefined;
     this.detachMedia();
     this.status = "ended";
     this.failure = null;
@@ -1318,6 +1352,7 @@ class PlaybackEngine {
     this.publish();
   }
   resetMedia() {
+    this.nativeOrigin = 0;
     this.terminalMedia = undefined;
     this.video.pause();
     this.pipeline?.dispose();
@@ -1347,6 +1382,7 @@ class PlaybackEngine {
       if (source.delivery === "hls" && !this.useNativeHls(source)) {
         this.backend = "mse";
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
+        pipeline.timelineOriginSeconds = source.timelineOriginSeconds ?? 0;
         pipeline.audioRenditions = source.audioRenditions ?? [];
         pipeline.initialAudioTrackId = this.audio;
         pipeline.expensiveSwitches = source.strategy === "transcode";
@@ -1362,14 +1398,18 @@ class PlaybackEngine {
       } else {
         this.backend = source.delivery === "file" ? "file" : "native-hls";
         this.video.disableRemotePlayback = false;
-        const mediaUrl = source.delivery === "hls" ? await nativeMediaPlaylist(source.url, token.signal) : source.url;
+        const media = source.delivery === "hls" ? await nativeMediaPlaylist(source.url, token.signal) : { url: source.url, duration: null };
         cancelled(token.signal);
-        this.video.src = mediaUrl;
+        const legacyOffset = !this.session?.live && position > 0 && media.duration !== null && this.session?.duration !== undefined && Math.abs(media.duration + position - this.session.duration) <= 0.25;
+        if (source.timelineOriginSeconds !== undefined && (!Number.isFinite(source.timelineOriginSeconds) || source.timelineOriginSeconds < 0))
+          throw new Error("Invalid media timeline origin");
+        this.nativeOrigin = source.delivery === "hls" ? source.timelineOriginSeconds ?? (legacyOffset ? position : 0) : 0;
+        this.video.src = media.url;
       }
       await this.metadata(token);
       cancelled(token.signal);
       if (this.backend !== "mse" && position > 0)
-        this.video.currentTime = position;
+        this.video.currentTime = Math.max(0, position - this.nativeOrigin);
       this.applySubtitle();
       this.applyNativeAudio();
       this.status = this.wantsPlay ? "loading" : "paused";
@@ -1420,6 +1460,11 @@ class PlaybackEngine {
       this.fail({ kind: "source", message, recoverable: false });
   }
   requestSeek(seconds) {
+    this.pendingSeek = { position: seconds, startedAt: performance.now(), authorized: false };
+    this.status = "buffering";
+    this.video.pause();
+    this.lastObservation = -Infinity;
+    this.publish();
     this.emit({ type: "session-command", sessionId: this.session.id, command: {
       kind: "seek",
       positionSeconds: seconds,
@@ -1443,8 +1488,9 @@ class PlaybackEngine {
     } });
   }
   fail(failure) {
-    const position = this.video.currentTime;
-    const duration = Number.isFinite(this.video.duration) ? this.video.duration : null;
+    const position = this.position();
+    const duration = this.duration();
+    this.pendingSeek = undefined;
     this.failure = failure;
     this.status = "failed";
     this.controller.cancel();
@@ -1460,7 +1506,7 @@ class PlaybackEngine {
       return;
     this.recovering = true;
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError" ? "network" : "source";
-    const position = this.video.currentTime || this.resumePosition;
+    const position = this.position();
     const failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
     this.status = "recovering";
     this.failure = failure;
@@ -1500,6 +1546,8 @@ class PlaybackEngine {
           return;
         this.status = "playing";
         this.failure = null;
+        if (this.pendingSeek?.authorized)
+          this.pendingSeek = undefined;
         this.lastObservation = -Infinity;
         this.publish();
       }
@@ -1514,6 +1562,8 @@ class PlaybackEngine {
             return;
           this.status = "playing";
           this.failure = null;
+          if (this.pendingSeek?.authorized)
+            this.pendingSeek = undefined;
           this.lastObservation = -Infinity;
           this.publish();
           return;
@@ -1602,7 +1652,7 @@ class PlaybackEngine {
           break;
         case "retry":
           if (this.session)
-            await this.load({ ...this.session, position: this.terminalMedia?.position ?? (this.video.currentTime || this.resumePosition) });
+            await this.load({ ...this.session, position: this.terminalMedia?.position ?? this.position() });
           break;
         case "switchPath": {
           const source = this.candidates().find((s) => s.id === command.pathId);
@@ -1611,20 +1661,20 @@ class PlaybackEngine {
           if (source.recoveryAllowed === false)
             throw new Error("Source has no compatibility proof");
           if (this.session?.serverControlled)
-            this.requestSwitch(source, this.video.currentTime);
+            this.requestSwitch(source, this.position());
           else
-            await this.activate(source, this.video.currentTime);
+            await this.activate(source, this.position());
           break;
         }
         case "seekBy": {
           if (!Number.isFinite(command.seconds))
             throw new Error("Invalid relative seek");
-          const upper = Number.isFinite(this.video.duration) ? this.video.duration : Infinity;
-          await this.command({ id: command.id, type: "seek", seconds: Math.max(0, Math.min(upper, this.video.currentTime + command.seconds)) });
+          const upper = this.duration() ?? Infinity;
+          await this.command({ id: command.id, type: "seek", seconds: Math.max(0, Math.min(upper, (this.pendingSeek?.position ?? this.position()) + command.seconds)) });
           break;
         }
         case "seek": {
-          if (!Number.isFinite(command.seconds) || command.seconds < 0 || Number.isFinite(this.video.duration) && command.seconds > this.video.duration)
+          if (!Number.isFinite(command.seconds) || command.seconds < 0 || this.duration() !== null && command.seconds > this.duration())
             throw new Error("Seek outside media timeline");
           if (this.session?.serverControlled) {
             this.requestSeek(command.seconds);
@@ -1634,7 +1684,7 @@ class PlaybackEngine {
           if (this.backend === "mse" && this.source)
             await this.activate(this.source, command.seconds, false, true);
           else
-            this.video.currentTime = command.seconds;
+            this.video.currentTime = Math.max(0, command.seconds - this.nativeOrigin);
           break;
         }
         case "catchUp": {
@@ -1690,7 +1740,7 @@ class PlaybackEngine {
             this.audio = previous;
             throw new Error("Audio selection requires a compatible server source");
           }
-          await this.activate(source, this.video.currentTime);
+          await this.activate(source, this.position());
           break;
         }
         case "subtitle":
@@ -1765,6 +1815,7 @@ function sessionFromPlan(plan) {
     mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? "",
     edition,
     position: plan.positionSeconds,
+    duration: plan.durationSeconds,
     live: !!plan.channelId,
     liveWindowStart: plan.live?.windowStartSeconds,
     liveEdge: plan.live?.liveEdgeSeconds,
@@ -1787,6 +1838,7 @@ function sessionFromPlan(plan) {
       audioTrackId: plan.selectedAudioTrackId,
       boundaries: p.boundaries.filter((b) => b.independent).map((b) => b.atSeconds),
       recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some((b) => b.independent && (b.compatibility === "verified-timeline" || b.compatibility === "same-source" && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
+      timelineOriginSeconds: p.timelineOriginSeconds,
       initialRenditionId: p.initialRenditionId,
       audioRenditions: p.audioRenditions,
       renditions: p.qualities.map((q) => ({
