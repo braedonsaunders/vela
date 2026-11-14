@@ -6,7 +6,7 @@ IDs, continuation cursors, receipt tokens and source identities are opaque.
 
 ## Endpoints
 
-All endpoints require `Authorization: Bearer <accessToken>` except capabilities,
+All endpoints require `Authorization: Bearer <accessToken>` except capabilities, appearance,
 negotiation, sign-in, refresh, grant initiation/polling, quick-connect initiation/polling and
 web-code redemption. Authenticated calls also require `X-Vela-Device-Id: <device.id>`.
 Device identity binds credentials and sessions. All POSTs
@@ -15,6 +15,8 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | Method | Path | Request | Response |
 |---|---|---|---|
 | GET | /capabilities | — | ServerCapabilities |
+| GET | /appearance | — | Appearance (public, cacheable) |
+| GET | /events | Last-Event-ID (header) | SSE ServerEvent (viewer-level) |
 | POST | /negotiate | NegotiateRequest | NegotiateResponse |
 | POST | /auth/sign-in | SignInRequest | Tokens |
 | POST | /auth/refresh | RefreshRequest | Tokens |
@@ -170,6 +172,21 @@ URLs must serve their advertised aspect-preserving size, clamped to the source
 without upscaling. Ether's Vela image grants use canonical w/h parameters (not
 width/height aliases), capped at4000; explicit w=0 requests the source/default
 image and preserves an unmeasured-source URL against client sizing fallbacks.
+
+## Appearance and server events
+
+`GET /appearance` is public: it names the server default skin (an engine id or an
+installed pack id), the engine that default runs on, the owner's `force` flag and every
+installed SkinPack. It carries no viewer data. `revision` increases with every owner
+change; clients ignore an older revision. `GET /events` is the viewer-level SSE stream
+(not a playback session): on connect it sends the current `appearance` event, then one
+per change, with `cursor` = revision. Unknown event types are ignored. A SkinPack is
+data only; clients validate every field (colour `#rrggbb[aa]`, radius 0-48 px, pill
+0-999, at most 8 font files, image and font URLs same-origin under
+`/vela/v0/appearance/`, 64 KiB per pack). Pack `schema` and `engine` gate
+application: a client that lacks the engine or schema shows the engine's house look.
+A viewer's own pick wins over `defaultSkinId` unless `force` is true.
+Full design: `docs/skin-distribution.md`.
 
 ## Cache and mutation semantics
 
