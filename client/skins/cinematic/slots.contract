@@ -1,0 +1,187 @@
+use Card, FeedRow, HomeModel, SearchModel, DetailModel from "../../foundation/models.contract"
+
+keyframes arrive
+  from opacity=0 translate="0px 10px"
+
+component Shell
+  props
+    viewer: string
+    skin: string
+    skins: string[]
+    chooseSkin: action
+  slot
+  view
+    column height="100%" min-height=0 background-color="surface.page" color="ink.primary" color-scheme="dark" font-family="system-ui, sans-serif"
+      row padding="20px 5%" align-items="center" gap=24
+        link href="/" color="ink.primary" text-decoration="none" aria-label="Vela home"
+          text "vela" font-size=30 font-weight=600 letter-spacing="-1.5px"
+        text "YOUR EVENING, REIMAGINED" font-size=10 letter-spacing="2px" color="ink.quiet" flex=1
+        if skins.length > 1
+          select value=skin change=chooseSkin aria-label="Appearance" background-color="surface.raised" color="ink.primary" border="none" padding=8 border-radius=8
+            for name in skins key=name
+              option value=name
+                text name
+        text viewer font-size=12 color="ink.secondary"
+      children
+
+component TitleCard
+  props
+    card: Card
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  view
+    column width=(small ? 142 : 190) flex-shrink=0 gap=10 intersect=observe(card.receipt)
+      button press=selectTitle(card.id, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease")
+        if card.poster != ""
+          image card.poster alt="" width="100%" height=(small ? 206 : 274) object-fit="cover"
+        else
+          column height=(small ? 206 : 274) padding=16 justify-content="end"
+            text card.name font-size=22 font-weight=600
+      text card.name font-size=14 font-weight=600 line-clamp=2
+      text card.facts font-size=11 color="ink.quiet" line-clamp=1
+
+component Row
+  props
+    row: FeedRow
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  view
+    column gap=18 padding="0px 5% 34px"
+      text row.name role="heading" aria-level=2 font-size=(small ? 20 : 23) font-weight=550 letter-spacing="-0.5px"
+      scroll overflow-x="auto" overflow-y="hidden"
+        row gap=(small ? 14 : 20) align-items="flex-start"
+          for card in row.items key=card.id
+            TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe)
+
+component Home
+  props
+    model: HomeModel
+    query: string
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  slot
+  view
+    column
+      column position="relative" min-height=(query != "" ? 160 : small ? 360 : 432) justify-content="end" overflow="hidden"
+        if query == ""
+          for hero in model.hero key=hero.id
+            column position="absolute" inset=0
+              if hero.backdrop != ""
+                image hero.backdrop alt="" width="100%" height="100%" object-fit="cover" opacity=0.68
+              column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e18 80%), linear-gradient(90deg, #090b0ed9, transparent)"
+            column padding="20px 7%" gap=12 max-width=700 animation=(still ? "none" : "arrive 500ms ease both")
+              text "SELECTED FOR YOU" font-size=10 letter-spacing="3px" color="brand.warm"
+              text hero.name role="heading" aria-level=1 font-size=(small ? 36 : 62) font-weight=550 letter-spacing="-2px" line-height=1.05
+              text hero.facts font-size=12 color="ink.secondary"
+              if not small
+                text hero.summary font-size=15 color="ink.secondary" line-clamp=2 line-height=1.6
+              button press=selectTitle(hero.id, hero.receipt) background-color="ink.primary" color="ink.inverse" padding="12px 22px" border="none" border-radius=24 align-self="start"
+                text "Explore title" font-size=13 font-weight=600
+        column padding=(small ? "20px 5% 28px" : "26px 18% 38px")
+          children
+      if query == ""
+        for row in model.rows key=row.id
+          Row(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+
+component SearchSurface
+  props
+    query: string
+    model: SearchModel
+    loading: bool
+    error: bool
+    aiAvailable: bool
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  view
+    column gap=22 padding="0px 5% 40px" animation=(still ? "none" : "arrive 200ms ease both")
+      if error
+        text "Search is unavailable. Try another query." role="status" color="ink.secondary"
+      else
+        if loading
+          text "Finding titles…" role="status" color="ink.secondary"
+        else
+          if model.items.length == 0
+            text "No title matches. Try a name, a mood or a different description." role="status" color="ink.secondary"
+          else
+            Row(row=FeedRow(id="fast", name="Title matches", receipt="", items=model.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if not loading and model.query == query and model.descriptive.length > 0
+          Row(row=FeedRow(id="vibe", name="The feeling you're looking for", receipt="", items=model.descriptive), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if not loading and model.query == query and aiAvailable and model.aiStatus != ""
+          column gap=12
+            text "A little further afield" role="heading" aria-level=2 font-size=22
+            if model.aiStatus == "queued" or model.aiStatus == "running"
+              text "Exploring your description…" role="status" color="ink.secondary"
+            if model.ai.length > 0
+              Row(row=FeedRow(id="ai", name="Discovered for you", receipt="", items=model.ai), small=small, still=still, selectTitle=selectTitle, observe=observe)
+            if model.aiStatus == "failed"
+              text "Discovery couldn't finish. Your title matches are ready above." color="ink.secondary"
+
+component Detail
+  props
+    model: DetailModel
+    small: bool
+    still: bool
+    play: action
+    playExtra: action
+    selectTitle: action
+    observe: action
+  view
+    column gap=28 padding-bottom=48 animation=(still ? "none" : "arrive 250ms ease both")
+      for title in model.title key=title.id
+        column position="relative" min-height=(small ? 410 : 490) justify-content="end" overflow="hidden"
+          if title.backdrop != ""
+            image title.backdrop alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover" opacity=0.65
+          column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e, #090b0e10 100%)"
+          column position="relative" padding="32px 7%" max-width=780 gap=18
+            text title.kind color="brand.warm" text-transform="uppercase" letter-spacing="3px" font-size=11
+            if title.logo != ""
+              image title.logo alt=title.name width=260 height=100 object-fit="contain"
+            else
+              text title.name role="heading" aria-level=1 font-size=(small ? 38 : 60) line-height=1.05 font-weight=550 letter-spacing="-1.5px"
+            text title.facts color="ink.secondary" font-size=13
+            text title.summary color="ink.primary" font-size=16 line-height=1.6
+            if model.canPlay
+              button press=play(title.id) background-color="ink.primary" color="ink.inverse" border="none" border-radius=28 padding="15px 28px" align-self="start" testId="detail-play"
+                text (model.resumeSeconds > 0 ? "Resume watching" : "Play") font-weight=650
+      if model.seasons.length > 0
+        Row(row=FeedRow(id="seasons", name="Seasons", receipt="", items=model.seasons), small=small, still=still, selectTitle=selectTitle, observe=observe)
+      if model.episodes.length > 0
+        Row(row=FeedRow(id="episodes", name="Episodes", receipt="", items=model.episodes), small=small, still=still, selectTitle=selectTitle, observe=observe)
+      if model.extras.length > 0
+        column padding="0px 7%" gap=14
+          text "Extras" role="heading" aria-level=2 font-size=24
+          for extra in model.extras key=extra.id
+            button press=playExtra(extra.id) disabled=(not extra.ready) background-color="surface.raised" color="ink.primary" border="none" padding=16 border-radius=12 text-align="left"
+              text `${extra.name}${extra.ready ? "" : " · Not available"}`
+      if model.cast.length > 0
+        column padding="0px 7%" gap=12
+          text "Featuring" role="heading" aria-level=2 font-size=24
+          text model.cast.join(" · ") color="ink.secondary" line-height=1.6
+
+component PlayerChrome
+  props
+    titleId: string
+    command: action
+  view
+    row padding=20 gap=14 flex-wrap="wrap" justify-content="center" background-color="surface.raised"
+      button press=command("play") aria-label="Play" buttonStyle="bordered"
+        text "Play"
+      button press=command("pause") aria-label="Pause" buttonStyle="bordered"
+        text "Pause"
+      button press=command("pip") aria-label="Picture in picture" buttonStyle="bordered"
+        text "Picture in picture"
+      button press=command("fullscreen") aria-label="Fullscreen" buttonStyle="bordered"
+        text "Fullscreen"
+
+component Guide
+  view
+    column padding=24
+      text "Live guide is not available." role="status" color="ink.secondary"

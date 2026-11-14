@@ -1,0 +1,61 @@
+// Total presentation records projected from protocol/v0/types.ts. Empty artwork means absent.
+shape Card
+  id: string
+  kind: string
+  name: string
+  summary: string
+  facts: string
+  poster: string
+  backdrop: string
+  logo: string
+  accent: string
+  receipt: string
+
+shape FeedRow
+  id: string
+  name: string
+  receipt: string
+  items: Card[]
+
+shape HomeModel
+  viewer: string
+  defaultSkinId: string
+  skins: string[]
+  hero: Card[]
+  rows: FeedRow[]
+  aiAvailable: bool
+  descriptiveAvailable: bool
+
+shape SearchModel
+  query: string
+  generation: number
+  items: Card[]
+  descriptive: Card[]
+  ai: Card[]
+  aiStatus: string
+
+shape ExtraModel
+  id: string
+  name: string
+  kind: string
+  ready: bool
+
+shape DetailModel
+  title: Card[]
+  canPlay: bool
+  resumeSeconds: number
+  seasons: Card[]
+  episodes: Card[]
+  extras: ExtraModel[]
+  cast: string[]
+
+shape ReceiptReply
+  accepted: bool
+
+shape Viewport
+  width: number
+  height: number
+  prefersReducedMotion: bool
+
+shape PlaybackModel
+  planJson: string

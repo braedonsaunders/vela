@@ -1,0 +1,13 @@
+tamber vela
+
+theme
+  AccentColor = #a65b38  scheme=fixed
+  surface.page = #090b0e  scheme=fixed
+  surface.raised = #15191e  scheme=fixed
+  surface.glass = #1b2028dd  scheme=fixed
+  surface.line = #ffffff24  scheme=fixed
+  ink.primary = #f5f1e9  scheme=fixed
+  ink.secondary = #b6b8bb  scheme=fixed
+  ink.quiet = #858d98  scheme=fixed
+  ink.inverse = #111419  scheme=fixed
+  brand.warm = #dcb998  scheme=fixed

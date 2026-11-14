@@ -1,0 +1,64 @@
+use HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./models.contract"
+
+shape Time
+  epochAtZero: number
+
+shape PageState
+  visibilityState: string
+
+members Client
+  state generation = 0
+  state skin = ""
+  state observed: string[] = []
+  derive query = match first(stack(nav)) { case some(e) => searchParam(e, "q"), case none => "" }
+  derive detailId = (top(nav).name == "title" ? top(nav).params.id : "")
+  resource page = exactPage() as shape PageState
+  resource time = exactTime() as shape Time
+  resource viewport = exactViewport() as shape Viewport
+  resource home = uiBootstrap() as shape HomeModel
+  resource results = uiSearch(query, generation, time.epochAtZero) when query.trim() != "" as shape SearchModel
+  resource detail = uiDetail(detailId) when detailId != "" as shape DetailModel
+  derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" ? top(nav).params.id : "")
+  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : "title", time.epochAtZero) when playingId != "" as shape PlaybackModel
+  mutation playerReceipt as shape ReceiptReply queue
+  state commandId = 0
+  state commandJson = ""
+  mutation receipt as shape ReceiptReply queue
+  derive small = viewport.width < 640
+  derive still = viewport.prefersReducedMotion
+  derive activeSkin = (skin == "" ? home.defaultSkinId : skin)
+
+  task searchUpdates when query.trim() != ""
+    every(1500, updateSearch)
+
+  action updateSearch
+    refresh results
+
+  action edit(v: string)
+    generation = generation + 1
+    nav = replace(nav, path("home") + (v == "" ? "" : `?q=${encodeURIComponent(v)}`))
+  action chooseSkin(v: string)
+    skin = v
+  action follow(url: string)
+    nav = go(nav, url)
+  action close
+    nav = back(nav)
+  action selectTitle(id: string, token: string)
+    nav = push(nav, path("title", id))
+    if token != ""
+      send receipt = interaction(token, "selected", time.epochAtZero + performanceNow())
+  action observe(token: string, entry: IntersectionObserverEntry)
+    if entry.isIntersecting and entry.intersectionRatio > 0 and token != "" and not observed.includes(token) and top(nav).name == "home" and page.visibilityState == "visible"
+      observed = observed.concat([token])
+      send receipt = interaction(token, "visible", time.epochAtZero + performanceNow())
+  action playerMessage(json: string)
+    send playerReceipt = playerEvent(json, time.epochAtZero + performanceNow())
+  action playerCommand(kind: string)
+    let next = commandId + 1
+    commandId = next
+    commandJson = `{"id":${next},"type":"${kind}"}`
+  action play(id: string)
+    nav = push(nav, path("watch", id))
+  action playExtra(id: string)
+    nav = push(nav, path("extra", id))
+
