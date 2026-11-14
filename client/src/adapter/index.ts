@@ -18,5 +18,8 @@ export interface ServerAdapter {
   aiJob(id: string): Promise<V.AISearchJob>;
   cancelAI(id: string, request: V.CancelRequest): Promise<V.AISearchJob>;
   interactions(request: V.InteractionsRequest): Promise<V.Ack>;
+  playback(request: V.PlaybackRequest): Promise<V.PlaybackPlan>;
+  observe(id: string, request: V.PlayerObservation): Promise<V.Ack>;
+  command(id: string, request: V.SessionCommand): Promise<V.PlaybackPlan>;
   snapshot(id: string): Promise<V.SessionSnapshot>;
 }

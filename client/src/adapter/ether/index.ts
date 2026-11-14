@@ -79,6 +79,9 @@ export class EtherAdapter implements ServerAdapter {
   aiJob(id: string) { return this.request<V.AISearchJob>('GET', `/search/ai/${encodeURIComponent(id)}`); }
   cancelAI(id: string, r: V.CancelRequest) { return this.request<V.AISearchJob>('POST', `/search/ai/${encodeURIComponent(id)}/cancel`, r); }
   interactions(r: V.InteractionsRequest) { return this.request<V.Ack>('POST', '/interactions', r); }
+  playback(r: V.PlaybackRequest) { return this.request<V.PlaybackPlan>('POST', '/playback', r); }
+  observe(id: string, r: V.PlayerObservation) { return this.request<V.Ack>('POST', `/sessions/${encodeURIComponent(id)}/observations`, r); }
+  command(id: string, r: V.SessionCommand) { return this.request<V.PlaybackPlan>('POST', `/sessions/${encodeURIComponent(id)}/commands`, r); }
   snapshot(id: string) { return this.request<V.SessionSnapshot>('GET', `/sessions/${encodeURIComponent(id)}`); }
 }
 function query(values: object): string {
