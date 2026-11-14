@@ -146,22 +146,28 @@ component SearchField
       else
         CineSearchField(query=query, edit=edit)
 
+// Index and example scroll the route; cinematic owns its own scroll containers inside a fixed page.
 component Guide
   props
     skin: string
     model: GuideModel
     small: bool
+    still: bool
     watch: action
     previous: action
     next: action
+    chooseDay: action
   view
     if skin == "example"
-      ExampleGuide(model=model, small=small, watch=watch, previous=previous, next=next)
+      scroll flex=1 min-height=0
+        ExampleGuide(model=model, small=small, watch=watch, previous=previous, next=next)
     else
       if skin == "index" or skin == "editorial"
-        IndexGuide(model=model, small=small, watch=watch, previous=previous, next=next)
+        scroll flex=1 min-height=0
+          IndexGuide(model=model, small=small, watch=watch, previous=previous, next=next)
       else
-        CineGuide(model=model, small=small, watch=watch, previous=previous, next=next)
+        column flex=1 min-height=0
+          CineGuide(model=model, small=small, still=still, watch=watch, chooseDay=chooseDay)
 
 component LiveControls
   props
