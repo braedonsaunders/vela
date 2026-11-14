@@ -1,5 +1,5 @@
 import { artworkURL } from '../discovery/artwork';
-import { msg, number, time } from '../../foundation/i18n';
+import { msg, number, time, withLocale } from '../../foundation/i18n';
 import type { Channel, GuideQuery, GuideResponse, Page, Programme } from '../../wire/v0/types';
 
 /** A single bounded guide window. Times remain the server's original timestamps. */
@@ -38,7 +38,7 @@ async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise
 }
 
 /** Fetch all pages for one window; incomplete pages are never presented as complete. */
-export async function loadGuide(api: GuideApi, from: string, until: string, now: number, origin?: string): Promise<GuideModel> {
+export async function loadGuide(api: GuideApi, from: string, until: string, now: number, origin?: string, localeJSON?: string): Promise<GuideModel> {
   const start = Date.parse(from), end = Date.parse(until);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 86400000)
     throw new Error('Invalid guide window');
@@ -60,6 +60,7 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
     if (!grouped.has(programme.channelId)) grouped.set(programme.channelId, []);
     grouped.get(programme.channelId)!.push(programme);
   }
+  return withLocale(localeJSON, () => {
   const label = (value: number) => time(value);
   const model: GuideModel = {
     from, until, fromLabel: label(start), untilLabel: label(end), nowOffset: Math.max(0, Math.min(100, (now - start) / (end - start) * 100)),
@@ -103,11 +104,12 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
     p.upId = vertical(row - 1); p.downId = vertical(row + 1);
   }));
   return model;
+  });
 }
 
-export async function liveIdentity(api: GuideApi, channelId: string, now: number) {
+export async function liveIdentity(api: GuideApi, channelId: string, now: number, localeJSON?: string) {
   const channel = (await allPages(cursor => api.channels(cursor, 100))).find(c => c.id === channelId);
-  if (!channel) return { title: msg('ui.liveTelevisionTitle') };
+  if (!channel) return withLocale(localeJSON, () => ({ title: msg('ui.liveTelevisionTitle') }));
   const programmes = await allPages(cursor => api.guide({ from: new Date(now).toISOString(), until: new Date(now + 60000).toISOString(), channelIds: [channelId], cursor, limit: 100 }));
   const current = programmes.find(p => Date.parse(p.start) <= now && now < Date.parse(p.end));
   return { title: current ? `${channel.name} · ${current.name}` : channel.name };

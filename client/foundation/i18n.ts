@@ -11,6 +11,13 @@ export function setLocale(json: string): void {
   current = value;
 }
 export function localeContext(): LocaleContext { return current; }
+/** A request projects synchronously under its own locale without changing the session locale. */
+export function withLocale<T>(json: string | undefined, run: () => T): T {
+  if (!json) return run();
+  const previous = current;
+  setLocale(json);
+  try { return run(); } finally { current = previous; }
+}
 export function msg(key: string, params: Record<string, string | number> = {}): string {
   const name = current.resolvedLocale.toLowerCase();
   const found = Object.keys(catalogs).find(k => k.toLowerCase() === name) ?? Object.keys(catalogs).find(k => k.toLowerCase() === name.split('-')[0]) ?? 'en';

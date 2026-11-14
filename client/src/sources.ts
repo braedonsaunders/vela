@@ -9,7 +9,7 @@ import { InteractionQueue } from './telemetry';
 import { sessionEvents } from './protocol/events';
 import { mediaPlan } from './protocol/media';
 import { playerPresentation } from '../player/presentation';
-import { setLocale, time } from '../foundation/i18n';
+import { setLocale, time, withLocale } from '../foundation/i18n';
 
 export function createAnswer(devOrigin: string, MOCK: boolean, version: string): Answer {
 let API = '';
@@ -79,14 +79,14 @@ const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '
 };
 let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, driftLabel: '', canCatchUp: false };
 const sources: Sources = {
-  uiLiveIdentity: async ([channelId, epoch], store) => liveIdentity(await session(store), channelId, epoch),
-  uiGuide: async ([epoch, window], store) => {
+  uiLiveIdentity: async ([channelId, epoch, localeJSON], store) => liveIdentity(await session(store), channelId, epoch, localeJSON),
+  uiGuide: async ([epoch, window, localeJSON], store) => {
     const start = Math.floor(epoch / 1800000) * 1800000 + window * 7200000;
-    return loadGuide(await session(store), new Date(start).toISOString(), new Date(start + 7200000).toISOString(), epoch, API);
+    return loadGuide(await session(store), new Date(start).toISOString(), new Date(start + 7200000).toISOString(), epoch, API, localeJSON);
   },
-  liveEvent: async ([json]) => {
+  liveEvent: async ([json, localeJSON]) => {
     const event = JSON.parse(json);
-    const next = liveStatus(event);
+    const next = withLocale(localeJSON, () => liveStatus(event));
     if (next) lastLive = next;
     return lastLive;
   },
@@ -110,11 +110,11 @@ const sources: Sources = {
       return authModel(store);
     } catch (error) { return authModel(store, error instanceof Error ? error.message : 'Sign in failed'); }
   },
-  startQuick: async (_args, store) => {
+  startQuick: async ([_epoch, localeJSON], store) => {
     const api = server(store);
     const grant = await api.quickConnect({ device, idempotencyKey: key(store) });
     activeQuick = grant.secret;
-    return { ...grant, expiresLabel: time(Date.parse(grant.expiresAt)), status: 'pending' };
+    return withLocale(localeJSON, () => ({ ...grant, expiresLabel: time(Date.parse(grant.expiresAt)), status: 'pending' }));
   },
   pollQuick: async ([secret], store) => {
     const api = server(store);
@@ -140,7 +140,7 @@ const sources: Sources = {
     if (activeQuick === secret) activeQuick = '';
     return { accepted: true };
   },
-  uiBootstrap: async ([at], store) => {
+  uiBootstrap: async ([at, localeJSON], store) => {
     const api = await session(store);
     const version = authVersion;
     if (!negotiation || negotiation.version !== version) {
@@ -154,11 +154,11 @@ const sources: Sources = {
     const bootstrap = await api.bootstrap();
     if (authVersion !== version) throw new Error('Session changed during bootstrap');
     features = bootstrap.capabilities.features;
-    return homeModel(bootstrap, API, at);
+    return withLocale(localeJSON, () => homeModel(bootstrap, API, at));
   },
-  uiCollection: async ([id], store) => {
+  uiCollection: async ([id, localeJSON], store) => {
     const data = await (await session(store)).collection(id);
-    return { name: data.collection.name, items: data.items.map(item => entry(item, API)) };
+    return withLocale(localeJSON, () => ({ name: data.collection.name, items: data.items.map(item => entry(item, API)) }));
   },
   cancelAISearch: async (_args, store) => {
     const previous = ai;
@@ -168,23 +168,23 @@ const sources: Sources = {
     // A start still in flight detects that it was superseded and cancels itself.
     return { accepted: true };
   },
-  uiRelated: async ([id], store) => {
+  uiRelated: async ([id, localeJSON], store) => {
     const data = await (await session(store)).rows({ placement: 'detail', titleId: id });
-    return data.items.map(row => feedRow(row, API));
+    return withLocale(localeJSON, () => data.items.map(row => feedRow(row, API)));
   },
-  uiDetail: async ([id], store) => detailModel(await (await session(store)).detail(id), API),
-  uiSearch: async ([query, generation, epoch], store) => {
+  uiDetail: async ([id, localeJSON], store) => { const detail = await (await session(store)).detail(id); return withLocale(localeJSON, () => detailModel(detail, API)); },
+  uiSearch: async ([query, generation, epoch, localeJSON], store) => {
     const api = await session(store);
     const result = await api.search({ query, generation, mode: 'fast', idempotencyKey: `search-${epoch}-${generation}` });
-    return { query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API)), descriptive: [], ai: [], aiStatus: 'unavailable' };
+    return withLocale(localeJSON, () => ({ query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API)), descriptive: [], ai: [], aiStatus: 'unavailable' }));
   },
-  uiDescriptive: async ([query, generation, epoch], store) => {
+  uiDescriptive: async ([query, generation, epoch, localeJSON], store) => {
     const api = await session(store);
     if (!features?.descriptiveSearch.available) return lane(query, generation);
     const result = await api.search({ query, generation, mode: 'descriptive', idempotencyKey: `descriptive-${epoch}-${generation}` });
-    return { ...lane(result.query, result.generation), items: result.items.map(t => card(t, '', API)) };
+    return withLocale(localeJSON, () => ({ ...lane(result.query, result.generation), items: result.items.map(t => card(t, '', API)) }));
   },
-  uiAI: async ([query, generation, epoch], store) => {
+  uiAI: async ([query, generation, epoch, localeJSON], store) => {
     const api = await session(store);
     if (!features?.aiSearch.available) return lane(query, generation);
     if (!ai || ai.epoch !== epoch || ai.generation !== generation || ai.query !== query) {
@@ -210,7 +210,8 @@ const sources: Sources = {
       if (ai === current) current.job = job;
     }
     if (!ai || ai.epoch !== epoch || ai.generation !== generation || !ai.job || ai.job.generation !== generation) return lane(query, generation);
-    return { ...lane(query, generation), items: (ai.job.results?.items ?? []).map(t => card(t, '', API)), aiStatus: ai.job.status };
+    const job = ai.job;
+    return withLocale(localeJSON, () => ({ ...lane(query, generation), items: (job.results?.items ?? []).map(t => card(t, '', API)), aiStatus: job.status }));
   },
   interaction: async ([receipt, kind, at], store) => {
     if (kind !== 'visible' && kind !== 'selected' && kind !== 'played') throw new Error('Invalid interaction');
@@ -234,7 +235,7 @@ const sources: Sources = {
     while (interactions?.size) await interactions.flush(key(store));
     return { accepted: true };
   },
-  uiPlayer: ([planJson, eventJson, replyJson, localeJSON]) => { setLocale(localeJSON); return playerPresentation(planJson, eventJson, replyJson, localeJSON); },
+  uiPlayer: ([planJson, eventJson, replyJson, localeJSON]) => withLocale(localeJSON, () => playerPresentation(planJson, eventJson, replyJson, localeJSON)),
   uiPlayerCommand: async ([json], store) => {
     let sessionId = '';
     try {
