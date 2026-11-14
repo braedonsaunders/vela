@@ -1,0 +1,12 @@
+{
+  "extends": "../../../vendor/webgpu-player/tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "types": ["../../../vendor/webgpu-player/node_modules/@webgpu/types", "../../../vendor/webgpu-player/node_modules/@types/node"],
+    "paths": {
+      "mediabunny": ["../../../vendor/webgpu-player/vendor/mediabunny"],
+      "webgpu-player/*": ["../../../vendor/webgpu-player/src/*"]
+    }
+  },
+  "include": ["runtime.ts", "source.ts", "audio/upstream.ts"]
+}

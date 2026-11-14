@@ -38,12 +38,11 @@ component PlayerChrome
     column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="jellytwin.ink-strong" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif"
       row padding=(small ? "10px 8px 48px" : "14px 20px 80px") gap=10 align-items="center" background-image="linear-gradient(180deg, var(--jellytwin.osd-top) 0%, transparent 100%)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 300ms ease") pointer-events=(shown ? "auto" : "none") inert=(not shown)
         button press=close aria-label=t("ui.closePlayer") class=IconBtn width=46 height=46
-          Icon(name="back", size=26)
+          Icon(name="symbol:back", size=26)
         text title font-size=(small ? 17 : 20) font-weight=500 line-clamp=1 flex=1 min-width=0 text-shadow="0px 1px 6px var(--jellytwin.shadow)"
       if failed
         column pointer-events="auto" align-self="center" align-items="center" text-align="center" gap=14 padding=(small ? "24px 20px" : "30px 36px") margin="0px 16px" max-width=440 box-sizing="border-box" class=Sheet role="alert" testId="player-status"
-          column color="jellytwin.danger"
-            Icon(name="alert", size=34)
+          image "symbol:alert" width=34 height=34 flex-shrink=0 color="jellytwin.danger" aria-hidden=true
           text t("ui.playbackInterrupted") font-size=21 font-weight=600
           if failure != ""
             text failure font-size=14 line-height=1.5 color="jellytwin.ink"
@@ -75,31 +74,31 @@ component PlayerChrome
           text model.remaining font-size=13 font-variant-numeric="tabular-nums" min-width=44 text-align="right"
         row align-items="center" gap=(small ? 0 : 2)
           button disabled=blocked press=command("seekBy", "-10") aria-label=t("ui.back10Seconds") class=IconBtn width=(small ? 42 : 48) height=(small ? 42 : 48)
-            Icon(name="rewind", size=(small ? 24 : 28))
+            Icon(name="symbol:icon.jelly-rewind", size=(small ? 24 : 28))
           button disabled=(model.state == "ended") press=command(model.playing ? "pause" : "play", "") aria-label=(model.state == "ended" ? t("ui.finished") : model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" class=IconBtn width=(small ? 48 : 56) height=(small ? 48 : 56)
-            Icon(name=(model.playing ? "pause" : "play"), size=(small ? 30 : 36))
+            Icon(name=(model.playing ? "symbol:pause-fill" : "symbol:play-fill"), size=(small ? 30 : 36))
           button disabled=(model.duration <= 0 or blocked) press=command("seekBy", "10") aria-label=t("ui.forward10Seconds") class=IconBtn width=(small ? 42 : 48) height=(small ? 42 : 48)
-            Icon(name="forward", size=(small ? 24 : 28))
+            Icon(name="symbol:icon.jelly-fastforward", size=(small ? 24 : 28))
           column flex=1 min-width=0
             if not small
               text (model.quality != "" ? t("ui.pathQuality", path=model.path, quality=model.quality) : model.path) testId="player-quality" font-size=12 color="jellytwin.secondary" padding-left=10 line-clamp=1
           if model.subtitles.length > 0
             button popovertarget="jt-subtitles" aria-label=t("ui.subtitles") testId="player-subtitles-button" class=IconBtn width=44 height=44 color=(model.subtitleId != "" ? "jellytwin.accent" : "jellytwin.ink-strong")
-              Icon(name="subtitles", size=24)
+              Icon(name="symbol:icon.jelly-subtitles", size=24)
           if model.audio.length > 1
             button popovertarget="jt-audio" aria-label=t("ui.audioTrack") testId="player-audio-button" class=IconBtn width=44 height=44
-              Icon(name="audio", size=22)
+              Icon(name="symbol:waveform", size=22)
           if hasSettings
             button popovertarget="jt-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" class=IconBtn width=44 height=44
-              Icon(name="settings", size=24)
+              Icon(name="symbol:settings", size=24)
           if model.pip and not small
             button press=command("pip", "") aria-label=t("ui.pictureInPicture") class=IconBtn width=44 height=44
-              Icon(name="pip", size=23)
+              Icon(name="symbol:icon.jelly-pip", size=23)
           if model.fullscreen
             button press=command("fullscreen", "") aria-label=t("ui.fullscreen") class=IconBtn width=44 height=44
-              Icon(name="fullscreen", size=23)
+              Icon(name="symbol:icon.jelly-fullscreen", size=23)
           button press=command("mute", "") aria-label=(model.muted ? t("ui.unmute") : t("ui.mute")) aria-pressed=model.muted testId="player-mute" class=IconBtn width=44 height=44
-            Icon(name=(model.muted or model.volume <= 0 ? "muted" : "volume"), size=23)
+            Icon(name=(model.muted or model.volume <= 0 ? "symbol:speaker-mute" : "symbol:speaker"), size=23)
           if not small
             column position="relative" width=96 height=24 justify-content="center" flex-shrink=0 margin-right=4
               column position="absolute" left=0 right=0 height=4 border-radius=2 background-color="jellytwin.track" overflow="hidden"
@@ -136,8 +135,7 @@ component PlayerChrome
             SheetTitle(label=t("ui.chapters"))
             for chapter in model.chapters key=chapter.id
               button press=seek(chapter.seconds) disabled=blocked class=MenuRow
-                column width=20 color="jellytwin.secondary"
-                  Icon(name="chapters", size=18)
+                image "symbol:list" width=18 height=18 flex-shrink=0 color="jellytwin.secondary" aria-hidden=true
                 text chapter.label line-clamp=1
           text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 color="jellytwin.secondary" padding="10px 16px 6px"
 
@@ -155,7 +153,5 @@ component TrackRow
     press: action
   view
     button press=press() disabled=disabled role="menuitemradio" aria-checked=on class=MenuRow color=(on ? "jellytwin.accent" : "jellytwin.ink-strong")
-      column width=20 align-items="center"
-        if on
-          Icon(name="check", size=18)
+      image "symbol:checkmark" width=18 height=18 flex-shrink=0 opacity=(on ? 1 : 0) aria-hidden=true
       text label line-clamp=1
