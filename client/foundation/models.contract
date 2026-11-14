@@ -46,11 +46,25 @@ shape HeroPreview
   url: string
   expiresAt: number
 
+shape HeroAction
+  heroId: string
+  reason: string
+  reasonLabel: string
+  action: string
+  targetId: string
+  targetKind: string
+  hasPosition: bool
+  positionSeconds: number
+  actionLabel: string
+  actionDetail: string
+  progress: number
+
 shape HomeModel
   viewer: string
   defaultSkinId: string
   skins: string[]
   hero: Card[]
+  heroActions: HeroAction[]
   heroPreviewIds: string[]
   previews: HeroPreview[]
   rows: FeedRow[]

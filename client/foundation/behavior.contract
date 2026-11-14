@@ -346,7 +346,7 @@ members Client
   resource related = uiRelated(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape FeedRow[] else empty()
   derive detailSurface = DetailModel(detail, related=(current(related) ? related : []))
   derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" ? top(nav).params.id : "")
-  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero, `${top(nav).id}`) when auth.authenticated and playingId != "" as shape PlaybackModel transient
+  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero, `${top(nav).id}`, searchParam(top(nav), "position")) when auth.authenticated and playingId != "" as shape PlaybackModel transient
   state streamAttempt = 0
   resource sessionUpdate = sessionEvents(playback.sessionId, streamAttempt) when auth.authenticated and playingId != "" and playback.sessionId != "" as shape PlaybackModel
   derive currentPlan = (current(sessionUpdate) and sessionUpdate.sessionId == playback.sessionId and sessionUpdate.planJson != "" ? sessionUpdate.planJson : playback.planJson)
@@ -427,6 +427,9 @@ members Client
   action play(id: string)
     streamAttempt = 0
     nav = push(nav, path("watch", id))
+  action playHero(id: string, position: number, hasPosition: bool)
+    streamAttempt = 0
+    nav = push(nav, path("watch", id) + (hasPosition ? `?position=${position}` : ""))
   action playExtra(id: string)
     streamAttempt = 0
     nav = push(nav, path("extra", id))

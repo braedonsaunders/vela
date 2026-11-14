@@ -29,7 +29,7 @@ export function feedRow(row: Row, origin?: string, artWidth = 2560) {
   return { id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin, artWidth)), nextCursor: row.nextCursor ?? '', continuation: row.continuation, previewOnFocus: row.previewOnFocus ?? false };
 }
 export function homeModel(data: Bootstrap, origin?: string, now?: number, artWidth = 2560) {
-  const heroes = (data.heroes ?? []).slice(0, 5);
+  const heroes = (data.heroes ?? []).slice(0, 6);
   const previews: { id: string; url: string; expiresAt: number }[] = [];
   for (const hero of heroes) {
     const cached = hero.trailer?.cachedPlayback;
@@ -42,7 +42,21 @@ export function homeModel(data: Bootstrap, origin?: string, now?: number, artWid
     } catch { /* Invalid grant: leave preview unavailable. */ }
   }
   return { viewer: data.viewer.name, defaultSkinId: data.defaultSkinId, skins: data.capabilities.skins.map(s => s.id),
-    hero: heroes.map(hero => card(hero.title, hero.receiptToken, origin, artWidth)), heroPreviewIds: heroes.filter(hero => hero.previewOnFocus === true).map(hero => hero.title.id), previews,
+    hero: heroes.map(hero => card(hero.title, hero.receiptToken, origin, artWidth)),
+    heroActions: heroes.map(hero => {
+      const { title, action, reason } = hero;
+      const sameTarget = action.titleId === title.id;
+      const position = action.kind === 'resume' && sameTarget ? action.positionSeconds : undefined;
+      const remaining = position !== undefined && title.durationSeconds !== undefined && title.durationSeconds > position && position >= 0 ? title.durationSeconds - position : undefined;
+      const episode = sameTarget && title.kind === 'episode' && title.seasonNumber !== undefined && title.episodeNumber !== undefined;
+      const actionLabel = episode && action.kind !== 'details'
+        ? msg(`hero.action.${action.kind === 'resume' ? 'resumeEpisode' : 'playEpisode'}`, { season: number(title.seasonNumber!, { useGrouping: false }), episode: number(title.episodeNumber!, { useGrouping: false }) })
+        : msg(`hero.action.${action.kind}`);
+      return { heroId: title.id, reason, reasonLabel: hero.label || msg(`hero.reason.${reason}`), action: action.kind,
+        targetId: action.titleId, targetKind: sameTarget ? title.kind : reason === 'nextEpisode' ? 'episode' : '', hasPosition: action.positionSeconds !== undefined, positionSeconds: action.positionSeconds ?? 0, actionLabel,
+        actionDetail: remaining !== undefined ? msg('hero.detail.remaining', { time: minute(Math.ceil(remaining / 60)) }) : '',
+        progress: position !== undefined && title.durationSeconds && title.durationSeconds > 0 ? Math.min(1, Math.max(0, position / title.durationSeconds)) : 0 };
+    }), heroPreviewIds: heroes.filter(hero => hero.previewOnFocus === true).map(hero => hero.title.id), previews,
     rows: data.rows.map(row => feedRow(row, origin, artWidth)), nextCursor: data.nextCursor ?? '',
     liveAvailable: data.capabilities.features.liveTV.available, aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available, trailerPreviewAvailable: data.capabilities.features.trailerPreview?.available ?? false };
 }

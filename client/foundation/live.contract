@@ -83,7 +83,7 @@ members Client
   derive tileTarget = (tileChannel != "" ? tileChannel : match first(tileCandidates.slice(tileAttempt, tileAttempt + 1)) { case some(id) => id, case none => "" })
   derive tileAllowed = tileManual or (not still and not saveData)
   derive tileWanted = auth.authenticated and guideOpen and page.visibilityState == "visible" and guideReady and tileAllowed and tileTarget != "" and pendingWatch == "" and not tileGivenUp
-  resource tilePlayback = uiPlayback(tileTarget, "channel", time.epochAtZero, `tile-${tileGen}`) when tileWanted as shape PlaybackModel transient
+  resource tilePlayback = uiPlayback(tileTarget, "channel", time.epochAtZero, `tile-${tileGen}`, "") when tileWanted as shape PlaybackModel transient
   derive tilePlan = (tileWanted and current(tilePlayback) ? tilePlayback.planJson : "")
   resource tileModel = uiPlayer(tilePlan, tileEvent, "", localeJSON) when tilePlan != "" as shape PlayerView
   derive tileFailed = tileWanted and (failed(tilePlayback) or (tilePlan != "" and current(tileModel) and tileModel.state == "failed"))
