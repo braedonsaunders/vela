@@ -723,7 +723,7 @@ function randomId() {
 // client/player/engine.ts
 class PlaybackEngine {
   video;
-  emit;
+  deliver;
   fullscreenContainer;
   controller = new SessionController;
   session;
@@ -749,18 +749,38 @@ class PlaybackEngine {
   manualQuality = null;
   track;
   lastObservation = 0;
-  constructor(video, emit, fullscreenContainer = video) {
+  constructor(video, deliver, fullscreenContainer = video) {
     this.video = video;
-    this.emit = emit;
+    this.deliver = deliver;
     this.fullscreenContainer = fullscreenContainer;
     video.crossOrigin = "anonymous";
     video.playsInline = true;
     video.controls = false;
     video.preload = "auto";
+    this.timer = setInterval(() => this.publish(), 1000);
+  }
+  emit(event) {
+    this.deliver(event.type === "error" ? {
+      ...event,
+      sessionId: this.session?.id ?? null,
+      sourceGeneration: this.controller.source,
+      seekGeneration: this.controller.seek
+    } : event);
+  }
+  detachMedia() {
+    for (const remove of this.listeners)
+      remove();
+    this.listeners = [];
+  }
+  bindMedia(token) {
+    const { video } = this;
+    this.detachMedia();
     for (const [name, handler] of Object.entries({
       playing: () => {
-        this.status = "playing";
-        this.failure = null;
+        if (!this.video.paused && !this.video.error && this.video.readyState >= 3) {
+          this.status = "playing";
+          this.failure = null;
+        }
       },
       pause: () => {
         if (!["loading", "recovering", "failed", "ended"].includes(this.status))
@@ -782,13 +802,18 @@ class PlaybackEngine {
       }
     })) {
       const listener = () => {
+        if (!this.controller.current(token) || ["failed", "ended"].includes(this.status))
+          return;
+        const previous = this.status;
+        const failure = this.failure;
         handler();
+        if (previous !== this.status || failure !== this.failure)
+          this.lastObservation = -Infinity;
         this.publish();
       };
       video.addEventListener(name, listener);
       this.listeners.push(() => video.removeEventListener(name, listener));
     }
-    this.timer = setInterval(() => this.publish(), 1000);
   }
   get observationAllowed() {
     return this.session?.serverState !== "ended";
@@ -807,6 +832,7 @@ class PlaybackEngine {
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: (this.session?.audioTracks.length ?? 0) > 1 && !!this.session?.audioTracks.every((t) => !!this.nativeAudio(t.id)) },
       lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
+      preparation: ["loading", "buffering"].includes(this.status) && (quality?.totalVideoFrames ?? 0) === 0 ? this.video.readyState < 1 ? "media-metadata" : this.video.paused ? "starting" : "initial-buffer" : null,
       position: this.terminalMedia?.position ?? (Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0),
       duration: this.terminalMedia?.duration ?? (Number.isFinite(this.video.duration) ? this.video.duration : null),
       playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: ranges.start(i), end: ranges.end(i) })),
@@ -972,6 +998,7 @@ class PlaybackEngine {
     if (this.status === "ended" && this.terminalMedia)
       return;
     this.terminalMedia = { position: position ?? this.video.currentTime, duration: Number.isFinite(this.video.duration) ? this.video.duration : null };
+    this.detachMedia();
     this.status = "ended";
     this.failure = null;
     this.wantsPlay = false;
@@ -1006,9 +1033,11 @@ class PlaybackEngine {
     const token = this.controller.changeSource(!initial);
     this.resetMedia();
     this.source = source;
+    this.bindMedia(token);
     this.attempted.add(source.id);
     this.status = recovery ? "recovering" : "loading";
     this.failure = null;
+    this.lastObservation = -Infinity;
     this.publish();
     try {
       if (source.delivery === "hls" && !this.useNativeHls(source)) {
@@ -1033,7 +1062,7 @@ class PlaybackEngine {
         this.video.currentTime = position;
       this.applySubtitle();
       this.applyNativeAudio();
-      this.status = this.video.paused ? "paused" : this.video.readyState >= 3 ? "playing" : "buffering";
+      this.status = this.wantsPlay ? "loading" : "paused";
       if (this.wantsPlay)
         await this.play();
       this.publish();
@@ -1104,12 +1133,16 @@ class PlaybackEngine {
     } });
   }
   fail(failure) {
-    this.controller.cancel();
-    this.pipeline?.dispose();
-    this.video.pause();
+    const position = this.video.currentTime;
+    const duration = Number.isFinite(this.video.duration) ? this.video.duration : null;
     this.failure = failure;
     this.status = "failed";
+    this.controller.cancel();
+    this.detachMedia();
+    this.resetMedia();
+    this.terminalMedia = { position, duration };
     this.emit({ type: "error", failure });
+    this.lastObservation = -Infinity;
     this.publish();
   }
   async recover(error, token) {
@@ -1118,14 +1151,22 @@ class PlaybackEngine {
     this.recovering = true;
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError" ? "network" : "source";
     const position = this.video.currentTime || this.resumePosition;
+    const failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
     this.status = "recovering";
-    this.failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
+    this.failure = failure;
     this.publish();
     try {
       await delay(300, token.signal);
+      if (!this.video.error && this.video.readyState >= 3 && (!this.video.paused || !this.wantsPlay)) {
+        this.status = this.video.paused ? "paused" : "playing";
+        this.failure = null;
+        this.lastObservation = -Infinity;
+        this.publish();
+        return;
+      }
       const source = this.candidates().find((s) => !this.attempted.has(s.id) && s.recoveryAllowed !== false && s.timeline === this.source?.timeline && s.edition === this.source?.edition && (!this.audio || s.audioTrackId === this.audio));
       if (!source) {
-        this.fail({ ...this.failure, recoverable: false });
+        this.fail({ ...failure, recoverable: false });
         return;
       }
       this.recovering = false;
@@ -1145,12 +1186,18 @@ class PlaybackEngine {
     try {
       await this.video.play();
       if (this.controller.current(token)) {
+        if (["failed", "ended"].includes(this.status) || this.video.error)
+          return;
         this.status = "playing";
+        this.failure = null;
+        this.lastObservation = -Infinity;
         this.publish();
       }
     } catch (e) {
       if (!this.controller.current(token))
         return;
+      this.status = "paused";
+      this.publish();
       this.emit({ type: "error", failure: { kind: "action", message: e instanceof Error ? e.message : String(e), recoverable: true } });
     }
   }

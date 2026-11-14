@@ -34,9 +34,10 @@ export interface Snapshot {
   backend: 'file' | 'native-hls' | 'mse' | null; renditionId: string | null;
   capabilities: { pip: boolean; fullscreen: boolean; audioSwitch: boolean }; lockedQuality: string | null;
   live: LiveSnapshot | null;
+  preparation: 'media-metadata' | 'initial-buffer' | 'starting' | null;
   position: number; duration: number | null; playable: { start: number; end: number }[];
   throughputBps: number | null; droppedFrames: number | null; totalFrames: number | null;
   audioTrackId: string | null; subtitleTrackId: string | null; failure: Failure | null;
 }
 export type EngineEvent = { type: 'snapshot'; snapshot: Snapshot } |
-  { type: 'error'; failure: Failure } | { type: 'session-command'; sessionId: string; command: SessionCommand };
+  { type: 'error'; failure: Failure; sessionId?: string | null; sourceGeneration?: number; seekGeneration?: number } | { type: 'session-command'; sessionId: string; command: SessionCommand };

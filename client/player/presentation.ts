@@ -10,14 +10,17 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
   const reply = (replyJson ? JSON.parse(replyJson) : null) as PlaybackPlan | null;
   if (reply && (!plan || reply.sessionId === plan.sessionId && reply.revision > plan.revision)) plan = reply;
   const event = eventJson ? JSON.parse(eventJson) : null;
-  if (plan && event?.type === 'snapshot' && event.snapshot.sessionId === plan.sessionId) {
+  const currentGeneration = (value: { sourceGeneration?: number; seekGeneration?: number }) => !!plan && value.sourceGeneration === plan.sourceGeneration && value.seekGeneration === plan.seekGeneration;
+  const errorKey = plan ? `${plan.sessionId}:${plan.sourceGeneration}:${plan.seekGeneration}` : '';
+  if (plan && event?.type === 'snapshot' && event.snapshot.sessionId === plan.sessionId && currentGeneration(event.snapshot)) {
     snapshots.set(plan.sessionId, event.snapshot);
-    if (!event.snapshot.failure) errors.delete(plan.sessionId);
+    if (!event.snapshot.failure) errors.delete(errorKey);
   }
-  if (plan && event?.type === 'error') errors.set(plan.sessionId, event.failure.message);
+  if (plan && event?.type === 'error' && event.sessionId === plan.sessionId && currentGeneration(event)) errors.set(errorKey, event.failure.message);
   if (snapshots.size > 8) snapshots.delete(snapshots.keys().next().value!);
   if (errors.size > 8) errors.delete(errors.keys().next().value!);
-  const snapshot = plan ? snapshots.get(plan.sessionId) : undefined;
+  const cached = plan ? snapshots.get(plan.sessionId) : undefined;
+  const snapshot = cached && currentGeneration(cached) ? cached : undefined;
   const position = snapshot?.position ?? plan?.positionSeconds ?? 0;
   const duration = snapshot?.duration ?? plan?.durationSeconds ?? 0;
   const path = plan?.paths.find(p => p.id === (snapshot?.sourceId ?? plan.selectedPathId));
@@ -32,10 +35,11 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
     planJson: plan ? JSON.stringify(plan) : "",
     stopCommandJson: plan && plan.state !== 'ended' ? JSON.stringify({ type: 'session-command', sessionId: plan.sessionId,
       command: { kind: 'stop', sourceGeneration, seekGeneration, idempotencyKey: `stop-${plan.sessionId}-${sourceGeneration}-${seekGeneration}` } }) : '',
+    preparation: snapshot?.preparation ? msg(`data.preparation.${snapshot.preparation}`) : !snapshot ? msg('data.preparation.media-metadata') : '',
     ready: !!snapshot && !['idle','loading'].includes(state), state, playing: state === 'playing', position, duration,
     elapsed: clock(position), remaining: duration > 0 ? clock(Math.max(0, duration - position)) : msg('data.live'),
     progress: duration > 0 ? Math.min(100, position / duration * 100) : 0,
-    reason: snapshot?.failure?.message ?? '', actionError: plan ? errors.get(plan.sessionId) ?? '' : '',
+    reason: snapshot?.failure?.message ?? '', actionError: plan ? errors.get(errorKey) ?? '' : '',
     path: snapshot?.strategy || path?.kind ? msg(`data.${snapshot?.strategy ?? path?.kind}`) : '', backend: snapshot?.backend ?? '',
     quality: quality ? `${number(quality.height, {useGrouping:false})}p` : path?.kind === 'direct' ? msg('data.original') : snapshot?.backend === 'native-hls' ? msg('data.browserManaged') : msg('data.starting'),
     lockedQuality: snapshot?.lockedQuality ?? '',

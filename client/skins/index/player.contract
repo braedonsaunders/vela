@@ -46,6 +46,8 @@ component PlayerChrome
       if model.state == "loading" or model.state == "buffering" or model.state == "recovering" or model.state == "failed" or serverError != ""
         column align-self="center" max-width="28rem" padding=24 gap=14 background-color="surface.glass" role="status" testId="player-status"
           text (model.state == "failed" or serverError != "" ? t("ui.playbackInterrupted") : model.state == "loading" ? t("ui.preparingPlayback") : model.state == "recovering" ? t("ui.recoveringPlayback") : t("ui.buffering")) font-size=26
+          if model.preparation != "" and (model.state == "loading" or model.state == "buffering")
+            text model.preparation font-size=13 role="status"
           if failure != ""
             text failure font-size=14 line-height=1.5
           if model.state == "failed" or serverError != ""

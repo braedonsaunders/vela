@@ -20,10 +20,20 @@ export class PlaybackEngine {
   private localTransportIntent: 'playing' | 'paused' | undefined;
   private wantsPlay = false; private lowDelay = false; private manualQuality: string | null = null;
   private track?: HTMLTrackElement; private lastObservation = 0;
-  constructor(readonly video: ExtendedVideo, private emit: (event: EngineEvent) => void, private fullscreenContainer: HTMLElement = video) {
+  constructor(readonly video: ExtendedVideo, private deliver: (event: EngineEvent) => void, private fullscreenContainer: HTMLElement = video) {
     video.crossOrigin = 'anonymous'; video.playsInline = true; video.controls = false; video.preload = 'auto';
+    this.timer = setInterval(() => this.publish(), 1000);
+  }
+  private emit(event: EngineEvent) {
+    this.deliver(event.type === 'error' ? { ...event, sessionId: this.session?.id ?? null,
+      sourceGeneration: this.controller.source, seekGeneration: this.controller.seek } : event);
+  }
+  private detachMedia() { for (const remove of this.listeners) remove(); this.listeners = []; }
+  private bindMedia(token: Generation) {
+    const { video } = this;
+    this.detachMedia();
     for (const [name, handler] of Object.entries({
-      playing: () => { this.status = 'playing'; this.failure = null; },
+      playing: () => { if (!this.video.paused && !this.video.error && this.video.readyState >= 3) { this.status = 'playing'; this.failure = null; } },
       pause: () => { if (!['loading', 'recovering', 'failed', 'ended'].includes(this.status)) this.status = 'paused'; },
       waiting: () => { if (!['recovering','ended','failed'].includes(this.status)) this.status = 'buffering'; },
       ended: () => { this.endPlayback(); },
@@ -31,10 +41,9 @@ export class PlaybackEngine {
         const kind = e.code === 2 ? 'network' : e.code === 3 ? 'decoder' : 'source';
         void this.recover(new PlaybackFault(e.message || `Media error ${e.code}`, kind), this.controller.token()); },
     })) {
-      const listener = () => { handler(); this.publish(); };
+      const listener = () => { if (!this.controller.current(token) || ['failed','ended'].includes(this.status)) return; const previous = this.status; const failure = this.failure; handler(); if (previous !== this.status || failure !== this.failure) this.lastObservation = -Infinity; this.publish(); };
       video.addEventListener(name, listener); this.listeners.push(() => video.removeEventListener(name, listener));
     }
-    this.timer = setInterval(() => this.publish(), 1000);
   }
   get observationAllowed() { return this.session?.serverState !== 'ended'; }
   snapshot(): Snapshot {
@@ -45,6 +54,8 @@ export class PlaybackEngine {
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? null,
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: (this.session?.audioTracks.length ?? 0) > 1 && !!this.session?.audioTracks.every(t => !!this.nativeAudio(t.id)) }, lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
+      preparation: ['loading','buffering'].includes(this.status) && (quality?.totalVideoFrames ?? 0) === 0
+        ? this.video.readyState < 1 ? 'media-metadata' : this.video.paused ? 'starting' : 'initial-buffer' : null,
       position: this.terminalMedia?.position ?? (Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0),
       duration: this.terminalMedia?.duration ?? (Number.isFinite(this.video.duration) ? this.video.duration : null),
       playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: ranges.start(i), end: ranges.end(i) })),
@@ -155,7 +166,7 @@ export class PlaybackEngine {
   private endPlayback(position?: number) {
     if (this.status === 'ended' && this.terminalMedia) return;
     this.terminalMedia = { position: position ?? this.video.currentTime, duration: Number.isFinite(this.video.duration) ? this.video.duration : null };
-    this.status = 'ended'; this.failure = null; this.wantsPlay = false; this.localTransportIntent = undefined;
+    this.detachMedia(); this.status = 'ended'; this.failure = null; this.wantsPlay = false; this.localTransportIntent = undefined;
     this.controller.cancel(); this.pipeline?.dispose(); this.pipeline = undefined; this.track?.remove(); this.track = undefined;
     if (this.timer) clearInterval(this.timer); this.timer = undefined;
     this.video.pause(); this.video.removeAttribute('src'); this.video.load();
@@ -169,7 +180,8 @@ export class PlaybackEngine {
   private async activate(source: Source, position: number, recovery = false, initial = false) {
     this.resumePosition = position;
     const token = this.controller.changeSource(!initial); this.resetMedia(); this.source = source;
-    this.attempted.add(source.id); this.status = recovery ? 'recovering' : 'loading'; this.failure = null;
+    this.bindMedia(token);
+    this.attempted.add(source.id); this.status = recovery ? 'recovering' : 'loading'; this.failure = null; this.lastObservation = -Infinity;
     this.publish();
     try {
       if (source.delivery === 'hls' && !this.useNativeHls(source)) {
@@ -185,7 +197,7 @@ export class PlaybackEngine {
       cancelled(token.signal);
       if (this.backend !== 'mse' && position > 0) this.video.currentTime = position;
       this.applySubtitle(); this.applyNativeAudio();
-      this.status = this.video.paused ? 'paused' : this.video.readyState >= 3 ? 'playing' : 'buffering';
+      this.status = this.wantsPlay ? 'loading' : 'paused';
       if (this.wantsPlay) await this.play();
       this.publish();
     } catch (e) { if (this.controller.current(token)) await this.recover(e, token); }
@@ -213,18 +225,21 @@ export class PlaybackEngine {
     this.emit({ type: 'session-command', sessionId: this.session!.id, command: { kind: 'switch', pathId: source.id, atSeconds: boundary,
       sourceGeneration: this.controller.source, seekGeneration: this.controller.seek, idempotencyKey: randomId() } });
   }
-  private fail(failure: Failure) { this.controller.cancel(); this.pipeline?.dispose(); this.video.pause(); this.failure = failure; this.status = 'failed'; this.emit({ type: 'error', failure }); this.publish(); }
+  private fail(failure: Failure) { const position = this.video.currentTime; const duration = Number.isFinite(this.video.duration) ? this.video.duration : null; this.failure = failure; this.status = 'failed'; this.controller.cancel(); this.detachMedia(); this.resetMedia(); this.terminalMedia = { position, duration }; this.emit({ type: 'error', failure }); this.lastObservation = -Infinity; this.publish(); }
   private async recover(error: unknown, token: Generation) {
     if (!this.controller.current(token) || this.recovering) return;
     this.recovering = true;
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === 'TimeoutError' ? 'network' : 'source';
     const position = this.video.currentTime || this.resumePosition;
-    this.status = 'recovering'; this.failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true }; this.publish();
+    const failure: Failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
+    this.status = 'recovering'; this.failure = failure; this.publish();
     try {
       // Requests already retry twice; source handoff is bounded by plan length.
       await delay(300, token.signal);
+      // A delayed recovery must not fail media that has since genuinely resumed.
+      if (!this.video.error && this.video.readyState >= 3 && (!this.video.paused || !this.wantsPlay)) { this.status = this.video.paused ? 'paused' : 'playing'; this.failure = null; this.lastObservation = -Infinity; this.publish(); return; }
       const source = this.candidates().find(s => !this.attempted.has(s.id) && s.recoveryAllowed !== false && s.timeline === this.source?.timeline && s.edition === this.source?.edition && (!this.audio || s.audioTrackId === this.audio));
-      if (!source) { this.fail({ ...this.failure!, recoverable: false }); return; }
+      if (!source) { this.fail({ ...failure, recoverable: false }); return; }
       // Release the guard before activation so a failed replacement can advance again.
       this.recovering = false;
       if (this.session?.serverControlled) this.requestSwitch(source, position, true);
@@ -234,8 +249,8 @@ export class PlaybackEngine {
   }
   private async play() {
     const token = this.controller.token();
-    try { await this.video.play(); if (this.controller.current(token)) { this.status = 'playing'; this.publish(); } }
-    catch (e) { if (!this.controller.current(token)) return; this.emit({ type: 'error', failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true } }); }
+    try { await this.video.play(); if (this.controller.current(token)) { if (['failed','ended'].includes(this.status) || this.video.error) return; this.status = 'playing'; this.failure = null; this.lastObservation = -Infinity; this.publish(); } }
+    catch (e) { if (!this.controller.current(token)) return; this.status = 'paused'; this.publish(); this.emit({ type: 'error', failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true } }); }
   }
   private nativeAudio(id: string): NativeAudioTrack | undefined {
     const tracks = Array.from(this.video.audioTracks ?? []);

@@ -13,6 +13,7 @@ shape PlayerBuffer
 shape PlayerView
   planJson: string
   stopCommandJson: string
+  preparation: string
   ready: bool
   state: string
   playing: bool

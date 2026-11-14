@@ -200,5 +200,9 @@
   "data.direct": "Original direct",
   "data.remux": "Remux",
   "data.transcode": "Adaptive transcode",
-  "ui.finished": "Finished"
+  "ui.finished": "Finished",
+  "data.preparation.media-metadata": "Waiting for media metadata…",
+  "data.preparation.initial-buffer": "Buffering initial media…",
+  "data.preparation.starting": "Starting playback…",
+  "ui.requestingPlaybackSession": "Requesting playback session…"
 }

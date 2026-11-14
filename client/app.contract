@@ -94,7 +94,7 @@ component Client
                   text t("ui.backToTitle")
             else
               if not current(playback)
-                text t("ui.preparingPlayback") role="status" margin="auto"
+                text t("ui.requestingPlaybackSession") role="status" margin="auto"
               else
                 vela-player plan=(watchModel.planJson != "" ? watchModel.planJson : currentPlan) playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%"
                 PlayerChrome(skin=activeSkin, model=watchModel, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : t("ui.liveTelevisionTitle")) : watchTitle), busy=pending(watchAuthorized), visible=watchChromeVisible, small=small, still=still, serverError=watchReply.error, command=watchControl, seek=watchSeek, editing=editWatch, close=closeWatch)
