@@ -22,10 +22,11 @@ members Client
     lowDelay = false
     nav = push(nav, path("liveWatch", id))
   action toggleLowDelay
-    lowDelay = not lowDelay
+    let enabled = not lowDelay
+    lowDelay = enabled
     let next = watchCommandId + 1
     watchCommandId = next
-    watchCommandJson = `{"id":${next},"type":"lowDelay","enabled":${lowDelay}}`
+    watchCommandJson = `{"id":${next},"type":"lowDelay","enabled":${enabled}}`
   action catchUpLive
     watchControl("catchUp", "")
   action liveWatchMessage(json: string)

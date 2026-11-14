@@ -32,7 +32,7 @@ component Guide
         if target != ""
           focus(target)
   view
-    column gap=20 padding="36px 5% 64px" background-image="radial-gradient(ellipse at 85% 0%, #77533525, transparent 65%)"
+    column gap=20 padding="36px 5% 64px" background-image="radial-gradient(ellipse at 85% 0%, var(--cinematic.guide-aura), transparent 65%)"
       text t("ui.liveTelevision") color="brand.warm" font-size=11 letter-spacing="3px"
       text t("ui.channelGuide") role="heading" aria-level=1 font-size=(small ? 36 : 52) font-weight=550 letter-spacing="-1px"
       row gap=12 align-items="center"
@@ -43,7 +43,7 @@ component Guide
       text t("ui.startEnd", start=model.fromLabel, end=model.untilLabel) color="ink.secondary" font-size=13
       for channel in model.channels.filter(c => c.id == selectedChannel) key=`sheet-${channel.id}`
         for programme in channel.programmes.filter(p => p.id == selectedProgramme) key=programme.id
-          column id="programme-sheet" tabindex=-1 key=sheetKey role="region" aria-label=programme.name gap=12 padding=24 border="1px solid var(--surface.line)" border-radius=16 background-color="surface.raised" max-width=560
+          column id="programme-sheet" tabindex=-1 key=sheetKey role="region" aria-label=programme.name gap=12 padding=24 border="1px solid var(--surface.line)" border-radius=16 background-color="surface.raised" max-width="35rem"
             row gap=12 align-items="center"
               column gap=6 flex=1
                 text channel.name font-size=12 color="brand.warm"
@@ -95,7 +95,7 @@ component Guide
                     text channel.number color="ink.quiet" font-size=11
               column flex=1 min-width=0 position="relative" background-color="surface.raised"
                 for programme in channel.programmes key=programme.id
-                  button id=`guide-${programme.id}` key=move(channel.id, programme.airing, programme.leftId, programme.rightId, programme.upId, programme.downId) press=selectProgramme(channel.id, programme.id) aria-label=t("ui.programmeStartToEndChannelProgrammeDetails", programme=programme.name, start=programme.startLabel, end=programme.endLabel, channel=channel.name) position="absolute" left=`${programme.offset}%` width=`${programme.width}%` height="100%" box-sizing="border-box" padding=14 border="1px solid var(--surface.line)" background-color=(programme.airing ? "#b78c6330" : "surface.raised") opacity=(programme.ended ? 0.45 : 1) color="ink.primary" text-align="left" overflow="hidden" border-radius=6
+                  button id=`guide-${programme.id}` key=move(channel.id, programme.airing, programme.leftId, programme.rightId, programme.upId, programme.downId) press=selectProgramme(channel.id, programme.id) aria-label=t("ui.programmeStartToEndChannelProgrammeDetails", programme=programme.name, start=programme.startLabel, end=programme.endLabel, channel=channel.name) position="absolute" left=`${programme.offset}%` width=`${programme.width}%` height="100%" box-sizing="border-box" padding=14 border="1px solid var(--surface.line)" background-color=(programme.airing ? "cinematic.guide-airing" : "surface.raised") opacity=(programme.ended ? 0.45 : 1) color="ink.primary" text-align="left" overflow="hidden" border-radius=6
                     column gap=4
                       text programme.name font-weight=600 line-clamp=1
                       text t("ui.startEnd", start=programme.startLabel, end=programme.endLabel) font-size=11 color="ink.secondary"

@@ -61,7 +61,7 @@ component Client
                   else
                     Guide(skin=activeSkin, model=guide, small=small, watch=watchChannel, previous=earlierGuide, next=laterGuide)
         if e.name == "title"
-          column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=skinDetailPresentation(activeSkin, viewport.width) navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 box-sizing="border-box" padding=(indexSkin or small ? "0px" : "5vh 5vw") background-color=(indexSkin ? pageColor : "#000000bf") color=inkColor
+          column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=skinDetailPresentation(activeSkin, viewport.width) navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 box-sizing="border-box" padding=(indexSkin or small ? "0px" : "5vh 5vw") background-color=(indexSkin ? pageColor : "media.overlay") color=inkColor
             column position="relative" flex=1 min-height=0 overflow="hidden" border-radius=(indexSkin or small ? 0 : 24) background-color=pageColor
               button id="back" press=close aria-label=t("ui.closeTitle") testId="detail-close" position="absolute" top=18 right=20 z-index=10 box-sizing="border-box" width=44 height=44 border="1px solid var(--surface.line)" border-radius=22 padding=12 background-color="surface.glass" color="ink.primary"
                 image "symbol:close"
@@ -86,7 +86,7 @@ component Client
                 else
                   Row(skin=activeSkin, row=FeedRow(id=e.params.id, name=collection.name, receipt="", items=collection.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if e.name == "watch" or e.name == "extra" or e.name == "liveWatch"
-          column navigationKey=`${e.id}` navigationPresentation="fullscreen" id="watch-stage" testId="watch-stage" key=watchKey pointermove=touchWatch pointerdown=touchWatch position="absolute" inset=0 background-color="#000000" color="ink.primary" tabindex=0
+          column navigationKey=`${e.id}` navigationPresentation="fullscreen" id="watch-stage" testId="watch-stage" key=watchKey pointermove=touchWatch pointerdown=touchWatch position="absolute" inset=0 background-color="media.ground" color="ink.primary" tabindex=0
             if failed(playback)
               column margin="auto" padding=32 gap=16
                 text t("ui.playbackCouldnTBeStarted") role="alert"

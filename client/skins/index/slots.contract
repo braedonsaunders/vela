@@ -18,27 +18,27 @@ component Navigation
     library: action
     small: bool
   view
-    row role="navigation" aria-label=t("ui.mainNavigation") flex-wrap="wrap" gap=12 align-items="center" padding=(small ? 12 : 20) background-color="#e3dfd3"
+    row role="navigation" aria-label=t("ui.mainNavigation") flex-wrap="wrap" gap=12 align-items="center" padding=(small ? 12 : 20) background-color="index.rail"
       text t("ui.velaIndex") font-size=16 font-weight=700
-      button press=home background-color="transparent" color="#22221e" border="none" padding=4
+      button press=home background-color="transparent" color="index.ink" border="none" padding=4
         text t("ui.home")
-      button press=search background-color="transparent" color="#22221e" border="none" padding=4
+      button press=search background-color="transparent" color="index.ink" border="none" padding=4
         text t("ui.search")
       if canLive
-        button press=live background-color="transparent" color="#22221e" border="none" padding=4
+        button press=live background-color="transparent" color="index.ink" border="none" padding=4
           text t("ui.live")
       if canLibrary
-        button press=library background-color="transparent" color="#22221e" border="none" padding=4
+        button press=library background-color="transparent" color="index.ink" border="none" padding=4
           text t("ui.library")
       if skins.length > 1
-        select max-width="100%" min-width=0 value=skin change=chooseSkin aria-label=t("ui.appearance") testId="skin-picker" background-color="#ffffff" color="#22221e" padding=8
+        select max-width="100%" min-width=0 value=skin change=chooseSkin aria-label=t("ui.appearance") testId="skin-picker" background-color="index.field" color="index.ink" padding=8
           for name in skins key=name
             option value=name
               text skinLabel(name)
       vela-install pwaAction="install" buttonLabel=t("pwa.install")
       vela-install pwaAction="update" buttonLabel=t("pwa.update")
       text viewer font-size=12
-      button press=signOut background-color="transparent" color="#22221e" border="none" padding=4
+      button press=signOut background-color="transparent" color="index.ink" border="none" padding=4
         text t("ui.signOut")
 
 component Shell
@@ -57,14 +57,14 @@ component Shell
     library: action
   slot
   view
-    column height="100%" min-height=0 background-color="#f3f0e8" color="#22221e" color-scheme="light" font-family="Georgia, serif"
+    column height="100%" min-height=0 background-color="index.page" color="index.ink" color-scheme="light" font-family="Georgia, serif"
       if viewport.width < 640
         Navigation(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, small=true)
         column flex=1 min-height=0
           children
       else
         row flex=1 min-height=0
-          column width=180 flex-shrink=0 background-color="#e3dfd3"
+          column width="11.25rem" flex-shrink=0 background-color="index.rail"
             Navigation(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, small=false)
           column flex=1 min-width=0 min-height=0
             children
@@ -74,11 +74,11 @@ component SearchField
     query: string
     edit: action
   view
-    row align-items="center" gap=12 border-bottom="2px solid #22221e" padding="8px 0px"
+    row align-items="center" gap=12 border-bottom="2px solid var(--index.ink)" padding="8px 0px"
       text t("ui.search_a62a7") font-size=12 font-weight=700
-      input value=query input=edit placeholder=t("ui.titlePersonOrDescription") aria-label=t("ui.searchYourLibrary") testId="search" flex=1 min-width=0 padding=8 border="none" background-color="transparent" color="#22221e"
+      input value=query input=edit placeholder=t("ui.titlePersonOrDescription") aria-label=t("ui.searchYourLibrary") testId="search" flex=1 min-width=0 padding=8 border="none" background-color="transparent" color="index.ink"
       if query != ""
-        button press=edit("") aria-label=t("ui.clearSearch") border="none" background-color="transparent" color="#22221e"
+        button press=edit("") aria-label=t("ui.clearSearch") border="none" background-color="transparent" color="index.ink"
           text t("ui.clear")
 
 component TitleCard
@@ -89,16 +89,16 @@ component TitleCard
     selectTitle: action
     observe: action
   view
-    row intersect=observe(card.receipt) border-bottom="1px solid #bcb8ae" align-items="center" gap=12 padding="10px 0px"
-      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=cardName(card) testId=`title-${card.id}` flex=1 min-width=0 padding=4 border="none" background-color="transparent" color="#22221e" text-align="left"
+    row intersect=observe(card.receipt) border-bottom="1px solid var(--index.line)" align-items="center" gap=12 padding="10px 0px"
+      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=cardName(card) testId=`title-${card.id}` flex=1 min-width=0 padding=4 border="none" background-color="transparent" color="index.ink" text-align="left"
         text card.name font-size=16 font-weight=600
       if not small
-        text (card.kind == "movie" ? t("ui.film") : card.kind == "show" ? t("ui.series") : card.kind == "episode" ? t("ui.episode") : card.kind == "season" ? t("ui.season") : t("ui.collection")) width=80 font-size=12 color="#55554d"
-        text (card.year > 0 ? card.yearLabel : t("ui.symbol1b9379")) width=54 font-size=12 color="#55554d"
-        text card.rating width=50 font-size=12 color="#55554d"
-        text card.genres.join(", ") width=150 font-size=12 color="#55554d" line-clamp=1
+        text (card.kind == "movie" ? t("ui.film") : card.kind == "show" ? t("ui.series") : card.kind == "episode" ? t("ui.episode") : card.kind == "season" ? t("ui.season") : t("ui.collection")) width=80 font-size=12 color="index.secondary"
+        text (card.year > 0 ? card.yearLabel : t("ui.symbol1b9379")) width=54 font-size=12 color="index.secondary"
+        text card.rating width=50 font-size=12 color="index.secondary"
+        text card.genres.join(", ") width=150 font-size=12 color="index.secondary" line-clamp=1
       else
-        text card.facts width=100 font-size=12 color="#55554d" line-clamp=1
+        text card.facts width=100 font-size=12 color="index.secondary" line-clamp=1
 
 component Row
   props
@@ -124,7 +124,7 @@ component Home
     observe: action
   slot
   view
-    column background-color="#f3f0e8" color="#22221e"
+    column background-color="index.page" color="index.ink"
       column padding="24px 4%" gap=18
         text t("ui.theViewingIndex") role="heading" aria-level=1 font-size=(small ? 28 : 42) font-weight=700
         children
@@ -132,7 +132,7 @@ component Home
           for hero in model.hero key=hero.id
             column gap=8 padding="16px 0px" intersect=observe(hero.receipt)
               text t("ui.featured") font-size=11 letter-spacing="2px"
-              button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) background-color="transparent" color="#22221e" border="none" text-align="left" padding=0
+              button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) background-color="transparent" color="index.ink" border="none" text-align="left" padding=0
                 text hero.name font-size=26 font-weight=700
               text hero.facts font-size=12
               text hero.summary font-size=14 line-clamp=2
@@ -158,13 +158,13 @@ component SearchSurface
     column gap=22 padding="0px 5% 40px"
       text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 font-size=24
       if error
-        text t("ui.searchIsUnavailableTryAnotherQuery") role="status" color="#55554d"
+        text t("ui.searchIsUnavailableTryAnotherQuery") role="status" color="index.secondary"
       else
         if loading
-          text t("ui.findingTitles") role="status" color="#55554d"
+          text t("ui.findingTitles") role="status" color="index.secondary"
         else
           if model.items.length == 0
-            text t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription") role="status" color="#55554d"
+            text t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription") role="status" color="index.secondary"
           else
             Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
@@ -173,11 +173,11 @@ component SearchSurface
           column gap=12
             text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 font-size=22
             if ai.aiStatus == "queued" or ai.aiStatus == "running"
-              text t("ui.exploringYourDescription") role="status" color="#55554d"
+              text t("ui.exploringYourDescription") role="status" color="index.secondary"
             if ai.items.length > 0
               Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
             if ai.aiStatus == "failed"
-              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="#55554d"
+              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="index.secondary"
 
 component Detail
   props
@@ -200,7 +200,7 @@ component Detail
             text title.facts font-size=13
             text title.summary font-size=16 line-height=1.6
             if model.canPlay
-              button press=play(title.id) background-color="#22221e" color="#f3f0e8" border="none" padding="12px 20px" align-self="start" testId="detail-play"
+              button press=play(title.id) background-color="index.ink" color="index.page" border="none" padding="12px 20px" align-self="start" testId="detail-play"
                 text (model.resumeSeconds > 0 ? t("ui.resumeWatching") : t("ui.play"))
       if model.seasons.length > 0
         Row(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons), small=small, still=still, selectTitle=selectTitle, observe=observe)
@@ -210,12 +210,12 @@ component Detail
         column padding="0px 7%" gap=14
           text t("ui.extras") role="heading" aria-level=2 font-size=24
           for extra in model.extras key=extra.id
-            button press=playExtra(extra.id) disabled=(not extra.ready) background-color="#e3dfd3" color="#22221e" border="none" padding=16 border-radius=0 text-align="left"
+            button press=playExtra(extra.id) disabled=(not extra.ready) background-color="index.rail" color="index.ink" border="none" padding=16 border-radius=0 text-align="left"
               text (extra.ready ? extra.name : t("ui.titleNotAvailable", title=extra.name))
       if model.cast.length > 0
         column padding="0px 7%" gap=12
           text t("ui.featuring") role="heading" aria-level=2 font-size=24
-          text model.cast.join(" · ") color="#55554d" line-height=1.6
+          text model.cast.join(" · ") color="index.secondary" line-height=1.6
       if model.crew.length > 0
         column padding="0px 7%" gap=12
           text t("ui.behindTheStory") role="heading" aria-level=2 font-size=24

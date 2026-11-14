@@ -62,7 +62,7 @@ component TitleCard
     lifted = false
   view
     column width=(small ? 142 : 190) flex-shrink=0 gap=10 intersect=observe(card.receipt)
-      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=hoverCard focus=focusCard blur=restCard position="relative" scale=(lifted and not still ? 1.035 : 1) translate=(lifted and not still ? "0px -5px" : "0px 0px") box-shadow=(lifted ? "0px 18px 38px #00000088" : "none") padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease, translate 180ms ease, box-shadow 180ms ease")
+      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=hoverCard focus=focusCard blur=restCard position="relative" scale=(lifted and not still ? 1.035 : 1) translate=(lifted and not still ? "0px -5px" : "0px 0px") box-shadow=(lifted ? "0px 18px 38px var(--cinematic.card-shadow)" : "none") padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease, translate 180ms ease, box-shadow 180ms ease")
         if card.poster != ""
           image card.poster alt="" width="100%" height=(small ? 206 : 274) object-fit="cover"
         else
@@ -109,7 +109,7 @@ component Home
                 image hero.backdrop alt="" width="100%" height="100%" object-fit="cover" opacity=0.92
               if model.trailerReady and model.trailerUrl != "" and model.trailerExpiresAt > 0 and not still
                 vela-preview url=model.trailerUrl active=(active and query == "" ? "true" : "false") still=(still ? "true" : "false") expiresAt=model.trailerExpiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
-              column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e00 65%), linear-gradient(90deg, #090b0ef0 0%, #090b0e70 45%, #090b0e10 100%)"
+              column position="absolute" inset=0 background-image="linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-clear) 65%), linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-mid) 45%, var(--cinematic.scrim-faint) 100%)"
             column position="relative" padding="20px 7%" gap=12 max-width=700 intersect=observe(hero.receipt) animation=(still ? "none" : "arrive 500ms ease both")
               row gap=10 align-items="center"
                 column width=22 height=3 border-radius=2 background-color=(hero.accent == "" ? "brand.warm" : hero.accent)
@@ -184,7 +184,7 @@ component Detail
         column position="relative" min-height=(small ? 520 : 600) justify-content="end" overflow="hidden"
           if title.backdrop != ""
             image title.backdrop alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover" opacity=0.9
-          column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e30 90%), linear-gradient(90deg, #090b0ed9, #090b0e10)"
+          column position="absolute" inset=0 background-image="linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-soft) 90%), linear-gradient(90deg, var(--cinematic.scrim-strong), var(--cinematic.scrim-faint))"
           column position="relative" padding=(small ? "80px 7% 32px" : "110px 7% 42px") max-width="52rem" gap=18
             text (title.kind == "movie" ? t("ui.film") : title.kind == "show" ? t("ui.series") : title.kind == "season" ? t("ui.season") : t("ui.episode")) color="brand.warm" text-transform="uppercase" letter-spacing="3px" font-size=11
             if title.logo != ""
@@ -274,7 +274,7 @@ component SignIn
     submit: action
     quick: action
   view
-    column max-width=380 width="85%" align-self="center" gap=20 padding="48px 0px"
+    column max-width="23.75rem" width="85%" align-self="center" gap=20 padding="48px 0px"
       text t("ui.welcomeToYourEvening") role="heading" aria-level=1 font-size=40 line-height=1.1 letter-spacing="-1px"
       text t("ui.signInToYourLibrary") color="ink.secondary" font-size=15
       if error != ""
@@ -298,7 +298,7 @@ component QuickConnect
     error: string
     cancel: action
   view
-    column max-width=420 width="85%" align-self="center" gap=24 padding="48px 0px" align-items="center"
+    column max-width="26.25rem" width="85%" align-self="center" gap=24 padding="48px 0px" align-items="center"
       text t("ui.anEasierWayIn") role="heading" aria-level=1 font-size=38 letter-spacing="-1px"
       text t("ui.approveThisCodeFromASignedInEtherDevice") color="ink.secondary" text-align="center" line-height=1.6
       text model.code font-size=44 font-weight=600 letter-spacing="8px" color="brand.warm" testId="connect-code"
@@ -315,7 +315,7 @@ component SearchField
     query: string
     edit: action
   view
-    row align-items="center" gap=12 padding="8px 18px" border-radius=32 background-color="surface.glass" border="1px solid var(--surface.line)" box-shadow="0px 16px 50px #00000040"
+    row align-items="center" gap=12 padding="8px 18px" border-radius=32 background-color="surface.glass" border="1px solid var(--surface.line)" box-shadow="0px 16px 50px var(--cinematic.search-shadow)"
       image "symbol:search" color="ink.secondary" width=20 height=20
       input value=query input=edit placeholder=t("ui.aTitleAFeelingAWorldToGetLostIn") aria-label=t("ui.searchYourLibrary") testId="search" border-radius=14 flex=1 min-width=0 padding="12px 0px" border="none" background-color="transparent" color="ink.primary" font-size=15
         ::placeholder

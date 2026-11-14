@@ -14,3 +14,40 @@ theme
 
   index.page = #f3f0e8  scheme=fixed
   index.ink = #22221e  scheme=fixed
+
+  // Cinematic dark media palette; fixed colors preserve its authored appearance.
+  cinematic.control = #ffffff16  scheme=fixed
+  cinematic.scrim-strong = #090b0ed9  scheme=fixed
+  cinematic.track = #ffffff25  scheme=fixed
+  cinematic.buffer = #ffffff55  scheme=fixed
+  cinematic.marker = #000000d9  scheme=fixed
+  cinematic.field = #ffffff12  scheme=fixed
+  cinematic.popover = #111419f5  scheme=fixed
+  cinematic.shadow = #00000099  scheme=fixed
+  cinematic.header-scrim = #000000c9  scheme=fixed
+  cinematic.footer-scrim = #000000f0  scheme=fixed
+  cinematic.guide-aura = #77533525  scheme=fixed
+  cinematic.guide-airing = #b78c6330  scheme=fixed
+  cinematic.search-shadow = #00000040  scheme=fixed
+  cinematic.card-shadow = #00000088  scheme=fixed
+  cinematic.scrim-clear = #090b0e00  scheme=fixed
+  cinematic.scrim-faint = #090b0e10  scheme=fixed
+  cinematic.scrim-soft = #090b0e30  scheme=fixed
+  cinematic.scrim-mid = #090b0e70  scheme=fixed
+  cinematic.scrim-deep = #090b0ef0  scheme=fixed
+
+  // Index light page palette, plus its independent light-on-video chrome.
+  index.rail = #e3dfd3  scheme=fixed
+  index.field = #ffffff  scheme=fixed
+  index.secondary = #55554d  scheme=fixed
+  index.line = #bcb8ae  scheme=fixed
+  index.accent = #813b31  scheme=fixed
+  index.separator = #d6d1c6  scheme=fixed
+  index.airing = #e9e1d3  scheme=fixed
+  index.video-header = #000000dd  scheme=fixed
+  index.video-footer = #000000ee  scheme=fixed
+  index.on-video = #f5f1e9  scheme=fixed
+  index.video-line = #ffffff24  scheme=fixed
+  index.video-ground = #090b0e  scheme=fixed
+  media.overlay = #000000bf  scheme=fixed
+  media.ground = #000000  scheme=fixed

@@ -36,33 +36,33 @@ component PlayerChrome
         editing(false)
   view
     column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="ink.primary"
-      row padding=(small ? "20px 18px 50px" : "28px 36px 72px") gap=20 align-items="center" background-image="linear-gradient(180deg, #000000c9, transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease")
-        button press=close pointer-events=(shown ? "auto" : "none") aria-label=t("ui.closePlayer") border="none" background-color="#ffffff16" color="ink.primary" border-radius=24 padding=12
+      row padding=(small ? "20px 18px 50px" : "28px 36px 72px") gap=20 align-items="center" background-image="linear-gradient(180deg, var(--cinematic.header-scrim), transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease")
+        button press=close pointer-events=(shown ? "auto" : "none") aria-label=t("ui.closePlayer") border="none" background-color="cinematic.control" color="ink.primary" border-radius=24 padding=12
           image "symbol:close" width=20 height=20
         column gap=5 flex=1
           text t("ui.nowPlaying_586fa") font-size=9 letter-spacing="3px" color="ink.secondary"
           text title font-size=(small ? 18 : 24) font-weight=550 letter-spacing="-0.5px" line-clamp=1
         text t("ui.vela") font-size=25 letter-spacing="-1.5px" opacity=0.7
       if model.state == "loading" or model.state == "buffering" or model.state == "recovering" or model.state == "failed" or serverError != ""
-        column align-self="center" align-items="center" gap=14 padding=24 max-width=480 border-radius=20 background-color="#090b0ed9" role="status" testId="player-status"
+        column align-self="center" align-items="center" gap=14 padding=24 max-width="30rem" border-radius=20 background-color="cinematic.scrim-strong" role="status" testId="player-status"
           text (model.state == "recovering" ? t("ui.findingAWayForward") : model.state == "failed" or serverError != "" ? t("ui.playbackInterrupted") : model.state == "loading" ? t("ui.preparingYourScreening") : t("ui.buildingALittleBreathingRoom")) font-size=22 font-weight=500 text-align="center"
           if failure != ""
             text failure color="ink.secondary" font-size=13 line-height=1.5 text-align="center"
           if model.state == "failed" or serverError != ""
             button press=command("retry", "") pointer-events="auto" border="none" border-radius=22 padding="12px 24px" background-color="ink.primary" color="ink.inverse"
               text t("ui.tryAgain")
-      column padding=(small ? "48px 18px 20px" : "80px 36px 30px") gap=18 background-image="linear-gradient(0deg, #000000f0, #00000099 62%, transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease") pointer-events=(shown ? "auto" : "none")
+      column padding=(small ? "48px 18px 20px" : "80px 36px 30px") gap=18 background-image="linear-gradient(0deg, var(--cinematic.footer-scrim), var(--cinematic.shadow) 62%, transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease") pointer-events=(shown ? "auto" : "none")
         if model.actionError != "" and failure == ""
           text model.actionError color="brand.warm" font-size=12 role="status"
         row gap=14 align-items="center"
           text model.elapsed font-size=12 font-variant-numeric="tabular-nums" min-width=38 color="ink.secondary"
           column flex=1 position="relative" height=24 justify-content="center"
-            column position="absolute" left=0 right=0 height=3 border-radius=2 background-color="#ffffff25" overflow="hidden"
+            column position="absolute" left=0 right=0 height=3 border-radius=2 background-color="cinematic.track" overflow="hidden"
               for range in model.buffered key=range.id
-                column position="absolute" top=0 bottom=0 left=`${range.left}%` width=`${range.width}%` background-color="#ffffff55"
+                column position="absolute" top=0 bottom=0 left=`${range.left}%` width=`${range.width}%` background-color="cinematic.buffer"
               column position="absolute" left=0 top=0 bottom=0 width=`${model.progress}%` background-color="brand.warm"
             for chapter in model.chapters key=chapter.id
-              column position="absolute" left=`${chapter.percent}%` height=7 width=1 background-color="#000000d9" aria-hidden=true
+              column position="absolute" left=`${chapter.percent}%` height=7 width=1 background-color="cinematic.marker" aria-hidden=true
             input focus=editing(true) blur=editing(false) type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub aria-label=t("ui.playbackPosition") testId="player-scrub" disabled=(model.duration <= 0 or blocked) width="100%" opacity=0.15 accent-color="brand.warm"
           text model.remaining font-size=12 font-variant-numeric="tabular-nums" color="ink.secondary"
         row gap=(small ? 12 : 22) align-items="center" flex-wrap="wrap"
@@ -76,7 +76,7 @@ component PlayerChrome
             text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 font-weight=550 testId="player-quality"
             text (model.backend == "file" ? t("ui.originalQuality") : model.backend == "native-hls" ? t("ui.browserManaged") : model.qualities.length <= 1 ? t("ui.fixedQuality") : model.lockedQuality == "" ? t("ui.autoQuality") : t("ui.qualityLocked")) font-size=8 letter-spacing="1.5px" color="ink.quiet"
           if model.chapters.length > 0
-            select focus=editing(true) blur=editing(false) disabled=blocked value="" change=chapter aria-label=t("ui.chapters") background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
+            select focus=editing(true) blur=editing(false) disabled=blocked value="" change=chapter aria-label=t("ui.chapters") background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
               option value=""
                 text t("ui.chapters")
               for chapter in model.chapters key=chapter.id
@@ -90,12 +90,12 @@ component PlayerChrome
               text t("ui.fullscreen") font-size=12
           button popovertarget="player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" border="none" padding=8 background-color="transparent" color="ink.primary"
             text t("ui.tracksQuality") font-size=12
-      column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=16 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 320) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=22 gap=16 border="1px solid #ffffff25" border-radius=18 background-color="#111419f5" color="ink.primary" box-shadow="0px 16px 60px #00000099"
+      column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=16 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 320) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=22 gap=16 border="1px solid var(--cinematic.track)" border-radius=18 background-color="cinematic.popover" color="ink.primary" box-shadow="0px 16px 60px var(--cinematic.shadow)"
         text t("ui.yourScreening") font-size=10 letter-spacing="2px" color="ink.quiet"
         text t("ui.playbackSettings") font-size=20 font-weight=550
         if model.audio.length > 1
           text t("ui.audio") font-size=12 color="ink.secondary"
-          select disabled=blocked value=model.audioId change=audio aria-label=t("ui.audioTrack") background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=10
+          select disabled=blocked value=model.audioId change=audio aria-label=t("ui.audioTrack") background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
             for track in model.audio key=track.id
               option value=track.id
                 text track.label
@@ -103,7 +103,7 @@ component PlayerChrome
           text model.audioLabel font-size=12 color="ink.secondary"
         if model.subtitles.length > 0
           text t("ui.subtitles") font-size=12 color="ink.secondary"
-          select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=10
+          select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
             option value=""
               text t("ui.off")
             for track in model.subtitles key=track.id
@@ -111,7 +111,7 @@ component PlayerChrome
                 text track.label
         if model.qualities.length > 1
           text t("ui.quality") font-size=12 color="ink.secondary"
-          select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=10
+          select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
             option value=""
               text t("ui.autoAdaptToYourConnection")
             for quality in model.qualities key=quality.id
@@ -119,7 +119,7 @@ component PlayerChrome
                 text quality.label
         if model.paths.length > 1
           text t("ui.delivery") font-size=12 color="ink.secondary"
-          select disabled=blocked value=model.pathId change=path aria-label=t("ui.playbackPath") testId="player-path" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=10
+          select disabled=blocked value=model.pathId change=path aria-label=t("ui.playbackPath") testId="player-path" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
             for path in model.paths key=path.id
               option value=path.id
                 text path.label
