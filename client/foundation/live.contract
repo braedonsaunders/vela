@@ -5,6 +5,7 @@ members Client
   state guideZoom = 1 persist
   state guideNow = 0
   state lowDelay = false
+  state saveData = false
   resource guide = uiGuide(guideNow, guideDay) with localeJSON when auth.authenticated and (top(nav).name == "live" or top(nav).name == "liveWatch") and guideNow > 0 as shape GuideModel else empty()
   // The minute clock re-projects the same day in place; only another day shows the loading state.
   derive guideReady = current(guide) or (guide.day == guideDay and guide.channels.length > 0)
@@ -53,6 +54,8 @@ members Client
           zapTarget = ""
         else
           watchKey(k, event)
+  action receiveNetwork(json: string)
+    saveData = json.includes("\"saveData\":true")
   action tickGuide
     guideNow = time.epochAtZero + performanceNow()
   action earlierGuide
