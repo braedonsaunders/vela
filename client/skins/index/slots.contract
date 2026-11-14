@@ -116,6 +116,7 @@ component Row
 component Home
   props
     model: HomeModel
+    active: bool
     query: string
     small: bool
     still: bool

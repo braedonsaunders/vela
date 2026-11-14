@@ -92,6 +92,7 @@ component Row
 component Home
   props
     model: HomeModel
+    active: bool
     query: string
     small: bool
     still: bool
@@ -107,7 +108,7 @@ component Home
               if hero.backdrop != ""
                 image hero.backdrop alt="" width="100%" height="100%" object-fit="cover" opacity=0.92
               if model.trailerReady and model.trailerUrl != "" and model.trailerExpiresAt > 0 and not still
-                vela-preview url=model.trailerUrl active=(query == "" ? "true" : "false") still=(still ? "true" : "false") expiresAt=model.trailerExpiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                vela-preview url=model.trailerUrl active=(active and query == "" ? "true" : "false") still=(still ? "true" : "false") expiresAt=model.trailerExpiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
               column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e00 65%), linear-gradient(90deg, #090b0ef0 0%, #090b0e70 45%, #090b0e10 100%)"
             column position="relative" padding="20px 7%" gap=12 max-width=700 intersect=observe(hero.receipt) animation=(still ? "none" : "arrive 500ms ease both")
               row gap=10 align-items="center"
@@ -201,14 +202,14 @@ component Detail
               button press=play(title.id) background-color="ink.primary" color="ink.inverse" border="none" border-radius=28 padding="15px 28px" align-self="start" testId="detail-play"
                 text (model.resumeSeconds > 0 ? `Resume · ${floor(model.resumeSeconds / 60)} min in` : "Play") font-weight=650
               if model.resumeSeconds > 0 and title.durationSeconds > 0
-                column width=230 height=3 border-radius=2 background-color="surface.line" role="progressbar" aria-label="Watch progress" aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=model.resumeSeconds
+                column width=230 height=3 border-radius=2 background-color="surface.line" role="progressbar" aria-label="Watch progress" aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=min(title.durationSeconds, max(0, model.resumeSeconds))
                   column height=3 width=`${min(100, model.resumeSeconds / title.durationSeconds * 100)}%` background-color="brand.warm"
             for trailer in model.extras.filter(e => e.kind == "trailer" and e.ready) key=trailer.id
               button press=playExtra(trailer.id) align-self="start" border="1px solid var(--surface.line)" border-radius=28 background-color="surface.glass" color="ink.primary" padding="13px 24px"
                 text "Watch trailer"
       if model.seasons.length > 0 or model.episodes.length > 0
         column padding="0px 7%" gap=22
-          row align-items="center" justify-content="space-between" flex-wrap="wrap" gap=16
+          row align-items="center" justify-content="space-between" flex-wrap="wrap" gap=16 padding-right=(small ? 52 : 0)
             text "Episodes" role="heading" aria-level=2 font-size=28 font-weight=550
             if model.seasons.length > 0
               select value=selectedSeason change=pickSeason aria-label="Season" testId="season-picker" padding="12px 18px" border="1px solid var(--surface.line)" border-radius=12 background-color="surface.raised" color="ink.primary"
@@ -216,11 +217,11 @@ component Detail
                   option value=season.id
                     text season.name
           for episode in upNext key=episode.id
-            row align-items="center" justify-content="space-between" flex-wrap="wrap" gap=18 padding=24 border-radius=18 background-color="surface.raised"
+            row flex-direction=(small ? "column" : "row") align-items=(small ? "stretch" : "center") justify-content="space-between" gap=18 padding=24 border-radius=18 background-color="surface.raised"
               column gap=6 flex=1
                 text (episode.progressSeconds > 0 ? "CONTINUE WATCHING" : "UP NEXT") color="brand.warm" font-size=10 letter-spacing="2px"
                 text episode.name role="heading" aria-level=3 font-size=24
-              button press=play(episode.id) aria-label=`${episode.progressSeconds > 0 ? "Resume" : "Play"} ${episode.name}` padding="13px 24px" border-radius=26 background-color="ink.primary" color="ink.inverse" border="none"
+              button align-self=(small ? "stretch" : "center") press=play(episode.id) aria-label=`${episode.progressSeconds > 0 ? "Resume" : "Play"} ${episode.name}` padding="13px 24px" border-radius=26 background-color="ink.primary" color="ink.inverse" border="none"
                 text (episode.progressSeconds > 0 ? "Resume episode" : "Play episode") font-weight=600
           for episode in model.episodes key=episode.id
             row gap=(small ? 14 : 24) align-items="center" padding="18px 0px" border-bottom="1px solid var(--surface.line)"
@@ -235,7 +236,7 @@ component Detail
                 if not small
                   text episode.summary color="ink.secondary" font-size=14 line-clamp=2 line-height=1.5
                 if episode.progressSeconds > 0 and episode.durationSeconds > 0
-                  column height=3 border-radius=2 background-color="surface.line" role="progressbar" aria-label=`${episode.name} watch progress` aria-valuemin=0 aria-valuemax=episode.durationSeconds aria-valuenow=episode.progressSeconds
+                  column height=3 border-radius=2 background-color="surface.line" role="progressbar" aria-label=`${episode.name} watch progress` aria-valuemin=0 aria-valuemax=episode.durationSeconds aria-valuenow=min(episode.durationSeconds, max(0, episode.progressSeconds))
                     column height=3 width=`${min(100, episode.progressSeconds / episode.durationSeconds * 100)}%` border-radius=2 background-color="brand.warm"
               button press=play(episode.id) aria-label=`Play ${episode.name}` border="1px solid var(--surface.line)" border-radius=24 width=44 height=44 padding=10 box-sizing="border-box" background-color="surface.glass" color="ink.primary"
                 image "symbol:play-fill"

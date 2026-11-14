@@ -124,3 +124,7 @@ pwaAction="install" appears only when installable; pwaAction="update" appears on
 when a service-worker update is ready and directly invokes applyUpdate on a trusted
 click. Unsupported or unavailable actions occupy no button. Auth/bootstrap waits for
 the host's real media capability probe as well as its trusted page origin.
+
+Home also receives active:bool from foundation route/page visibility. Cinematic
+preview pauses for covered routes as well as search, document hiding and viewport
+exit; a retained home behind a detail cannot keep its preview playing.
