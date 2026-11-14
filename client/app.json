@@ -19,5 +19,9 @@
   },
   "modules": [
     "vela-player"
+  ],
+  "env": [
+    "API_BASE_URL",
+    "VELA_MOCK"
   ]
 }
