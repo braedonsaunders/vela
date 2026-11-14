@@ -2,7 +2,7 @@ use Guide, LiveControls from "./foundation/skin.contract"
 use PlayerChrome from "./foundation/skin.contract"
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./foundation/models.contract"
 use AuthStage, AuthNotice, SignIn, QuickConnect from "./skins/cinematic/auth.contract"
-use Shell, Home, SearchSurface, Detail, SearchField, Row, Status, skinDetailPresentation, skinDetailSplit from "./foundation/skin.contract"
+use Shell, Home, SearchSurface, Detail, SearchField, Row, Status, Collection, skinDetailPresentation, skinDetailSplit from "./foundation/skin.contract"
 use dissolve, open from "./skins/cinematic/look.contract"
 
 routes nav
@@ -77,16 +77,14 @@ component Client
                     Detail(skin=activeSkin, model=detailSurface, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observeDetail)
         if e.name == "collection"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor color=inkColor
-            button press=close aria-label=t("ui.back") padding=16
-              text t("ui.back")
             scroll flex=1 min-height=0
               if failed(collection)
-                text t("ui.thisCollectionCouldnTBeOpened") padding=24 role="status"
+                Status(skin=activeSkin, kind="failure", message=t("ui.thisCollectionCouldnTBeOpened"), small=small, still=still)
               else
                 if not current(collection)
-                  text t("ui.openingCollection") padding=24 role="status"
+                  Status(skin=activeSkin, kind="loading", message=t("ui.openingCollection"), small=small, still=still)
                 else
-                  Row(skin=activeSkin, row=FeedRow(id=e.params.id, name=collection.name, receipt="", items=collection.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+                  Collection(skin=activeSkin, id=e.params.id, name=collection.name, items=collection.items, small=small, still=still, close=close, selectTitle=selectTitle, observe=observe)
         if e.name == "watch" or e.name == "extra" or e.name == "liveWatch"
           column navigationKey=`${e.id}` navigationPresentation="fullscreen" id="watch-stage" testId="watch-stage" key=watchKey pointermove=touchWatch pointerdown=touchWatch position="absolute" inset=0 background-color="media.ground" color="ink.primary" tabindex=0
             if failed(playback)

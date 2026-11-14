@@ -1,0 +1,40 @@
+use Card from "../../foundation/models.contract"
+use TitleCard, gutter from "./slots.contract"
+use Display, Eyebrow, IconButton, enter, stagger, dissolve, rise from "./look.contract"
+
+// Posters in a wrapping grid, in the order given, entering with a short stagger.
+component TitleGrid
+  props
+    items: Card[]
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  view
+    column display="grid" grid-template-columns=(small ? "repeat(auto-fill, minmax(132px, 1fr))" : "repeat(auto-fill, minmax(190px, 1fr))") column-gap=(small ? 12 : 20) row-gap=(small ? 22 : 34) padding-left=gutter(small) padding-right=gutter(small) justify-items="center"
+      for card, i in items key=card.id
+        column animation=enter(still, stagger(i, 30, 18))
+          TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe)
+
+// A page of titles under a heading, with a way back.
+component BrowsePage
+  props
+    eyebrow: string
+    name: string
+    items: Card[]
+    small: bool
+    still: bool
+    close: action
+    selectTitle: action
+    observe: action
+  slot
+  view
+    column gap=(small ? 22 : 32) padding-bottom=80
+      column position="relative" gap=(small ? 14 : 18) padding-top=(small ? 84 : 112) padding-left=gutter(small) padding-right=gutter(small) background-image="radial-gradient(ellipse 70% 120% at 15% 0%, var(--cinematic.guide-aura) 0%, var(--cinematic.scrim-clear) 70%)"
+        row gap=14 align-items="center" animation=enter(still, 60)
+          button press=close aria-label=t("ui.back") class=IconButton width=40 height=40 padding=11
+            image "symbol:back" width=18 height=18
+          text eyebrow class=Eyebrow font-size=10 color="brand.warm"
+        text name role="heading" aria-level=1 class=Display font-size=(small ? 42 : 72) animation=enter(still, 120)
+        children
+      TitleGrid(items=items, small=small, still=still, selectTitle=selectTitle, observe=observe)

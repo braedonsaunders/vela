@@ -10,6 +10,7 @@ use LiveControls as IndexLiveControls from "../skins/index/live.contract"
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport from "./models.contract"
 use Status as CineStatus, Shell as CineShell, Home as CineHome, SearchSurface as CineSearchSurface, Row as CineRow, SearchField as CineSearchField, detailPresentation as CinePresentation, detailSplit as CineSplit from "../skins/cinematic/slots.contract"
 use Detail as CineDetail from "../skins/cinematic/detail.contract"
+use BrowsePage as CineBrowsePage from "../skins/cinematic/browse.contract"
 use Shell as IndexShell, Home as IndexHome, SearchSurface as IndexSearchSurface, Row as IndexRow, Detail as IndexDetail, SearchField as IndexSearchField, detailPresentation as IndexPresentation, detailSplit as IndexSplit from "../skins/index/slots.contract"
 
 fn skinDetailPresentation(skin: string, width: number): string = (skin == "example" ? ExamplePresentation(width) : skin == "index" or skin == "editorial" ? IndexPresentation(width) : CinePresentation(width))
@@ -213,3 +214,25 @@ component Status
       text message padding=32 role="status"
     else
       CineStatus(kind=kind, message=message, small=small, still=still)
+
+// A collection's titles in server order. Cinematic draws a browse page with a grid;
+// other skins keep a back button over their own row.
+component Collection
+  props
+    skin: string
+    id: string
+    name: string
+    items: Card[]
+    small: bool
+    still: bool
+    close: action
+    selectTitle: action
+    observe: action
+  view
+    if skin == "index" or skin == "editorial" or skin == "example"
+      column
+        button press=close aria-label=t("ui.back") padding=16
+          text t("ui.back")
+        Row(skin=skin, row=FeedRow(id=id, name=name, receipt="", items=items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+    else
+      CineBrowsePage(eyebrow=t("library.collection"), name=name, items=items, small=small, still=still, close=close, selectTitle=selectTitle, observe=observe)
