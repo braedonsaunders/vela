@@ -26,8 +26,12 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
   const capability = snapshot?.capabilities;
   const selectedAudio = plan?.audioTracks.find(t => t.id === snapshot?.audioTrackId || !snapshot && t.id === plan.selectedAudioTrackId);
   const subtitles = (plan?.subtitleTracks ?? []).filter(t => !!t.url && ['webvtt', 'vtt'].includes(t.codec.toLowerCase()));
+  const sourceGeneration = snapshot?.sourceGeneration ?? plan?.sourceGeneration ?? 0;
+  const seekGeneration = snapshot?.seekGeneration ?? plan?.seekGeneration ?? 0;
   return {
     planJson: plan ? JSON.stringify(plan) : "",
+    stopCommandJson: plan && plan.state !== 'ended' ? JSON.stringify({ type: 'session-command', sessionId: plan.sessionId,
+      command: { kind: 'stop', sourceGeneration, seekGeneration, idempotencyKey: `stop-${plan.sessionId}-${sourceGeneration}-${seekGeneration}` } }) : '',
     ready: !!snapshot && !['idle','loading'].includes(state), state, playing: state === 'playing', position, duration,
     elapsed: clock(position), remaining: duration > 0 ? clock(Math.max(0, duration - position)) : msg('data.live'),
     progress: duration > 0 ? Math.min(100, position / duration * 100) : 0,

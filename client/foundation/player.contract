@@ -8,6 +8,11 @@ members Client
   state watchTouched = 0
   state watchEditing = false
   mutation watchAuthorized as shape PlayerCommandReply
+  mutation watchClosed as shape PlayerCommandReply queue
+  action closeWatch
+    if watchModel.stopCommandJson != ""
+      send watchClosed = uiPlayerCommand(watchModel.stopCommandJson)
+    nav = back(nav)
   derive watchReply = match watchAuthorized { case some(r) => (r.sessionId == playback.sessionId ? r : PlayerCommandReply(planJson="", sessionId="", error="")), case none => PlayerCommandReply(planJson="", sessionId="", error="") }
   derive watchPlan = (watchReply.sessionId == playback.sessionId and watchReply.planJson != "" ? watchReply.planJson : currentPlan)
   resource watchModel = uiPlayer(currentPlan, watchEvent, watchReply.planJson, localeJSON) when playingId != "" and watchPlan != "" as shape PlayerView

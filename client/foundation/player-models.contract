@@ -12,6 +12,7 @@ shape PlayerBuffer
   width: number
 shape PlayerView
   planJson: string
+  stopCommandJson: string
   ready: bool
   state: string
   playing: bool

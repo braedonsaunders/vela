@@ -350,3 +350,23 @@ At this checkpoint no media stream had been opened. Same-viewer approval portal
 `/ether/me` was reachable, but quick-connect, show detail, playback, progress,
 resume and live remained unqualified pending the blocking fixes. Do not treat
 these pending steps as passes.
+
+### Installed 0.1.3 / Ether 0.3.11-lab.2
+
+| Step | Result | Evidence |
+| --- | --- | --- |
+| Password / sign-out recheck | Passed | Sign-in and revoke HTTP 200; sign-in form restored. One denied telemetry batch, no rapid retry burst. Stale private header after logout was separately assigned to UI. |
+| Missing-hero layout | Passed | Blank reserved area collapsed; `lab-05-home-013.png`. |
+| Same-viewer quick-connect | Passed | `/ether/me` authenticated as the test viewer, approved this Vela request, and Vela polling returned home. `lab-06-quick-connect.png`; no owner identity used. |
+| Real hero / receipts after server deployment | Passed | Hero and artwork rendered; three fresh `/interactions` POSTs returned HTTP 200. `lab-08-hero.png`. |
+| Console Vela Watch handoff | Succeeded with client race | Same-viewer console endpoint returned 200, one redeem returned 200, authenticated home appeared and code fragment was cleared. Concurrent source invocations also sent 60 failed redeem attempts. Data fix `7956d15` makes redemption single-flight with a stable key; clean recheck pending. Deployment-window 503s are excluded from steady-state server findings. |
+| Show detail | Passed for metadata | “The Gilded Age”: four seasons plus specials, episode list, 11 cast and three crew entries. Show itself correctly reports `canPlay:false`. |
+| Movie broker | Passed for authorization / plan creation | “1917”, `canPlay:true`; playback POST HTTP 200 in 3529 ms, ready primary HLS transcode, no offered qualities, four source audio tracks, no offered subtitles. |
+| Movie media startup | **Failed** | Broker-issued same-origin `/sessions/media/:session/:token/master.m3u8` returned HTTP 401 and HTML Unauthorized. Video time 0, readyState 0, zero decoded frames, `DEMUXER_ERROR_COULD_NOT_PARSE`. `lab-09-playback-failed.png`. |
+
+The failed movie was the only opened stream and was closed before further client
+installation. Seek, track switching, rendered progress, resume and live playback
+remain blocked by media authorization, not claimed as passes. No fallback edition
+was selected. In-app Close now queues an explicit broker stop before navigating
+back; its dedicated root mutation survives route changes. Full browser unload
+cannot guarantee delivery of an in-flight authenticated command.
