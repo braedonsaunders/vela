@@ -11,10 +11,10 @@ component TitleGrid
     selectTitle: action
     observe: action
   view
-    column display="grid" grid-template-columns=(small ? "repeat(auto-fill, minmax(132px, 1fr))" : "repeat(auto-fill, minmax(190px, 1fr))") column-gap=(small ? 12 : 20) row-gap=(small ? 22 : 34) padding-left=gutter(small) padding-right=gutter(small) justify-items="center"
+    column display="grid" grid-template-columns=(small ? "repeat(auto-fill, minmax(140px, 1fr))" : "repeat(auto-fill, minmax(190px, 1fr))") column-gap=(small ? 12 : 20) row-gap=(small ? 22 : 34) padding-left=gutter(small) padding-right=gutter(small)
       for card, i in items key=card.id
-        column animation=enter(still, stagger(i, 30, 18))
-          TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe)
+        column width="100%" animation=enter(still, stagger(i, 30, 18))
+          TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=true)
 
 // The head of a browse page: a way back, an eyebrow, the display name, and the
 // collection's or library's own landscape art faded in behind it when it has one.

@@ -51,7 +51,7 @@ component Shell
           column position="absolute" inset=0 pointer-events="none" aria-hidden=true background-image="linear-gradient(180deg, var(--cinematic.nav-scrim) 0%, var(--cinematic.scrim-clear) 100%)" backdrop-filter="blur(16px) saturate(1.2)" mask-image="linear-gradient(180deg, black 0%, black 30%, transparent 100%)"
           link href="/" aria-label=t("ui.velaHome") text-decoration="none" color="ink.primary" position="relative" margin-right=(compact ? 6 : 22)
             Wordmark(size=(compact ? 26 : 30), still=still)
-          scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" position="relative" flex=1 min-width=0
+          scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" position="relative" flex=1 min-width=0 mask-image="linear-gradient(90deg, black 0%, black 88%, transparent 100%)"
             row gap=2 align-items="center" height=(compact ? 64 : 84)
               NavItem(label=t("ui.home"), on=(section == "home"), press=home)
               for lib in libraries key=lib.id
@@ -126,6 +126,7 @@ component TitleCard
     still: bool
     selectTitle: action
     observe: action
+    fill: bool
   state lifted = false
   action hoverCard(over: bool)
     lifted = over
@@ -134,7 +135,7 @@ component TitleCard
   action restCard
     lifted = false
   view
-    column width=(small ? 132 : "clamp(150px, 12.4vw, 232px)") flex-shrink=0 gap=12 intersect=observe(card.receipt)
+    column width=(fill ? "100%" : small ? 132 : "clamp(150px, 12.4vw, 232px)") flex-shrink=0 gap=12 intersect=observe(card.receipt)
       button press=selectTitle(card.id, card.kind, card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=hoverCard focus=focusCard blur=restCard position="relative" width="100%" aspect-ratio="2 / 3" padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=(small ? 10 : 12) overflow="hidden" text-align="left" cursor="pointer" scale=(lifted and not still ? 1.045 : 1) translate=(lifted and not still ? "0px -6px" : "0px 0px") box-shadow=(lifted ? "0px 28px 50px -14px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)" : "0px 10px 24px -12px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.hairline)") transition=`scale ${base()}ms ${glide()}, translate ${base()}ms ${glide()}, box-shadow ${base()}ms ${glide()}`
         :focus-visible
           box-shadow="0px 0px 0px 3px var(--ink.primary), 0px 28px 50px -14px var(--cinematic.card-shadow)"
@@ -170,7 +171,7 @@ component Row
         row gap=(small ? 12 : 18) align-items="flex-start" padding-top=(small ? 14 : 16) padding-bottom=(small ? 18 : 22) padding-left=gutter(small) padding-right=gutter(small)
           for card, i in row.items key=card.id
             column animation=enter(still, stagger(i, 45, 8))
-              TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe)
+              TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
 
 // A row-shaped placeholder while titles load.
 component RowSkeleton
