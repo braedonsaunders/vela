@@ -6,6 +6,7 @@ members Client
   state lowDelay = false
   resource guide = uiGuide(guideNow, guideWindow) when auth.authenticated and top(nav).name == "live" and guideNow > 0 as shape GuideModel
   mutation liveState as shape LiveStatus queue
+  derive liveView = match liveState { case some(r) => r, case none => LiveStatus(sessionId="", reconnecting=false, delivery="unknown", drift=-1, canCatchUp=false) }
   task startGuideClock when top(nav).name == "live" and auth.authenticated and guideNow == 0
     after(1, tickGuide)
   task guideClock when top(nav).name == "live" and auth.authenticated
