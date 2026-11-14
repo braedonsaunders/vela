@@ -119,8 +119,8 @@ members Client
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
   resource collection = uiCollection(collectionId) when auth.authenticated and collectionId != "" as shape CollectionModel
   resource detail = uiDetail(detailId) when auth.authenticated and detailId != "" as shape DetailModel
-  derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" ? top(nav).params.id : "")
-  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : "title", time.epochAtZero) when auth.authenticated and playingId != "" as shape PlaybackModel
+  derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" ? top(nav).params.id : "")
+  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero) when auth.authenticated and playingId != "" as shape PlaybackModel
   state streamAttempt = 0
   resource sessionUpdate = sessionEvents(playback.sessionId, streamAttempt) when auth.authenticated and playingId != "" and playback.sessionId != "" as shape PlaybackModel
   derive currentPlan = (current(sessionUpdate) and sessionUpdate.sessionId == playback.sessionId and sessionUpdate.planJson != "" ? sessionUpdate.planJson : playback.planJson)

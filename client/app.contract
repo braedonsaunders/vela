@@ -1,3 +1,5 @@
+use Guide from "./skins/cinematic/guide.contract"
+use LiveControls from "./skins/cinematic/live.contract"
 use PlayerChrome from "./skins/cinematic/player.contract"
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./foundation/models.contract"
 use SignIn, QuickConnect from "./skins/cinematic/slots.contract"
@@ -15,6 +17,7 @@ routes nav
 component Client
   members "./foundation/behavior.contract"
   members "./foundation/player.contract"
+  members "./foundation/live.contract"
 
   view
     main navigationKey=`${top(nav).id}` navigationBack="back" navigate=follow width="100%" height="100%" background-color=pageColor color=inkColor color-scheme="dark"
@@ -48,6 +51,17 @@ component Client
                                   image "symbol:close"
                           if query != ""
                             SearchSurface(skin=activeSkin, query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe)
+        if e.name == "live"
+          column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor color=inkColor
+            Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins, chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=home.liveAvailable, canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
+              scroll flex=1 min-height=0
+                if failed(guide)
+                  text "The guide couldn't be loaded. Check your connection." role="status" padding=32
+                else
+                  if not current(guide)
+                    text "Loading the guide…" role="status" padding=32
+                  else
+                    Guide(model=guide, small=small, watch=watchChannel, previous=earlierGuide, next=laterGuide)
         if e.name == "title"
           column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=skinDetailPresentation(activeSkin, viewport.width) navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 background-color=pageColor color=inkColor
             row padding="16px 5%" align-items="center"
@@ -74,7 +88,7 @@ component Client
                   text "Opening collection…" padding=24 role="status"
                 else
                   Row(skin=activeSkin, row=FeedRow(id=e.params.id, name=collection.name, receipt="", items=collection.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
-        if e.name == "watch" or e.name == "extra"
+        if e.name == "watch" or e.name == "extra" or e.name == "liveWatch"
           column navigationKey=`${e.id}` id="watch-stage" testId="watch-stage" key=watchKey pointermove=touchWatch pointerdown=touchWatch position="absolute" inset=0 background-color="#000000" color="ink.primary" tabindex=0
             if failed(playback)
               column margin="auto" padding=32 gap=16
@@ -85,5 +99,8 @@ component Client
               if not current(playback)
                 text "Preparing playback…" role="status" margin="auto"
               else
-                vela-player plan=watchPlan playerCommand=watchCommandJson serverError=watchReply.error message=watchMessage position="absolute" inset=0 width="100%" height="100%"
+                vela-player plan=watchPlan playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%"
+                if e.name == "liveWatch"
+                  column position="absolute" top=16 right=16
+                    LiveControls(lowDelay=lowDelay, reconnecting=(liveState.sessionId == playback.sessionId and liveState.reconnecting), delivery=(liveState.sessionId == playback.sessionId ? liveState.delivery : "unknown"), drift=(liveState.sessionId == playback.sessionId ? liveState.drift : -1), canCatchUp=(liveState.sessionId == playback.sessionId and liveState.canCatchUp), toggleLowDelay=toggleLowDelay, catchUp=catchUpLive)
                 PlayerChrome(model=watchModel, title=watchModel.title, visible=(not watchHidden or not watchModel.playing or watchEditing), small=small, still=still, serverError=watchReply.error, command=watchControl, seek=watchSeek, editing=editWatch, close=close)

@@ -26,3 +26,7 @@ members Client
     commandJson = `{"id":${next},"type":"lowDelay","enabled":${lowDelay}}`
   action catchUpLive
     playerCommand("catchUp")
+  action liveWatchMessage(json: string)
+    watchMessage(json)
+    if top(nav).name == "liveWatch"
+      send liveState = liveEvent(json)
