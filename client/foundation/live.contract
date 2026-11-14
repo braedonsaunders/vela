@@ -139,8 +139,9 @@ members Client
   action tileUnmute
     let next = tileCommandId + 1
     tileCommandId = next
-    tileMuted = not tileMuted
-    tileCommandJson = `{"id":${next},"type":"mute","value":"${tileMuted ? "false" : "true"}"}`
+    let muted = not tileMuted
+    tileMuted = muted
+    tileCommandJson = `{"id":${next},"type":"mute","value":"${muted}"}`
   action tileTuneIn
     tileManual = true
   action retuneTile(id: string)

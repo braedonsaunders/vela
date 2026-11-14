@@ -64,8 +64,8 @@ component MiniGuide
   derive n = model.channels.length
   derive around = (n < 3 ? model.channels : model.channels.slice((at - 1 + n) % n, (at - 1 + n) % n + 1).concat(model.channels.slice(at, at + 1)).concat(model.channels.slice((at + 1) % n, (at + 1) % n + 1)))
   view
-    column gap=8 width=(small ? "calc(100% - 32px)" : 400) role="dialog" aria-label=t("live.channels") aria-live="polite" animation=(still ? "none" : `zapIn 260ms ${glide()} both`) -exact-exit-animation="zapOut 160ms ease-in both"
-      for c, i in around key=`${i}-${c.id}`
+    column gap=8 width=(small ? "calc(100% - 32px)" : 400) role="region" aria-label=t("live.channels") aria-live="polite" animation=(still ? "none" : `zapIn 260ms ${glide()} both`) -exact-exit-animation="zapOut 160ms ease-in both"
+      for c, i in around key=c.id
         if (n < 3 ? c.id == (target != "" ? target : playing) : i == 1)
           MiniGuideCard(channel=c, playing=(c.id == playing), still=still, tune=tune)
         else

@@ -270,10 +270,11 @@ component Guide
                       row position="sticky" left=0 z-index=7 width=rail height=rulerH() flex-shrink=0 box-sizing="border-box" padding-left=(small ? 12 : 20) align-items="center" background-color="cinematic.guide-rail" border-right="1px solid var(--cinematic.glass-edge)"
                         text (small ? model.days.filter(d => d.offset == model.day).map(d => d.label).join("") : model.dayLabel) class=Eyebrow font-size=10 letter-spacing="0.16em" color="ink.secondary" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
                       column position="relative" width=width height=rulerH() flex-shrink=0
+                        // A label the now pill would cover fades out rather than colliding with it.
                         for tick in model.ticks key=tick.id
                           column id=`guide-tick-${tick.minute}` position="absolute" left=(tick.minute * scale) top=0 bottom=0 width=(30 * scale) justify-content="center" aria-hidden=true
                             column position="absolute" left=0 bottom=0 width=1 height=(tick.hour ? 10 : 6) background-color=(tick.hour ? "cinematic.glass-edge-strong" : "cinematic.glass-edge")
-                            text tick.label padding-left=10 font-size=12 font-weight=(tick.hour ? 650 : 500) color=(tick.hour ? "ink.primary" : "ink.quiet") font-variant-numeric="tabular-nums" white-space="nowrap"
+                            text tick.label opacity=(model.nowMinute >= 0 and tick.minute * scale > model.nowMinute * scale - 112 and tick.minute * scale < model.nowMinute * scale + 30 ? 0 : 1) transition=(still ? "none" : "opacity 200ms linear") padding-left=10 font-size=12 font-weight=(tick.hour ? 650 : 500) color=(tick.hour ? "ink.primary" : "ink.quiet") font-variant-numeric="tabular-nums" white-space="nowrap"
                         if model.nowMinute >= 0
                           column id="guide-now-anchor" position="absolute" left=(max(0, model.nowMinute - (portW - rail) / scale / 3) * scale) top=0 width=1 height=1 aria-hidden=true
                           row position="absolute" left=(model.nowMinute * scale) bottom=7 translate="-50% 0px" z-index=2 gap=5 align-items="center" padding="3px 8px" border-radius=999 background-color="cinematic.guide-now" box-shadow="0px 4px 18px var(--cinematic.guide-now-glow)" aria-hidden=true
