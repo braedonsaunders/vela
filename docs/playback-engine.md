@@ -1251,3 +1251,45 @@ mismatches map by source order, audio ordinal or first actual audio, with the
 mapping recorded. Unsupported decoder/output configurations, unsafe unknown
 multichannel PCM positions, corrupt or changed sources and HTTP/range violations
 still take automatic fallback. HEVC/DV presentation expansion remains gated.
+
+### HEVC local qualification candidate (production admission still H.264 only)
+
+The coordinator corrected the owner-session analysis: **both** 1917 and End of
+Oak Street used HEVC-copy fMP4 HLS with TrueHD converted to AAC. Oak Street was
+not original-file playback. Neither run qualifies original HEVC; 0.1.28's native
+and original H.264-only declarations remain necessary until this gate passes.
+
+An isolated, non-production candidate enabled HEVC only for these local native-view
+drives. Real same-origin assets, installed Chrome, synthetic 640×360/24fps files,
+one source at a time. SDR used the exact-config-supported native WebCodecs route
+with hardware preference; API support and route choice do not prove the silicon
+actually used. PQ used the separately loaded HEVC WASM-parser/GPU decoder package
+and WebGPU HDR-to-SDR presentation. The forced-package case bypassed native route
+selection without changing the fixture.
+
+| Fixture / actual route | First presented frame, warm | Before seek: decoded / presented / dropped | Position after seek to 4s (~700ms observation delay) | Worst post-seek frame lag | PCM underruns |
+|---|---:|---:|---:|---:|---:|
+| Main8 BT.709 + E-AC-3 5.1 / native |197.6ms|20 /16 /0|4.632s|13.800ms|0|
+| Main10 BT.709 + AAC / native |116.7ms|20 /16 /0|4.625s|11.848ms|0|
+| Main10 actual PQ/BT.2020 + E-AC-3 / package |167.5ms|43 /16 /0|4.638s|15.996ms|0|
+| Main10 BT.709 + AAC / forced package |109.6ms|43 /16 /0|4.639s|12.017ms|0|
+
+Initial cold Main8 first frame was2702.3ms. Stereo output/downmix was used;
+physical surround and human-perceived lipsync were not measured. PQ input was
+actual ST2084 neutral steps0–203nits plus a moving bar, not relabelled SDR.
+A never-settling `VideoDecoder.isConfigSupported` call was cancelled at150ms:
+startup rejected `AbortError` at155.6ms, runtime disposed, zero remaining canvas.
+Shared capability promises are raced per caller, never globally cancelled; audio
+package, video package and GPU-device offer preparation now use that same wait.
+
+The drive found and fixed two integration defects. GPU decode must consume seek
+preroll to reconstruct references, but frames ending before the requested start
+must be released before presentation readiness/queueing. Otherwise a seek to4s
+presented old pictures, counted92 drops and recorded up to1.795s lag. The pinned
+build-time adaptation drops only those decoded output frames and returns their
+slots; compressed packets and dependencies remain intact. Afterward both package
+seek cases had zero drops. Native VideoFrame GPU completions can outlive decoder
+retirement; seeks and audio switches now advance the presenter's/frame loop's
+presentation generation so old completion acknowledgements cannot fail the new
+playback. All four final cases completed without playback failure. No lab HEVC
+pass, 4K/DV8 pass, DV7 reconstruction or production HEVC enablement is claimed here.

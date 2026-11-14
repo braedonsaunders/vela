@@ -54,11 +54,11 @@ export class UniversalRuntime {
   get pendingAudioTrackId() { return this.pendingAudio; }
   private disposing?: Promise<void>;
   private initializing?: AbortSignal;
-  private readonly generation = 1;
+  private generation = 1;
   private readonly visibility = () => this.loop?.synchronizePageVisibility(!document.hidden);
   constructor(private options: RuntimeOptions) {
     configureEngineAssets({ baseURL: options.assets.baseURL, cacheKey: options.assets.assetKey });
-    this.presenter = new Presenter((reason) => this.failed(`WebGPU presentation: ${reason}`), () => this.loop?.schedule(false), () => this.failed('WebGPU device lost'));
+    this.presenter = new Presenter((_generation, reason) => this.failed(`WebGPU presentation: ${reason}`), () => this.loop?.schedule(false), () => this.failed('WebGPU device lost'));
     options.signal.addEventListener('abort', this.abort, { once: true });
     document.addEventListener('visibilitychange', this.visibility);
   }
@@ -117,7 +117,7 @@ export class UniversalRuntime {
         : {...media,audio:[],selectedAudioId:null};
       const options = upstreamOptions(media);
       const audio = media.audio.find(a => a.id === media.selectedAudioId);
-      const packageSelection = preparedAudio?.audioOptions.audioDecoder ? await registry.load(preparedAudio.actualTrack.codec, signal) : null;
+      const packageSelection = preparedAudio?.audioOptions.audioDecoder ? await abortable(registry.load(preparedAudio.actualTrack.codec, signal),signal) : null;
       signal.throwIfAborted();
       this.presenter.startSession(this.generation);
       const input = readPresentationInput(options);
@@ -139,9 +139,9 @@ export class UniversalRuntime {
       // independently served GPU package when the native route cannot qualify.
       let eligibility = getCustomPlaybackEligibility(options, capabilities, eligibilityOptions);
       if (forceGPU || !media.video.nativeSupported || !eligibility.eligible) {
-        const decoder = await new VideoPackages(this.options.assets.videoDecoderURL).load(media.video.codec, signal);
+        const decoder = await abortable(new VideoPackages(this.options.assets.videoDecoderURL).load(media.video.codec, signal),signal);
         if (decoder) {
-          const gpuVideoDecoders = await getGPUVideoDecoderOffers(this.presenter, [decoder], options);
+          const gpuVideoDecoders = await abortable(getGPUVideoDecoderOffers(this.presenter, [decoder], options),signal);
           signal.throwIfAborted();
           eligibility = getCustomPlaybackEligibility(options, capabilities, {...eligibilityOptions, gpuVideoDecoders});
         }
@@ -199,6 +199,7 @@ export class UniversalRuntime {
         registry:this.audioRegistry, maximumOutputChannels:this.maximumChannels, signal});
       signal.throwIfAborted();
       void this.readout; // Capture the retiring decode generation before restart.
+      this.advancePresentation();
       const result = await this.controller.setAudioStreamIndex(prepared.ordinal,
         {...prepared.audioOptions, audioMetadataLayout:prepared.audioMetadataLayout});
       signal.throwIfAborted();
@@ -210,7 +211,15 @@ export class UniversalRuntime {
       this.loop?.schedule(this.wantsPlaying);
     } finally { if (this.audioSwitch === job) { this.audioSwitch = undefined; this.pendingAudio = null; } }
   }
-  async seek(position: number) { this.audioSwitch?.abort(); void this.readout; await this.controller?.seek(secondsToMicroseconds(position)); this.loop?.schedule(true); }
+  private advancePresentation() {
+    const generation = ++this.generation;
+    this.loop?.setPresentationGeneration(generation);
+    this.presenter.seek(generation);
+  }
+  async seek(position: number) {
+    this.audioSwitch?.abort(); void this.readout; this.advancePresentation();
+    await this.controller?.seek(secondsToMicroseconds(position)); this.loop?.schedule(this.wantsPlaying);
+  }
   dispose(): Promise<void> {
     if (this.disposing) return this.disposing;
     if (this.disposed) return Promise.resolve();
