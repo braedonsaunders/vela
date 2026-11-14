@@ -1,5 +1,6 @@
 import type * as V from '../../../wire/v0/types';
 import type { ServerAdapter } from '../index';
+import type { StreamEvent } from '../../../app.contract.d.ts';
 
 export class VelaError extends Error {
   constructor(readonly detail: V.ProtocolError, readonly status: number) { super(detail.message); }
@@ -17,6 +18,24 @@ export class EtherAdapter implements ServerAdapter {
   private cache = new Map<string, { etag: string; body: unknown }>();
   private refreshing: Promise<V.Tokens> | undefined;
   constructor(private origin: string, private credentials: Credentials, private capabilityContext: string) {}
+
+  private boundURL(path: string): string {
+    const url = new URL(path, `${this.origin}/`);
+    if (url.origin !== this.origin || !url.pathname.startsWith('/vela/v0/')) throw new Error('Request outside bound server');
+    return url.href;
+  }
+  private fetchBound<T>(path: string, init: RequestInit & { exactStream: (event: StreamEvent) => T }, token: V.Tokens | null): Promise<T>;
+  private fetchBound(path: string, init: RequestInit, token: V.Tokens | null): Promise<Response>;
+  private fetchBound(path: string, init: RequestInit, token: V.Tokens | null): Promise<any> {
+    const url = this.boundURL(path);
+    return fetch(url, { ...init, redirect: 'error', headers: { ...init.headers as Record<string, string>,
+      ...(token ? { Authorization: `Bearer ${token.accessToken}`, 'X-Vela-Device-Id': this.credentials.device.id } : {}) } });
+  }
+  async streamSession<T>(id: string, cursor: string, mapper: (event: StreamEvent) => T): Promise<T> {
+    const token = await this.credentials.get();
+    if (!token) throw new Error('Sign in required');
+    return this.fetchBound(`/vela/v0/sessions/${encodeURIComponent(id)}/events`, { headers: { 'Last-Event-ID': cursor }, exactStream: mapper }, token);
+  }
 
   private async refresh(tokens: V.Tokens): Promise<V.Tokens> {
     if (!this.refreshing) {
@@ -42,12 +61,11 @@ export class EtherAdapter implements ServerAdapter {
     if (auth && !tokens) throw new Error('Sign in required');
     const key = JSON.stringify([this.origin, tokens?.viewer.id ?? '', tokens?.viewer.policyRevision ?? '', this.capabilityContext, 0, path]);
     const cached = cacheable ? this.cache.get(key) : undefined;
-    const send = (token: V.Tokens | null, useCache = true) => fetch(`${this.origin}/vela/v0${path}`, {
+    const send = (token: V.Tokens | null, useCache = true) => this.fetchBound(`/vela/v0${path}`, {
       method, headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        ...(token ? { Authorization: `Bearer ${token.accessToken}`, 'X-Vela-Device-Id': this.credentials.device.id } : {}),
         ...(cached && useCache ? { 'If-None-Match': cached.etag } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+    }, token);
     let response = await send(tokens);
     if (response.status === 401 && tokens && retryAuth) { tokens = await this.refresh(tokens); response = await send(tokens, false); }
     if (response.status === 304 && cached) return cached.body as T;

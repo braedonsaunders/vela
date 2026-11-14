@@ -4,8 +4,9 @@ The Ether adapter implements the v0 JSON endpoints used by discovery, authentica
 search, interactions and session snapshots. Credentials are supplied through an
 interface backed by Exact secret storage. Contract sources use opt-in mock sign-in
 when `VELA_MOCK=1`; password, web-code and quick-connect sources support real
-sign-in. Set `API_BASE_URL` at build time to the Ether origin; the default is
-`http://127.0.0.1:7777` for development. Fast, descriptive and AI searches use
+sign-in. Production binds its API origin once to the trusted serving page origin.
+For an explicit `VELA_MOCK=1` development build, `API_BASE_URL` overrides that
+origin and defaults to `http://127.0.0.1:7777`. Fast, descriptive and AI searches use
 independent resources; AI jobs are cancelled on replacement. A bounded queue
 coalesces visible receipts and flushes on hide, selection and sign-out. Device
 grant UI and end-to-end playback verification remain open.
@@ -18,11 +19,11 @@ the resource so a retry starts with a new snapshot. The UI owns bounded retries
 and releases the stream when playback leaves the view. End-to-end behavior still
 requires the mock server and player to be exercised together.
 
-A portable multi-origin deployment is blocked by the pinned Exact runtime. Its
-`net.fetch` admission supports fixed origins, subdomain and scheme patterns,
-and local-network grants, but no serving-page same-origin grant. Grants are
-baked from `app.ts`; templating a page setting cannot change them. Ether must
-serve the static artifact without an origin template until Exact provides a
-same-origin grant bound to the trusted serving-page origin (including redirect
-checks). The current build-time `API_BASE_URL` works for development and
-per-origin builds only; a scheme-wide grant would violate Vela's boundary.
+Exact currently lacks a serving-page same-origin grant, so the app holds
+`net.fetch http:` and `net.fetch https:`. Every data-module request, including
+the session stream, passes through the adapter, which pins its URL to the bound
+origin and `/vela/v0/` path and refuses redirects. Only this wrapper attaches
+bearer credentials and device IDs. Skins are Contract code and cannot issue
+requests. Replace the scheme grants and application-level pin when Exact adds a
+trusted same-origin grant that also scopes redirects. Ether can serve the same
+static build at each origin; no per-server HTML template is needed.

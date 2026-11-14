@@ -10,7 +10,16 @@ import { sessionEvents } from './protocol/events';
 import { mediaPlan } from './protocol/media';
 import { playerPresentation } from '../player/presentation';
 
-export function createAnswer(API: string, MOCK: boolean, version: string): Answer {
+export function createAnswer(devOrigin: string, MOCK: boolean, version: string): Answer {
+let API = '';
+function bindOrigin(pageOrigin: string): void {
+  const candidate = MOCK ? devOrigin : pageOrigin;
+  let parsed: URL;
+  try { parsed = new URL(candidate); } catch { throw new Error('Server origin is unavailable'); }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('Invalid server origin');
+  if (API && API !== parsed.origin) throw new Error('Server origin changed during session');
+  API = parsed.origin;
+}
 let device: Device;
 let client: ClientCapabilities;
 function key(store: Parameters<Sources['uiBootstrap']>[1]): string {
@@ -26,6 +35,7 @@ let authVersion = 0;
 let ai: { epoch: number; generation: number; query: string; job?: AISearchJob; starting?: Promise<AISearchJob> } | undefined;
 const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable' });
 function server(store: Parameters<Sources['uiBootstrap']>[1]): EtherAdapter {
+  if (!API) throw new Error('Server origin is unavailable');
   if (!adapter) {
     let id = store.get('vela.device');
     if (!id) { id = crypto.randomUUID(); store.set('vela.device', id); }
@@ -64,7 +74,8 @@ const sources: Sources = {
     if (next) lastLive = next;
     return lastLive;
   },
-  uiAuth: async ([code, _epoch, isFragment], store) => {
+  uiAuth: async ([code, _epoch, isFragment, pageOrigin], store) => {
+    bindOrigin(pageOrigin);
     const api = server(store);
     if (code && !store.get('vela.session')) {
       let decoded = code;
@@ -181,10 +192,7 @@ const sources: Sources = {
   },
   sessionEvents: async ([id], store) => {
     const api = await session(store);
-    return sessionEvents(api, API, () => {
-      const value = store.get('vela.session');
-      return value ? JSON.parse(value) : null;
-    }, device.id, id);
+    return sessionEvents(api, API, id);
   },
   flushInteractions: async (_args, store) => {
     while (interactions?.size) await interactions.flush(key(store));
