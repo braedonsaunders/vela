@@ -367,6 +367,11 @@ and `atSeconds` on the pinned source; there is no separate select-path command.
 An `on-demand` playback path has no URL and is never fetched or considered ready.
 The generation-aware `switch` command authorizes preparation, then returns the
 actual broker plan. Existing ready/preparing/unavailable paths keep their URL rule.
+Optional `PlaybackPath.quality: {width, height, bitrate}` describes the target
+output (pixel dimensions and bits per second), including for on-demand paths.
+It is menu metadata, not codec, init-segment or playability evidence. Switching
+to a lazy quality path must return the actual plan and its rendition readiness;
+clients must not turn target metadata into verified `Quality` entries or a URL.
 
 `POST /auth/web-code` requires bearer/device authentication. Its targetOrigin must
 exactly match an advertised trusted HTTPS origin; the server issues a short-lived
