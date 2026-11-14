@@ -145,7 +145,7 @@ members Client
   state streamAttempt = 0
   resource sessionUpdate = sessionEvents(playback.sessionId, streamAttempt) when auth.authenticated and playingId != "" and playback.sessionId != "" as shape PlaybackModel
   derive currentPlan = (current(sessionUpdate) and sessionUpdate.sessionId == playback.sessionId and sessionUpdate.planJson != "" ? sessionUpdate.planJson : playback.planJson)
-  task retrySession when failed(sessionUpdate) and streamAttempt < 3
+  task retrySession when playingId != "" and watchModel.state != "ended" and failed(sessionUpdate) and streamAttempt < 3
     after(1500, retryStream)
   action retryStream
     streamAttempt = streamAttempt + 1
