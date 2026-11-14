@@ -111,7 +111,7 @@ component QuickConnect
         text t("ui.approveThisCodeFromASignedInEtherDevice") color="mochi.ink-soft" font-size=15 line-height=1.5 max-width=300
       row width="100%" gap=6 justify-content="center" testId="connect-code" aria-label=model.code role="text"
         for ch, i in model.code.split("") key=`${i}`
-          text ch aria-hidden=true flex=1 max-width=46 height=58 display="flex" align-items="center" justify-content="center" border-radius=14 background-color=(i % 3 == 0 ? "mochi.pink-soft" : i % 3 == 1 ? "mochi.lavender-soft" : "mochi.mint-soft") border="2.5px solid var(--mochi.ink)" box-shadow="0px 4px 0px var(--mochi.ink)" font-family="Fredoka, ui-rounded, system-ui, sans-serif" font-size=27 font-weight=650 color="mochi.ink" animation=(still ? "mochiFade 200ms linear both" : `mochiPop 420ms ${boing()} ${120 + i * 50}ms both`)
+          text ch aria-hidden=true flex=1 max-width=46 height=58 display="flex" align-items="center" justify-content="center" border-radius=14 background-color=(i % 3 == 0 ? "mochi.pink-soft" : i % 3 == 1 ? "mochi.lavender-soft" : "mochi.mint-soft") border="2.5px solid var(--mochi.ink)" box-shadow="0px 4px 0px var(--mochi.ink)" font-family="\"Pixelify Sans\", ui-monospace, monospace" font-size=28 font-weight=700 color="mochi.ink" animation=(still ? "mochiFade 200ms linear both" : `mochiPop 420ms ${boing()} ${120 + i * 50}ms both`)
       column gap=8 align-items="center"
         row gap=10 align-items="center" role="status"
           if error == ""

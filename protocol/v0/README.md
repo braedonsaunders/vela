@@ -95,12 +95,7 @@ grant-bound receipts and are absent from its home-row fixtures.
 
 features.trailerPreview.available declares the actual preview cache/broker
 capability; absent/off disables preview requests. Row.previewOnFocus is an
-optional per-row opt-in (absent=false). Hero.previewOnFocus carries that same
-owner toggle from the featured source row; absent=false. Hero preview requests
-require both the capability and that hero's explicit true flag, including when
-trailer metadata or a cached grant is present. Capability alone never opts a hero
-in; do not infer the flag from another row or from trailer availability.
-Hero and focused-card previews use the
+optional per-row opt-in (absent=false). Hero and focused-card previews use the
 same authenticated POST /titles/:id/trailer-preview, with a matching client device.
 The host authorizes the title before checking/preparing cached trailer media.
 Ready/preparing/unavailable are200 no-store results; a missing/hidden title is404.

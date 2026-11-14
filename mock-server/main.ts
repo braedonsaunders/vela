@@ -3,7 +3,7 @@ import { previewSessions, stopPreview, trailerPreview } from './previews';
 import { libraries, libraryEntries } from '../protocol/v0/fixtures/libraries';
 import { createHmac } from 'node:crypto';
 import type * as V from '../protocol/v0/types';
-import { allTitles, channels, detail, extras, featuredSources, featuredTitles, guide, rows, titles } from '../protocol/v0/fixtures/catalogue';
+import { allTitles, channels, detail, extras, featuredTitles, guide, rows, titles } from '../protocol/v0/fixtures/catalogue';
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia } from './media';
 import { serveLive, liveFaults } from './live';
 import { applyCommand, createSession, events, observe, requestedInit, sessions, snapshot, type Session } from './sessions';
@@ -133,7 +133,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
-    const heroes = featuredSources.map(({ title, rowId }): V.Hero => ({ title, receiptToken: receipt(g, `hero:${title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
+    const heroes = featuredTitles.map((title): V.Hero => ({ title, receiptToken: receipt(g, `hero:${title.id}`) }));
     const firstPage = new URL(url); firstPage.search = '';
     const home = homeRows(g, firstPage);
     return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}) } satisfies V.Bootstrap, g.id);

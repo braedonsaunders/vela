@@ -80,7 +80,7 @@ component PlayerChrome
       else
         if waiting
           column align-self="center" align-items="center" gap=14 role="status" aria-label=(model.state == "recovering" ? t("ui.findingAWayForward") : model.state == "loading" ? t("ui.preparingYourScreening") : t("ui.buildingALittleBreathingRoom")) testId="player-status" animation=(still ? "mochiFade 200ms linear both" : "mochiFade 360ms ease-out 120ms both")
-            Spinner(size=(small ? 112 : 140), still=still)
+            Spinner(size=(small ? 96 : 120), still=still)
             if model.state == "loading" or model.state == "recovering"
               text (model.state == "recovering" ? t("ui.findingAWayForward") : t("ui.preparingYourScreening")) class=Pixel font-size=(small ? 16 : 19) padding="6px 14px" border-radius=999 background-color="mochi.night-veil" border="2px solid var(--mochi.night-edge)"
       // Bottom: a rounded dock with the timeline and the controls.
@@ -231,6 +231,6 @@ component Spinner
       column position="absolute" inset=0 animation=(still ? "none" : "mochiSpin 3.2s linear infinite")
         for a, i in [0, 45, 90, 135, 180, 225, 270, 315] key=`${a}`
           column position="absolute" left="50%" top="50%" width=0 height=0 rotate=`${a}deg`
-            column position="absolute" left=-6.5 top=(0 - size / 2 + 4) color=(i % 3 == 0 ? "mochi.sakura" : i % 3 == 1 ? "mochi.star" : "mochi.mint")
-              PixelIcon(name=(i % 2 == 0 ? "sparkle" : "heart"), size=13)
+            column position="absolute" left=-5 top=(0 - size / 2 + 2) color=(i % 3 == 0 ? "mochi.sakura" : i % 3 == 1 ? "mochi.star" : "mochi.mint")
+              PixelIcon(name=(i % 2 == 0 ? "sparkle" : "heart"), size=10)
       Hopper(size=(size * 0.42), still=still, mood="happy")
