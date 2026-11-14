@@ -1,4 +1,4 @@
-use Card, FeedRow, DetailModel, ExtraModel, cardName from "../../foundation/models.contract"
+use Card, FeedRow, DetailModel, ExtraModel, CastPerson, cardName from "../../foundation/models.contract"
 use Shelf, noPreview, unwatched, progressPct, subLine from "./slots.contract"
 use Glyph, Solid, Art, Primary, Secondary, Round, gutter, arrive, kindLabel from "./look.contract"
 
@@ -71,13 +71,13 @@ component Detail
               row gap=16 padding-left=gutter(small) padding-right=gutter(small) padding-bottom=4
                 for extra in model.extras key=extra.id
                   ExtraCard(extra=extra, small=small, playExtra=playExtra)
-        if model.cast.length > 0
+        if model.castPeople.length > 0
           column gap=(small ? 10 : 14) padding-bottom=(small ? 20 : 30)
             text t("marquee.castAndCrew") role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 padding-left=gutter(small) padding-right=gutter(small)
             scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
               row gap=(small ? 14 : 22) padding-left=gutter(small) padding-right=gutter(small) padding-bottom=4 role="list"
-                for person in model.cast key=person
-                  Person(person=person, small=small)
+                for person, i in model.castPeople key=`${i}-${person.name}`
+                  Person(person=person, small=small, still=still)
         if model.crew.length > 0
           column gap=6 padding-left=gutter(small) padding-right=gutter(small) padding-bottom=(small ? 20 : 30) max-width="60rem"
             for person in model.crew key=person
@@ -239,15 +239,20 @@ style ExtraTile
   :focus-visible
     box-shadow = "0px 0px 0px 2px var(--marquee.amber)"
 
-// One person in the cast row: their initials in a circle, their name and role.
+// One person in the cast row: their portrait in a circle (initials when there is none),
+// their name and role.
 component Person
   props
-    person: string
+    person: CastPerson
     small: bool
+    still: bool
   view
     column role="listitem" width=(small ? 84 : 110) align-items="center" gap=8 text-align="center" flex-shrink=0
-      text initials(personName(person)) width=(small ? 72 : 96) height=(small ? 72 : 96) border-radius=999 display="flex" align-items="center" justify-content="center" font-size=(small ? 22 : 28) font-weight=700 color="marquee.ink-dim" background-image="linear-gradient(150deg, var(--marquee.raised) 0%, var(--marquee.chrome) 100%)" box-shadow="inset 0px 0px 0px 1px var(--marquee.line)" aria-hidden=true
+      column position="relative" width=(small ? 72 : 96) height=(small ? 72 : 96) border-radius=999 overflow="hidden" align-items="center" justify-content="center" background-image="linear-gradient(150deg, var(--marquee.raised) 0%, var(--marquee.chrome) 100%)" box-shadow="inset 0px 0px 0px 1px var(--marquee.line)" aria-hidden=true
+        text initials(person.name) font-size=(small ? 22 : 28) font-weight=700 color="marquee.ink-dim"
+        if person.portrait != ""
+          Art(src=person.portrait, still=still)
       column gap=2 width="100%"
-        text personName(person) font-size=13 font-weight=600 line-clamp=2
-        if personRole(person) != ""
-          text personRole(person) font-size=12 color="marquee.ink-faint" line-clamp=2
+        text person.name font-size=13 font-weight=600 line-clamp=2
+        if person.role != ""
+          text person.role font-size=12 color="marquee.ink-faint" line-clamp=2
