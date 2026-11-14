@@ -83,7 +83,7 @@ try {
   await inventory(dist);
   if (!cards.some(c => c.path === 'index.html')) throw new Error('Build has no index.html');
   const archive = join(work, archiveName);
-  await run(['tar', '--format=ustar', '-czf', archive, '-C', dist, '.']);
+  await run(['tar', '--format=ustar', '-czf', archive, '-C', dist, '.'], root, { ...process.env, COPYFILE_DISABLE: '1' });
   const archiveBytes = await readFile(archive), archiveSha256 = digest(archiveBytes);
   const manifest = { schemaVersion: 1, version, protocolVersions: [0], exactRevision, buildTime: new Date().toISOString(), sourceRevision, sourceDirty, apiOrigin: 'same-origin', basePath: '/vela/', archive: { file: archiveName, bytes: archiveBytes.length, sha256: archiveSha256 }, files: cards };
   const manifestBytes = JSON.stringify(manifest, null, 2) + '\n';
