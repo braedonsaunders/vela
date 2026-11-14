@@ -35,6 +35,7 @@ export class PlaybackEngine {
     }
     this.timer = setInterval(() => this.publish(), 1000);
   }
+  get observationAllowed() { return this.session?.serverState !== 'ended'; }
   snapshot(): Snapshot {
     const ranges = this.video.buffered, quality = this.video.getVideoPlaybackQuality?.();
     return {

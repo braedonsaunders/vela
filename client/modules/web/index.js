@@ -779,6 +779,9 @@ class PlaybackEngine {
     }
     this.timer = setInterval(() => this.publish(), 1000);
   }
+  get observationAllowed() {
+    return this.session?.serverState !== "ended";
+  }
   snapshot() {
     const ranges = this.video.buffered, quality = this.video.getVideoPlaybackQuality?.();
     return {
@@ -1432,7 +1435,7 @@ function create(tag, element, json, event) {
   handle.engine = new PlaybackEngine(video, (value) => {
     event(8, JSON.stringify(value));
     const now = performance.now();
-    if (value.type === "snapshot" && now - handle.lastReport >= 1000) {
+    if (value.type === "snapshot" && handle.engine.observationAllowed && now - handle.lastReport >= 1000) {
       const endedKey = `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}`;
       if (value.snapshot.state === "ended" && handle.endedReport === endedKey)
         return;

@@ -29,7 +29,7 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   handle.engine = new PlaybackEngine(video, value => {
     event(8, JSON.stringify(value));
     const now = performance.now();
-    if (value.type === 'snapshot' && now - handle.lastReport >= 1000) {
+    if (value.type === 'snapshot' && handle.engine.observationAllowed && now - handle.lastReport >= 1000) {
       const endedKey = `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}`;
       if (value.snapshot.state === 'ended' && handle.endedReport === endedKey) return;
       if (value.snapshot.state === 'ended') handle.endedReport = endedKey;
