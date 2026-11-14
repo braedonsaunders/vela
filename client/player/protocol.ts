@@ -1,4 +1,4 @@
-import type { PlaybackPlan, PlayerObservation } from '../../protocol/v0/types';
+import type { PlaybackPlan, PlaybackPath, PlayerObservation } from '../../protocol/v0/types';
 import type { PlaybackSession, Snapshot } from './model';
 /** Protocol paths contain server-qualified codec strings, never guessed capabilities. */
 export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
@@ -11,7 +11,7 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
     audioTrackId: plan.selectedAudioTrackId, subtitleTrackId: plan.selectedSubtitleTrackId ?? undefined,
     audioTracks: plan.audioTracks.map(t => ({ id: t.id, label: t.name, language: t.language })),
     subtitleTracks: plan.subtitleTracks.filter(t => t.codec.toLowerCase() === 'webvtt' || t.codec.toLowerCase() === 'vtt').map(t => ({ id: t.id, label: t.name, language: t.language, url: t.url })),
-    sources: plan.paths.filter(p => p.readiness === 'ready' && (p.edition ?? '') === edition).map(p => ({
+    sources: plan.paths.filter((p): p is PlaybackPath & { readiness: 'ready'; url: string } => p.readiness === 'ready' && (p.edition ?? '') === edition).map(p => ({
       id: p.id, strategy: p.kind, delivery: p.transport, url: p.url, mime: p.mimeType,
       edition: p.edition ?? '', timeline: p.timelineId ?? `unverified:${p.id}`,
       audioTrackId: plan.selectedAudioTrackId,
