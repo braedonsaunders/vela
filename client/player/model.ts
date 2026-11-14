@@ -1,4 +1,4 @@
-import type { SessionCommand, AudioRendition, OriginalVideo } from '../wire/v0/types';
+import type { SessionCommand, AudioRendition, OriginalVideo, Chapter } from '../wire/v0/types';
 import type { SubtitleDelivery } from '../../protocol/v0/types';
 /** Local engine input. protocol.ts translates the versioned server plan here. */
 export interface Track { id: string; label: string; language?: string; url?: string; codec?: string; channels?: number; streamIndex?: number; delivery?: SubtitleDelivery; forced?: boolean; hearingImpaired?: boolean }
@@ -19,6 +19,7 @@ export interface PlaybackSession {
   id: string; mediaId: string; edition: string; selectedSourceId?: string; serverControlled?: boolean; sources: Source[]; position?: number; duration?: number;
   audioTracks: Track[]; subtitleTracks: Track[]; audioTrackId?: string;
   subtitleTrackId?: string; live?: boolean; liveWindowStart?: number; liveEdge?: number; liveMaxDrift?: number; lowDelay?: boolean; sourceGeneration?: number; seekGeneration?: number;
+  chapters?: Chapter[];
 }
 export type Command = { id: number } & (
   { type: 'play' | 'pause' | 'pip' | 'fullscreen' | 'catchUp' | 'retry' } |
@@ -43,6 +44,7 @@ export interface Snapshot {
   capabilities: { pip: boolean; fullscreen: boolean; audioSwitch: boolean }; lockedQuality: string | null;
   audioTracks: Track[]; subtitleTracks: Track[]; renditions: Rendition[];
   speed: number; speeds: number[]; pendingSubtitleTrackId: string | null;
+  chapters: Chapter[];
   diagnostics?: { metadataDiscrepancies: string[] };
   live: LiveSnapshot | null;
   seekTarget: number | null; waiting: boolean; volume: number; muted: boolean;

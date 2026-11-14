@@ -96,6 +96,7 @@ export class PlaybackEngine {
       audioTracks: this.session?.audioTracks ?? [], subtitleTracks: this.session?.subtitleTracks ?? [], renditions: this.source?.renditions ?? [],
       speed: this.speed, speeds: this.original && !this.original.setSpeed ? [] : [0.5,0.75,1,1.25,1.5,1.75,2],
       pendingSubtitleTrackId: this.pendingTracks?.subtitle ?? null,
+      chapters: this.session?.chapters ?? [],
       live: this.liveSnapshot(),
       seekTarget: this.pendingSeek?.position ?? null,
       waiting: !!this.pendingSeek || ['loading','buffering','recovering'].includes(this.status) || this.wantsPlay && this.video.seeking, volume: this.video.volume, muted: this.video.muted,
@@ -160,13 +161,18 @@ export class PlaybackEngine {
     if (!this.timer) this.timer = setInterval(() => { this.checkWaiting(); this.publish(); }, 1000);
     if (session.id !== this.session?.id || session.sourceGeneration !== this.controller.source || session.seekGeneration !== this.controller.seek) this.localDecoderRetries.clear();
     const pending = this.pendingSwitch;
-    const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && ((pending.source + 1 === session.sourceGeneration && pending.seek === session.seekGeneration) || (pending.source === session.sourceGeneration && pending.seek + 1 === session.seekGeneration));
+    const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId &&
+      session.sourceGeneration !== undefined && session.seekGeneration !== undefined &&
+      session.sourceGeneration >= pending.source && session.sourceGeneration <= pending.source+1 &&
+      session.seekGeneration >= pending.seek && session.seekGeneration <= pending.seek+1 &&
+      (session.sourceGeneration > pending.source || session.seekGeneration > pending.seek);
     const position = handoff ? Math.max(pending.position, this.position()) : session.position ?? 0;
     const recovery = !!handoff && pending.recovery;
     this.pendingSwitch = undefined;
     if (session.id !== this.session?.id) this.pendingSeek = undefined;
     else if (this.pendingSeek && session.seekGeneration !== this.controller.seek) this.pendingSeek = { ...this.pendingSeek, position: session.position ?? this.pendingSeek.position, authorized: true };
     const previousServerState = session.id === this.session?.id ? this.session.serverState : undefined;
+    if (session.id !== this.session?.id || session.selectedSourceId !== this.source?.id) this.manualQuality = null;
     if (session.id !== this.session?.id) {
       this.audioPreference = undefined; this.lowDelayOverride = undefined; this.localTransportIntent = undefined;
       // Opening the watch view is a play request. Later ready revisions merely
@@ -515,7 +521,8 @@ export class PlaybackEngine {
           if (command.trackId && !selected) throw new Error('Unknown subtitle track');
           const current = this.session?.subtitleTracks.find(t => t.id === this.subtitle);
           if (selected?.delivery?.kind === 'burn-in' || current?.delivery?.kind === 'burn-in') { this.requestTracks({subtitle:command.trackId}); break; }
-          if (this.original && command.trackId) throw new Error('Original subtitle overlay is not available');
+          if (this.original && command.trackId && this.session?.serverControlled) { this.requestTracks({subtitle:command.trackId}); break; }
+          if (this.original && command.trackId) throw new Error('This source has no installed subtitle renderer');
           if (command.trackId && !this.session?.subtitleTracks.some(t => t.id === command.trackId && t.url)) throw new Error('Unknown WebVTT track');
           this.subtitle = command.trackId; this.applySubtitle(); break;
         }
