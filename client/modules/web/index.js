@@ -1,0 +1,962 @@
+// client/player/session.ts
+class SessionController {
+  sessionId = "";
+  source = 0;
+  seek = 0;
+  abort = new AbortController;
+  supersede() {
+    this.abort.abort();
+    this.abort = new AbortController;
+  }
+  start(id, source = 0, seek = 0) {
+    this.supersede();
+    this.sessionId = id;
+    this.source = source;
+    this.seek = seek;
+    return this.token();
+  }
+  changeSource(increment = true) {
+    this.supersede();
+    if (increment)
+      this.source++;
+    return this.token();
+  }
+  changeSeek() {
+    this.supersede();
+    this.seek++;
+    return this.token();
+  }
+  token() {
+    return { sessionId: this.sessionId, source: this.source, seek: this.seek, signal: this.abort.signal };
+  }
+  current(t) {
+    return !t.signal.aborted && t.sessionId === this.sessionId && t.source === this.source && t.seek === this.seek;
+  }
+  stop() {
+    this.supersede();
+    this.sessionId = "";
+    this.source++;
+  }
+}
+function cancelled(signal) {
+  if (signal.aborted)
+    throw new DOMException("Superseded playback work", "AbortError");
+}
+function delay(ms, signal) {
+  return new Promise((resolve, reject) => {
+    cancelled(signal);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+// client/player/abr.ts
+class BandwidthEstimator {
+  fast = 0;
+  slow = 0;
+  get bps() {
+    return this.fast ? Math.min(this.fast, this.slow) : null;
+  }
+  sample(bytes, elapsedMs, cached) {
+    if (cached || bytes < 16384 || elapsedMs < 50)
+      return;
+    const rate = bytes * 8000 / elapsedMs, seconds = elapsedMs / 1000;
+    const blend = (old, halfLife) => old ? old + (rate - old) * (1 - 2 ** (-seconds / halfLife)) : rate;
+    this.fast = blend(this.fast, 3);
+    this.slow = blend(this.slow, 10);
+  }
+}
+
+class AdaptiveBitrate {
+  upSince = 0;
+  manual = null;
+  choose(ladder, current, buffer, throughput, dropRatio, now) {
+    const sorted = [...ladder].sort((a, b) => a.bandwidth - b.bandwidth);
+    if (!sorted.length)
+      throw new Error("No playable renditions");
+    const manual = sorted.find((r) => r.id === this.manual);
+    if (manual)
+      return manual;
+    const budget = (throughput ?? sorted[0].bandwidth) * (buffer < 4 ? 0.55 : buffer < 12 ? 0.7 : 0.85);
+    let next = sorted.filter((r) => r.bandwidth <= budget).at(-1) ?? sorted[0];
+    if (buffer < 2)
+      next = sorted[0];
+    if (dropRatio > 0.05 && current)
+      next = sorted.filter((r) => r.bandwidth < current.bandwidth).at(-1) ?? sorted[0];
+    if (current && next.bandwidth > current.bandwidth) {
+      if (buffer < 12 || dropRatio > 0.01) {
+        this.upSince = 0;
+        return current;
+      }
+      if (!this.upSince)
+        this.upSince = now;
+      if (now - this.upSince < 12000)
+        return current;
+      this.upSince = 0;
+      return sorted.find((r) => r.bandwidth > current.bandwidth) ?? current;
+    }
+    this.upSince = 0;
+    return next;
+  }
+  abandon(current, lower, duration, received, elapsed, buffer) {
+    if (elapsed < 1000 || lower.bandwidth >= current.bandwidth || buffer > 8 || received <= 0)
+      return false;
+    const rate = received * 8 / (elapsed / 1000);
+    const remaining = Math.max(0, current.bandwidth * duration - received * 8) / rate;
+    const replacement = lower.bandwidth * duration / rate + 0.25;
+    return remaining > buffer && replacement < remaining && replacement < Math.max(buffer, 1);
+  }
+}
+
+// client/player/hls.ts
+function parsePlaylist(text, base) {
+  if (!text.trimStart().startsWith("#EXTM3U"))
+    throw new Error("Invalid HLS playlist");
+  if (/#EXT-X-(KEY|BYTERANGE|DISCONTINUITY|STREAM-INF)/m.test(text))
+    throw new Error("Requires clear, continuous fMP4 media playlist (not master/TS/encrypted/byte-range HLS)");
+  let sequence = 0, start = 0, duration = 0, init = "", targetDuration = 6;
+  const segments = [];
+  for (const line of text.split(/\r?\n/).map((l) => l.trim())) {
+    if (line.startsWith("#EXT-X-MEDIA-SEQUENCE:"))
+      sequence = Number(line.split(":")[1]);
+    else if (line.startsWith("#EXT-X-TARGETDURATION:"))
+      targetDuration = Number(line.split(":")[1]);
+    else if (line.startsWith("#EXT-X-MAP:")) {
+      if (/BYTERANGE=/.test(line))
+        throw new Error("Byte-range initialization is unsupported");
+      const uri = /URI="([^"]+)"/.exec(line)?.[1];
+      if (!uri)
+        throw new Error("Missing initialization URI");
+      init = new URL(uri, base).href;
+    } else if (line.startsWith("#EXTINF:"))
+      duration = Number(line.slice(8).split(",")[0]);
+    else if (line && !line.startsWith("#")) {
+      if (!init || !Number.isFinite(duration) || duration <= 0)
+        throw new Error("Invalid fMP4 segment");
+      segments.push({ sequence: sequence++, url: new URL(line, base).href, start, duration, init });
+      start += duration;
+      duration = 0;
+    }
+  }
+  if (!Number.isFinite(sequence) || !Number.isFinite(targetDuration) || targetDuration <= 0 || !segments.length)
+    throw new Error("Empty/invalid playlist");
+  return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
+}
+
+// client/player/pipeline.ts
+function mediaSourceClass() {
+  return globalThis.ManagedMediaSource ?? globalThis.MediaSource;
+}
+
+class PlaybackFault extends Error {
+  kind;
+  retryable;
+  constructor(message, kind, retryable = false) {
+    super(message);
+    this.kind = kind;
+    this.retryable = retryable;
+  }
+}
+function bufferAhead(video) {
+  for (let i = 0;i < video.buffered.length; i++)
+    if (video.currentTime >= video.buffered.start(i) - 0.05 && video.currentTime < video.buffered.end(i))
+      return video.buffered.end(i) - video.currentTime;
+  return 0;
+}
+function mutation(buffer, signal, operation) {
+  return new Promise((resolve, reject) => {
+    cancelled(signal);
+    const clean = () => {
+      buffer.removeEventListener("updateend", done);
+      buffer.removeEventListener("error", error);
+      signal.removeEventListener("abort", abort);
+    };
+    const done = () => {
+      clean();
+      resolve();
+    };
+    const error = () => {
+      clean();
+      reject(new PlaybackFault("SourceBuffer rejected media", "decoder"));
+    };
+    const abort = () => {
+      clean();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    buffer.addEventListener("updateend", done, { once: true });
+    buffer.addEventListener("error", error, { once: true });
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+      operation();
+    } catch (e) {
+      clean();
+      reject(e);
+    }
+  });
+}
+
+class SegmentPipeline {
+  video;
+  onRendition;
+  bandwidth = new BandwidthEstimator;
+  abr = new AdaptiveBitrate;
+  current;
+  lowDelay = false;
+  media;
+  objectUrl;
+  buffer;
+  dropPrevious = { dropped: 0, total: 0 };
+  dropRatio = 0;
+  driftPenalty = 0;
+  constructor(video, onRendition) {
+    this.video = video;
+    this.onRendition = onRendition;
+  }
+  dispose() {
+    if (this.buffer?.updating) {
+      try {
+        this.buffer.abort();
+      } catch {}
+    }
+    if (this.media?.readyState === "open") {
+      try {
+        this.media.endOfStream();
+      } catch {}
+    }
+    if (this.objectUrl)
+      URL.revokeObjectURL(this.objectUrl);
+    this.buffer = undefined;
+    this.media = undefined;
+    this.objectUrl = undefined;
+  }
+  async fetchBytes(url, signal, progress) {
+    const started = performance.now();
+    const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(12000)]), credentials: "same-origin" });
+    if (!response.ok)
+      throw new PlaybackFault(`Media HTTP ${response.status}`, "network", response.status === 408 || response.status === 429 || response.status >= 500 || response.status === 404);
+    const chunks = [];
+    let size = 0;
+    if (response.body) {
+      const reader = response.body.getReader();
+      try {
+        for (;; ) {
+          const { done, value } = await reader.read();
+          if (done)
+            break;
+          size += value.byteLength;
+          if (size > 64 * 1024 * 1024)
+            throw new PlaybackFault("Segment exceeds 64 MiB budget", "source");
+          chunks.push(value);
+          progress?.(size, performance.now() - started);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    }
+    cancelled(signal);
+    const bytes = new Uint8Array(size);
+    let at = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, at);
+      at += chunk.byteLength;
+    }
+    const timing = performance.getEntriesByName(response.url).at(-1);
+    const cached = response.headers.get("X-Cache")?.toLowerCase() === "hit" || !!(timing && timing.transferSize === 0 && timing.decodedBodySize > 0);
+    this.bandwidth.sample(size, performance.now() - started, cached);
+    return bytes.buffer;
+  }
+  async bytes(url, signal, progress) {
+    const deadline = performance.now() + 12000;
+    for (let attempt = 0;; attempt++) {
+      try {
+        return await this.fetchBytes(url, signal, progress);
+      } catch (error) {
+        cancelled(signal);
+        const retryable = error instanceof TypeError || error instanceof PlaybackFault && error.retryable;
+        if (!retryable || attempt >= 2 || performance.now() >= deadline)
+          throw error;
+        this.driftPenalty = Math.min(12, this.driftPenalty + 3);
+        await delay(300 * 2 ** attempt, signal);
+      }
+    }
+  }
+  async playlist(r, signal) {
+    return parsePlaylist(new TextDecoder().decode(await this.bytes(r.url, signal)), r.url);
+  }
+  async append(bytes, signal) {
+    const buffer = this.buffer;
+    try {
+      await mutation(buffer, signal, () => buffer.appendBuffer(bytes));
+    } catch (error) {
+      if (!(error instanceof DOMException) || error.name !== "QuotaExceededError")
+        throw error;
+      const end = this.video.currentTime - 10;
+      if (end <= 0)
+        throw new PlaybackFault("Insufficient media buffer quota", "source");
+      await mutation(buffer, signal, () => buffer.remove(0, end));
+      await mutation(buffer, signal, () => buffer.appendBuffer(bytes));
+    }
+  }
+  async run(ladder, position, live, signal) {
+    const MS = mediaSourceClass();
+    if (!MS)
+      throw new PlaybackFault("MediaSource unavailable", "source");
+    const playable = ladder.filter((r) => MS.isTypeSupported(r.mime));
+    if (!playable.length)
+      throw new PlaybackFault("No supported segmented codec", "source");
+    const media = this.media = new MS;
+    this.video.disableRemotePlayback = true;
+    this.objectUrl = URL.createObjectURL(media);
+    this.video.src = this.objectUrl;
+    await new Promise((resolve, reject) => {
+      const clean = () => {
+        media.removeEventListener("sourceopen", open);
+        signal.removeEventListener("abort", abort);
+      };
+      const open = () => {
+        clean();
+        resolve();
+      };
+      const abort = () => {
+        clean();
+        reject(new DOMException("Aborted", "AbortError"));
+      };
+      media.addEventListener("sourceopen", open, { once: true });
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted)
+        abort();
+    });
+    cancelled(signal);
+    let rendition = this.abr.choose(playable, undefined, 0, this.bandwidth.bps, 0, performance.now());
+    this.current = rendition;
+    this.onRendition(rendition);
+    this.buffer = media.addSourceBuffer(rendition.mime);
+    let list = await this.playlist(rendition, signal);
+    if (!live && list.ended)
+      media.duration = list.segments.reduce((sum, s) => sum + s.duration, 0);
+    let next = live ? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find((s) => s.start + s.duration > position);
+    if (!next)
+      throw new PlaybackFault("Position outside source timeline", "source");
+    let sequence = next.sequence, init = "", first = true;
+    while (!signal.aborted) {
+      const ahead = bufferAhead(this.video);
+      const target = live ? this.lowDelay ? 6 : 18 + this.driftPenalty : 30;
+      if (ahead >= target || "streaming" in media && !media.streaming) {
+        await delay(250, signal);
+        continue;
+      }
+      const quality = this.video.getVideoPlaybackQuality?.();
+      if (quality) {
+        const total = quality.totalVideoFrames - this.dropPrevious.total;
+        if (total >= 30) {
+          this.dropRatio = Math.max(0, quality.droppedVideoFrames - this.dropPrevious.dropped) / total;
+          this.dropPrevious = { dropped: quality.droppedVideoFrames, total: quality.totalVideoFrames };
+        }
+      }
+      const choice = this.abr.choose(playable.filter((r) => r.mime === rendition.mime), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
+      if (choice.id !== rendition.id) {
+        const candidate = await this.playlist(choice, signal);
+        const compatible = candidate.segments.find((s) => s.sequence === sequence);
+        if (compatible) {
+          rendition = choice;
+          list = candidate;
+          this.current = choice;
+          this.onRendition(choice);
+          init = "";
+        }
+      }
+      next = list.segments.find((s) => s.sequence === sequence);
+      if (!next) {
+        if (list.ended) {
+          if (media.readyState === "open")
+            media.endOfStream();
+          return;
+        }
+        await delay(Math.max(500, list.targetDuration * 500), signal);
+        const fresh = await this.playlist(rendition, signal);
+        const overlap = fresh.segments.find((s) => list.segments.some((old) => old.sequence === s.sequence));
+        if (!overlap)
+          throw new PlaybackFault("Live playlist lost timeline overlap", "source");
+        const offset = list.segments.find((s) => s.sequence === overlap.sequence).start - overlap.start;
+        fresh.segments.forEach((s) => {
+          s.start += offset;
+        });
+        list = fresh;
+        continue;
+      }
+      if (next.init !== init) {
+        await this.append(await this.bytes(next.init, signal), signal);
+        init = next.init;
+      }
+      const request = new AbortController;
+      const abort = () => request.abort();
+      signal.addEventListener("abort", abort, { once: true });
+      let abandon;
+      let bytes;
+      const timeout = setTimeout(() => request.abort(new PlaybackFault("Segment deadline exceeded", "network", true)), 15000);
+      try {
+        bytes = await this.bytes(next.url, request.signal, (received, elapsed) => {
+          const lower = [...playable].filter((r) => r.mime === rendition.mime && r.bandwidth < rendition.bandwidth).sort((a, b) => a.bandwidth - b.bandwidth)[0];
+          if (lower && this.abr.abandon(rendition, lower, next.duration, received, elapsed, bufferAhead(this.video))) {
+            abandon = lower;
+            request.abort();
+          }
+        });
+      } catch (error) {
+        cancelled(signal);
+        if (!abandon)
+          throw request.signal.reason instanceof PlaybackFault ? request.signal.reason : error;
+        rendition = abandon;
+        list = await this.playlist(rendition, signal);
+        this.current = rendition;
+        this.onRendition(rendition);
+        init = "";
+        continue;
+      } finally {
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", abort);
+      }
+      await this.append(bytes, signal);
+      if (first) {
+        this.video.currentTime = live ? next.start : position;
+        first = false;
+      }
+      sequence++;
+      const retain = live ? 15 : 30;
+      if (this.video.currentTime > retain && this.buffer.buffered.length && this.buffer.buffered.start(0) < this.video.currentTime - retain - 5) {
+        await mutation(this.buffer, signal, () => this.buffer.remove(0, this.video.currentTime - retain));
+      }
+      if (this.video.readyState < 3)
+        for (let i = 0;i < this.video.buffered.length; i++) {
+          const gap = this.video.buffered.start(i) - this.video.currentTime;
+          if (gap > 0.02 && gap <= 0.25) {
+            this.video.currentTime = this.video.buffered.start(i) + 0.01;
+            break;
+          }
+        }
+      if (live && this.lowDelay && this.video.buffered.length) {
+        const drift = this.video.buffered.end(this.video.buffered.length - 1) - this.video.currentTime;
+        this.video.playbackRate = drift > 8 ? 1.03 : 1;
+      }
+    }
+  }
+}
+
+// client/player/engine.ts
+class PlaybackEngine {
+  video;
+  emit;
+  fullscreenContainer;
+  controller = new SessionController;
+  session;
+  source;
+  pipeline;
+  status = "idle";
+  backend = null;
+  failure = null;
+  audio = null;
+  subtitle = null;
+  timer;
+  listeners = [];
+  attempted = new Set;
+  recovering = false;
+  disposed = false;
+  wantsPlay = false;
+  lowDelay = false;
+  manualQuality = null;
+  track;
+  lastObservation = 0;
+  constructor(video, emit, fullscreenContainer = video) {
+    this.video = video;
+    this.emit = emit;
+    this.fullscreenContainer = fullscreenContainer;
+    video.playsInline = true;
+    video.controls = false;
+    video.preload = "auto";
+    for (const [name, handler] of Object.entries({
+      playing: () => {
+        this.status = "playing";
+        this.failure = null;
+      },
+      pause: () => {
+        if (!["loading", "recovering", "failed"].includes(this.status))
+          this.status = "paused";
+      },
+      waiting: () => {
+        if (this.status !== "recovering")
+          this.status = "buffering";
+      },
+      ended: () => {
+        this.status = "ended";
+      },
+      error: () => {
+        const e = video.error;
+        if (!e || !this.session || this.disposed)
+          return;
+        const kind = e.code === 2 ? "network" : e.code === 3 ? "decoder" : "source";
+        this.recover(new PlaybackFault(e.message || `Media error ${e.code}`, kind), this.controller.token());
+      }
+    })) {
+      const listener = () => {
+        handler();
+        this.publish();
+      };
+      video.addEventListener(name, listener);
+      this.listeners.push(() => video.removeEventListener(name, listener));
+    }
+    this.timer = setInterval(() => this.publish(), 1000);
+  }
+  snapshot() {
+    const ranges = this.video.buffered, quality = this.video.getVideoPlaybackQuality?.();
+    return {
+      sessionId: this.session?.id ?? null,
+      sourceGeneration: this.controller.source,
+      seekGeneration: this.controller.seek,
+      state: this.status,
+      sourceId: this.source?.id ?? null,
+      strategy: this.source?.strategy ?? null,
+      backend: this.backend,
+      renditionId: this.pipeline?.current?.id ?? null,
+      position: Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0,
+      duration: Number.isFinite(this.video.duration) ? this.video.duration : null,
+      playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: ranges.start(i), end: ranges.end(i) })),
+      throughputBps: this.pipeline?.bandwidth.bps ?? null,
+      droppedFrames: quality?.droppedVideoFrames ?? null,
+      totalFrames: quality?.totalVideoFrames ?? null,
+      audioTrackId: this.audio,
+      subtitleTrackId: this.subtitle,
+      failure: this.failure
+    };
+  }
+  publish() {
+    if (this.disposed)
+      return;
+    const now = performance.now();
+    if (now - this.lastObservation < 250)
+      return;
+    this.lastObservation = now;
+    this.emit({ type: "snapshot", snapshot: this.snapshot() });
+  }
+  supported(source) {
+    if (source.edition !== this.session?.edition)
+      return false;
+    if (source.delivery === "file")
+      return !!this.video.canPlayType(source.mime);
+    return !!this.video.canPlayType("application/vnd.apple.mpegurl") || !!source.renditions?.some((r) => mediaSourceClass()?.isTypeSupported(r.mime));
+  }
+  candidates() {
+    const priority = { direct: 0, remux: 1, transcode: 2 };
+    return (this.session?.sources ?? []).filter((s) => this.supported(s)).sort((a, b) => priority[a.strategy] - priority[b.strategy]);
+  }
+  async load(session) {
+    this.controller.start(session.id, session.sourceGeneration, session.seekGeneration);
+    this.resetMedia();
+    this.session = session;
+    this.source = undefined;
+    this.failure = null;
+    this.attempted.clear();
+    this.recovering = false;
+    this.audio = session.audioTrackId ?? null;
+    this.subtitle = session.subtitleTrackId ?? null;
+    const source = this.candidates().find((s) => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
+    if (!source) {
+      this.fail({ kind: "unsupported", message: "No browser-compatible source for this edition", recoverable: false });
+      return;
+    }
+    await this.activate(source, session.position ?? 0, false, true);
+  }
+  resetMedia() {
+    this.video.pause();
+    this.pipeline?.dispose();
+    this.pipeline = undefined;
+    this.track?.remove();
+    this.track = undefined;
+    this.video.removeAttribute("src");
+    this.video.load();
+    this.video.playbackRate = 1;
+  }
+  async activate(source, position, recovery = false, initial = false) {
+    const token = this.controller.changeSource(!initial);
+    this.resetMedia();
+    this.source = source;
+    this.attempted.add(source.id);
+    this.status = recovery ? "recovering" : "loading";
+    this.failure = null;
+    this.publish();
+    try {
+      if (source.delivery === "hls" && !this.video.canPlayType("application/vnd.apple.mpegurl")) {
+        this.backend = "mse";
+        const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
+        pipeline.lowDelay = this.lowDelay;
+        pipeline.abr.manual = this.manualQuality;
+        pipeline.run(source.renditions ?? [], position, !!this.session?.live, token.signal).catch((e) => {
+          if (this.controller.current(token))
+            this.recover(e, token);
+        });
+      } else {
+        this.backend = source.delivery === "file" ? "file" : "native-hls";
+        this.video.disableRemotePlayback = false;
+        this.video.src = source.url;
+      }
+      await this.metadata(token);
+      cancelled(token.signal);
+      if (this.backend !== "mse" && position > 0)
+        this.video.currentTime = position;
+      this.applySubtitle();
+      this.applyNativeAudio();
+      this.status = "paused";
+      if (this.wantsPlay)
+        await this.play();
+      this.publish();
+    } catch (e) {
+      if (this.controller.current(token))
+        await this.recover(e, token);
+    }
+  }
+  metadata(token) {
+    return new Promise((resolve, reject) => {
+      const done = () => {
+        clean();
+        resolve();
+      };
+      const abort = () => {
+        clean();
+        reject(new DOMException("Superseded", "AbortError"));
+      };
+      const error = () => {
+        clean();
+        reject(new PlaybackFault("Media metadata unavailable", "source"));
+      };
+      const timer = setTimeout(() => {
+        clean();
+        reject(new PlaybackFault("Metadata deadline exceeded", "network", true));
+      }, 15000);
+      const clean = () => {
+        clearTimeout(timer);
+        this.video.removeEventListener("loadedmetadata", done);
+        this.video.removeEventListener("error", error);
+        token.signal.removeEventListener("abort", abort);
+      };
+      this.video.addEventListener("loadedmetadata", done, { once: true });
+      this.video.addEventListener("error", error, { once: true });
+      token.signal.addEventListener("abort", abort, { once: true });
+      if (this.video.readyState >= 1)
+        done();
+      else if (token.signal.aborted)
+        abort();
+    });
+  }
+  fail(failure) {
+    this.failure = failure;
+    this.status = "failed";
+    this.emit({ type: "error", failure });
+    this.publish();
+  }
+  async recover(error, token) {
+    if (!this.controller.current(token) || this.recovering)
+      return;
+    this.recovering = true;
+    const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError ? "network" : "source";
+    const position = this.video.currentTime || this.session?.position || 0;
+    this.status = "recovering";
+    this.failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
+    this.publish();
+    try {
+      await delay(300, token.signal);
+      const source = this.candidates().find((s) => !this.attempted.has(s.id) && s.recoveryAllowed !== false && s.timeline === this.source?.timeline && s.edition === this.source?.edition && (!this.audio || s.audioTrackId === this.audio));
+      if (!source) {
+        this.fail({ ...this.failure, recoverable: false });
+        return;
+      }
+      this.recovering = false;
+      await this.activate(source, position, true);
+    } catch (e) {
+      if (this.controller.current(token))
+        this.fail({ kind, message: String(e), recoverable: false });
+    } finally {
+      this.recovering = false;
+    }
+  }
+  async play() {
+    try {
+      await this.video.play();
+    } catch (e) {
+      this.emit({ type: "error", failure: { kind: "action", message: e instanceof Error ? e.message : String(e), recoverable: true } });
+    }
+  }
+  applyNativeAudio() {
+    const tracks = this.video.audioTracks;
+    if (!tracks || !this.audio)
+      return false;
+    const selected = Array.from(tracks).find((t) => t.id === this.audio);
+    if (!selected)
+      return false;
+    for (const track of Array.from(tracks))
+      track.enabled = track === selected;
+    return true;
+  }
+  applySubtitle() {
+    this.track?.remove();
+    this.track = undefined;
+    if (!this.subtitle)
+      return;
+    const selected = this.session?.subtitleTracks.find((t) => t.id === this.subtitle);
+    if (!selected?.url)
+      throw new Error("Selected subtitle has no WebVTT URL");
+    const track = this.track = document.createElement("track");
+    track.kind = "subtitles";
+    track.label = selected.label;
+    track.srclang = selected.language ?? "und";
+    track.src = selected.url;
+    track.default = true;
+    track.addEventListener("load", () => {
+      if (this.track === track)
+        track.track.mode = "showing";
+    }, { once: true });
+    track.addEventListener("error", () => {
+      if (this.track === track)
+        this.emit({ type: "error", failure: { kind: "source", message: "Subtitle could not be loaded", recoverable: true } });
+    }, { once: true });
+    this.video.append(track);
+    track.track.mode = "showing";
+  }
+  async command(command) {
+    if (this.disposed)
+      return;
+    try {
+      switch (command.type) {
+        case "play":
+          this.wantsPlay = true;
+          await this.play();
+          break;
+        case "pause":
+          this.wantsPlay = false;
+          this.video.pause();
+          break;
+        case "seek": {
+          if (!Number.isFinite(command.seconds) || command.seconds < 0 || Number.isFinite(this.video.duration) && command.seconds > this.video.duration)
+            throw new Error("Seek outside media timeline");
+          this.controller.changeSeek();
+          if (this.backend === "mse" && this.source)
+            await this.activate(this.source, command.seconds);
+          else
+            this.video.currentTime = command.seconds;
+          break;
+        }
+        case "volume":
+          if (!Number.isFinite(command.value) || command.value < 0 || command.value > 1)
+            throw new Error("Volume outside 0–1");
+          this.video.volume = command.value;
+          break;
+        case "quality":
+          if (this.backend !== "mse")
+            throw new Error("Quality is controlled by the browser on this playback path");
+          if (command.renditionId && !this.source?.renditions?.some((r) => r.id === command.renditionId))
+            throw new Error("Unknown rendition");
+          this.manualQuality = command.renditionId;
+          if (this.pipeline)
+            this.pipeline.abr.manual = command.renditionId;
+          break;
+        case "audio": {
+          if (!this.session?.audioTracks.some((t) => t.id === command.trackId))
+            throw new Error("Unknown audio track");
+          const previous = this.audio;
+          this.audio = command.trackId;
+          if (this.applyNativeAudio())
+            break;
+          const source = this.candidates().find((s) => s.audioTrackId === command.trackId && s.timeline === this.source?.timeline);
+          if (!source) {
+            this.audio = previous;
+            throw new Error("Audio selection requires a compatible server source");
+          }
+          await this.activate(source, this.video.currentTime);
+          break;
+        }
+        case "subtitle":
+          if (command.trackId && !this.session?.subtitleTracks.some((t) => t.id === command.trackId && t.url))
+            throw new Error("Unknown WebVTT track");
+          this.subtitle = command.trackId;
+          this.applySubtitle();
+          break;
+        case "lowDelay":
+          this.lowDelay = command.enabled;
+          if (this.pipeline)
+            this.pipeline.lowDelay = command.enabled;
+          if (!command.enabled)
+            this.video.playbackRate = 1;
+          break;
+        case "pip":
+          if (!document.pictureInPictureEnabled || !this.video.requestPictureInPicture)
+            throw new Error("Picture-in-picture is unavailable");
+          await this.video.requestPictureInPicture();
+          break;
+        case "fullscreen":
+          if (this.fullscreenContainer.requestFullscreen)
+            await this.fullscreenContainer.requestFullscreen();
+          else if (this.video.webkitEnterFullscreen)
+            this.video.webkitEnterFullscreen();
+          else
+            throw new Error("Fullscreen is unavailable");
+          break;
+      }
+    } catch (e) {
+      this.emit({ type: "error", failure: { kind: "action", message: e instanceof Error ? e.message : String(e), recoverable: true } });
+    }
+    this.publish();
+  }
+  dispose() {
+    this.disposed = true;
+    this.controller.stop();
+    clearInterval(this.timer);
+    for (const remove of this.listeners)
+      remove();
+    this.listeners = [];
+    this.resetMedia();
+    this.session = undefined;
+  }
+}
+
+// client/player/protocol.ts
+function sessionFromPlan(plan) {
+  const selected = plan.paths.find((p) => p.id === plan.selectedPathId);
+  if (!selected)
+    throw new Error("Plan selected path is absent");
+  const edition = selected.edition ?? "";
+  return {
+    id: plan.sessionId,
+    mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? "",
+    edition,
+    position: plan.positionSeconds,
+    live: !!plan.live,
+    sourceGeneration: plan.sourceGeneration,
+    seekGeneration: plan.seekGeneration,
+    audioTrackId: plan.selectedAudioTrackId,
+    subtitleTrackId: plan.selectedSubtitleTrackId ?? undefined,
+    audioTracks: plan.audioTracks.map((t) => ({ id: t.id, label: t.name, language: t.language })),
+    subtitleTracks: plan.subtitleTracks.filter((t) => t.codec.toLowerCase() === "webvtt" || t.codec.toLowerCase() === "vtt").map((t) => ({ id: t.id, label: t.name, language: t.language, url: t.url })),
+    sources: plan.paths.filter((p) => p.readiness === "ready" && (p.edition ?? "") === edition).map((p) => ({
+      id: p.id,
+      strategy: p.kind,
+      delivery: p.transport,
+      url: p.url,
+      mime: p.mimeType,
+      edition: p.edition ?? "",
+      timeline: p.timelineId ?? `unverified:${p.id}`,
+      audioTrackId: plan.selectedAudioTrackId,
+      recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some((b) => b.independent && b.compatibility === "verified-timeline" && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
+      renditions: p.qualities.map((q) => ({
+        id: q.id,
+        url: q.url,
+        bandwidth: q.bitrate,
+        height: q.height,
+        mime: `video/mp4; codecs="${q.videoCodec}${q.audioCodec ? `,${q.audioCodec}` : ""}"`
+      }))
+    }))
+  };
+}
+function observation(snapshot, sequence) {
+  if (!snapshot.sessionId || !snapshot.sourceId)
+    return null;
+  return {
+    idempotencyKey: `${snapshot.sessionId}:${snapshot.sourceGeneration}:${snapshot.seekGeneration}:${sequence}`,
+    sourceGeneration: snapshot.sourceGeneration,
+    seekGeneration: snapshot.seekGeneration,
+    sequence,
+    observedAt: new Date().toISOString(),
+    positionSeconds: snapshot.position,
+    state: snapshot.state === "playing" ? "playing" : snapshot.state === "ended" ? "ended" : snapshot.state === "paused" ? "paused" : "buffering",
+    playableRanges: snapshot.playable.map((r) => ({ startSeconds: r.start, endSeconds: r.end })),
+    selectedPathId: snapshot.sourceId,
+    ...snapshot.throughputBps === null ? {} : { throughputBps: snapshot.throughputBps },
+    ...snapshot.droppedFrames === null ? {} : { droppedFrames: snapshot.droppedFrames },
+    ...snapshot.totalFrames === null ? {} : { totalFrames: snapshot.totalFrames },
+    ...snapshot.audioTrackId === null ? {} : { audioTrackId: snapshot.audioTrackId },
+    subtitleTrackId: snapshot.subtitleTrackId,
+    ...snapshot.failure ? { error: { class: snapshot.failure.kind === "network" ? "transient" : snapshot.failure.kind === "decoder" ? "decoder" : "source", message: snapshot.failure.message } } : {}
+  };
+}
+
+// client/player/web-module.ts
+var abi = 1;
+var roster = { "vela-player": { snapshot: false } };
+function create(tag, element, json, event) {
+  if (tag !== "vela-player")
+    throw new Error(`Unknown player view: ${tag}`);
+  const root = element.shadowRoot ?? element.attachShadow({ mode: "open" });
+  const video = document.createElement("video");
+  video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000";
+  root.replaceChildren(video);
+  const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0 };
+  handle.engine = new PlaybackEngine(video, (value) => {
+    event(8, JSON.stringify(value));
+    const now = performance.now();
+    if (value.type === "snapshot" && now - handle.lastReport >= 1000) {
+      const report = observation(value.snapshot, ++handle.sequence);
+      if (report) {
+        handle.lastReport = now;
+        event(8, JSON.stringify({ type: "observation", sessionId: value.snapshot.sessionId, observation: report }));
+      }
+    }
+  }, element.parentElement ?? element);
+  try {
+    setProps(handle, json);
+  } catch (error) {
+    handle.engine.dispose();
+    video.remove();
+    throw error;
+  }
+  return handle;
+}
+function setProps(handle, json) {
+  const props = JSON.parse(json);
+  const input = props.plan || props.session || "";
+  if (input && input !== handle.sessionJson) {
+    let session;
+    if (props.plan) {
+      const plan = JSON.parse(input);
+      const stale = plan.sessionId === handle.planSession && (plan.revision <= handle.planRevision || plan.sourceGeneration < handle.engine.controller.source || plan.seekGeneration < handle.engine.controller.seek);
+      if (stale) {
+        applyCommand(handle, props);
+        return;
+      }
+      session = sessionFromPlan(plan);
+      handle.planRevision = plan.revision;
+      handle.planSession = plan.sessionId;
+    } else
+      session = JSON.parse(input);
+    if (!session.id || !Array.isArray(session.sources))
+      throw new Error("Invalid playback session");
+    handle.sessionJson = input;
+    handle.engine.load(session);
+  }
+  applyCommand(handle, props);
+}
+function applyCommand(handle, props) {
+  if (props.command) {
+    const command = JSON.parse(props.command);
+    if (!Number.isSafeInteger(command.id))
+      throw new Error("Command requires integer id");
+    if (command.id > handle.lastCommand) {
+      handle.lastCommand = command.id;
+      handle.engine.command(command);
+    }
+  }
+}
+function destroy(handle) {
+  handle.engine.dispose();
+  handle.video.remove();
+}
+export {
+  abi,
+  create,
+  destroy,
+  roster,
+  setProps
+};

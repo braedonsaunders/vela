@@ -16,5 +16,8 @@
     "store": {
       "web": "0"
     }
-  }
+  },
+  "modules": [
+    "vela-player"
+  ]
 }
