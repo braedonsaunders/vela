@@ -52,12 +52,12 @@ component PlayerChrome
   view
     column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="ink.primary"
       // Top: close, and the title being screened.
-      row position="relative" padding=(small ? "18px 16px 64px" : "30px 40px 110px") gap=(small ? 14 : 20) align-items="center" background-image="linear-gradient(180deg, var(--cinematic.player-top) 0%, var(--cinematic.player-mid) 45%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or still ? "0px 0px" : "0px -14px") transition=chrome(still)
+      row position="relative" padding=(small ? "18px 16px 72px" : "30px 40px 140px") gap=(small ? 14 : 20) align-items="center" background-image="linear-gradient(180deg, var(--cinematic.player-top) 0%, var(--cinematic.player-upper) 38%, var(--cinematic.player-mid) 68%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or still ? "0px 0px" : "0px -14px") transition=chrome(still)
         button press=close pointer-events=(shown ? "auto" : "none") aria-label=t("ui.closePlayer") class=IconButton width=46 height=46 padding=13 flex-shrink=0 transition=`background-color 180ms linear`
           image "symbol:back" width=20 height=20
         column gap=4 flex=1 min-width=0
           text t("ui.nowPlaying") class=Eyebrow font-size=10 color="ink.quiet"
-          text title class=Display font-size=(small ? 24 : 32) line-clamp=1
+          text title class=Display font-size=(small ? 24 : 34) line-clamp=1 text-shadow="0px 2px 18px var(--cinematic.shadow)"
       // Centre: the engine is waiting, or playback has failed.
       if failed
         column pointer-events="auto" align-self="center" align-items="center" text-align="center" gap=14 padding=(small ? "26px 22px" : "34px 40px") margin="0px 16px" max-width=440 box-sizing="border-box" border-radius=24 background-color="cinematic.glass" backdrop-filter="blur(28px) saturate(1.3)" border="1px solid var(--cinematic.glass-edge)" box-shadow="0px 30px 90px var(--cinematic.shadow)" role="alert" testId="player-status" animation=enter(still, 0)
@@ -77,12 +77,12 @@ component PlayerChrome
             if model.state == "loading" or model.state == "recovering"
               text (model.state == "recovering" ? t("ui.findingAWayForward") : t("ui.preparingYourScreening")) class=Display font-size=(small ? 22 : 26) color="ink.primary" text-shadow="0px 2px 24px var(--cinematic.shadow)"
       // Bottom: the timeline, then icon transport and screening controls.
-      column position="relative" padding=(small ? "64px 16px 18px" : "120px 40px 30px") gap=(small ? 10 : 14) background-image="linear-gradient(0deg, var(--cinematic.player-bottom) 0%, var(--cinematic.player-mid) 50%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or still ? "0px 0px" : "0px 18px") transition=chrome(still) pointer-events=(shown ? "auto" : "none")
+      column position="relative" padding=(small ? "80px 16px 18px" : "150px 40px 30px") gap=(small ? 10 : 14) background-image="linear-gradient(0deg, var(--cinematic.player-bottom) 0%, var(--cinematic.player-upper) 42%, var(--cinematic.player-mid) 72%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or still ? "0px 0px" : "0px 18px") transition=chrome(still) pointer-events=(shown ? "auto" : "none")
         if model.actionError != "" and failure == ""
           text model.actionError color="brand.warm" font-size=13 role="status"
         // Timeline: buffered ranges, played fill and a thumb over a transparent native range.
         column position="relative" height=22 justify-content="center"
-          column position="absolute" left=0 right=0 height=(scrubbing ? 6 : 4) border-radius=3 background-color="cinematic.track" overflow="hidden" transition=(still ? "none" : `height ${base()}ms ${glide()}`)
+          column position="absolute" left=0 right=0 height=(scrubbing ? 6 : 4) border-radius=3 background-color="cinematic.track-strong" overflow="hidden" transition=(still ? "none" : `height ${base()}ms ${glide()}`)
             for range in model.buffered key=range.id
               column position="absolute" top=0 bottom=0 left=`${range.left}%` width=`${range.width}%` background-color="cinematic.buffer"
             column position="absolute" left=0 top=0 bottom=0 width=`${model.progress}%` border-radius=3 background-color="ink.primary"
@@ -103,13 +103,14 @@ component PlayerChrome
           button press=command("mute", "") aria-label=(model.muted ? t("ui.unmute") : t("ui.mute")) aria-pressed=model.muted testId="player-mute" class=Bare width=44 height=44 padding=11 flex-shrink=0
             image (model.muted or model.volume <= 0 ? "symbol:speaker-mute" : "symbol:speaker") width=22 height=22
           if not small
-            column position="relative" width=96 height=22 justify-content="center" flex-shrink=0
-              column position="absolute" left=0 right=0 height=4 border-radius=2 background-color="cinematic.track" overflow="hidden"
+            column position="relative" width=104 height=22 justify-content="center" flex-shrink=0 margin-right=8
+              column position="absolute" left=0 right=0 height=4 border-radius=2 background-color="cinematic.track-strong" overflow="hidden"
                 column height=4 width=`${level * 100}%` background-color="ink.primary"
+              column position="absolute" left=`calc(${level * 100}% - 6px)` width=12 height=12 border-radius=6 background-color="ink.primary" box-shadow="0px 1px 6px var(--cinematic.shadow)" aria-hidden=true
               input type="range" min=0 max=1 step=0.01 value=level change=setVolume focus=editing(true) blur=editing(false) aria-label=t("ui.volume") testId="player-volume" position="absolute" left=0 width="100%" height=22 margin=0 opacity=0 cursor="pointer"
           row flex=1 min-width=0 justify-content="flex-end"
             if not small
-              text t("ui.pathQuality", path=model.path, quality=model.quality) testId="player-quality" font-size=11 color="ink.quiet" letter-spacing="0.02em" line-clamp=1 padding="0px 10px"
+              text (model.quality != "" ? model.quality : model.path) testId="player-quality" font-size=11 font-weight=600 color="ink.secondary" letter-spacing="0.04em" line-clamp=1 padding="4px 10px" border="1px solid var(--cinematic.glass-edge)" border-radius=6 margin-right=6
           if hasSettings
             button popovertarget="player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" class=Bare width=44 height=44 padding=11 flex-shrink=0
               image "symbol:adjust" width=22 height=22
@@ -165,8 +166,7 @@ component PlayerChrome
               for path in model.paths key=path.id
                 option value=path.id
                   text path.label
-          if small
-            text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 color="ink.quiet"
+          text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 color="ink.secondary"
           text t("ui.spacePlayPauseSeekFFullscreen") font-size=10 line-height=1.5 letter-spacing="0.04em" color="ink.quiet"
 
 style Bare

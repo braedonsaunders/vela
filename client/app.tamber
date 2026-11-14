@@ -51,9 +51,11 @@ theme
   cinematic.dusk = #5b2a4a  scheme=fixed
   cinematic.alert = #c0703f1f  scheme=fixed
   cinematic.alert-edge = #c0703f4d  scheme=fixed
-  cinematic.player-top = #000000b8  scheme=fixed
-  cinematic.player-mid = #00000052  scheme=fixed
-  cinematic.player-bottom = #000000e0  scheme=fixed
+  cinematic.player-top = #000000d9  scheme=fixed
+  cinematic.player-upper = #0000008c  scheme=fixed
+  cinematic.player-mid = #00000033  scheme=fixed
+  cinematic.player-bottom = #000000eb  scheme=fixed
+  cinematic.track-strong = #ffffff47  scheme=fixed
 
   // Index light page palette, plus its independent light-on-video chrome.
   index.rail = #e3dfd3  scheme=fixed
