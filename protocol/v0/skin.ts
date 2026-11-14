@@ -22,7 +22,7 @@ export type StyleProperty =
   | 'color' | 'background-color' | 'background-image' | 'opacity' | 'mix-blend-mode'
   | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'outline' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
   | 'font-family' | 'font-size' | 'font-weight' | 'font-style' | 'line-height' | 'letter-spacing' | 'text-transform'
-  | 'text-align' | 'text-shadow' | 'line-clamp' | 'white-space' | 'font-variant-numeric'
+  | 'text-align' | 'text-shadow' | '-webkit-text-stroke' | 'line-clamp' | 'white-space' | 'font-variant-numeric'
   | 'object-fit' | 'transform-origin' | 'translate' | 'scale' | 'rotate'
   | 'transition' | 'animation' | 'pointer-events' | 'cursor';
 
