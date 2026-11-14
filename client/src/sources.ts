@@ -95,18 +95,18 @@ const sources: Sources = {
     if (activeQuick === secret) activeQuick = '';
     return { accepted: true };
   },
-  uiBootstrap: async (_args, store) => homeModel(await (await session(store)).bootstrap()),
-  uiDetail: async ([id], store) => detailModel(await (await session(store)).detail(id)),
+  uiBootstrap: async (_args, store) => homeModel(await (await session(store)).bootstrap(), API),
+  uiDetail: async ([id], store) => detailModel(await (await session(store)).detail(id), API),
   uiSearch: async ([query, generation, epoch], store) => {
     const api = await session(store);
     const result = await api.search({ query, generation, mode: 'fast', idempotencyKey: `search-${epoch}-${generation}` });
-    return { query: result.query, generation: result.generation, items: result.items.map(t => card(t)), descriptive: [], ai: [], aiStatus: 'unavailable' };
+    return { query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API)), descriptive: [], ai: [], aiStatus: 'unavailable' };
   },
   uiDescriptive: async ([query, generation, epoch], store) => {
     const api = await session(store);
     if (!(await api.capabilities()).features.descriptiveSearch.available) return lane(query, generation);
     const result = await api.search({ query, generation, mode: 'descriptive', idempotencyKey: `descriptive-${epoch}-${generation}` });
-    return { ...lane(result.query, result.generation), items: result.items.map(t => card(t)) };
+    return { ...lane(result.query, result.generation), items: result.items.map(t => card(t, '', API)) };
   },
   uiAI: async ([query, generation, epoch], store) => {
     const api = await session(store);
@@ -134,7 +134,7 @@ const sources: Sources = {
       if (ai === current) current.job = job;
     }
     if (!ai || ai.epoch !== epoch || ai.generation !== generation || !ai.job || ai.job.generation !== generation) return lane(query, generation);
-    return { ...lane(query, generation), items: (ai.job.results?.items ?? []).map(t => card(t)), aiStatus: ai.job.status };
+    return { ...lane(query, generation), items: (ai.job.results?.items ?? []).map(t => card(t, '', API)), aiStatus: ai.job.status };
   },
   interaction: async ([receipt, kind, at], store) => {
     if (kind !== 'visible' && kind !== 'selected' && kind !== 'played') throw new Error('Invalid interaction');
