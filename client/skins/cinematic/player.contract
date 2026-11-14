@@ -16,6 +16,7 @@ component PlayerChrome
   action menuChanged(e: ToggleEvent)
     editing(e.newState == "open")
   derive blocked = busy or model.state == "ended"
+  derive hasSettings = model.audio.length > 1 or model.subtitles.length > 0 or model.qualities.length > 1 or model.paths.length > 1
   derive failure = (serverError != "" ? serverError : model.reason)
   derive shown = (visible or model.state != "playing")
   action scrub(v: number)
@@ -88,39 +89,41 @@ component PlayerChrome
           if model.fullscreen
             button press=command("fullscreen", "") aria-label=t("ui.fullscreen") border="none" padding=8 background-color="transparent" color="ink.primary"
               text t("ui.fullscreen") font-size=12
-          button popovertarget="player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" border="none" padding=8 background-color="transparent" color="ink.primary"
-            text t("ui.tracksQuality") font-size=12
-      column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=16 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 320) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=22 gap=16 border="1px solid var(--cinematic.track)" border-radius=18 background-color="cinematic.popover" color="ink.primary" box-shadow="0px 16px 60px var(--cinematic.shadow)"
-        text t("ui.yourScreening") font-size=10 letter-spacing="2px" color="ink.quiet"
-        text t("ui.playbackSettings") font-size=20 font-weight=550
-        if model.audio.length > 1
-          text t("ui.audio") font-size=12 color="ink.secondary"
-          select disabled=blocked value=model.audioId change=audio aria-label=t("ui.audioTrack") background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
-            for track in model.audio key=track.id
-              option value=track.id
-                text track.label
-        else
-          text model.audioLabel font-size=12 color="ink.secondary"
-        if model.subtitles.length > 0
-          text t("ui.subtitles") font-size=12 color="ink.secondary"
-          select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
-            option value=""
-              text t("ui.off")
-            for track in model.subtitles key=track.id
-              option value=track.id
-                text track.label
-        if model.qualities.length > 1
-          text t("ui.quality") font-size=12 color="ink.secondary"
-          select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
-            option value=""
-              text t("ui.autoAdaptToYourConnection")
-            for quality in model.qualities key=quality.id
-              option value=quality.id
-                text quality.label
-        if model.paths.length > 1
-          text t("ui.delivery") font-size=12 color="ink.secondary"
-          select disabled=blocked value=model.pathId change=path aria-label=t("ui.playbackPath") testId="player-path" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
-            for path in model.paths key=path.id
-              option value=path.id
-                text path.label
-        text t("ui.spacePlayPauseSeekFFullscreen") font-size=10 line-height=1.5 color="ink.quiet"
+          if hasSettings
+            button popovertarget="player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" border="none" padding=8 background-color="transparent" color="ink.primary"
+              text t("ui.tracksQuality") font-size=12
+      if hasSettings
+        column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=16 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 320) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=22 gap=16 border="1px solid var(--cinematic.track)" border-radius=18 background-color="cinematic.popover" color="ink.primary" box-shadow="0px 16px 60px var(--cinematic.shadow)"
+          text t("ui.yourScreening") font-size=10 letter-spacing="2px" color="ink.quiet"
+          text t("ui.playbackSettings") font-size=20 font-weight=550
+          if model.audio.length > 1
+            text t("ui.audio") font-size=12 color="ink.secondary"
+            select disabled=blocked value=model.audioId change=audio aria-label=t("ui.audioTrack") background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
+              for track in model.audio key=track.id
+                option value=track.id
+                  text track.label
+          else
+            text model.audioLabel font-size=12 color="ink.secondary"
+          if model.subtitles.length > 0
+            text t("ui.subtitles") font-size=12 color="ink.secondary"
+            select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
+              option value=""
+                text t("ui.off")
+              for track in model.subtitles key=track.id
+                option value=track.id
+                  text track.label
+          if model.qualities.length > 1
+            text t("ui.quality") font-size=12 color="ink.secondary"
+            select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
+              option value=""
+                text t("ui.autoAdaptToYourConnection")
+              for quality in model.qualities key=quality.id
+                option value=quality.id
+                  text quality.label
+          if model.paths.length > 1
+            text t("ui.delivery") font-size=12 color="ink.secondary"
+            select disabled=blocked value=model.pathId change=path aria-label=t("ui.playbackPath") testId="player-path" background-color="cinematic.field" color="ink.primary" border="none" border-radius=8 padding=10
+              for path in model.paths key=path.id
+                option value=path.id
+                  text path.label
+          text t("ui.spacePlayPauseSeekFFullscreen") font-size=10 line-height=1.5 color="ink.quiet"

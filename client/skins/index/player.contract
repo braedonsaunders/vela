@@ -15,6 +15,7 @@ component PlayerChrome
     close: action
   derive shown = (visible or model.state != "playing")
   derive blocked = busy or model.state == "ended"
+  derive hasSettings = model.audio.length > 1 or model.subtitles.length > 0 or model.qualities.length > 1 or model.paths.length > 1
   derive failure = (serverError != "" ? serverError : model.reason)
   action menuChanged(e: ToggleEvent)
     editing(e.newState == "open")
@@ -71,40 +72,42 @@ component PlayerChrome
           if model.fullscreen
             button press=command("fullscreen", "") aria-label=t("ui.fullscreen") border="none" background-color="transparent" color="index.on-video" padding=6
               text t("ui.fullscreen")
-          button popovertarget="index-player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" border="none" background-color="transparent" color="index.on-video" padding=6
-            text t("ui.tracksQuality")
-      column id="index-player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=16 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 340) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=24 gap=16 border="1px solid var(--index.video-line)" background-color="index.video-ground" color="index.on-video"
-        text t("ui.playbackSettings") font-size=24
-        if model.audio.length > 1
-          select disabled=blocked value=model.audioId change=audio aria-label=t("ui.audioTrack")
-            for track in model.audio key=track.id
-              option value=track.id
-                text track.label
-        else
-          text model.audioLabel font-size=13
-        if model.subtitles.length > 0
-          select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles"
-            option value=""
-              text t("ui.off")
-            for track in model.subtitles key=track.id
-              option value=track.id
-                text track.label
-        if model.qualities.length > 1
-          select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select"
-            option value=""
-              text t("ui.autoAdaptToYourConnection")
-            for quality in model.qualities key=quality.id
-              option value=quality.id
-                text quality.label
-        if model.paths.length > 1
-          select disabled=blocked value=model.pathId change=delivery aria-label=t("ui.playbackPath") testId="player-path"
-            for path in model.paths key=path.id
-              option value=path.id
-                text path.label
-        if model.chapters.length > 0
-          select disabled=blocked value="" change=chapter aria-label=t("ui.chapters")
-            option value=""
-              text t("ui.chapters")
-            for item in model.chapters key=item.id
-              option value=item.id
-                text item.label
+          if model.chapters.length > 0
+            select disabled=blocked value="" change=chapter aria-label=t("ui.chapters")
+              option value=""
+                text t("ui.chapters")
+              for item in model.chapters key=item.id
+                option value=item.id
+                  text item.label
+          if hasSettings
+            button popovertarget="index-player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" border="none" background-color="transparent" color="index.on-video" padding=6
+              text t("ui.tracksQuality")
+      if hasSettings
+        column id="index-player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=16 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 340) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=24 gap=16 border="1px solid var(--index.video-line)" background-color="index.video-ground" color="index.on-video"
+          text t("ui.playbackSettings") font-size=24
+          if model.audio.length > 1
+            select disabled=blocked value=model.audioId change=audio aria-label=t("ui.audioTrack")
+              for track in model.audio key=track.id
+                option value=track.id
+                  text track.label
+          else
+            text model.audioLabel font-size=13
+          if model.subtitles.length > 0
+            select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles"
+              option value=""
+                text t("ui.off")
+              for track in model.subtitles key=track.id
+                option value=track.id
+                  text track.label
+          if model.qualities.length > 1
+            select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select"
+              option value=""
+                text t("ui.autoAdaptToYourConnection")
+              for quality in model.qualities key=quality.id
+                option value=quality.id
+                  text quality.label
+          if model.paths.length > 1
+            select disabled=blocked value=model.pathId change=delivery aria-label=t("ui.playbackPath") testId="player-path"
+              for path in model.paths key=path.id
+                option value=path.id
+                  text path.label
