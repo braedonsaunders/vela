@@ -1,0 +1,7 @@
+// The layout engine this build was compiled for: empty in a development or all-skins
+// build (every engine dispatched in place), an engine id in a single-engine release
+// build, where tools/engine.ts rewrites it. See docs/skin-distribution.md.
+fn buildEngine(): string = ""
+
+// The engine a skin id runs on (a pack's engine is resolved before this).
+fn engineOf(skin: string): string = (skin == "editorial" ? "index" : ["cinematic", "index", "example", "jellytwin", "mochi", "marquee"].includes(skin) ? skin : "cinematic")

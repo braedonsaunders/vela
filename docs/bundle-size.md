@@ -106,3 +106,11 @@ Index384,439; Example92,956; initialization594,648; shared/foundation/root/runti
 the remaining payload. The owner approved separate static engine builds and a
 tiny selector; Exact-supported static dispatch is used, without vendor changes or
 unsupported lazy Contract imports. Cold-load measurements remain pending that build.
+
+The skin owners traced the multiplier to `foundation/skin.contract`: each Shell
+branch receives `children`, so all root routes are compiled once per engine branch.
+This repeats other engines’ routes inside each branch, not just that engine’s own
+chrome. The section ledger above attributes the repeated code to its original
+creation source. Static single-engine dispatch removes this cross product; the
+AuthStage slot can cause a second smaller multiplier. This explains why reducing
+icon node counts alone did not reduce entry bytes proportionally.
