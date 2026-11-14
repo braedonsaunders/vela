@@ -60,6 +60,8 @@ component Shell
     secureBusy: bool
     secureError: string
     goSecure: action
+    beta: bool
+    toggleBeta: action
   slot
   view
     if skin == "mochi"
@@ -81,7 +83,7 @@ component Shell
             MarqueeShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
               children
           else
-            CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary, secureOrigin=secureOrigin, secureBusy=secureBusy, secureError=secureError, goSecure=goSecure)
+            CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary, secureOrigin=secureOrigin, secureBusy=secureBusy, secureError=secureError, goSecure=goSecure, beta=beta, toggleBeta=toggleBeta)
               children
 
 component Home
@@ -142,6 +144,8 @@ component SearchSurface
     loading: bool
     error: bool
     aiAvailable: bool
+    descriptiveState: string
+    aiState: string
     small: bool
     still: bool
     selectTitle: action
@@ -161,7 +165,7 @@ component SearchSurface
           else if skin == "marquee"
             MarqueeSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
           else
-            CineSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
+            CineSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, descriptiveState=descriptiveState, aiState=aiState, small=small, still=still, selectTitle=selectTitle, observe=observe)
 
 component Row
   props
@@ -198,6 +202,8 @@ component Detail
     playExtra: action
     selectTitle: action
     observe: action
+    // The visit's ?season= (empty: the title's default season); tabs highlight this.
+    season: string
   view
     if skin == "mochi"
       MochiDetail(model=model, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
@@ -213,7 +219,7 @@ component Detail
           else if skin == "marquee"
             MarqueeDetail(model=model, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
           else
-            CineDetail(model=model, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
+            CineDetail(model=model, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe, season=season)
 
 component SearchField
   props
@@ -341,6 +347,8 @@ component PlayerChrome
     seek: action
     editing: action
     close: action
+    beta: bool
+    toggleBeta: action
   view
     if skin == "mochi"
       MochiPlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
@@ -356,7 +364,7 @@ component PlayerChrome
           else if skin == "marquee"
             MarqueePlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
           else
-            CinePlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
+            CinePlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close, beta=beta, toggleBeta=toggleBeta)
 
 // Loading and failure moments. Cinematic draws skeletons and designed failures;
 // other skins keep a plain status line.

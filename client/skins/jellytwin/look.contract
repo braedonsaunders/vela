@@ -212,3 +212,13 @@ style Sheet
   background-color = "jellytwin.popup"
   color = "jellytwin.ink-strong"
   box-shadow = "0px 12px 40px var(--jellytwin.shadow)"
+
+// The played mark on a card: a check on an accent disc.
+style PlayedBadge
+  width = 24
+  height = 24
+  border-radius = 12
+  align-items = "center"
+  justify-content = "center"
+  background-color = "jellytwin.accent"
+  color = "jellytwin.ink-strong"

@@ -1,6 +1,6 @@
 use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, cardName from "../../foundation/models.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
-use Icon, Wordmark, Spinner, IconBtn, Raised, Submit, Tab, MenuRow, Sheet, side, tileColor, kindIcon, fadeIn, riseIn, jtFade, jtGone, jtDrawer, jtDrawerOut, jtPop, jtRise, jtSpin from "./look.contract"
+use Icon, PlayedBadge, Wordmark, Spinner, IconBtn, Raised, Submit, Tab, MenuRow, Sheet, side, tileColor, kindIcon, fadeIn, riseIn, jtFade, jtGone, jtDrawer, jtDrawerOut, jtPop, jtRise, jtSpin from "./look.contract"
 
 fn detailPresentation(width: number): string = "fullscreen"
 fn detailSplit(width: number): string = "none"
@@ -271,7 +271,8 @@ component Poster
       button press=selectTitle(card.id, card.kind, card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=hover focus=hover(true) blur=hover(false) class=CardFace aspect-ratio=(wide ? "16 / 9" : "2 / 3") background-color=(art == "" ? tileColor(card.id) : "jellytwin.card") box-shadow=(over ? "0px 0px 0px 3px var(--jellytwin.accent)" : "0px 2px 6px var(--jellytwin.shadow)") filter=(over ? "brightness(0.75)" : "none") transition=(still ? "none" : "box-shadow 140ms linear")
         image (art != "" ? art : kindIcon(card.kind)) alt="" position="absolute" inset=(art != "" ? "0px" : "34%") width=(art != "" ? "100%" : "32%") height=(art != "" ? "100%" : "32%") margin="auto" object-fit=(art != "" ? "cover" : "contain") color="jellytwin.secondary"
         if card.played
-          image "symbol:checkmark" position="absolute" top=6 right=6 width=14 height=14 padding=5 border-radius=12 background-color="jellytwin.accent" color="jellytwin.ink-strong" aria-hidden=true
+          column position="absolute" top=6 right=6 class=PlayedBadge aria-hidden=true
+            Icon(name="symbol:checkmark", size=14)
         if card.progressSeconds > 0 and card.durationSeconds > 0 and not card.played
           column position="absolute" left=0 right=0 bottom=0 height=5 background-color="jellytwin.overlay" background-image=`linear-gradient(90deg, var(--jellytwin.accent) ${min(100, card.progressSeconds / card.durationSeconds * 100)}%, transparent 0%)` aria-hidden=true
       text card.name class=CardTitle margin-top=6
