@@ -22,7 +22,7 @@ function mediaCapabilities() {
 
 // client/player/install.ts
 function createInstall(element, json, event) {
-  const runtime = window.velaPwa;
+  let runtime = window.velaPwa;
   const button = document.createElement("button");
   button.type = "button";
   button.style.cssText = "font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:20px;padding:8px 14px;cursor:pointer";
@@ -42,7 +42,17 @@ function createInstall(element, json, event) {
     action = props.pwaAction === "update" ? "update" : "install";
     update();
   };
-  const unsubscribe = runtime?.subscribe(update);
+  let unsubscribe = runtime?.subscribe(update);
+  const appeared = () => {
+    const next = window.velaPwa;
+    if (next === runtime || disposed)
+      return;
+    unsubscribe?.();
+    runtime = next;
+    unsubscribe = runtime?.subscribe(update);
+    update();
+  };
+  window.addEventListener("vela:pwa-state", appeared);
   const clicked = () => {
     if (!runtime)
       return;
@@ -56,6 +66,7 @@ function createInstall(element, json, event) {
   queueMicrotask(update);
   return { install: true, button, update: setProps, dispose() {
     disposed = true;
+    window.removeEventListener("vela:pwa-state", appeared);
     unsubscribe?.();
     button.removeEventListener("click", clicked);
     button.remove();
@@ -685,6 +696,7 @@ class PlaybackEngine {
   recovering = false;
   disposed = false;
   resumePosition = 0;
+  lowDelayOverride;
   wantsPlay = false;
   lowDelay = false;
   manualQuality = null;
@@ -818,6 +830,8 @@ class PlaybackEngine {
     return (this.session?.sources ?? []).filter((s) => this.supported(s)).sort((a, b) => priority[a.strategy] - priority[b.strategy]);
   }
   async load(session) {
+    if (session.id !== this.session?.id)
+      this.lowDelayOverride = undefined;
     this.controller.start(session.id, session.sourceGeneration, session.seekGeneration);
     this.resetMedia();
     this.session = session;
@@ -825,7 +839,7 @@ class PlaybackEngine {
     this.failure = null;
     this.attempted.clear();
     this.recovering = false;
-    this.lowDelay = session.lowDelay ?? false;
+    this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? false;
     this.audio = session.audioTrackId ?? null;
     this.subtitle = session.subtitleTrackId ?? null;
     const source = this.candidates().find((s) => s.id === session.selectedSourceId) ?? this.candidates().find((s) => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
@@ -839,7 +853,7 @@ class PlaybackEngine {
     if (session.id !== this.session?.id)
       throw new Error("Cannot update a different session");
     this.session = session;
-    this.lowDelay = session.lowDelay ?? this.lowDelay;
+    this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? this.lowDelay;
     if (this.pipeline) {
       this.pipeline.lowDelay = this.lowDelay;
       this.pipeline.maxLiveDrift = session.liveMaxDrift ?? 45;
@@ -1140,6 +1154,7 @@ class PlaybackEngine {
           this.applySubtitle();
           break;
         case "lowDelay":
+          this.lowDelayOverride = command.enabled;
           this.lowDelay = command.enabled;
           if (this.pipeline)
             this.pipeline.lowDelay = command.enabled;

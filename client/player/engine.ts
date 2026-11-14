@@ -13,6 +13,7 @@ export class PlaybackEngine {
   private timer: ReturnType<typeof setInterval>; private listeners: (() => void)[] = [];
   private attempted = new Set<string>(); private recovering = false; private disposed = false;
   private resumePosition = 0;
+  private lowDelayOverride: boolean | undefined;
   private wantsPlay = false; private lowDelay = false; private manualQuality: string | null = null;
   private track?: HTMLTrackElement; private lastObservation = 0;
   constructor(readonly video: ExtendedVideo, private emit: (event: EngineEvent) => void, private fullscreenContainer: HTMLElement = video) {
@@ -92,9 +93,10 @@ export class PlaybackEngine {
     return (this.session?.sources ?? []).filter(s => this.supported(s)).sort((a,b) => priority[a.strategy] - priority[b.strategy]);
   }
   async load(session: PlaybackSession) {
+    if (session.id !== this.session?.id) this.lowDelayOverride = undefined;
     this.controller.start(session.id, session.sourceGeneration, session.seekGeneration); this.resetMedia(); this.session = session;
     this.source = undefined; this.failure = null; this.attempted.clear(); this.recovering = false;
-    this.lowDelay = session.lowDelay ?? false;
+    this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? false;
     this.audio = session.audioTrackId ?? null; this.subtitle = session.subtitleTrackId ?? null;
     const source = this.candidates().find(s => s.id === session.selectedSourceId) ?? this.candidates().find(s => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) { this.fail({ kind: 'unsupported', message: 'No browser-compatible source for this edition', recoverable: false }); return; }
@@ -104,7 +106,7 @@ export class PlaybackEngine {
   updateSession(session: PlaybackSession) {
     if (session.id !== this.session?.id) throw new Error('Cannot update a different session');
     this.session = session;
-    this.lowDelay = session.lowDelay ?? this.lowDelay;
+    this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? this.lowDelay;
     if (this.pipeline) { this.pipeline.lowDelay = this.lowDelay; this.pipeline.maxLiveDrift = session.liveMaxDrift ?? 45; }
     if ((session.subtitleTrackId ?? null) !== this.subtitle) {
       this.subtitle = session.subtitleTrackId ?? null; this.applySubtitle();
@@ -251,7 +253,7 @@ export class PlaybackEngine {
         case 'subtitle':
           if (command.trackId && !this.session?.subtitleTracks.some(t => t.id === command.trackId && t.url)) throw new Error('Unknown WebVTT track');
           this.subtitle = command.trackId; this.applySubtitle(); break;
-        case 'lowDelay': this.lowDelay = command.enabled; if (this.pipeline) this.pipeline.lowDelay = command.enabled; if (!command.enabled) this.video.playbackRate = 1; break;
+        case 'lowDelay': this.lowDelayOverride = command.enabled; this.lowDelay = command.enabled; if (this.pipeline) this.pipeline.lowDelay = command.enabled; if (!command.enabled) this.video.playbackRate = 1; break;
         case 'pip':
           if (!document.pictureInPictureEnabled || !this.video.requestPictureInPicture) throw new Error('Picture-in-picture is unavailable');
           await this.video.requestPictureInPicture(); break;

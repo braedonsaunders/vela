@@ -206,3 +206,47 @@ presentation), stale-plan early return swallowing server rejection, and repeated
 ended observations after the server had closed the session. The cinematic chrome
 owns no network requests: its seek/path intents are authorized through the data
 adapter; rejected requests retain the current source and show their reason.
+
+### Completed restore qualification on the 180-second ladder
+
+The active scratch alias was independently checked before this trace: direct MP4
+reported 180.000 seconds and each media playlist contained 45 four-second segments.
+An earlier alias blip exposed old/incomplete files; those attempts were excluded.
+The final drive used the standardized `bun tools/dev.ts` supervisor (app :8765,
+mock :7777) in explicit mock mode. The initial 720p was selected, then returned
+to Auto before the fault, as in the earlier trace.
+
+| Final Chrome trace | Measured result |
+| --- | --- |
+| Play request → actual `playing` | 0.550 s; initial startup `waiting` lasted 0.441 s |
+| 6 → 1 Mbps collapse → automatic 720p → 360p | 2.455 s; 3.805 s accepted buffer remained |
+| Restore to 6 Mbps → automatic 540p | 18.615 s; 29.432 s accepted buffer remained |
+| Restore → automatic 720p | 39.671 s; 28.365 s accepted buffer remained |
+| Rebuffering after first `playing` | 0 `waiting` events, 0 `stalled` events |
+| Decoder pressure at final observation | 0 dropped / 2,425 total frames; playhead 100.708 s |
+| Engine/UI state agreement | video.paused=false, engine=playing, control label=Pause |
+| Idle chrome | header opacity=0 after idle; pointer movement restores it |
+
+This completes the post-restoration qualification missing from the 60-second
+fixture. The delay before returning to higher quality was measured rather than
+inferred from the ABR hysteresis constant. The top and bottom chrome are absolute
+overlays, with track/quality settings in a popover. Browser geometry confirmed
+both the native host and actual video occupy (0,0,1200,746), with object-fit contain;
+any black letterboxing follows the media aspect ratio, not reserved chrome rows.
+
+### Other trusted host views
+
+`vela-context` emits the runtime page origin; `probe="media"` emits browser-declared
+format support from canPlayType/isTypeSupported, not a hardware/throughput claim.
+`vela-preview` consumes only an explicitly ready cached URL and future UNIX-ms
+`expiresAt`; inactive, offscreen, hidden-document, reduced-motion, SaveData and
+expiry states pause and remove the media source. The preview remains transparent
+until actual playing, and refusal preserves the artwork. It holds no playback
+session or progress telemetry. The UI worker's real broker-grant look confirmed
+ready playback and search/covered-home removal.
+
+`vela-install` renders a native trusted-gesture button when the production PWA
+runtime reports installable; `pwaAction="update"` renders the explicit update/reload
+control only when an update is available. Runtime absence leaves it hidden. Late
+runtime availability is observed through the runtime's state event. Install/update
+prompts still require actual production/browser qualification by the release owner.
