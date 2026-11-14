@@ -53,7 +53,7 @@ component Detail
               Facts(model=model, title=title, upNext=upNext, small=small, still=still, play=play, playExtra=playExtra)
       column position="relative" gap=(small ? 8 : 14) padding-top=(small ? 16 : 28)
         if model.seasons.length > 0
-          Shelf(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false), place="detail", small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Shelf(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="detail", small=small, still=still, selectTitle=selectTitle, observe=observe)
         if model.episodes.length > 0
           column gap=(small ? 10 : 14) padding-bottom=(small ? 20 : 30)
             text seasonName role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 padding-left=gutter(small) padding-right=gutter(small)

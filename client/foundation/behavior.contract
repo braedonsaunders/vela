@@ -344,6 +344,12 @@ members Client
   action followLibraryLink
     if top(nav).name == "library"
       nav = open(nav, path("home") + librarySection(top(nav).params.id, ""))
+  // The guide stays mounted once visited; its tile and session follow guideOpen, not mounting.
+  state liveVisited = false
+  task markLiveVisited when libraryId == "@live" and not liveVisited
+    after(1, rememberLiveVisit)
+  action rememberLiveVisit
+    liveVisited = true
   // /live opens the Live TV panel of the home surface.
   task redirectLiveLink when top(nav).name == "live"
     after(1, followLiveLink)
@@ -377,13 +383,13 @@ members Client
   derive still = viewport.prefersReducedMotion
   derive indexSkin = (activeSkin == "index" or activeSkin == "editorial")
   // Skins whose title page is a plain page rather than cinematic's framed overlay.
-  derive flatDetail = (indexSkin or activeSkin == "jellytwin")
+  derive flatDetail = (indexSkin or activeSkin == "jellytwin" or activeSkin == "marquee")
   derive homeSmall = (small or (indexSkin and top(nav).name == "title" and viewport.width >= 900))
   derive shellViewport = Viewport(viewport, width=(homeSmall and not small ? 360 : viewport.width))
-  derive pageColor = (activeSkin == "mochi" ? "mochi.page" : indexSkin ? "index.page" : activeSkin == "jellytwin" ? "jellytwin.page" : "surface.page")
-  derive inkColor = (activeSkin == "mochi" ? "mochi.ink" : indexSkin ? "index.ink" : activeSkin == "jellytwin" ? "jellytwin.ink" : "ink.primary")
+  derive pageColor = (activeSkin == "mochi" ? "mochi.page" : indexSkin ? "index.page" : activeSkin == "jellytwin" ? "jellytwin.page" : activeSkin == "marquee" ? "marquee.page" : "surface.page")
+  derive inkColor = (activeSkin == "mochi" ? "mochi.ink" : indexSkin ? "index.ink" : activeSkin == "jellytwin" ? "jellytwin.ink" : activeSkin == "marquee" ? "marquee.ink" : "ink.primary")
   // requestedSkin and activePack come from the server appearance (appearance.contract).
-  derive activeSkin = match activePack { case some(p) => p.engine, case none => (["cinematic", "index", "editorial", "example", "jellytwin", "mochi"].includes(requestedSkin) ? requestedSkin : "cinematic") }
+  derive activeSkin = match activePack { case some(p) => p.engine, case none => (["cinematic", "index", "editorial", "example", "jellytwin", "mochi", "marquee"].includes(requestedSkin) ? requestedSkin : "cinematic") }
 
   task searchUpdates when auth.authenticated and query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running")
     every(1500, updateSearch)

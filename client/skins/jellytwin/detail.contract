@@ -81,7 +81,7 @@ component Detail
                 button press=play(episode.id) aria-label=(episode.progressSeconds > 0 ? t("ui.resumeTitle", title=episode.name) : t("ui.playTitle", title=episode.name)) class=IconBtn width=56 height=56 background-color="jellytwin.raised"
                   Icon(name="play", size=28)
         if model.seasons.length > 0
-          Section(row=FeedRow(id="detail-seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Section(row=FeedRow(id="detail-seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if model.episodes.length > 0
           column gap=4 padding-left=side(small) padding-right=side(small) padding-bottom=(small ? 18 : 26)
             text t("ui.episodes") role="heading" aria-level=2 font-size=(small ? 17 : 21) font-weight=600 color="jellytwin.ink-strong" padding-bottom=8

@@ -30,7 +30,7 @@ component Client
       for e in stack(nav) key=e.id
         if e.name == "home"
           column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width) : "none") navigationScroll="home-scroll" position="absolute" inset=0
-            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "jellytwin", "mochi", "example"] : ["cinematic", "index", "jellytwin", "mochi"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section=(libraryId == "" ? "home" : libraryId == "@live" ? "live" : libraryId), openLibrary=openLibrary)
+            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "jellytwin", "mochi", "marquee", "example"] : ["cinematic", "index", "jellytwin", "mochi", "marquee"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section=(libraryId == "" ? "home" : libraryId == "@live" ? "live" : libraryId), openLibrary=openLibrary)
               if failed(auth) or not current(auth) or not auth.authenticated
                 scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") flex=1 min-height=0
                   AuthStage(skin=activeSkin, still=still, backdrop=packBackdrop, wordmark=packWordmark)
@@ -47,8 +47,8 @@ component Client
               else
                 // Home and the libraries side by side: the track pans to the active section.
                 column flex=1 min-height=0 position="relative" overflow="hidden"
-                  row height="100%" translate=`${sectionIndex * -100}% 0px` transition=(activeSkin == "index" or activeSkin == "editorial" or activeSkin == "example" or still ? "none" : "translate 640ms cubic-bezier(0.65, 0, 0.35, 1)")
-                    scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") scroll=cancelPreviewOnScroll width="100%" height="100%" flex-shrink=0 inert=(sectionIndex != 0) aria-hidden=(sectionIndex != 0) opacity=(sectionIndex == 0 or not still ? 1 : 0) transition=(activeSkin == "index" or activeSkin == "editorial" or activeSkin == "example" ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
+                  row height="100%" translate=`${sectionIndex * -100}% 0px` transition=(activeSkin == "index" or activeSkin == "editorial" or activeSkin == "example" or activeSkin == "marquee" or still ? "none" : "translate 640ms cubic-bezier(0.65, 0, 0.35, 1)")
+                    scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") scroll=cancelPreviewOnScroll width="100%" height="100%" flex-shrink=0 inert=(sectionIndex != 0) aria-hidden=(sectionIndex != 0) opacity=(sectionIndex == 0 or not still ? 1 : 0) transition=(activeSkin == "index" or activeSkin == "editorial" or activeSkin == "example" or activeSkin == "marquee" ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
                       if failed(home)
                         Status(skin=activeSkin, kind="failure", message=t("ui.yourLibraryCouldnTBeReachedCheckYourServerConnection"), small=homeSmall, still=still)
                       else
@@ -61,9 +61,9 @@ component Client
                             SearchSurface(skin=activeSkin, query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results)), aiAvailable=home.aiAvailable, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe)
                     for sid in sectionIds.slice(1) key=sid
                       if sid == "@live"
-                        // Live TV: the guide owns its scrolling; it mounts only while its panel is active.
-                        column role="region" aria-label=t("ui.live") width="100%" height="100%" flex-shrink=0 min-height=0 inert=(libraryId != "@live") aria-hidden=(libraryId != "@live") opacity=(libraryId == "@live" or not still ? 1 : 0)
-                          if libraryId == "@live"
+                        // Live TV: the guide owns its scrolling; it mounts on first visit and stays (inert) so it keeps its place.
+                        column role="region" aria-label=t("ui.live") width="100%" height="100%" flex-shrink=0 min-height=0 inert=(libraryId != "@live") aria-hidden=(libraryId != "@live") opacity=(libraryId == "@live" or not still ? 1 : 0) transition=(activeSkin == "index" or activeSkin == "editorial" or activeSkin == "example" ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
+                          if libraryId == "@live" or liveVisited
                             if guideReady
                               Guide(skin=activeSkin, model=guide, small=small, still=still, zoom=guideZoom, tile=tile, watch=watchChannel, previous=earlierGuide, next=laterGuide, chooseDay=chooseGuideDay, setZoom=setGuideZoom, tileMessage=tileMessage, tileUnmute=tileUnmute, tileTuneIn=tileTuneIn, retune=retuneTile)
                             else
@@ -73,7 +73,7 @@ component Client
                                 text t("ui.loadingTheGuide") role="status" padding=32 padding-top=(small ? 120 : 112)
                       else
                         for lib in libraries.filter(l => l.id == sid) key=lib.id
-                          scroll id=`library-scroll-${lib.id}` role="region" aria-label=lib.name width="100%" height="100%" flex-shrink=0 inert=(lib.id != libraryId) aria-hidden=(lib.id != libraryId) opacity=(lib.id == libraryId or not still ? 1 : 0) transition=(activeSkin == "index" or activeSkin == "editorial" or activeSkin == "example" ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
+                          scroll id=`library-scroll-${lib.id}` role="region" aria-label=lib.name width="100%" height="100%" flex-shrink=0 inert=(lib.id != libraryId) aria-hidden=(lib.id != libraryId) opacity=(lib.id == libraryId or not still ? 1 : 0) transition=(activeSkin == "index" or activeSkin == "editorial" or activeSkin == "example" or activeSkin == "marquee" ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
                             // One page per library: the live answer when it is this library's, else this
                             // session's last answer for it, so switching source never remounts the page.
                             for shown in [libraryModel].filter(m => m.id == lib.id).concat(librarySnapshots.filter(m => m.id == lib.id)).slice(0, 1) key=lib.id
