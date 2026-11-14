@@ -355,3 +355,4 @@ icons
   icon.jelly-rewind = icon(svg "icons/jelly-rewind.svg")
   icon.jelly-fastforward = icon(svg "icons/jelly-fastforward.svg")
   icon.jelly-bolt = icon(svg "icons/jelly-bolt.svg")
+  icon.jelly-live = icon(svg "icons/jelly-live.svg")
