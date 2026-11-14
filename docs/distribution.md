@@ -19,6 +19,9 @@ External image/font assets receive content-hashed filenames, and complete static
 data-URI images/fonts are emitted as hashed static files. ESM entry/import URLs
 remain canonical. Dynamic symbol/mask expressions stay with their owning runtime.
 See [bundle-size.md](bundle-size.md) for measured byte costs and remaining limits.
+When byte attribution is requested, add `--map-report`: the same captured source
+produces `vela-<version>.bundle.json` with raw/gzip9 entry bytes and plan node
+counts by skin and component. This opt-in measurement is not part of routine builds.
 
 Output under `~/.scratch/tmp/vela/release/`:
 

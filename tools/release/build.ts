@@ -6,9 +6,11 @@ import { createHash } from 'node:crypto';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 const root = resolve(import.meta.dir, '../..');
 const committed = process.argv.includes('--committed');
+const mapReport = process.argv.includes('--map-report');
 const releases = join(homedir(), '.scratch/tmp/vela/release');
 const pkg = await Bun.file(join(root, 'client/package.json')).json();
 const version = String(pkg.version ?? (await readFile(join(import.meta.dir, 'VERSION'), 'utf8')).trim());
@@ -71,6 +73,20 @@ try {
     /^  notfound(?:\s|$)/m.test(declarations) ? block : `${header}${declarations.trimEnd()}\n  notfound\n\n`);
   await writeFile(contractPath, mounted);
   const env = { ...process.env, EXACT: join(root, 'vendor/exact'), EXACT2: join(root, 'vendor/exact'), API_BASE_URL: '', VELA_MOCK: '0', VELA_BUILD_VERSION: version, EXACT_VERSION: version };
+  let planNodes: { total: number; bySource: Record<string, number>; byComponent: Record<string, number> } | undefined;
+  if (mapReport) {
+    const plan = join(work, 'app.plan');
+    console.log(await run([process.execPath, 'exact.mjs', 'contract', 'build', 'app.contract', '--map', '-o', plan], client, env));
+    const map = JSON.parse(await readFile(`${plan}.map.json`, 'utf8'));
+    planNodes = { total: map.nodes.length, bySource: {}, byComponent: {} };
+    for (const node of map.nodes) {
+      const file = String(node.file).replaceAll('\\', '/');
+      const source = file.includes('/skins/') ? file.split('/skins/')[1].split('/')[0] : file.includes('/foundation/') ? 'foundation' : file.split('/').pop()!;
+      planNodes.bySource[source] = (planNodes.bySource[source] ?? 0) + 1;
+      const component = `${source}/${file.split('/').pop()}#${node.component}`;
+      planNodes.byComponent[component] = (planNodes.byComponent[component] ?? 0) + 1;
+    }
+  }
   // --out selects Exact's production target (minified, no agent overlay).
   console.log(await run([process.execPath, 'player/build.ts'], client, env));
   const dist = join(client, 'dist');
@@ -132,6 +148,12 @@ try {
   await writeFile(join(releases, manifestName), manifestBytes);
   await writeFile(join(releases, `${archiveName}.sha256`), `${archiveSha256}  ${archiveName}\n`);
   await writeFile(join(releases, `${manifestName}.sha256`), `${digest(manifestBytes)}  ${manifestName}\n`);
+  if (mapReport) {
+    const entry = await readFile(join(dist, 'app.js'));
+    const report = { version, sourceRevision, sourceDirty, appBytes: entry.length, appGzip9Bytes: gzipSync(entry, { level: 9 }).length, planNodes };
+    await writeFile(join(releases, `vela-${version}.bundle.json`), JSON.stringify(report, null, 2) + '\n');
+    console.log(JSON.stringify({ bundleReport: report }));
+  }
   console.log(JSON.stringify({ archive: join(releases, archiveName), sha256: archiveSha256, manifest: join(releases, manifestName), manifestSha256: digest(manifestBytes), sourceDirty }, null, 2));
 } finally {
   await rm(work, { recursive: true, force: true });
