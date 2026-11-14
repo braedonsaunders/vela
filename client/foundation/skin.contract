@@ -146,6 +146,7 @@ component SearchSurface
     aiAvailable: bool
     descriptiveState: string
     aiState: string
+    openLiveProgramme: action
     small: bool
     still: bool
     selectTitle: action
@@ -165,7 +166,7 @@ component SearchSurface
           else if skin == "marquee"
             MarqueeSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
           else
-            CineSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, descriptiveState=descriptiveState, aiState=aiState, small=small, still=still, selectTitle=selectTitle, observe=observe)
+            CineSearchSurface(query=query, model=model, descriptive=descriptive, ai=ai, generation=generation, loading=loading, error=error, aiAvailable=aiAvailable, descriptiveState=descriptiveState, aiState=aiState, openLiveProgramme=openLiveProgramme, small=small, still=still, selectTitle=selectTitle, observe=observe)
 
 component Row
   props
