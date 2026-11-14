@@ -1,0 +1,182 @@
+import { createHmac } from 'node:crypto';
+import type * as V from '../protocol/v0/types';
+import { allTitles, channels, detail, extras, guide, rows, titles } from '../protocol/v0/fixtures/catalogue';
+import { faults, mediaRoot, serveMedia } from './media';
+import { applyCommand, createSession, events, observe, sessions, snapshot, type Session } from './sessions';
+
+const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
+const secret = crypto.randomUUID();
+const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
+const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
+const capabilities: V.ServerCapabilities = { protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.2.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, extras: yes, initialTrackSelection: yes, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean }
+const grants = new Map<string, Grant>(), access = new Map<string, Grant>(), refresh = new Map<string, Grant>();
+function issue(device: V.Device): V.Tokens {
+  if (!device?.id) fail('request', 'device_required', 'A device id is required');
+  const g: Grant = { id: crypto.randomUUID(), device, access: crypto.randomUUID(), refresh: crypto.randomUUID(), expires: Date.now() + 3600000, revoked: false };
+  grants.set(g.id, g); access.set(g.access, g); refresh.set(g.refresh, g);
+  return tokens(g);
+}
+function tokens(g: Grant): V.Tokens { return { accessToken: g.access, refreshToken: g.refresh, expiresAt: new Date(g.expires).toISOString(), viewer }; }
+if (process.env.VELA_MOCK_TOKEN) { const t = issue({ id: 'vela-dev', name: 'Development', platform: 'web', appVersion: '0.1' }); const g = access.get(t.accessToken)!; access.delete(g.access); g.access = process.env.VELA_MOCK_TOKEN; access.set(g.access, g); }
+function authenticate(req: Request): Grant {
+  const g = access.get(req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '');
+  if (!g || g.revoked || g.expires <= Date.now() || req.headers.get('x-vela-device-id') !== g.device.id) fail('auth', 'unauthorized', 'Valid bearer and X-Vela-Device-Id required');
+  return g;
+}
+function fail(cls: V.ProtocolError['class'], code: string, message: string, extra: Partial<V.ProtocolError> = {}): never {
+  const status = { auth: 401, policy: 403, 'not-found': 404, source: 502, decoder: 422, capacity: 503, transient: 503, request: 400, conflict: 409 }[cls];
+  throw Response.json({ error: { class: cls, code, message, retry: { allowed: ['capacity', 'transient'].includes(cls), ...(cls === 'capacity' ? { afterSeconds: 3, maxAttempts: 3 } : {}) }, ...extra } } satisfies V.ErrorResponse, { status, headers: { 'Cache-Control': 'no-store', ...(cls === 'capacity' ? { 'Retry-After': '3' } : {}) } });
+}
+const mac = (value: string) => createHmac('sha256', secret).update(value).digest('base64url');
+function receipt(g: Grant, value: string) { const p = Buffer.from(`${g.id}|${value}`).toString('base64url'); return `${p}.${mac(p)}`; }
+function validReceipt(g: Grant, value: string) { if (typeof value !== 'string') return false; const [p, s] = value.split('.'); try { return s === mac(p) && Buffer.from(p, 'base64url').toString().startsWith(`${g.id}|`); } catch { return false; } }
+function boundRow(g: Grant, row: V.Row): V.Row { return { ...row, receiptToken: receipt(g, row.id), items: row.items.map(i => ({ ...i, receiptToken: receipt(g, i.id) })) }; }
+function page<T>(items: T[], url: URL, g: Grant, scope: string): V.Page<T> {
+  const n = Number(url.searchParams.get('limit') ?? 50); if (!Number.isInteger(n) || n < 1 || n > 100) fail('request', 'invalid_limit', 'Limit must be 1–100');
+  let offset = 0; const cursor = url.searchParams.get('cursor');
+  if (cursor) {
+    const [p, signature] = cursor.split('.');
+    try { const c = JSON.parse(Buffer.from(p, 'base64url').toString()); if (signature !== mac(p) || c.owner !== g.id || c.scope !== scope || c.expires < Date.now()) throw 0; offset = c.offset; } catch { fail('conflict', 'cursor_expired', 'Refresh from first page'); }
+  }
+  const more = offset + n < items.length;
+  const p = Buffer.from(JSON.stringify({ owner: g.id, scope, offset: offset + n, expires: Date.now() + 3600000 })).toString('base64url');
+  return { items: items.slice(offset, offset + n), continuation: more ? 'more' : 'exhausted', ...(more ? { nextCursor: `${p}.${mac(p)}` } : {}) };
+}
+function cached(req: Request, data: unknown, scope: string): Response {
+  const body = JSON.stringify(data), etag = `"${mac(scope + body)}"`;
+  const headers = { ETag: etag, 'Cache-Control': 'private, max-age=0, must-revalidate', Vary: 'Authorization, X-Vela-Device-Id', 'Content-Type': 'application/json' };
+  return new Response(req.headers.get('if-none-match') === etag ? null : body, { status: req.headers.get('if-none-match') === etag ? 304 : 200, headers });
+}
+const json = (data: unknown) => Response.json(data, { headers: { 'Cache-Control': 'no-store' } });
+interface Pairing { device: V.Device; code: string; expires: number; approved: boolean; result?: V.Tokens }
+const devices = new Map<string, Pairing>(), quick = new Map<string, Pairing>(), webCodes = new Map<string, number>();
+const idempotency = new Map<string, { body: string; response: Promise<Response>; expires: number }>();
+function revoke(g: Grant) { g.revoked = true; for (const s of sessions.values()) if (s.owner === g.id) { for (const c of s.listeners) c.close(); s.listeners.clear(); } }
+function currentSession(id: string, g: Grant): Session { const s = sessions.get(id); if (!s || s.owner !== g.id || s.expires <= Date.now()) fail('not-found', 'session_not_found', 'Session not found'); return s; }
+
+async function api(req: Request, url: URL, body: any): Promise<Response> {
+  const path = url.pathname.replace(/^\/vela\/v0/, ''), method = req.method;
+  if (method === 'GET' && path === '/capabilities') return cached(req, capabilities, 'public');
+  if (method === 'POST' && path === '/auth/sign-in') { if (body.username !== 'demo' || body.password !== 'vela') fail('auth', 'invalid_credentials', 'Invalid sign-in'); return json(issue(body.device)); }
+  if (method === 'POST' && path === '/auth/refresh') {
+    const g = refresh.get(body.refreshToken); if (!g || g.revoked || g.device.id !== body.device?.id) fail('auth', 'invalid_refresh', 'Refresh invalid');
+    access.delete(g.access); refresh.delete(g.refresh); g.access = crypto.randomUUID(); g.refresh = crypto.randomUUID(); g.expires = Date.now() + 3600000; access.set(g.access, g); refresh.set(g.refresh, g); return json(tokens(g));
+  }
+  if (method === 'POST' && path === '/auth/web-code/redeem') { const expiry = webCodes.get(body.code); if (!expiry || expiry < Date.now()) fail('auth', 'invalid_web_code', 'Code expired or consumed'); webCodes.delete(body.code); return json(issue(body.device)); }
+  if (method === 'POST' && ['/auth/device', '/auth/quick-connect'].includes(path)) {
+    if (!body.device?.id) fail('request', 'device_required', 'Device required');
+    const id = crypto.randomUUID(), code = crypto.randomUUID().slice(0, 8).toUpperCase(), expires = Date.now() + 600000;
+    const pairing: Pairing = { device: body.device, code, expires, approved: false };
+    (path.endsWith('/device') ? devices : quick).set(id, pairing);
+    return json(path.endsWith('/device') ? { deviceCode: id, userCode: code, verificationUrl: '/vela/pair', expiresAt: new Date(expires).toISOString(), pollIntervalSeconds: 3 } : { secret: id, code, expiresAt: new Date(expires).toISOString(), pollIntervalSeconds: 3 });
+  }
+  if (method === 'POST' && ['/auth/device/poll', '/auth/quick-connect/poll'].includes(path)) {
+    const p = (path.includes('/device/') ? devices : quick).get(body.deviceCode ?? body.secret);
+    if (!p || p.expires < Date.now()) return json({ status: 'expired' });
+    if (p.device.id !== body.device?.id) fail('auth', 'device_mismatch', 'Device mismatch');
+    if (!p.approved) return json({ status: 'pending' });
+    p.result ??= issue(p.device); return json({ status: 'approved', tokens: p.result });
+  }
+  const g = authenticate(req);
+  if (method === 'POST' && path === '/negotiate') {
+    if (!body.client?.protocolVersions?.includes(0)) fail('request', 'unsupported_version', 'Protocol v0 required');
+    return json({ capabilities, client: body.client });
+  }
+  if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
+  if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
+  if (method === 'GET' && path === '/bootstrap') return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, hero: { title: titles[0], receiptToken: receipt(g, 'hero') }, rows: rows.map(r => boundRow(g, r)) } satisfies V.Bootstrap, g.id);
+  if (method === 'GET' && path === '/rows') return cached(req, page(rows.map(r => boundRow(g, r)), url, g, 'rows'), g.id);
+  const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
+  if (method === 'GET' && rowMatch) { const r = rows.find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); const p = page(boundRow(g, r).items, url, g, r.id); return cached(req, { ...boundRow(g, r), ...p }, g.id); }
+  const titleMatch = /^\/titles\/([^/]+)(?:\/(children|extras|watch))?$/.exec(path);
+  if (titleMatch) {
+    const d = detail(titleMatch[1]); if (!d) fail('not-found', 'title_not_found', 'Title not found');
+    if (method === 'POST' && titleMatch[2] === 'watch') { const t = allTitles.find(t => t.id === titleMatch[1])!; t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false }; for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key]; return json({ accepted: true }); }
+    if (method === 'GET') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: d.extras } : d, g.id);
+  }
+  if (method === 'POST' && path === '/search') {
+    if (typeof body.query !== 'string' || !Number.isInteger(body.generation) || !['fast', 'descriptive'].includes(body.mode)) fail('request', 'invalid_search', 'Query, generation and mode required');
+    const terms = body.query.toLowerCase().split(/\s+/).filter(Boolean);
+    const items = titles.filter(t => terms.every((term: string) => (body.mode === 'fast' ? t.name : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
+    const paging = new URL(url); if (body.cursor) paging.searchParams.set('cursor', body.cursor); if (body.limit) paging.searchParams.set('limit', String(body.limit));
+    return json({ ...page(items, paging, g, `search:${body.mode}:${body.query}`), query: body.query, generation: body.generation });
+  }
+  if (path.startsWith('/search/ai')) fail('policy', 'feature_unavailable', 'AI search unavailable');
+  if (method === 'POST' && path === '/interactions') {
+    if (!Array.isArray(body.interactions) || body.interactions.length > 100 || body.interactions.some((i: V.Interaction) => !validReceipt(g, i.receiptToken) || !['visible', 'selected', 'played'].includes(i.kind))) fail('request', 'invalid_receipt', 'Invalid interaction receipt');
+    return json({ accepted: true });
+  }
+  if (method === 'GET' && path === '/live/channels') return cached(req, page(channels, url, g, 'channels'), g.id);
+  if (method === 'GET' && path === '/live/guide') {
+    const from = Date.parse(url.searchParams.get('from') ?? ''), until = Date.parse(url.searchParams.get('until') ?? '');
+    if (!Number.isFinite(from) || !Number.isFinite(until) || until <= from || until - from > 86400000) fail('request', 'invalid_window', 'Guide window must be positive and <=24h');
+    const ids = (url.searchParams.get('channelIds') ?? '').split(',').filter(Boolean);
+    return cached(req, { ...page(guide(from, until, ids), url, g, `guide:${from}:${until}:${ids.join(',')}`), from: new Date(from).toISOString(), until: new Date(until).toISOString() }, g.id);
+  }
+  if (method === 'POST' && path === '/playback') {
+    if (!body.client || [body.titleId, body.channelId, body.extraId].filter(Boolean).length !== 1) fail('request', 'invalid_target', 'Exactly one playback target required');
+    if (body.channelId) fail('source', 'live_fixture_unavailable', 'Guide fixtures have no real live source');
+    const title = allTitles.find(t => t.id === body.titleId), extra = extras.find(e => e.id === body.extraId);
+    if (!title && !extra) fail('not-found', 'title_not_found', 'Playback target not found');
+    if (title && !['movie', 'episode'].includes(title.kind)) fail('request', 'not_playable', 'Select an episode to play');
+    if (faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted');
+    if (!await Bun.file(`${mediaRoot}/master.m3u8`).exists()) fail('source', 'media_not_generated', 'Run mock-server/scripts/make-media.ts first');
+    if (body.positionSeconds !== undefined && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > 60)) fail('request', 'invalid_position', 'Synthetic fixture is 60 seconds');
+    return json((await createSession(g.id, body)).plan);
+  }
+  const match = /^\/sessions\/([^/]+)(?:\/(events|commands|observations))?$/.exec(path);
+  if (match) {
+    const s = currentSession(match[1], g);
+    if (method === 'GET') return match[2] === 'events' ? events(s, req) : json(snapshot(s));
+    if (method === 'POST' && ['commands', 'observations'].includes(match[2])) {
+      if (body.sourceGeneration !== s.plan.sourceGeneration || body.seekGeneration !== s.plan.seekGeneration) fail('conflict', 'stale_generation', 'Refresh session state', { currentGenerations: { sourceGeneration: s.plan.sourceGeneration, seekGeneration: s.plan.seekGeneration } });
+      if (s.plan.state === 'ended') fail('conflict', 'session_ended', 'Session ended');
+      if (match[2] === 'observations') { if (!Number.isInteger(body.sequence) || body.sequence < 1 || !Array.isArray(body.playableRanges) || !Number.isFinite(body.positionSeconds) || !['playing','paused','buffering','ended'].includes(body.state)) fail('request', 'invalid_observation', 'Invalid observation'); observe(s, body); return json({ accepted: true }); }
+      if (body.kind === 'prepare-fallback') fail(faults.capacityExhausted ? 'capacity' : 'policy', faults.capacityExhausted ? 'capacity_exhausted' : 'feature_unavailable', 'Proactive fallback not implemented');
+      if (!['seek', 'pause', 'resume', 'stop', 'tracks', 'switch'].includes(body.kind)) fail('request', 'invalid_command', 'Unknown command');
+      if (body.kind === 'seek' && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > 60)) fail('request', 'invalid_position', 'Position must be 0–60');
+      if (body.kind === 'tracks') fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
+      if (body.kind === 'tracks' && ((body.audioTrackId !== undefined && !s.plan.audioTracks.some(t => t.id === body.audioTrackId)) || (body.subtitleTrackId != null && !s.plan.subtitleTracks.some(t => t.id === body.subtitleTrackId)))) fail('request', 'invalid_track', 'Unknown track');
+      if (body.kind === 'switch') { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!p.boundaries.some(b => b.atSeconds === body.atSeconds)) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
+      applyCommand(s, body); return json(s.plan);
+    }
+  }
+  fail('not-found', 'endpoint_not_found', 'Endpoint not found');
+}
+
+async function dispatch(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204 });
+  if (url.pathname.startsWith('/__admin/')) {
+    if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
+    if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } return json(faults); }
+    if (req.method === 'POST' && url.pathname === '/__admin/web-code') { const code = crypto.randomUUID(); webCodes.set(code, Date.now() + 60000); return json({ code, expiresAt: new Date(Date.now() + 60000).toISOString() }); }
+    fail('not-found', 'endpoint_not_found', 'Admin endpoint not found');
+  }
+  const media = /^\/sessions\/media\/([^/]+)\/([^/]+)\/(.+)$/.exec(url.pathname);
+  if (media) { const s = sessions.get(media[1]), g = s && grants.get(s.owner); if (!s || !g || g.revoked || g.expires < Date.now() || s.mediaToken !== media[2] || s.plan.state === 'ended') fail('auth', 'invalid_media_grant', 'Invalid media grant'); return serveMedia(req, media[3]); }
+  const art = /^\/vela\/v0\/artwork\/([a-z0-9-]+)$/.exec(url.pathname);
+  if (art && req.method === 'GET') {
+    // Only synthetic assets: no private or remotely fetched imagery.
+    const width = Math.max(120, Math.min(1920, Number(url.searchParams.get('width')) || 480)), height = Math.round(width * (url.searchParams.get('kind') === 'poster' ? 1.5 : 9 / 16));
+    const hue = Number(Bun.hash(art[1]) % 360n);
+    return new Response(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 480 720"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="hsl(${hue},35%,35%)"/><stop offset="1" stop-color="#10151e"/></linearGradient></defs><rect width="480" height="720" fill="url(#g)"/><circle cx="360" cy="170" r="130" fill="white" opacity=".05"/><path d="M0 560 Q140 300 480 520V720H0" fill="#090d15" opacity=".35"/><text x="40" y="650" fill="#f2eadb" font-family="serif" font-size="23" letter-spacing="6">VELA</text></svg>`, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
+  }
+  if (!url.pathname.startsWith('/vela/v0/')) fail('not-found', 'endpoint_not_found', 'Endpoint not found');
+  if (req.method !== 'POST') return api(req, url, undefined);
+  let raw: string, body: any; try { raw = await req.text(); if (raw.length > 262144) fail('request', 'body_too_large', 'Body exceeds 256KiB'); body = JSON.parse(raw); } catch (e) { if (e instanceof Response) throw e; fail('request', 'invalid_json', 'JSON object required'); }
+  if (!body || typeof body.idempotencyKey !== 'string' || !body.idempotencyKey || body.idempotencyKey.length > 200) fail('request', 'idempotency_required', 'Nonempty idempotencyKey required');
+  const identity = access.get(req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '')?.id ?? body.device?.id ?? 'anonymous';
+  const key = `${identity}:${url.pathname}:${body.idempotencyKey}`, old = idempotency.get(key);
+  if (old && old.expires > Date.now()) { if (old.body !== raw) fail('conflict', 'idempotency_conflict', 'Key reused with different body'); return (await old.response).clone(); }
+  const response = api(req, url, body).catch(e => { if (e instanceof Response) return e; throw e; });
+  idempotency.set(key, { body: raw, response, expires: Date.now() + 86400000 });
+  return (await response).clone();
+}
+const server = Bun.serve({ hostname: '127.0.0.1', port, idleTimeout: 0, async fetch(req) {
+  let response: Response;
+  try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
+  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
+} });
+console.log(`Vela mock: ${server.url} — demo / vela`);
