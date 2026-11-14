@@ -2,7 +2,7 @@ use Shell as ExampleShell, Home as ExampleHome, SearchSurface as ExampleSearchSu
 use PlayerView from "./player-models.contract"
 use PlayerChrome as CinePlayerChrome from "../skins/cinematic/player.contract"
 use PlayerChrome as IndexPlayerChrome from "../skins/index/player.contract"
-use GuideModel, LiveTile from "../live/models.contract"
+use GuideModel, LiveTile, GuideFocus from "../live/models.contract"
 use Guide as CineGuide from "../skins/cinematic/guide.contract"
 use LiveControls as CineLiveControls, MiniGuide as CineMiniGuide from "../skins/cinematic/live.contract"
 use Guide as IndexGuide from "../skins/index/guide.contract"
@@ -253,6 +253,7 @@ component Guide
     still: bool
     zoom: number
     tile: LiveTile
+    focus: GuideFocus
     watch: action
     previous: action
     next: action
@@ -283,7 +284,7 @@ component Guide
               MarqueeGuide(model=model, small=small, still=still, tile=tile, watch=watch, chooseDay=chooseDay, tileMessage=tileMessage, tileUnmute=tileUnmute, tileTuneIn=tileTuneIn, retune=retune)
           else
             column flex=1 min-height=0
-              CineGuide(model=model, small=small, still=still, zoom=zoom, tile=tile, watch=watch, chooseDay=chooseDay, setZoom=setZoom, tileMessage=tileMessage, tileUnmute=tileUnmute, tileTuneIn=tileTuneIn, retune=retune)
+              CineGuide(model=model, small=small, still=still, zoom=zoom, tile=tile, focus=focus, watch=watch, chooseDay=chooseDay, setZoom=setZoom, tileMessage=tileMessage, tileUnmute=tileUnmute, tileTuneIn=tileTuneIn, retune=retune)
 
 component LiveControls
   props

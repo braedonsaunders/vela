@@ -1,4 +1,4 @@
-use GuideModel, GuideChannel, GuideProgramme, LiveTile from "../../live/models.contract"
+use GuideModel, GuideChannel, GuideProgramme, LiveTile, GuideFocus from "../../live/models.contract"
 use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, glide, quick, base, spin from "./look.contract"
 
 // The channel guide as an app: a preview of the focused programme, a toolbar of
@@ -39,6 +39,7 @@ component Guide
     still: bool
     zoom: number
     tile: LiveTile
+    focus: GuideFocus
     watch: action
     chooseDay: action
     setZoom: action
@@ -58,28 +59,38 @@ component Guide
   state portH = 640
   state focusMin = -1
   state landed = -1
+  state landedKey = ""
   // A tab whose Guide left the lineup falls back to all channels.
   derive tabOn = (model.guides.filter(g => g.id == guideTab).length > 0 ? guideTab : "")
-  derive rows = model.channels.filter(c => keep(c, filter, tabOn))
+  // A search hand-off focuses one channel (and programme, when it is in this day's listings) on its day;
+  // the viewer's own selection, filters and day choice take over from it.
+  derive focusOn = focus.channelId != "" and focus.day == model.day
+  derive focusKey = (focusOn ? focus.key : "")
+  derive rows = model.channels.filter(c => keep(c, filter, tabOn) or (focusOn and c.id == focus.channelId))
+  derive focusRow = (focusOn ? rows.map(c => c.id).indexOf(focus.channelId) : -1)
+  derive focusProgramme = (focusOn and focus.programmeId != "" and model.channels.filter(c => c.id == focus.channelId and c.programmes.filter(p => p.id == focus.programmeId).length > 0).length > 0 ? focus.programmeId : "")
+  derive pickedChannel = (selChannel != "" ? selChannel : focusOn ? focus.channelId : "")
+  derive pickedProgramme = (selChannel != "" ? selProgramme : focusProgramme)
   derive grid = not small or mode == "guide"
   derive scale = ppm(small, zoom)
   derive row = rowH(small)
   derive rail = railW(small)
   derive width = model.minutes * scale
   // Open with the landing time a third of the way across the panel, so the past reads to its left.
-  derive landingMin = max(0, min(model.minutes - (portW - rail) / scale, model.landing - (portW - rail) / scale / 3))
+  derive landingMin = max(0, min(model.minutes - (portW - rail) / scale, (focusOn and focus.minute >= 0 ? focus.minute : model.landing) - (portW - rail) / scale / 3))
   derive col = (colBase < 0 ? floor(landingMin / 30) : colBase)
   derive firstRow = max(0, rowBase - 6)
   derive lastRow = min(rows.length, rowBase + ceil(portH / row) + 8)
   derive winFrom = col * 30 - 150
   derive winTo = col * 30 + portW / scale + 150
   // The preview follows selection; with none it shows the first channel airing something.
-  derive heroChannels = (selChannel != "" ? model.channels.filter(c => c.id == selChannel) : model.channels.filter(c => c.nowId != "").slice(0, 1))
+  derive heroChannels = (pickedChannel != "" ? model.channels.filter(c => c.id == pickedChannel) : model.channels.filter(c => c.nowId != "").slice(0, 1))
   derive heroFallback = (heroChannels.length == 0 ? model.channels.slice(0, 1) : heroChannels)
 
   action scrolled(x: number, y: number)
-    if landed < 0
+    if landed < 0 or landedKey != focusKey
       landed = landingMin
+      landedKey = focusKey
     let r = floor(y / row / 4) * 4
     if r != rowBase
       rowBase = r
@@ -192,7 +203,7 @@ component Guide
       if grid and not expanded
         column position="relative" flex-shrink=0 height=(small ? 196 : "calc(84px + clamp(128px, 16vh, 168px))") overflow="hidden"
           for c in heroFallback key=`hero-${c.id}`
-            GuideHero(channel=c, programmeId=(selChannel == c.id and selProgramme != "" ? selProgramme : c.nowId), small=small, still=still, watch=watch)
+            GuideHero(channel=c, programmeId=(pickedChannel == c.id and pickedProgramme != "" ? pickedProgramme : c.nowId), small=small, still=still, watch=watch)
           if tile.state != "off"
             column position="absolute" right=side(small) bottom=(small ? 12 : 14) z-index=2
               GuideTile(tile=tile, small=small, still=still, watch=watch, message=tileMessage, unmute=tileUnmute, tuneIn=tileTuneIn)
@@ -270,8 +281,8 @@ component Guide
         else
           if grid
             column flex=1 min-height=0 margin-left=(small ? 0 : side(small)) margin-right=(small ? 0 : side(small)) margin-bottom=(small ? 0 : 24) border-radius=(small ? 0 : 20) overflow="hidden" border=(small ? "none" : "1px solid var(--cinematic.glass-edge)") border-top="1px solid var(--cinematic.glass-edge)" background-color="cinematic.guide-panel" box-shadow=(small ? "none" : "0px 40px 120px var(--cinematic.shadow)")
-              for day in [model.day] key=day
-                scroll id="guide-grid" testId="guide-grid" scroll=scrolled resize=measured scrollLeft=((landed < 0 ? landingMin : landed) * scale) flex=1 min-height=0 overflow="auto" overscroll-behavior="contain" scroll-padding-left=rail scroll-padding-top=rulerH() role="grid" aria-label=t("ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch")
+              for day in [`${model.day}|${focusKey}`] key=day
+                scroll id="guide-grid" testId="guide-grid" scroll=scrolled resize=measured scrollLeft=((landed < 0 or landedKey != focusKey ? landingMin : landed) * scale) scrollTop=(focusRow > 1 ? (focusRow - 1) * row : 0) flex=1 min-height=0 overflow="auto" overscroll-behavior="contain" scroll-padding-left=rail scroll-padding-top=rulerH() role="grid" aria-label=t("ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch")
                   column position="relative" width=(rail + width) height=(rulerH() + rows.length * row) flex-shrink=0
                     // Half-hour and hour lines under every row, drawn once.
                     column position="absolute" left=rail top=rulerH() width=width height=(rows.length * row) aria-hidden=true background-image=`repeating-linear-gradient(90deg, var(--cinematic.guide-hour) 0px 1px, transparent 1px ${30 * scale}px, var(--cinematic.guide-half) ${30 * scale}px ${30 * scale + 1}px, transparent ${30 * scale + 1}px ${60 * scale}px)`
@@ -294,7 +305,7 @@ component Guide
                     // Channel rows, windowed around the port.
                     for c, i in rows.slice(firstRow, lastRow) key=c.id
                       row position="absolute" left=0 top=(rulerH() + (firstRow + i) * row) width=(rail + width) height=row role="row" border-bottom="1px solid var(--cinematic.hairline)" box-sizing="border-box"
-                        GuideRail(channel=c, index=(firstRow + i), small=small, rail=rail, row=row, selected=(c.id == selChannel), watch=watch, select=select, railKey=railKey)
+                        GuideRail(channel=c, index=(firstRow + i), small=small, rail=rail, row=row, selected=(c.id == pickedChannel), watch=watch, select=select, railKey=railKey)
                         if not c.listed
                           button id=`guide-empty-${c.id}` press=watch(c.id) aria-label=t("ui.watchChannel", channel=c.name) position="sticky" left=(rail + 6) margin-left=6 margin-top=6 height=(row - 13) width=max(120, min(width, portW - rail - 12)) box-sizing="border-box" class=GuideEmpty
                             row gap=10 align-items="center" padding-left=16
@@ -302,7 +313,7 @@ component Guide
                               text "·" font-size=13 color="ink.quiet" aria-hidden=true
                               text t("live.watch") font-size=13 font-weight=600 color="ink.secondary"
                         for p in c.programmes.filter(p => p.at + p.span > winFrom and p.at < winTo) key=p.id
-                          GuideCell(programme=p, channel=c, index=(firstRow + i), scale=scale, rail=rail, row=row, small=small, nowMinute=model.nowMinute, selected=(c.id == selChannel and p.id == selProgramme), focusMin=focusMin, select=select, press=press, move=move)
+                          GuideCell(programme=p, channel=c, index=(firstRow + i), scale=scale, rail=rail, row=row, small=small, nowMinute=model.nowMinute, selected=(c.id == pickedChannel and p.id == pickedProgramme), focusMin=focusMin, select=select, press=press, move=move)
                     if model.nowMinute >= 0
                       column position="absolute" left=(rail + model.nowMinute * scale - 1) top=rulerH() width=2 height=(rows.length * row) z-index=2 background-color="cinematic.guide-now" box-shadow="0px 0px 14px var(--cinematic.guide-now-glow)" pointer-events="none" aria-hidden=true
           else
@@ -352,7 +363,7 @@ component GuideHero
                   column height=3 width=`${p.progress}%` background-color="brand.warm" transition=(still ? "none" : `width ${base()}ms ${glide()}`)
                 text p.remainingLabel font-size=12 color="brand.warm" font-variant-numeric="tabular-nums" white-space="nowrap"
               else
-                text (p.ended ? t("live.ended") : t("live.startsIn", minutes=p.startsInLabel)) font-size=12 color="ink.secondary" white-space="nowrap"
+                text (p.ended ? t("live.ended") : p.startsLabel) font-size=12 color="ink.secondary" white-space="nowrap"
               if p.episode != "" and not small
                 text p.episode font-size=12 color="ink.secondary" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
               if p.rating != "" and not small

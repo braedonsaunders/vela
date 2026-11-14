@@ -1,4 +1,4 @@
-use GuideModel, LiveStatus, LiveIdentity, LiveTile from "../live/models.contract"
+use GuideModel, LiveStatus, LiveIdentity, LiveTile, GuideFocus, GuideFocusTime from "../live/models.contract"
 use PlaybackModel from "./models.contract"
 use PlayerView, PlayerCommandReply from "./player-models.contract"
 
@@ -8,6 +8,21 @@ members Client
   // tile and its release) follows it, so moving the guide to another surface changes only this line.
   derive guideOpen = top(nav).name == "home" and libraryId == "@live"
   state guideZoom = 1 persist
+  // A search hand-off (/?lib=@live&ch=&prog=&at=) carries only server facts; the data module
+  // places `at` in the guide's local days, and the guide opens on that day, row and time.
+  derive guideFocusChannel = match first(stack(nav)) { case some(e) => searchParam(e, "ch"), case none => "" }
+  derive guideFocusProgramme = match first(stack(nav)) { case some(e) => searchParam(e, "prog"), case none => "" }
+  derive guideFocusAt = match first(stack(nav)) { case some(e) => searchParam(e, "at"), case none => "" }
+  derive guideFocusKey = (guideFocusChannel == "" ? "" : `${guideFocusChannel}|${guideFocusProgramme}|${guideFocusAt}`)
+  resource guideFocusTime = uiGuideFocus(guideFocusAt, guideNow) with localeJSON when guideOpen and guideFocusAt != "" and guideNow > 0 as shape GuideFocusTime
+  derive guideFocusDay = (guideFocusAt == "" ? guideDay : current(guideFocusTime) ? guideFocusTime.day : -1)
+  derive guideFocus = GuideFocus(key=guideFocusKey, channelId=(guideFocusDay >= 0 ? guideFocusChannel : ""), programmeId=guideFocusProgramme, day=guideFocusDay, minute=(guideFocusAt != "" and current(guideFocusTime) ? guideFocusTime.minute : -1))
+  state guideFocusApplied = ""
+  task focusGuideDay when guideOpen and guideFocusKey != "" and guideFocusDay >= 0 and guideFocusApplied != guideFocusKey
+    after(1, applyGuideFocus)
+  action applyGuideFocus
+    guideFocusApplied = guideFocusKey
+    guideDay = guideFocusDay
   state guideNow = 0
   state lowDelay = false
   resource guide = uiGuide(guideNow, guideDay) with localeJSON when auth.authenticated and (guideOpen or top(nav).name == "liveWatch") and guideNow > 0 as shape GuideModel else empty()

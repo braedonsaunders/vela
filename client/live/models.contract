@@ -16,6 +16,7 @@ shape GuideProgramme
   progress: number
   remainingLabel: string
   durationLabel: string
+  startsLabel: string
   episode: string
   rating: string
   genre: string
@@ -42,6 +43,18 @@ shape GuideChannel
 shape GuideTab
   id: string
   name: string
+
+// A search hand-off into the guide: server ids and the local day/minute of a programme's start.
+shape GuideFocus
+  key: string
+  channelId: string
+  programmeId: string
+  day: number
+  minute: number
+
+shape GuideFocusTime
+  day: number
+  minute: number
 
 shape GuideDay
   offset: number
