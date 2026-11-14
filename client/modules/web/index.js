@@ -2479,9 +2479,9 @@ function create(tag, element, json, event) {
   const ambient = JSON.parse(json).ambient === "true";
   const root = element.shadowRoot ?? element.attachShadow({ mode: "open" });
   const video = document.createElement("video");
-  video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000";
+  video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:none";
   const surface = document.createElement("div");
-  surface.style.cssText = "position:relative;width:100%;height:100%";
+  surface.style.cssText = "position:relative;width:100%;height:100%;isolation:isolate;z-index:0;pointer-events:none";
   const style = document.createElement("style");
   style.textContent = ".webgpuPlayerCanvas{position:absolute;display:block;z-index:1;opacity:0;pointer-events:none}.webgpuPlayerCanvas-visible{opacity:1}";
   surface.append(video);
