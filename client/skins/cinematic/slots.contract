@@ -30,7 +30,7 @@ component Shell
             button press=live border="none" background-color="transparent" color="ink.secondary"
               text "Live"
         if skins.length > 1
-          select value=skin change=chooseSkin aria-label="Appearance" background-color="surface.raised" color="ink.primary" border="none" padding=8 border-radius=8
+          select value=skin change=chooseSkin aria-label="Appearance" testId="skin-picker" background-color="surface.raised" color="ink.primary" border="none" padding=8 border-radius=8
             for name in skins key=name
               option value=name
                 text name
