@@ -124,6 +124,7 @@ export class EtherAdapter implements ServerAdapter {
       return this.request<V.Ack>('POST', '/auth/revoke', { refreshToken: rotated.refreshToken, idempotencyKey: this.credentials.refreshKey() }, true, false, false);
     }
   }
+  trailerPreview(id: string, request: V.TrailerPreviewRequest) { return this.request<V.TrailerPreviewResponse>('POST', `/titles/${encodeURIComponent(id)}/trailer-preview`, request); }
   bootstrap() { return this.request<V.Bootstrap>('GET', '/bootstrap', undefined, true, true); }
   rows(q: V.RowsQuery) { return this.request<V.Page<V.Row>>('GET', `/rows${query(q)}`, undefined, true, true); }
   row(id: string, cursor?: string, limit?: number) { return this.request<V.Row>('GET', `/rows/${encodeURIComponent(id)}${query({ cursor, limit })}`, undefined, true, true); }

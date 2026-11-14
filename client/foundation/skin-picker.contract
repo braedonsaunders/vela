@@ -2,11 +2,12 @@ use SkinManifest from "./models.contract"
 use manifest as CinematicManifest from "../skins/cinematic/manifest.contract"
 use manifest as IndexManifest from "../skins/index/manifest.contract"
 use manifest as ExampleManifest from "../skins/example/manifest.contract"
+use manifest as JellyTwinManifest from "../skins/jellytwin/manifest.contract"
 use manifest as MochiManifest from "../skins/mochi/manifest.contract"
 
 // Every compiled skin registers its manifest here (one branch per id); unknown ids
 // show the cinematic entry, matching the foundation's fallback.
-fn skinManifest(id: string): SkinManifest = (id == "mochi" ? MochiManifest() : id == "index" or id == "editorial" ? IndexManifest() : id == "example" ? ExampleManifest() : CinematicManifest())
+fn skinManifest(id: string): SkinManifest = (id == "mochi" ? MochiManifest() : id == "index" or id == "editorial" ? IndexManifest() : id == "example" ? ExampleManifest() : id == "jellytwin" ? JellyTwinManifest() : CinematicManifest())
 
 keyframes pickerVeil
   from opacity=0

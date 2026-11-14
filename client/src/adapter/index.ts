@@ -18,6 +18,7 @@ export interface ServerAdapter {
   library(id: string, query: V.LibraryBrowseQuery): Promise<V.LibraryContents>;
   collection(id: string): Promise<V.CollectionContents>;
   detail(id: string): Promise<V.TitleDetail>;
+  trailerPreview(id: string, request: V.TrailerPreviewRequest): Promise<V.TrailerPreviewResponse>;
   search(request: V.SearchRequest): Promise<V.SearchResponse>;
   startAI(request: V.AISearchRequest): Promise<V.AISearchJob>;
   aiJob(id: string): Promise<V.AISearchJob>;
