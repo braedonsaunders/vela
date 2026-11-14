@@ -1,5 +1,6 @@
 // Minimal complete example: plain lists, no requests, ordering or playback engine.
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, cardName, skinLabel, LibraryNav from "../../foundation/models.contract"
+use SkinPicker from "../../foundation/skin-picker.contract"
 use PlayerView from "../../foundation/player-models.contract"
 use GuideModel from "../../live/models.contract"
 use PlayerChrome as BasePlayer from "../index/player.contract"
@@ -27,8 +28,17 @@ component Shell
     section: string
     openLibrary: action
   slot
+  state pickerOpen = false
+  action openPicker
+    pickerOpen = true
+  action closePicker
+    pickerOpen = false
+    focus("skin-picker")
+  action pickSkin(v: string)
+    pickerOpen = false
+    chooseSkin(v)
   view
-    column height="100%" color="ink.primary" background-color="surface.page" gap=12
+    column position="relative" height="100%" color="ink.primary" background-color="surface.page" gap=12
       row role="navigation" aria-label=t("ui.mainNavigation") gap=12 padding=16 flex-wrap="wrap"
         text t("example.name") role="heading" aria-level=1
         if viewer != ""
@@ -39,13 +49,13 @@ component Shell
           if canLive
             button press=live
               text t("ui.live")
-          select value=skin change=chooseSkin aria-label=t("ui.appearance")
-            for id in skins key=id
-              option value=id
-                text skinLabel(id)
+          button press=openPicker testId="skin-picker" aria-haspopup="dialog"
+            text t("skin.picker.choose")
           button press=signOut
             text t("ui.signOut")
       children
+      if pickerOpen
+        SkinPicker(skins=skins, current=skin, small=viewport.width < 640, still=viewport.prefersReducedMotion, choose=pickSkin, dismiss=closePicker)
 
 component TitleCard
   props

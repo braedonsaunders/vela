@@ -163,3 +163,13 @@ shape HomeRowPage
   continuation: string
   requestCursor: string
   homeAt: number
+
+// A skin's appearance-picker entry: skins/<id>/manifest.contract exports `fn manifest()`.
+// preview is an app-relative asset path (assets/skins/<id>.jpg, a 1440x900 home capture
+// scaled to 720x450); swatches are 3-5 CSS colours from the skin's palette, ground first.
+shape SkinManifest
+  id: string
+  name: string
+  tagline: string
+  preview: string
+  swatches: string[]

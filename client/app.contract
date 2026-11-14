@@ -3,7 +3,7 @@ use PlayerChrome from "./foundation/skin.contract"
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./foundation/models.contract"
 use AuthStage, AuthNotice, SignIn, QuickConnect from "./skins/cinematic/auth.contract"
 use Shell, Home, SearchSurface, Detail, SearchField, Row, Status, Collection, Library, skinDetailPresentation, skinDetailSplit from "./foundation/skin.contract"
-use dissolve, open from "./skins/cinematic/look.contract"
+use dissolve, open, vanish from "./skins/cinematic/look.contract"
 
 routes nav
   home "/"
@@ -123,3 +123,6 @@ component Client
                   if zapTarget != "" and guide.channels.length > 0
                     column position="absolute" left=(small ? 16 : 40) top="50%" translate="0px -50%" z-index=3
                       MiniGuide(skin=activeSkin, model=guide, playing=playingId, target=zapTarget, small=small, still=still, tune=tuneZap)
+      // A new appearance dissolves in from its own ground instead of swapping hard.
+      for n in [skinSwitches].filter(k => k > 0) key=`veil-${n}`
+        column position="absolute" inset=0 z-index=500 pointer-events="none" aria-hidden=true background-color=pageColor animation=(still ? "vanish 260ms linear both" : "vanish 760ms cubic-bezier(0.65, 0, 0.35, 1) 60ms both")

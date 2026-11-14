@@ -1,6 +1,7 @@
 use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, cardName, skinLabel from "../../foundation/models.contract"
 use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill, FadeImage from "./look.contract"
 use Wordmark, Pulse from "./auth.contract"
+use SkinPicker, skinManifest from "../../foundation/skin-picker.contract"
 
 // The page gutter: content aligns to it everywhere in the skin.
 fn gutter(small: bool): string = (small ? "18px" : "max(28px, 4vw)")
@@ -28,8 +29,15 @@ component Shell
   derive still = viewport.prefersReducedMotion
   action toggleMenu
     menuOpen = not menuOpen
-  action changeAppearance(value: string)
+  state pickerOpen = false
+  action openPicker
     menuOpen = false
+    pickerOpen = true
+  action closePicker
+    pickerOpen = false
+    focus("profile-menu-trigger")
+  action changeAppearance(value: string)
+    pickerOpen = false
     chooseSkin(value)
   action leaveSession
     menuOpen = false
@@ -74,12 +82,15 @@ component Shell
             text viewer font-size=16 font-weight=600 flex=1 min-width=0 line-clamp=1
           column height=1 background-color="cinematic.glass-edge"
           if skins.length > 1
-            column gap=8
-              text t("ui.appearance") class=Eyebrow font-size=10 color="ink.quiet"
-              select value=skin change=changeAppearance aria-label=t("ui.appearance") testId="skin-picker" box-sizing="border-box" width="100%" height=42 padding="0px 12px" border="1px solid var(--cinematic.glass-edge)" border-radius=12 background-color="cinematic.field" color="ink.primary" font-size=14
-                for name in skins key=name
-                  option value=name
-                    text skinLabel(name)
+            button press=openPicker testId="skin-picker" class=NavLink justify-content="space-between" padding="8px 10px" margin="0px -10px"
+              row gap=12 align-items="center" width="100%"
+                column gap=2 flex=1 min-width=0 text-align="left"
+                  text t("ui.appearance") class=Eyebrow font-size=10 color="ink.quiet"
+                  text skinLabel(skin) font-size=14 color="ink.primary"
+                row gap=4 aria-hidden=true
+                  for color, c in skinManifest(skin).swatches.slice(0, 4) key=`${c}`
+                    column width=10 height=10 border-radius=5 background-color=color box-shadow="inset 0px 0px 0px 1px var(--cinematic.glass-edge-strong)"
+                image "symbol:forward-chevron" width=12 height=12 color="ink.quiet" aria-hidden=true
           vela-install pwaAction="install" buttonLabel=t("pwa.install")
           vela-install pwaAction="update" buttonLabel=t("pwa.update")
           button press=leaveSession class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
@@ -87,6 +98,8 @@ component Shell
               image "symbol:sign-out" width=16 height=16 aria-hidden=true
               text t("ui.signOut") font-size=14
       children
+      if pickerOpen
+        SkinPicker(skins=skins, current=skin, small=compact, still=still, choose=changeAppearance, dismiss=closePicker)
 
 // Home, the server's libraries in order (a live library opens the guide), and Live
 // when the server offers it without a live library.

@@ -111,6 +111,36 @@ The complete example supplies the other slots, loading/error states, asynchronou
 lanes, exact-ID actions and the registered presentation functions. It intentionally
 adds no animation or artwork effects; it is a functional starting point, not a mock.
 
+## Appearance manifest
+
+Every skin supplies a manifest so the shared appearance picker
+(`foundation/skin-picker.contract`, presented by every skin's profile or settings menu)
+can show it as a large preview card. Create `client/skins/<id>/manifest.contract`:
+
+```contract
+use SkinManifest from "../../foundation/models.contract"
+
+fn manifest(): SkinManifest = SkinManifest(id="my-skin", name=t("skin.my-skin.name"), tagline=t("skin.my-skin.tagline"), preview="assets/skins/my-skin.jpg", swatches=["#101418", "#f4efe6", "#d0a46c"])
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | The compiled skin id, as accepted by the foundation and advertised by the server. |
+| `name` | Translated display name (the same text `skinLabel` returns for the id). |
+| `tagline` | One translated line, under about 70 characters, saying what the look is. |
+| `preview` | App-relative asset path of a real miniature of the skin's home: a 1440x900 capture of the home on the mock (real-looking mock art, no error overlays, reduced motion so no trailer frame), scaled to 720x450, JPEG quality ~82, saved as `client/assets/skins/<id>.jpg`. |
+| `swatches` | 3 to 5 CSS colours from the skin's palette, its page ground first (the card shows the ground until the preview loads). |
+
+Register the manifest with one branch in `skinManifest` in
+`foundation/skin-picker.contract` (`use manifest as MySkinManifest from "../skins/my-skin/manifest.contract"`).
+The picker lists the ids the root offers the viewer, marks the current one, and is a
+radio group: arrow keys move between looks, Enter or Space chooses, Escape closes. A
+skin presents it by keeping a `pickerOpen` state and rendering
+`SkinPicker(skins, current, small, still, choose, dismiss)` as the last child of a
+viewport-sized, `position="relative"` Shell root (it covers its positioned ancestor);
+`choose` is the Shell's `chooseSkin`. The root dissolves the app into the newly chosen
+skin from that skin's page ground; reduced motion shortens it to a quick fade.
+
 ## Register and build
 
 1. Add the Contract files under `client/skins/<id>/`. Use Tamber tokens for appearance;

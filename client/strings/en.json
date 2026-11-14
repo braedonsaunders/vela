@@ -290,5 +290,14 @@
   "live.tuneInTo": "Tune in to {channel}",
   "live.tuneIn": "Tune in",
   "live.unmutePreview": "Unmute preview",
-  "live.mutePreview": "Mute preview"
+  "live.mutePreview": "Mute preview",
+  "skin.cinematic.tagline": "Near-black, full-bleed artwork and slow, cinematic motion.",
+  "skin.index.tagline": "A quiet printed catalogue: light paper, serif type, plain lists.",
+  "skin.example.tagline": "The minimal reference skin: plain lists, nothing extra.",
+  "skin.picker.eyebrow": "Appearance",
+  "skin.picker.title": "Choose how Vela looks",
+  "skin.picker.subtitle": "Every look shows the same library and remembers where you were.",
+  "skin.picker.current": "Current",
+  "skin.picker.choose": "Change appearance",
+  "skin.picker.option": "{name}. {tagline}"
 }

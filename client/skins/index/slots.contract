@@ -1,4 +1,5 @@
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, cardName, skinLabel, LibraryNav from "../../foundation/models.contract"
+use SkinPicker from "../../foundation/skin-picker.contract"
 
 fn detailPresentation(width: number): string = (width < 900 ? "fullscreen" : "")
 fn detailSplit(width: number): string = (width < 900 ? "none" : "360")
@@ -17,6 +18,7 @@ component Navigation
     live: action
     library: action
     small: bool
+    openPicker: action
   view
     row role="navigation" aria-label=t("ui.mainNavigation") flex-wrap="wrap" gap=12 align-items="center" padding=(small ? 12 : 20) background-color="index.rail"
       text t("ui.velaIndex") font-size=16 font-weight=700
@@ -32,10 +34,8 @@ component Navigation
         button press=library background-color="transparent" color="index.ink" border="none" padding=4
           text t("ui.library")
       if skins.length > 1
-        select max-width="100%" min-width=0 value=skin change=chooseSkin aria-label=t("ui.appearance") testId="skin-picker" background-color="index.field" color="index.ink" padding=8
-          for name in skins key=name
-            option value=name
-              text skinLabel(name)
+        button press=openPicker testId="skin-picker" aria-haspopup="dialog" background-color="index.field" color="index.ink" border="1px solid var(--index.line)" padding="6px 12px"
+          text t("skin.picker.choose") font-size=13
       vela-install pwaAction="install" buttonLabel=t("pwa.install")
       vela-install pwaAction="update" buttonLabel=t("pwa.update")
       if viewer != ""
@@ -61,18 +61,29 @@ component Shell
     section: string
     openLibrary: action
   slot
+  state pickerOpen = false
+  action openPicker
+    pickerOpen = true
+  action closePicker
+    pickerOpen = false
+    focus("skin-picker")
+  action pickSkin(v: string)
+    pickerOpen = false
+    chooseSkin(v)
   view
-    column height="100%" min-height=0 background-color="index.page" color="index.ink" color-scheme="light" font-family="Georgia, serif"
+    column position="relative" height="100%" min-height=0 background-color="index.page" color="index.ink" color-scheme="light" font-family="Georgia, serif"
       if viewport.width < 640
-        Navigation(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, small=true)
+        Navigation(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, small=true, openPicker=openPicker)
         column flex=1 min-height=0
           children
       else
         row flex=1 min-height=0
           column width="11.25rem" flex-shrink=0 background-color="index.rail"
-            Navigation(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, small=false)
+            Navigation(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, small=false, openPicker=openPicker)
           column flex=1 min-width=0 min-height=0
             children
+      if pickerOpen
+        SkinPicker(skins=skins, current=skin, small=viewport.width < 640, still=viewport.prefersReducedMotion, choose=pickSkin, dismiss=closePicker)
 
 component SearchField
   props

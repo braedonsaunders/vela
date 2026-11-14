@@ -306,7 +306,11 @@ members Client
   action edit(v: string)
     generation = generation + 1
     nav = replace(nav, path("home") + (v == "" ? "" : `?q=${encodeURIComponent(v)}`))
+  // Counts appearance changes so the root can dissolve into the newly chosen skin.
+  state skinSwitches = 0
   action chooseSkin(v: string)
+    if v != activeSkin
+      skinSwitches = skinSwitches + 1
     skin = v
   action follow(url: string)
     nav = go(nav, url)

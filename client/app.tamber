@@ -107,4 +107,20 @@ theme
   index.video-line = #ffffff24  scheme=fixed
   index.video-ground = #090b0e  scheme=fixed
   media.overlay = #000000bf  scheme=fixed
+
+  // The shared appearance picker: a dark glass sheet every skin presents.
+  picker.scrim = #05060899  scheme=fixed
+  picker.panel = #111419fb  scheme=fixed
+  picker.card = #ffffff08  scheme=fixed
+  picker.raised = #ffffff12  scheme=fixed
+  picker.edge = #ffffff1f  scheme=fixed
+  picker.ring = #ffffff26  scheme=fixed
+  picker.swatch-edge = #ffffff40  scheme=fixed
+  picker.shadow = #000000a6  scheme=fixed
+  picker.ink = #f5f1e9  scheme=fixed
+  picker.quiet = #a7abb1  scheme=fixed
+  picker.control = #ffffff14  scheme=fixed
+  picker.accent = #dcb998  scheme=fixed
+  picker.on-accent = #15130f  scheme=fixed
+  picker.focus = #f5f1e9  scheme=fixed
   media.ground = #000000  scheme=fixed
