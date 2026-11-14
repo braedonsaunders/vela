@@ -7,10 +7,11 @@ use Guide as CineGuide from "../skins/cinematic/guide.contract"
 use LiveControls as CineLiveControls from "../skins/cinematic/live.contract"
 use Guide as IndexGuide from "../skins/index/guide.contract"
 use LiveControls as IndexLiveControls from "../skins/index/live.contract"
-use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport from "./models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, LibraryNav, LibraryModel from "./models.contract"
 use Status as CineStatus, Shell as CineShell, Home as CineHome, SearchSurface as CineSearchSurface, Row as CineRow, SearchField as CineSearchField, detailPresentation as CinePresentation, detailSplit as CineSplit from "../skins/cinematic/slots.contract"
 use Detail as CineDetail from "../skins/cinematic/detail.contract"
 use BrowsePage as CineBrowsePage from "../skins/cinematic/browse.contract"
+use Library as CineLibrary from "../skins/cinematic/library.contract"
 use Shell as IndexShell, Home as IndexHome, SearchSurface as IndexSearchSurface, Row as IndexRow, Detail as IndexDetail, SearchField as IndexSearchField, detailPresentation as IndexPresentation, detailSplit as IndexSplit from "../skins/index/slots.contract"
 
 fn skinDetailPresentation(skin: string, width: number): string = (skin == "example" ? ExamplePresentation(width) : skin == "index" or skin == "editorial" ? IndexPresentation(width) : CinePresentation(width))
@@ -30,17 +31,20 @@ component Shell
     search: action
     live: action
     library: action
+    libraries: LibraryNav[]
+    section: string
+    openLibrary: action
   slot
   view
     if skin == "example"
-      ExampleShell(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library)
+      ExampleShell(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
         children
     else
       if skin == "index" or skin == "editorial"
-        IndexShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library)
+        IndexShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
           children
       else
-        CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library)
+        CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
           children
 
 component Home
@@ -236,3 +240,31 @@ component Collection
         Row(skin=skin, row=FeedRow(id=id, name=name, receipt="", items=items), small=small, still=still, selectTitle=selectTitle, observe=observe)
     else
       CineBrowsePage(eyebrow=t("library.collection"), name=name, items=items, small=small, still=still, close=close, selectTitle=selectTitle, observe=observe)
+
+// A library's titles with the server's sort and filter choices. Cinematic draws the
+// browse page; other skins list the titles in a row with a way to load more.
+component Library
+  props
+    skin: string
+    model: LibraryModel
+    loading: bool
+    moreLoading: bool
+    small: bool
+    still: bool
+    close: action
+    setSort: action
+    setFilter: action
+    more: action
+    selectTitle: action
+    observe: action
+  view
+    if skin == "index" or skin == "editorial" or skin == "example"
+      column
+        button press=close aria-label=t("ui.back") padding=16
+          text t("ui.back")
+        Row(skin=skin, row=FeedRow(id=model.id, name=model.name, receipt="", items=model.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if model.more
+          button press=more() disabled=moreLoading padding=16
+            text t("library.loadMore")
+    else
+      CineLibrary(model=model, loading=loading, moreLoading=moreLoading, small=small, still=still, close=close, setSort=setSort, setFilter=setFilter, more=more, selectTitle=selectTitle, observe=observe)

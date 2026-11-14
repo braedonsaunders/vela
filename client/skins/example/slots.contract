@@ -1,5 +1,5 @@
 // Minimal complete example: plain lists, no requests, ordering or playback engine.
-use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, cardName, skinLabel from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, cardName, skinLabel, LibraryNav from "../../foundation/models.contract"
 use PlayerView from "../../foundation/player-models.contract"
 use GuideModel from "../../live/models.contract"
 use PlayerChrome as BasePlayer from "../index/player.contract"
@@ -23,6 +23,9 @@ component Shell
     search: action
     live: action
     library: action
+    libraries: LibraryNav[]
+    section: string
+    openLibrary: action
   slot
   view
     column height="100%" color="ink.primary" background-color="surface.page" gap=12

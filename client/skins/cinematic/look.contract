@@ -60,6 +60,10 @@ keyframes drift
   from scale=1.04 translate="0px 0px"
   to scale=1.14 translate="-2.4% -1.6%"
 
+keyframes fill
+  from translate="-100% 0px"
+  to translate="0px 0px"
+
 keyframes shimmer
   from translate="-100% 0px"
   to translate="100% 0px"

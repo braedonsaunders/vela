@@ -1,0 +1,108 @@
+use Card, LibraryModel, LibraryOption, LibrarySortOption from "../../foundation/models.contract"
+use TitleGrid, BrowseHeader from "./browse.contract"
+use EmptyState, RowSkeleton, gutter from "./slots.contract"
+use Eyebrow, GhostPill, IconButton, Skeleton, enter, base, glide, quick from "./look.contract"
+use Pulse from "./auth.contract"
+
+// A library: its name, the server's sort and filter choices, then its titles in a grid.
+component Library
+  props
+    model: LibraryModel
+    loading: bool
+    moreLoading: bool
+    small: bool
+    still: bool
+    close: action
+    setSort: action
+    setFilter: action
+    more: action
+    selectTitle: action
+    observe: action
+  derive directions = match first(model.sorts.filter(s => s.id == model.sort)) { case some(s) => s.directions, case none => [] }
+  action pickSort(id: string)
+    match first(model.sorts.filter(s => s.id == id))
+      case some(s)
+        setSort(id, (s.directions.includes(model.direction) ? model.direction : match first(s.directions) { case some(d) => d, case none => "" }))
+      case none
+        setSort(id, "")
+  action flip
+    setSort(model.sort, (model.direction == "asc" ? "desc" : "asc"))
+  action pickGenre(v: string)
+    setFilter("genre", v)
+  view
+    column gap=(small ? 22 : 30) padding-bottom=80
+      BrowseHeader(eyebrow=t("library.library"), name=model.name, backdrop=model.backdrop, small=small, still=still, close=close)
+      row gap=10 align-items="center" flex-wrap="wrap" padding-left=gutter(small) padding-right=gutter(small) animation=enter(still, 180)
+        if model.kinds.length > 1
+          row gap=4 padding=4 border-radius=999 background-color="cinematic.control" border="1px solid var(--cinematic.glass-edge)" role="group" aria-label=t("library.filter.all")
+            Chip(label=t("library.filter.all"), on=(model.kindFilter == ""), press=setFilter("kind", ""))
+            for kind in model.kinds key=kind.id
+              Chip(label=kind.label, on=(model.kindFilter == kind.id), press=setFilter("kind", kind.id))
+        if model.canPlayed
+          row gap=4 padding=4 border-radius=999 background-color="cinematic.control" border="1px solid var(--cinematic.glass-edge)" role="group" aria-label=t("library.filter.unwatched")
+            Chip(label=t("library.filter.all"), on=(model.playedFilter == ""), press=setFilter("played", ""))
+            Chip(label=t("library.filter.unwatched"), on=(model.playedFilter == "false"), press=setFilter("played", "false"))
+            Chip(label=t("library.filter.watched"), on=(model.playedFilter == "true"), press=setFilter("played", "true"))
+        if model.canFavorite
+          button press=setFilter("favorite", (model.favoriteFilter ? "" : "true")) aria-pressed=model.favoriteFilter class=GhostPill height=42 padding-left=16 padding-right=18 background-color=(model.favoriteFilter ? "ink.primary" : "cinematic.control") color=(model.favoriteFilter ? "ink.inverse" : "ink.primary") transition=`background-color ${quick()}ms linear, color ${quick()}ms linear`
+            row gap=8 align-items="center"
+              image (model.favoriteFilter ? "symbol:heart-fill" : "symbol:heart") width=15 height=15 aria-hidden=true
+              text t("library.filter.favorites") font-size=14
+        if model.genres.length > 0
+          select value=model.genreFilter change=pickGenre aria-label=t("library.genre") class=GlassSelect
+            option value=""
+              text t("library.anyGenre")
+            for genre in model.genres key=genre.id
+              option value=genre.id
+                text genre.label
+        column flex=1
+        if model.sorts.length > 1
+          row gap=6 align-items="center"
+            text t("library.sortBy") class=Eyebrow font-size=10 color="ink.quiet" padding-right=4
+            select value=model.sort change=pickSort aria-label=t("library.sortBy") class=GlassSelect
+              for sort in model.sorts key=sort.id
+                option value=sort.id
+                  text sort.label
+            if directions.length > 1
+              button press=flip aria-label=(model.direction == "asc" ? t("library.direction.asc") : t("library.direction.desc")) class=IconButton width=42 height=42 padding=12
+                image "symbol:sort" width=18 height=18 rotate=(model.direction == "asc" ? 180 : 0) transition=(still ? "none" : `rotate ${base()}ms ${glide()}`)
+      if loading and model.items.length == 0
+        column role="status" aria-label=t("ui.findingTitles")
+          RowSkeleton(small=small, still=still)
+          RowSkeleton(small=small, still=still)
+      else
+        if model.items.length == 0
+          EmptyState(icon="symbol:filter", title=t("library.empty"), message=t("library.emptyHint"), still=still)
+        else
+          column opacity=(loading ? 0.45 : 1) transition=`opacity ${base()}ms ${glide()}` aria-busy=loading
+            TitleGrid(items=model.items, small=small, still=still, selectTitle=selectTitle, observe=observe)
+          if model.more
+            row justify-content="center" padding-top=12
+              if moreLoading
+                Pulse(still=still)
+              else
+                button press=more class=GhostPill height=48 padding-left=28 padding-right=28
+                  text t("library.loadMore") font-size=15
+
+component Chip
+  props
+    label: string
+    on: bool
+    press: action
+  view
+    button press=press() aria-pressed=on height=34 padding="0px 14px" border="none" border-radius=999 background-color=(on ? "ink.primary" : "cinematic.scrim-clear") color=(on ? "ink.inverse" : "ink.secondary") font-size=13 font-weight=600 transition="background-color 180ms linear, color 180ms linear"
+      :hover
+        opacity=0.92
+      :focus-visible
+        box-shadow="0px 0px 0px 2px var(--brand.warm)"
+      text label
+
+style GlassSelect
+  box-sizing = "border-box"
+  height = 42
+  padding = "0px 14px"
+  border = "1px solid var(--cinematic.glass-edge)"
+  border-radius = 999
+  background-color = "cinematic.control"
+  color = "ink.primary"
+  font-size = 14

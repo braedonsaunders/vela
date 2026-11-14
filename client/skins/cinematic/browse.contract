@@ -1,6 +1,6 @@
 use Card from "../../foundation/models.contract"
 use TitleCard, gutter from "./slots.contract"
-use Display, Eyebrow, IconButton, enter, stagger, dissolve, rise from "./look.contract"
+use Display, Eyebrow, IconButton, enter, expose, drift, stagger, dissolve, rise, open, drift from "./look.contract"
 
 // Posters in a wrapping grid, in the order given, entering with a short stagger.
 component TitleGrid
@@ -16,6 +16,27 @@ component TitleGrid
         column animation=enter(still, stagger(i, 30, 18))
           TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe)
 
+// The head of a browse page: a way back, an eyebrow, the display name, and the
+// collection's or library's own landscape art faded in behind it when it has one.
+component BrowseHeader
+  props
+    eyebrow: string
+    name: string
+    backdrop: string
+    small: bool
+    still: bool
+    close: action
+  view
+    column position="relative" gap=(small ? 14 : 18) padding-top=(small ? 88 : 128) padding-bottom=(small ? 4 : 8) padding-left=gutter(small) padding-right=gutter(small) background-image="radial-gradient(ellipse 70% 120% at 15% 0%, var(--cinematic.guide-aura) 0%, var(--cinematic.scrim-clear) 70%)"
+      if backdrop != ""
+        column position="absolute" top=0 left=0 right=0 height=(small ? 300 : 420) overflow="hidden" aria-hidden=true mask-image="linear-gradient(180deg, black 0%, transparent 100%)" opacity=0.55 animation=expose(still)
+          image backdrop alt="" width="100%" height="100%" object-fit="cover" animation=drift(still)
+      row position="relative" gap=14 align-items="center" animation=enter(still, 60)
+        button press=close aria-label=t("ui.back") class=IconButton width=40 height=40 padding=11
+          image "symbol:back" width=18 height=18
+        text eyebrow class=Eyebrow font-size=10 color="brand.warm"
+      text name position="relative" role="heading" aria-level=1 class=Display font-size=(small ? 44 : 76) animation=enter(still, 120)
+
 // A page of titles under a heading, with a way back.
 component BrowsePage
   props
@@ -27,14 +48,7 @@ component BrowsePage
     close: action
     selectTitle: action
     observe: action
-  slot
   view
     column gap=(small ? 22 : 32) padding-bottom=80
-      column position="relative" gap=(small ? 14 : 18) padding-top=(small ? 84 : 112) padding-left=gutter(small) padding-right=gutter(small) background-image="radial-gradient(ellipse 70% 120% at 15% 0%, var(--cinematic.guide-aura) 0%, var(--cinematic.scrim-clear) 70%)"
-        row gap=14 align-items="center" animation=enter(still, 60)
-          button press=close aria-label=t("ui.back") class=IconButton width=40 height=40 padding=11
-            image "symbol:back" width=18 height=18
-          text eyebrow class=Eyebrow font-size=10 color="brand.warm"
-        text name role="heading" aria-level=1 class=Display font-size=(small ? 42 : 72) animation=enter(still, 120)
-        children
+      BrowseHeader(eyebrow=eyebrow, name=name, backdrop="", small=small, still=still, close=close)
       TitleGrid(items=items, small=small, still=still, selectTitle=selectTitle, observe=observe)

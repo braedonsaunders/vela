@@ -2,7 +2,7 @@ use Guide, LiveControls from "./foundation/skin.contract"
 use PlayerChrome from "./foundation/skin.contract"
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./foundation/models.contract"
 use AuthStage, AuthNotice, SignIn, QuickConnect from "./skins/cinematic/auth.contract"
-use Shell, Home, SearchSurface, Detail, SearchField, Row, Status, Collection, skinDetailPresentation, skinDetailSplit from "./foundation/skin.contract"
+use Shell, Home, SearchSurface, Detail, SearchField, Row, Status, Collection, Library, skinDetailPresentation, skinDetailSplit from "./foundation/skin.contract"
 use dissolve, open from "./skins/cinematic/look.contract"
 
 routes nav
@@ -11,6 +11,7 @@ routes nav
     watch "/watch/:id"
     extra "/watch/extra/:id"
     collection "/collection/:id"
+    library "/library/:id"
     live "/live"
     liveWatch "/live/:id"
 
@@ -26,7 +27,7 @@ component Client
       for e in stack(nav) key=e.id
         if e.name == "home"
           column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width) : "none") navigationScroll="home-scroll" position="absolute" inset=0
-            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "example"] : ["cinematic", "index"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
+            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "example"] : ["cinematic", "index"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section="home", openLibrary=openLibrary)
               scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") flex=1 min-height=0
                 if failed(auth) or not current(auth) or not auth.authenticated
                   AuthStage(still=still)
@@ -53,7 +54,7 @@ component Client
                         SearchSurface(skin=activeSkin, query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe)
         if e.name == "live"
           column navigationKey=`${e.id}` navigationPresentation="fullscreen" position="absolute" inset=0 background-color=pageColor color=inkColor
-            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "example"] : ["cinematic", "index"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
+            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "example"] : ["cinematic", "index"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section="live", openLibrary=openLibrary)
               scroll flex=1 min-height=0
                 if failed(guide)
                   text t("ui.theGuideCouldnTBeLoadedCheckYourConnection") role="status" padding=32
@@ -85,6 +86,17 @@ component Client
                   Status(skin=activeSkin, kind="loading", message=t("ui.openingCollection"), small=small, still=still)
                 else
                   Collection(skin=activeSkin, id=e.params.id, name=collection.name, items=collection.items, small=small, still=still, close=close, selectTitle=selectTitle, observe=observe)
+        if e.name == "library"
+          column navigationKey=`${e.id}` navigationScroll=`library-scroll-${e.id}` position="absolute" inset=0 background-color=pageColor color=inkColor
+            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "example"] : ["cinematic", "index"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section=e.params.id, openLibrary=openLibrary)
+              scroll id=`library-scroll-${e.id}` role="region" aria-label=t("library.library") flex=1 min-height=0
+                if failed(libraryModel)
+                  Status(skin=activeSkin, kind="failure", message=t("library.couldNotOpen"), small=small, still=still)
+                else
+                  if not current(libraryModel) and libraryModel.id != libraryId
+                    Status(skin=activeSkin, kind="library", message=t("ui.findingTitles"), small=small, still=still)
+                  else
+                    Library(skin=activeSkin, model=libraryModel, loading=libraryLoading, moreLoading=libraryMoreLoading, small=small, still=still, close=close, setSort=setLibrarySort, setFilter=setLibraryFilter, more=moreLibrary, selectTitle=selectTitle, observe=observe)
         if e.name == "watch" or e.name == "extra" or e.name == "liveWatch"
           column navigationKey=`${e.id}` navigationPresentation="fullscreen" id="watch-stage" testId="watch-stage" key=watchKey pointermove=touchWatch pointerdown=touchWatch position="absolute" inset=0 background-color="media.ground" color="ink.primary" tabindex=0
             if failed(playback)
