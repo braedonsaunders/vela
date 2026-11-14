@@ -712,6 +712,14 @@ class SegmentPipeline {
   }
 }
 
+// client/src/protocol/id.ts
+function randomId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = bytes[6] & 15 | 64;
+  bytes[8] = bytes[8] & 63 | 128;
+  return Array.from(bytes, (b, i) => `${i === 4 || i === 6 || i === 8 || i === 10 ? "-" : ""}${b.toString(16).padStart(2, "0")}`).join("");
+}
+
 // client/player/engine.ts
 class PlaybackEngine {
   video;
@@ -1078,7 +1086,7 @@ class PlaybackEngine {
       positionSeconds: seconds,
       sourceGeneration: this.controller.source,
       seekGeneration: this.controller.seek,
-      idempotencyKey: crypto.randomUUID()
+      idempotencyKey: randomId()
     } });
   }
   requestSwitch(source, position, recovery = false) {
@@ -1092,7 +1100,7 @@ class PlaybackEngine {
       atSeconds: boundary,
       sourceGeneration: this.controller.source,
       seekGeneration: this.controller.seek,
-      idempotencyKey: crypto.randomUUID()
+      idempotencyKey: randomId()
     } });
   }
   fail(failure) {

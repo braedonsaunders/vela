@@ -1,6 +1,7 @@
 import type { Command, EngineEvent, Failure, LiveSnapshot, PlaybackSession, Snapshot, Source } from './model';
 import { SessionController, cancelled, delay, type Generation } from './session';
 import { mediaSourceClass, PlaybackFault, SegmentPipeline } from './pipeline';
+import { randomId } from '../src/protocol/id';
 
 interface NativeAudioTrack { id: string; language: string; enabled: boolean }
 type ExtendedVideo = HTMLVideoElement & { audioTracks?: ArrayLike<NativeAudioTrack>; webkitEnterFullscreen?: () => void; webkitExitFullscreen?: () => void; webkitSupportsFullscreen?: boolean; webkitDisplayingFullscreen?: boolean; webkitSupportsPresentationMode?: (mode: string) => boolean; webkitSetPresentationMode?: (mode: string) => void };
@@ -198,14 +199,14 @@ export class PlaybackEngine {
   rejectCommand(message: string) { this.pendingSwitch = undefined; if (message) this.fail({ kind: 'source', message, recoverable: false }); }
   private requestSeek(seconds: number) {
     this.emit({ type: 'session-command', sessionId: this.session!.id, command: { kind: 'seek', positionSeconds: seconds,
-      sourceGeneration: this.controller.source, seekGeneration: this.controller.seek, idempotencyKey: crypto.randomUUID() } });
+      sourceGeneration: this.controller.source, seekGeneration: this.controller.seek, idempotencyKey: randomId() } });
   }
   private requestSwitch(source: Source, position: number, recovery = false) {
     const boundary = source.boundaries?.filter(at => at <= position).sort((a,b) => b-a)[0];
     if (boundary === undefined) throw new Error('No independent switch boundary offered by server');
     this.pendingSwitch = { sessionId: this.session!.id, sourceId: source.id, source: this.controller.source + 1, seek: this.controller.seek, position, recovery };
     this.emit({ type: 'session-command', sessionId: this.session!.id, command: { kind: 'switch', pathId: source.id, atSeconds: boundary,
-      sourceGeneration: this.controller.source, seekGeneration: this.controller.seek, idempotencyKey: crypto.randomUUID() } });
+      sourceGeneration: this.controller.source, seekGeneration: this.controller.seek, idempotencyKey: randomId() } });
   }
   private fail(failure: Failure) { this.controller.cancel(); this.pipeline?.dispose(); this.video.pause(); this.failure = failure; this.status = 'failed'; this.emit({ type: 'error', failure }); this.publish(); }
   private async recover(error: unknown, token: Generation) {
