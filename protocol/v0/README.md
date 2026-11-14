@@ -21,6 +21,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | POST | /auth/sign-in | SignInRequest | Tokens |
 | POST | /auth/refresh | RefreshRequest | Tokens |
 | POST | /auth/revoke | RevokeRequest | Ack |
+| POST | /auth/web-code | WebCodeIssueRequest | WebCodeIssueResponse |
 | POST | /auth/web-code/redeem | WebCodeRedeemRequest | Tokens |
 | POST | /auth/device | DeviceGrantRequest | DeviceGrant |
 | POST | /auth/device/poll | DevicePollRequest | GrantPoll |
@@ -352,3 +353,17 @@ original. HTTP range responses remain authoritative. `Track.streamIndex` is the
 actual source ffmpeg stream index, not a client-generated track ordinal.
 Lazy fallback uses the existing generation-aware `switch` command with `pathId`
 and `atSeconds` on the pinned source; there is no separate select-path command.
+
+An `on-demand` playback path has no URL and is never fetched or considered ready.
+The generation-aware `switch` command authorizes preparation, then returns the
+actual broker plan. Existing ready/preparing/unavailable paths keep their URL rule.
+
+`POST /auth/web-code` requires bearer/device authentication. Its targetOrigin must
+exactly match an advertised trusted HTTPS origin; the server issues a short-lived
+single-use Vela web code bound to the account and target origin. The response echoes that origin.
+Clients carry only `#code=<encoded-code>` in the destination fragment and scrub it
+before the first fetch. HTTPS is a new browser device: the target generates its
+own device ID and redeems normally. The issuing device field validates the
+current authenticated request; it does not bind or transfer the grant. Codes are
+single-use for60 seconds, bound to the account, exact trusted TLS origin and Vela
+surface. Credentials are not forwarded by HTTP redirects.
