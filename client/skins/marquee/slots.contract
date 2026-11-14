@@ -591,9 +591,9 @@ component SearchSurface
           if model.items.length == 0
             Empty(glyph="search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"))
           else
-            Shelf(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
+            Shelf(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
         if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
-          Shelf(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Shelf(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
         if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
           column gap=8
             if ai.aiStatus == "queued" or ai.aiStatus == "running"
@@ -601,7 +601,7 @@ component SearchSurface
                 Spinner(size=18, still=still)
                 text t("ui.exploringYourDescription") color="marquee.ink-dim" font-size=14
             if ai.items.length > 0
-              Shelf(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
+              Shelf(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
             if ai.aiStatus == "failed"
               text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="marquee.ink-dim" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
 

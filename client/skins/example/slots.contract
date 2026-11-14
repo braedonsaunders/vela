@@ -145,14 +145,14 @@ component SearchSurface
         if loading
           text t("ui.findingTitles") role="status"
         else
-          Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
       if descriptive.query == query and descriptive.generation == generation
-        Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
       if aiAvailable and ai.query == query and ai.generation == generation
         if ai.aiStatus == "running" or ai.aiStatus == "queued"
           text t("ui.exploringYourDescription") role="status"
         if ai.items.length > 0
-          Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
 
 component Detail
   props
@@ -173,9 +173,9 @@ component Detail
           button press=play(title.id)
             text (model.resumeSeconds > 0 ? t("ui.resumeWatching") : t("ui.play"))
       if model.seasons.length > 0
-        Row(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        Row(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
       if model.episodes.length > 0
-        Row(row=FeedRow(id="episodes", name=t("ui.episodes"), receipt="", items=model.episodes, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        Row(row=FeedRow(id="episodes", name=t("ui.episodes"), receipt="", items=model.episodes, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
       for extra in model.extras key=extra.id
         button press=playExtra(extra.id) disabled=(not extra.ready)
           text extra.name
