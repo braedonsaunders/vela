@@ -324,14 +324,19 @@ actual track facts. It does not touch a controller, video or active output. The
 lead can call setAudioStreamIndex only after successful preparation, leaving old
 audio intact when preparation fails.
 
-The helper requires a complete broker audio inventory with unique IDs/source
-stream indices, checks it against the actual audio inventory in file order, and
-compares codec, count/rate/mask and optional expected language for each track.
-Two/three-letter language aliases are normalized; declared regional distinctions
-are retained. It never substitutes another track. Actual source masks remain
-nullable; unknown multichannel PCM positions and unqualified masks are rejected.
-It reads actual decoder configuration and native canDecode support before choosing
-an on-demand package; sample rate and output layout must have a qualified route.
+Broker audio entries are descriptions, not admission gates. The helper first
+maps the requested description to actual source order (`InputTrack.id - 1`, not
+containerTrackId), then tries its described audio ordinal, then the first actual
+audio track. Empty or stale inventories are accepted. Only the chosen actual
+track is prepared, so unrelated unsupported tracks cannot block playback.
+Codec, channel count, rate, mask and language differences produce bounded,
+fixed-vocabulary `discrepancies` notes; the returned `mapping` records the route.
+Actual track fields and decoder configuration determine decoder selection.
+An unmatched actual track gets a local `demux-audio-<id>` identifier, which must
+not be reported as a server track ID. Source masks remain nullable: an
+unqualified mask is omitted so the compressed decoder can establish its layout;
+unknown multichannel raw PCM positions remain unsafe and require fallback.
+No speaker positions are inferred from a broker description.
 
 It opens the ORIGINAL through UrlSource with upstream HTTP range validation:
 actual HTTP requests capped at 256 KiB, cache 8 MiB, total metadata-read budget
@@ -345,9 +350,17 @@ A read-only source-integration drive exercised real file bytes and the pinned
 demuxer through an in-process range-response adapter (not a network/server
 qualification). ALAC Matroska/MP4, MP2 Matroska and WMA v2 ASF returned ordinal 0,
 actual 48kHz format and their correct software package in a runtime without
-AudioDecoder. A mismatched expected FLAC codec for an ALAC track was refused.
+AudioDecoder. That earlier drive predates the policy of recording descriptive
+mismatches rather than refusing them.
 Eight metadata range requests were made, none larger than 262,144 bytes. Browser
 native support, a real mid-play switch and pending-state UI remain lead-owned.
+
+The current metadata-only check used the local synthetic HEVC/E-AC-3 fixture.
+Wrong codec, channel count, rate, mask, language and inventory descriptions all
+returned the actual E-AC-3 5.1(side), 48kHz track and discrepancy notes. Empty
+inventories, unknown requested IDs and missing source indices/ordinals also
+prepared actual audio. The selected helper type-checked and bundled. This did
+not open a browser, lab stream, provider fetch or capture private source data.
 
 ## Nested-worker asset diagnosis
 
