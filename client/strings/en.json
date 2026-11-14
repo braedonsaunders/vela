@@ -339,5 +339,18 @@
   "mochi.peek": "Take a peek",
   "mochi.searchPlaceholder": "Find a show, a vibe, a whole new world…",
   "skin.mochi.tagline": "Pastel pink, pixel sparkles and a bouncy friend for anime nights.",
-  "mochi.welcome": "Welcome back, friend!"
+  "mochi.welcome": "Welcome back, friend!",
+  "hero.reason.resume": "Continue watching",
+  "hero.reason.nextEpisode": "New episode",
+  "hero.reason.newRelease": "New for you",
+  "hero.reason.forYou": "Picked for you",
+  "hero.reason.trending": "Trending now",
+  "hero.reason.featured": "Featured",
+  "hero.action.resume": "Resume",
+  "hero.action.play": "Play",
+  "hero.action.details": "More info",
+  "hero.action.playEpisode": "Play S{season} E{episode}",
+  "hero.action.resumeEpisode": "Resume S{season} E{episode}",
+  "hero.detail.remaining": "{time} left",
+  "hero.moreInfo": "More info"
 }
