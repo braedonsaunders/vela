@@ -12,7 +12,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 /** Engines the foundation dispatches; "example" is the extension slot a skin package fills. */
-export const ENGINES = ['cinematic', 'index', 'jellytwin', 'mochi', 'marquee', 'example'];
+export const ENGINES = ['cinematic', 'index', 'jellytwin', 'mochi', 'marquee', 'example', 'doc'];
 
 /** `skin == "x"` / `skin != "x"` joined by `or`/`and` (no parentheses), for skin = engine. */
 function decide(condition: string, engine: string): boolean | undefined {
@@ -114,6 +114,20 @@ export async function prepareEngine(client: string, engine: string): Promise<voi
   const engineSource = await readFile(marker, 'utf8');
   if (!engineSource.includes('fn buildEngine(): string = ""')) throw new Error('foundation/engine.contract has no empty buildEngine() to bake');
   await writeFile(marker, engineSource.replace('fn buildEngine(): string = ""', `fn buildEngine(): string = ${JSON.stringify(engine)}`));
+}
+
+/** Mount a staged client's routes under /vela, as Ether serves it. */
+export async function mountRoutes(client: string): Promise<void> {
+  const path = join(client, 'app.contract');
+  let count = 0;
+  const routed = (await readFile(path, 'utf8')).replace(/^(\s+\w+ )"(\/[^"\n]*)"\s*$/gm, (_line, prefix, route) => {
+    // Route declarations are the only bare indented identifier + quoted path lines.
+    count++; return `${prefix}"${route === '/' ? '/vela' : '/vela' + route}"`;
+  });
+  if (!count) throw new Error('No route declarations found to mount under /vela/');
+  // Exact permits a non-root first route only with an explicit unmatched-location fallback.
+  await writeFile(path, routed.replace(/^(routes \w+\n)([\s\S]*?)(?=^\S)/m, (block, header, declarations) =>
+    /^  notfound(?:\s|$)/m.test(declarations) ? block : `${header}${declarations.trimEnd()}\n  notfound\n\n`));
 }
 
 if (import.meta.main) {

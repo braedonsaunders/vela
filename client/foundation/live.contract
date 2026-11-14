@@ -6,7 +6,7 @@ members Client
   state guideDay = 0
   // The one place that says the guide is on screen: everything live (listings, clock, the preview
   // tile and its release) follows it, so moving the guide to another surface changes only this line.
-  derive guideOpen = top(nav).name == "live"
+  derive guideOpen = top(nav).name == "home" and libraryId == "@live"
   state guideZoom = 1 persist
   state guideNow = 0
   state lowDelay = false
