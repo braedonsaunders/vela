@@ -1,3 +1,4 @@
+import { renderArtwork } from './artwork';
 import { createHmac } from 'node:crypto';
 import type * as V from '../protocol/v0/types';
 import { allTitles, channels, detail, extras, guide, rows, titles } from '../protocol/v0/fixtures/catalogue';
@@ -166,9 +167,8 @@ async function dispatch(req: Request): Promise<Response> {
   const art = /^\/vela\/v0\/artwork\/([a-z0-9-]+)$/.exec(url.pathname);
   if (art && req.method === 'GET') {
     // Only synthetic assets: no private or remotely fetched imagery.
-    const width = Math.max(120, Math.min(1920, Number(url.searchParams.get('width')) || 480)), height = Math.round(width * (url.searchParams.get('kind') === 'poster' ? 1.5 : 9 / 16));
-    const hue = Number(Bun.hash(art[1]) % 360n);
-    return new Response(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 480 720" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="hsl(${hue},35%,35%)"/><stop offset="1" stop-color="#10151e"/></linearGradient></defs><rect width="480" height="720" fill="url(#g)"/><circle cx="360" cy="170" r="130" fill="white" opacity=".05"/><path d="M0 560 Q140 300 480 520V720H0" fill="#090d15" opacity=".35"/><text x="40" y="650" fill="#f2eadb" font-family="serif" font-size="23" letter-spacing="6">VELA</text></svg>`, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
+    const width = Math.max(120, Math.min(1920, Number(url.searchParams.get('width')) || 480));
+    return new Response(renderArtwork(art[1], url.searchParams.get('kind') ?? 'poster', width), { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
   }
   if (!url.pathname.startsWith('/vela/v0/')) fail('not-found', 'endpoint_not_found', 'Endpoint not found');
   if (req.method !== 'POST') return api(req, url, undefined);

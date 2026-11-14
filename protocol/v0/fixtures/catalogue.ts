@@ -2,7 +2,7 @@ import type { ArtworkRef, Channel, Extra, Programme, Row, Title, TitleDetail } f
 
 export function artwork(id: string, kind: ArtworkRef['kind'] = 'poster'): ArtworkRef {
   const wide = kind !== 'poster';
-  return { id: `${id}-${kind}`, kind, tag: 'fixture-v1', color: '#293443', sizes: (wide ? [640, 1280] : [240, 480]).map(width => ({ width, height: Math.round(width * (wide ? 9 / 16 : 3 / 2)), url: `/vela/v0/artwork/${id}?kind=${kind}&width=${width}` })) };
+  return { id: `${id}-${kind}`, kind, tag: 'fixture-v2', color: '#293443', sizes: (wide ? [640, 1280] : [240, 480]).map(width => ({ width, height: Math.round(width * (wide ? 9 / 16 : 3 / 2)), url: `/vela/v0/artwork/${id}?kind=${kind}&width=${width}&v=2` })) };
 }
 const collections = [
   ['Beyond the horizon', 'The Last Observatory', 'A Map of Quiet Stars', 'Signal from Europa', 'The Long Orbit', 'Under a Copper Sky', 'The Glass Planet', 'After the Comet', 'Dawn at Meridian', 'The Gravity Garden', 'Passengers of Light', 'A Thousand Small Suns', 'The Far Shore', 'Orbit of Silence', 'The Ninth Moon', 'The Blue Interval'],
