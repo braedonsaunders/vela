@@ -120,7 +120,7 @@ component Destinations
       for lib in libraries key=lib.id
         if lib.kind == "live"
           if canLive
-            NavItem(label=lib.name, on=(section == "live"), chip=chips, still=still, press=live)
+            NavItem(label=t("ui.live"), on=(section == "live"), chip=chips, still=still, press=live)
         else
           NavItem(label=lib.name, on=(section == lib.id), chip=chips, still=still, press=openLibrary(lib.id))
       if canLive and not hasLiveLibrary

@@ -310,7 +310,7 @@ members Client
   state libraryPages = 1
   state libraryPagingEntry = ""
   derive activeLibraryPages = (libraryPagingEntry == libraryKey ? libraryPages : 1)
-  resource libraryModel = uiLibrary(libraryId, librarySort, libraryDirection, libraryKind, libraryGenre, libraryYear, libraryPlayed, libraryFavorite, activeLibraryPages) with localeJSON, artWidth when auth.authenticated and libraryId != "" as shape LibraryModel
+  resource libraryModel = uiLibrary(libraryId, librarySort, libraryDirection, libraryKind, libraryGenre, libraryYear, libraryPlayed, libraryFavorite, activeLibraryPages) with localeJSON, artWidth when auth.authenticated and libraryId != "" and libraryId != "@live" as shape LibraryModel
   derive libraryLoading = (activeLibraryPages <= 1 and (pending(libraryModel) or not current(libraryModel)))
   derive libraryMoreLoading = (activeLibraryPages > 1 and pending(libraryModel))
   // The last answer per library this session, so a revisited section shows at once.
@@ -321,7 +321,11 @@ members Client
   action bumpLibrarySnapshots
     snapshotVersion = snapshotVersion + 1
   derive browseLibraries = (auth.authenticated and current(libraries) ? libraries.filter(l => l.kind != "live") : [])
-  derive sectionIndex = (libraryId == "" ? 0 : 1 + max(0, browseLibraries.map(l => l.id).indexOf(libraryId)))
+  // Top-level sections in top-bar order: Home, then the server's libraries, a live library
+  // becoming the Live TV panel; Live TV comes last when the server has no live library.
+  derive canLiveSection = auth.authenticated and current(home) and home.liveAvailable
+  derive sectionIds = ["home"].concat(auth.authenticated and current(libraries) ? libraries.filter(l => l.kind != "live" or canLiveSection).map(l => (l.kind == "live" ? "@live" : l.id)) : []).concat(canLiveSection and not (auth.authenticated and current(libraries) and libraries.filter(l => l.kind == "live").length > 0) ? ["@live"] : [])
+  derive sectionIndex = max(0, sectionIds.indexOf(libraryId == "" ? "home" : libraryId))
   action openLibrary(id: string)
     libraryPages = 1
     nav = (top(nav).name == "home" ? replace(nav, path("home") + librarySection(id, "")) : open(nav, path("home") + librarySection(id, "")))
@@ -341,6 +345,18 @@ members Client
   action followLibraryLink
     if top(nav).name == "library"
       nav = open(nav, path("home") + librarySection(top(nav).params.id, ""))
+  // The guide stays mounted once visited; its tile and session follow guideOpen, not mounting.
+  state liveVisited = false
+  task markLiveVisited when libraryId == "@live" and not liveVisited
+    after(1, rememberLiveVisit)
+  action rememberLiveVisit
+    liveVisited = true
+  // /live opens the Live TV panel of the home surface.
+  task redirectLiveLink when top(nav).name == "live"
+    after(1, followLiveLink)
+  action followLiveLink
+    if top(nav).name == "live"
+      nav = open(nav, path("home") + librarySection("@live", ""))
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
   resource collection = uiCollection(collectionId) with localeJSON, artWidth when auth.authenticated and collectionId != "" as shape CollectionModel
   resource detail = uiDetail(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape DetailModel
@@ -402,7 +418,8 @@ members Client
   action openSearch
     nav = (top(nav).name == "home" ? replace(nav, path("home") + (query == "" ? "" : `?q=${encodeURIComponent(query)}`)) : open(nav, path("home")))
   action openLive
-    nav = push(nav, path("live"))
+    libraryPages = 1
+    nav = (top(nav).name == "home" ? replace(nav, path("home") + librarySection("@live", "")) : open(nav, path("home") + librarySection("@live", "")))
   action selectTitle(id: string, kind: string, token: string)
     if kind == "channel"
       nav = push(nav, path("liveWatch", id))

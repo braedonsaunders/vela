@@ -1,5 +1,7 @@
+import generalCodecs from './ffmpeg/codecs.json';
 /** Separately replaceable LGPL modules. No codec code is linked into the app bundle. */
 export const audioPackages = {
+  'vela-audio': { file: 'vela-audio.wasm', sha256: '9ed0aa482117fadc992a914e29560244bb69c9d23ccb1a0260755db8270fe23d', codecs: generalCodecs.map(([codec]) => codec) },
   truehd: { file: 'truehd.wasm', sha256: 'af594a327e706205d3da60050398d34e0cfa0d45c9de809c648c6661df3d8273', codecs: ['truehd', 'mlp'] },
   dts: { file: 'dts.wasm', sha256: 'cc8454c5a6c7672f47c3a4b6ef7e2e4bf412805ab11491687d6f8fbc2bc005db', codecs: ['dts'] },
   eac3: { file: 'eac3.wasm', sha256: 'fac88bb851c8ae7ca58cae0c70f96733882ecc15cf3667e5aee167ce9f2aed8c', codecs: ['eac3', 'ac3'] },
@@ -16,6 +18,10 @@ export const audioSourceFiles = [
 export function canonicalAudioCodec(codec: string): string {
   const token = codec.trim().toLowerCase();
   if (token.startsWith('mp4a.40.')) return 'aac';
+  const pcm = /^pcm-([suf])(8|16|24|32|64)(le|be)?$/.exec(token);
+  if (pcm) return `pcm_${pcm[1]}${pcm[2]}${Number(pcm[2]) === 8 ? '' : (pcm[3] ?? 'le')}`;
+  if (token === 'ulaw') return 'pcm_mulaw';
+  if (token === 'alaw') return 'pcm_alaw';
   if (['dts', 'dtsc', 'dtsh', 'dtsl', 'dts-hd ma', 'dts_hd_ma'].includes(token)) return 'dts';
   return ({ 'a_ac3': 'ac3', 'ac-3': 'ac3', 'ec-3': 'eac3', 'e-ac-3': 'eac3',
     'a_eac3': 'eac3', 'a_truehd': 'truehd', 'a_dts': 'dts', 'a_flac': 'flac',
@@ -43,6 +49,7 @@ export class AudioPackageRegistry<P extends LoadedAudioPackage> {
     const id = packageForCodec(codec);
     if (!id) return null;
     const canonical = canonicalAudioCodec(codec);
+    const moduleCodec = id === 'vela-audio' ? canonical.replaceAll('_', '-') : canonical;
     let source = this.loaded.get(id);
     if (!source) {
       const entry = audioPackages[id];
@@ -58,11 +65,11 @@ export class AudioPackageRegistry<P extends LoadedAudioPackage> {
       if (hash !== entry.sha256) throw new Error(`Audio decoder ${id}: integrity mismatch`);
       source = await this.loadPackage(bytes);
       signal.throwIfAborted();
-      if (source.kind !== 'audio' || source.id !== id || !source.manifest.codecs.includes(canonical))
+      if (source.kind !== 'audio' || source.id !== id || !source.manifest.codecs.includes(moduleCodec))
         throw new Error(`Audio decoder ${id}: manifest mismatch`);
       this.loaded.set(id, source);
     }
     signal.throwIfAborted();
-    return { codec: canonical, source };
+    return { codec: moduleCodec, source };
   }
 }

@@ -4,8 +4,8 @@
  *   bun tools/skin.ts init <dir> [--id <id>]     scaffold a package from the reference (example) skin
  *   bun tools/skin.ts check <dir>                validate a package without building
  *   bun tools/skin.ts keygen <key-id>            make an Ed25519 signing key (~/.config/vela/keys)
- *   bun tools/skin.ts build <dir> [--key <id>]   compile the package with the committed Vela source
- *                                                and the pinned Exact into a signed web build
+ *   bun tools/skin.ts build <dir> [--key <id>]   compile the package with the committed Vela source and the
+ *                                                pinned Exact into a signed single-engine build (/vela/engines/<id>/<version>/)
  *
  * A package is source, not code that runs at build time: Contract files against the
  * extension slot ABI, a skin.json manifest, optional strings and assets. The build
@@ -18,6 +18,8 @@ import { cp, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'nod
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { generateLocales } from './locales';
+import { mountRoutes, prepareEngine } from './engine';
+import { finalizeEngineRoot } from './release/engine-root';
 
 const root = resolve(import.meta.dir, '..');
 const out = join(homedir(), '.scratch/tmp/vela/skins');
@@ -132,7 +134,9 @@ async function install(client: string, dir: string, skin: SkinJson, list: string
     await writeFile(target, JSON.stringify({ ...base, ...JSON.parse(await readFile(join(dir, path), 'utf8')) }, null, 2) + '\n');
   }
   // The foundation dispatches the extension slot by the id "example": give it the package's.
-  for (const path of ['app.contract', 'foundation/skin.contract', 'foundation/behavior.contract', 'foundation/skin-picker.contract', 'foundation/models.contract']) {
+  // A single-engine build: only the extension slot (and the cinematic slots it falls back to).
+  await prepareEngine(client, 'example');
+  for (const path of ['app.contract', 'foundation/skin.contract', 'foundation/behavior.contract', 'foundation/skin-picker.contract', 'foundation/models.contract', 'foundation/engine.contract']) {
     const file = join(client, path);
     await writeFile(file, (await readFile(file, 'utf8')).replaceAll('"example"', JSON.stringify(skin.id)));
   }
@@ -158,12 +162,15 @@ async function build(dir: string, keyId: string) {
     await rm(tar);
     const client = join(work, 'client');
     await install(client, dir, skin, list);
+    await mountRoutes(client);
     await generateLocales(client);
     const env = { ...process.env, EXACT: join(root, 'vendor/exact'), EXACT2: join(root, 'vendor/exact'), API_BASE_URL: '', VELA_MOCK: '0', VELA_BUILD_VERSION: velaVersion, EXACT_VERSION: velaVersion };
     await run([process.execPath, 'player/build.ts'], client, env);
     const dist = join(client, 'dist');
     await run([process.execPath, 'exact.mjs', 'web-build', '--out', dist, '--render', 'none'], client, env);
     await rm(join(dist, '.exact-build.json'), { force: true });
+    // Served beside the official engines, under its own versioned base.
+    const base = await finalizeEngineRoot(dist, skin.id, skin.version);
     const cards: { path: string; bytes: number; sha256: string }[] = [];
     for (const path of await files(dist)) { const bytes = await readFile(join(dist, path)); cards.push({ path, bytes: bytes.length, sha256: digest(bytes) }); }
     await mkdir(target, { recursive: true });
@@ -173,7 +180,7 @@ async function build(dir: string, keyId: string) {
     for (const path of list) sources[path] = digest(await readFile(join(dir, path)));
     const manifest = {
       schema: 1, kind: 'vela-skin-build', id: skin.id, name: skin.name, version: skin.version, tagline: skin.tagline ?? '', swatches: skin.swatches,
-      engine: skin.id, slotApi: SLOT_API, protocolVersions: [0], velaVersion, velaRevision, exactRevision, builtAt: new Date().toISOString(),
+      engine: skin.id, base, slotApi: SLOT_API, protocolVersions: [0], velaVersion, velaRevision, exactRevision, builtAt: new Date().toISOString(),
       source: { sha256: digest(canonical(sources)), files: sources },
       archive: { file: 'webroot.tar.gz', sha256: digest(await readFile(archive)), bytes: (await readFile(archive)).length }, files: cards,
     };
