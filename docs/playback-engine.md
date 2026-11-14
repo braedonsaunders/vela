@@ -62,8 +62,9 @@ native audioTracks is used when available. No demuxer, DRM, WebGPU decoder,
 transmuxing of MPEG-TS or arbitrary release splicing is included.
 
 Prefer direct, then remux, then transcode among browser-qualified sources. Compatible
-recovery requires the same media and edition/timeline identity. Native HLS is
-preferred for Safari; MSE/ManagedMediaSource are detected for other streams.
+recovery requires the same media and edition/timeline identity. ManagedMediaSource is preferred on Apple browsers when it supports the plan;
+native HLS remains the fallback when managed streaming or the segmented codec is
+unavailable. Other browsers prefer their supported MSE ladder.
 Fullscreen/PiP require browser support and user activation; asynchronous Contract
 commands cannot guarantee activation survives dispatch. Unsupported actions emit
 explicit errors. iOS fullscreen can use the video-only platform presentation,
