@@ -106,6 +106,9 @@ export class UniversalRuntime {
     try {
       media = this.media = await abortable(probeOriginal(media,signal),signal);
       if (!QUALIFIED_ORIGINAL_VIDEO.includes(media.video.codec)) throw new Error(`Original video ${media.video.codec} is not yet qualified; using compatible fallback`);
+      // Only the proven HDR10-compatible DV8 base is normalized by the probe.
+      // Full DV reconstruction (including profile7) has not passed its gate.
+      if (media.video.dvProfile !== undefined) throw new Error('Original Dolby Vision reconstruction is not yet qualified; using compatible fallback');
       const registry = this.audioRegistry = createAudioPackages(this.options.assets.audioDecoderURL);
       const maximumChannels = this.maximumChannels = prewarm?.audioContext.destination.maxChannelCount ?? null;
       const preparedAudio = (media.audioTrackCount ?? media.audio.length) > 0 ? await abortable(prepareOriginalAudioSwitch({url:media.url,

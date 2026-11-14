@@ -78,12 +78,12 @@ export async function probeOriginal(media: OriginalMedia, signal: AbortSignal): 
     // Explicit HDR10-compatible DV8 base plus actual PQ/BT.2020 can use the
     // ordinary HDR10 tone mapper; do not claim RPU reconstruction on this route.
     if (videoFacts.dvProfile !== undefined && transfer && !['smpte2084','arib-std-b67'].includes(transfer)) {
-      videoFacts.dvProfile = undefined; videoFacts.dvLevel = undefined;
+      videoFacts.dvProfile = undefined; videoFacts.dvLevel = undefined; videoFacts.dvBlSignalCompatibilityId = undefined;
       videoFacts.rpuPresent = undefined; videoFacts.elPresent = undefined; videoFacts.blPresent = undefined;
       notes.push('presentation: using actual SDR colour instead of conflicting Dolby Vision description');
     }
     if (videoFacts.dvProfile === 8 && videoFacts.dvBlSignalCompatibilityId === 1 && transfer === 'smpte2084' && String(color.primaries) === 'bt2020') {
-      videoFacts.dvProfile = undefined; videoFacts.dvLevel = undefined;
+      videoFacts.dvProfile = undefined; videoFacts.dvLevel = undefined; videoFacts.dvBlSignalCompatibilityId = undefined;
       videoFacts.rpuPresent = undefined; videoFacts.elPresent = undefined; videoFacts.blPresent = undefined;
       notes.push('presentation: DV8 HDR10-compatible base layer, RPU not applied');
     }

@@ -1293,3 +1293,47 @@ retirement; seeks and audio switches now advance the presenter's/frame loop's
 presentation generation so old completion acknowledgements cannot fail the new
 playback. All four final cases completed without playback failure. No lab HEVC
 pass, 4K/DV8 pass, DV7 reconstruction or production HEVC enablement is claimed here.
+
+### Real HTTPS HEVC candidate drives (2026-11-14)
+
+The Ether coordinator confirmed the owner idle immediately before each drive.
+The isolated native-view candidate used the normal password auth/negotiate,
+playback broker, commands and observations. It did not replace the installed
+0.1.28 app shell. One stream at a time; each finished with stop200/ended,
+current-family revoke200/accepted, zero video/canvas, and the dedicated Chrome
+closed. No original file bytes were captured to disk.
+
+| Actual selected source | First GPU incl. plan | Broker plan | Seek → first new GPU | Frames / dropped after seek | Worst post-seek lag | Audio |
+|---|---:|---:|---:|---:|---:|---|
+| The Mummy (1959), original HEVC Main10,1800×1080 BT.709; native WebCodecs |4364.1ms|3672.1ms|60s:6458.0ms|32 decoded /28 presented /0 dropped|16.989ms|PCM underruns0|
+| The Mummy (1999), original HEVC Main10,3840×2160 PQ/BT.2020 + DTS8ch; package GPU decode and SDR tone map |4609.3ms|3392.6ms|120s:3155.3ms|43 decoded /35 presented /0 dropped|16.625ms|PCM underruns0|
+
+The SDR run initially decoded64/presented60/drop0; Ether independently confirmed
+zero FFmpeg/transcode starts during that session. The 4K run initially decoded88,
+presented59/drop0. Its broker facts contained HDR10 colour but no Dolby Vision
+profile/compatibility facts, so this is **not** a DV8 qualification. The rendered
+post-seek film frame is `client/.exact/lab-29-hevc-4k-hdr.png`; the SDR opening
+capture `lab-28-hevc-sdr.png` is black at2.506s and is not claimed as visible film
+content. These are short decoder/presentation/clock measurements, not physical
+lipsync, HDR-display output, CPU/GPU utilization or long-film reliability results.
+
+Broker metadata remained advisory: frame-rate differences and eng/en language
+spelling differences were recorded without preventing decoding. The first Model
+Citizen request selected H.264 despite its persisted HEVC probes and was stopped
+unused. An isolated-candidate setup error then inherited production's H.264-only
+shared runtime descriptor: HEVC rejection automatically selected authorized HLS,
+which played88 frames/drop0 by3.514s media time; stop200/ended followed. This
+proves the production native-view runtime's internal handoff in that drive, not
+a separate real `/watch` UI acceptance pass. The diagnostic driver now removes
+that inherited descriptor before loading its explicitly staged candidate.
+
+The explicit DV8 candidate then reached the runtime and fell back promptly with
+`video-track-unavailable`; authorized HLS advanced6.466s with159 frames/drop0.
+Stop/revoke both200, resources zero, Chrome closed. Offline reproduction identified
+an adapter defect: removing the DV profile to use its HDR10-compatible base left
+`dvBlSignalCompatibilityId=1`. Upstream treats any surviving DV field as a DV
+selection; with no profile its selected video ordinal was null. Clearing the
+compatibility field as well yields ordinal0. Both SDR-conflict and compatible-base
+normalization now remove that field. Remaining DV reconstruction profiles are
+explicitly unqualified and immediately take the compatible backend; DV7 is not
+silently advertised as reconstructed playback. The corrected DV8 drive follows.
