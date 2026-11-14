@@ -10,16 +10,16 @@ export function card(title: Title, receipt = '', origin?: string) {
   return { id: title.id, kind: title.kind, name: title.name, summary: title.summary, year: title.year ?? 0, rating: title.rating ?? '', durationSeconds: title.durationSeconds ?? 0, progressSeconds: title.watch?.positionSeconds ?? 0, played: title.watch?.played ?? false, seasonId: title.seasonId ?? '', seasonNumber: title.seasonNumber ?? 0, episodeNumber: title.episodeNumber ?? 0, genres: title.genres,
     yearLabel: title.year ? number(title.year, { useGrouping: false }) : '', progressLabel: title.durationSeconds ? number(Math.min(1, Math.max(0, (title.watch?.positionSeconds ?? 0) / title.durationSeconds)), { style: 'percent', maximumFractionDigits: 0 }) : '', seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '', episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
     facts: [title.year ? number(title.year, { useGrouping: false }) : '', title.rating ?? '', title.durationSeconds ? minute(Math.round(title.durationSeconds / 60)) : ''].filter(Boolean).join(' · '),
-    poster: art(title.artwork, 'poster', 400, 600, origin), backdrop: art(title.artwork, 'backdrop', 1280, 720, origin),
-    logo: art(title.artwork, 'logo', 400, 200, origin), accent: title.artwork.find(a => a.color)?.color ?? '', receipt };
+    poster: art(title.artwork, 'poster', 600, 900, origin), backdrop: art(title.artwork, 'backdrop', 2560, 1440, origin),
+    logo: art(title.artwork, 'logo', 800, 400, origin), accent: title.artwork.find(a => a.color)?.color ?? '', receipt };
 }
 export function entry(item: RowEntry, origin?: string) {
   if (item.kind === 'title') return card(item.title, item.receiptToken, origin);
   const artwork = item.kind === 'channel' ? item.channel.artwork : item.artwork;
   return { id: item.kind === 'channel' ? item.channel.id : item.targetId, kind: item.kind,
     name: item.kind === 'channel' ? item.channel.name : item.name, summary: '', facts: '', yearLabel: '', progressLabel: '', seasonNumberLabel: '', episodeNumberLabel: '', year: 0, rating: item.kind === 'channel' ? item.channel.rating ?? '' : '', durationSeconds: 0, progressSeconds: 0, played: false, seasonId: '', seasonNumber: 0, episodeNumber: 0, genres: [] as string[],
-    poster: art(artwork, 'poster', 400, 600, origin), backdrop: art(artwork, 'backdrop', 1280, 720, origin),
-    logo: art(artwork, 'logo', 400, 200, origin), accent: artwork.find(a => a.color)?.color ?? '', receipt: item.receiptToken };
+    poster: art(artwork, 'poster', 600, 900, origin), backdrop: art(artwork, 'backdrop', 2560, 1440, origin),
+    logo: art(artwork, 'logo', 800, 400, origin), accent: artwork.find(a => a.color)?.color ?? '', receipt: item.receiptToken };
 }
 export function feedRow(row: Row, origin?: string) {
   return { id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin)) };
