@@ -273,5 +273,6 @@
   "live.liveBadge": "LIVE",
   "live.progress": "Programme progress",
   "live.nothingNow": "Nothing listed right now",
-  "live.favourite": "Favourite"
+  "live.favourite": "Favourite",
+  "ui.switchingAudioSoon": "Switching audio in a moment…"
 }

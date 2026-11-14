@@ -136,10 +136,14 @@ component PlayerChrome
                   text chapter.label
           if model.audio.length > 1
             SettingLabel(label=t("ui.audio"))
-            select disabled=blocked value=model.audioId change=audio aria-label=t("ui.audioTrack") class=MenuSelect
+            select disabled=blocked value=(model.pendingAudioId != "" ? model.pendingAudioId : model.audioId) change=audio aria-label=t("ui.audioTrack") aria-busy=(model.pendingAudioId != "") class=MenuSelect
               for track in model.audio key=track.id
                 option value=track.id
                   text track.label
+            if model.pendingAudioId != ""
+              row gap=8 align-items="center" role="status"
+                Spinner(size=14, still=still)
+                text t("ui.switchingAudioSoon") font-size=12 color="ink.secondary"
           else
             if model.audioLabel != ""
               SettingLabel(label=t("ui.audio"))
