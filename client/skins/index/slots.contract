@@ -212,6 +212,9 @@ component Detail
         column padding="0px 7%" gap=12
           text "Featuring" role="heading" aria-level=2 font-size=24
           text model.cast.join(" · ") color="#55554d" line-height=1.6
+      if model.related.length > 0
+        for related in model.related key=related.id
+          Row(row=related, small=small, still=still, selectTitle=selectTitle, observe=observe)
 
 component PlayerChrome
   props

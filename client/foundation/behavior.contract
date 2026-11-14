@@ -1,4 +1,4 @@
-use HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel from "./models.contract"
+use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel from "./models.contract"
 
 shape Time
   epochAtZero: number
@@ -122,6 +122,8 @@ members Client
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
   resource collection = uiCollection(collectionId) when auth.authenticated and collectionId != "" as shape CollectionModel
   resource detail = uiDetail(detailId) when auth.authenticated and detailId != "" as shape DetailModel
+  resource related = uiRelated(detailId) when auth.authenticated and detailId != "" as shape FeedRow[] else empty()
+  derive detailSurface = DetailModel(detail, related=(current(related) ? related : []))
   derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" ? top(nav).params.id : "")
   resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero) when auth.authenticated and playingId != "" as shape PlaybackModel
   state streamAttempt = 0

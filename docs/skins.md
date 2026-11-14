@@ -103,3 +103,7 @@ Cinematic profile controls live in a viewer popover. Cards receive progressSecon
 for an optional watched-progress indicator; lift/scale is disabled for reduced motion.
 DetailModel mediaFacts contains only server-verified format/audio information; absent
 resolution/HDR/audio metadata produces no badge. Related rows remain server-ordered.
+
+Related recommendations load independently through uiRelated(id):FeedRow[]. The
+foundation merges only the current answer into DetailModel.related; loading or failed
+recommendations never delay title metadata, capabilities or playback actions.
