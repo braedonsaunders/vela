@@ -64,6 +64,12 @@ keyframes fill
   from translate="-100% 0px"
   to translate="0px 0px"
 
+keyframes seasonFromRight
+  from opacity=0 translate="56px 0px"
+
+keyframes seasonFromLeft
+  from opacity=0 translate="-56px 0px"
+
 keyframes shimmer
   from translate="-100% 0px"
   to translate="100% 0px"
