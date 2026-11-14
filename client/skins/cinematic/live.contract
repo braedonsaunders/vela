@@ -1,0 +1,27 @@
+component LiveControls
+  props
+    lowDelay: bool
+    reconnecting: bool
+    delivery: string
+    drift: number
+    canCatchUp: bool
+    toggleLowDelay: action
+    catchUp: action
+  view
+    column gap=10 padding="12px 20px" background-color="surface.raised"
+      if reconnecting
+        text "Reconnecting to the live stream…" role="status" color="ink.secondary"
+      if delivery == "upstream-gap"
+        text "The broadcaster has a gap in this stream." role="status" color="ink.secondary"
+      if delivery == "segment-delayed"
+        text "Waiting for a delayed segment…" role="status" color="ink.secondary"
+      if delivery == "waiting-for-publication"
+        text "Waiting for the next segment…" role="status" color="ink.secondary"
+      if drift > 0
+        text `${drift} seconds behind live` role="status" color="ink.secondary"
+      row gap=12
+        button press=toggleLowDelay buttonStyle="bordered" aria-label="Toggle low delay"
+          text (lowDelay ? "Low delay on" : "Low delay off")
+        if canCatchUp and drift > 0
+          button press=catchUp buttonStyle="bordered"
+            text "Catch up to live"
