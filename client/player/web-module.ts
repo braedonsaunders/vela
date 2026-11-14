@@ -73,6 +73,8 @@ function applyCommand(handle: Handle, props: Record<string, string>) {
         case 'lowDelay': command = { ...base, type: 'lowDelay', enabled: decoded === 'true' }; break;
         case 'seekBy': command = { ...base, type: 'seekBy', seconds: Number(decoded) }; break;
         case 'seek': command = { ...base, type: 'seek', seconds: Number(decoded) }; break;
+        case 'volume': command = { ...base, type: 'volume', value: Number(decoded) }; break;
+        case 'mute': command = { ...base, type: 'mute', muted: decoded === '' ? undefined : decoded === 'true' }; break;
         case 'quality': command = { ...base, type: 'quality', renditionId: decoded || null }; break;
         case 'audio': command = { ...base, type: 'audio', trackId: decoded }; break;
         case 'subtitle': command = { ...base, type: 'subtitle', trackId: decoded || null }; break;

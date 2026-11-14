@@ -204,5 +204,15 @@
   "data.preparation.media-metadata": "Waiting for media metadata…",
   "data.preparation.initial-buffer": "Buffering initial media…",
   "data.preparation.starting": "Starting playback…",
-  "ui.requestingPlaybackSession": "Requesting playback session…"
+  "ui.requestingPlaybackSession": "Requesting playback session…",
+  "ui.or": "or",
+  "ui.signingYouIn": "Signing you in…",
+  "ui.noSignInMethodsOffered": "This server doesn't offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.",
+  "ui.codeExpires": "This code expires at {expiry}.",
+  "ui.serverUnreachable": "Can't reach your server",
+  "data.fixedQuality": "Fixed quality",
+  "ui.mute": "Mute",
+  "ui.unmute": "Unmute",
+  "ui.volume": "Volume",
+  "ui.deliveryDetails": "{path} · {quality} · {mode}"
 }

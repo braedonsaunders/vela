@@ -5,7 +5,7 @@ export interface Rendition { id: string; url: string; bandwidth: number; mime: s
 export interface Source {
   id: string; strategy: 'direct' | 'remux' | 'transcode'; delivery: 'file' | 'hls';
   url: string; mime: string; timeline: string; edition: string; audioTrackId?: string; recoveryAllowed?: boolean; boundaries?: number[];
-  renditions?: Rendition[];
+  initialRenditionId?: string; renditions?: Rendition[];
 }
 export interface PlaybackSession {
   serverState?: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended';
@@ -15,7 +15,7 @@ export interface PlaybackSession {
 }
 export type Command = { id: number } & (
   { type: 'play' | 'pause' | 'pip' | 'fullscreen' | 'catchUp' | 'retry' } |
-  { type: 'seekBy'; seconds: number } | { type: 'switchPath'; pathId: string } | { type: 'seek'; seconds: number } | { type: 'volume'; value: number } |
+  { type: 'seekBy'; seconds: number } | { type: 'switchPath'; pathId: string } | { type: 'seek'; seconds: number } | { type: 'volume'; value: number } | { type: 'mute'; muted?: boolean } |
   { type: 'audio'; trackId: string } | { type: 'subtitle'; trackId: string | null } |
   { type: 'quality'; renditionId: string | null } | { type: 'lowDelay'; enabled: boolean });
 export type FailureKind = 'network' | 'source' | 'decoder' | 'unsupported' | 'action';
@@ -34,6 +34,7 @@ export interface Snapshot {
   backend: 'file' | 'native-hls' | 'mse' | null; renditionId: string | null;
   capabilities: { pip: boolean; fullscreen: boolean; audioSwitch: boolean }; lockedQuality: string | null;
   live: LiveSnapshot | null;
+  waiting: boolean; volume: number; muted: boolean;
   preparation: 'media-metadata' | 'initial-buffer' | 'starting' | null;
   position: number; duration: number | null; playable: { start: number; end: number }[];
   throughputBps: number | null; droppedFrames: number | null; totalFrames: number | null;

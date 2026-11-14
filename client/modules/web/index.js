@@ -248,6 +248,8 @@ class BandwidthEstimator {
 class AdaptiveBitrate {
   upSince = 0;
   manual = null;
+  expensive = false;
+  downSince = 0;
   choose(ladder, current, buffer, throughput, dropRatio, now) {
     const sorted = [...ladder].sort((a, b) => a.bandwidth - b.bandwidth);
     if (!sorted.length)
@@ -261,6 +263,18 @@ class AdaptiveBitrate {
       next = sorted[0];
     if (dropRatio > 0.05 && current)
       next = sorted.filter((r) => r.bandwidth < current.bandwidth).at(-1) ?? sorted[0];
+    if (this.expensive && current && next.bandwidth < current.bandwidth) {
+      if (buffer >= 8) {
+        this.downSince = 0;
+        return current;
+      }
+      if (!this.downSince)
+        this.downSince = now;
+      if (now - this.downSince < 5000)
+        return current;
+      this.downSince = 0;
+    } else
+      this.downSince = 0;
     if (current && next.bandwidth > current.bandwidth) {
       if (dropRatio > 0.01) {
         this.upSince = 0;
@@ -268,7 +282,7 @@ class AdaptiveBitrate {
       }
       if (!this.upSince)
         this.upSince = now;
-      if (buffer < 12 || now - this.upSince < 12000)
+      if (buffer < (this.expensive ? 24 : 12) || now - this.upSince < (this.expensive ? 30000 : 12000))
         return current;
       this.upSince = 0;
       return sorted.find((r) => r.bandwidth > current.bandwidth) ?? current;
@@ -384,6 +398,8 @@ class SegmentPipeline {
   abr = new AdaptiveBitrate;
   current;
   lowDelay = false;
+  expensiveSwitches = false;
+  initialRenditionId;
   liveWindowStart = null;
   maxLiveDrift = 45;
   publishedEdge = null;
@@ -558,7 +574,9 @@ class SegmentPipeline {
         abort();
     });
     cancelled(signal);
-    let rendition = this.abr.choose(playable, undefined, 0, this.bandwidth.bps, 0, performance.now());
+    let rendition = playable.find((r) => r.id === this.initialRenditionId) ?? playable[0];
+    this.abr.expensive = this.expensiveSwitches;
+    let startupBuffered = false;
     this.current = rendition;
     this.onRendition(rendition);
     this.buffer = media.addSourceBuffer(rendition.mime);
@@ -590,7 +608,10 @@ class SegmentPipeline {
           this.dropPrevious = { dropped: quality.droppedVideoFrames, total: quality.totalVideoFrames };
         }
       }
-      const choice = this.abr.choose(playable.filter((r) => r.mime === rendition.mime), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
+      if (ahead >= 12 && this.video.readyState >= 3 && !this.video.paused)
+        startupBuffered = true;
+      const proposed = this.abr.choose(playable.filter((r) => r.mime === rendition.mime), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
+      const choice = startupBuffered || this.abr.manual ? proposed : rendition;
       if (choice.id !== rendition.id) {
         const candidate = await this.playlist(choice, signal);
         const compatible = candidate.segments.find((s) => s.sequence === sequence);
@@ -653,7 +674,7 @@ class SegmentPipeline {
       try {
         bytes = await this.bytes(next.url, request.signal, (received, elapsed) => {
           const lower = [...playable].filter((r) => r.mime === rendition.mime && r.bandwidth < rendition.bandwidth).sort((a, b) => a.bandwidth - b.bandwidth)[0];
-          if (lower && this.abr.abandon(rendition, lower, next.duration, received, elapsed, bufferAhead(this.video))) {
+          if (startupBuffered && !this.expensiveSwitches && lower && this.abr.abandon(rendition, lower, next.duration, received, elapsed, bufferAhead(this.video))) {
             abandon = lower;
             request.abort();
           }
@@ -664,8 +685,16 @@ class SegmentPipeline {
           continue;
         if (!abandon)
           throw request.signal.reason instanceof PlaybackFault ? request.signal.reason : error;
+        const candidate = await this.playlist(abandon, signal);
+        const anchor = candidate.segments.find((s) => list.segments.some((old) => old.sequence === s.sequence));
+        if (!anchor || !candidate.segments.some((s) => s.sequence === sequence))
+          throw new PlaybackFault("Replacement rendition lacks next segment boundary", "source");
+        const offset = list.segments.find((s) => s.sequence === anchor.sequence).start - anchor.start;
+        candidate.segments.forEach((s) => {
+          s.start += offset;
+        });
         rendition = abandon;
-        list = await this.playlist(rendition, signal);
+        list = candidate;
         this.current = rendition;
         this.onRendition(rendition);
         init = "";
@@ -712,6 +741,28 @@ class SegmentPipeline {
   }
 }
 
+// client/player/native-hls.ts
+async function nativeMediaPlaylist(url, signal) {
+  const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), credentials: "same-origin" });
+  if (!response.ok)
+    throw new TypeError(`HLS manifest HTTP ${response.status}`);
+  const text = await response.text();
+  cancelled(signal);
+  if (text.length > 1024 * 1024 || !text.trimStart().startsWith("#EXTM3U"))
+    throw new Error("Invalid HLS manifest");
+  const lines = text.split(/\r?\n/).map((line) => line.trim());
+  const first = lines.findIndex((line) => line.startsWith("#EXT-X-STREAM-INF:"));
+  if (first < 0)
+    return response.url;
+  const uri = lines.slice(first + 1).find((line) => line && !line.startsWith("#"));
+  if (!uri)
+    throw new Error("HLS default variant is missing");
+  const variant = new URL(uri, response.url);
+  if (variant.origin !== new URL(response.url).origin || variant.username || variant.password)
+    throw new Error("HLS variant outside broker origin");
+  return variant.href;
+}
+
 // client/src/protocol/id.ts
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -744,6 +795,10 @@ class PlaybackEngine {
   lowDelayOverride;
   terminalMedia;
   localTransportIntent;
+  waitSince = 0;
+  everPlayed = false;
+  lastPosition = 0;
+  lastAdvance = 0;
   wantsPlay = false;
   lowDelay = false;
   manualQuality = null;
@@ -757,7 +812,16 @@ class PlaybackEngine {
     video.playsInline = true;
     video.controls = false;
     video.preload = "auto";
-    this.timer = setInterval(() => this.publish(), 1000);
+    try {
+      const saved = localStorage.getItem("vela.player.volume");
+      if (saved !== null && Number.isFinite(Number(saved)))
+        video.volume = Math.max(0, Math.min(1, Number(saved)));
+      video.muted = video.muted || localStorage.getItem("vela.player.muted") === "true";
+    } catch {}
+    this.timer = setInterval(() => {
+      this.checkWaiting();
+      this.publish();
+    }, 1000);
   }
   emit(event) {
     this.deliver(event.type === "error" ? {
@@ -766,6 +830,31 @@ class PlaybackEngine {
       sourceGeneration: this.controller.source,
       seekGeneration: this.controller.seek
     } : event);
+  }
+  saveVolume() {
+    try {
+      localStorage.setItem("vela.player.volume", String(this.video.volume));
+      localStorage.setItem("vela.player.muted", String(this.video.muted));
+    } catch {}
+  }
+  checkWaiting() {
+    if (this.pendingSwitch && performance.now() - this.pendingSwitch.startedAt > 15000) {
+      this.pendingSwitch = undefined;
+      this.fail({ kind: "network", message: "Source switch authorization timed out", recoverable: true });
+      return;
+    }
+    if (!this.session || !this.source || !this.wantsPlay || ["failed", "ended", "recovering"].includes(this.status))
+      return;
+    const now = performance.now();
+    if (this.video.currentTime > this.lastPosition + 0.02 && !this.video.paused) {
+      this.everPlayed = true;
+      this.lastAdvance = now;
+      this.lastPosition = this.video.currentTime;
+      return;
+    }
+    const expired = !this.everPlayed ? now - this.waitSince > 45000 : now - this.lastAdvance > 30000;
+    if (expired)
+      this.recover(new PlaybackFault(this.everPlayed ? "Playback stalled for 30 seconds" : "Playback did not start within 45 seconds", "network"), this.controller.token());
   }
   detachMedia() {
     for (const remove of this.listeners)
@@ -776,6 +865,9 @@ class PlaybackEngine {
     const { video } = this;
     this.detachMedia();
     for (const [name, handler] of Object.entries({
+      volumechange: () => {
+        this.saveVolume();
+      },
       playing: () => {
         if (!this.video.paused && !this.video.error && this.video.readyState >= 3) {
           this.status = "playing";
@@ -783,7 +875,7 @@ class PlaybackEngine {
         }
       },
       pause: () => {
-        if (!["loading", "recovering", "failed", "ended"].includes(this.status))
+        if (!this.wantsPlay && !["loading", "recovering", "failed", "ended"].includes(this.status))
           this.status = "paused";
       },
       waiting: () => {
@@ -832,6 +924,9 @@ class PlaybackEngine {
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: (this.session?.audioTracks.length ?? 0) > 1 && !!this.session?.audioTracks.every((t) => !!this.nativeAudio(t.id)) },
       lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
+      waiting: ["loading", "buffering", "recovering"].includes(this.status) || this.wantsPlay && this.video.seeking,
+      volume: this.video.volume,
+      muted: this.video.muted,
       preparation: ["loading", "buffering"].includes(this.status) && (quality?.totalVideoFrames ?? 0) === 0 ? this.video.readyState < 1 ? "media-metadata" : this.video.paused ? "starting" : "initial-buffer" : null,
       position: this.terminalMedia?.position ?? (Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0),
       duration: this.terminalMedia?.duration ?? (Number.isFinite(this.video.duration) ? this.video.duration : null),
@@ -909,7 +1004,10 @@ class PlaybackEngine {
   }
   async load(session) {
     if (!this.timer)
-      this.timer = setInterval(() => this.publish(), 1000);
+      this.timer = setInterval(() => {
+        this.checkWaiting();
+        this.publish();
+      }, 1000);
     const pending = this.pendingSwitch;
     const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && pending.source === session.sourceGeneration && pending.seek === session.seekGeneration;
     const position = handoff ? Math.max(pending.position, this.video.currentTime) : session.position ?? 0;
@@ -1030,6 +1128,10 @@ class PlaybackEngine {
   }
   async activate(source, position, recovery = false, initial = false) {
     this.resumePosition = position;
+    this.waitSince = performance.now();
+    this.lastAdvance = this.waitSince;
+    this.lastPosition = position;
+    this.everPlayed = false;
     const token = this.controller.changeSource(!initial);
     this.resetMedia();
     this.source = source;
@@ -1043,6 +1145,8 @@ class PlaybackEngine {
       if (source.delivery === "hls" && !this.useNativeHls(source)) {
         this.backend = "mse";
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
+        pipeline.expensiveSwitches = source.strategy === "transcode";
+        pipeline.initialRenditionId = source.initialRenditionId;
         pipeline.lowDelay = this.lowDelay;
         pipeline.liveWindowStart = this.session?.liveWindowStart ?? null;
         pipeline.maxLiveDrift = this.session?.liveMaxDrift ?? 45;
@@ -1054,7 +1158,9 @@ class PlaybackEngine {
       } else {
         this.backend = source.delivery === "file" ? "file" : "native-hls";
         this.video.disableRemotePlayback = false;
-        this.video.src = source.url;
+        const mediaUrl = source.delivery === "hls" ? await nativeMediaPlaylist(source.url, token.signal) : source.url;
+        cancelled(token.signal);
+        this.video.src = mediaUrl;
       }
       await this.metadata(token);
       cancelled(token.signal);
@@ -1088,7 +1194,7 @@ class PlaybackEngine {
       const timer = setTimeout(() => {
         clean();
         reject(new PlaybackFault("Metadata deadline exceeded", "network", true));
-      }, 15000);
+      }, 45000);
       const clean = () => {
         clearTimeout(timer);
         this.video.removeEventListener("loadedmetadata", done);
@@ -1122,7 +1228,7 @@ class PlaybackEngine {
     const boundary = source.boundaries?.filter((at) => at <= position).sort((a, b) => b - a)[0];
     if (boundary === undefined)
       throw new Error("No independent switch boundary offered by server");
-    this.pendingSwitch = { sessionId: this.session.id, sourceId: source.id, source: this.controller.source + 1, seek: this.controller.seek, position, recovery };
+    this.pendingSwitch = { startedAt: performance.now(), sessionId: this.session.id, sourceId: source.id, source: this.controller.source + 1, seek: this.controller.seek, position, recovery };
     this.emit({ type: "session-command", sessionId: this.session.id, command: {
       kind: "switch",
       pathId: source.id,
@@ -1196,9 +1302,23 @@ class PlaybackEngine {
     } catch (e) {
       if (!this.controller.current(token))
         return;
-      this.status = "paused";
-      this.publish();
-      this.emit({ type: "error", failure: { kind: "action", message: e instanceof Error ? e.message : String(e), recoverable: true } });
+      if (e instanceof DOMException && e.name === "NotAllowedError" && !this.video.muted) {
+        this.video.muted = true;
+        try {
+          await this.video.play();
+          if (!this.controller.current(token))
+            return;
+          this.status = "playing";
+          this.failure = null;
+          this.lastObservation = -Infinity;
+          this.publish();
+          return;
+        } catch (retryError) {
+          e = retryError;
+        }
+      }
+      if (this.controller.current(token))
+        this.fail({ kind: "action", message: e instanceof Error ? e.message : String(e), recoverable: true });
     }
   }
   nativeAudio(id) {
@@ -1278,7 +1398,7 @@ class PlaybackEngine {
           break;
         case "retry":
           if (this.session)
-            await this.load({ ...this.session, position: this.video.currentTime || this.resumePosition });
+            await this.load({ ...this.session, position: this.terminalMedia?.position ?? (this.video.currentTime || this.resumePosition) });
           break;
         case "switchPath": {
           const source = this.candidates().find((s) => s.id === command.pathId);
@@ -1320,10 +1440,19 @@ class PlaybackEngine {
           await this.command({ id: command.id, type: "seek", seconds: target });
           break;
         }
+        case "mute":
+          this.video.muted = command.muted ?? !this.video.muted;
+          this.saveVolume();
+          this.lastObservation = -Infinity;
+          break;
         case "volume":
           if (!Number.isFinite(command.value) || command.value < 0 || command.value > 1)
             throw new Error("Volume outside 0–1");
           this.video.volume = command.value;
+          if (command.value > 0)
+            this.video.muted = false;
+          this.saveVolume();
+          this.lastObservation = -Infinity;
           break;
         case "quality":
           if (this.backend !== "mse")
@@ -1441,6 +1570,7 @@ function sessionFromPlan(plan) {
       audioTrackId: plan.selectedAudioTrackId,
       boundaries: p.boundaries.filter((b) => b.independent).map((b) => b.atSeconds),
       recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some((b) => b.independent && (b.compatibility === "verified-timeline" || b.compatibility === "same-source" && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
+      initialRenditionId: p.initialRenditionId,
       renditions: p.qualities.map((q) => ({
         id: q.id,
         url: q.url,
@@ -1580,6 +1710,12 @@ function applyCommand(handle, props) {
           break;
         case "seek":
           command = { ...base, type: "seek", seconds: Number(decoded) };
+          break;
+        case "volume":
+          command = { ...base, type: "volume", value: Number(decoded) };
+          break;
+        case "mute":
+          command = { ...base, type: "mute", muted: decoded === "" ? undefined : decoded === "true" };
           break;
         case "quality":
           command = { ...base, type: "quality", renditionId: decoded || null };

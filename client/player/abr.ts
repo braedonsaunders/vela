@@ -12,6 +12,7 @@ export class BandwidthEstimator {
 export class AdaptiveBitrate {
   private upSince = 0;
   manual: string | null = null;
+  expensive = false; private downSince = 0;
   choose(ladder: Rendition[], current: Rendition | undefined, buffer: number, throughput: number | null, dropRatio: number, now: number): Rendition {
     const sorted = [...ladder].sort((a, b) => a.bandwidth - b.bandwidth);
     if (!sorted.length) throw new Error('No playable renditions');
@@ -21,11 +22,17 @@ export class AdaptiveBitrate {
     let next = sorted.filter(r => r.bandwidth <= budget).at(-1) ?? sorted[0];
     if (buffer < 2) next = sorted[0];
     if (dropRatio > 0.05 && current) next = sorted.filter(r => r.bandwidth < current.bandwidth).at(-1) ?? sorted[0];
+    if (this.expensive && current && next.bandwidth < current.bandwidth) {
+      if (buffer >= 8) { this.downSince = 0; return current; }
+      if (!this.downSince) this.downSince = now;
+      if (now - this.downSince < 5000) return current;
+      this.downSince = 0;
+    } else this.downSince = 0;
     if (current && next.bandwidth > current.bandwidth) {
       if (dropRatio > 0.01) { this.upSince = 0; return current; }
       if (!this.upSince) this.upSince = now;
       // Keep throughput stability across browser-managed fetch pauses, but never up-switch on a low buffer.
-      if (buffer < 12 || now - this.upSince < 12000) return current;
+      if (buffer < (this.expensive ? 24 : 12) || now - this.upSince < (this.expensive ? 30000 : 12000)) return current;
       this.upSince = 0;
       return sorted.find(r => r.bandwidth > current.bandwidth) ?? current;
     }

@@ -30,7 +30,7 @@ export class SegmentPipeline {
   readonly bandwidth = new BandwidthEstimator();
   readonly abr = new AdaptiveBitrate();
   current?: Rendition;
-  lowDelay = false;
+  lowDelay = false; expensiveSwitches = false; initialRenditionId?: string;
   liveWindowStart: number | null = null; maxLiveDrift = 45;
   publishedEdge: number | null = null; publishedStart: number | null = null;
   retrying = false;
@@ -132,7 +132,8 @@ export class SegmentPipeline {
       media.addEventListener('sourceopen', open, { once: true }); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort();
     });
     cancelled(signal);
-    let rendition = this.abr.choose(playable, undefined, 0, this.bandwidth.bps, 0, performance.now());
+    let rendition = playable.find(r => r.id === this.initialRenditionId) ?? playable[0];
+    this.abr.expensive = this.expensiveSwitches; let startupBuffered = false;
     this.current = rendition; this.onRendition(rendition);
     this.buffer = media.addSourceBuffer(rendition.mime);
     let list = await this.playlist(rendition, signal);
@@ -154,7 +155,9 @@ export class SegmentPipeline {
           this.dropPrevious = { dropped: quality.droppedVideoFrames, total: quality.totalVideoFrames };
         }
       }
-      const choice = this.abr.choose(playable.filter(r => r.mime === rendition.mime), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
+      if (ahead >= 12 && this.video.readyState >= 3 && !this.video.paused) startupBuffered = true;
+      const proposed = this.abr.choose(playable.filter(r => r.mime === rendition.mime), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
+      const choice = startupBuffered || this.abr.manual ? proposed : rendition;
       if (choice.id !== rendition.id) {
         const candidate = await this.playlist(choice, signal);
         const compatible = candidate.segments.find(s => s.sequence === sequence);
@@ -189,13 +192,18 @@ export class SegmentPipeline {
       try {
         bytes = await this.bytes(next.url, request.signal, (received, elapsed) => {
           const lower = [...playable].filter(r => r.mime === rendition.mime && r.bandwidth < rendition.bandwidth).sort((a,b) => a.bandwidth-b.bandwidth)[0];
-          if (lower && this.abr.abandon(rendition, lower, next!.duration, received, elapsed, bufferAhead(this.video))) { abandon = lower; request.abort(); }
+          if (startupBuffered && !this.expensiveSwitches && lower && this.abr.abandon(rendition, lower, next!.duration, received, elapsed, bufferAhead(this.video))) { abandon = lower; request.abort(); }
         });
       } catch (error) {
         cancelled(signal);
         if (!this.streamingAllowed && request.signal.aborted) continue;
         if (!abandon) throw request.signal.reason instanceof PlaybackFault ? request.signal.reason : error;
-        rendition = abandon; list = await this.playlist(rendition, signal); this.current = rendition; this.onRendition(rendition); init = ''; continue;
+        const candidate = await this.playlist(abandon, signal);
+        const anchor = candidate.segments.find(s => list.segments.some(old => old.sequence === s.sequence));
+        if (!anchor || !candidate.segments.some(s => s.sequence === sequence)) throw new PlaybackFault('Replacement rendition lacks next segment boundary', 'source');
+        const offset = list.segments.find(s => s.sequence === anchor.sequence)!.start - anchor.start;
+        candidate.segments.forEach(s => { s.start += offset; });
+        rendition = abandon; list = candidate; this.current = rendition; this.onRendition(rendition); init = ''; continue;
       } finally { if (this.request === request) this.request = undefined; this.segmentStarted = null; clearTimeout(timeout); signal.removeEventListener('abort', abort); }
       await this.append(bytes, signal);
       if (first && live && this.liveWindowStart === null && this.buffer.buffered.length) {

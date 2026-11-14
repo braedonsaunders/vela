@@ -70,13 +70,15 @@ export interface Interaction { receiptToken: string; kind: 'visible' | 'selected
 export interface InteractionsRequest extends Mutation { interactions: Interaction[] }
 export interface Track { id: ID; kind: 'audio' | 'subtitle'; language: string; name: string; codec: string;
   channels?: number; forced?: boolean; hearingImpaired?: boolean; default?: boolean; url?: string }
-export interface Quality { id: ID; width: number; height: number; bitrate: number; videoCodec: string; audioCodec?: string; url: string }
+export interface AudioRendition { trackId: ID; groupId: ID; url: string; mimeType: string; bitrate?: number }
+export interface Quality { id: ID; width: number; height: number; bitrate: number; videoCodec: string; audioCodec?: string; url: string; codecStatus?: 'pending' | 'verified'; audioGroupId?: ID }
 export interface Generations { sourceGeneration: number; seekGeneration: number }
 export interface SwitchBoundary { atSeconds: number; independent: boolean; timelineId: ID;
   /** Source replacement requires this compatibility proof, not just a matching title. */
   compatibility: 'same-source' | 'verified-timeline'; audioTrackIds: ID[]; subtitleTrackIds: ID[] }
 export interface PlaybackPath { id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
   url: string; mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
+  initialRenditionId?: ID; audioRenditions?: AudioRendition[];
   readiness: 'ready' | 'preparing' | 'unavailable'; qualities: Quality[]; boundaries: SwitchBoundary[] }
 export interface Fallback { state: 'unsupported' | 'idle' | 'preparing' | 'ready' | 'unavailable' | 'capacity'; pathId?: ID; reason?: string }
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID;

@@ -68,5 +68,11 @@ members Client
       if k == "ArrowRight" or k == "l" or k == "L"
         preventDefault()
         watchControl("seekBy", "10")
+      if k == "m" or k == "M"
+        preventDefault()
+        watchControl("mute", "")
+      if k == "ArrowUp" or k == "ArrowDown"
+        preventDefault()
+        watchControl("volume", `${max(0, min(1, watchModel.volume + (k == "ArrowUp" ? 0.05 : -0.05)))}`)
       if (k == "f" or k == "F") and watchModel.fullscreen
         watchControl("fullscreen", "")
