@@ -19,6 +19,7 @@ members Client
   resource watchIdentity = uiDetail(playingId) with localeJSON when auth.authenticated and top(nav).name == "watch" and playingId != "" as shape DetailModel
   derive watchTitle = match first(watchIdentity.title) { case some(item) => (item.kind == "episode" and item.seasonNumber > 0 and item.episodeNumber > 0 ? t("ui.sSeasonEEpisodeTitle", season=item.seasonNumberLabel, episode=item.episodeNumberLabel, title=item.name) : item.name), case none => match first(detail.title) { case some(item) => item.name, case none => t("ui.nowPlaying") } }
   state watchHidden = false
+  derive watchChromeVisible = not watchHidden or not watchModel.playing or watchEditing or watchModel.state != "playing"
   task resetWatch when playingId != "" key=playingId
     change(clearWatch)
   action clearWatch

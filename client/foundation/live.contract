@@ -8,6 +8,7 @@ members Client
   resource liveIdentity = uiLiveIdentity(playingId, guideNow) with localeJSON when auth.authenticated and top(nav).name == "liveWatch" and guideNow > 0 as shape LiveIdentity
   mutation liveState as shape LiveStatus queue
   derive liveView = match liveState { case some(r) => r, case none => LiveStatus(sessionId="", reconnecting=false, delivery="unknown", driftLabel="", drift=-1, canCatchUp=false) }
+  derive liveControlsVisible = watchChromeVisible or (liveView.sessionId == playback.sessionId and (liveView.reconnecting or liveView.canCatchUp or liveView.delivery == "upstream-gap" or liveView.delivery == "segment-delayed" or liveView.delivery == "waiting-for-publication"))
   task startGuideClock when (top(nav).name == "live" or top(nav).name == "liveWatch") and auth.authenticated and guideNow == 0
     after(1, tickGuide)
   task guideClock when (top(nav).name == "live" or top(nav).name == "liveWatch") and auth.authenticated
