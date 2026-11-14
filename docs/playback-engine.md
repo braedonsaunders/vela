@@ -485,3 +485,33 @@ frames decoded, and programme fallback remained false. Health retained outcome
 slates. These facts explain the transport-success signal, but do not prove the
 provider's exact rejection cause. No additional provider request, stream, or lab
 mutation was made for that correlation.
+
+### One CHROMA 80 check on installed 0.1.8
+
+The coordinator authorized exactly one virtual-channel attempt through the real
+guide. CHROMA 80 appeared normally as channel 1980 with a `Watch CHROMA 80`
+control, on the second page of this 118-channel response (100 / more, then 18 /
+exhausted). The single tune returned HTTP 200, session
+`LHWIHS43Y22HBSDLVWW6WZ2BY7`, channel `showcase-chroma-80`, ready adaptive HLS
+remux. First decoded frames were observed at 20,419 ms: readyState 4, paused false,
+four frames, time 0.012943. The title was `CHROMA 80 · Big`; chrome simultaneously
+retained `DEMUXER_ERROR_COULD_NOT_PARSE`, so this was not a sustained-play pass.
+
+Before sustained playback/content inspection and the requested screenshot, the
+dedicated playwright-cli browser unexpectedly reset to `about:blank`. Its daemon
+error log was empty. No further stream was opened; Chrome was closed. Ether was
+asked to confirm playing observations and stop/expiration, and to clean up only
+that identified session if necessary. Browser reset cause is unproven.
+
+This attempt does **not** qualify real programme content, a playing observation
+200, clean Close/stop acknowledgement, or explicit sign-out. The requested
+`lab-25-live-chroma80.png` was not produced; no other screenshot substitutes for
+it. See [live-tv.md](live-tv.md) for the focused status. A further tune requires
+the coordinator's clearance under the one-attempt constraint.
+
+Read-only Ether correlation subsequently found the sole matching Vela tune's
+resources released at 04:36:18.941 UTC (age 53.613 seconds; ready, media requested,
+media delivered and viewer reservation released), and its channel broadcast
+stopped at 04:37:18.962 UTC. No cleanup mutation was needed for those resources.
+These log lines do not prove a playing observation or HTTP stop 200; current
+public broker-session state correlation remains with the coordinator.
