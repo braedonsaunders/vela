@@ -45,6 +45,7 @@ let interactions: InteractionQueue | undefined;
 let ready: Promise<void> | undefined;
 let activeQuick = "";
 let authVersion = 0;
+let validation: { token: string; pending: Promise<Tokens | null> } | undefined;
 let redemption: { code: string; idempotencyKey: string; pending?: Promise<Tokens>; consumed: boolean } | undefined;
 let negotiation: { version: number; pending: Promise<void> } | undefined;
 let features: ServerCapabilities['features'] | undefined;
@@ -59,7 +60,9 @@ function server(store: Parameters<Sources['uiBootstrap']>[1], media?: MediaCapab
     device = { id, name: 'Vela browser', platform: 'web', appVersion: version };
     client = { device, protocolVersions: [0], ...media };
     const credentials = new SessionCredentials(store, device, () => key(store));
-    adapter = new EtherAdapter(API, credentials, JSON.stringify(client));
+    adapter = new EtherAdapter(API, credentials, JSON.stringify(client), () => {
+      authVersion++; ready = undefined; validation = undefined; negotiation = undefined; features = undefined; interactions = undefined; ai = undefined;
+    });
   }
   return adapter;
 }
@@ -117,6 +120,23 @@ const sources: Sources = {
         authVersion++; ready = undefined;
       }
     } else if (MOCK && store.get('vela.session') === null) await session(store);
+    const stored = store.get('vela.session');
+    if (stored) {
+      const token = (JSON.parse(stored) as Tokens).refreshToken;
+      if (!validation || validation.token !== token) {
+        const current = { token, pending: api.validateSession() };
+        validation = current;
+        current.pending = current.pending.then(result => {
+          if (validation === current && result) current.token = result.refreshToken;
+          return result;
+        });
+      }
+      try { await validation.pending; }
+      catch (error) {
+        if (store.get('vela.session')) throw error;
+        // The adapter already cleared only the rejected session and invalidated its state.
+      }
+    }
     return authModel(store);
   },
   signIn: async ([username, password], store) => {

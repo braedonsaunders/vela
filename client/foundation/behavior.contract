@@ -38,7 +38,9 @@ members Client
   action cancelSearch
     send cancelledAI = cancelAISearch(time.epochAtZero)
   mutation signedOut as shape AuthModel refreshes auth
+  state homeAuthChecked = false
   action logout
+    homeAuthChecked = false
     send signedOut = signOut(time.epochAtZero)
     nav = open(nav, path("home"))
   mutation signedIn as shape AuthModel refreshes auth then afterSignIn
@@ -94,6 +96,7 @@ members Client
     if username.trim() != "" and password != "" and not pending(signedIn)
       send signedIn = signIn(username.trim(), password, time.epochAtZero)
   action afterSignIn
+    homeAuthChecked = false
     password = ""
     match signedIn
       case some(r)
@@ -116,6 +119,8 @@ members Client
       case some(r)
         if r.authenticated or r.error != ""
           quickSecret = ""
+        if r.authenticated
+          homeAuthChecked = false
         if r.authenticated and returnTo != ""
           nav = open(nav, returnTo)
           returnTo = ""
@@ -132,6 +137,11 @@ members Client
     homeAt = time.epochAtZero + performanceNow()
     homeLocale = localeJSON
   resource home = uiBootstrap(homeAt) with localeJSON when auth.authenticated and homeAt > 0 and homeLocale == localeJSON as shape HomeModel
+  task checkHomeAuth when failed(home) and auth.authenticated and not homeAuthChecked
+    after(1, recheckHomeAuth)
+  action recheckHomeAuth
+    homeAuthChecked = true
+    refresh auth
   resource results = uiSearch(query, generation, time.epochAtZero) with localeJSON when auth.authenticated and query.trim() != "" as shape SearchModel transient
   resource descriptive = uiDescriptive(query, generation, time.epochAtZero) with localeJSON when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel transient
   resource ai = uiAI(query, generation, time.epochAtZero) with localeJSON when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel transient

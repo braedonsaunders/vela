@@ -17,7 +17,13 @@ export interface Credentials {
 export class EtherAdapter implements ServerAdapter {
   private cache = new Map<string, { etag: string; body: unknown }>();
   private refreshing: Promise<V.Tokens> | undefined;
-  constructor(private origin: string, private credentials: Credentials, private capabilityContext: string) {}
+  private refreshFailure?: { token: string; error: unknown };
+  /** Validate a stored session before the auth resource presents it. */
+  async validateSession(): Promise<V.Tokens | null> {
+    const tokens = await this.credentials.get();
+    return tokens ? this.refresh(tokens) : null;
+  }
+  constructor(private origin: string, private credentials: Credentials, private capabilityContext: string, private onSessionRejected?: () => void) {}
 
   private boundURL(path: string): string {
     const url = new URL(path, `${this.origin}/`);
@@ -43,10 +49,30 @@ export class EtherAdapter implements ServerAdapter {
         const current = await this.credentials.get();
         if (current && current.refreshToken !== tokens.refreshToken) return current;
         if (!current) throw new Error('Session ended');
-        const next = await this.request<V.Tokens>('POST', '/auth/refresh', {
-          refreshToken: current.refreshToken, device: this.credentials.device,
-          idempotencyKey: this.credentials.refreshKey(),
-        }, false);
+        if (this.refreshFailure?.token === current.refreshToken) throw this.refreshFailure.error;
+        const request = { refreshToken: current.refreshToken, device: this.credentials.device, idempotencyKey: this.credentials.refreshKey() };
+        let next: V.Tokens | undefined;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try { next = await this.request<V.Tokens>('POST', '/auth/refresh', request, false); break; }
+          catch (error) {
+            const rejected = error instanceof VelaError && (error.status === 401 || error.detail.class === 'auth');
+            if (rejected) {
+              const latest = await this.credentials.get();
+              if (latest?.refreshToken === current.refreshToken) { await this.credentials.set(null); this.cache.clear(); this.onSessionRejected?.(); }
+              throw error;
+            }
+            const policy = error instanceof VelaError ? error.detail.retry : undefined;
+            const limit = policy?.maxAttempts && Number.isFinite(policy.maxAttempts) ? Math.max(1, Math.min(3, Math.floor(policy.maxAttempts))) : 3;
+            const seconds = error instanceof VelaError && error.retryAfter ? Number(error.retryAfter) : 0;
+            const delay = Math.max(1000 * 2 ** attempt, (policy?.afterSeconds ?? 0) * 1000, Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0);
+            if (policy?.allowed === false || attempt + 1 >= limit || !Number.isFinite(delay) || delay > 30000) {
+              this.refreshFailure = { token: current.refreshToken, error }; throw error;
+            }
+            await new Promise<void>(resolve => setTimeout(resolve, delay));
+          }
+        }
+        if (!next) throw new Error('Refresh unavailable');
+        this.refreshFailure = undefined;
         const latest = await this.credentials.get();
         if (!latest || latest.refreshToken !== current.refreshToken) throw new Error('Session changed during refresh');
         await this.credentials.set(next);
