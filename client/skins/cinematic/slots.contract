@@ -1,5 +1,5 @@
 use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, cardName, skinLabel from "../../foundation/models.contract"
-use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill from "./look.contract"
+use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill, FadeImage from "./look.contract"
 use Wordmark, Pulse from "./auth.contract"
 
 // The page gutter: content aligns to it everywhere in the skin.
@@ -121,14 +121,17 @@ component NavItem
     press: action
   view
     if chip
-      button press=press() aria-current=(on ? "page" : "false") flex-shrink=0 height=34 padding="0px 14px" border=(on ? "1px solid var(--ink.primary)" : "1px solid var(--cinematic.glass-edge)") border-radius=999 background-color=(on ? "ink.primary" : "cinematic.control") color=(on ? "ink.inverse" : "ink.primary") backdrop-filter="blur(16px)" transition="background-color 180ms linear, color 180ms linear"
+      button press=press() testId=`nav-${label}` aria-current=(on ? "page" : "false") position="relative" flex-shrink=0 height=34 padding="0px 14px" border="1px solid var(--cinematic.glass-edge)" border-radius=999 background-color="cinematic.control" color=(on ? "ink.inverse" : "ink.primary") backdrop-filter="blur(16px)" transition="color 240ms linear"
         :focus-visible
           box-shadow="0px 0px 0px 2px var(--brand.warm)"
-        text label font-size=13 font-weight=600 white-space="nowrap"
+        if on
+          column sharedElement="nav-chip" -exact-layout-transition="460ms ease-out" position="absolute" inset=-1 border-radius=999 background-color="ink.primary" aria-hidden=true
+        text label position="relative" font-size=13 font-weight=600 white-space="nowrap"
     else
-      button press=press() aria-current=(on ? "page" : "false") class=NavLink position="relative" flex-shrink=0 color=(on ? "ink.primary" : "ink.secondary")
+      button press=press() testId=`nav-${label}` aria-current=(on ? "page" : "false") class=NavLink position="relative" flex-shrink=0 color=(on ? "ink.primary" : "ink.secondary")
         text label font-size=14 font-weight=(on ? 650 : 550) white-space="nowrap"
-        column position="absolute" left=14 right=14 bottom=4 height=2 border-radius=1 background-color="brand.warm" opacity=(on ? 1 : 0) scale=(on ? 1 : 0.4) transition="opacity 240ms ease-out, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)" aria-hidden=true
+        if on
+          column sharedElement="nav-underline" -exact-layout-transition="460ms ease-out" position="absolute" left=14 right=14 bottom=4 height=2 border-radius=1 background-color="brand.warm" aria-hidden=true
 
 style NavLink
   display = "flex"
@@ -169,7 +172,7 @@ component TitleCard
         :focus-visible
           box-shadow="0px 0px 0px 3px var(--ink.primary), 0px 28px 50px -14px var(--cinematic.card-shadow)"
         if card.poster != ""
-          image card.poster alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover"
+          FadeImage(src=card.poster)
         else
           column position="absolute" inset=0 padding=16 justify-content="flex-end" background-image="linear-gradient(160deg, var(--cinematic.placeholder-top) 0%, var(--cinematic.placeholder-bottom) 100%)"
             text card.name class=Display font-size=(small ? 20 : 24) line-clamp=4
@@ -260,7 +263,8 @@ component Home
             image hero.backdrop alt="" position="absolute" top="-12%" left="-12%" width="124%" height="124%" object-fit="cover" filter="blur(70px) saturate(1.5)" opacity=(searching ? 0.5 : 0) transition=`opacity ${slow()}ms ${glide()}`
           column position="absolute" inset=0 opacity=(searching ? 0 : 1) transition=`opacity ${slow()}ms ${glide()}`
             if hero.backdrop != ""
-              image hero.backdrop alt="" width="100%" height="100%" object-fit="cover" transform-origin="62% 38%" animation=drift(still)
+              column position="absolute" inset=0 transform-origin="62% 38%" animation=drift(still)
+                FadeImage(src=hero.backdrop)
             else
               if hero.poster != ""
                 image hero.poster alt="" position="absolute" top="-20%" left="-20%" width="140%" height="140%" object-fit="cover" filter="blur(90px) saturate(1.6)" opacity=0.7 animation=drift(still)

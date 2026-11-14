@@ -1,6 +1,6 @@
 use Card, FeedRow, DetailModel, ExtraModel, cardName from "../../foundation/models.contract"
 use Row from "./slots.contract"
-use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, enter, expose, drift, base, glide, quick from "./look.contract"
+use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, enter, expose, drift, base, glide, quick, FadeImage from "./look.contract"
 
 fn kindLabel(kind: string): string = (kind == "movie" ? t("ui.film") : kind == "show" ? t("ui.series") : kind == "season" ? t("ui.season") : t("ui.episode"))
 fn side(small: bool): string = (small ? "20px" : "max(32px, 5.5vw)")
@@ -25,7 +25,8 @@ component Detail
         column position="relative" min-height=(small ? 600 : "min(80vh, 780px)") justify-content="flex-end" overflow="hidden"
           column position="absolute" inset=0 overflow="hidden" aria-hidden=true mask-image="linear-gradient(180deg, black 0%, black 78%, transparent 100%)" animation=expose(still)
             if title.backdrop != ""
-              image title.backdrop alt="" width="100%" height="100%" object-fit="cover" transform-origin="58% 40%" animation=drift(still)
+              column position="absolute" inset=0 transform-origin="58% 40%" animation=drift(still)
+                FadeImage(src=title.backdrop)
             column position="absolute" left="-12%" bottom="0%" width="70%" height="80%" background-color=(title.accent == "" ? "brand.warm" : title.accent) opacity=0.18 mask-image="radial-gradient(closest-side, black 0%, transparent 100%)"
             column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-mid) 38%, var(--cinematic.scrim-clear) 72%), linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-strong) 20%, var(--cinematic.scrim-clear) 60%), linear-gradient(180deg, var(--cinematic.nav-scrim) 0%, var(--cinematic.scrim-clear) 22%)"
             image "assets/grain.svg" alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="fill" opacity=0.05
@@ -138,7 +139,7 @@ component EpisodeRow
         :focus-visible
           box-shadow="0px 0px 0px 3px var(--ink.primary)"
         if episode.backdrop != ""
-          image episode.backdrop alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover"
+          FadeImage(src=episode.backdrop)
         else
           column position="absolute" inset=0 align-items="center" justify-content="center" background-image="linear-gradient(160deg, var(--cinematic.placeholder-top) 0%, var(--cinematic.placeholder-bottom) 100%)"
             text (episode.episodeNumber > 0 ? episode.episodeNumberLabel : t("ui.episode")) class=Display font-size=(small ? 26 : 34) color="ink.secondary"
