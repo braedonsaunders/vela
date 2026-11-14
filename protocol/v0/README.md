@@ -410,3 +410,15 @@ probe facts, not defaults: omit unknown field order/rotation/interlace state and
 preserve explicitly known zero rotation or false interlace. Rotation is signed counterclockwise degrees from the display matrix, preserved
 without normalization to0–360. For example, positive90 is counterclockwise90;
 missing rotation/matrix is omitted rather than defaulted to zero.
+
+### Live results in fast search
+
+Fast `POST /search` responses may include `live: LiveSearchResults`, containing
+`channels: Channel[]` and `programmes: Programme[]` in server order. The existing
+query and generation identify all lanes. Omission means unavailable; present empty
+arrays mean no matches. These are bounded, unpaged lanes: title-page cursors and
+continuation describe `items` only, never live totals or completeness. There is no
+new endpoint and no invented receipt. Programme IDs and channel IDs match the live
+API; programme.channelId references a viewer-authorized tunable channel, and its
+start/end are authoritative. Descriptive and AI responses omit these live lanes.
+The mock searches its visible channel/Guide labels and a24-hour programme window.
