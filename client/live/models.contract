@@ -2,6 +2,9 @@ shape GuideProgramme
   id: string
   name: string
   summary: string
+  airing: bool
+  ended: bool
+  startsIn: number
   start: string
   end: string
   startLabel: string
@@ -18,6 +21,7 @@ shape GuideChannel
   number: string
   name: string
   favorite: bool
+  logo: string
   now: string
   next: string
   programmes: GuideProgramme[]
@@ -29,6 +33,7 @@ shape GuideModel
   untilLabel: string
   nowOffset: number
   showNow: bool
+  ticks: GuideTick[]
   channels: GuideChannel[]
 
 shape LiveStatus
@@ -37,3 +42,11 @@ shape LiveStatus
   delivery: string
   drift: number
   canCatchUp: bool
+
+shape GuideTick
+  id: string
+  label: string
+  offset: number
+
+shape LiveIdentity
+  title: string

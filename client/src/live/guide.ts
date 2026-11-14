@@ -1,3 +1,4 @@
+import { artworkURL } from '../discovery/artwork';
 import type { Channel, GuideQuery, GuideResponse, Page, Programme } from '../../wire/v0/types';
 
 /** A single bounded guide window. Times remain the server's original timestamps. */
@@ -7,16 +8,16 @@ export interface GuideApi {
 }
 
 export interface GuideProgramme {
-  id: string; name: string; summary: string; start: string; end: string;
+  id: string; name: string; summary: string; start: string; end: string; airing: boolean; ended: boolean; startsIn: number;
   leftId: string; rightId: string; upId: string; downId: string;
   startLabel: string; endLabel: string; offset: number; width: number;
 }
 export interface GuideChannel {
-  id: string; number: string; name: string; favorite: boolean;
+  id: string; number: string; name: string; favorite: boolean; logo: string;
   now: string; next: string; programmes: GuideProgramme[];
 }
 export interface GuideModel {
-  from: string; until: string; fromLabel: string; untilLabel: string; nowOffset: number; showNow: boolean; channels: GuideChannel[];
+  from: string; until: string; fromLabel: string; untilLabel: string; nowOffset: number; showNow: boolean; ticks: { id: string; label: string; offset: number }[]; channels: GuideChannel[];
 }
 
 async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise<T[]> {
@@ -36,11 +37,11 @@ async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise
 }
 
 /** Fetch all pages for one window; incomplete pages are never presented as complete. */
-export async function loadGuide(api: GuideApi, from: string, until: string, now: number): Promise<GuideModel> {
+export async function loadGuide(api: GuideApi, from: string, until: string, now: number, origin?: string): Promise<GuideModel> {
   const start = Date.parse(from), end = Date.parse(until);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 86400000)
     throw new Error('Invalid guide window');
-  const channels = await allPages(cursor => api.channels(cursor, 100));
+  const channels = (await allPages(cursor => api.channels(cursor, 100))).sort((a, b) => Number(b.favorite) - Number(a.favorite));
   const programmes = await allPages(cursor => api.guide({ from, until, cursor, limit: 100 }));
   // Mobile now/next stays current even while the grid browses another window.
   const currentStart = Math.floor(now / 1800000) * 1800000;
@@ -62,6 +63,10 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
   const model: GuideModel = {
     from, until, fromLabel: label(start), untilLabel: label(end), nowOffset: Math.max(0, Math.min(100, (now - start) / (end - start) * 100)),
     showNow: now >= start && now < end,
+    ticks: Array.from({ length: Math.floor((end - start) / 1800000) + 1 }, (_, n) => {
+      const t = start + n * 1800000;
+      return { id: String(t), label: label(t), offset: n * 1800000 / (end - start) * 100 };
+    }),
     channels: channels.map(channel => {
       const entries = (grouped.get(channel.id) ?? []).filter(p => {
         const a = Date.parse(p.start), b = Date.parse(p.end);
@@ -73,11 +78,11 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
       }).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
       const current = currentEntries.find(p => Date.parse(p.start) <= now && now < Date.parse(p.end));
       const next = currentEntries.find(p => Date.parse(p.start) > now);
-      return { id: channel.id, number: channel.number, name: channel.name, favorite: channel.favorite,
+      return { id: channel.id, number: channel.number, name: channel.name, favorite: channel.favorite, logo: (() => { const art = channel.artwork.find(a => a.kind === 'logo' || a.kind === 'channel'); return art ? artworkURL(art, 80, 45, origin) ?? '' : ''; })(),
         now: current?.name ?? '', next: next?.name ?? '',
         programmes: entries.map(p => {
           const a = Date.parse(p.start), b = Date.parse(p.end);
-          return { leftId: '', rightId: '', upId: '', downId: '', id: p.id, name: p.name, summary: p.summary, start: p.start, end: p.end,
+          return { leftId: '', rightId: '', upId: '', downId: '', airing: a <= now && now < b, ended: b <= now, startsIn: Math.max(0, Math.ceil((a - now) / 60000)), id: p.id, name: p.name, summary: p.summary, start: p.start, end: p.end,
             startLabel: label(a), endLabel: label(b), offset: (Math.max(a, start) - start) / (end - start) * 100,
             width: (Math.min(b, end) - Math.max(a, start)) / (end - start) * 100 };
         }) };
@@ -97,4 +102,12 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
     p.upId = vertical(row - 1); p.downId = vertical(row + 1);
   }));
   return model;
+}
+
+export async function liveIdentity(api: GuideApi, channelId: string, now: number) {
+  const channel = (await allPages(cursor => api.channels(cursor, 100))).find(c => c.id === channelId);
+  if (!channel) return { title: 'Live television' };
+  const programmes = await allPages(cursor => api.guide({ from: new Date(now).toISOString(), until: new Date(now + 60000).toISOString(), channelIds: [channelId], cursor, limit: 100 }));
+  const current = programmes.find(p => Date.parse(p.start) <= now && now < Date.parse(p.end));
+  return { title: current ? `${channel.name} · ${current.name}` : channel.name };
 }

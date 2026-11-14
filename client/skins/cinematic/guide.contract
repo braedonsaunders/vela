@@ -7,7 +7,24 @@ component Guide
     watch: action
     previous: action
     next: action
-  action move(leftId: string, rightId: string, upId: string, downId: string, k: string, event: KeyboardEvent)
+  state selectedChannel = ""
+  state selectedProgramme = ""
+  action selectProgramme(channel: string, programme: string)
+    selectedChannel = channel
+    selectedProgramme = programme
+    focus("programme-sheet")
+  action dismissProgramme
+    let id = selectedProgramme
+    selectedProgramme = ""
+    focus(`guide-${id}`)
+  action sheetKey(k: string)
+    if k == "Escape"
+      preventDefault()
+      dismissProgramme()
+  action move(channel: string, airing: bool, leftId: string, rightId: string, upId: string, downId: string, k: string, event: KeyboardEvent)
+    if k == "Enter" and airing
+      preventDefault()
+      watch(channel)
     if not event.metaKey and not event.ctrlKey and not event.altKey
       if k == "ArrowLeft" or k == "ArrowRight" or k == "ArrowUp" or k == "ArrowDown"
         preventDefault()
@@ -24,32 +41,63 @@ component Guide
         button press=next aria-label="Later programmes" buttonStyle="bordered"
           text "Later"
       text `${model.fromLabel} – ${model.untilLabel}` color="ink.secondary" font-size=13
+      for channel in model.channels.filter(c => c.id == selectedChannel) key=`sheet-${channel.id}`
+        for programme in channel.programmes.filter(p => p.id == selectedProgramme) key=programme.id
+          column id="programme-sheet" tabindex=-1 key=sheetKey role="dialog" aria-label=programme.name gap=12 padding=24 border="1px solid var(--surface.line)" border-radius=16 background-color="surface.raised" max-width=560
+            row gap=12 align-items="center"
+              column gap=6 flex=1
+                text channel.name font-size=12 color="brand.warm"
+                text programme.name font-size=24 font-weight=550
+              button press=dismissProgramme aria-label="Close programme details" buttonStyle="bordered"
+                text "Close"
+            text `${programme.startLabel} – ${programme.endLabel}` color="ink.secondary" font-size=13
+            if programme.summary != ""
+              text programme.summary color="ink.secondary" line-height=1.6
+            if programme.airing
+              button press=watch(channel.id) buttonStyle="bordered"
+                text "Watch live"
+            else
+              text (programme.ended ? "This programme has ended" : `Starts in ${programme.startsIn} min`) color="ink.secondary"
       if model.channels.length == 0
         text "No channels are available." role="status" color="ink.secondary"
       if small
         for channel in model.channels key=channel.id
           button press=watch(channel.id) aria-label=`Watch ${channel.name}` padding=16 border="none" border-radius=12 background-color="surface.raised" color="ink.primary" text-align="left"
             column gap=6
-              text `${channel.number}  ${channel.name}${channel.favorite ? "  ·  Favourite" : ""}` font-weight=600
+              row gap=12 align-items="center"
+                if channel.logo != ""
+                  image channel.logo alt="" width=48 height=30 object-fit="contain" border-radius=4
+                column gap=4
+                  text `${channel.name}${channel.favorite ? "  ★" : ""}` font-weight=600
+                  text channel.number color="ink.quiet" font-size=11
               text (channel.now == "" ? "No current programme information" : `Now  ${channel.now}`) color="ink.secondary"
               if channel.next != ""
                 text `Next  ${channel.next}` color="ink.quiet"
       else
-        scroll overflow-x="auto" overflow-y="hidden"
-          column width=1100 gap=3 role="grid" aria-label="Programme guide. Use arrow keys to move and Enter to watch."
-            row height=32 padding-left=184 justify-content="space-between" color="ink.secondary" font-size=12
-              text model.fromLabel
-              text "LIVE · TWO HOUR GUIDE" color="brand.warm" letter-spacing="2px"
-              text model.untilLabel
-            for channel in model.channels key=channel.id
-              row height=88 gap=4 role="row"
-                button press=watch(channel.id) aria-label=`Watch ${channel.name}` width=180 flex-shrink=0 padding=12 border="none" background-color="surface.raised" color="ink.primary" text-align="left"
-                  text `${channel.number}  ${channel.name}${channel.favorite ? " ★" : ""}`
-                column flex=1 position="relative" background-color="surface.raised"
-                  for programme in channel.programmes key=programme.id
-                    button id=`guide-${programme.id}` key=move(programme.leftId, programme.rightId, programme.upId, programme.downId) press=watch(channel.id) aria-label=`${programme.name}, ${programme.startLabel} to ${programme.endLabel}. Watch ${channel.name}` position="absolute" left=`${programme.offset}%` width=`${programme.width}%` height="100%" padding=14 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary" text-align="left" overflow="hidden" border-radius=6
-                      column gap=4
-                        text programme.name font-weight=600 line-clamp=1
-                        text `${programme.startLabel} – ${programme.endLabel}` font-size=11 color="ink.secondary"
-                  if model.showNow
-                    column position="absolute" left=`${model.nowOffset}%` top=0 bottom=0 width=2 background-color="brand.warm" pointer-events="none"
+        column width="100%" gap=3 role="grid" aria-label="Programme guide. Use arrow keys to move and Enter to watch."
+          row height=54 gap=4
+            column width=200 flex-shrink=0
+            column flex=1 min-width=0 position="relative"
+              for tick in model.ticks key=tick.id
+                column position="absolute" left=`${tick.offset}%` top=0 bottom=0 width=1 background-color="surface.line"
+                  text tick.label position="absolute" top=0 right=(tick.offset == 100 ? 0 : -60) width=60 font-size=11 color="ink.secondary" text-align=(tick.offset == 100 ? "right" : "left")
+              if model.showNow
+                column position="absolute" left=`${model.nowOffset}%` bottom=0 pointer-events="none"
+                  text "Now" color="ink.inverse" background-color="brand.warm" border-radius=12 padding="4px 8px" font-size=10 font-weight=650
+          for channel in model.channels key=channel.id
+            row height=88 gap=4 role="row"
+              button press=watch(channel.id) aria-label=`Watch ${channel.name}` width=200 flex-shrink=0 padding=12 border="none" background-color="surface.raised" color="ink.primary" text-align="left"
+                row gap=10 align-items="center"
+                  if channel.logo != ""
+                    image channel.logo alt="" width=44 height=28 object-fit="contain" border-radius=4
+                  column gap=5
+                    text `${channel.name}${channel.favorite ? " ★" : ""}` font-size=13 font-weight=600 line-clamp=1
+                    text channel.number color="ink.quiet" font-size=11
+              column flex=1 min-width=0 position="relative" background-color="surface.raised"
+                for programme in channel.programmes key=programme.id
+                  button id=`guide-${programme.id}` key=move(channel.id, programme.airing, programme.leftId, programme.rightId, programme.upId, programme.downId) press=selectProgramme(channel.id, programme.id) aria-label=`${programme.name}, ${programme.startLabel} to ${programme.endLabel}. ${channel.name}. Programme details` position="absolute" left=`${programme.offset}%` width=`${programme.width}%` height="100%" padding=14 border="1px solid var(--surface.line)" background-color=(programme.airing ? "#b78c6330" : "surface.raised") opacity=(programme.ended ? 0.45 : 1) color="ink.primary" text-align="left" overflow="hidden" border-radius=6
+                    column gap=4
+                      text programme.name font-weight=600 line-clamp=1
+                      text `${programme.startLabel} – ${programme.endLabel}` font-size=11 color="ink.secondary"
+                if model.showNow
+                  column position="absolute" left=`${model.nowOffset}%` top=0 bottom=0 width=2 background-color="brand.warm" pointer-events="none"

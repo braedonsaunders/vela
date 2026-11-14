@@ -1,15 +1,16 @@
-use GuideModel, LiveStatus from "../live/models.contract"
+use GuideModel, LiveStatus, LiveIdentity from "../live/models.contract"
 
 members Client
   state guideWindow = 0
   state guideNow = 0
   state lowDelay = false
   resource guide = uiGuide(guideNow, guideWindow) when auth.authenticated and top(nav).name == "live" and guideNow > 0 as shape GuideModel
+  resource liveIdentity = uiLiveIdentity(playingId, guideNow) when auth.authenticated and top(nav).name == "liveWatch" and guideNow > 0 as shape LiveIdentity
   mutation liveState as shape LiveStatus queue
   derive liveView = match liveState { case some(r) => r, case none => LiveStatus(sessionId="", reconnecting=false, delivery="unknown", drift=-1, canCatchUp=false) }
-  task startGuideClock when top(nav).name == "live" and auth.authenticated and guideNow == 0
+  task startGuideClock when (top(nav).name == "live" or top(nav).name == "liveWatch") and auth.authenticated and guideNow == 0
     after(1, tickGuide)
-  task guideClock when top(nav).name == "live" and auth.authenticated
+  task guideClock when (top(nav).name == "live" or top(nav).name == "liveWatch") and auth.authenticated
     every(60000, tickGuide)
   action tickGuide
     guideNow = time.epochAtZero + performanceNow()
