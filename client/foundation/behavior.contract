@@ -136,6 +136,11 @@ members Client
   mutation receipt as shape ReceiptReply queue
   derive small = viewport.width < 640
   derive still = viewport.prefersReducedMotion
+  derive indexSkin = (activeSkin == "index" or activeSkin == "editorial")
+  derive homeSmall = (small or (indexSkin and top(nav).name == "title" and viewport.width >= 900))
+  derive shellViewport = Viewport(viewport, width=(homeSmall and not small ? 360 : viewport.width))
+  derive pageColor = (indexSkin ? "index.page" : "surface.page")
+  derive inkColor = (indexSkin ? "index.ink" : "ink.primary")
   derive activeSkin = (skin == "" ? home.defaultSkinId : skin)
 
   task searchUpdates when auth.authenticated and query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running")
