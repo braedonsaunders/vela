@@ -475,3 +475,13 @@ slate evidence were sent to the Ether worker and coordinator for upstream
 provider/device-availability diagnosis. No additional stream was requested.
 The earlier unqualified live-channel pass is retracted: guide, transport and UI
 passed; actual BBC News content failed and remains an open demo limitation.
+
+Ether's read-only source/history correlation selected a priority-zero Pluto input
+from USA TV Next. Its imported URL declares web / Chrome 126 / app 9.1.2; no proxy
+headers were supplied, and the backend's default User-Agent is MediaPlayer/1.0,
+independent of Vela's browser. At 04:27:05 UTC the upstream returned HTTP 200,
+frames decoded, and programme fallback remained false. Health retained outcome
+`ok` because sustained frames define success; it does not recognize refusal
+slates. These facts explain the transport-success signal, but do not prove the
+provider's exact rejection cause. No additional provider request, stream, or lab
+mutation was made for that correlation.
