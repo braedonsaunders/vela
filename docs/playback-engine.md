@@ -1306,7 +1306,7 @@ closed. No original file bytes were captured to disk.
 | Actual selected source | First GPU incl. plan | Broker plan | Seek → first new GPU | Frames / dropped after seek | Worst post-seek lag | Audio |
 |---|---:|---:|---:|---:|---:|---|
 | The Mummy (1959), original HEVC Main10,1800×1080 BT.709; native WebCodecs |4364.1ms|3672.1ms|60s:6458.0ms|32 decoded /28 presented /0 dropped|16.989ms|PCM underruns0|
-| The Mummy (1999), original HEVC Main10,3840×2160 PQ/BT.2020 + DTS8ch; package GPU decode and SDR tone map |4609.3ms|3392.6ms|120s:3155.3ms|43 decoded /35 presented /0 dropped|16.625ms|PCM underruns0|
+| Requested The Mummy (1999); actually The Mummy Returns (server pack-selection defect), original HEVC Main10,3840×2160 PQ/BT.2020 + DTS8ch; package GPU decode and SDR tone map |4609.3ms|3392.6ms|120s:3155.3ms|43 decoded /35 presented /0 dropped|16.625ms|PCM underruns0|
 
 The SDR run initially decoded64/presented60/drop0; Ether independently confirmed
 zero FFmpeg/transcode starts during that session. The 4K run initially decoded88,
@@ -1371,3 +1371,34 @@ admission: after actual-container inspection, only normalized compatible DV8
 HDR10-base playback proceeds; remaining DV profiles immediately use the authorized
 fallback. This qualification adds neither full RPU/FEL reconstruction, PGS/ASS,
 nor universal live TS decoding. Those remain subsequent work.
+
+
+### Title-attribution correction from Ether's resolver audit
+
+The coordinator subsequently traced the 4K HDR10 request labelled The Mummy
+(1999) to a pack whose acquired file was **The Mummy Returns.mkv**. Its codec,
+decoder, frame, seek, timing and no-FFmpeg measurements remain valid for that
+actual file; it is **not a correct-title playback pass**. Ether owns the pack-file
+identity defect and is fixing it before plan-latency optimization. No client-side
+permission to substitute a film or edition is implied by these results.
+
+### 0.1.30 overlay hotfix: real app watch verification
+
+A real `/vela/watch/...` route reproduced the missing chrome on an original H.264
+1800×1080 source. The Contract chrome and all children had opacity1, but the
+shadow canvas's z-index1 escaped its media surface (isolation/z-index both auto)
+and painted above it. A shadow root is not a CSS stacking context. The native
+view now isolates its media surface at z-index0 and disables all media pointer
+targets. The shared Contract wrapper gives chrome z-index1 and focuses the watch
+stage on entry. UI state continues to come from engine snapshots, not the unused
+video element's paused property.
+
+Exact committed/proposed styles and focus were applied on that same installed
+0.1.29 stream before packaging30. One manual drive measured idle chrome opacity0;
+pointer movement0.995, centre tap0.995 and an otherwise unhandled key0.997 during
+fade-in; after Space paused playback, opacity remained1 and the transport label
+was Play. Playing/paused observations returned200,1825 frames/drop0. Before/after
+images `lab-31-overlay-before.png` and `lab-32-overlay-fixed.png` were inspected.
+Real Close player returned broker stop200/ended, own-family revoke200/accepted;
+the test Chrome was closed. Native fix3ec6089 and UI a549994/8bdb8d0 are paired;
+the universal runtime e2e583f40c93c9f6 is unchanged. No extra stream was opened.
