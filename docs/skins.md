@@ -59,3 +59,10 @@ Auth slots: `SignIn` receives username, password, passwordAvailable, quickAvaila
 PlaybackModel carries `sessionId` and serialized `planJson`. The foundation seeds the
 engine from uiPlayback, then uses matching sessionEvents stream plans. Stream failures
 retry at most three times. Chrome never interprets the transport or invents recovery.
+
+## Contract gaps
+
+- Shell has no viewport input or route actions, so Index cannot recompose its rail for mobile or offer Search, Live and Library navigation honestly. Add responsive state and supported navigation actions, with capability information for unavailable destinations.
+- The Home child is a fully styled cinematic search field. A search field slot receiving query and edit action would let each skin control its presentation while keeping search behaviour shared.
+- Detail is wrapped in a root-owned modal, preventing Index from choosing a true split-pane route. Expose presentation selection to the root while preserving the navigation stack and focus restoration.
+- Cards expose a preformatted facts string rather than structured metadata, limiting accessible table columns; expose stable display fields alongside the formatted string.
