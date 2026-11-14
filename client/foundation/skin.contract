@@ -62,8 +62,6 @@ component Shell
     secureBusy: bool
     secureError: string
     goSecure: action
-    beta: bool
-    toggleBeta: action
     doc: SkinDoc
   slot
   view
@@ -90,7 +88,7 @@ component Shell
               MarqueeShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
                 children
             else
-              CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary, secureOrigin=secureOrigin, secureBusy=secureBusy, secureError=secureError, goSecure=goSecure, beta=beta, toggleBeta=toggleBeta)
+              CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary, secureOrigin=secureOrigin, secureBusy=secureBusy, secureError=secureError, goSecure=goSecure)
                 children
 
 component Home
@@ -360,8 +358,6 @@ component PlayerChrome
     seek: action
     editing: action
     close: action
-    beta: bool
-    toggleBeta: action
   view
     if skin == "mochi"
       MochiPlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
@@ -377,7 +373,7 @@ component PlayerChrome
           else if skin == "marquee"
             MarqueePlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
           else
-            CinePlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close, beta=beta, toggleBeta=toggleBeta)
+            CinePlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
 
 // Loading and failure moments. Cinematic draws skeletons and designed failures;
 // other skins keep a plain status line.

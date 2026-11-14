@@ -35,15 +35,6 @@ members Client
   state mediaCapabilitiesJSON = ""
   action receiveCapabilities(json: string)
     mediaCapabilitiesJSON = json
-  // The new player (beta) is a per-device preference the host persists. betaIntent is
-  // only a request to the host ("" asks for nothing); betaEnabled is what it reports.
-  state betaIntent = ""
-  state betaEnabled = false
-  action receiveBeta(value: string)
-    betaEnabled = value == "true"
-    betaIntent = ""
-  action toggleBeta
-    betaIntent = (betaEnabled ? "false" : "true")
   action receiveOrigin(origin: string)
     pageOrigin = origin
   derive localeJSON = `{"locale":"${time.locale}","formatLocale":"${time.formatLocale}","resolvedLocale":"${time.resolvedLocale}","timeZone":"${time.timeZone}","utcOffset":${time.utcOffset}}`
