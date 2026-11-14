@@ -269,9 +269,9 @@ function fontFaces(pack, name) {
     } catch {
       return [];
     }
-    if (url.origin !== location.origin || !url.pathname.startsWith("/vela/v0/appearance/") || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname))
+    if (url.origin !== pack.origin || !url.pathname.startsWith("/vela/v0/appearance/") || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname))
       return [];
-    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, "")}")`, { weight: String(f.weight), style: f.style === "italic" ? "italic" : "normal", display: "swap" });
+    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, "")}")`, { weight: String(f.weight), style: f.style === "italic" ? "italic" : "normal", display: "swap", sizeAdjust: `${Math.min(150, Math.max(50, font.sizeAdjust ?? 100))}%` });
     document.fonts.add(face);
     face.load().catch(() => document.fonts.delete(face));
     return [face];
@@ -313,6 +313,129 @@ function destroyTheme(handle) {
   for (const face of handle.fonts)
     document.fonts.delete(face);
   handle.sheet.remove();
+}
+
+// player/engine-handoff.ts
+var CHOSEN = "vela.engine";
+var DEFAULT = "vela.engine.default";
+var HANDOFF = "vela.handoff";
+var ENGINE = /^[a-z][a-z0-9-]{0,31}$/;
+var FRESH_MS = 15000;
+var installed = () => {
+  const list = window.velaEngines;
+  return Array.isArray(list) ? list.filter((e) => typeof e === "string" && ENGINE.test(e)) : [];
+};
+function store(key, value) {
+  try {
+    if (value)
+      localStorage.setItem(key, value);
+    else
+      localStorage.removeItem(key);
+  } catch {}
+}
+function readHandoff() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(HANDOFF) ?? "null");
+    return value && Date.now() - value.at < FRESH_MS ? value : undefined;
+  } catch {
+    return;
+  }
+}
+function scrollPositions() {
+  const out = {};
+  for (const el of Array.from(document.querySelectorAll("[id]")))
+    if (el.scrollTop > 0 && el.id.length <= 80)
+      out[el.id] = Math.round(el.scrollTop);
+  return out;
+}
+function veil(still, from, to) {
+  const el = document.createElement("div");
+  el.setAttribute("aria-hidden", "true");
+  el.style.cssText = `position:fixed;inset:0;z-index:2147483647;pointer-events:none;background:${getComputedStyle(document.body).backgroundColor || "#090b0e"};opacity:${from}`;
+  document.body.append(el);
+  if (!still)
+    el.animate([{ opacity: from }, { opacity: to }], { duration: 260, easing: "ease-out", fill: "forwards" });
+  else
+    el.style.opacity = String(to);
+  return el;
+}
+function leave(handle, from, to, still) {
+  const earlier = readHandoff();
+  if (earlier && earlier.from === to && earlier.to === from)
+    return;
+  handle.leaving = true;
+  const record = { from, to, at: Date.now(), url: location.href, scroll: scrollPositions(), window: Math.round(scrollY) };
+  try {
+    sessionStorage.setItem(HANDOFF, JSON.stringify(record));
+  } catch {}
+  handle.overlay = veil(still, 0, 1);
+  setTimeout(() => location.replace(location.href), still ? 0 : 280);
+}
+function arrive(handle, build, still) {
+  const record = readHandoff();
+  if (!record || record.to !== build || record.url !== location.href)
+    return;
+  handle.overlay = veil(true, 1, 1);
+  const pending = new Map(Object.entries(record.scroll));
+  const started = performance.now();
+  const step = () => {
+    if (handle.disposed)
+      return;
+    for (const [id, top] of pending) {
+      const el = document.getElementById(id);
+      if (el && el.scrollHeight - el.clientHeight >= top) {
+        el.scrollTop = top;
+        pending.delete(id);
+      }
+    }
+    if (record.window && document.documentElement.scrollHeight - innerHeight >= record.window) {
+      scrollTo(0, record.window);
+      record.window = 0;
+    }
+    if ((pending.size || record.window) && performance.now() - started < 2000) {
+      handle.restoring = requestAnimationFrame(step);
+      return;
+    }
+    const overlay = handle.overlay;
+    handle.overlay = undefined;
+    if (!overlay)
+      return;
+    if (still)
+      overlay.remove();
+    else
+      overlay.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: "ease-out", fill: "forwards" }).finished.then(() => overlay.remove(), () => overlay.remove());
+  };
+  handle.restoring = requestAnimationFrame(step);
+}
+function apply3(handle, json, first) {
+  if (handle.leaving || handle.disposed)
+    return;
+  const p = JSON.parse(json);
+  const build = ENGINE.test(p.build ?? "") ? p.build : "";
+  const still = p.still === true || p.still === "true";
+  if (first && build)
+    arrive(handle, build, still);
+  if (p.settled !== true && p.settled !== "true")
+    return;
+  store(CHOSEN, ENGINE.test(p.chosen ?? "") ? p.chosen : "");
+  if (ENGINE.test(p.fallback ?? ""))
+    store(DEFAULT, p.fallback);
+  const wanted = p.wanted ?? "";
+  if (build && ENGINE.test(wanted) && wanted !== build && installed().includes(wanted))
+    leave(handle, build, wanted, still);
+}
+function createEngine(json) {
+  const handle = { engine: true, leaving: false, disposed: false };
+  apply3(handle, json, true);
+  return handle;
+}
+var setEngine = (handle, json) => apply3(handle, json, false);
+function destroyEngine(handle) {
+  handle.disposed = true;
+  if (handle.restoring)
+    cancelAnimationFrame(handle.restoring);
+  if (!handle.leaving)
+    handle.overlay?.remove();
 }
 
 // player/model.ts
@@ -2095,8 +2218,10 @@ function observation(snapshot, sequence) {
 
 // player/web-module.ts
 var abi = 1;
-var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false }, "vela-theme": { snapshot: false } };
+var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false }, "vela-theme": { snapshot: false }, "vela-engine": { snapshot: false } };
 function create(tag, element, json, event) {
+  if (tag === "vela-engine")
+    return createEngine(json);
   if (tag === "vela-theme")
     return createTheme(json);
   if (tag === "vela-install")
@@ -2146,6 +2271,10 @@ function create(tag, element, json, event) {
   return handle;
 }
 function setProps(handle, json) {
+  if ("engine" in handle) {
+    setEngine(handle, json);
+    return;
+  }
   if ("theme" in handle) {
     setTheme(handle, json);
     return;
@@ -2237,6 +2366,10 @@ function applyCommand(handle, props) {
   }
 }
 function destroy(handle) {
+  if ("engine" in handle) {
+    destroyEngine(handle);
+    return;
+  }
   if ("theme" in handle) {
     destroyTheme(handle);
     return;

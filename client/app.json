@@ -22,7 +22,8 @@
     "vela-context",
     "vela-preview",
     "vela-install",
-    "vela-theme"
+    "vela-theme",
+    "vela-engine"
   ],
   "env": [
     "API_BASE_URL",

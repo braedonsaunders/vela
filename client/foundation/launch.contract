@@ -1,0 +1,11 @@
+// Launch: the splash stands over the app only while boot and sign-in are actually
+// pending. It ends the moment the first useful screen can show (sign-in, home or
+// the offline notice) and never returns once it has ended.
+members Client
+  state launched = false
+  derive launching = (not launched and not failed(auth) and (not current(auth) or (auth.authenticated and not failed(home) and not current(home))))
+  derive splashOnPaper = (indexSkin or activeSkin == "mochi")
+  task endLaunchOnce when not launched and not launching
+    after(1, endLaunch)
+  action endLaunch
+    launched = true
