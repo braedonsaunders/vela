@@ -72,3 +72,39 @@ which cannot retain custom Contract chrome; ordinary in-page playback can.
 Browser/device coverage is an implementation target, not qualification evidence.
 Only an actual media drive can establish decode/recovery; platform APIs alone
 cannot establish codec or container compatibility.
+
+## Implemented API
+
+`client/player/model.ts` is the browser command and snapshot contract;
+`client/player/protocol.ts` translates `protocol/v0/types.ts` plans and creates
+wire observations. The view also accepts `plan` (a JSON PlaybackPlan) in place
+of `session`. Older revisions/generations for the current session are ignored.
+A command is still processed when the accompanying plan prop is unchanged/stale.
+
+```json
+{"id":1,"type":"play"}
+{"id":2,"type":"seek","seconds":42}
+{"id":3,"type":"subtitle","trackId":"english"}
+{"id":4,"type":"quality","renditionId":null}
+```
+
+Other payloads: volume `value` (0–1), audio `trackId`, lowDelay `enabled`;
+pause, pip and fullscreen have no extra fields. Quality null restores auto ABR;
+subtitle null disables captions. Each command id is consumed once per view.
+
+Events are `snapshot` with a `snapshot` object, `error` with a `failure` object,
+and `observation` with `sessionId` and a typed `observation` object. Errors use
+network/source/decoder/unsupported/action classes. Snapshot fields are declared
+in `model.ts`; duration and metrics are null when unobservable. `recovering`
+is visible until metadata is accepted; actual progress is only `playing`.
+The adapter must send observations to the server and handle generation conflicts;
+the engine itself holds no bearer credential. Protocol does not yet describe a
+track-specific replacement source; native audioTracks can select an existing
+browser track, while other audio changes require a newly negotiated server plan.
+
+Build with `bun run player:build` in client before Exact dev commands. The normal
+`bun run build` includes that step. Commit the generated modules/web/index.js
+alongside engine edits so Exact's stock web command can consume it immediately.
+Native HLS manages its own quality and throughput; manual quality there emits an
+explicit unsupported action. Same-source seek on MSE rebuilds the pipeline,
+retains seek generation, and does not claim a seamless transition.

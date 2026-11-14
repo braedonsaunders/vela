@@ -9,6 +9,7 @@ export class SessionController {
   changeSeek() { this.supersede(); this.seek++; return this.token(); }
   token(): Generation { return { sessionId: this.sessionId, source: this.source, seek: this.seek, signal: this.abort.signal }; }
   current(t: Generation) { return !t.signal.aborted && t.sessionId === this.sessionId && t.source === this.source && t.seek === this.seek; }
+  cancel() { this.supersede(); }
   stop() { this.supersede(); this.sessionId = ''; this.source++; }
 }
 export function cancelled(signal: AbortSignal) { if (signal.aborted) throw new DOMException('Superseded playback work', 'AbortError'); }

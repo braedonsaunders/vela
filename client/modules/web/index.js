@@ -32,6 +32,9 @@ class SessionController {
   current(t) {
     return !t.signal.aborted && t.sessionId === this.sessionId && t.source === this.source && t.seek === this.seek;
   }
+  cancel() {
+    this.supersede();
+  }
   stop() {
     this.supersede();
     this.sessionId = "";
@@ -256,6 +259,9 @@ class SegmentPipeline {
           chunks.push(value);
           progress?.(size, performance.now() - started);
         }
+      } catch (error) {
+        await reader.cancel().catch(() => {});
+        throw error;
       } finally {
         reader.releaseLock();
       }
@@ -365,6 +371,13 @@ class SegmentPipeline {
         const candidate = await this.playlist(choice, signal);
         const compatible = candidate.segments.find((s) => s.sequence === sequence);
         if (compatible) {
+          const anchor = candidate.segments.find((s) => list.segments.some((old) => old.sequence === s.sequence));
+          if (!anchor)
+            throw new PlaybackFault("Rendition lost timeline overlap", "source");
+          const offset = list.segments.find((s) => s.sequence === anchor.sequence).start - anchor.start;
+          candidate.segments.forEach((s) => {
+            s.start += offset;
+          });
           rendition = choice;
           list = candidate;
           this.current = choice;
@@ -654,6 +667,9 @@ class PlaybackEngine {
     });
   }
   fail(failure) {
+    this.controller.cancel();
+    this.pipeline?.dispose();
+    this.video.pause();
     this.failure = failure;
     this.status = "failed";
     this.emit({ type: "error", failure });
@@ -745,7 +761,7 @@ class PlaybackEngine {
             throw new Error("Seek outside media timeline");
           this.controller.changeSeek();
           if (this.backend === "mse" && this.source)
-            await this.activate(this.source, command.seconds);
+            await this.activate(this.source, command.seconds, false, true);
           else
             this.video.currentTime = command.seconds;
           break;

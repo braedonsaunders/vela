@@ -55,7 +55,7 @@ export class SegmentPipeline {
           if (size > 64 * 1024 * 1024) throw new PlaybackFault('Segment exceeds 64 MiB budget', 'source');
           chunks.push(value); progress?.(size, performance.now() - started);
         }
-      } finally { reader.releaseLock(); }
+      } catch (error) { await reader.cancel().catch(() => {}); throw error; } finally { reader.releaseLock(); }
     }
     cancelled(signal);
     const bytes = new Uint8Array(size); let at = 0;
@@ -133,7 +133,12 @@ export class SegmentPipeline {
         const candidate = await this.playlist(choice, signal);
         const compatible = candidate.segments.find(s => s.sequence === sequence);
         // Plans promise aligned sequences; reject playlists lacking the boundary.
-        if (compatible) { rendition = choice; list = candidate; this.current = choice; this.onRendition(choice); init = ''; }
+        if (compatible) {
+          const anchor = candidate.segments.find(s => list.segments.some(old => old.sequence === s.sequence));
+          if (!anchor) throw new PlaybackFault('Rendition lost timeline overlap', 'source');
+          const offset = list.segments.find(s => s.sequence === anchor.sequence)!.start - anchor.start;
+          candidate.segments.forEach(s => { s.start += offset; });
+          rendition = choice; list = candidate; this.current = choice; this.onRendition(choice); init = ''; }
       }
       next = list.segments.find(s => s.sequence === sequence);
       if (!next) {

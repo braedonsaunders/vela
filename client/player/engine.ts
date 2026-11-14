@@ -104,7 +104,7 @@ export class PlaybackEngine {
       if (this.video.readyState >= 1) done(); else if (token.signal.aborted) abort();
     });
   }
-  private fail(failure: Failure) { this.failure = failure; this.status = 'failed'; this.emit({ type: 'error', failure }); this.publish(); }
+  private fail(failure: Failure) { this.controller.cancel(); this.pipeline?.dispose(); this.video.pause(); this.failure = failure; this.status = 'failed'; this.emit({ type: 'error', failure }); this.publish(); }
   private async recover(error: unknown, token: Generation) {
     if (!this.controller.current(token) || this.recovering) return;
     this.recovering = true;
@@ -153,7 +153,7 @@ export class PlaybackEngine {
         case 'seek': {
           if (!Number.isFinite(command.seconds) || command.seconds < 0 || Number.isFinite(this.video.duration) && command.seconds > this.video.duration) throw new Error('Seek outside media timeline');
           this.controller.changeSeek();
-          if (this.backend === 'mse' && this.source) await this.activate(this.source, command.seconds);
+          if (this.backend === 'mse' && this.source) await this.activate(this.source, command.seconds, false, true);
           else this.video.currentTime = command.seconds;
           break;
         }
