@@ -607,7 +607,11 @@ it requires coordinator clearance.
 ### Consolidated Ether request
 
 1. For MSE-capable Vela clients, select the existing fMP4 HLS output instead of
-   forcing TS; return every actual rendition in `PlaybackPath.qualities` with
+   forcing TS. Accept `client.mse` independently of native `client.hls` in the
+   DirectStream/profile/transport gates (`playback.go:112,145,202`); Vela's probe
+   intentionally distinguishes native HLS from MSE. Otherwise a Firefox client
+   with MSE but no native HLS is rejected before it can use this pipeline.
+   Return every actual rendition in `PlaybackPath.qualities` with
    scoped media-playlist URL, bitrate, dimensions and exact encoded RFC 6381
    video/audio codecs. Preserve native HLS fallback. Supply sanitized real master
    and variant fixtures proving `EXT-X-MAP`, independent aligned boundaries,
