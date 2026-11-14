@@ -135,7 +135,7 @@ shape CollectionModel
 
 fn cardName(card: Card): string = t("ui.openTitleYearProgress", title=card.name, year=(card.year > 0 ? t("ui.year", year=card.yearLabel) : ""), progress=(card.played ? t("ui.watched") : card.progressSeconds > 0 and card.durationSeconds > 0 ? t("ui.progressComplete", progress=card.progressLabel) : ""))
 
-fn skinLabel(id: string): string = (id == "mochi" ? t("mochi.name") : id == "cinematic" ? t("ui.cinematic") : id == "index" or id == "editorial" ? t("ui.index") : id == "example" ? t("example.name") : id == "jellytwin" ? t("jellytwin.name") : id)
+fn skinLabel(id: string): string = (id == "mochi" ? t("mochi.name") : id == "cinematic" ? t("ui.cinematic") : id == "index" or id == "editorial" ? t("ui.index") : id == "example" ? t("example.name") : id == "jellytwin" ? t("jellytwin.name") : id == "marquee" ? t("marquee.name") : id)
 
 shape LibraryOption
   id: string
