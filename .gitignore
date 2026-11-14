@@ -1,0 +1,6 @@
+vendor/
+.tools/
+node_modules/
+.exact/
+target/
+.DS_Store
