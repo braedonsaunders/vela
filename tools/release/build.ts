@@ -9,10 +9,6 @@ const releases = join(homedir(), '.scratch/tmp/vela/release');
 const pkg = await Bun.file(join(root, 'client/package.json')).json();
 const version = String(pkg.version ?? (await readFile(join(import.meta.dir, 'VERSION'), 'utf8')).trim());
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) throw new Error('Release version must be a semantic version');
-const apiOrigin = process.env.API_BASE_URL;
-if (!apiOrigin) throw new Error('API_BASE_URL must be explicit until pinned Exact supports runtime same-origin grants; refusing a hidden development-server binding');
-const parsedOrigin = new URL(apiOrigin);
-if (parsedOrigin.origin !== apiOrigin || !['https:', 'http:'].includes(parsedOrigin.protocol)) throw new Error('API_BASE_URL must be an HTTP(S) origin without credentials, path or query');
 const exactRevision = (await readFile(join(root, 'EXACT_REVISION'), 'utf8')).trim();
 const digest = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 async function run(cmd: string[], cwd = root, env: Record<string, string | undefined> = process.env): Promise<string> {
@@ -45,18 +41,18 @@ try {
   const client = join(work, 'client');
   const manifestPath = join(client, 'app.json');
   const app = JSON.parse(await readFile(manifestPath, 'utf8'));
-  app.start_url = '/vela/';
+  app.start_url = '/vela';
   await writeFile(manifestPath, JSON.stringify(app, null, 2) + '\n');
   const contractPath = join(client, 'app.contract');
   const contract = await readFile(contractPath, 'utf8');
   let routeCount = 0;
   const routed = contract.replace(/^(\s+\w+ )"(\/[^"\n]*)"\s*$/gm, (line, prefix, path) => {
     // Route declarations are the only bare indented identifier + quoted path lines.
-    routeCount++; return `${prefix}"/vela${path}"`;
+    routeCount++; return `${prefix}"${path === "/" ? "/vela" : "/vela" + path}"`;
   });
   if (!routeCount) throw new Error('No route declarations found to mount under /vela/');
   await writeFile(contractPath, routed);
-  const env = { ...process.env, EXACT: join(root, 'vendor/exact'), EXACT2: join(root, 'vendor/exact'), VELA_MOCK: '0', VELA_BUILD_VERSION: version, EXACT_VERSION: version };
+  const env = { ...process.env, EXACT: join(root, 'vendor/exact'), EXACT2: join(root, 'vendor/exact'), API_BASE_URL: '', VELA_MOCK: '0', VELA_BUILD_VERSION: version, EXACT_VERSION: version };
   // --out selects Exact's production target (minified, no agent overlay).
   console.log(await run([process.execPath, 'player/build.ts'], client, env));
   const dist = join(client, 'dist');
@@ -71,7 +67,7 @@ try {
   }
   const pwaPath = join(dist, 'manifest.json');
   const pwa = JSON.parse(await readFile(pwaPath, 'utf8'));
-  pwa.start_url = '/vela/'; pwa.scope = '/vela/';
+  pwa.start_url = '/vela'; pwa.scope = '/vela';
   await writeFile(pwaPath, JSON.stringify(pwa, null, 2) + '\n');
   // Build metadata is host-local and is not an installer/runtime input.
   await rm(join(dist, '.exact-build.json'), { force: true });
@@ -89,7 +85,7 @@ try {
   const archive = join(work, archiveName);
   await run(['tar', '--format=ustar', '-czf', archive, '-C', dist, '.']);
   const archiveBytes = await readFile(archive), archiveSha256 = digest(archiveBytes);
-  const manifest = { schemaVersion: 1, version, protocolVersions: [0], exactRevision, buildTime: new Date().toISOString(), sourceRevision, sourceDirty, apiOrigin, basePath: '/vela/', archive: { file: archiveName, bytes: archiveBytes.length, sha256: archiveSha256 }, files: cards };
+  const manifest = { schemaVersion: 1, version, protocolVersions: [0], exactRevision, buildTime: new Date().toISOString(), sourceRevision, sourceDirty, apiOrigin: 'same-origin', basePath: '/vela/', archive: { file: archiveName, bytes: archiveBytes.length, sha256: archiveSha256 }, files: cards };
   const manifestBytes = JSON.stringify(manifest, null, 2) + '\n';
   await copyFile(archive, join(releases, archiveName));
   await writeFile(join(releases, manifestName), manifestBytes);

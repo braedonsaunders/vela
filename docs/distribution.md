@@ -6,7 +6,7 @@ the production deployment. Nothing in the release tool publishes or uploads.
 
 ## Local packaging
 
-Run `source tools/env.sh` then `API_BASE_URL=https://your-ether.example bun tools/release/build.ts` from this repository.
+Run `source tools/env.sh` then `bun tools/release/build.ts` from this repository.
 Version is `client/package.json`'s version when present, otherwise
 `tools/release/VERSION`. Increment it for each release; existing outputs are never
 overwritten. The checked-out Exact revision must match `EXACT_REVISION`.
@@ -16,12 +16,12 @@ Output under `~/.scratch/tmp/vela/release/`:
 - `vela-<version>.tar.gz`: `index.html` and the complete static tree at archive root.
 - `vela-<version>.manifest.json`: schema version 1, client version, supported wire
   protocol versions, Exact revision, UTC build time, source commit and dirty flag,
-  base path and current API-origin binding, archive filename/size/SHA-256, and each static file's path/size/SHA-256.
+  base path and same-origin API policy, archive filename/size/SHA-256, and each static file's path/size/SHA-256.
 - `.sha256` sidecars for both files, using ordinary sha256sum text format.
 
 Builds use a temporary source snapshot inside that scratch directory. Only staged
 route declarations are prefixed with `/vela`; staged HTML base URLs and the PWA
-start URL/scope are `/vela/`. The packager runs the player bundle and Exact's
+start URL is `/vela` and scope is `/vela` (which includes the canonical home URL). The packager runs the player bundle and Exact's
 production `web-build --out` with prerendering disabled: sign-in and personalized
 content are rendered at runtime. No viewer token, demo session, mock artwork or
 mock media is included. Build intermediates are deleted when the command exits.
@@ -61,7 +61,7 @@ The proposed installer layout is:
 This describes what the Ether installer should implement; the Vela packager does
 not modify Ether's data directory. Install new versions side by side, then switch
 `current` atomically. Keep active media/API sessions independent of this switch.
-Redirect `/vela` to `/vela/`. Serve static files from `current`, including correct
+Redirect `/vela/` to `/vela` with status 308, preserving query; browsers retain the fragment. The console handoff targets `/vela#code=...`. Serve static files from `current`, including correct
 JavaScript, CSS, JSON and WASM MIME types. For declared client routes such as
 `/vela/title/:id`, `/vela/watch/:id` and `/vela/collection/:id`, return the release's
 index.html. Use its routes.json to distinguish routes from missing static assets;
@@ -95,16 +95,12 @@ The installer must retain a known working release until the replacement has been
 opened successfully. Viewer credentials remain in the shared client identity
 store; changing static files must not create a different Ether viewer/device.
 
-## Current runtime-origin constraint
+## Runtime origin
 
-Pinned Exact currently bakes literal API network grants into the app's data module.
-A rewritten HTML base URL cannot relocate those grants. The release archive is
-portable only after the runtime-origin work supplies a supported same-origin
-transport/admission boundary. The packager must not widen grants to all HTTPS
-origins or silently call a build-time development server. This is a release blocker,
-not an installer setting or a completed production feature.
-
-Until the runtime-origin blocker is resolved, API_BASE_URL is mandatory and the
-manifest records apiOrigin. Such an artifact is bound to that one Ether origin
-and must not be published as a portable build. Omitting the setting fails before
-starting a build; there is no implicit localhost release default.
+Release builds clear API_BASE_URL and VELA_MOCK. The data module takes the page's
+HTTP(S) origin once and pins API, event and media requests to it; dev builds may
+still choose an explicit origin. Exact's baked admission ceiling contains HTTP(S)
+scheme grants, while Vela enforces the narrower same-origin runtime policy. This
+is an application policy boundary, not an Exact native `self` grant. Artwork and
+media URLs must satisfy that boundary and redirects must not escape it. No
+installer rewriting, instance hostname or viewer token belongs in the archive.
