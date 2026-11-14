@@ -25,11 +25,37 @@ export function transformUpstreamAudio(path: string, source: string): string | n
       '            ? velaTrackConfiguration(metadata, routeCodec) : packageCodecPrivate,\n        routeCodec,');
     return source.slice(0, begin) + modified + source.slice(end);
   }
+  if (name.endsWith('/audio/CustomAudioCodec.ts')) {
+    return replaceOnce(source, 'export const CUSTOM_PACKAGE_AUDIO_CODECS = [',
+      "export const CUSTOM_PACKAGE_AUDIO_CODECS = [\n    'alac', 'mp1', 'mp2',");
+  }
+  if (name.endsWith('/capability/CustomPlaybackEligibility.ts')) {
+    source = replaceOnce(source, 'const AUDIO_CODEC_ALIASES = new Map<string, CustomAudioCodec>([',
+      "const AUDIO_CODEC_ALIASES = new Map<string, CustomAudioCodec>([\n    [ 'ALAC', 'alac' ], [ 'MP1', 'mp1' ], [ 'MP2', 'mp2' ],");
+    source = replaceOnce(source, "if (capabilities.audio[codec].status === 'supported') {",
+      "if (capabilities.audio[codec]?.status === 'supported') {");
+    source = replaceOnce(source, "if (capabilities.audio[codec].status !== 'supported') {",
+      "if (capabilities.audio[codec]?.status !== 'supported') {");
+    source = replaceOnce(source,
+      'const decoderPackage = audioDecoders.find((candidate: AudioDecoderPackage): boolean => candidate.manifest.codecs.includes(codec));',
+      "const decoderPackage = audioDecoders.find((candidate: AudioDecoderPackage): boolean => candidate.manifest.codecs.includes(codec) || (candidate.id === 'vela-audio' && candidate.manifest.codecs.includes(codec.replaceAll('_', '-'))));");
+    return replaceOnce(source, 'return { codec, source: { manifest: decoderPackage.manifest, memory: decoderPackage.memory, module: decoderPackage.module } };',
+      "return { codec: decoderPackage.id === 'vela-audio' ? codec.replaceAll('_', '-') : codec, source: { manifest: decoderPackage.manifest, memory: decoderPackage.memory, module: decoderPackage.module } };");
+  }
+  if (name.endsWith('/capability/CustomContainerCodecSupport.ts')) {
+    source = replaceOnce(source, 'const CUSTOM_ISO_BASE_MEDIA_AUDIO_CODECS: readonly CustomAudioCodec[] = Object.freeze([',
+      "const CUSTOM_ISO_BASE_MEDIA_AUDIO_CODECS: readonly CustomAudioCodec[] = Object.freeze([\n    'alac',");
+    return replaceOnce(source, 'const CUSTOM_MATROSKA_AUDIO_CODECS: readonly CustomAudioCodec[] = Object.freeze([',
+      "const CUSTOM_MATROSKA_AUDIO_CODECS: readonly CustomAudioCodec[] = Object.freeze([\n    'alac', 'mp1', 'mp2',");
+  }
   if (name.endsWith('/audio/CustomAudioOutputPolicy.ts')) {
     const marker = 'export function isSupportedCustomAudioInputLayout(';
     const at = source.indexOf(marker);
     if (at < 0) throw new Error('Pinned input policy changed');
-    const before = source.slice(0, at), body = source.slice(at);
+    source = replaceOnce(source, 'export function getSupportedCustomAudioInputChannelCounts(codec: CustomAudioCodec): readonly number[] {',
+      "export function getSupportedCustomAudioInputChannelCounts(codec: CustomAudioCodec): readonly number[] {\n    if (codec === 'alac' || codec === 'mp1' || codec === 'mp2') return [1, 2, 3, 5, 6, 7, 8];");
+    const position = source.indexOf(marker);
+    const before = source.slice(0, position), body = source.slice(position);
     return before + replaceOnce(body,
       "    if (isCustomMediabunnyPCMAudioCodec(codec) || isMediabunnyPCMDecoderCodec(codec)) {",
       `    if (${JSON.stringify(codecs.map(([codec]) => codec.replaceAll('_', '-')))}.includes(codec)) {\n` +
@@ -43,6 +69,8 @@ export function transformUpstreamAudio(path: string, source: string): string | n
   }
   if (name.endsWith('/isobmff/isobmff-demuxer.ts')) {
     // Preserve the ALAC full-box atom without claiming it is a WebCodecs codec.
+    source = replaceOnce(source, "} else if (codecName === 'flac') {",
+      "} else if (codecName === 'alac') {\n                            // Vela owns this codec through its separately loaded decoder package.\n                        } else if (codecName === 'flac') {");
     return replaceOnce(source, "\t\t\tcase 'dOps': { // Used for Opus audio",
       "\t\t\tcase 'alac': {\n" +
       "\t\t\t\tconst track = this.currentTrack;\n" +

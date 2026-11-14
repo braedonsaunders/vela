@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 /** Only synthetic files, reached after the ordinary session/media-token check. */
 export async function serveAudioFixture(req: Request, resource: string): Promise<Response> {
-  if (!/^(?:(?:truehd-5\.1|dts-5\.1|eac3-5\.1|ac3-5\.1|flac-7\.1|alac-5\.1|pcm-7\.1)\.mkv|(?:alac|aac)-stereo\.m4a|(?:vorbis|opus)-stereo\.ogg|mp2-stereo\.mka|wma-stereo\.asf|pcm-f64-stereo\.wav)$/.test(resource))
+  if (!/^(?:(?:truehd-bed-7\.1|truehd-5\.1|dts-5\.1|eac3-5\.1|ac3-5\.1|flac-7\.1|alac-5\.1|pcm-7\.1)\.mkv|(?:alac|aac)-stereo\.m4a|(?:vorbis|opus)-stereo\.ogg|mp2-stereo\.mka|wma-stereo\.asf|pcm-f64-stereo\.wav)$/.test(resource))
     return new Response('Not found', { status: 404 });
   const file = Bun.file(join(homedir(), '.scratch/tmp/vela/media-audio', resource));
   if (!await file.exists()) return Response.json({ error: 'audio_media_not_generated',
