@@ -6,3 +6,4 @@ node_modules/
 target/
 .DS_Store
 client/modules/web/universal/
+.worktrees/
