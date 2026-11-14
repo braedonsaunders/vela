@@ -7,6 +7,10 @@ shape Card
   facts: string
   year: number
   rating: string
+  seasonId: string
+  seasonNumber: number
+  episodeNumber: number
+  played: bool
   progressSeconds: number
   durationSeconds: number
   genres: string[]
@@ -27,6 +31,9 @@ shape HomeModel
   defaultSkinId: string
   skins: string[]
   hero: Card[]
+  trailerReady: bool
+  trailerUrl: string
+  trailerExpiresAt: number
   rows: FeedRow[]
   liveAvailable: bool
   aiAvailable: bool
@@ -54,6 +61,7 @@ shape DetailModel
   episodes: Card[]
   extras: ExtraModel[]
   cast: string[]
+  crew: string[]
   mediaFacts: string[]
   related: FeedRow[]
 
@@ -85,3 +93,5 @@ shape QuickModel
 shape CollectionModel
   name: string
   items: Card[]
+
+fn cardName(card: Card): string = `Open ${card.name}${card.year > 0 ? ", " + card.year.toString() : ""}${card.played ? ", watched" : card.progressSeconds > 0 and card.durationSeconds > 0 ? ", " + floor(min(100, card.progressSeconds / card.durationSeconds * 100)).toString() + " percent complete" : ""}`

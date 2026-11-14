@@ -16,7 +16,7 @@ optional artwork, metadata and capabilities to these presentation records.
 | Row | `row:FeedRow`, `small`, `still`, `selectTitle`, `observe` |
 | TitleCard | `card:Card`, `small`, `still`, `selectTitle`, `observe` |
 | Detail | `model:DetailModel`, `small`, `still`, `play(id)`, `playExtra(id)`, `selectTitle`, `observe` |
-| PlayerChrome | `model:PlayerView`, `title:string`, `visible:bool`, `small:bool`, `still:bool`, `serverError:string`, `command(kind,value)`, `seek(seconds)`, `editing(bool)`, `close()`; presentation-only cinematic controls over engine observations and server-authorized seeks/path changes |
+| PlayerChrome | `model:PlayerView`, `title:string`, `visible:bool`, `small:bool`, `still:bool`, `serverError:string`, `busy:bool`, `command(kind,value)`, `seek(seconds)`, `editing(bool)`, `close()`; presentation-only cinematic controls over engine observations and server-authorized seeks/path changes |
 | Guide | `model:GuideModel`, `small:bool`, `watch(channelId)`, `previous()`, `next()`; channels retain server order; programmes are ordered by start time, with window-relative positions and the current-time position. |
 
 Action props are declared `action` in Exact; arguments above document their inferred
@@ -45,8 +45,7 @@ The root retains `stack(nav)` entries and uses Exact modal navigation for detail
 Skins must preserve focusable semantic buttons/links, accessible names, headings and
 search input. Keep mobile layouts usable under a keyboard; use `small` to recompose,
 not scale. `still` means reduced motion; all nonessential motion must be disabled.
-No hero trailer starts without a prepared and ready playback hook. The initial
-cinematic skin intentionally renders immediate artwork only.
+Hero artwork always appears immediately. A preview is mounted only for a server-confirmed cached, unexpired playable grant; without that grant it stays artwork-only.
 
 Colors are Tamber tokens in `client/app.tamber`. A skin may add its own namespaced
 tokens and choose entirely different layout, typography and geometry. Asset access
@@ -107,3 +106,15 @@ resolution/HDR/audio metadata produces no badge. Related rows remain server-orde
 Related recommendations load independently through uiRelated(id):FeedRow[]. The
 foundation merges only the current answer into DetailModel.related; loading or failed
 recommendations never delay title metadata, capabilities or playback actions.
+
+Hero preview fields are trailerReady:bool, trailerUrl:string and trailerExpiresAt:number
+(Unix milliseconds). The native vela-preview view cross-fades only on actual playing,
+removes its source when inactive, offscreen, Save-Data or reduced motion, and stops at
+grant expiry. It creates no playback session or synthetic viewing receipt. An autoplay
+refusal leaves the artwork visible. Search removes the preview surface immediately.
+
+Cards expose played:bool, seasonId:string, seasonNumber:number and episodeNumber:number.
+Both skins use shared cardName() labels including title, year and watched progress.
+Cinematic show details select distinct season IDs, render episode progress and offer
+the first unfinished episode in the server's episode order. Crew, cast, verified media
+facts, extras and related rows are omitted when absent rather than filled with samples.

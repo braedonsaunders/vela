@@ -1,4 +1,4 @@
-use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, cardName from "../../foundation/models.contract"
 
 fn detailPresentation(width: number): string = (width < 900 ? "fullscreen" : "")
 fn detailSplit(width: number): string = (width < 900 ? "none" : "360")
@@ -18,7 +18,7 @@ component Navigation
     library: action
     small: bool
   view
-    row flex-wrap="wrap" gap=12 align-items="center" padding=(small ? 12 : 20) background-color="#e3dfd3"
+    row role="navigation" aria-label="Main navigation" flex-wrap="wrap" gap=12 align-items="center" padding=(small ? 12 : 20) background-color="#e3dfd3"
       text "VELA / INDEX" font-size=16 font-weight=700
       button press=home background-color="transparent" color="#22221e" border="none" padding=4
         text "Home"
@@ -88,7 +88,7 @@ component TitleCard
     observe: action
   view
     row intersect=observe(card.receipt) border-bottom="1px solid #bcb8ae" align-items="center" gap=12 padding="10px 0px"
-      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` flex=1 min-width=0 padding=4 border="none" background-color="transparent" color="#22221e" text-align="left"
+      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=cardName(card) testId=`title-${card.id}` flex=1 min-width=0 padding=4 border="none" background-color="transparent" color="#22221e" text-align="left"
         text card.name font-size=16 font-weight=600
       if not small
         text (card.kind == "movie" ? "Film" : card.kind == "show" ? "Series" : card.kind == "episode" ? "Episode" : card.kind == "season" ? "Season" : "Collection") width=80 font-size=12 color="#55554d"
@@ -129,7 +129,7 @@ component Home
           for hero in model.hero key=hero.id
             column gap=8 padding="16px 0px" intersect=observe(hero.receipt)
               text "FEATURED" font-size=11 letter-spacing="2px"
-              button press=selectTitle(hero.id, hero.kind, hero.receipt) background-color="transparent" color="#22221e" border="none" text-align="left" padding=0
+              button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) background-color="transparent" color="#22221e" border="none" text-align="left" padding=0
                 text hero.name font-size=26 font-weight=700
               text hero.facts font-size=12
               text hero.summary font-size=14 line-clamp=2
@@ -153,6 +153,7 @@ component SearchSurface
     observe: action
   view
     column gap=22 padding="0px 5% 40px"
+      text `Results for “${query}”` role="heading" aria-level=1 font-size=24
       if error
         text "Search is unavailable. Try another query." role="status" color="#55554d"
       else
@@ -212,6 +213,10 @@ component Detail
         column padding="0px 7%" gap=12
           text "Featuring" role="heading" aria-level=2 font-size=24
           text model.cast.join(" · ") color="#55554d" line-height=1.6
+      if model.crew.length > 0
+        column padding="0px 7%" gap=12
+          text "Behind the story" role="heading" aria-level=2 font-size=24
+          text model.crew.join(" · ") line-height=1.6
       if model.related.length > 0
         for related in model.related key=related.id
           Row(row=related, small=small, still=still, selectTitle=selectTitle, observe=observe)

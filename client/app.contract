@@ -26,7 +26,7 @@ component Client
         if e.name == "home"
           column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width) : "none") navigationScroll="home-scroll" position="absolute" inset=0
             Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins, chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=home.liveAvailable, canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
-              scroll id="home-scroll" flex=1 min-height=0
+              scroll id="home-scroll" role="region" aria-label="Browse and search" flex=1 min-height=0
                 if failed(auth)
                   text "Your server could not be reached. Reopen Vela when the connection is restored." padding=32 role="status"
                 else
@@ -63,9 +63,9 @@ component Client
         if e.name == "title"
           column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=skinDetailPresentation(activeSkin, viewport.width) navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 box-sizing="border-box" padding=(indexSkin or small ? "0px" : "5vh 5vw") background-color=(indexSkin ? pageColor : "#000000bf") color=inkColor
             column position="relative" flex=1 min-height=0 overflow="hidden" border-radius=(indexSkin or small ? 0 : 24) background-color=pageColor
-              button id="back" press=close aria-label="Close title" testId="detail-close" position="absolute" top=18 right=20 z-index=10 width=44 height=44 border="1px solid var(--surface.line)" border-radius=24 padding=12 background-color="surface.glass" color="ink.primary"
+              button id="back" press=close aria-label="Close title" testId="detail-close" position="absolute" top=18 right=20 z-index=10 box-sizing="border-box" width=44 height=44 border="1px solid var(--surface.line)" border-radius=22 padding=12 background-color="surface.glass" color="ink.primary"
                 image "symbol:close"
-              scroll id=`detail-scroll-${e.id}` flex=1 min-height=0
+              scroll id=`detail-scroll-${e.id}` role="region" aria-label="Title details" flex=1 min-height=0
                 if failed(detail)
                   text "This title couldn't be opened. It may no longer be available." padding=32 role="status"
                 else
@@ -100,4 +100,4 @@ component Client
                 if e.name == "liveWatch"
                   column position="absolute" top=(small ? 88 : 16) right=(small ? 12 : 16) max-width=(small ? "calc(100% - 24px)" : "none")
                     LiveControls(lowDelay=lowDelay, reconnecting=(liveView.sessionId == playback.sessionId and liveView.reconnecting), delivery=(liveView.sessionId == playback.sessionId ? liveView.delivery : "unknown"), drift=(liveView.sessionId == playback.sessionId ? liveView.drift : -1), canCatchUp=(liveView.sessionId == playback.sessionId and liveView.canCatchUp), toggleLowDelay=toggleLowDelay, catchUp=catchUpLive)
-                PlayerChrome(model=watchModel, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : "Live television") : watchTitle), visible=(not watchHidden or not watchModel.playing or watchEditing), small=small, still=still, serverError=watchReply.error, command=watchControl, seek=watchSeek, editing=editWatch, close=close)
+                PlayerChrome(model=watchModel, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : "Live television") : watchTitle), busy=pending(watchAuthorized), visible=(not watchHidden or not watchModel.playing or watchEditing), small=small, still=still, serverError=watchReply.error, command=watchControl, seek=watchSeek, editing=editWatch, close=close)

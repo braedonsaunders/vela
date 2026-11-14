@@ -115,7 +115,7 @@ members Client
   action cancelCode
     send quickCancelled = cancelQuick(quickSecret, time.epochAtZero)
     quickSecret = ""
-  resource home = uiBootstrap() when auth.authenticated as shape HomeModel
+  resource home = uiBootstrap() with time.epochAtZero + performanceNow() when auth.authenticated as shape HomeModel
   resource results = uiSearch(query, generation, time.epochAtZero) when auth.authenticated and query.trim() != "" as shape SearchModel
   resource descriptive = uiDescriptive(query, generation, time.epochAtZero) when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel
   resource ai = uiAI(query, generation, time.epochAtZero) when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel

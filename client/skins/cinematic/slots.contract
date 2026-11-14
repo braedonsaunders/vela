@@ -1,4 +1,4 @@
-use Card, FeedRow, HomeModel, SearchModel, DetailModel, QuickModel, Viewport from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, QuickModel, Viewport, cardName from "../../foundation/models.contract"
 
 keyframes arrive
   from opacity=0 translate="0px 10px"
@@ -20,7 +20,7 @@ component Shell
   slot
   view
     column height="100%" min-height=0 background-color="surface.page" color="ink.primary" color-scheme="dark" font-family="system-ui, sans-serif"
-      row padding="20px 5%" align-items="center" gap=24
+      row role="navigation" aria-label="Main navigation" padding="20px 5%" align-items="center" gap=24
         link href="/" color="ink.primary" text-decoration="none" aria-label="Vela home"
           text "vela" font-size=30 font-weight=600 letter-spacing="-1.5px"
         if viewport.width >= 640
@@ -60,7 +60,7 @@ component TitleCard
     lifted = false
   view
     column width=(small ? 142 : 190) flex-shrink=0 gap=10 intersect=observe(card.receipt)
-      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` hover=hoverCard focus=focusCard blur=restCard position="relative" scale=(lifted and not still ? 1.035 : 1) translate=(lifted and not still ? "0px -5px" : "0px 0px") box-shadow=(lifted ? "0px 18px 38px #00000088" : "none") padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease, translate 180ms ease, box-shadow 180ms ease")
+      button press=selectTitle(card.id, card.kind, card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=hoverCard focus=focusCard blur=restCard position="relative" scale=(lifted and not still ? 1.035 : 1) translate=(lifted and not still ? "0px -5px" : "0px 0px") box-shadow=(lifted ? "0px 18px 38px #00000088" : "none") padding=0 border="none" background-color="surface.raised" color="ink.primary" border-radius=12 overflow="hidden" text-align="left" transition=(still ? "none" : "scale 180ms ease, translate 180ms ease, box-shadow 180ms ease")
         if card.poster != ""
           image card.poster alt="" width="100%" height=(small ? 206 : 274) object-fit="cover"
         else
@@ -104,6 +104,8 @@ component Home
             column position="absolute" inset=0
               if hero.backdrop != ""
                 image hero.backdrop alt="" width="100%" height="100%" object-fit="cover" opacity=0.92
+              if model.trailerReady and model.trailerUrl != "" and model.trailerExpiresAt > 0 and not still
+                vela-preview url=model.trailerUrl active=(query == "" ? "true" : "false") still=(still ? "true" : "false") expiresAt=model.trailerExpiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
               column position="absolute" inset=0 background-image="linear-gradient(0deg, #090b0e 0%, #090b0e00 65%), linear-gradient(90deg, #090b0ef0 0%, #090b0e70 45%, #090b0e10 100%)"
             column position="relative" padding="20px 7%" gap=12 max-width=700 intersect=observe(hero.receipt) animation=(still ? "none" : "arrive 500ms ease both")
               row gap=10 align-items="center"
@@ -113,7 +115,7 @@ component Home
               text hero.facts font-size=12 color="ink.secondary"
               if not small
                 text hero.summary font-size=15 color="ink.secondary" line-clamp=2 line-height=1.6
-              button press=selectTitle(hero.id, hero.kind, hero.receipt) background-color="ink.primary" color="ink.inverse" padding="12px 22px" border="none" border-radius=24 align-self="start"
+              button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) background-color="ink.primary" color="ink.inverse" padding="12px 22px" border="none" border-radius=24 align-self="start"
                 text "Explore title" font-size=13 font-weight=600
         column padding=(small ? "20px 5% 28px" : "26px 18% 38px")
           children
@@ -137,6 +139,7 @@ component SearchSurface
     observe: action
   view
     column gap=22 padding="0px 0px 40px" animation=(still ? "none" : "arrive 200ms ease both")
+      text `Results for “${query}”` role="heading" aria-level=1 font-size=24 padding="0px 5%"
       if error
         text "Search is unavailable. Try another query." role="status" color="ink.secondary"
       else
@@ -168,6 +171,10 @@ component Detail
     playExtra: action
     selectTitle: action
     observe: action
+  derive selectedSeason = match first(model.title) { case some(t) => (t.kind == "season" ? t.id : match first(model.seasons) { case some(s) => s.id, case none => "" }), case none => "" }
+  derive upNext = match first(model.episodes.filter(e => not e.played)) { case some(e) => [e], case none => [] }
+  action pickSeason(id: string)
+    selectTitle(id, "season", "")
   view
     column gap=28 padding-bottom=48 animation=(still ? "none" : "arrive 250ms ease both")
       for title in model.title key=title.id
@@ -197,10 +204,39 @@ component Detail
             for trailer in model.extras.filter(e => e.kind == "trailer" and e.ready) key=trailer.id
               button press=playExtra(trailer.id) align-self="start" border="1px solid var(--surface.line)" border-radius=28 background-color="surface.glass" color="ink.primary" padding="13px 24px"
                 text "Watch trailer"
-      if model.seasons.length > 0
-        Row(row=FeedRow(id="seasons", name="Seasons", receipt="", items=model.seasons), small=small, still=still, selectTitle=selectTitle, observe=observe)
-      if model.episodes.length > 0
-        Row(row=FeedRow(id="episodes", name="Episodes", receipt="", items=model.episodes), small=small, still=still, selectTitle=selectTitle, observe=observe)
+      if model.seasons.length > 0 or model.episodes.length > 0
+        column padding="0px 7%" gap=22
+          row align-items="center" justify-content="space-between" flex-wrap="wrap" gap=16
+            text "Episodes" role="heading" aria-level=2 font-size=28 font-weight=550
+            if model.seasons.length > 0
+              select value=selectedSeason change=pickSeason aria-label="Season" testId="season-picker" padding="12px 18px" border="1px solid var(--surface.line)" border-radius=12 background-color="surface.raised" color="ink.primary"
+                for season in model.seasons key=season.id
+                  option value=season.id
+                    text season.name
+          for episode in upNext key=episode.id
+            row align-items="center" justify-content="space-between" flex-wrap="wrap" gap=18 padding=24 border-radius=18 background-color="surface.raised"
+              column gap=6 flex=1
+                text (episode.progressSeconds > 0 ? "CONTINUE WATCHING" : "UP NEXT") color="brand.warm" font-size=10 letter-spacing="2px"
+                text episode.name role="heading" aria-level=3 font-size=24
+              button press=play(episode.id) aria-label=`${episode.progressSeconds > 0 ? "Resume" : "Play"} ${episode.name}` padding="13px 24px" border-radius=26 background-color="ink.primary" color="ink.inverse" border="none"
+                text (episode.progressSeconds > 0 ? "Resume episode" : "Play episode") font-weight=600
+          for episode in model.episodes key=episode.id
+            row gap=(small ? 14 : 24) align-items="center" padding="18px 0px" border-bottom="1px solid var(--surface.line)"
+              button press=selectTitle(episode.id, episode.kind, episode.receipt) aria-label=cardName(episode) testId=`episode-${episode.id}` padding=0 border="none" border-radius=10 overflow="hidden" background-color="surface.raised" color="ink.primary" flex-shrink=0
+                if episode.backdrop != ""
+                  image episode.backdrop alt="" width=(small ? 100 : 180) height=(small ? 66 : 102) object-fit="cover"
+                else
+                  text (episode.episodeNumber > 0 ? episode.episodeNumber.toString() : "Episode") width=(small ? 100 : 180) padding="22px 0px"
+              column flex=1 min-width=0 gap=8
+                text `${episode.episodeNumber > 0 ? episode.episodeNumber.toString() + ". " : ""}${episode.name}` role="heading" aria-level=3 font-size=(small ? 16 : 20) font-weight=550
+                text `${episode.facts}${episode.played ? " · Watched" : ""}` color="ink.secondary" font-size=12
+                if not small
+                  text episode.summary color="ink.secondary" font-size=14 line-clamp=2 line-height=1.5
+                if episode.progressSeconds > 0 and episode.durationSeconds > 0
+                  column height=3 border-radius=2 background-color="surface.line" role="progressbar" aria-label=`${episode.name} watch progress` aria-valuemin=0 aria-valuemax=episode.durationSeconds aria-valuenow=episode.progressSeconds
+                    column height=3 width=`${min(100, episode.progressSeconds / episode.durationSeconds * 100)}%` border-radius=2 background-color="brand.warm"
+              button press=play(episode.id) aria-label=`Play ${episode.name}` border="1px solid var(--surface.line)" border-radius=24 width=44 height=44 padding=10 box-sizing="border-box" background-color="surface.glass" color="ink.primary"
+                image "symbol:play-fill"
       if model.extras.length > 0
         column padding="0px 7%" gap=14
           text "Extras" role="heading" aria-level=2 font-size=24
@@ -214,6 +250,10 @@ component Detail
             row gap=12
               for person in model.cast key=person
                 text person padding="20px 24px" border-radius=12 background-color="surface.raised" color="ink.secondary" flex-shrink=0
+      if model.crew.length > 0
+        column padding="0px 7%" gap=12
+          text "Behind the story" role="heading" aria-level=2 font-size=24
+          text model.crew.join(" · ") line-height=1.6
       if model.related.length > 0
         for related in model.related key=related.id
           Row(row=related, small=small, still=still, selectTitle=selectTitle, observe=observe)
