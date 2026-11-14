@@ -16,6 +16,10 @@ export const audioSourceFiles = [
 export function canonicalAudioCodec(codec: string): string {
   const token = codec.trim().toLowerCase();
   if (token.startsWith('mp4a.40.')) return 'aac';
+  const pcm = /^pcm-([suf])(8|16|24|32|64)(be)?$/.exec(token);
+  if (pcm) return `pcm_${pcm[1]}${pcm[2]}${Number(pcm[2]) === 8 ? '' : (pcm[3] ?? 'le')}`;
+  if (token === 'ulaw') return 'pcm_mulaw';
+  if (token === 'alaw') return 'pcm_alaw';
   if (['dts', 'dtsc', 'dtsh', 'dtsl', 'dts-hd ma', 'dts_hd_ma'].includes(token)) return 'dts';
   return ({ 'a_ac3': 'ac3', 'ac-3': 'ac3', 'ec-3': 'eac3', 'e-ac-3': 'eac3',
     'a_eac3': 'eac3', 'a_truehd': 'truehd', 'a_dts': 'dts', 'a_flac': 'flac',
