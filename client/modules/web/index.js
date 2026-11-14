@@ -1,5 +1,5 @@
 // client/player/universal/qualified.ts
-var QUALIFIED_ORIGINAL_VIDEO = ["h264"];
+var QUALIFIED_ORIGINAL_VIDEO = ["h264", "hevc"];
 var QUALIFIED_ORIGINAL_AUDIO = ["aac", "ac3", "eac3", "truehd", "dts", "flac", "opus", "vorbis", "mp3", "alac", "mp2", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le", "pcm_f64le"];
 
 // client/player/universal/loader.ts

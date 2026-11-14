@@ -1337,3 +1337,37 @@ compatibility field as well yields ordinal0. Both SDR-conflict and compatible-ba
 normalization now remove that field. Remaining DV reconstruction profiles are
 explicitly unqualified and immediately take the compatible backend; DV7 is not
 silently advertised as reconstructed playback. The corrected DV8 drive follows.
+
+### HEVC original admission enabled after corrected DV8 pass
+
+The final corrected Model Citizen (2026) source was original HEVC Main10,
+3840×2160, PQ/BT.2020, DV8 compatibility1, RPU present, enhancement layer absent.
+The same pinned runtime decoded its HDR10-compatible base into the SDR renderer;
+RPU reconstruction was explicitly disabled and recorded in the snapshot.
+
+| Final DV8-base measurement | Result |
+|---|---:|
+| Broker plan (cached source resolution) |79.7ms|
+| First presented GPU frame from click |957.8ms|
+| Initial decoded / presented / dropped |86 /59 /0|
+| Authorized seek120s → first new GPU frame |1022.4ms|
+| Resumed position |121.236111s|
+| Post-seek decoded / presented / dropped |55 /31 /0|
+| Worst post-seek frame lag / late frames |16.659ms /0|
+| PCM underruns |0|
+| Observations, stop, revoke |200; ended; accepted|
+
+`client/.exact/lab-30-hevc-dv8-base.png` was visually inspected after the seek.
+The session ended, current authorization family was revoked, video/canvas counts
+were zero, and Chrome was closed. The coordinator's fresh idle check preceded
+this one retry. No further source was opened afterward. These cached-startup
+numbers are not cold-provider resolution latency or physical lipsync measurements.
+
+Original negotiation now admits H.264 and HEVC, backed by the exact per-source
+native probe and installed package fallback. **Native HLS negotiation remains
+H.264-only** so an internal handoff cannot reproduce the unqualified HEVC-copy
+HLS path from0.1.27. DV7 and other full Dolby Vision reconstruction remain outside
+admission: after actual-container inspection, only normalized compatible DV8
+HDR10-base playback proceeds; remaining DV profiles immediately use the authorized
+fallback. This qualification adds neither full RPU/FEL reconstruction, PGS/ASS,
+nor universal live TS decoding. Those remain subsequent work.
