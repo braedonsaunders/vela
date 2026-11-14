@@ -1026,6 +1026,7 @@ class PlaybackEngine {
   video;
   deliver;
   fullscreenContainer;
+  ambient;
   controller = new SessionController;
   session;
   source;
@@ -1058,20 +1059,25 @@ class PlaybackEngine {
   manualQuality = null;
   track;
   lastObservation = 0;
-  constructor(video, deliver, fullscreenContainer = video) {
+  constructor(video, deliver, fullscreenContainer = video, ambient = false) {
     this.video = video;
     this.deliver = deliver;
     this.fullscreenContainer = fullscreenContainer;
+    this.ambient = ambient;
     video.crossOrigin = "anonymous";
     video.playsInline = true;
     video.controls = false;
     video.preload = "auto";
-    try {
-      const saved = localStorage.getItem("vela.player.volume");
-      if (saved !== null && Number.isFinite(Number(saved)))
-        video.volume = Math.max(0, Math.min(1, Number(saved)));
-      video.muted = video.muted || localStorage.getItem("vela.player.muted") === "true";
-    } catch {}
+    if (ambient) {
+      video.defaultMuted = true;
+      video.muted = true;
+    } else
+      try {
+        const saved = localStorage.getItem("vela.player.volume");
+        if (saved !== null && Number.isFinite(Number(saved)))
+          video.volume = Math.max(0, Math.min(1, Number(saved)));
+        video.muted = video.muted || localStorage.getItem("vela.player.muted") === "true";
+      } catch {}
     this.timer = setInterval(() => {
       this.checkWaiting();
       this.publish();
@@ -1092,6 +1098,8 @@ class PlaybackEngine {
     return this.terminalMedia?.duration ?? (Number.isFinite(this.video.duration) ? this.nativeOrigin + this.video.duration : this.session?.duration ?? null);
   }
   saveVolume() {
+    if (this.ambient)
+      return;
     try {
       localStorage.setItem("vela.player.volume", String(this.video.volume));
       localStorage.setItem("vela.player.muted", String(this.video.muted));
@@ -1949,12 +1957,13 @@ function create(tag, element, json, event) {
     const props = JSON.parse(json);
     queueMicrotask(() => {
       if (!handle.disposed)
-        event(8, props.probe === "media" ? JSON.stringify(mediaCapabilities()) : location.origin);
+        event(8, props.probe === "media" ? JSON.stringify(mediaCapabilities()) : props.probe === "network" ? JSON.stringify({ saveData: navigator.connection?.saveData === true }) : location.origin);
     });
     return handle;
   }
   if (tag !== "vela-player")
     throw new Error(`Unknown player view: ${tag}`);
+  const ambient = JSON.parse(json).ambient === "true";
   const root = element.shadowRoot ?? element.attachShadow({ mode: "open" });
   const video = document.createElement("video");
   video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000";
@@ -1975,7 +1984,7 @@ function create(tag, element, json, event) {
         event(8, JSON.stringify({ type: "observation", sessionId: value.snapshot.sessionId, observation: report }));
       }
     }
-  }, element.parentElement ?? element);
+  }, element.parentElement ?? element, ambient);
   try {
     setProps(handle, json);
   } catch (error) {

@@ -18,10 +18,11 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   if (tag === 'vela-context') {
     const handle: ContextHandle = { context: true, disposed: false };
     const props = JSON.parse(json) as Record<string, string>;
-    queueMicrotask(() => { if (!handle.disposed) event(8, props.probe === 'media' ? JSON.stringify(mediaCapabilities()) : location.origin); });
+    queueMicrotask(() => { if (!handle.disposed) event(8, props.probe === 'media' ? JSON.stringify(mediaCapabilities()) : props.probe === 'network' ? JSON.stringify({ saveData: (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true }) : location.origin); });
     return handle;
   }
   if (tag !== 'vela-player') throw new Error(`Unknown player view: ${tag}`);
+  const ambient = (JSON.parse(json) as Record<string, string>).ambient === 'true';
   const root = element.shadowRoot ?? element.attachShadow({ mode: 'open' });
   const video = document.createElement('video'); video.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:#000';
   root.replaceChildren(video);
@@ -36,7 +37,7 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
       const report = observation(value.snapshot, ++handle.sequence);
       if (report) { handle.lastReport = now; event(8, JSON.stringify({ type: 'observation', sessionId: value.snapshot.sessionId, observation: report })); }
     }
-  }, element.parentElement ?? element);
+  }, element.parentElement ?? element, ambient);
   try { setProps(handle, json); } catch (error) { handle.engine.dispose(); video.remove(); throw error; }
   return handle;
 }

@@ -802,3 +802,26 @@ Local Chrome/mock opt-in fixture `4269ed1`, 2026-11-14 (no lab streams):
 The player browser TypeScript and shared Contract build passed. This is paired
 source readiness for the full Ether branch, not a real-server playback pass; a
 new client package must be installed before deploying pending-codec output.
+
+### Ambient live tile
+
+Set `ambient="true"` when creating a `vela-player` view. This is an instance
+option: unmount it and create a separate ordinary view for full watch. The video
+starts muted (including its defaultMuted attribute), reads no persisted volume
+or mute preference, and never writes those preferences through media events or
+commands. A normal mute command with value `"false"` unmutes this instance in
+place. Volume changes are likewise local; snapshots and observations retain the
+usual shape and truthfully report its actual audio state.
+
+The guide owns tuning, visibility and stop authorization. Destroying the native
+view releases its local media work; the guide must also obtain a broker stop
+before another stream opens. Ambient mode retains the server's initial rendition
+recommendation: choosing a lower rung could start another expensive encoder.
+`vela-context probe="network"` emits a JSON string `{saveData:boolean}` once,
+using `navigator.connection?.saveData === true`. The guide can gate session
+creation before tuning; absent browser support reports false, not a promise of
+unmetered connectivity.
+Local Chrome check: ambient started muted/defaultMuted=true, made zero preference
+reads/writes through mute and volume commands, and unmuted in place; an ordinary
+instance still loaded saved volume 0.4/muted=false. Network probe returned
+saveData=false. No session was opened; all created views and Chrome were closed.
