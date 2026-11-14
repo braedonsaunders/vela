@@ -3,6 +3,7 @@ import type * as V from '../../wire/v0/types';
 /** Server-independent operations used by Vela's data layer. */
 export interface ServerAdapter {
   capabilities(): Promise<V.ServerCapabilities>;
+  negotiate(request: V.NegotiateRequest): Promise<V.NegotiateResponse>;
   redeemWebCode(request: V.WebCodeRedeemRequest): Promise<V.Tokens>;
   signIn(request: V.SignInRequest): Promise<V.Tokens>;
   deviceGrant(request: V.DeviceGrantRequest): Promise<V.DeviceGrant>;

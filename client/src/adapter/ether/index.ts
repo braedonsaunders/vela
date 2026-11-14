@@ -81,6 +81,7 @@ export class EtherAdapter implements ServerAdapter {
     if (etag && cacheable && (!tokens || key === JSON.stringify([this.origin, tokens.viewer.id, tokens.viewer.policyRevision, this.capabilityContext, 0, path]))) this.cache.set(key, { etag, body: value });
     return value;
   }
+  negotiate(r: V.NegotiateRequest) { return this.request<V.NegotiateResponse>('POST', '/negotiate', r); }
   capabilities() { return this.request<V.ServerCapabilities>('GET', '/capabilities', undefined, false, true); }
   redeemWebCode(r: V.WebCodeRedeemRequest) { return this.request<V.Tokens>('POST', '/auth/web-code/redeem', r, false); }
   signIn(r: V.SignInRequest) { return this.request<V.Tokens>('POST', '/auth/sign-in', r, false); }

@@ -22,6 +22,17 @@ function bindOrigin(pageOrigin: string): void {
 }
 let device: Device;
 let client: ClientCapabilities;
+type MediaCapabilities = Pick<ClientCapabilities, 'containers' | 'videoCodecs' | 'audioCodecs' | 'subtitleFormats' | 'hls' | 'mse'>;
+function parseMediaCapabilities(json: string): MediaCapabilities {
+  const value = JSON.parse(json) as Record<string, unknown>;
+  const list = (name: string): string[] => {
+    const items = value?.[name];
+    if (!Array.isArray(items) || items.length > 32 || items.some(item => typeof item !== 'string' || item.length > 80)) throw new Error('Invalid media capabilities');
+    return items;
+  };
+  if (typeof value?.hls !== 'boolean' || typeof value?.mse !== 'boolean') throw new Error('Invalid media capabilities');
+  return { containers: list('containers'), videoCodecs: list('videoCodecs'), audioCodecs: list('audioCodecs'), subtitleFormats: list('subtitleFormats'), hls: value.hls, mse: value.mse };
+}
 function key(store: Parameters<Sources['uiBootstrap']>[1]): string {
   const n = Number(store.get('vela.counter') || '0') + 1;
   store.set('vela.counter', String(n));
@@ -32,15 +43,17 @@ let interactions: InteractionQueue | undefined;
 let ready: Promise<void> | undefined;
 let activeQuick = "";
 let authVersion = 0;
+let negotiation: { version: number; pending: Promise<void> } | undefined;
 let ai: { epoch: number; generation: number; query: string; job?: AISearchJob; starting?: Promise<AISearchJob> } | undefined;
 const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable' });
-function server(store: Parameters<Sources['uiBootstrap']>[1]): EtherAdapter {
+function server(store: Parameters<Sources['uiBootstrap']>[1], media?: MediaCapabilities): EtherAdapter {
   if (!API) throw new Error('Server origin is unavailable');
   if (!adapter) {
+    if (!media) throw new Error('Media capabilities are unavailable');
     let id = store.get('vela.device');
     if (!id) { id = crypto.randomUUID(); store.set('vela.device', id); }
     device = { id, name: 'Vela browser', platform: 'web', appVersion: version };
-    client = { device, protocolVersions: [0], containers: ['mp4'], videoCodecs: ['h264'], audioCodecs: ['aac'], subtitleFormats: [], hls: true, mse: true };
+    client = { device, protocolVersions: [0], ...media };
     const credentials = new SessionCredentials(store, device, () => key(store));
     adapter = new EtherAdapter(API, credentials, JSON.stringify(client));
   }
@@ -75,9 +88,9 @@ const sources: Sources = {
     if (next) lastLive = next;
     return lastLive;
   },
-  uiAuth: async ([code, _epoch, isFragment, pageOrigin], store) => {
+  uiAuth: async ([code, _epoch, isFragment, pageOrigin, mediaJSON], store) => {
     bindOrigin(pageOrigin);
-    const api = server(store);
+    const api = server(store, parseMediaCapabilities(mediaJSON));
     if (code && !store.get('vela.session')) {
       let decoded = code;
       try { if (isFragment) decoded = decodeURIComponent(code); } catch { /* Preserve malformed input for the server to reject. */ }
@@ -124,7 +137,19 @@ const sources: Sources = {
     if (activeQuick === secret) activeQuick = '';
     return { accepted: true };
   },
-  uiBootstrap: async ([at], store) => homeModel(await (await session(store)).bootstrap(), API, at),
+  uiBootstrap: async ([at], store) => {
+    const api = await session(store);
+    const version = authVersion;
+    if (!negotiation || negotiation.version !== version) {
+      const current = { version, pending: Promise.resolve() };
+      current.pending = api.negotiate({ client, idempotencyKey: key(store) }).then(() => {
+        if (authVersion !== version) throw new Error('Session changed during negotiation');
+      }).catch(error => { if (negotiation === current) negotiation = undefined; throw error; });
+      negotiation = current;
+    }
+    await negotiation.pending;
+    return homeModel(await api.bootstrap(), API, at);
+  },
   uiCollection: async ([id], store) => {
     const data = await (await session(store)).collection(id);
     return { name: data.collection.name, items: data.items.map(item => entry(item, API)) };
