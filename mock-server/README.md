@@ -111,14 +111,17 @@ live in a separate store and never touch normal sessions, watch state or receipt
 Bootstrap now supplies no eagerly-created normal-session preview; hero previews
 use this same on-demand endpoint. No media regeneration is needed.
 
-Home bootstrap starts with two rows of five entries. Its nextCursor continues
+Home bootstrap starts with two rows of twenty entries. Its nextCursor continues
 the ordered row list through GET/rows?placement=home; each row's own nextCursor
 continues only that row through GET/rows/:id. Subsequent default pages remain
-two rows/five entries (explicit limits1–100 are accepted). Cursors bind the grant,
+two rows/twenty entries (explicit limits1–100 are accepted). Cursors bind the grant,
 viewer policy, featured exclusion set and fixture snapshot, keep their original
 one-hour expiry, and reject cross-row/query/snapshot reuse with409. Receipts and
 IDs remain stable across pages; featured titles stay excluded. This deliberately
-small first page exercises both vertical and horizontal home scroll loading.
+first page exercises both vertical and horizontal home scroll loading. Additional
+fictional titles have real detail/library entries, so the continuation does not
+depend on repeated cards. Home item cursors bind snapshot/offset, not page size:
+an explicit limit20 continuation is valid even for a cursor issued at another size.
 
 The guide fixture has170 channels, six favourites,80% logos, and25% without
 listings. Programmes follow fixed channel-seeded schedules with15–120min slots,

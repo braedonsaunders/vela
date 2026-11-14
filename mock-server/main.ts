@@ -7,6 +7,7 @@ import { allTitles, channels, detail, extras, featuredSources, featuredTitles, g
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia } from './media';
 import { serveLive, liveFaults } from './live';
 import { applyCommand, createSession, events, observe, requestedInit, sessions, snapshot, type Session } from './sessions';
+import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
 
 const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
 const secret = crypto.randomUUID();
@@ -50,7 +51,7 @@ function page<T>(items: T[], url: URL, g: Grant, scope: string, defaultLimit = 5
 function homeScope() { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), rows]))}`; }
 function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
   const bound = boundRow(g, row);
-  return { ...bound, ...page(bound.items, url, g, `home-items:${row.id}:${homeScope()}`, 5) };
+  return { ...bound, ...page(bound.items, url, g, `home-items:${row.id}:${homeScope()}`, 20) };
 }
 function homeRows(g: Grant, url: URL): V.Page<V.Row> {
   const result = page(rows, url, g, `home-rows:${homeScope()}`, 2);
@@ -72,6 +73,7 @@ function currentSession(id: string, g: Grant): Session { const s = sessions.get(
 async function api(req: Request, url: URL, body: any): Promise<Response> {
   const path = url.pathname.replace(/^\/vela\/v0/, ''), method = req.method;
   if (method === 'GET' && path === '/capabilities') return cached(req, capabilities, 'public');
+  if (method === 'GET' && path === '/appearance') return cached(req, appearance(), 'public');
   if (method === 'POST' && path === '/auth/sign-in') { if (body.username !== 'demo' || body.password !== 'vela') fail('auth', 'invalid_credentials', 'Invalid sign-in'); return json(issue(body.device)); }
   if (method === 'POST' && path === '/auth/refresh') {
     const g = refresh.get(body.refreshToken); if (!g || g.revoked || g.device.id !== body.device?.id) fail('auth', 'invalid_refresh', 'Refresh invalid');
@@ -131,6 +133,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, url, g, scope) } satisfies V.LibraryContents, g.id);
   }
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
+  if (method === 'GET' && path === '/events') return serverEvents(req, () => !g.revoked && g.expires > Date.now());
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
     const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
@@ -249,6 +252,7 @@ async function dispatch(req: Request): Promise<Response> {
     if (req.method === 'POST' && url.pathname === '/__admin/live-faults') { const data = await req.json(); for (const key of Object.keys(liveFaults) as (keyof typeof liveFaults)[]) if (Number.isFinite(data[key]) && data[key] >= 0) liveFaults[key] = Math.min(60000, Math.floor(data[key])); return json(liveFaults); }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } return json(faults); }
+    if (req.method === 'POST' && url.pathname === '/__admin/appearance') return json(setAppearance(await req.json()));
     if (req.method === 'POST' && url.pathname === '/__admin/web-code') { const code = crypto.randomUUID(); webCodes.set(code, Date.now() + 60000); return json({ code, expiresAt: new Date(Date.now() + 60000).toISOString() }); }
     fail('not-found', 'endpoint_not_found', 'Admin endpoint not found');
   }
@@ -272,6 +276,8 @@ async function dispatch(req: Request): Promise<Response> {
     const width = Math.max(120, Math.min(1920, Number(url.searchParams.get('width')) || 480));
     return new Response(renderArtwork(art[1], url.searchParams.get('kind') ?? 'poster', width), { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
   }
+  const packFile = req.method === 'GET' ? await packAsset(url.pathname) : undefined;
+  if (packFile) return packFile;
   if (!url.pathname.startsWith('/vela/v0/')) fail('not-found', 'endpoint_not_found', 'Endpoint not found');
   if (req.method !== 'POST') return api(req, url, undefined);
   let raw: string, body: any; try { raw = await req.text(); if (raw.length > 262144) fail('request', 'body_too_large', 'Body exceeds 256KiB'); body = JSON.parse(raw); } catch (e) { if (e instanceof Response) throw e; fail('request', 'invalid_json', 'JSON object required'); }

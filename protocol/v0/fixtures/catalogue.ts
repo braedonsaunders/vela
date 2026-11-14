@@ -30,6 +30,13 @@ const show: Title = { id: 'show-meridian', kind: 'show', name: 'Meridian Station
 export const seasons: Title[] = [1, 2].map(n => ({ ...show, id: `season-meridian-${n}`, kind: 'season', name: `Season ${n}`, showId: show.id, seasonNumber: n }));
 export const episodes: Title[] = seasons.flatMap(s => ['Arrival', 'The Night Watch', 'Pressure Drop', 'A Distant Light', 'The Sounding', 'Home Waters'].map((name, i) => ({ ...show, id: `episode-${s.seasonNumber}-${i + 1}`, kind: 'episode', name, showId: show.id, seasonId: s.id, seasonNumber: s.seasonNumber, episodeNumber: i + 1, durationSeconds: 180, watch: { positionSeconds: i === 1 ? 68 : 0, played: i === 0, favorite: false, watchlisted: false } })));
 titles.splice(14, 1, show);
+// Fictional follow-up titles keep the twenty-card first pages genuinely pageable.
+const additionalTitles: Title[] = collections.flatMap((_, row) => Array.from({ length: 12 }, (_, n) => {
+  const base = titles[row * 15 + n]!, id = `title-${row + 1}-${n + 16}`;
+  return { ...base, id, name: `${base.name} — ${['Afterlight', 'Homecoming', 'The Crossing', 'Another Season'][n % 4]}`, watch: undefined,
+    artwork: [artwork(id), artwork(id, 'backdrop')] };
+}));
+titles.push(...additionalTitles);
 export const allTitles = [...titles, ...seasons, ...episodes];
 export const extras: Extra[] = [{ id: 'extra-observatory-preview', parentId: titles[0]!.id, kind: 'trailer', name: 'Synthetic cached preview', durationSeconds: 180, availability: 'ready' }, { id: 'extra-meridian-trailer', parentId: show.id, kind: 'trailer', name: 'Meridian Station — First Look', durationSeconds: 60, availability: 'ready' }];
 export function detail(id: string): TitleDetail | undefined {
@@ -49,7 +56,7 @@ export const featuredSources: (Pick<Hero, 'title' | 'reason' | 'action' | 'label
 ];
 export const featuredTitles = featuredSources.map(source => source.title);
 const featuredIds = new Set(featuredTitles.map(t => t.id));
-export const rows: Row[] = collections.map(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, previewOnFocus: row % 2 === 0, style: row === 3 ? 'landscape' : 'poster', items: titles.slice(row * 15, row * 15 + 15).filter(t => !featuredIds.has(t.id)).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }));
+export const rows: Row[] = collections.map(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, previewOnFocus: row % 2 === 0, style: row === 3 ? 'landscape' : 'poster', items: [...titles.slice(row * 15, row * 15 + 15), ...additionalTitles.filter(t => t.id.startsWith(`title-${row + 1}-`))].filter(t => !featuredIds.has(t.id)).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }));
 const channelNames = ['World News', 'Field & Forest', 'Cinema One', 'Classic Evenings', 'Discovery Lab', 'Coastal Living', 'Matchday', 'The Kitchen', 'Young Explorers', 'Arts & Culture', 'Night Music', 'Open Roads'];
 const programmeGenres = ['News', 'Sports', 'Movies', 'Kids', 'Documentary', 'Drama', 'Comedy', 'Music', 'Lifestyle'];
 export const channels: Channel[] = Array.from({ length: 170 }, (_, i) => ({ id: `channel-${i + 1}`, number: String(i < 150 ? 101 + i : 1980 + i - 150),
