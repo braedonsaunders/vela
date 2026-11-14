@@ -186,6 +186,10 @@ members Client
     if entry.isIntersecting and entry.intersectionRatio > 0 and token != "" and not observed.includes(token) and (top(nav).name == "home" or top(nav).name == "collection") and page.visibilityState == "visible"
       observed = observed.concat([token])
       send receipt = interaction(token, "visible", time.epochAtZero + performanceNow())
+  action observeDetail(token: string, entry: IntersectionObserverEntry)
+    if entry.isIntersecting and entry.intersectionRatio > 0 and token != "" and not observed.includes(token) and top(nav).name == "title" and page.visibilityState == "visible"
+      observed = observed.concat([token])
+      send receipt = interaction(token, "visible", time.epochAtZero + performanceNow())
   action playerMessage(json: string)
     send playerReceipt = playerEvent(json, time.epochAtZero + performanceNow())
   action playerCommand(kind: string)

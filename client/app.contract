@@ -72,7 +72,7 @@ component Client
                   if not current(detail)
                     text "Opening title…" padding=32 role="status"
                   else
-                    Detail(skin=activeSkin, model=detailSurface, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observe)
+                    Detail(skin=activeSkin, model=detailSurface, small=small, still=still, play=play, playExtra=playExtra, selectTitle=selectTitle, observe=observeDetail)
         if e.name == "collection"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor color=inkColor
             button press=close aria-label="Back" padding=16
