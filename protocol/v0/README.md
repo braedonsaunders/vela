@@ -403,3 +403,10 @@ empty-Guide catalogue or new endpoint; memberships arrive with channel pages.
 These named Guides are channel groupings, separate from `/live/guide` programme
 time windows. The mock includes provider-derived memberships and overlapping
 House picks for its first six channels.
+
+Original-video probes may additionally carry `isInterlaced`, `fieldOrder`
+(`progressive`, `tt`, `bb`, `tb`, `bt`) and `rotation` in degrees. These are actual
+probe facts, not defaults: omit unknown field order/rotation/interlace state and
+preserve explicitly known zero rotation or false interlace. Rotation is passed
+through as probed; decoder admission must use the source convention rather than
+silently guessing its sign or a missing orientation.
