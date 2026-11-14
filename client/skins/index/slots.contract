@@ -239,7 +239,3 @@ component PlayerChrome
       button press=command("fullscreen") aria-label="Fullscreen" buttonStyle="bordered"
         text "Fullscreen"
 
-component Guide
-  view
-    column padding=24
-      text "Live guide is not available." role="status" color="#55554d"
