@@ -35,16 +35,26 @@ const mac = (value: string) => createHmac('sha256', secret).update(value).digest
 function receipt(g: Grant, value: string) { const p = Buffer.from(`${g.id}|${value}`).toString('base64url'); return `${p}.${mac(p)}`; }
 function validReceipt(g: Grant, value: string) { if (typeof value !== 'string') return false; const [p, s] = value.split('.'); try { return s === mac(p) && Buffer.from(p, 'base64url').toString().startsWith(`${g.id}|`); } catch { return false; } }
 function boundRow(g: Grant, row: V.Row): V.Row { return { ...row, receiptToken: receipt(g, row.id), items: row.items.map(i => ({ ...i, receiptToken: receipt(g, i.id) })) }; }
-function page<T>(items: T[], url: URL, g: Grant, scope: string): V.Page<T> {
-  const n = Number(url.searchParams.get('limit') ?? 50); if (!Number.isInteger(n) || n < 1 || n > 100) fail('request', 'invalid_limit', 'Limit must be 1–100');
-  let offset = 0; const cursor = url.searchParams.get('cursor');
+function page<T>(items: T[], url: URL, g: Grant, scope: string, defaultLimit = 50): V.Page<T> {
+  const n = Number(url.searchParams.get('limit') ?? defaultLimit); if (!Number.isInteger(n) || n < 1 || n > 100) fail('request', 'invalid_limit', 'Limit must be 1–100');
+  let offset = 0, expires = Date.now() + 3600000; const cursor = url.searchParams.get('cursor');
   if (cursor) {
     const [p, signature] = cursor.split('.');
-    try { const c = JSON.parse(Buffer.from(p, 'base64url').toString()); if (signature !== mac(p) || c.owner !== g.id || c.scope !== scope || c.expires < Date.now()) throw 0; offset = c.offset; } catch { fail('conflict', 'cursor_expired', 'Refresh from first page'); }
+    try { const c = JSON.parse(Buffer.from(p, 'base64url').toString()); if (signature !== mac(p) || c.owner !== g.id || c.scope !== scope || !Number.isInteger(c.offset) || c.offset < 0 || c.offset > items.length || !Number.isFinite(c.expires) || c.expires <= Date.now()) throw 0; offset = c.offset; expires = c.expires; } catch { fail('conflict', 'cursor_expired', 'Refresh from first page'); }
   }
   const more = offset + n < items.length;
-  const p = Buffer.from(JSON.stringify({ owner: g.id, scope, offset: offset + n, expires: Date.now() + 3600000 })).toString('base64url');
+  const p = Buffer.from(JSON.stringify({ owner: g.id, scope, offset: offset + n, expires })).toString('base64url');
   return { items: items.slice(offset, offset + n), continuation: more ? 'more' : 'exhausted', ...(more ? { nextCursor: `${p}.${mac(p)}` } : {}) };
+}
+function homeScope() { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), rows]))}`; }
+function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
+  const bound = boundRow(g, row);
+  return { ...bound, ...page(bound.items, url, g, `home-items:${row.id}:${homeScope()}`, 5) };
+}
+function homeRows(g: Grant, url: URL): V.Page<V.Row> {
+  const result = page(rows, url, g, `home-rows:${homeScope()}`, 2);
+  const firstItems = new URL(url); firstItems.search = '';
+  return { ...result, items: result.items.map(row => homeRow(g, row, firstItems)) };
 }
 function cached(req: Request, data: unknown, scope: string): Response {
   const body = JSON.stringify(data), etag = `"${mac(scope + body)}"`;
@@ -134,7 +144,9 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (direct) trailer = { ...extra, cachedPlayback: { status: 'ready', url: direct.url, expiresAt: new Date(Math.min(g.expires, preview.expires)).toISOString() } };
     }
     const heroes = featuredTitles.map((title): V.Hero => ({ title, receiptToken: receipt(g, `hero:${title.id}`), ...(trailer?.parentId === title.id ? { trailer } : {}) }));
-    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: rows.map(r => boundRow(g, r)) } satisfies V.Bootstrap, g.id);
+    const firstPage = new URL(url); firstPage.search = '';
+    const home = homeRows(g, firstPage);
+    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}) } satisfies V.Bootstrap, g.id);
   }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';
@@ -143,7 +155,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (!detail(url.searchParams.get('titleId') ?? '')) fail('not-found', 'title_not_found', 'Detail title not found');
       return cached(req, { items: [], continuation: 'exhausted' }, g.id);
     }
-    return cached(req, page(placement === 'home' ? rows.map(r => boundRow(g, r)) : [], url, g, `rows:${placement}`), g.id);
+    return cached(req, placement === 'home' ? homeRows(g, url) : page([], url, g, `rows:${placement}`), g.id);
   }
   const collectionMatch = /^\/collections\/([^/]+)$/.exec(path);
   if (method === 'GET' && collectionMatch) {
@@ -152,7 +164,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, { collection: { id: row.id, kind: 'collection', name: row.name, artwork: [] }, ...page(boundRow(g, row).items, url, g, `collection:${row.id}`) } satisfies V.CollectionContents, g.id);
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
-  if (method === 'GET' && rowMatch) { const r = rows.find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); const p = page(boundRow(g, r).items, url, g, r.id); return cached(req, { ...boundRow(g, r), ...p }, g.id); }
+  if (method === 'GET' && rowMatch) { const r = rows.find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
   const titleMatch = /^\/titles\/([^/]+)(?:\/(children|extras|watch))?$/.exec(path);
   if (titleMatch) {
     const d = detail(titleMatch[1]); if (!d) fail('not-found', 'title_not_found', 'Title not found');

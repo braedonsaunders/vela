@@ -97,6 +97,15 @@ unknown library IDs fail404. These demo views are all visible to the demo viewer
 Production visibility remains Ether's responsibility; no hidden production
 library rules or IDs are simulated as authoritative data.
 
+Home bootstrap starts with two rows of five entries. Its nextCursor continues
+the ordered row list through GET/rows?placement=home; each row's own nextCursor
+continues only that row through GET/rows/:id. Subsequent default pages remain
+two rows/five entries (explicit limits1–100 are accepted). Cursors bind the grant,
+viewer policy, featured exclusion set and fixture snapshot, keep their original
+one-hour expiry, and reject cross-row/query/snapshot reuse with409. Receipts and
+IDs remain stable across pages; featured titles stay excluded. This deliberately
+small first page exercises both vertical and horizontal home scroll loading.
+
 The guide fixture has170 channels, six favourites,80% logos, and25% without
 listings. Programmes follow fixed channel-seeded schedules with15–120min slots,
 two channels with gaps, varied episode metadata/artwork and explicit fixture
