@@ -18,8 +18,22 @@ component Shell
     live: action
     library: action
   slot
+  state menuOpen = false
+  action toggleMenu
+    menuOpen = not menuOpen
+  action changeAppearance(value: string)
+    menuOpen = false
+    chooseSkin(value)
+  action leaveSession
+    menuOpen = false
+    signOut()
+  action menuKey(k: string)
+    if k == "Escape" and menuOpen
+      preventDefault()
+      menuOpen = false
+      focus("profile-menu-trigger")
   view
-    column height="100%" min-height=0 background-color="surface.page" color="ink.primary" color-scheme="dark" font-family="system-ui, sans-serif"
+    column position="relative" key=menuKey height="100%" min-height=0 background-color="surface.page" color="ink.primary" color-scheme="dark" font-family="system-ui, sans-serif"
       row role="navigation" aria-label=t("ui.mainNavigation") padding="20px 5%" align-items="center" gap=24
         link href="/" color="ink.primary" text-decoration="none" aria-label=t("ui.velaHome")
           text t("ui.vela") font-size=30 font-weight=600 letter-spacing="-1.5px"
@@ -30,20 +44,20 @@ component Shell
             button press=live border="none" background-color="transparent" color="ink.secondary"
               text t("ui.live")
         if viewer != ""
-          button popovertarget="viewer-settings" aria-label=t("ui.profileAndAppearance") testId="profile-menu" background-color="surface.raised" border="1px solid var(--surface.line)" border-radius=24 padding=(viewport.width < 640 ? "10px 14px" : "10px 18px") color="ink.primary"
+          button id="profile-menu-trigger" press=toggleMenu aria-expanded=menuOpen aria-controls="viewer-settings" aria-label=t("ui.profileAndAppearance") testId="profile-menu" background-color="surface.raised" border="1px solid var(--surface.line)" border-radius=24 padding=(viewport.width < 640 ? "10px 14px" : "10px 18px") color="ink.primary"
             text (viewport.width < 640 ? viewer.slice(0, 1) : viewer) font-size=13
-      if viewer != ""
-        column id="viewer-settings" popover="auto" position="absolute" top=72 right="5%" left="auto" bottom="auto" margin=0 padding=22 gap=16 border="1px solid var(--surface.line)" border-radius=20 background-color="surface.raised" color="ink.primary" min-width=210
+      if viewer != "" and menuOpen
+        column id="viewer-settings" position="absolute" top=72 right="5%" z-index=30 margin=0 padding=22 gap=16 border="1px solid var(--surface.line)" border-radius=20 background-color="surface.raised" color="ink.primary" min-width=210
           text viewer font-weight=600
           if skins.length > 1
             text t("ui.appearance") font-size=12 color="ink.secondary"
-            select value=skin change=chooseSkin aria-label=t("ui.appearance") testId="skin-picker" background-color="surface.page" color="ink.primary" border="1px solid var(--surface.line)" padding=10 border-radius=10
+            select value=skin change=changeAppearance aria-label=t("ui.appearance") testId="skin-picker" background-color="surface.page" color="ink.primary" border="1px solid var(--surface.line)" padding=10 border-radius=10
               for name in skins key=name
                 option value=name
                   text skinLabel(name)
           vela-install pwaAction="install" buttonLabel=t("pwa.install")
           vela-install pwaAction="update" buttonLabel=t("pwa.update")
-          button press=signOut background-color="transparent" border="none" color="ink.secondary" text-align="left" padding=0
+          button press=leaveSession background-color="transparent" border="none" color="ink.secondary" text-align="left" padding=0
             text t("ui.signOut")
       children
 
