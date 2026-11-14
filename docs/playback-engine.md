@@ -438,7 +438,7 @@ real Chrome, one stream at a time, with no fault injection.
 | Movie / show detail and skins | Passed | Real 1917 and Gilded Age metadata; seasons/episodes/cast/crew; anchored profile and real Index Home/Detail. Stream facts omitted when unavailable. `lab-13`–`lab-15`. |
 | Movie play / seek / progress / stop / resume | Passed | Measurements above: 13.96 s first startup; +10 authorized seek; observations 200; stop 200 `ended`; distinct reopened session resumed at saved 515.163 s with actual decoded playback. `lab-17`. |
 | Live guide | Passed | 173 channels: page 1 = 100 / `more` + cursor; page 2 = 73 / `exhausted`. Guide = eight programmes / `exhausted` in the selected window. `lab-19-live-guide-fixed.png`. |
-| One live channel | Passed | BBC News, remux HLS, broker HTTP 200 / 2962 ms; first decoded frames 3436 ms after tune. Playing observations 200 through 35.520 → 36.521 s; stop 200 `ended` at 36.521 s. `lab-20-live-channel.png` captures first frames, before coalesced chrome settled. |
+| One live channel transport | Passed; **content failed** | BBC News, remux HLS, broker HTTP 200 / 2962 ms; first decoded frames 3436 ms after tune. Playing observations 200 through 35.520 → 36.521 s; stop 200 `ended` at 36.521 s. `lab-20-live-channel.png` captures Pluto-branded first frames, not proof of actual news. The installed 0.1.8 look below identified an unavailable-device slate. |
 | Reload after progress changed | Passed | Fresh root navigation and reload both bootstrap HTTP 200, authenticated Home and Continue Watching rendered; no repeat of cursorless 409. |
 | Clean console Watch handoff | Passed | Same-viewer console endpoint HTTP 200; exactly **one** redeem request, HTTP 200; authenticated Home and cleared fragment. `lab-23-single-flight-handoff.png`. |
 
@@ -450,6 +450,28 @@ mode without verified live-window anchors, so no live-edge latency claim is made
 
 The final movie and live sessions each received acknowledged stop before another
 session; the viewer was signed out of Vela and the portal, and the dedicated
-Chrome was closed. The installer then verified 0.1.8 (UI-only live-control
-placement/visibility fix); its narrow installed visual check belongs to the UI
-worker. Engine/full-flow evidence here is specifically for 0.1.7 with lab.4.
+Chrome was closed. Engine/full-flow evidence here is specifically for 0.1.7 with
+lab.4; the installed 0.1.8 UI result and content correction follow.
+
+### Installed 0.1.8 visual result and live-content correction
+
+The UI worker completed the narrow installed look: live controls top 88 / right
+36, clear of the wordmark; normal idle state opacity 0, inert true, pointer-events
+none. Its playing sample was 33.385272 seconds, readyState 4, 1006 frames, with
+HTTP 200 observations and acknowledged stop `{status:200,state:ended,kind:stop}`.
+The video was removed, viewer signed out, and its dedicated Chrome closed.
+
+**BBC News content did not pass.** Decoded media was a Pluto unavailable-device
+slate, not news. The measured captures show:
+
+- `lab-21-live-controls-018-visible.png`, 2026-11-14 04:27:27.296789 UTC:
+  Portuguese ending/availability text.
+- `lab-22-live-controls-018-hidden.png`, 04:27:42.782734 UTC:
+  “Pluto TV ist auf diesem Gerät nicht mehr verfügbar.”
+
+Channel identity was `ee070ebfa1b4b8fa9ad2`; that UI session ID and exact stop
+wall-clock time were not retained. The capture times, transport/stop results and
+slate evidence were sent to the Ether worker and coordinator for upstream
+provider/device-availability diagnosis. No additional stream was requested.
+The earlier unqualified live-channel pass is retracted: guide, transport and UI
+passed; actual BBC News content failed and remains an open demo limitation.
