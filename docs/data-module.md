@@ -8,10 +8,10 @@ the network grant and defaults to `http://127.0.0.1:7777`. Fast, descriptive and
 cancelled on replacement. Receipts are sent immediately; the bounded queue
 exists but is not yet connected. Playback sources require integration verification.
 
-Session events remain unimplemented. Exact supports HTTP SSE directly through a
-resource returning `fetch` with `exactStream` under `net.fetch` (reference.md,
-"An answer that keeps coming"). Its mapper receives parsed events and the host
-closes the stream when the resource is released. The Contract still needs a
-session-event resource and a shaped state; resume cursors, snapshot fallback,
-reconnect and bearer refresh must be wired into that resource. Until then,
-snapshots are the only available session-state read; they are not a live stream.
+Session events use Exact's HTTP `exactStream` resource under `net.fetch`. Each
+connection reads a fresh authoritative snapshot (also refreshing credentials on
+401), then resumes from the last observed cursor or the snapshot cursor. The
+server supplies a snapshot on a retention gap. Unknown or malformed events fail
+the resource so a retry starts with a new snapshot. The UI owns bounded retries
+and releases the stream when playback leaves the view. End-to-end behavior still
+requires the mock server and player to be exercised together.

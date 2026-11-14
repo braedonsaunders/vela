@@ -4,6 +4,7 @@ import { EtherAdapter } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, homeModel, detailModel } from './discovery/models';
 import { InteractionQueue } from './telemetry';
+import { sessionEvents } from './protocol/events';
 
 export function createAnswer(API: string, MOCK: boolean): Answer {
 let device: Device;
@@ -146,7 +147,14 @@ const sources: Sources = {
     const api = await session(store);
     if (kind !== 'title' && kind !== 'extra') throw new Error('Unsupported playback target');
     const plan = await api.playback({ ...(kind === 'extra' ? { extraId: id } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${kind}-${id}` });
-    return { planJson: JSON.stringify(plan) };
+    return { planJson: JSON.stringify(plan), sessionId: plan.sessionId };
+  },
+  sessionEvents: async ([id], store) => {
+    const api = await session(store);
+    return sessionEvents(api, API, () => {
+      const value = store.get('vela.session');
+      return value ? JSON.parse(value) : null;
+    }, device.id, id);
   },
   flushInteractions: async (_args, store) => {
     while (interactions?.size) await interactions.flush(key(store));
