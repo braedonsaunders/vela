@@ -1,5 +1,5 @@
 use Card, FeedRow, DetailModel, ExtraModel, cardName from "../../foundation/models.contract"
-use Shelf, unwatched, progressPct, subLine from "./slots.contract"
+use Shelf, noPreview, unwatched, progressPct, subLine from "./slots.contract"
 use Glyph, Solid, Art, Primary, Secondary, Round, gutter, arrive, kindLabel from "./look.contract"
 
 fn personName(person: string): string = person.split(" · ").slice(0, 1).join("")
@@ -18,9 +18,13 @@ component Detail
     playExtra: action
     selectTitle: action
     observe: action
+  state asked = false
   derive upNext = model.episodes.filter(e => not e.played).slice(0, 1)
   derive seasonId = match first(model.title) { case some(t) => (t.kind == "season" ? t.id : match first(model.seasons) { case some(s) => s.id, case none => "" }), case none => "" }
   derive seasonName = match first(model.seasons.filter(s => s.id == seasonId)) { case some(s) => s.name, case none => t("ui.episodes") }
+  // Title pages never preview.
+  action quiet(cardId: string, rowId: string, on: bool)
+    asked = on
   view
     column position="relative" min-height="100%" padding-bottom=60 overflow-x="hidden"
       for title in model.title key=title.id
@@ -53,7 +57,7 @@ component Detail
               Facts(model=model, title=title, upNext=upNext, small=small, still=still, play=play, playExtra=playExtra)
       column position="relative" gap=(small ? 8 : 14) padding-top=(small ? 16 : 28)
         if model.seasons.length > 0
-          Shelf(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="detail", small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Shelf(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="detail", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
         if model.episodes.length > 0
           column gap=(small ? 10 : 14) padding-bottom=(small ? 20 : 30)
             text seasonName role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 padding-left=gutter(small) padding-right=gutter(small)
@@ -82,7 +86,7 @@ component Detail
                 if personRole(person) != ""
                   text personRole(person) font-size=14 color="marquee.ink-faint"
         for related in model.related key=related.id
-          Shelf(row=related, place="detail", small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Shelf(row=related, place="detail", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
 
 component Poster
   props
@@ -117,8 +121,8 @@ component Facts
         row gap=10 align-items="center" flex-wrap="wrap"
           if title.rating != "" and not small
             text title.rating font-size=12 font-weight=700 padding="2px 6px" border="1px solid var(--marquee.ink-faint)" border-radius=3 color="marquee.ink-dim"
-          if title.durationSeconds > 0 and not small
-            text title.facts.split(" · ").slice(-1).join("") font-size=15 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
+          if title.durationLabel != "" and not small
+            text title.durationLabel font-size=15 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
           if title.played
             row gap=6 align-items="center" color="marquee.ink-dim"
               Glyph(name="check", size=16)
@@ -186,7 +190,7 @@ component EpisodeCard
       column gap=3 min-width=0 flex=1
         button press=selectTitle(episode.id, episode.kind, episode.receipt) aria-label=cardName(episode) class=TextLink
           text episode.name font-size=(small ? 14 : 15) font-weight=600 line-clamp=(small ? 2 : 1)
-        text ([subLine(episode), episode.facts.split(" · ").slice(-1).join("")].filter(s => s != "").join(" · ")) font-size=13 color="marquee.ink-faint" font-variant-numeric="tabular-nums"
+        text ([subLine(episode), episode.durationLabel].filter(s => s != "").join(" · ")) font-size=13 color="marquee.ink-faint" font-variant-numeric="tabular-nums"
         if episode.summary != "" and not small
           text episode.summary font-size=13 color="marquee.ink-dim" line-height=1.5 line-clamp=2 margin-top=2
 
