@@ -333,3 +333,20 @@ for seek and source-switch idempotency keys. Packaging removes the entry URL
 identity mismatch in 0.1.2. Further playback requires the corrected package to be
 installed: driving two app runtimes could violate the single-stream lab rule.
 No authenticated or playback pass is claimed for 0.1.1.
+
+### Installed 0.1.2, first authenticated pass
+
+| Step | Result | Evidence |
+| --- | --- | --- |
+| Fresh load / password sign-in | Passed | One `main` root; `/auth/sign-in` HTTP 200, `/bootstrap` HTTP 200; viewer identity rendered. |
+| Home rows / artwork | Passed for supplied rows and images; hero absent | Real catalogue rows and lazy image grants (`/vela/v0/images/…`, HTTP 200); 37 images decoded in the initial viewport/nearby rows. `lab-02-home.png`. Missing hero left excessive blank space, assigned to UI. |
+| Impressions / receipts | Failed | POST `/vela/v0/interactions` HTTP 503, `transient/service_unavailable`, `retry.allowed=false`; 16 signed visible-entry events. Ether identified missing entry-receipt handling. Vela retried rapidly on subsequent visibility events. |
+| Sign-out | Failed | Receipt flush failed before revoke, leaving the viewer signed in. Fixed with bounded telemetry retries and logout independent of telemetry in `3a15976`; installation/recheck pending. |
+| Title search | Passed | “Avengers” returned real title matches, HTTP 200. |
+| Descriptive search / AI honesty | Request passed; no matches | “hopeful stories about found family” returned HTTP 200 and zero items. No AI requests; server advertises AI unavailable. `lab-03-search.png`. |
+| Movie detail | Metadata passed; playback blocked | “Avengers: Endgame” detail HTTP 200 in 19.8 ms, 30 cast and six crew entries; `lab-04-movie.png`. `canPlay` omitted, so no Play button or fabricated stream facts. Ether identified absent trusted-peer request context in the permission lookup. |
+
+At this checkpoint no media stream had been opened. Same-viewer approval portal
+`/ether/me` was reachable, but quick-connect, show detail, playback, progress,
+resume and live remained unqualified pending the blocking fixes. Do not treat
+these pending steps as passes.
