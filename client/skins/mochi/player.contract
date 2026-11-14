@@ -1,0 +1,234 @@
+use PlayerView from "../../foundation/player-models.contract"
+use Pixel, Title, Label, Candy, Puffy, NightBubble, PixelIcon, Mascot, Hopper, SpeechBubble, Twinkle, hop, popIn, boing, settle, mochiFade, mochiHop, mochiPop, mochiSpin, mochiFloat from "./look.contract"
+
+// A screening under a night sky: a top bar with the title, Mochi hopping while
+// the engine waits, a sticker card when playback fails, and a rounded dock with a
+// chunky candy timeline and round controls that say their names in bubbles.
+component PlayerChrome
+  props
+    model: PlayerView
+    title: string
+    visible: bool
+    small: bool
+    still: bool
+    busy: bool
+    serverError: string
+    command: action
+    seek: action
+    editing: action
+    close: action
+  state scrubbing = false
+  state tip = ""
+  action menuChanged(e: ToggleEvent)
+    editing(e.newState == "open")
+  action scrubFocus(on: bool)
+    scrubbing = on
+    editing(on)
+  action hint(name: string, on: bool)
+    tip = (on ? name : tip == name ? "" : tip)
+  derive blocked = busy or model.state == "ended"
+  derive hasSettings = model.audio.length > 1 or model.subtitles.length > 0 or model.qualities.length > 1 or model.paths.length > 1 or model.chapters.length > 0
+  derive failure = (serverError != "" ? serverError : model.reason)
+  derive failed = model.state == "failed" or serverError != ""
+  derive waiting = not failed and (model.waiting or model.state == "loading" or model.state == "buffering" or model.state == "recovering")
+  derive shown = (visible or model.state != "playing")
+  derive level = (model.muted ? 0 : max(0, min(1, model.volume)))
+  derive dock = (small ? 12 : 28)
+  action scrub(v: number)
+    seek(v)
+  action setVolume(v: number)
+    command("volume", `${v}`)
+  action audio(v: string)
+    command("audio", v)
+  action subtitles(v: string)
+    command("subtitle", v)
+  action quality(v: string)
+    command("quality", v)
+  action path(v: string)
+    command("switchPath", v)
+  action chapter(v: string)
+    match first(model.chapters.filter(c => c.id == v))
+      case some(c)
+        seek(c.seconds)
+      case none
+        editing(false)
+  view
+    column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="mochi.night-ink" font-family="Fredoka, ui-rounded, system-ui, sans-serif"
+      // Top: back, and the title being screened.
+      row position="relative" padding=(small ? "14px 14px 64px" : "26px 32px 120px") gap=(small ? 12 : 18) align-items="center" background-image="linear-gradient(180deg, var(--mochi.night-deep) 0%, var(--mochi.night-veil) 30%, var(--mochi.night-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or still ? "0px 0px" : "0px -14px") transition=(still ? "opacity 260ms linear" : `opacity 320ms ${settle()}, translate 320ms ${settle()}`)
+        column position="relative" pointer-events=(shown ? "auto" : "none")
+          button press=close hover=hint("close") focus=hint("close", true) blur=hint("close", false) aria-label=t("ui.closePlayer") class=NightBubble width=48 height=48 padding=0 display="flex" align-items="center" justify-content="center"
+            PixelIcon(name="back", size=16)
+        column gap=6 flex=1 min-width=0
+          row align-self="flex-start" gap=6 align-items="center" padding="3px 10px 3px 8px" border-radius=999 background-color="mochi.pink" color="mochi.ink" border="2px solid var(--mochi.ink)"
+            PixelIcon(name="heart", size=10)
+            text t("ui.nowPlaying") class=Label font-size=10
+          text title class=Title font-size=(small ? 22 : 32) line-clamp=1 text-shadow="2px 2px 0px var(--mochi.ink)"
+      // Centre: the engine is waiting, or playback has failed.
+      if failed
+        column pointer-events="auto" align-self="center" align-items="center" text-align="center" gap=12 padding=(small ? "22px 20px" : "30px 36px") margin="0px 16px" max-width=420 box-sizing="border-box" border-radius=30 background-color="mochi.card" color="mochi.ink" border="3px solid var(--mochi.ink)" box-shadow="7px 8px 0px var(--mochi.pink)" role="alert" testId="player-status" animation=popIn(still, 0)
+          Mascot(mood="sad", size=72)
+          text t("ui.playbackInterrupted") class=Title font-size=26
+          if failure != ""
+            text failure color="mochi.ink-soft" font-size=14 line-height=1.55
+          row gap=10 margin-top=6 flex-wrap="wrap" justify-content="center"
+            button press=command("retry", "") class=Candy height=46 padding="0px 24px"
+              text t("ui.tryAgain") font-size=15
+            button press=close class=Puffy height=46 padding="0px 22px"
+              text t("ui.closePlayer") font-size=15
+      else
+        if waiting
+          column align-self="center" align-items="center" gap=14 role="status" aria-label=(model.state == "recovering" ? t("ui.findingAWayForward") : model.state == "loading" ? t("ui.preparingYourScreening") : t("ui.buildingALittleBreathingRoom")) testId="player-status" animation=(still ? "mochiFade 200ms linear both" : "mochiFade 360ms ease-out 120ms both")
+            Spinner(size=(small ? 96 : 120), still=still)
+            if model.state == "loading" or model.state == "recovering"
+              text (model.state == "recovering" ? t("ui.findingAWayForward") : t("ui.preparingYourScreening")) class=Pixel font-size=(small ? 16 : 19) padding="6px 14px" border-radius=999 background-color="mochi.night-veil" border="2px solid var(--mochi.night-edge)"
+      // Bottom: a rounded dock with the timeline and the controls.
+      column position="relative" padding=(small ? "60px 0px 0px" : "110px 0px 0px") background-image="linear-gradient(0deg, var(--mochi.night-deep) 0%, var(--mochi.night-veil) 35%, var(--mochi.night-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or still ? "0px 0px" : "0px 18px") transition=(still ? "opacity 260ms linear" : `opacity 320ms ${settle()}, translate 320ms ${settle()}`) pointer-events=(shown ? "auto" : "none")
+        column margin=`0px ${dock}px ${dock}px` padding=(small ? "12px 12px 10px" : "16px 20px 14px") gap=(small ? 8 : 10) border-radius=(small ? 24 : 30) background-color="mochi.night-veil" backdrop-filter="blur(18px) saturate(1.3)" border="2px solid var(--mochi.night-edge)" box-shadow="0px 6px 0px var(--mochi.night-deep)"
+          if model.actionError != "" and failure == ""
+            text model.actionError color="mochi.sakura" font-size=13 role="status"
+          // Timeline: buffered ranges, a striped played fill and a heart thumb over a transparent native range.
+          column position="relative" height=26 justify-content="center"
+            column position="absolute" left=0 right=0 height=(scrubbing ? 14 : 12) border-radius=7 background-color="mochi.night-track" border="2px solid var(--mochi.night-edge-strong)" box-sizing="border-box" overflow="hidden" transition=(still ? "none" : `height 240ms ${boing()}`)
+              for range in model.buffered key=range.id
+                column position="absolute" top=0 bottom=0 left=`${range.left}%` width=`${range.width}%` background-color="mochi.night-buffer"
+              column position="absolute" left=0 top=0 bottom=0 width=`${model.progress}%` background-image="repeating-linear-gradient(135deg, var(--mochi.pink) 0px, var(--mochi.pink) 5px, var(--mochi.pink-hover) 5px, var(--mochi.pink-hover) 10px)"
+            for chapter in model.chapters key=chapter.id
+              column position="absolute" left=`${chapter.percent}%` width=4 height=4 margin-left=-2 border-radius=2 background-color="mochi.star" aria-hidden=true
+            row position="absolute" left=`calc(${model.progress}% - 13px)` width=26 height=26 border-radius=13 align-items="center" justify-content="center" background-color="mochi.card" color="mochi.pink-deep" border="2.5px solid var(--mochi.ink)" box-sizing="border-box" scale=(scrubbing and not still ? 1.18 : 1) transition=(still ? "none" : `scale 260ms ${boing()}`) aria-hidden=true
+              PixelIcon(name="heart", size=11)
+            input focus=scrubFocus(true) blur=scrubFocus(false) type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub aria-label=t("ui.playbackPosition") testId="player-scrub" disabled=(model.duration <= 0 or blocked) position="absolute" left=0 right=0 width="100%" height=26 margin=0 opacity=0 cursor="pointer"
+          row align-items="center" justify-content="space-between"
+            text model.elapsed class=Pixel font-size=13 font-variant-numeric="tabular-nums" color="mochi.night-soft"
+            text model.remaining class=Pixel font-size=13 font-variant-numeric="tabular-nums" color="mochi.night-soft"
+          row gap=(small ? 6 : 10) align-items="center"
+            button disabled=(model.state == "ended") press=command(model.playing ? "pause" : "play", "") aria-label=(model.state == "ended" ? t("ui.finished") : model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" class=Candy width=(small ? 52 : 60) height=(small ? 52 : 60) padding=0 display="flex" align-items="center" justify-content="center" flex-shrink=0
+              PixelIcon(name=(model.playing ? "pause" : "play"), size=(small ? 18 : 22))
+            TipButton(name="back10", label=t("ui.back10Seconds"), icon="rewind", tip=tip, disabled=blocked, still=still, press=command("seekBy", "-10"), hint=hint)
+            TipButton(name="fwd10", label=t("ui.forward10Seconds"), icon="ffwd", tip=tip, disabled=(model.duration <= 0 or blocked), still=still, press=command("seekBy", "10"), hint=hint)
+            column position="relative" flex-shrink=0
+              button press=command("mute", "") hover=hint("mute") focus=hint("mute", true) blur=hint("mute", false) aria-label=(model.muted ? t("ui.unmute") : t("ui.mute")) aria-pressed=model.muted testId="player-mute" class=NightBubble width=46 height=46 padding=0 display="flex" align-items="center" justify-content="center"
+                PixelIcon(name=(model.muted or model.volume <= 0 ? "mute" : "speaker"), size=17)
+              SpeechBubble(message=(model.muted ? t("ui.unmute") : t("ui.mute")), shown=(tip == "mute"), still=still, night=true)
+            if not small
+              column position="relative" width=110 height=26 justify-content="center" flex-shrink=0 margin-right=4
+                column position="absolute" left=0 right=0 height=10 border-radius=5 background-color="mochi.night-track" border="2px solid var(--mochi.night-edge-strong)" box-sizing="border-box" overflow="hidden"
+                  column height="100%" width=`${level * 100}%` background-color="mochi.mint"
+                column position="absolute" left=`calc(${level * 100}% - 9px)` width=18 height=18 border-radius=9 background-color="mochi.card" border="2.5px solid var(--mochi.ink)" box-sizing="border-box" aria-hidden=true
+                input type="range" min=0 max=1 step=0.01 value=level change=setVolume focus=editing(true) blur=editing(false) aria-label=t("ui.volume") testId="player-volume" position="absolute" left=0 width="100%" height=26 margin=0 opacity=0 cursor="pointer"
+            row flex=1 min-width=0 justify-content="flex-end"
+              if not small and (model.quality != "" or model.path != "")
+                text (model.quality != "" ? model.quality : model.path) testId="player-quality" class=Pixel font-size=12 color="mochi.ink" line-clamp=1 padding="3px 10px" border-radius=8 background-color="mochi.lavender" border="2px solid var(--mochi.ink)"
+            if hasSettings
+              column position="relative" flex-shrink=0
+                button popovertarget="player-settings" hover=hint("settings") focus=hint("settings", true) blur=hint("settings", false) aria-label=t("ui.playbackSettings") testId="player-settings-button" class=NightBubble width=46 height=46 padding=0 display="flex" align-items="center" justify-content="center"
+                  PixelIcon(name="sliders", size=17)
+                SpeechBubble(message=t("ui.playbackSettings"), shown=(tip == "settings"), still=still, night=true)
+            if model.pip
+              TipButton(name="pip", label=t("ui.pictureInPicture"), icon="pip", tip=tip, disabled=false, still=still, press=command("pip", ""), hint=hint)
+            if model.fullscreen
+              TipButton(name="full", label=t("ui.fullscreen"), icon="full", tip=tip, disabled=false, still=still, press=command("fullscreen", ""), hint=hint)
+      if hasSettings
+        column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=14 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 340) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=22 gap=14 border="3px solid var(--mochi.ink)" border-radius=26 background-color="mochi.card" color="mochi.ink" box-shadow="6px 7px 0px var(--mochi.lavender)"
+          row gap=12 align-items="center"
+            Mascot(mood="happy", size=40)
+            column gap=2 flex=1 min-width=0
+              text t("ui.playbackSettings") class=Title font-size=22
+              text (model.backend == "file" ? t("ui.originalQuality") : model.backend == "native-hls" ? t("ui.browserManaged") : model.qualities.length <= 1 ? t("ui.fixedQuality") : model.lockedQuality == "" ? t("ui.autoQuality") : t("ui.qualityLocked")) class=Label font-size=10 color="mochi.pink-deep"
+          if model.chapters.length > 0
+            SettingLabel(label=t("ui.chapters"))
+            select focus=editing(true) blur=editing(false) disabled=blocked value="" change=chapter aria-label=t("ui.chapters") class=MenuSelect
+              option value=""
+                text t("ui.chapters")
+              for chapter in model.chapters key=chapter.id
+                option value=chapter.id
+                  text chapter.label
+          if model.audio.length > 1
+            SettingLabel(label=t("ui.audio"))
+            select disabled=blocked value=(model.pendingAudioId != "" ? model.pendingAudioId : model.audioId) change=audio aria-label=t("ui.audioTrack") aria-busy=(model.pendingAudioId != "") class=MenuSelect
+              for track in model.audio key=track.id
+                option value=track.id
+                  text track.label
+            if model.pendingAudioId != ""
+              row gap=8 align-items="center" role="status"
+                Hopper(size=18, still=still, mood="happy")
+                text t("ui.switchingAudioSoon") font-size=13 color="mochi.ink-soft"
+          else
+            if model.audioLabel != ""
+              SettingLabel(label=t("ui.audio"))
+              text model.audioLabel font-size=14 color="mochi.ink-soft"
+          if model.subtitles.length > 0
+            SettingLabel(label=t("ui.subtitles"))
+            select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles" class=MenuSelect
+              option value=""
+                text t("ui.off")
+              for track in model.subtitles key=track.id
+                option value=track.id
+                  text track.label
+          if model.qualities.length > 1
+            SettingLabel(label=t("ui.quality"))
+            select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select" class=MenuSelect
+              option value=""
+                text t("ui.autoAdaptToYourConnection")
+              for quality in model.qualities key=quality.id
+                option value=quality.id
+                  text quality.label
+          if model.paths.length > 1
+            SettingLabel(label=t("ui.delivery"))
+            select disabled=blocked value=model.pathId change=path aria-label=t("ui.playbackPath") testId="player-path" class=MenuSelect
+              for path in model.paths key=path.id
+                option value=path.id
+                  text path.label
+          text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=13 color="mochi.ink-soft"
+          text t("ui.spacePlayPauseSeekFFullscreen") class=Label font-size=10 line-height=1.6 color="mochi.ink-quiet"
+
+// A round icon control that names itself in a speech bubble on hover or focus.
+component TipButton
+  props
+    name: string
+    label: string
+    icon: string
+    tip: string
+    disabled: bool
+    still: bool
+    press: action
+    hint: action
+  view
+    column position="relative" flex-shrink=0
+      button press=press() disabled=disabled hover=hint(name) focus=hint(name, true) blur=hint(name, false) aria-label=label class=NightBubble width=46 height=46 padding=0 display="flex" align-items="center" justify-content="center"
+        PixelIcon(name=icon, size=17)
+      SpeechBubble(message=label, shown=(tip == name and not disabled), still=still, night=true)
+
+style MenuSelect
+  box-sizing = "border-box"
+  width = "100%"
+  height = 44
+  padding = "0px 14px"
+  border = "2.5px solid var(--mochi.ink)"
+  border-radius = 14
+  background-color = "mochi.page"
+  color = "mochi.ink"
+  font-family = "Fredoka, ui-rounded, system-ui, sans-serif"
+  font-size = 15
+
+component SettingLabel
+  props
+    label: string
+  view
+    text label class=Label font-size=10 color="mochi.ink-soft" margin-top=4
+
+// Mochi hopping inside a turning ring of pastel pixel stars: the engine is
+// preparing, buffering or seeking. Reduced motion holds both still.
+component Spinner
+  props
+    size: number
+    still: bool
+  view
+    column position="relative" width=size height=size align-items="center" justify-content="center" aria-hidden=true
+      column position="absolute" inset=0 border-radius="50%" background-color="mochi.night-veil" border="2px solid var(--mochi.night-edge)"
+      column position="absolute" inset=0 animation=(still ? "none" : "mochiSpin 3.2s linear infinite")
+        for a, i in [0, 45, 90, 135, 180, 225, 270, 315] key=`${a}`
+          column position="absolute" left="50%" top="50%" width=0 height=0 rotate=`${a}deg`
+            column position="absolute" left=-5 top=(0 - size / 2 + 2) color=(i % 3 == 0 ? "mochi.sakura" : i % 3 == 1 ? "mochi.star" : "mochi.mint")
+              PixelIcon(name=(i % 2 == 0 ? "sparkle" : "heart"), size=10)
+      Hopper(size=(size * 0.42), still=still, mood="happy")

@@ -1,0 +1,158 @@
+use Card, LibraryModel from "../../foundation/models.contract"
+use TitleCard, EmptyState, gutter from "./slots.contract"
+use Pixel, Title, Label, Candy, Puffy, Bubble, Picker, PixelIcon, Mascot, Hopper, Loader, Twinkle, FadeImage, hop, stagger, mochiFade, mochiHop from "./look.contract"
+
+// Posters in a wrapping grid, in the order given, hopping in with a short stagger.
+component TitleGrid
+  props
+    items: Card[]
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  view
+    column display="grid" grid-template-columns=(small ? "repeat(auto-fill, minmax(136px, 1fr))" : "repeat(auto-fill, minmax(176px, 1fr))") column-gap=(small ? 14 : 24) row-gap=(small ? 24 : 34) padding-left=gutter(small) padding-right=gutter(small) padding-top=8
+      for card, i in items key=card.id
+        column width="100%" animation=hop(still, stagger(i, 28, 18))
+          TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=true)
+
+// A page heading as a sticker label: a way back (when offered), a pixel eyebrow and the name.
+component PageHeading
+  props
+    eyebrow: string
+    name: string
+    backdrop: string
+    small: bool
+    still: bool
+    back: bool
+    close: action
+  view
+    row position="relative" gap=(small ? 12 : 16) align-items="center" padding-left=gutter(small) padding-right=gutter(small) padding-top=(small ? 10 : 18) animation=hop(still, 40)
+      if back
+        button press=close aria-label=t("ui.back") class=Bubble width=46 height=46 padding=0 flex-shrink=0 display="flex" align-items="center" justify-content="center"
+          PixelIcon(name="back", size=15)
+      if backdrop != "" and not small
+        column position="relative" width=96 height=60 flex-shrink=0 border-radius=16 overflow="hidden" border="3px solid var(--mochi.ink)" box-shadow="4px 4px 0px var(--mochi.lavender)" rotate="-3deg" aria-hidden=true
+          FadeImage(src=backdrop)
+      column gap=4 min-width=0
+        row gap=6 align-items="center" color="mochi.pink-deep"
+          PixelIcon(name="sparkle", size=11)
+          text eyebrow class=Label font-size=11
+        text name role="heading" aria-level=1 class=Title font-size=(small ? 30 : 42) line-clamp=1
+
+// A library: its name, the server's sort and filter choices, then its titles in a grid.
+component Library
+  props
+    model: LibraryModel
+    loading: bool
+    moreLoading: bool
+    small: bool
+    still: bool
+    close: action
+    setSort: action
+    setFilter: action
+    more: action
+    selectTitle: action
+    observe: action
+  derive directions = match first(model.sorts.filter(s => s.id == model.sort)) { case some(s) => s.directions, case none => [] }
+  action pickSort(id: string)
+    match first(model.sorts.filter(s => s.id == id))
+      case some(s)
+        setSort(id, (s.directions.includes(model.direction) ? model.direction : match first(s.directions) { case some(d) => d, case none => "" }))
+      case none
+        setSort(id, "")
+  action flip
+    setSort(model.sort, (model.direction == "asc" ? "desc" : "asc"))
+  action pickGenre(v: string)
+    setFilter("genre", v)
+  view
+    column position="relative" gap=(small ? 14 : 20) padding-bottom=80 color="mochi.ink"
+      PageHeading(eyebrow=t("library.library"), name=model.name, backdrop=model.backdrop, small=small, still=still, back=false, close=close)
+      scroll overflow-x=(small ? "auto" : "visible") overflow-y="hidden" scrollbar-width="none"
+        row gap=10 align-items="center" flex-wrap=(small ? "nowrap" : "wrap") padding-top=4 padding-bottom=8 padding-left=gutter(small) padding-right=gutter(small) min-width="100%" box-sizing="border-box" animation=hop(still, 90)
+          if model.kinds.length > 1
+            row gap=4 padding=4 flex-shrink=0 border-radius=999 background-color="mochi.card" border="2.5px solid var(--mochi.ink)" role="group" aria-label=t("library.filter.all")
+              Chip(label=t("library.filter.all"), on=(model.kindFilter == ""), press=setFilter("kind", ""))
+              for kind in model.kinds key=kind.id
+                Chip(label=kind.label, on=(model.kindFilter == kind.id), press=setFilter("kind", kind.id))
+          if model.canPlayed
+            row gap=4 padding=4 flex-shrink=0 border-radius=999 background-color="mochi.card" border="2.5px solid var(--mochi.ink)" role="group" aria-label=t("library.filter.unwatched")
+              Chip(label=t("library.filter.all"), on=(model.playedFilter == ""), press=setFilter("played", ""))
+              Chip(label=t("library.filter.unwatched"), on=(model.playedFilter == "false"), press=setFilter("played", "false"))
+              Chip(label=t("library.filter.watched"), on=(model.playedFilter == "true"), press=setFilter("played", "true"))
+          if model.canFavorite
+            button press=setFilter("favorite", (model.favoriteFilter ? "" : "true")) aria-pressed=model.favoriteFilter class=Bubble height=44 flex-shrink=0 padding-left=14 padding-right=18 background-color=(model.favoriteFilter ? "mochi.pink" : "mochi.card")
+              row gap=8 align-items="center"
+                column color=(model.favoriteFilter ? "mochi.ink" : "mochi.pink-deep")
+                  PixelIcon(name="heart", size=14)
+                text t("library.filter.favorites") font-size=15 font-weight=600
+          if model.genres.length > 0
+            select value=model.genreFilter change=pickGenre aria-label=t("library.genre") class=Picker flex-shrink=0 height=44
+              option value=""
+                text t("library.anyGenre")
+              for genre in model.genres key=genre.id
+                option value=genre.id
+                  text genre.label
+          column flex=1
+          if model.sorts.length > 1
+            row gap=8 align-items="center" flex-shrink=0
+              text t("library.sortBy") class=Label font-size=11 color="mochi.ink-soft"
+              select value=model.sort change=pickSort aria-label=t("library.sortBy") class=Picker height=44
+                for sort in model.sorts key=sort.id
+                  option value=sort.id
+                    text sort.label
+              if directions.length > 1
+                button press=flip aria-label=(model.direction == "asc" ? t("library.direction.asc") : t("library.direction.desc")) class=Bubble width=44 height=44 padding=0 display="flex" align-items="center" justify-content="center"
+                  column rotate=(model.direction == "asc" ? 180 : 0) transition=(still ? "none" : "rotate 320ms cubic-bezier(0.34, 1.56, 0.64, 1)")
+                    PixelIcon(name="sort", size=15)
+      if loading and model.items.length == 0
+        column align-items="center" padding="48px 0px"
+          Loader(message=t("ui.findingTitles"), size=64, still=still, night=false)
+      else
+        if model.items.length == 0
+          EmptyState(mood="sleepy", title=t("library.empty"), message=t("library.emptyHint"), still=still)
+        else
+          column aria-busy=loading opacity=(loading ? 0.6 : 1) transition="opacity 200ms linear"
+            TitleGrid(items=model.items, small=small, still=still, selectTitle=selectTitle, observe=observe)
+          if model.more
+            row justify-content="center" padding-top=18
+              if moreLoading
+                Loader(message=t("ui.loadingMore"), size=44, still=still, night=false)
+              else
+                button press=more class=Candy height=52 padding-left=30 padding-right=30
+                  row gap=10 align-items="center"
+                    PixelIcon(name="sparkle", size=14)
+                    text t("library.loadMore") font-size=16
+
+// A collection's titles in server order, with a way back.
+component Collection
+  props
+    id: string
+    name: string
+    items: Card[]
+    small: bool
+    still: bool
+    close: action
+    selectTitle: action
+    observe: action
+  view
+    column gap=(small ? 18 : 26) padding-bottom=80 padding-top=(small ? 6 : 10) color="mochi.ink" font-family="Fredoka, ui-rounded, system-ui, sans-serif"
+      PageHeading(eyebrow=t("library.collection"), name=name, backdrop="", small=small, still=still, back=true, close=close)
+      if items.length == 0
+        EmptyState(mood="sleepy", title=t("ui.nothingHereYet"), message="", still=still)
+      else
+        TitleGrid(items=items, small=small, still=still, selectTitle=selectTitle, observe=observe)
+
+// One choice in a segmented candy group.
+component Chip
+  props
+    label: string
+    on: bool
+    press: action
+  view
+    button press=press() aria-pressed=on height=34 padding="0px 14px" border=(on ? "2px solid var(--mochi.ink)" : "2px solid transparent") border-radius=999 background-color=(on ? "mochi.pink" : "mochi.page-clear") color="mochi.ink" font-family="Fredoka, ui-rounded, system-ui, sans-serif" font-size=14 font-weight=(on ? 650 : 550) cursor="pointer" white-space="nowrap" transition="background-color 160ms linear"
+      :hover
+        border-color="mochi.ink"
+      :focus-visible
+        box-shadow="0px 0px 0px 2px var(--mochi.card), 0px 0px 0px 5px var(--mochi.focus)"
+      text label

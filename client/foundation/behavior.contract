@@ -292,10 +292,10 @@ members Client
   derive indexSkin = (activeSkin == "index" or activeSkin == "editorial")
   derive homeSmall = (small or (indexSkin and top(nav).name == "title" and viewport.width >= 900))
   derive shellViewport = Viewport(viewport, width=(homeSmall and not small ? 360 : viewport.width))
-  derive pageColor = (indexSkin ? "index.page" : "surface.page")
-  derive inkColor = (indexSkin ? "index.ink" : "ink.primary")
+  derive pageColor = (activeSkin == "mochi" ? "mochi.page" : indexSkin ? "index.page" : "surface.page")
+  derive inkColor = (activeSkin == "mochi" ? "mochi.ink" : indexSkin ? "index.ink" : "ink.primary")
   derive requestedSkin = (skin == "" ? home.defaultSkinId : skin)
-  derive activeSkin = (["cinematic", "index", "editorial", "example"].includes(requestedSkin) ? requestedSkin : "cinematic")
+  derive activeSkin = (["cinematic", "index", "editorial", "example", "mochi"].includes(requestedSkin) ? requestedSkin : "cinematic")
 
   task searchUpdates when auth.authenticated and query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running")
     every(1500, updateSearch)

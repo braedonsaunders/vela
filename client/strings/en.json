@@ -299,5 +299,12 @@
   "skin.picker.subtitle": "Every look shows the same library and remembers where you were.",
   "skin.picker.current": "Current",
   "skin.picker.choose": "Change appearance",
-  "skin.picker.option": "{name}. {tagline}"
+  "skin.picker.option": "{name}. {tagline}",
+  "mochi.name": "Mochi",
+  "mochi.hello": "Hi there",
+  "mochi.pickedForYou": "Picked for you",
+  "mochi.peek": "Take a peek",
+  "mochi.searchPlaceholder": "Find a show, a vibe, a whole new world…",
+  "skin.mochi.tagline": "Pastel pink, pixel sparkles and a bouncy friend for anime nights.",
+  "mochi.welcome": "Welcome back, friend!"
 }

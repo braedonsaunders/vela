@@ -1,0 +1,539 @@
+use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, cardName, skinLabel from "../../foundation/models.contract"
+use SkinPicker, skinManifest from "../../foundation/skin-picker.contract"
+use Pixel, Title, Label, Candy, Puffy, Bubble, Picker, PixelIcon, Mascot, Hopper, Loader, Twinkle, Burst, SpeechBubble, Skeleton, FadeImage, Wordmark, hop, popIn, stagger, lift, boing, settle, quick, base, mochiFade, mochiVanish, mochiHop, mochiPop, mochiWiggle, mochiFloat, mochiBubble, mochiTwinkle from "./look.contract"
+
+keyframes mochiFill
+  from translate="-100% 0px"
+  to translate="0px 0px"
+
+// The page gutter: content aligns to it everywhere in the skin.
+fn gutter(small: bool): string = (small ? "16px" : "max(24px, 3.6vw)")
+// Each card and row takes one of three pastel accents, from its own name, so
+// neighbours differ without any reordering or state.
+fn accent(name: string): string = (name.length % 3 == 0 ? "mochi.pink" : name.length % 3 == 1 ? "mochi.lavender" : "mochi.mint")
+fn tilt(name: string): number = (name.length % 2 == 0 ? -2.2 : 2.2)
+
+component Shell
+  props
+    viewer: string
+    skin: string
+    skins: string[]
+    chooseSkin: action
+    signOut: action
+    viewport: Viewport
+    canLive: bool
+    canLibrary: bool
+    home: action
+    search: action
+    live: action
+    library: action
+    libraries: LibraryNav[]
+    section: string
+    openLibrary: action
+  slot
+  state menuOpen = false
+  state tip = ""
+  derive compact = viewport.width < 720
+  derive still = viewport.prefersReducedMotion
+  action toggleMenu
+    menuOpen = not menuOpen
+    tip = ""
+  state pickerOpen = false
+  action openPicker
+    menuOpen = false
+    pickerOpen = true
+  action closePicker
+    pickerOpen = false
+    focus("profile-menu-trigger")
+  action changeAppearance(value: string)
+    pickerOpen = false
+    chooseSkin(value)
+  action leaveSession
+    menuOpen = false
+    signOut()
+  action findSomething
+    menuOpen = false
+    search()
+    focus("vela-search")
+  action hint(name: string, on: bool)
+    tip = (on ? name : tip == name ? "" : tip)
+  action menuKey(k: string)
+    if k == "Escape" and menuOpen
+      preventDefault()
+      menuOpen = false
+      focus("profile-menu-trigger")
+  view
+    column position="relative" key=menuKey height="100%" min-height=0 background-color=(section == "live" ? "mochi.night" : "mochi.page") color="mochi.ink" color-scheme="light" font-family="Fredoka, ui-rounded, system-ui, sans-serif"
+      if section != "live"
+        image "assets/mochi/dots.svg" alt="" aria-hidden=true position="absolute" inset=0 width="100%" height="100%" object-fit="fill" pointer-events="none"
+      if viewer != ""
+        column role="navigation" aria-label=t("ui.mainNavigation") flex-shrink=0 position="relative" z-index=20 padding-top=(compact ? 10 : 14) padding-left=gutter(compact) padding-right=gutter(compact) padding-bottom=(compact ? 4 : 8) animation=(still ? "mochiFade 200ms linear both" : `mochiHop 600ms ${boing()} both`)
+          row height=(compact ? 56 : 66) box-sizing="border-box" padding-left=(compact ? 14 : 22) padding-right=(compact ? 8 : 10) align-items="center" gap=(compact ? 6 : 10) border="3px solid var(--mochi.ink)" border-radius=999 background-color="mochi.card" box-shadow="0px 5px 0px var(--mochi.ink)"
+            link href="/" aria-label=t("ui.velaHome") text-decoration="none" color="mochi.ink" margin-right=(compact ? 0 : 18) flex-shrink=0
+              Wordmark(size=(compact ? 22 : 26), night=false, still=still)
+            if compact
+              column flex=1
+            else
+              scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" flex=1 min-width=0
+                Destinations(libraries=libraries, section=section, canLive=canLive, still=still, compact=false, home=home, live=live, openLibrary=openLibrary)
+            column position="relative" flex-shrink=0
+              button press=findSomething hover=hint("search") focus=hint("search", true) blur=hint("search", false) aria-label=t("ui.search") class=Bubble width=44 height=44 padding=0 display="flex" align-items="center" justify-content="center" background-color="mochi.butter-soft"
+                PixelIcon(name="search", size=18)
+              SpeechBubble(message=t("ui.search"), shown=(tip == "search" and not menuOpen and not compact), still=still, night=false)
+            button id="profile-menu-trigger" press=toggleMenu aria-expanded=menuOpen aria-controls="viewer-settings" aria-label=t("ui.profileAndAppearance") testId="profile-menu" class=Bubble height=44 flex-shrink=0 padding-left=4 padding-right=(compact ? 4 : 16) display="flex" align-items="center" gap=8 background-color=(menuOpen ? "mochi.pink-wash" : "mochi.card")
+              text viewer.slice(0, 1).toUpperCase() width=32 height=32 border-radius=16 display="flex" align-items="center" justify-content="center" font-family="\"Pixelify Sans\", ui-monospace, monospace" font-size=16 font-weight=700 color="mochi.ink" background-color="mochi.pink-soft" border="2px solid var(--mochi.ink)" box-sizing="border-box" aria-hidden=true
+              if not compact
+                text viewer font-size=15 font-weight=600 max-width=140 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+          if compact
+            scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" margin-left=("-16px") margin-right=("-16px")
+              row padding="12px 16px 6px"
+                Destinations(libraries=libraries, section=section, canLive=canLive, still=still, compact=true, home=home, live=live, openLibrary=openLibrary)
+      if viewer != "" and menuOpen
+        column id="viewer-settings" role="dialog" aria-label=t("ui.profileAndAppearance") position="absolute" top=(compact ? 74 : 92) right=(compact ? 12 : "max(24px, 3.6vw)") z-index=30 width=272 box-sizing="border-box" padding=20 gap=16 border="3px solid var(--mochi.ink)" border-radius=24 background-color="mochi.card" color="mochi.ink" box-shadow="6px 6px 0px var(--mochi.lavender)" transform-origin="top right" animation=(still ? "mochiFade 160ms linear both" : `mochiPop 360ms ${boing()} both`) -exact-exit-animation=(still ? "mochiVanish 120ms linear both" : "mochiVanish 160ms ease-in both")
+          svg position="absolute" top=-14 right=34 width=24 height=14 viewBox="0 0 24 14" aria-hidden=true
+            path d="M1 13.5L12 1.5L23 13.5" fill="var(--mochi.card)" stroke="var(--mochi.ink)" stroke-width=3 stroke-linejoin="round"
+          row gap=12 align-items="center"
+            Mascot(mood="happy", size=44)
+            column gap=2 flex=1 min-width=0
+              text t("mochi.hello") class=Label font-size=10 color="mochi.ink-soft"
+              text viewer font-size=18 font-weight=650 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+          column height=0 border-top="2.5px dashed var(--mochi.line-strong)"
+          if skins.length > 1
+            button press=openPicker testId="skin-picker" class=MenuRow
+              row gap=12 align-items="center" width="100%"
+                column gap=2 flex=1 min-width=0 text-align="left"
+                  text t("ui.appearance") class=Label font-size=10 color="mochi.ink-soft"
+                  text skinLabel(skin) font-size=16 font-weight=600 color="mochi.ink"
+                row gap=4 aria-hidden=true
+                  for color, c in skinManifest(skin).swatches.slice(0, 4) key=`${c}`
+                    column width=12 height=12 border-radius=6 background-color=color border="2px solid var(--mochi.ink)" box-sizing="border-box"
+          vela-install pwaAction="install" buttonLabel=t("pwa.install")
+          vela-install pwaAction="update" buttonLabel=t("pwa.update")
+          button press=leaveSession class=Puffy height=42 padding="0px 16px" box-shadow="0px 3px 0px var(--mochi.ink)"
+            row gap=10 align-items="center" justify-content="center"
+              PixelIcon(name="out", size=14)
+              text t("ui.signOut") font-size=15
+      column flex=1 min-height=0 position="relative"
+        children
+      if pickerOpen
+        SkinPicker(skins=skins, current=skin, small=compact, still=still, choose=changeAppearance, dismiss=closePicker)
+
+// Home, the server's libraries in order (a live library opens the guide), and Live
+// when the server offers it without a live library.
+component Destinations
+  props
+    libraries: LibraryNav[]
+    section: string
+    canLive: bool
+    still: bool
+    compact: bool
+    home: action
+    live: action
+    openLibrary: action
+  derive hasLiveLibrary = libraries.filter(l => l.kind == "live").length > 0
+  view
+    row gap=(compact ? 8 : 4) align-items="center"
+      NavItem(label=t("ui.home"), icon="home", on=(section == "home"), compact=compact, still=still, press=home)
+      for lib in libraries key=lib.id
+        if lib.kind == "live"
+          if canLive
+            NavItem(label=lib.name, icon="tv", on=(section == "live"), compact=compact, still=still, press=live)
+        else
+          NavItem(label=lib.name, icon=(lib.kind == "show" ? "layers" : lib.kind == "movie" ? "star" : "grid"), on=(section == lib.id), compact=compact, still=still, press=openLibrary(lib.id))
+      if canLive and not hasLiveLibrary
+        NavItem(label=t("ui.live"), icon="tv", on=(section == "live"), compact=compact, still=still, press=live)
+
+// A destination pill: the current one is a pink candy with a pixel icon that wiggles in.
+component NavItem
+  props
+    label: string
+    icon: string
+    on: bool
+    compact: bool
+    still: bool
+    press: action
+  view
+    button press=press() testId=`nav-${label}` aria-current=(on ? "page" : "false") class=NavPill height=(compact ? 38 : 42) border-color=(on ? "mochi.ink" : (compact ? "mochi.ink" : "mochi.page-clear")) background-color=(on ? "mochi.pink" : (compact ? "mochi.card" : "mochi.page-clear")) box-shadow=(on or compact ? "0px 3px 0px var(--mochi.ink)" : "none")
+      row gap=8 align-items="center"
+        column animation=(on and not still ? "mochiWiggle 520ms ease-in-out both" : "none") color=(on ? "mochi.ink" : "mochi.ink-soft")
+          PixelIcon(name=icon, size=13)
+        text label font-size=15 font-weight=(on ? 650 : 550) white-space="nowrap"
+
+style MenuRow
+  box-sizing = "border-box"
+  width = "100%"
+  padding = "10px 12px"
+  border = "2.5px solid var(--mochi.ink)"
+  border-radius = 16
+  background-color = "mochi.page"
+  color = "mochi.ink"
+  cursor = "pointer"
+  :hover
+    background-color = "mochi.lavender-soft"
+  :active
+    -exact-press-scale = 0.97
+  :focus-visible
+    box-shadow = "0px 0px 0px 3px var(--mochi.card), 0px 0px 0px 6px var(--mochi.focus)"
+
+style NavPill
+  flex-shrink = 0
+  padding = "0px 16px"
+  border = "2.5px solid transparent"
+  border-radius = 999
+  color = "mochi.ink"
+  font-family = "Fredoka, ui-rounded, system-ui, sans-serif"
+  cursor = "pointer"
+  transition = "background-color 160ms linear, box-shadow 160ms linear"
+  :hover
+    border-color = "mochi.ink"
+  :active
+    -exact-press-scale = 0.94
+  :focus-visible
+    box-shadow = "0px 0px 0px 3px var(--mochi.card), 0px 0px 0px 6px var(--mochi.focus)"
+
+// A poster sticker: white-edged, hard pastel shadow; it bounces and tilts toward
+// the viewer on hover or focus and throws sparkles when chosen.
+component TitleCard
+  props
+    card: Card
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+    fill: bool
+  state lifted = false
+  state bursts = 0
+  action hoverCard(over: bool)
+    lifted = over
+  action focusCard
+    lifted = true
+  action restCard
+    lifted = false
+  action choose
+    bursts = bursts + 1
+    selectTitle(card.id, card.kind, card.receipt)
+  view
+    column position="relative" width=(fill ? "100%" : small ? 132 : "clamp(146px, 11.6vw, 208px)") flex-shrink=0 gap=10 intersect=observe(card.receipt)
+      button press=choose aria-label=cardName(card) testId=`title-${card.id}` hover=hoverCard focus=focusCard blur=restCard position="relative" width="100%" aspect-ratio="2 / 3" padding=0 border="3px solid var(--mochi.ink)" border-radius=(small ? 16 : 20) overflow="hidden" background-color=accent(card.name) color="mochi.ink" text-align="left" cursor="pointer" translate=(lifted and not still ? "0px -8px" : "0px 0px") rotate=(lifted and not still ? `${tilt(card.name)}deg` : "0deg") scale=(lifted and not still ? 1.03 : 1) box-shadow=(card.name.length % 3 == 0 ? (lifted ? "7px 10px 0px var(--mochi.shadow-pink)" : "4px 5px 0px var(--mochi.shadow-pink)") : card.name.length % 3 == 1 ? (lifted ? "7px 10px 0px var(--mochi.shadow)" : "4px 5px 0px var(--mochi.shadow)") : (lifted ? "7px 10px 0px var(--mochi.mint)" : "4px 5px 0px var(--mochi.mint)")) transition=lift(still)
+        :focus-visible
+          box-shadow="0px 0px 0px 3px var(--mochi.card), 0px 0px 0px 7px var(--mochi.focus)"
+        if card.poster != ""
+          FadeImage(src=card.poster)
+        else
+          column position="absolute" inset=0 padding=14 gap=10 justify-content="flex-end" background-image="linear-gradient(160deg, var(--mochi.card) 0%, var(--mochi.page-clear) 70%)"
+            column color="mochi.ink"
+              PixelIcon(name="star", size=18)
+            text card.name class=Title font-size=(small ? 18 : 21) line-clamp=4
+        column position="absolute" inset=0 pointer-events="none" border-radius=(small ? 13 : 17) box-shadow="inset 0px 0px 0px 3px var(--mochi.edge)" aria-hidden=true
+        if card.played
+          row position="absolute" top=8 right=8 width=26 height=26 border-radius=13 align-items="center" justify-content="center" background-color="mochi.mint" border="2px solid var(--mochi.ink)" box-sizing="border-box" color="mochi.ink" aria-hidden=true
+            PixelIcon(name="check", size=12)
+        if card.progressSeconds > 0 and card.durationSeconds > 0 and not card.played
+          column position="absolute" left=10 right=10 bottom=10 height=10 border-radius=5 background-color="mochi.card" border="2px solid var(--mochi.ink)" box-sizing="border-box" overflow="hidden" aria-hidden=true
+            column height="100%" width=`${min(100, card.progressSeconds / card.durationSeconds * 100)}%` background-color="mochi.pink" background-image="repeating-linear-gradient(135deg, var(--mochi.pink) 0px, var(--mochi.pink) 4px, var(--mochi.pink-hover) 4px, var(--mochi.pink-hover) 8px)"
+        if lifted and not still
+          column position="absolute" top=10 left=10 color="mochi.card" animation="mochiPop 300ms ease-out both" aria-hidden=true
+            Twinkle(size=14, color="mochi.card", delay=0, still=still)
+      for n in [bursts] key=`burst-${n}`
+        if n > 0
+          Burst(still=still)
+      column gap=3 padding="0px 4px"
+        text card.name font-size=(small ? 14 : 15) font-weight=600 line-clamp=1 color="mochi.ink"
+        text card.facts font-size=12.5 color="mochi.ink-soft" line-clamp=1 font-variant-numeric="tabular-nums"
+
+// A named shelf of cards, in server order, that slides horizontally.
+component Row
+  props
+    row: FeedRow
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  view
+    Shelf(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+
+// The shelf heading: a pixel star in the row's colour, pixel type, a squiggle.
+component ShelfHeading
+  props
+    name: string
+    small: bool
+  view
+    row gap=10 align-items="center" padding-left=gutter(small) padding-right=gutter(small)
+      column color=accent(name) flex-shrink=0 filter="drop-shadow(1.5px 1.5px 0px var(--mochi.ink))"
+        PixelIcon(name="star", size=(small ? 16 : 18))
+      column gap=2 min-width=0
+        text name role="heading" aria-level=2 class=Pixel font-size=(small ? 19 : 23) color="mochi.ink" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+        svg width=72 height=7 viewBox="0 0 72 7" aria-hidden=true
+          path d="M1 4Q5 1 9 4T17 4T25 4T33 4T41 4T49 4T57 4T65 4T71 4" fill="none" stroke=(name.length % 3 == 0 ? "var(--mochi.pink)" : name.length % 3 == 1 ? "var(--mochi.lavender)" : "var(--mochi.mint)") stroke-width=2.5 stroke-linecap="round"
+
+// The shelf itself; a caller may add trailing content after the last card
+// (home rows add their end-of-row sentinel and a loading Mochi there).
+component Shelf
+  props
+    row: FeedRow
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  slot
+  view
+    column position="relative" gap=0 padding-bottom=(small ? 10 : 18)
+      ShelfHeading(name=row.name, small=small)
+      scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
+        row gap=(small ? 14 : 20) align-items="flex-start" padding-top=(small ? 18 : 22) padding-bottom=(small ? 18 : 24) padding-left=gutter(small) padding-right=gutter(small)
+          for card, i in row.items key=card.id
+            column animation=hop(still, stagger(i, 45, 8))
+              TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
+          children
+
+// A row-shaped placeholder while titles load.
+component RowSkeleton
+  props
+    small: bool
+    still: bool
+  view
+    column gap=18 padding-bottom=24 aria-hidden=true
+      column padding-left=gutter(small) padding-right=gutter(small)
+        Skeleton(width="190px", height="22px", radius=8, still=still)
+      row gap=(small ? 14 : 20) padding-left=gutter(small) padding-right=gutter(small) overflow="hidden"
+        for i in [0, 1, 2, 3, 4, 5, 6, 7] key=`${i}`
+          column gap=10 flex-shrink=0
+            Skeleton(width=(small ? "132px" : "clamp(146px, 11.6vw, 208px)"), height=(small ? "198px" : "clamp(219px, 17.4vw, 312px)"), radius=20, still=still)
+            Skeleton(width="70%", height="12px", radius=6, still=still)
+
+component Home
+  props
+    model: HomeModel
+    active: bool
+    query: string
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+    heroIndex: number
+    pickHero: action
+    reachEnd: action
+    reachRowEnd: action
+    homeMoreLoading: bool
+    rowMoreLoading: string[]
+  slot
+  derive searching = query != ""
+  derive shown = model.hero.slice(heroIndex, heroIndex + 1)
+  derive previewing = not still and not searching and model.previews.filter(p => shown.map(h => h.id).includes(p.id)).length > 0
+  derive rotating = model.hero.length > 1 and active and not searching and not still and not previewing
+  view
+    column position="relative" padding-top=(small ? 6 : 10)
+      if not searching
+        for hero in shown key=hero.id
+          column padding-left=gutter(small) padding-right=gutter(small) -exact-exit-animation=(still ? "mochiVanish 120ms linear both" : "mochiVanish 220ms ease-in both")
+            Banner(hero=hero, model=model, active=active, small=small, still=still, previewing=previewing, selectTitle=selectTitle, observe=observe)
+        if model.hero.length > 1
+          row gap=8 align-items="center" justify-content="center" padding-top=(small ? 16 : 20) role="group" aria-label=t("ui.featuredTitles")
+            for hero, i in model.hero key=hero.id
+              button press=pickHero(i) aria-label=t("ui.featuredTitleOf", position=formatNumber(i + 1, "decimal"), total=formatNumber(model.hero.length, "decimal"), title=hero.name) aria-current=(i == heroIndex ? "true" : "false") position="relative" width=(i == heroIndex ? 44 : 14) height=14 padding=0 border="2.5px solid var(--mochi.ink)" border-radius=7 overflow="hidden" box-sizing="border-box" background-color=(i == heroIndex ? "mochi.pink-soft" : "mochi.card") cursor="pointer" -exact-layout-transition=(still ? "none" : "380ms ease-out")
+                :hover
+                  background-color="mochi.lavender-soft"
+                :focus-visible
+                  box-shadow="0px 0px 0px 2px var(--mochi.card), 0px 0px 0px 5px var(--mochi.focus)"
+                if i == heroIndex
+                  for n in [heroIndex] key=`fill-${n}`
+                    column position="absolute" inset=0 background-color="mochi.pink" animation=(rotating ? "mochiFill 9000ms linear both" : "none")
+      // The search box, with Mochi perched on its edge.
+      column padding-top=(searching ? (small ? 40 : 48) : (small ? 26 : 34)) padding-bottom=(small ? 4 : 10) padding-left=gutter(small) padding-right=gutter(small) align-items="center" -exact-layout-transition=(still ? "none" : "420ms ease-out")
+        column position="relative" width="100%" max-width=720
+          column position="absolute" left=(small ? 18 : 30) top=(small ? -30 : -36) z-index=2 pointer-events="none" animation=(still ? "none" : "mochiFloat 3.6s ease-in-out infinite")
+            Mascot(mood=(searching ? "wow" : "happy"), size=(small ? 40 : 48))
+          children
+      if not searching
+        column position="relative" padding-top=(small ? 12 : 18)
+          for row, i in model.rows key=row.id
+            column animation=hop(still, 120 + stagger(i, 80, 4)) -exact-exit-animation=(still ? "mochiVanish 120ms linear both" : "mochiVanish 200ms ease-in both")
+              Shelf(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+                if row.nextCursor != ""
+                  column width=(small ? 72 : 104) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
+                    if rowMoreLoading.includes(row.id)
+                      Hopper(size=36, still=still, mood="happy")
+          if model.nextCursor != ""
+            column min-height=120 align-items="center" justify-content="center" intersect=reachEnd
+              if homeMoreLoading
+                Loader(message=t("ui.loadingMore"), size=48, still=still, night=false)
+          if model.rows.length == 0
+            EmptyState(mood="sleepy", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"), still=still)
+          column height=(small ? 24 : 40)
+
+// The featured title as a big sticker: artwork in a thick rounded frame with a
+// hard lavender shadow, the poster stuck on at a tilt, and a candy button.
+component Banner
+  props
+    hero: Card
+    model: HomeModel
+    active: bool
+    small: bool
+    still: bool
+    previewing: bool
+    selectTitle: action
+    observe: action
+  view
+    column position="relative" intersect=observe(hero.receipt) animation=popIn(still, 0)
+      column position="relative" height=(small ? 440 : "clamp(380px, 54vh, 560px)") border="3px solid var(--mochi.ink)" border-radius=(small ? 26 : 34) overflow="hidden" background-color="mochi.lavender-soft" box-shadow=(small ? "6px 7px 0px var(--mochi.lavender)" : "10px 11px 0px var(--mochi.lavender)")
+        if hero.backdrop != ""
+          FadeImage(src=hero.backdrop)
+        else
+          if hero.poster != ""
+            image hero.poster alt="" aria-hidden=true position="absolute" top="-20%" left="-20%" width="140%" height="140%" object-fit="cover" filter="blur(60px) saturate(1.4)" opacity=0.9
+        if not still
+          for preview in model.previews.filter(p => p.id == hero.id) key=preview.id
+            vela-preview url=preview.url active=(active ? "true" : "false") still="false" expiresAt=preview.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+        column position="absolute" inset=0 pointer-events="none" aria-hidden=true background-image=(small ? "linear-gradient(0deg, var(--mochi.scrim) 0%, var(--mochi.scrim) 30%, var(--mochi.scrim-clear) 75%)" : "linear-gradient(90deg, var(--mochi.scrim) 0%, var(--mochi.scrim-soft) 48%, var(--mochi.scrim-clear) 72%), linear-gradient(0deg, var(--mochi.scrim) 0%, var(--mochi.scrim-clear) 50%)")
+        column position="absolute" left=0 right=0 bottom=0 box-sizing="border-box" padding=(small ? "0px 20px 22px" : "0px 44px 40px") max-width=(small ? "none" : "46rem") gap=(small ? 10 : 14) color="mochi.night-ink"
+          row align-self="flex-start" gap=7 align-items="center" padding="5px 12px 5px 10px" border-radius=999 background-color="mochi.butter" color="mochi.ink" border="2.5px solid var(--mochi.ink)" animation=hop(still, 160)
+            PixelIcon(name="heart", size=11)
+            text t("mochi.pickedForYou") class=Label font-size=11
+          if hero.logo != ""
+            image hero.logo alt=hero.name role="heading" aria-level=1 height=(small ? 84 : 130) width="auto" max-width=(small ? "80%" : "min(480px, 72%)") object-fit="contain" align-self="flex-start" filter="drop-shadow(3px 3px 0px var(--mochi.ink))" animation=hop(still, 220)
+          else
+            text hero.name role="heading" aria-level=1 class=Title font-size=(small ? 38 : 64) line-clamp=2 color="mochi.night-ink" text-shadow="3px 3px 0px var(--mochi.ink)" animation=hop(still, 220)
+          row gap=6 flex-wrap="wrap" animation=hop(still, 280)
+            for fact in [hero.facts].concat(hero.genres.slice(0, 3)).filter(f => f != "") key=fact
+              text fact font-size=12.5 font-weight=600 padding="3px 10px" border-radius=999 background-color="mochi.night-veil" border="1.5px solid var(--mochi.night-edge-strong)" color="mochi.night-ink" font-variant-numeric="tabular-nums"
+          if hero.summary != ""
+            text hero.summary font-size=(small ? 14 : 16) line-height=1.5 line-clamp=(small ? 2 : 3) max-width="34rem" color="mochi.night-ink" text-shadow="0px 1px 8px var(--mochi.ink)" animation=hop(still, 330)
+          row margin-top=(small ? 4 : 8) animation=hop(still, 380)
+            button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) class=Candy height=(small ? 48 : 54) padding-left=(small ? 22 : 28) padding-right=(small ? 24 : 30)
+              row gap=10 align-items="center"
+                PixelIcon(name="play", size=14)
+                text t("mochi.peek") font-size=(small ? 16 : 17)
+      if hero.poster != "" and not small
+        column position="absolute" right="max(36px, 4.5vw)" top=-14 width="clamp(150px, 13vw, 210px)" aspect-ratio="2 / 3" rotate="5deg" aria-hidden=true animation=popIn(still, 260)
+          column position="relative" width="100%" height="100%" box-sizing="border-box" border-radius=20 border="3px solid var(--mochi.ink)" background-color="mochi.card" padding=5 box-shadow="8px 10px 0px var(--mochi.shadow-pink)" animation=(still ? "none" : "mochiFloat 5s ease-in-out infinite")
+            column position="relative" flex=1 border-radius=13 overflow="hidden"
+              FadeImage(src=hero.poster)
+          column position="absolute" top=-12 left="42%" width=54 height=20 rotate="-8deg" background-color="mochi.mint" opacity=0.85 border="2px solid var(--mochi.ink)" box-sizing="border-box"
+        column position="absolute" right="max(20px, 2.5vw)" top=-26 color="mochi.butter" filter="drop-shadow(2px 2px 0px var(--mochi.ink))" aria-hidden=true
+          Twinkle(size=26, color="mochi.butter", delay=0, still=still)
+
+// A designed moment for empty results and unavailable lanes: Mochi with a bubble.
+component EmptyState
+  props
+    mood: string
+    title: string
+    message: string
+    still: bool
+  view
+    column align-items="center" text-align="center" gap=12 padding="44px 24px 64px" role="status" animation=popIn(still, 60)
+      column position="relative" align-items="center"
+        column padding="12px 22px" border-radius=24 border="3px solid var(--mochi.ink)" background-color="mochi.card" box-shadow="5px 5px 0px var(--mochi.shadow-pink)"
+          text title class=Title font-size=26
+        svg width=24 height=14 viewBox="0 0 24 14" margin-top=-3 aria-hidden=true
+          path d="M1 0.5L12 12.5L23 0.5" fill="var(--mochi.card)" stroke="var(--mochi.ink)" stroke-width=3 stroke-linejoin="round"
+      column animation=(still ? "none" : "mochiFloat 3.2s ease-in-out infinite")
+        Mascot(mood=mood, size=86)
+      if message != ""
+        text message font-size=15 color="mochi.ink-soft" line-height=1.55 max-width="26rem"
+
+component SearchSurface
+  props
+    query: string
+    model: SearchModel
+    descriptive: SearchModel
+    ai: SearchModel
+    generation: number
+    loading: bool
+    error: bool
+    aiAvailable: bool
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  view
+    column position="relative" gap=(small ? 12 : 18) padding-top=(small ? 8 : 14) padding-bottom=72 animation=hop(still, 80)
+      column padding-left=gutter(small) padding-right=gutter(small)
+        text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 class=Title font-size=(small ? 28 : 40) line-clamp=2
+      if error
+        EmptyState(mood="sad", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"), still=still)
+      else
+        if loading
+          column align-items="center" padding="36px 0px"
+            Loader(message=t("ui.findingTitles"), size=64, still=still, night=false)
+        else
+          if model.items.length == 0
+            EmptyState(mood="sleepy", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"), still=still)
+          else
+            Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
+          column animation=hop(still, 120)
+            Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
+          column gap=8 animation=hop(still, 160)
+            row gap=10 align-items="center" padding-left=gutter(small) padding-right=gutter(small)
+              Twinkle(size=20, color="mochi.lavender-deep", delay=0, still=still)
+              text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 class=Title font-size=(small ? 24 : 28)
+            if ai.aiStatus == "queued" or ai.aiStatus == "running"
+              row gap=12 align-items="center" padding-left=gutter(small) padding-right=gutter(small) role="status"
+                Hopper(size=30, still=still, mood="wow")
+                text t("ui.exploringYourDescription") color="mochi.ink-soft" font-size=15
+            if ai.items.length > 0
+              Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+            if ai.aiStatus == "failed"
+              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="mochi.ink-soft" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
+
+fn detailPresentation(width: number): string = "fullscreen"
+fn detailSplit(width: number): string = "none"
+
+// The search box: a chunky white pill with a butter search badge.
+component SearchField
+  props
+    query: string
+    edit: action
+  state focused = false
+  action focusField
+    focused = true
+  action blurField
+    focused = false
+  view
+    row align-items="center" gap=12 height=62 box-sizing="border-box" padding="0px 8px 0px 10px" border="3px solid var(--mochi.ink)" border-radius=999 background-color="mochi.card" box-shadow=(focused ? "0px 6px 0px var(--mochi.ink), 0px 0px 0px 6px var(--mochi.lavender-soft)" : "0px 5px 0px var(--mochi.ink)") transition="box-shadow 200ms ease"
+      row width=40 height=40 flex-shrink=0 border-radius=20 align-items="center" justify-content="center" background-color=(focused ? "mochi.pink" : "mochi.butter") border="2.5px solid var(--mochi.ink)" box-sizing="border-box" color="mochi.ink" aria-hidden=true transition="background-color 160ms linear"
+        PixelIcon(name="search", size=16)
+      input id="vela-search" value=query input=edit focus=focusField blur=blurField outline="none" placeholder=t("mochi.searchPlaceholder") aria-label=t("ui.searchYourLibrary") testId="search" flex=1 min-width=0 height="100%" padding=0 border="none" background-color="transparent" color="mochi.ink" font-family="Fredoka, ui-rounded, system-ui, sans-serif" font-size=17 font-weight=500
+        ::placeholder
+          color="mochi.ink-quiet"
+      if query != ""
+        button press=edit("") aria-label=t("ui.clearSearch") class=Bubble width=40 height=40 padding=0 flex-shrink=0 display="flex" align-items="center" justify-content="center"
+          PixelIcon(name="close", size=12)
+
+// Waiting and failure moments the foundation reports, shaped like what is coming.
+component Status
+  props
+    kind: string
+    message: string
+    small: bool
+    still: bool
+  view
+    if kind == "home"
+      column role="status" aria-label=message padding-top=(small ? 6 : 10) gap=(small ? 26 : 34) animation=(still ? "mochiFade 200ms linear both" : "mochiFade 400ms ease-out both")
+        column position="relative" margin-left=gutter(small) margin-right=gutter(small) height=(small ? "440px" : "clamp(380px, 54vh, 560px)") border="3px dashed var(--mochi.shadow)" border-radius=(small ? 26 : 34) align-items="center" justify-content="center" background-color="mochi.lavender-soft" box-sizing="border-box"
+          Loader(message=message, size=(small ? 64 : 80), still=still, night=false)
+        column align-items="center" padding-left=gutter(small) padding-right=gutter(small)
+          Skeleton(width="min(720px, 100%)", height="62px", radius=31, still=still)
+        RowSkeleton(small=small, still=still)
+    else
+      if kind == "library"
+        column role="status" aria-label=message gap=26 padding-top=(small ? 18 : 26)
+          column gap=14 padding-left=gutter(small) padding-right=gutter(small)
+            Skeleton(width=(small ? "60%" : "320px"), height=(small ? "40px" : "56px"), radius=14, still=still)
+            row gap=10
+              Skeleton(width="200px", height="42px", radius=21, still=still)
+              Skeleton(width="140px", height="42px", radius=21, still=still)
+          column align-items="center" padding="20px 0px"
+            Loader(message=message, size=60, still=still, night=false)
+      else
+        if kind == "detail"
+          column role="status" aria-label=message min-height="70vh" align-items="center" justify-content="center" gap=20 padding=32
+            Loader(message=message, size=(small ? 72 : 90), still=still, night=false)
+        else
+          if kind == "loading"
+            column padding="96px 24px" align-items="center"
+              Loader(message=message, size=64, still=still, night=false)
+          else
+            column padding-top=(small ? 24 : 48)
+              EmptyState(mood="sad", title=t("ui.somethingWentQuiet"), message=message, still=still)

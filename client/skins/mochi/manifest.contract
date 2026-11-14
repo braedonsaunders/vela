@@ -1,0 +1,3 @@
+use SkinManifest from "../../foundation/models.contract"
+
+fn manifest(): SkinManifest = SkinManifest(id="mochi", name=t("mochi.name"), tagline=t("skin.mochi.tagline"), preview="assets/skins/mochi.jpg", swatches=["#fff0f6", "#3b1f4a", "#ff7eb6", "#b9a0ff", "#8fe8c9"])

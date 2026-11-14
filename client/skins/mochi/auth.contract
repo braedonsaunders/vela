@@ -1,0 +1,122 @@
+use QuickModel from "../../foundation/models.contract"
+use Pixel, Title, Label, Candy, Puffy, Field, PixelIcon, Mascot, Hopper, NightSky, Twinkle, Wordmark, hop, popIn, boing, mochiFade, mochiVanish, mochiFloat, mochiPop from "./look.contract"
+
+// The stage every signed-out state stands on: a night sky with drifting petals,
+// the wordmark, and a white sticker card with Mochi peeking over its edge.
+component AuthStage
+  props
+    still: bool
+  slot
+  view
+    column position="relative" z-index=0 min-height="100dvh" width="100%" box-sizing="border-box" overflow="hidden" align-items="center" justify-content="center" padding="max(28px, 6vh) 16px" background-color="mochi.night" color="mochi.ink" font-family="Fredoka, ui-rounded, system-ui, sans-serif" -exact-exit-animation=(still ? "mochiVanish 160ms linear both" : "mochiVanish 300ms ease-in both")
+      column position="absolute" inset=0 z-index=-1
+        NightSky(still=still, petals=true)
+      column position="relative" width="100%" max-width=440 gap=26 align-items="center" animation=popIn(still, 0)
+        Wordmark(size=44, night=true, still=still)
+        column position="relative" width="100%" padding-top=34
+          column position="absolute" top=0 left="50%" margin-left=-38 z-index=2 animation=(still ? "none" : "mochiFloat 3.6s ease-in-out infinite") aria-hidden=true
+            Mascot(mood="happy", size=76)
+          column width="100%" box-sizing="border-box" padding="clamp(40px, 6vw, 52px) clamp(22px, 5vw, 38px) clamp(26px, 5vw, 36px)" border-radius=32 background-color="mochi.card" border="3px solid var(--mochi.ink)" box-shadow="8px 9px 0px var(--mochi.pink)" -exact-layout-transition=(still ? "none" : "480ms ease-out")
+            children
+
+// A signed-out moment with nothing to fill in: connecting, redeeming a web code, offline.
+component AuthNotice
+  props
+    kind: string
+    still: bool
+  view
+    column gap=14 align-items="center" text-align="center" padding="8px 0px" role=(kind == "offline" ? "alert" : "status") animation=hop(still, 0) -exact-exit-animation=(still ? "mochiVanish 160ms linear both" : "mochiVanish 260ms ease-in both")
+      if kind == "offline"
+        row width=46 height=46 border-radius=23 align-items="center" justify-content="center" background-color="mochi.alert" border="2.5px solid var(--mochi.ink)" box-sizing="border-box" color="mochi.pink-deep" aria-hidden=true
+          PixelIcon(name="alert", size=20)
+        text t("ui.serverUnreachable") role="heading" aria-level=1 class=Title font-size=30
+        text t("ui.yourServerCouldNotBeReachedReopenVelaWhenTheConnectionIsRestored") color="mochi.ink-soft" font-size=15 line-height=1.55
+      else
+        Dots(still=still)
+        text (kind == "redeeming" ? t("ui.signingYouIn") : t("ui.connectingToYourLibrary")) class=Pixel color="mochi.ink-soft" font-size=16
+
+// Three pixel hearts that hop in turn: the skin's small indeterminate progress.
+component Dots
+  props
+    still: bool
+  view
+    row gap=8 aria-hidden=true
+      for i in [0, 1, 2] key=`${i}`
+        column color=(i == 0 ? "mochi.pink" : i == 1 ? "mochi.lavender" : "mochi.mint") animation=(still ? "none" : `mochiFloat 900ms ease-in-out ${i * 150}ms infinite`)
+          PixelIcon(name="heart", size=14)
+
+component SignIn
+  props
+    username: string
+    password: string
+    passwordAvailable: bool
+    quickAvailable: bool
+    error: string
+    busy: bool
+    still: bool
+    editUsername: action
+    editPassword: action
+    submit: action
+    quick: action
+  view
+    column gap=22 animation=hop(still, 60) -exact-exit-animation=(still ? "mochiVanish 160ms linear both" : "mochiVanish 260ms ease-in both")
+      column gap=8 align-items="center" text-align="center"
+        text t("mochi.welcome") role="heading" aria-level=1 class=Title font-size=34
+        text t("ui.signInToYourLibrary") color="mochi.ink-soft" font-size=16 line-height=1.5
+      if error != ""
+        row role="alert" gap=10 align-items="flex-start" padding="12px 14px" border-radius=18 background-color="mochi.alert" border="2.5px solid var(--mochi.pink-deep)" color="mochi.ink" animation=popIn(still, 0)
+          column color="mochi.pink-deep" flex-shrink=0 margin-top=2
+            PixelIcon(name="alert", size=16)
+          text error font-size=14 line-height=1.45
+      if passwordAvailable
+        column gap=14
+          column gap=6
+            text t("ui.username") class=Label font-size=11 color="mochi.ink-soft"
+            input value=username input=editUsername autocomplete="username" autocapitalize="none" spellcheck=false aria-label=t("ui.username") testId="username" class=Field
+          column gap=6
+            text t("ui.password") class=Label font-size=11 color="mochi.ink-soft"
+            input type="password" value=password input=editPassword submit=submit autocomplete="current-password" aria-label=t("ui.password") testId="password" class=Field
+          button press=submit disabled=(busy or username.trim() == "" or password == "") class=Candy height=54 margin-top=8 testId="sign-in"
+            row gap=10 align-items="center" justify-content="center"
+              if busy
+                Dots(still=still)
+              else
+                PixelIcon(name="heart", size=14)
+              text (busy ? t("ui.signingIn") : t("ui.signIn")) font-size=17
+      if passwordAvailable and quickAvailable
+        row gap=12 align-items="center" aria-hidden=true
+          column flex=1 height=0 border-top="2.5px dashed var(--mochi.line-strong)"
+          text t("ui.or") class=Pixel font-size=13 color="mochi.ink-quiet"
+          column flex=1 height=0 border-top="2.5px dashed var(--mochi.line-strong)"
+      if quickAvailable
+        button press=quick disabled=busy class=Puffy height=52 testId="quick-connect"
+          row gap=10 align-items="center" justify-content="center"
+            PixelIcon(name="phone", size=16)
+            text t("ui.connectWithACode") font-size=16
+      if not passwordAvailable and not quickAvailable
+        column gap=10 align-items="center" text-align="center" role="status"
+          Mascot(mood="sleepy", size=56)
+          text t("ui.noSignInMethodsOffered") color="mochi.ink-soft" font-size=14 line-height=1.55
+
+component QuickConnect
+  props
+    model: QuickModel
+    error: string
+    still: bool
+    cancel: action
+  view
+    column gap=22 align-items="center" text-align="center" animation=hop(still, 60) -exact-exit-animation=(still ? "mochiVanish 160ms linear both" : "mochiVanish 260ms ease-in both")
+      column gap=8 align-items="center"
+        text t("ui.anEasierWayIn") role="heading" aria-level=1 class=Title font-size=34
+        text t("ui.approveThisCodeFromASignedInEtherDevice") color="mochi.ink-soft" font-size=15 line-height=1.5 max-width=300
+      row width="100%" gap=6 justify-content="center" testId="connect-code" aria-label=model.code role="text"
+        for ch, i in model.code.split("") key=`${i}`
+          text ch aria-hidden=true flex=1 max-width=46 height=58 display="flex" align-items="center" justify-content="center" border-radius=14 background-color=(i % 3 == 0 ? "mochi.pink-soft" : i % 3 == 1 ? "mochi.lavender-soft" : "mochi.mint-soft") border="2.5px solid var(--mochi.ink)" box-shadow="0px 4px 0px var(--mochi.ink)" font-family="\"Pixelify Sans\", ui-monospace, monospace" font-size=28 font-weight=700 color="mochi.ink" animation=(still ? "mochiFade 200ms linear both" : `mochiPop 420ms ${boing()} ${120 + i * 50}ms both`)
+      column gap=8 align-items="center"
+        row gap=10 align-items="center" role="status"
+          if error == ""
+            Dots(still=still)
+          text (error == "" ? t("ui.waitingForApproval") : error) color=(error == "" ? "mochi.ink-soft" : "mochi.pink-deep") font-size=15
+        text t("ui.codeExpires", expiry=model.expiresLabel) color="mochi.ink-quiet" font-size=13
+      button press=cancel class=Puffy height=46 padding="0px 28px"
+        text t("ui.cancel") font-size=15

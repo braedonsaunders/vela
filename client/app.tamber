@@ -124,3 +124,74 @@ theme
   picker.on-accent = #15130f  scheme=fixed
   picker.focus = #f5f1e9  scheme=fixed
   media.ground = #000000  scheme=fixed
+
+  // Mochi: a strawberry-milk day page and a night-sky guide and player, with
+  // pastel pink, lavender and mint, sticker-white edges and hard pastel shadows.
+  mochi.page = #fff0f6  scheme=fixed
+  mochi.page-deep = #ffe2ee  scheme=fixed
+  mochi.page-clear = #fff0f600  scheme=fixed
+  mochi.ink = #3b1f4a  scheme=fixed
+  mochi.ink-soft = #6b4f7d  scheme=fixed
+  mochi.ink-quiet = #8f789f  scheme=fixed
+  mochi.card = #ffffff  scheme=fixed
+  mochi.card-soft = #fff8fb  scheme=fixed
+  mochi.edge = #ffffff  scheme=fixed
+  mochi.line = #3b1f4a1f  scheme=fixed
+  mochi.line-strong = #3b1f4a38  scheme=fixed
+  mochi.pink = #ff7eb6  scheme=fixed
+  mochi.pink-hover = #ff97c4  scheme=fixed
+  mochi.pink-deep = #d94c8f  scheme=fixed
+  mochi.pink-soft = #ffc8df  scheme=fixed
+  mochi.pink-wash = #ffd9e9  scheme=fixed
+  mochi.lavender = #b9a0ff  scheme=fixed
+  mochi.lavender-soft = #e6dcff  scheme=fixed
+  mochi.lavender-deep = #7b5ae0  scheme=fixed
+  mochi.mint = #8fe8c9  scheme=fixed
+  mochi.mint-soft = #d6f8ec  scheme=fixed
+  mochi.butter = #ffe48a  scheme=fixed
+  mochi.butter-soft = #fff4c7  scheme=fixed
+  mochi.sky = #a8dcff  scheme=fixed
+  mochi.shadow = #c4a6f2  scheme=fixed
+  mochi.shadow-pink = #f4a6c9  scheme=fixed
+  mochi.shadow-soft = #7b5ae033  scheme=fixed
+  mochi.glass = #fff8fbe0  scheme=fixed
+  mochi.scrim = #2a1546a6  scheme=fixed
+  mochi.scrim-soft = #2a154640  scheme=fixed
+  mochi.scrim-clear = #2a154600  scheme=fixed
+  mochi.focus = #7b5ae0  scheme=fixed
+  mochi.mascot = #fff9fc  scheme=fixed
+  mochi.blush = #ff9ec7  scheme=fixed
+  mochi.skeleton = #f6d3e4  scheme=fixed
+  mochi.skeleton-light = #fff4f9  scheme=fixed
+  mochi.alert = #ffe1e9  scheme=fixed
+  // Night sky: the guide, the player and the sign-in stage.
+  mochi.night = #1d1236  scheme=fixed
+  mochi.night-2 = #2b1a52  scheme=fixed
+  mochi.night-3 = #3e2870  scheme=fixed
+  mochi.night-clear = #1d123600  scheme=fixed
+  mochi.night-veil = #1d1236cc  scheme=fixed
+  mochi.night-deep = #120a24f2  scheme=fixed
+  mochi.night-card = #ffffff12  scheme=fixed
+  mochi.night-card-hover = #ffffff1f  scheme=fixed
+  mochi.night-edge = #ffffff2b  scheme=fixed
+  mochi.night-edge-strong = #ffffff55  scheme=fixed
+  mochi.night-ink = #fff4fb  scheme=fixed
+  mochi.night-soft = #dccbf5  scheme=fixed
+  mochi.night-quiet = #a996cc  scheme=fixed
+  mochi.night-track = #ffffff2e  scheme=fixed
+  mochi.night-buffer = #ffffff59  scheme=fixed
+  mochi.star = #fff6c9  scheme=fixed
+  mochi.sakura = #ffb7d5  scheme=fixed
+  mochi.airing = #ff7eb633  scheme=fixed
+  mochi.airing-fill = #ff7eb64d  scheme=fixed
+  mochi.past = #120a2459  scheme=fixed
+  mochi.tone-news = #a8dcff  scheme=fixed
+  mochi.tone-sport = #8fe8c9  scheme=fixed
+  mochi.tone-film = #ffc48a  scheme=fixed
+  mochi.tone-kids = #ffe48a  scheme=fixed
+  mochi.tone-factual = #9be7e3  scheme=fixed
+  mochi.tone-drama = #c9a8ff  scheme=fixed
+  mochi.tone-comedy = #ffa8cc  scheme=fixed
+  mochi.tone-music = #f0a0ff  scheme=fixed
+  mochi.tone-life = #c8eb94  scheme=fixed
+  mochi.tone-other = #c5bcd6  scheme=fixed
