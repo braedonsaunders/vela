@@ -318,7 +318,7 @@ component Collection
         column
           button press=close aria-label=t("ui.back") padding=16
             text t("ui.back")
-          Row(skin=skin, row=FeedRow(id=id, name=name, receipt="", items=items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Row(skin=skin, row=FeedRow(id=id, name=name, receipt="", items=items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
       else
         CineBrowsePage(eyebrow=t("library.collection"), name=name, items=items, small=small, still=still, close=close, selectTitle=selectTitle, observe=observe)
 
@@ -346,7 +346,7 @@ component Library
         column
           button press=close aria-label=t("ui.back") padding=16
             text t("ui.back")
-          Row(skin=skin, row=FeedRow(id=model.id, name=model.name, receipt="", items=model.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Row(skin=skin, row=FeedRow(id=model.id, name=model.name, receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
           if model.more
             button press=more() disabled=moreLoading padding=16
               text t("library.loadMore")
