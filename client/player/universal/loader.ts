@@ -1,9 +1,10 @@
+import { QUALIFIED_ORIGINAL_VIDEO, QUALIFIED_ORIGINAL_AUDIO } from './qualified';
 import type { ClientCapabilities } from '../../wire/v0/types';
 import type { DecoderRetry } from './retry';
 import type { OriginalMedia } from './source';
 export interface UniversalReadout {
   state: 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'failed';
-  position: number; duration: number | null; frames: number; dropped: number;
+  position: number; duration: number | null; frames: number; dropped: number; audioTrackId: string | null; metadataDiscrepancies: string[]; presentedFrames: number; decoderReady: boolean;
 }
 export interface OriginalBackend {
   position: number; readout: UniversalReadout;
@@ -73,5 +74,7 @@ export async function originalPlaybackCapabilities(signal: AbortSignal): Promise
   // Native codec APIs are optional only when an installed package supplies that
   // family. Current beta admission requires WebCodecs for the common video path.
   if (typeof VideoDecoder !== 'function' || typeof AudioContext !== 'function' || typeof AudioWorkletNode !== 'function') return null;
-  return declaration;
+  const videoDecoders = declaration.videoDecoders.filter(codec => QUALIFIED_ORIGINAL_VIDEO.includes(codec));
+  if (!videoDecoders.length) return null;
+  return {...declaration,videoDecoders,audioDecoders:declaration.audioDecoders.filter(codec => QUALIFIED_ORIGINAL_AUDIO.includes(codec))};
 }

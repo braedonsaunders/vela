@@ -39,6 +39,7 @@ export interface Snapshot {
   sourceId: string | null; strategy: Source['strategy'] | null;
   backend: 'file' | 'native-hls' | 'mse' | 'webgpu' | null; renditionId: string | null; qualityIds: string[];
   capabilities: { pip: boolean; fullscreen: boolean; audioSwitch: boolean }; lockedQuality: string | null;
+  diagnostics?: { metadataDiscrepancies: string[] };
   live: LiveSnapshot | null;
   seekTarget: number | null; waiting: boolean; volume: number; muted: boolean;
   preparation: 'media-metadata' | 'initial-buffer' | 'starting' | null;

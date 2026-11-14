@@ -1214,3 +1214,40 @@ HEVC SDR result therefore needs a supported release-pinning mechanism, or must
 qualify the actual returned release and codec facts honestly. The metadata
 mismatch was handed to Ether with exact broker facts; its container-side count
 remains unavailable for this stopped session.
+
+### 0.1.28 startup hotfix and qualification policy
+
+Original admission now intersects installed modules with **qualified** families:
+H.264 video only until another family passes its real playback gate. Native video
+advertisement is also H.264 only: the owner's1917 evidence was HEVC-copy HLS,
+so merely restricting original admission would still permit that unqualified
+copy route. HEVC/AV1/DV sources must receive compatible H.264 HLS for now. There is
+one player, no toggle; modules on disk do not establish qualification. Runtime
+admission independently checks the actual container codec, not just the broker
+label. Qualified audio families remain available.
+
+Every original start has an independent8s first-**presented**-frame watchdog.
+Audio-clock movement, a playing label or decoded-but-unpresented frames cannot
+satisfy it. Startup owns a cancellation controller; caller-scoped abortable waits
+cover demux/browser config, audio preparation, shared capability promises,
+presentation setup and controller start. Cancellation does not reset shared page
+probes. Old-renderer teardown is bounded3.5s. Actual decoder failures may try the
+local software/package route once, then the authorized compatible backend.
+Unavailable startup input bypasses pointless decoder retry. All attempts remain
+bounded and errors are reported rather than leaving a spinner indefinitely.
+
+Local same-origin native-view verification, no lab/media provider involved:
+
+| Case | Measured result |
+|---|---|
+| Actual HEVC/E-AC-3 fixture |Unqualified actual HEVC rejected into internal fallback; H.264/AAC file playing by2680.9ms,16 frames/0 dropped,position0.50542s |
+| Local media promise deliberately never resolves |Timeout reported8003.3ms; compatible fallback playing8947.8ms,17 frames/0 dropped,position0.503214s |
+
+Metadata descriptions are now advisory: actual selected container facts drive
+codec, channels/rate/layout/language, dimensions, profile/level, scan/rotation,
+colour and timeline. Differences enter bounded `snapshot.diagnostics` rather than
+rejecting playback. Only selected actual audio is inspected; description inventory
+mismatches map by source order, audio ordinal or first actual audio, with the
+mapping recorded. Unsupported decoder/output configurations, unsafe unknown
+multichannel PCM positions, corrupt or changed sources and HTTP/range violations
+still take automatic fallback. HEVC/DV presentation expansion remains gated.

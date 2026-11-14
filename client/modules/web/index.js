@@ -1,3 +1,7 @@
+// client/player/universal/qualified.ts
+var QUALIFIED_ORIGINAL_VIDEO = ["h264"];
+var QUALIFIED_ORIGINAL_AUDIO = ["aac", "ac3", "eac3", "truehd", "dts", "flac", "opus", "vorbis", "mp3", "alac", "mp2", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le", "pcm_f64le"];
+
 // client/player/universal/loader.ts
 function assetLocation() {
   const descriptor = window.velaUniversalAssets;
@@ -64,7 +68,10 @@ async function originalPlaybackCapabilities(signal) {
       return null;
   if (typeof VideoDecoder !== "function" || typeof AudioContext !== "function" || typeof AudioWorkletNode !== "function")
     return null;
-  return declaration;
+  const videoDecoders = declaration.videoDecoders.filter((codec) => QUALIFIED_ORIGINAL_VIDEO.includes(codec));
+  if (!videoDecoders.length)
+    return null;
+  return { ...declaration, videoDecoders, audioDecoders: declaration.audioDecoders.filter((codec) => QUALIFIED_ORIGINAL_AUDIO.includes(codec)) };
 }
 
 // client/player/media-capabilities.ts
@@ -86,7 +93,7 @@ async function mediaCapabilities(signal) {
   return {
     ...originalPlayback ? { originalPlayback } : {},
     containers: [supports("video/mp4") ? "mp4" : "", supports("video/webm") ? "webm" : ""].filter(Boolean),
-    videoCodecs: videoFormats.filter(([, mime]) => supports(mime)).map(([name]) => name),
+    videoCodecs: videoFormats.filter(([name, mime]) => name === "h264" && supports(mime)).map(([name]) => name),
     audioCodecs: audioFormats.filter(([, mime]) => supports(mime)).map(([name]) => name),
     subtitleFormats: typeof VTTCue === "function" ? ["webvtt"] : [],
     hls: supports("application/vnd.apple.mpegurl"),
@@ -514,7 +521,7 @@ function destroyEngine(handle) {
 
 // client/player/universal/retry.ts
 function decoderRetry(reason) {
-  if (!reason.startsWith("Original decode: decode-failed"))
+  if (!reason.startsWith("Original decode: decode-failed") && !reason.startsWith("Original first-frame deadline"))
     return null;
   return { audio: true, video: true };
 }
@@ -1385,6 +1392,7 @@ class PlaybackEngine {
   source;
   pipeline;
   original;
+  originalStartTimer;
   localDecoderRetries = new Set;
   originalClosing = Promise.resolve();
   status = "idle";
@@ -1558,6 +1566,7 @@ class PlaybackEngine {
       state: this.pendingSeek ? "buffering" : this.status,
       sourceId: this.source?.id ?? null,
       strategy: this.source?.strategy ?? null,
+      diagnostics: this.original ? { metadataDiscrepancies: this.original.readout.metadataDiscrepancies } : undefined,
       backend: this.backend,
       renditionId: this.pipeline?.current?.id ?? null,
       qualityIds: this.pipeline?.qualityIds ?? [],
@@ -1576,7 +1585,7 @@ class PlaybackEngine {
       droppedFrames: this.terminalMedia?.dropped ?? this.original?.readout.dropped ?? quality?.droppedVideoFrames ?? null,
       totalFrames: this.terminalMedia?.frames ?? this.original?.readout.frames ?? quality?.totalVideoFrames ?? null,
       audioTrackIds,
-      audioTrackId: this.pipeline?.audioTrackId ?? this.audio,
+      audioTrackId: this.original ? this.session?.audioTracks.some((track) => track.id === this.original?.readout.audioTrackId) ? this.original.readout.audioTrackId : null : this.pipeline?.audioTrackId ?? this.audio,
       pendingAudioTrackId: this.original?.pendingAudioTrackId ?? this.pipeline?.pendingAudioTrackId ?? null,
       subtitleTrackId: this.subtitle,
       failure: this.failure
@@ -1783,12 +1792,18 @@ class PlaybackEngine {
     this.publish();
   }
   releaseOriginal() {
+    if (this.originalStartTimer)
+      clearTimeout(this.originalStartTimer);
+    this.originalStartTimer = undefined;
     const original = this.original;
     this.original = undefined;
     if (original)
       this.originalClosing = original.dispose().catch(() => {});
   }
   resetMedia() {
+    if (this.originalStartTimer)
+      clearTimeout(this.originalStartTimer);
+    this.originalStartTimer = undefined;
     this.releaseOriginal();
     this.nativeOrigin = 0;
     this.terminalMedia = undefined;
@@ -1817,12 +1832,30 @@ class PlaybackEngine {
     this.failure = null;
     this.lastObservation = -Infinity;
     this.publish();
+    if (source.original && canAttemptOriginal()) {
+      this.backend = "webgpu";
+      this.startupDeadlineMs = 8000;
+      this.originalStartTimer = setTimeout(() => {
+        this.originalStartTimer = undefined;
+        if (this.controller.current(token) && !(this.original?.readout.presentedFrames ?? 0))
+          this.recover(new PlaybackFault("Original first-frame deadline exceeded (8 seconds)", "decoder"), token);
+      }, 8000);
+    }
     try {
-      await this.originalClosing;
+      await new Promise((resolve) => {
+        const timer = setTimeout(resolve, 3500);
+        this.originalClosing.then(() => {
+          clearTimeout(timer);
+          resolve();
+        }, () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
       cancelled(token.signal);
       if (source.original && !this.session?.live && canAttemptOriginal()) {
         this.backend = "webgpu";
-        this.startupDeadlineMs = 65000;
+        this.startupDeadlineMs = 8000;
         const parent = this.video.parentElement;
         if (!(parent instanceof HTMLDivElement))
           throw new Error("Original renderer surface is missing");
@@ -1866,11 +1899,7 @@ class PlaybackEngine {
           duration: this.session?.duration ?? null,
           position,
           video: { ...info, codec: info?.codec ?? "", width: info?.width ?? 0, height: info?.height ?? 0 },
-          audio: (this.session?.audioTracks ?? []).map((t) => {
-            if (t.streamIndex === undefined || !t.codec)
-              throw new Error("Original audio identity is unavailable");
-            return { id: t.id, codec: t.codec, channels: t.channels, language: t.language, streamIndex: t.streamIndex };
-          }),
+          audio: (this.session?.audioTracks ?? []).map((t) => ({ id: t.id, codec: t.codec ?? "", channels: t.channels, language: t.language, streamIndex: t.streamIndex ?? -1 })),
           selectedAudioId: this.audio
         });
         cancelled(token.signal);
@@ -2014,17 +2043,22 @@ class PlaybackEngine {
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError" ? "network" : "source";
     const position = this.position();
     const failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
+    if (this.originalStartTimer)
+      clearTimeout(this.originalStartTimer);
+    this.originalStartTimer = undefined;
     this.status = "recovering";
     this.failure = failure;
     this.publish(true);
     try {
-      const retry = this.backend === "webgpu" ? decoderRetry(failure.message) : null;
+      const retry = this.backend === "webgpu" && (!failure.message.startsWith("Original first-frame deadline") || this.original?.readout.decoderReady) ? decoderRetry(failure.message) : null;
       if (retry && this.source?.original && !this.localDecoderRetries.has(this.source.id)) {
         this.localDecoderRetries.add(this.source.id);
         this.recovering = false;
         await this.activate(this.source, position, true, true, retry);
         return;
       }
+      this.resumePosition = position;
+      this.releaseOriginal();
       await delay(300, token.signal);
       if (!this.video.error && this.video.readyState >= 3 && (!this.video.paused || !this.wantsPlay)) {
         this.status = this.video.paused ? "paused" : "playing";

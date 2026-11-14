@@ -14,6 +14,7 @@ export class PlaybackEngine {
   readonly controller = new SessionController();
   private session?: PlaybackSession; private source?: Source; private pipeline?: SegmentPipeline;
   private original?: OriginalBackend;
+  private originalStartTimer?: ReturnType<typeof setTimeout>;
   private localDecoderRetries = new Set<string>();
   private originalClosing: Promise<void> = Promise.resolve();
   private status: Snapshot['state'] = 'idle'; private backend: Snapshot['backend'] = null;
@@ -84,6 +85,7 @@ export class PlaybackEngine {
     return {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.pendingSeek ? 'buffering' : this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
+      diagnostics: this.original ? {metadataDiscrepancies:this.original.readout.metadataDiscrepancies} : undefined,
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? null, qualityIds: this.pipeline?.qualityIds ?? [],
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 }, lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
@@ -95,7 +97,7 @@ export class PlaybackEngine {
       duration: this.duration(),
       playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: this.nativeOrigin + ranges.start(i), end: this.nativeOrigin + ranges.end(i) })),
       throughputBps: this.pipeline?.bandwidth.bps ?? null, droppedFrames: this.terminalMedia?.dropped ?? this.original?.readout.dropped ?? quality?.droppedVideoFrames ?? null,
-      totalFrames: this.terminalMedia?.frames ?? this.original?.readout.frames ?? quality?.totalVideoFrames ?? null, audioTrackIds, audioTrackId: this.pipeline?.audioTrackId ?? this.audio, pendingAudioTrackId: this.original?.pendingAudioTrackId ?? this.pipeline?.pendingAudioTrackId ?? null, subtitleTrackId: this.subtitle, failure: this.failure,
+      totalFrames: this.terminalMedia?.frames ?? this.original?.readout.frames ?? quality?.totalVideoFrames ?? null, audioTrackIds, audioTrackId: this.original ? (this.session?.audioTracks.some(track => track.id === this.original?.readout.audioTrackId) ? this.original.readout.audioTrackId : null) : this.pipeline?.audioTrackId ?? this.audio, pendingAudioTrackId: this.original?.pendingAudioTrackId ?? this.pipeline?.pendingAudioTrackId ?? null, subtitleTrackId: this.subtitle, failure: this.failure,
     };
   }
   private catchUpTarget(): number | null {
@@ -223,10 +225,12 @@ export class PlaybackEngine {
     this.lastObservation = -Infinity; this.publish();
   }
   private releaseOriginal() {
+    if (this.originalStartTimer) clearTimeout(this.originalStartTimer); this.originalStartTimer = undefined;
     const original = this.original; this.original = undefined;
     if (original) this.originalClosing = original.dispose().catch(() => {});
   }
   private resetMedia() {
+    if (this.originalStartTimer) clearTimeout(this.originalStartTimer); this.originalStartTimer = undefined;
     this.releaseOriginal();
     this.nativeOrigin = 0;
     this.terminalMedia = undefined;
@@ -240,10 +244,19 @@ export class PlaybackEngine {
     this.bindMedia(token);
     this.attempted.add(source.id); this.status = recovery ? 'recovering' : 'loading'; this.failure = null; this.lastObservation = -Infinity;
     this.publish();
+    if (source.original && canAttemptOriginal()) {
+      this.backend = 'webgpu'; this.startupDeadlineMs = 8000;
+      this.originalStartTimer = setTimeout(() => {
+        this.originalStartTimer = undefined;
+        if (this.controller.current(token) && !(this.original?.readout.presentedFrames ?? 0))
+          void this.recover(new PlaybackFault('Original first-frame deadline exceeded (8 seconds)','decoder'),token);
+      },8000);
+    }
     try {
-      await this.originalClosing; cancelled(token.signal);
+      await new Promise<void>(resolve => { const timer=setTimeout(resolve,3500); this.originalClosing.then(() => {clearTimeout(timer);resolve();},() => {clearTimeout(timer);resolve();}); });
+      cancelled(token.signal);
       if (source.original && !this.session?.live && canAttemptOriginal()) {
-        this.backend = 'webgpu'; this.startupDeadlineMs = 65000;
+        this.backend = 'webgpu'; this.startupDeadlineMs = 8000;
         const parent = this.video.parentElement;
         if (!(parent instanceof HTMLDivElement)) throw new Error('Original renderer surface is missing');
         const original = await loadOriginalRuntime({ surface:{container:parent,video:this.video}, signal:token.signal, retry,
@@ -263,10 +276,7 @@ export class PlaybackEngine {
         const info = source.originalVideo;
         await original.open({url:source.url,container:'',duration:this.session?.duration ?? null,position,
           video:{...info,codec:info?.codec ?? '',width:info?.width ?? 0,height:info?.height ?? 0},
-          audio:(this.session?.audioTracks ?? []).map(t => {
-            if (t.streamIndex === undefined || !t.codec) throw new Error('Original audio identity is unavailable');
-            return {id:t.id,codec:t.codec,channels:t.channels,language:t.language,streamIndex:t.streamIndex};
-          }),selectedAudioId:this.audio});
+          audio:(this.session?.audioTracks ?? []).map(t => ({id:t.id,codec:t.codec ?? '',channels:t.channels,language:t.language,streamIndex:t.streamIndex ?? -1})),selectedAudioId:this.audio});
         cancelled(token.signal); this.status = original.readout.state; if (this.pendingSeek?.authorized && this.status === 'paused') this.pendingSeek = undefined; this.publish(); return;
       }
       if (source.delivery === 'hls' && !this.useNativeHls(source)) {
@@ -327,15 +337,17 @@ export class PlaybackEngine {
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === 'TimeoutError' ? 'network' : 'source';
     const position = this.position();
     const failure: Failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
+    if (this.originalStartTimer) clearTimeout(this.originalStartTimer); this.originalStartTimer = undefined;
     this.status = 'recovering'; this.failure = failure; this.publish(true);
     try {
-      const retry = this.backend === 'webgpu' ? decoderRetry(failure.message) : null;
+      const retry = this.backend === 'webgpu' && (!failure.message.startsWith('Original first-frame deadline') || this.original?.readout.decoderReady) ? decoderRetry(failure.message) : null;
       if (retry && this.source?.original && !this.localDecoderRetries.has(this.source.id)) {
         this.localDecoderRetries.add(this.source.id);
         this.recovering = false;
         // Local decoder replacement retains the broker's source/seek identity.
         await this.activate(this.source, position, true, true, retry); return;
       }
+      this.resumePosition = position; this.releaseOriginal();
       // Requests already retry twice; source handoff is bounded by plan length.
       await delay(300, token.signal);
       // A delayed recovery must not fail media that has since genuinely resumed.
