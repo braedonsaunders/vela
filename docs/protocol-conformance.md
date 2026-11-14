@@ -210,3 +210,32 @@ viewer/device identity or bypass current-family revocation. Sent to Ether's
 implementer as one follow-up blocker with this evidence. Source disposition:
 **10 findings fixed, F1 contained, F7/F8 remain partial on R1; F3 withdrawn.**
 The coordinator should wait for the R1 follow-up read before the lab gate.
+
+## Pairing-lineage follow-up read: 6628d5842
+
+Fetched and read `6628d58426c0e062c65f288e8b8e67dd5fe99c2a` without checkout,
+edits or execution in Ether. **R1 is resolved in source; F7/F8 are now resolved for
+the reviewed rotation/replay paths.**
+
+- `internal/frontends/vela/auth.go:20–31` validates the access grant/device before
+  dispatching complete token results to the canonical result handler.
+- `internal/frontends/vela/pairing_tokens.go:18–42` keys/coalesces results by the
+  validated access grant and device independently of each poll idempotency key;
+  it uses the encrypted durable replay store rather than a restart-local cache.
+- `pairing_tokens.go:44–48` extends retention to cover accepted access-grant lifetime.
+  Saved results at:57–62 bypass IssueRefresh at:64–65, so a fresh-key approved poll
+  receives the same full Tokens result and does not create another refresh family.
+- `pairing_tokens.go:51–56` fails closed on pending/conflicting claims; :73–80
+  persists an issued result with a bounded context independent of a disconnected
+  caller. :93–97 revalidates the current authorized scope before replaying success.
+- `internal/identity/grant_scope.go:22–42` reads at most two active families and
+  rejects zero/ambiguous scope. The arbitrary ORDER BY selection is gone.
+  GrantScopeCurrent at:47–60 still enforces family/current-grant/device/surface and
+  active-viewer validity; revocation was not weakened to viewer/device identity.
+
+Disposition after this follow-up: **12 original findings fixed in source; F1
+contained with contents intentionally unsupported; F3 withdrawn.** No additional
+blocking divergence was found in the changed code reviewed here. The missing
+collection endpoint remains an explicit feature/conformance limitation, not an
+implemented service. Implementer-reported identity/handler checks were not rerun
+here; browser behavior and the On Air Lab install/E2E remain separate gates.
