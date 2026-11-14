@@ -26,7 +26,7 @@ export function entry(item: RowEntry, origin?: string, artWidth = 2560) {
     logo: art(artwork, 'logo', logoWidth, Math.ceil(logoWidth / 2), origin), accent: artwork.find(a => a.color)?.color ?? '', receipt: item.receiptToken };
 }
 export function feedRow(row: Row, origin?: string, artWidth = 2560) {
-  return { id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin, artWidth)), nextCursor: row.nextCursor ?? '', continuation: row.continuation, previewOnFocus: row.previewOnFocus ?? false };
+  return { id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin, artWidth)), nextCursor: row.nextCursor ?? '', continuation: row.continuation, previewOnFocus: row.previewOnFocus ?? false, presentation: row.presentation ?? '' };
 }
 export function homeModel(data: Bootstrap, origin?: string, _now?: number, artWidth = 2560) {
   const heroes = (data.heroes ?? []).slice(0, 6);

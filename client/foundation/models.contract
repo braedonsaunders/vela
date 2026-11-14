@@ -32,6 +32,7 @@ shape FeedRow
   nextCursor: string
   continuation: string
   previewOnFocus: bool
+  presentation: string
 
 shape CardPreview
   cardId: string

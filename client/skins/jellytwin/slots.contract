@@ -511,9 +511,9 @@ component SearchSurface
           if model.items.length == 0
             EmptyState(icon="search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"))
           else
-            Section(row=FeedRow(id="search-fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
+            Section(row=FeedRow(id="search-fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
-          Section(row=FeedRow(id="search-vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Section(row=FeedRow(id="search-vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
           column gap=4
             if ai.aiStatus == "queued" or ai.aiStatus == "running"
@@ -521,7 +521,7 @@ component SearchSurface
                 Spinner(size=22, still=still)
                 text t("ui.exploringYourDescription") font-size=14 color="jellytwin.secondary"
             if ai.items.length > 0
-              Section(row=FeedRow(id="search-ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
+              Section(row=FeedRow(id="search-ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
             if ai.aiStatus == "failed"
               text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") font-size=14 color="jellytwin.secondary" padding-left=side(small) padding-right=side(small)
 
