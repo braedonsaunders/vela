@@ -16,8 +16,28 @@ Vela includes no media or provider credentials.
 
 ## Develop
 
-From the repository root, run `source tools/env.sh`, then `cd client`.
+From the repository root:
 
-- Start the web dev loop: `bun exact.mjs web`
-- Build and type-check: `bun exact.mjs contract build app.contract --json --errors-only`
-- Capture the app: `bun exact.mjs agent web "screenshot .exact/shell.png"`
+```sh
+source tools/env.sh
+bun tools/dev.ts
+```
+
+Use this single command for all local UI/playback work. It owns the mock on
+`http://127.0.0.1:7777` and Exact's web loop on `http://127.0.0.1:8765`, with
+`VELA_MOCK=1`, an explicit mock API origin and matching CORS. Sign in with
+**demo / vela**. It prints its owner PID, refuses a second instance or occupied
+ports, and shuts down both process groups on Ctrl-C or terminal exit.
+
+From another terminal, `bun tools/dev.ts stop` requests shutdown of that owner.
+It never adopts or stops an unrelated listener. The owner record lives under
+`~/.scratch/tmp/vela/dev/`; a stale record is removed only when its PID is gone.
+Do not launch separate mock or Exact servers alongside this command.
+
+Generate synthetic media when no viewer is using it:
+`bun mock-server/scripts/make-media.ts`. See [mock controls](mock-server/README.md).
+
+The routine compile check remains `bun exact.mjs contract build app.contract
+--json --errors-only` from `client/`. For a single visual look, use the running
+loop at port 8765. Distribution and PWA packaging are described in
+[distribution.md](docs/distribution.md).
