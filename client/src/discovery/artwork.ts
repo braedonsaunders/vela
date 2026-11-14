@@ -11,7 +11,7 @@ export function artworkURL(artwork: ArtworkRef, width: number, height: number, o
   // parameter byte-for-byte and never rewrite URLs for other servers.
   if (resolved.origin === new URL(origin).origin && resolved.pathname.startsWith('/vela/v0/images/') && !resolved.searchParams.has('w')) {
     const maximum = Math.max(0, ...sizes.map(size => size.width));
-    const target = Math.max(1, Math.ceil(maximum > 0 ? Math.min(width, maximum) : width));
+    const target = maximum > 0 ? Math.max(1, Math.ceil(Math.min(width, maximum))) : 0;
     resolved.search = `${resolved.search}${resolved.search ? '&' : '?'}w=${target}`;
   }
   return resolved.href;
