@@ -30,7 +30,8 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   const ambient = (JSON.parse(json) as Record<string, string>).ambient === 'true';
   const root = element.shadowRoot ?? element.attachShadow({ mode: 'open' });
   const video = document.createElement('video'); video.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:#000';
-  root.replaceChildren(video);
+  const surface = document.createElement('div'); surface.style.cssText = 'position:relative;width:100%;height:100%';
+  surface.append(video); root.replaceChildren(surface);
   const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0, serverError: '', endedReport: '' };
   handle.engine = new PlaybackEngine(video, value => {
     event(8, JSON.stringify(value));
