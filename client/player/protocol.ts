@@ -17,8 +17,8 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
       audioTrackId: plan.selectedAudioTrackId,
       boundaries: p.boundaries.filter(b => b.independent).map(b => b.atSeconds),
       recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some(b => b.independent && (b.compatibility === 'verified-timeline' || b.compatibility === 'same-source' && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
-      initialRenditionId: p.initialRenditionId,
-      renditions: p.qualities.map(q => ({ id: q.id, url: q.url, bandwidth: q.bitrate, height: q.height,
+      initialRenditionId: p.initialRenditionId, audioRenditions: p.audioRenditions,
+      renditions: p.qualities.map(q => ({ id: q.id, url: q.url, bandwidth: q.bitrate, height: q.height, audioGroupId: q.audioGroupId, codecStatus: q.codecStatus,
         mime: `video/mp4; codecs="${q.videoCodec}${q.audioCodec ? `,${q.audioCodec}` : ''}"` })),
     })),
   };

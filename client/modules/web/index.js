@@ -228,6 +228,261 @@ function delay(ms, signal) {
   });
 }
 
+// client/player/hls.ts
+function parsePlaylist(text, base) {
+  if (!text.trimStart().startsWith("#EXTM3U"))
+    throw new Error("Invalid HLS playlist");
+  if (/#EXT-X-(KEY|BYTERANGE|DISCONTINUITY|STREAM-INF)/m.test(text))
+    throw new Error("Requires clear, continuous fMP4 media playlist (not master/TS/encrypted/byte-range HLS)");
+  let sequence = 0, start = 0, duration = 0, init = "", targetDuration = 6;
+  const segments = [];
+  let gap = false;
+  for (const line of text.split(/\r?\n/).map((l) => l.trim())) {
+    if (line.startsWith("#EXT-X-MEDIA-SEQUENCE:"))
+      sequence = Number(line.split(":")[1]);
+    else if (line.startsWith("#EXT-X-TARGETDURATION:"))
+      targetDuration = Number(line.split(":")[1]);
+    else if (line === "#EXT-X-GAP")
+      gap = true;
+    else if (line.startsWith("#EXT-X-MAP:")) {
+      if (/BYTERANGE=/.test(line))
+        throw new Error("Byte-range initialization is unsupported");
+      const uri = /URI="([^"]+)"/.exec(line)?.[1];
+      if (!uri)
+        throw new Error("Missing initialization URI");
+      init = new URL(uri, base).href;
+    } else if (line.startsWith("#EXTINF:"))
+      duration = Number(line.slice(8).split(",")[0]);
+    else if (line && !line.startsWith("#")) {
+      if (!init || !Number.isFinite(duration) || duration <= 0)
+        throw new Error("Invalid fMP4 segment");
+      segments.push({ sequence: sequence++, url: new URL(line, base).href, start, duration, init, gap });
+      start += duration;
+      duration = 0;
+      gap = false;
+    }
+  }
+  if (!Number.isFinite(sequence) || !Number.isFinite(targetDuration) || targetDuration <= 0 || !segments.length)
+    throw new Error("Empty/invalid playlist");
+  return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
+}
+
+// client/player/buffer.ts
+class PlaybackFault extends Error {
+  kind;
+  retryable;
+  constructor(message, kind, retryable = false) {
+    super(message);
+    this.kind = kind;
+    this.retryable = retryable;
+  }
+}
+function mutation(buffer, signal, operation) {
+  return new Promise((resolve, reject) => {
+    cancelled(signal);
+    const clean = () => {
+      buffer.removeEventListener("updateend", done);
+      buffer.removeEventListener("error", error);
+      signal.removeEventListener("abort", abort);
+    };
+    const done = () => {
+      clean();
+      resolve();
+    };
+    const error = () => {
+      clean();
+      reject(new PlaybackFault("SourceBuffer rejected media", "decoder"));
+    };
+    const abort = () => {
+      clean();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    buffer.addEventListener("updateend", done, { once: true });
+    buffer.addEventListener("error", error, { once: true });
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+      operation();
+    } catch (e) {
+      clean();
+      reject(e);
+    }
+  });
+}
+async function appendBuffer(buffer, bytes, video, signal) {
+  try {
+    await mutation(buffer, signal, () => buffer.appendBuffer(bytes));
+  } catch (error) {
+    if (!(error instanceof DOMException) || error.name !== "QuotaExceededError")
+      throw error;
+    const end = video.currentTime - 10;
+    if (end <= 0)
+      throw new PlaybackFault("Insufficient media buffer quota", "source");
+    await mutation(buffer, signal, () => buffer.remove(0, end));
+    await mutation(buffer, signal, () => buffer.appendBuffer(bytes));
+  }
+}
+
+// client/player/audio.ts
+class AudioBuffer {
+  media;
+  video;
+  renditions;
+  read;
+  supported;
+  buffer;
+  current;
+  list;
+  nextSequence = -1;
+  init = "";
+  pending;
+  audible;
+  constructor(media, video, renditions, read, supported) {
+    this.media = media;
+    this.video = video;
+    this.renditions = renditions;
+    this.read = read;
+    this.supported = supported;
+  }
+  get trackId() {
+    if (this.audible && this.video.currentTime < this.audible.boundary)
+      return this.audible.before;
+    return this.current?.trackId ?? null;
+  }
+  get pendingTrackId() {
+    return this.pending?.trackId ?? (this.audible && this.video.currentTime < this.audible.boundary ? this.audible.after : null);
+  }
+  available(group) {
+    return this.renditions.filter((r) => r.groupId === group && this.supported(r.mimeType) && (!this.current || r.mimeType === this.current.mimeType || !!this.buffer?.changeType)).map((r) => r.trackId);
+  }
+  dispose() {
+    this.pending?.abort.abort();
+    this.pending?.reject(new DOMException("Audio selection superseded", "AbortError"));
+    this.pending = undefined;
+    if (this.buffer?.updating)
+      try {
+        this.buffer.abort();
+      } catch {}
+  }
+  async playlist(track, anchor, signal) {
+    const list = parsePlaylist(new TextDecoder().decode(await this.read(track.url, signal)), track.url);
+    const match = list.segments.find((s) => anchor.segments.some((a) => a.sequence === s.sequence));
+    if (!match)
+      throw new PlaybackFault("Audio playlist has no shared timeline boundary", "source");
+    const offset = anchor.segments.find((s) => s.sequence === match.sequence).start - match.start;
+    list.segments.forEach((s) => {
+      s.start += offset;
+    });
+    return list;
+  }
+  async start(group, trackId, anchor, signal) {
+    const track = this.renditions.find((r) => r.groupId === group && (trackId === null || r.trackId === trackId));
+    if (!track || !this.supported(track.mimeType))
+      throw new PlaybackFault("Selected audio rendition is not supported", "source");
+    this.current = track;
+    this.list = await this.playlist(track, anchor, signal);
+    this.buffer = this.media.addSourceBuffer(track.mimeType);
+  }
+  select(trackId) {
+    if (!this.current || !this.available(this.current.groupId).includes(trackId))
+      return Promise.reject(new Error("Audio track is outside the active rendition group"));
+    this.pending?.abort.abort();
+    this.pending?.reject(new DOMException("Audio selection superseded", "AbortError"));
+    if (trackId === this.current.trackId) {
+      this.pending = undefined;
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      this.pending = { trackId, abort: new AbortController, resolve, reject };
+    });
+  }
+  async append(segment, signal) {
+    if (this.init !== segment.init) {
+      await appendBuffer(this.buffer, await this.read(segment.init, signal), this.video, signal);
+      this.init = segment.init;
+    }
+    await appendBuffer(this.buffer, await this.read(segment.url, signal), this.video, signal);
+    this.nextSequence = segment.sequence + 1;
+  }
+  async fill(from, until, anchor, signal) {
+    if (!this.current || !this.list)
+      return;
+    if (!this.list.ended && !this.list.segments.some((s) => s.start + s.duration >= until - 0.1))
+      this.list = await this.playlist(this.current, anchor, signal);
+    const shared = this.list.segments.find((s) => anchor.segments.some((a) => a.sequence === s.sequence));
+    if (shared) {
+      const offset = anchor.segments.find((s) => s.sequence === shared.sequence).start - shared.start;
+      this.list.segments.forEach((s) => {
+        s.start += offset;
+      });
+    }
+    const segments = this.list.segments.filter((s) => s.start + s.duration > from + 0.001 && s.start < until - 0.001);
+    if (!segments.length)
+      throw new PlaybackFault("Audio does not cover the video boundary", "source");
+    for (const segment of segments) {
+      if (segment.sequence < this.nextSequence)
+        continue;
+      if (segment.gap)
+        throw new PlaybackFault("Publisher marked audio unavailable", "source");
+      await this.append(segment, signal);
+    }
+  }
+  async applySelection(anchor, signal) {
+    const pending = this.pending;
+    if (!pending || !this.current || !this.buffer || !this.buffer.buffered.length)
+      return;
+    let mutated = false;
+    try {
+      const track = this.renditions.find((r) => r.groupId === this.current.groupId && r.trackId === pending.trackId);
+      const requestSignal = AbortSignal.any([signal, pending.abort.signal]);
+      const list = await this.playlist(track, anchor, requestSignal);
+      const boundary = list.segments.find((s) => s.start > this.video.currentTime + 0.25);
+      if (!boundary || !anchor.segments.some((s) => Math.abs(s.start - boundary.start) <= 0.1))
+        throw new Error("No aligned future audio switch boundary");
+      const end = this.buffer.buffered.length ? this.buffer.buffered.end(this.buffer.buffered.length - 1) : boundary.start + boundary.duration;
+      const segments = list.segments.filter((s) => s.start >= boundary.start && s.start < Math.max(end, boundary.start + boundary.duration));
+      const init = await this.read(boundary.init, requestSignal);
+      const bytes = [];
+      for (const segment of segments) {
+        if (segment.gap)
+          throw new Error("Replacement audio contains an upstream gap");
+        bytes.push(await this.read(segment.url, requestSignal));
+      }
+      cancelled(requestSignal);
+      if (this.video.currentTime + 0.05 >= boundary.start)
+        throw new Error("Audio switch boundary passed during loading; select again");
+      if (track.mimeType !== this.current.mimeType && !this.buffer.changeType)
+        throw new Error("Browser cannot change audio codec");
+      const before = this.trackId;
+      mutated = true;
+      await mutation(this.buffer, signal, () => this.buffer.remove(boundary.start, Infinity));
+      if (track.mimeType !== this.current.mimeType)
+        this.buffer.changeType(track.mimeType);
+      this.buffer.appendWindowStart = boundary.start;
+      await appendBuffer(this.buffer, init, this.video, signal);
+      for (const data of bytes)
+        await appendBuffer(this.buffer, data, this.video, signal);
+      this.current = track;
+      this.list = list;
+      this.init = boundary.init;
+      this.nextSequence = segments.at(-1).sequence + 1;
+      this.audible = { before, after: track.trackId, boundary: boundary.start };
+      if (this.pending === pending)
+        this.pending = undefined;
+      pending.resolve();
+    } catch (error) {
+      if (this.pending === pending)
+        this.pending = undefined;
+      pending.reject(error);
+      cancelled(signal);
+      if (mutated)
+        throw error;
+    }
+  }
+  async evict(before, signal) {
+    if (before > 0 && this.buffer?.buffered.length && this.buffer.buffered.start(0) < before - 5)
+      await mutation(this.buffer, signal, () => this.buffer.remove(0, before));
+  }
+}
 // client/player/abr.ts
 class BandwidthEstimator {
   fast = 0;
@@ -300,95 +555,15 @@ class AdaptiveBitrate {
   }
 }
 
-// client/player/hls.ts
-function parsePlaylist(text, base) {
-  if (!text.trimStart().startsWith("#EXTM3U"))
-    throw new Error("Invalid HLS playlist");
-  if (/#EXT-X-(KEY|BYTERANGE|DISCONTINUITY|STREAM-INF)/m.test(text))
-    throw new Error("Requires clear, continuous fMP4 media playlist (not master/TS/encrypted/byte-range HLS)");
-  let sequence = 0, start = 0, duration = 0, init = "", targetDuration = 6;
-  const segments = [];
-  let gap = false;
-  for (const line of text.split(/\r?\n/).map((l) => l.trim())) {
-    if (line.startsWith("#EXT-X-MEDIA-SEQUENCE:"))
-      sequence = Number(line.split(":")[1]);
-    else if (line.startsWith("#EXT-X-TARGETDURATION:"))
-      targetDuration = Number(line.split(":")[1]);
-    else if (line === "#EXT-X-GAP")
-      gap = true;
-    else if (line.startsWith("#EXT-X-MAP:")) {
-      if (/BYTERANGE=/.test(line))
-        throw new Error("Byte-range initialization is unsupported");
-      const uri = /URI="([^"]+)"/.exec(line)?.[1];
-      if (!uri)
-        throw new Error("Missing initialization URI");
-      init = new URL(uri, base).href;
-    } else if (line.startsWith("#EXTINF:"))
-      duration = Number(line.slice(8).split(",")[0]);
-    else if (line && !line.startsWith("#")) {
-      if (!init || !Number.isFinite(duration) || duration <= 0)
-        throw new Error("Invalid fMP4 segment");
-      segments.push({ sequence: sequence++, url: new URL(line, base).href, start, duration, init, gap });
-      start += duration;
-      duration = 0;
-      gap = false;
-    }
-  }
-  if (!Number.isFinite(sequence) || !Number.isFinite(targetDuration) || targetDuration <= 0 || !segments.length)
-    throw new Error("Empty/invalid playlist");
-  return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
-}
-
 // client/player/pipeline.ts
 function mediaSourceClass() {
   return globalThis.ManagedMediaSource ?? globalThis.MediaSource;
-}
-
-class PlaybackFault extends Error {
-  kind;
-  retryable;
-  constructor(message, kind, retryable = false) {
-    super(message);
-    this.kind = kind;
-    this.retryable = retryable;
-  }
 }
 function bufferAhead(video) {
   for (let i = 0;i < video.buffered.length; i++)
     if (video.currentTime >= video.buffered.start(i) - 0.05 && video.currentTime < video.buffered.end(i))
       return video.buffered.end(i) - video.currentTime;
   return 0;
-}
-function mutation(buffer, signal, operation) {
-  return new Promise((resolve, reject) => {
-    cancelled(signal);
-    const clean = () => {
-      buffer.removeEventListener("updateend", done);
-      buffer.removeEventListener("error", error);
-      signal.removeEventListener("abort", abort);
-    };
-    const done = () => {
-      clean();
-      resolve();
-    };
-    const error = () => {
-      clean();
-      reject(new PlaybackFault("SourceBuffer rejected media", "decoder"));
-    };
-    const abort = () => {
-      clean();
-      reject(new DOMException("Aborted", "AbortError"));
-    };
-    buffer.addEventListener("updateend", done, { once: true });
-    buffer.addEventListener("error", error, { once: true });
-    signal.addEventListener("abort", abort, { once: true });
-    try {
-      operation();
-    } catch (e) {
-      clean();
-      reject(e);
-    }
-  });
 }
 
 class SegmentPipeline {
@@ -397,6 +572,21 @@ class SegmentPipeline {
   bandwidth = new BandwidthEstimator;
   abr = new AdaptiveBitrate;
   current;
+  audioRenditions = [];
+  initialAudioTrackId = null;
+  audio;
+  get audioTrackId() {
+    return this.audio?.trackId ?? null;
+  }
+  get pendingAudioTrackId() {
+    return this.audio?.pendingTrackId ?? null;
+  }
+  get audioTracks() {
+    return this.current?.audioGroupId ? this.audio?.available(this.current.audioGroupId) ?? [] : [];
+  }
+  selectAudio(trackId) {
+    return this.audio ? this.audio.select(trackId) : Promise.reject(new Error("No alternate audio buffer"));
+  }
   lowDelay = false;
   expensiveSwitches = false;
   initialRenditionId;
@@ -437,6 +627,8 @@ class SegmentPipeline {
     this.onRendition = onRendition;
   }
   dispose() {
+    this.audio?.dispose();
+    this.audio = undefined;
     this.detachStreaming?.();
     this.detachStreaming = undefined;
     this.request?.abort();
@@ -516,19 +708,8 @@ class SegmentPipeline {
   async playlist(r, signal) {
     return parsePlaylist(new TextDecoder().decode(await this.bytes(r.url, signal)), new URL(r.url, document.baseURI).href);
   }
-  async append(bytes, signal) {
-    const buffer = this.buffer;
-    try {
-      await mutation(buffer, signal, () => buffer.appendBuffer(bytes));
-    } catch (error) {
-      if (!(error instanceof DOMException) || error.name !== "QuotaExceededError")
-        throw error;
-      const end = this.video.currentTime - 10;
-      if (end <= 0)
-        throw new PlaybackFault("Insufficient media buffer quota", "source");
-      await mutation(buffer, signal, () => buffer.remove(0, end));
-      await mutation(buffer, signal, () => buffer.appendBuffer(bytes));
-    }
+  append(bytes, signal) {
+    return appendBuffer(this.buffer, bytes, this.video, signal);
   }
   async run(ladder, position, live, signal) {
     const MS = mediaSourceClass();
@@ -587,6 +768,10 @@ class SegmentPipeline {
       });
       this.published(list);
     }
+    if (rendition.audioGroupId) {
+      this.audio = new AudioBuffer(media, this.video, this.audioRenditions, (url, signal) => this.bytes(url, signal), (mime) => MS.isTypeSupported(mime));
+      await this.audio.start(rendition.audioGroupId, this.initialAudioTrackId, list, signal);
+    }
     if (!live && list.ended)
       media.duration = list.segments.reduce((sum, s) => sum + s.duration, 0);
     let next = live ? (position > 0 ? list.segments.find((s) => s.start + s.duration > position) : undefined) ?? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find((s) => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
@@ -594,6 +779,7 @@ class SegmentPipeline {
       throw new PlaybackFault("Position outside source timeline", "source");
     let sequence = next.sequence, init = "", first = true;
     while (!signal.aborted) {
+      await this.audio?.applySelection(list, signal);
       const ahead = bufferAhead(this.video);
       const target = live ? this.lowDelay ? 6 : 18 + this.driftPenalty : 30;
       if (ahead >= target || !this.streamingAllowed) {
@@ -610,7 +796,7 @@ class SegmentPipeline {
       }
       if (ahead >= 12 && this.video.readyState >= 3 && !this.video.paused)
         startupBuffered = true;
-      const proposed = this.abr.choose(playable.filter((r) => r.mime === rendition.mime), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
+      const proposed = this.abr.choose(playable.filter((r) => r.mime === rendition.mime && r.audioGroupId === rendition.audioGroupId), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
       const choice = startupBuffered || this.abr.manual ? proposed : rendition;
       if (choice.id !== rendition.id) {
         const candidate = await this.playlist(choice, signal);
@@ -637,7 +823,10 @@ class SegmentPipeline {
         if (list.ended) {
           if (media.readyState === "open")
             media.endOfStream();
-          return;
+          if (!this.audio)
+            return;
+          await delay(250, signal);
+          continue;
         }
         this.publicationPending = true;
         await delay(Math.max(500, list.targetDuration * 500), signal);
@@ -673,7 +862,7 @@ class SegmentPipeline {
       const timeout = setTimeout(() => request.abort(new PlaybackFault("Segment deadline exceeded", "network", true)), 15000);
       try {
         bytes = await this.bytes(next.url, request.signal, (received, elapsed) => {
-          const lower = [...playable].filter((r) => r.mime === rendition.mime && r.bandwidth < rendition.bandwidth).sort((a, b) => a.bandwidth - b.bandwidth)[0];
+          const lower = [...playable].filter((r) => r.mime === rendition.mime && r.audioGroupId === rendition.audioGroupId && r.bandwidth < rendition.bandwidth).sort((a, b) => a.bandwidth - b.bandwidth)[0];
           if (startupBuffered && !this.expensiveSwitches && lower && this.abr.abandon(rendition, lower, next.duration, received, elapsed, bufferAhead(this.video))) {
             abandon = lower;
             request.abort();
@@ -707,6 +896,7 @@ class SegmentPipeline {
         signal.removeEventListener("abort", abort);
       }
       await this.append(bytes, signal);
+      await this.audio?.fill(next.start, next.start + next.duration, list, signal);
       if (first && live && this.liveWindowStart === null && this.buffer.buffered.length) {
         const offset = this.buffer.buffered.start(0) - next.start;
         list.segments.forEach((s) => {
@@ -723,6 +913,7 @@ class SegmentPipeline {
       if (this.video.currentTime > retain && this.buffer.buffered.length && this.buffer.buffered.start(0) < this.video.currentTime - retain - 5) {
         await mutation(this.buffer, signal, () => this.buffer.remove(0, this.video.currentTime - retain));
       }
+      await this.audio?.evict(this.video.currentTime - retain, signal);
       if (this.video.readyState < 3)
         for (let i = 0;i < this.video.buffered.length; i++) {
           const gap = this.video.buffered.start(i) - this.video.currentTime;
@@ -782,6 +973,7 @@ class PlaybackEngine {
   pipeline;
   status = "idle";
   backend = null;
+  audioPreference;
   failure = null;
   audio = null;
   subtitle = null;
@@ -912,6 +1104,7 @@ class PlaybackEngine {
   }
   snapshot() {
     const ranges = this.video.buffered, quality = this.video.getVideoPlaybackQuality?.();
+    const audioTrackIds = this.backend === "mse" ? this.pipeline?.audioTracks ?? [] : this.session?.audioTracks.filter((t) => !!this.nativeAudio(t.id)).map((t) => t.id) ?? [];
     return {
       sessionId: this.session?.id ?? null,
       sourceGeneration: this.controller.source,
@@ -921,7 +1114,7 @@ class PlaybackEngine {
       strategy: this.source?.strategy ?? null,
       backend: this.backend,
       renditionId: this.pipeline?.current?.id ?? null,
-      capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: (this.session?.audioTracks.length ?? 0) > 1 && !!this.session?.audioTracks.every((t) => !!this.nativeAudio(t.id)) },
+      capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 },
       lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
       waiting: ["loading", "buffering", "recovering"].includes(this.status) || this.wantsPlay && this.video.seeking,
@@ -934,7 +1127,9 @@ class PlaybackEngine {
       throughputBps: this.pipeline?.bandwidth.bps ?? null,
       droppedFrames: quality?.droppedVideoFrames ?? null,
       totalFrames: quality?.totalVideoFrames ?? null,
-      audioTrackId: this.audio,
+      audioTrackIds,
+      audioTrackId: this.pipeline?.audioTrackId ?? this.audio,
+      pendingAudioTrackId: this.pipeline?.pendingAudioTrackId ?? null,
       subtitleTrackId: this.subtitle,
       failure: this.failure
     };
@@ -979,6 +1174,8 @@ class PlaybackEngine {
   publish() {
     if (this.disposed)
       return;
+    if (this.pipeline?.audioTrackId)
+      this.audio = this.pipeline.audioTrackId;
     const now = performance.now();
     if (now - this.lastObservation < 250)
       return;
@@ -1015,6 +1212,7 @@ class PlaybackEngine {
     this.pendingSwitch = undefined;
     const previousServerState = session.id === this.session?.id ? this.session.serverState : undefined;
     if (session.id !== this.session?.id) {
+      this.audioPreference = undefined;
       this.lowDelayOverride = undefined;
       this.localTransportIntent = undefined;
       this.wantsPlay = session.serverState !== "paused" && session.serverState !== "ended";
@@ -1033,7 +1231,9 @@ class PlaybackEngine {
     this.attempted.clear();
     this.recovering = false;
     this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? false;
-    this.audio = session.audioTrackId ?? null;
+    const preferred = this.audioPreference;
+    const selected = session.sources.find((s) => s.id === session.selectedSourceId);
+    this.audio = preferred && selected?.audioRenditions?.some((a) => a.trackId === preferred) ? preferred : session.audioTrackId ?? null;
     this.subtitle = session.subtitleTrackId ?? null;
     const source = this.candidates().find((s) => s.id === session.selectedSourceId) ?? this.candidates().find((s) => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) {
@@ -1061,7 +1261,9 @@ class PlaybackEngine {
     }
     if ((session.audioTrackId ?? null) !== this.audio) {
       const previous = this.audio;
-      this.audio = session.audioTrackId ?? null;
+      const preferred = this.audioPreference;
+      const selected = session.sources.find((s) => s.id === session.selectedSourceId);
+      this.audio = preferred && selected?.audioRenditions?.some((a) => a.trackId === preferred) ? preferred : session.audioTrackId ?? null;
       if (!this.applyNativeAudio()) {
         this.audio = previous;
         this.emit({ type: "error", failure: { kind: "action", message: "Audio change requires a new server source generation", recoverable: true } });
@@ -1145,6 +1347,8 @@ class PlaybackEngine {
       if (source.delivery === "hls" && !this.useNativeHls(source)) {
         this.backend = "mse";
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
+        pipeline.audioRenditions = source.audioRenditions ?? [];
+        pipeline.initialAudioTrackId = this.audio;
         pipeline.expensiveSwitches = source.strategy === "transcode";
         pipeline.initialRenditionId = source.initialRenditionId;
         pipeline.lowDelay = this.lowDelay;
@@ -1466,6 +1670,17 @@ class PlaybackEngine {
         case "audio": {
           if (!this.session?.audioTracks.some((t) => t.id === command.trackId))
             throw new Error("Unknown audio track");
+          if (this.pipeline?.audioTracks.includes(command.trackId)) {
+            this.audioPreference = command.trackId;
+            try {
+              await this.pipeline.selectAudio(command.trackId);
+            } catch (error) {
+              if (this.audioPreference === command.trackId)
+                this.audioPreference = this.audio ?? undefined;
+              throw error;
+            }
+            break;
+          }
           const previous = this.audio;
           this.audio = command.trackId;
           if (this.applyNativeAudio())
@@ -1518,6 +1733,8 @@ class PlaybackEngine {
           break;
       }
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError")
+        return;
       this.emit({ type: "error", failure: { kind: "action", message: e instanceof Error ? e.message : String(e), recoverable: true } });
     }
     this.publish();
@@ -1571,11 +1788,14 @@ function sessionFromPlan(plan) {
       boundaries: p.boundaries.filter((b) => b.independent).map((b) => b.atSeconds),
       recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some((b) => b.independent && (b.compatibility === "verified-timeline" || b.compatibility === "same-source" && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
       initialRenditionId: p.initialRenditionId,
+      audioRenditions: p.audioRenditions,
       renditions: p.qualities.map((q) => ({
         id: q.id,
         url: q.url,
         bandwidth: q.bitrate,
         height: q.height,
+        audioGroupId: q.audioGroupId,
+        codecStatus: q.codecStatus,
         mime: `video/mp4; codecs="${q.videoCodec}${q.audioCodec ? `,${q.audioCodec}` : ""}"`
       }))
     }))

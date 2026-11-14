@@ -1,11 +1,11 @@
-import type { SessionCommand } from '../wire/v0/types';
+import type { SessionCommand, AudioRendition } from '../wire/v0/types';
 /** Local engine input. protocol.ts translates the versioned server plan here. */
 export interface Track { id: string; label: string; language?: string; url?: string }
-export interface Rendition { id: string; url: string; bandwidth: number; mime: string; height?: number }
+export interface Rendition { id: string; url: string; bandwidth: number; mime: string; height?: number; audioGroupId?: string; codecStatus?: 'pending' | 'verified' }
 export interface Source {
   id: string; strategy: 'direct' | 'remux' | 'transcode'; delivery: 'file' | 'hls';
   url: string; mime: string; timeline: string; edition: string; audioTrackId?: string; recoveryAllowed?: boolean; boundaries?: number[];
-  initialRenditionId?: string; renditions?: Rendition[];
+  audioRenditions?: AudioRendition[]; initialRenditionId?: string; renditions?: Rendition[];
 }
 export interface PlaybackSession {
   serverState?: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended';
@@ -38,7 +38,7 @@ export interface Snapshot {
   preparation: 'media-metadata' | 'initial-buffer' | 'starting' | null;
   position: number; duration: number | null; playable: { start: number; end: number }[];
   throughputBps: number | null; droppedFrames: number | null; totalFrames: number | null;
-  audioTrackId: string | null; subtitleTrackId: string | null; failure: Failure | null;
+  audioTrackIds: string[]; audioTrackId: string | null; pendingAudioTrackId: string | null; subtitleTrackId: string | null; failure: Failure | null;
 }
 export type EngineEvent = { type: 'snapshot'; snapshot: Snapshot } |
   { type: 'error'; failure: Failure; sessionId?: string | null; sourceGeneration?: number; seekGeneration?: number } | { type: 'session-command'; sessionId: string; command: SessionCommand };

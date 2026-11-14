@@ -11,6 +11,7 @@ export class PlaybackEngine {
   readonly controller = new SessionController();
   private session?: PlaybackSession; private source?: Source; private pipeline?: SegmentPipeline;
   private status: Snapshot['state'] = 'idle'; private backend: Snapshot['backend'] = null;
+  private audioPreference?: string;
   private failure: Failure | null = null; private audio: string | null = null; private subtitle: string | null = null;
   private timer: ReturnType<typeof setInterval> | undefined; private listeners: (() => void)[] = [];
   private attempted = new Set<string>(); private recovering = false; private disposed = false;
@@ -61,11 +62,12 @@ export class PlaybackEngine {
   get observationAllowed() { return this.session?.serverState !== 'ended'; }
   snapshot(): Snapshot {
     const ranges = this.video.buffered, quality = this.video.getVideoPlaybackQuality?.();
+    const audioTrackIds = this.backend === 'mse' ? this.pipeline?.audioTracks ?? [] : this.session?.audioTracks.filter(t => !!this.nativeAudio(t.id)).map(t => t.id) ?? [];
     return {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? null,
-      capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: (this.session?.audioTracks.length ?? 0) > 1 && !!this.session?.audioTracks.every(t => !!this.nativeAudio(t.id)) }, lockedQuality: this.manualQuality,
+      capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 }, lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
       waiting: ['loading','buffering','recovering'].includes(this.status) || this.wantsPlay && this.video.seeking, volume: this.video.volume, muted: this.video.muted,
       preparation: ['loading','buffering'].includes(this.status) && (quality?.totalVideoFrames ?? 0) === 0
@@ -74,7 +76,7 @@ export class PlaybackEngine {
       duration: this.terminalMedia?.duration ?? (Number.isFinite(this.video.duration) ? this.video.duration : null),
       playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: ranges.start(i), end: ranges.end(i) })),
       throughputBps: this.pipeline?.bandwidth.bps ?? null, droppedFrames: quality?.droppedVideoFrames ?? null,
-      totalFrames: quality?.totalVideoFrames ?? null, audioTrackId: this.audio, subtitleTrackId: this.subtitle, failure: this.failure,
+      totalFrames: quality?.totalVideoFrames ?? null, audioTrackIds, audioTrackId: this.pipeline?.audioTrackId ?? this.audio, pendingAudioTrackId: this.pipeline?.pendingAudioTrackId ?? null, subtitleTrackId: this.subtitle, failure: this.failure,
     };
   }
   private catchUpTarget(): number | null {
@@ -104,6 +106,7 @@ export class PlaybackEngine {
   }
   private publish() {
     if (this.disposed) return;
+    if (this.pipeline?.audioTrackId) this.audio = this.pipeline.audioTrackId;
     const now = performance.now();
     if (now - this.lastObservation < 250) return;
     this.lastObservation = now; this.emit({ type: 'snapshot', snapshot: this.snapshot() });
@@ -132,7 +135,7 @@ export class PlaybackEngine {
     this.pendingSwitch = undefined;
     const previousServerState = session.id === this.session?.id ? this.session.serverState : undefined;
     if (session.id !== this.session?.id) {
-      this.lowDelayOverride = undefined; this.localTransportIntent = undefined;
+      this.audioPreference = undefined; this.lowDelayOverride = undefined; this.localTransportIntent = undefined;
       // Opening the watch view is a play request. Later ready revisions merely
       // update metadata and must not override an explicit pause.
       this.wantsPlay = session.serverState !== 'paused' && session.serverState !== 'ended';
@@ -142,7 +145,9 @@ export class PlaybackEngine {
     this.applyServerState(session.serverState, previousServerState, false);
     this.source = undefined; this.failure = null; this.attempted.clear(); this.recovering = false;
     this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? false;
-    this.audio = session.audioTrackId ?? null; this.subtitle = session.subtitleTrackId ?? null;
+    const preferred = this.audioPreference;
+    const selected = session.sources.find(s => s.id === session.selectedSourceId);
+    this.audio = preferred && selected?.audioRenditions?.some(a => a.trackId === preferred) ? preferred : session.audioTrackId ?? null; this.subtitle = session.subtitleTrackId ?? null;
     const source = this.candidates().find(s => s.id === session.selectedSourceId) ?? this.candidates().find(s => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) { this.fail({ kind: 'unsupported', message: 'No browser-compatible source for this edition', recoverable: false }); return; }
     await this.activate(source, position, recovery, true);
@@ -160,7 +165,9 @@ export class PlaybackEngine {
       this.subtitle = session.subtitleTrackId ?? null; this.applySubtitle();
     }
     if ((session.audioTrackId ?? null) !== this.audio) {
-      const previous = this.audio; this.audio = session.audioTrackId ?? null;
+      const previous = this.audio; const preferred = this.audioPreference;
+    const selected = session.sources.find(s => s.id === session.selectedSourceId);
+    this.audio = preferred && selected?.audioRenditions?.some(a => a.trackId === preferred) ? preferred : session.audioTrackId ?? null;
       if (!this.applyNativeAudio()) { this.audio = previous; this.emit({ type: 'error', failure: { kind: 'action', message: 'Audio change requires a new server source generation', recoverable: true } }); }
     }
   }
@@ -201,6 +208,7 @@ export class PlaybackEngine {
       if (source.delivery === 'hls' && !this.useNativeHls(source)) {
         this.backend = 'mse';
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
+        pipeline.audioRenditions = source.audioRenditions ?? []; pipeline.initialAudioTrackId = this.audio;
         pipeline.expensiveSwitches = source.strategy === 'transcode'; pipeline.initialRenditionId = source.initialRenditionId; pipeline.lowDelay = this.lowDelay; pipeline.liveWindowStart = this.session?.liveWindowStart ?? null; pipeline.maxLiveDrift = this.session?.liveMaxDrift ?? 45; pipeline.abr.manual = this.manualQuality;
         void pipeline.run(source.renditions ?? [], position, !!this.session?.live, token.signal).catch(e => { if (this.controller.current(token)) void this.recover(e, token); });
       } else {
@@ -353,6 +361,11 @@ export class PlaybackEngine {
           this.manualQuality = command.renditionId; if (this.pipeline) this.pipeline.abr.manual = command.renditionId; break;
         case 'audio': {
           if (!this.session?.audioTracks.some(t => t.id === command.trackId)) throw new Error('Unknown audio track');
+          if (this.pipeline?.audioTracks.includes(command.trackId)) {
+            this.audioPreference = command.trackId;
+            try { await this.pipeline.selectAudio(command.trackId); } catch (error) { if (this.audioPreference === command.trackId) this.audioPreference = this.audio ?? undefined; throw error; }
+            break;
+          }
           const previous = this.audio; this.audio = command.trackId;
           if (this.applyNativeAudio()) break;
           const source = this.candidates().find(s => s.audioTrackId === command.trackId && s.timeline === this.source?.timeline);
@@ -376,7 +389,7 @@ export class PlaybackEngine {
           else if (this.video.webkitEnterFullscreen) this.video.webkitEnterFullscreen();
           else throw new Error('Fullscreen is unavailable'); break;
       }
-    } catch (e) { this.emit({ type: 'error', failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true } }); }
+    } catch (e) { if (e instanceof DOMException && e.name === 'AbortError') return; this.emit({ type: 'error', failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true } }); }
     this.publish();
   }
   dispose() {

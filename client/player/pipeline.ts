@@ -1,3 +1,7 @@
+import { AudioBuffer } from './audio';
+import type { AudioRendition } from '../../protocol/v0/types';
+import { PlaybackFault, mutation, appendBuffer } from './buffer';
+export { PlaybackFault } from './buffer';
 import { AdaptiveBitrate, BandwidthEstimator } from './abr';
 import { parsePlaylist, type Playlist } from './hls';
 import { cancelled, delay } from './session';
@@ -7,29 +11,20 @@ type MediaSourceClass = typeof MediaSource;
 export function mediaSourceClass(): MediaSourceClass | undefined {
   return (globalThis as typeof globalThis & { ManagedMediaSource?: MediaSourceClass }).ManagedMediaSource ?? globalThis.MediaSource;
 }
-export class PlaybackFault extends Error {
-  constructor(message: string, readonly kind: 'network' | 'source' | 'decoder', readonly retryable = false) { super(message); }
-}
 export function bufferAhead(video: HTMLVideoElement) {
   for (let i = 0; i < video.buffered.length; i++) if (video.currentTime >= video.buffered.start(i) - 0.05 && video.currentTime < video.buffered.end(i)) return video.buffered.end(i) - video.currentTime;
   return 0;
-}
-function mutation(buffer: SourceBuffer, signal: AbortSignal, operation: () => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    cancelled(signal);
-    const clean = () => { buffer.removeEventListener('updateend', done); buffer.removeEventListener('error', error); signal.removeEventListener('abort', abort); };
-    const done = () => { clean(); resolve(); };
-    const error = () => { clean(); reject(new PlaybackFault('SourceBuffer rejected media', 'decoder')); };
-    const abort = () => { clean(); reject(new DOMException('Aborted', 'AbortError')); };
-    buffer.addEventListener('updateend', done, { once: true }); buffer.addEventListener('error', error, { once: true }); signal.addEventListener('abort', abort, { once: true });
-    try { operation(); } catch (e) { clean(); reject(e); }
-  });
 }
 /** Single producer serializes append/remove. No append can outlive its source. */
 export class SegmentPipeline {
   readonly bandwidth = new BandwidthEstimator();
   readonly abr = new AdaptiveBitrate();
-  current?: Rendition;
+  current?: Rendition; audioRenditions: AudioRendition[] = []; initialAudioTrackId: string | null = null;
+  private audio?: AudioBuffer;
+  get audioTrackId() { return this.audio?.trackId ?? null; }
+  get pendingAudioTrackId() { return this.audio?.pendingTrackId ?? null; }
+  get audioTracks() { return this.current?.audioGroupId ? this.audio?.available(this.current.audioGroupId) ?? [] : []; }
+  selectAudio(trackId: string) { return this.audio ? this.audio.select(trackId) : Promise.reject(new Error('No alternate audio buffer')); }
   lowDelay = false; expensiveSwitches = false; initialRenditionId?: string;
   liveWindowStart: number | null = null; maxLiveDrift = 45;
   publishedEdge: number | null = null; publishedStart: number | null = null;
@@ -52,6 +47,7 @@ export class SegmentPipeline {
   private driftPenalty = 0;
   constructor(private video: HTMLVideoElement, private onRendition: (r: Rendition) => void) {}
   dispose() {
+    this.audio?.dispose(); this.audio = undefined;
     this.detachStreaming?.(); this.detachStreaming = undefined; this.request?.abort(); this.request = undefined;
     if (this.buffer?.updating) { try { this.buffer.abort(); } catch {} }
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
@@ -102,16 +98,8 @@ export class SegmentPipeline {
   private async playlist(r: Rendition, signal: AbortSignal): Promise<Playlist> {
     return parsePlaylist(new TextDecoder().decode(await this.bytes(r.url, signal)), new URL(r.url, document.baseURI).href);
   }
-  private async append(bytes: ArrayBuffer, signal: AbortSignal) {
-    const buffer = this.buffer!;
-    try { await mutation(buffer, signal, () => buffer.appendBuffer(bytes)); }
-    catch (error) {
-      if (!(error instanceof DOMException) || error.name !== 'QuotaExceededError') throw error;
-      const end = this.video.currentTime - 10;
-      if (end <= 0) throw new PlaybackFault('Insufficient media buffer quota', 'source');
-      await mutation(buffer, signal, () => buffer.remove(0, end));
-      await mutation(buffer, signal, () => buffer.appendBuffer(bytes));
-    }
+  private append(bytes: ArrayBuffer, signal: AbortSignal) {
+    return appendBuffer(this.buffer!, bytes, this.video, signal);
   }
   async run(ladder: Rendition[], position: number, live: boolean, signal: AbortSignal) {
     const MS = mediaSourceClass(); if (!MS) throw new PlaybackFault('MediaSource unavailable', 'source');
@@ -138,12 +126,17 @@ export class SegmentPipeline {
     this.buffer = media.addSourceBuffer(rendition.mime);
     let list = await this.playlist(rendition, signal);
     if (live) { list.segments.forEach(s => { s.start += this.liveWindowStart ?? 0; }); this.published(list); }
+    if (rendition.audioGroupId) {
+      this.audio = new AudioBuffer(media, this.video, this.audioRenditions, (url, signal) => this.bytes(url, signal), mime => MS.isTypeSupported(mime));
+      await this.audio.start(rendition.audioGroupId, this.initialAudioTrackId, list, signal);
+    }
     if (!live && list.ended) media.duration = list.segments.reduce((sum, s) => sum + s.duration, 0);
     let next = live ? (position > 0 ? list.segments.find(s => s.start + s.duration > position) : undefined) ?? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find(s => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
     if (!next) throw new PlaybackFault('Position outside source timeline', 'source');
     let sequence = next.sequence, init = '', first = true;
     // Live sliding manifests are anchored by overlapping sequence, never reset to zero.
     while (!signal.aborted) {
+      await this.audio?.applySelection(list, signal);
       const ahead = bufferAhead(this.video);
       const target = live ? (this.lowDelay ? 6 : 18 + this.driftPenalty) : 30;
       if (ahead >= target || !this.streamingAllowed) { await delay(250, signal); continue; }
@@ -156,7 +149,7 @@ export class SegmentPipeline {
         }
       }
       if (ahead >= 12 && this.video.readyState >= 3 && !this.video.paused) startupBuffered = true;
-      const proposed = this.abr.choose(playable.filter(r => r.mime === rendition.mime), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
+      const proposed = this.abr.choose(playable.filter(r => r.mime === rendition.mime && r.audioGroupId === rendition.audioGroupId), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
       const choice = startupBuffered || this.abr.manual ? proposed : rendition;
       if (choice.id !== rendition.id) {
         const candidate = await this.playlist(choice, signal);
@@ -171,7 +164,12 @@ export class SegmentPipeline {
       }
       next = list.segments.find(s => s.sequence === sequence);
       if (!next) {
-        if (list.ended) { if (media.readyState === 'open') media.endOfStream(); return; }
+        if (list.ended) {
+          if (media.readyState === 'open') media.endOfStream();
+          if (!this.audio) return;
+          // Keep the audio producer available for a selection inside the buffered tail.
+          await delay(250, signal); continue;
+        }
         this.publicationPending = true;
         await delay(Math.max(500, list.targetDuration * 500), signal);
         const fresh = await this.playlist(rendition, signal);
@@ -191,7 +189,7 @@ export class SegmentPipeline {
       const timeout = setTimeout(() => request.abort(new PlaybackFault('Segment deadline exceeded', 'network', true)), 15000);
       try {
         bytes = await this.bytes(next.url, request.signal, (received, elapsed) => {
-          const lower = [...playable].filter(r => r.mime === rendition.mime && r.bandwidth < rendition.bandwidth).sort((a,b) => a.bandwidth-b.bandwidth)[0];
+          const lower = [...playable].filter(r => r.mime === rendition.mime && r.audioGroupId === rendition.audioGroupId && r.bandwidth < rendition.bandwidth).sort((a,b) => a.bandwidth-b.bandwidth)[0];
           if (startupBuffered && !this.expensiveSwitches && lower && this.abr.abandon(rendition, lower, next!.duration, received, elapsed, bufferAhead(this.video))) { abandon = lower; request.abort(); }
         });
       } catch (error) {
@@ -206,6 +204,7 @@ export class SegmentPipeline {
         rendition = abandon; list = candidate; this.current = rendition; this.onRendition(rendition); init = ''; continue;
       } finally { if (this.request === request) this.request = undefined; this.segmentStarted = null; clearTimeout(timeout); signal.removeEventListener('abort', abort); }
       await this.append(bytes, signal);
+      await this.audio?.fill(next.start, next.start + next.duration, list, signal);
       if (first && live && this.liveWindowStart === null && this.buffer.buffered.length) {
         const offset = this.buffer.buffered.start(0) - next.start;
         list.segments.forEach(s => { s.start += offset; }); this.published(list);
@@ -216,6 +215,7 @@ export class SegmentPipeline {
       if (this.video.currentTime > retain && this.buffer.buffered.length && this.buffer.buffered.start(0) < this.video.currentTime - retain - 5) {
         await mutation(this.buffer, signal, () => this.buffer!.remove(0, this.video.currentTime - retain));
       }
+      await this.audio?.evict(this.video.currentTime - retain, signal);
       // Skip only tiny holes; large gaps go through visible recovery.
       if (this.video.readyState < 3) for (let i = 0; i < this.video.buffered.length; i++) {
         const gap = this.video.buffered.start(i) - this.video.currentTime;
