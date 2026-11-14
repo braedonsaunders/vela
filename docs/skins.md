@@ -17,7 +17,7 @@ optional artwork, metadata and capabilities to these presentation records.
 | TitleCard | `card:Card`, `small`, `still`, `selectTitle`, `observe` |
 | Detail | `model:DetailModel`, `small`, `still`, `play(id)`, `playExtra(id)`, `selectTitle`, `observe` |
 | PlayerChrome | `model:PlayerView`, `title:string`, `visible:bool`, `small:bool`, `still:bool`, `serverError:string`, `busy:bool`, `command(kind,value)`, `seek(seconds)`, `editing(bool)`, `close()`; presentation-only cinematic controls over engine observations and server-authorized seeks/path changes |
-| Guide | `model:GuideModel`, `small:bool`, `watch(channelId)`, `previous()`, `next()`; channels retain server order; programmes are ordered by start time, with window-relative positions and the current-time position. |
+| Guide | `model:GuideModel`, `small:bool`, `watch(channelId)`, `previous()`, `next()`; the model is one local day (`day` 0-6 from today): channels in server order with favourites first, programmes by start time with `at`/`span` in minutes from the day's start, re-projected every minute (airing, progress, now/next) without refetching. Cinematic also takes `still`, `zoom` (0-2, persisted) with `setZoom(z)`, and `chooseDay(offset)`, and owns its scroll containers; other skins are wrapped in a route scroll. |
 
 Action props are declared `action` in Exact; arguments above document their inferred
 signatures. Every prop is required. See models.contract for exact field definitions.
@@ -163,3 +163,8 @@ type and surfaces; reuse it rather than writing literals.
   `client/app.tamber` (glass, glass-edge, scrims, skeleton, player scrims, ember/tide/dusk).
 - Reduced motion replaces movement with dissolves and holds artwork still; it never
   removes state changes.
+
+Live channels flick with Up/Down (PageUp/PageDown, ChannelUp/ChannelDown) through the
+guide's channel order; the target tunes after a 1.1 s pause or Enter, replacing the watch
+route. `MiniGuide(model, playing, target, small, still, tune())` shows the pending target;
+skins without one show nothing. Cinematic `LiveControls` also takes `zap(step)`.
