@@ -1,4 +1,43 @@
-use Card, FeedRow, HomeModel, SearchModel, DetailModel from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport from "../../foundation/models.contract"
+
+fn detailPresentation(width: number): string = (width < 900 ? "fullscreen" : "")
+fn detailSplit(width: number): string = (width < 900 ? "none" : "360")
+
+component Navigation
+  props
+    viewer: string
+    skin: string
+    skins: string[]
+    chooseSkin: action
+    signOut: action
+    canLive: bool
+    canLibrary: bool
+    home: action
+    search: action
+    live: action
+    library: action
+    small: bool
+  view
+    row flex-wrap="wrap" gap=12 align-items="center" padding=(small ? 12 : 20) background-color="#e3dfd3"
+      text "VELA / INDEX" font-size=16 font-weight=700
+      button press=home background-color="transparent" color="#22221e" border="none" padding=4
+        text "Home"
+      button press=search background-color="transparent" color="#22221e" border="none" padding=4
+        text "Search"
+      if canLive
+        button press=live background-color="transparent" color="#22221e" border="none" padding=4
+          text "Live"
+      if canLibrary
+        button press=library background-color="transparent" color="#22221e" border="none" padding=4
+          text "Library"
+      if skins.length > 1
+        select value=skin change=chooseSkin aria-label="Appearance" background-color="#ffffff" color="#22221e" padding=8
+          for name in skins key=name
+            option value=name
+              text name
+      text viewer font-size=12
+      button press=signOut background-color="transparent" color="#22221e" border="none" padding=4
+        text "Sign out"
 
 component Shell
   props
@@ -7,24 +46,38 @@ component Shell
     skins: string[]
     chooseSkin: action
     signOut: action
+    viewport: Viewport
+    canLive: bool
+    canLibrary: bool
+    home: action
+    search: action
+    live: action
+    library: action
   slot
   view
-    row height="100%" min-height=0 background-color="#f3f0e8" color="#22221e" color-scheme="light" font-family="Georgia, serif"
-      column width=150 flex-shrink=0 padding=20 gap=24 background-color="#e3dfd3"
-        link href="/" color="#22221e" text-decoration="none" aria-label="Vela home"
-          text "VELA / INDEX" font-size=18 font-weight=700
-        link href="/" color="#22221e"
-          text "Home"
-        text viewer font-size=12
-        button press=signOut background-color="transparent" color="#22221e" border="none" text-align="left" padding=0
-          text "Sign out"
-        if skins.length > 1
-          select value=skin change=chooseSkin aria-label="Appearance" background-color="#ffffff" color="#22221e" padding=8
-            for name in skins key=name
-              option value=name
-                text name
-      column flex=1 min-width=0 min-height=0
-        children
+    column height="100%" min-height=0 background-color="#f3f0e8" color="#22221e" color-scheme="light" font-family="Georgia, serif"
+      if viewport.width < 640
+        Navigation(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, small=true)
+        column flex=1 min-height=0
+          children
+      else
+        row flex=1 min-height=0
+          column width=180 flex-shrink=0 background-color="#e3dfd3"
+            Navigation(viewer=viewer, skin=skin, skins=skins, chooseSkin=chooseSkin, signOut=signOut, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, small=false)
+          column flex=1 min-width=0 min-height=0
+            children
+
+component SearchField
+  props
+    query: string
+    edit: action
+  view
+    row align-items="center" gap=12 border-bottom="2px solid #22221e" padding="8px 0px"
+      text "SEARCH" font-size=12 font-weight=700
+      input value=query input=edit placeholder="Title, person, or description" aria-label="Search your library" testId="search" flex=1 min-width=0 padding=8 border="none" background-color="transparent" color="#22221e"
+      if query != ""
+        button press=edit("") aria-label="Clear search" border="none" background-color="transparent" color="#22221e"
+          text "Clear"
 
 component TitleCard
   props
@@ -35,7 +88,7 @@ component TitleCard
     observe: action
   view
     row intersect=observe(card.receipt) border-bottom="1px solid #bcb8ae" align-items="center" gap=12 padding="10px 0px"
-      button press=selectTitle(card.id, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` flex=1 min-width=0 padding=4 border="none" background-color="transparent" color="#22221e" text-align="left"
+      button disabled=(card.kind != "movie" and card.kind != "show" and card.kind != "season" and card.kind != "episode") press=selectTitle(card.id, card.kind, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` flex=1 min-width=0 padding=4 border="none" background-color="transparent" color="#22221e" text-align="left"
         text card.name font-size=16 font-weight=600
       if not small
         text card.kind width=90 font-size=12 color="#55554d"
@@ -72,7 +125,7 @@ component Home
           for hero in model.hero key=hero.id
             column gap=8 padding="16px 0px" intersect=observe(hero.receipt)
               text "FEATURED" font-size=11 letter-spacing="2px"
-              button press=selectTitle(hero.id, hero.receipt) background-color="transparent" color="#22221e" border="none" text-align="left" padding=0
+              button press=selectTitle(hero.id, hero.kind, hero.receipt) background-color="transparent" color="#22221e" border="none" text-align="left" padding=0
                 text hero.name font-size=26 font-weight=700
               text hero.facts font-size=12
               text hero.summary font-size=14 line-clamp=2
