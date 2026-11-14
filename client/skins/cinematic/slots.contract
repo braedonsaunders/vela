@@ -326,7 +326,7 @@ component Home
           if hero.backdrop == "" and hero.poster != "" and not small
             image hero.poster alt="" position="absolute" right="max(28px, 6vw)" top="max(110px, 14vh)" height="min(56vh, 520px)" aspect-ratio="2 / 3" object-fit="cover" border-radius=16 box-shadow="0px 50px 120px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)" opacity=(searching ? 0 : 1) transition=`opacity ${slow()}ms ${glide()}` animation=enter(still, 300)
       // The hero copy, then the search box it settles onto.
-      column position="relative" height=(searching ? (small ? "176px" : "190px") : model.hero.length == 0 ? (small ? "176px" : "190px") : small ? "520px" : "clamp(500px, 62vh, 700px)") justify-content="flex-end" box-sizing="border-box" -exact-layout-transition=(still ? "none" : "640ms ease-out")
+      column position="relative" height=(searching or model.hero.length == 0 ? (small ? "176px" : "190px") : "auto") min-height=(searching or model.hero.length == 0 ? "0px" : small ? "520px" : "clamp(500px, 62vh, 700px)") padding-top=(searching or model.hero.length == 0 ? "0px" : small ? "calc(104px + 22px + env(safe-area-inset-top))" : "calc(84px + 32px + env(safe-area-inset-top))") justify-content="flex-end" box-sizing="border-box" -exact-layout-transition=(still ? "none" : "640ms ease-out")
         if not searching
           for hero in shown key=hero.id
             column padding-left=gutter(small) padding-right=gutter(small) gap=(small ? 12 : 16) max-width=(small ? "none" : "46rem") intersect=observe(hero.receipt) -exact-exit-animation=(still ? "vanish 120ms linear both" : "vanish 240ms ease-in both")
@@ -384,11 +384,11 @@ component Home
             column animation=enter(still, 520 + stagger(i, 90, 4)) -exact-exit-animation=(still ? "vanish 120ms linear both" : "vanish 220ms ease-in both")
               Shelf(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe, preview=cardPreview, intent=previewIntent)
                 if row.nextCursor != ""
-                  column width=(small ? 60 : 96) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
+                  column width=(small ? 60 : 96) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) intersect-margin="0px 100% 0px 0px" aria-hidden=(not rowMoreLoading.includes(row.id))
                     if rowMoreLoading.includes(row.id)
                       Pulse(still=still)
           if model.nextCursor != ""
-            column height=120 align-items="center" justify-content="center" intersect=reachEnd
+            column height=120 align-items="center" justify-content="center" intersect=reachEnd intersect-margin="0px 0px 100% 0px"
               if homeMoreLoading
                 RowSkeleton(small=small, still=still)
           if model.rows.length == 0
