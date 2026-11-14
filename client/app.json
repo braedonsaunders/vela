@@ -1,0 +1,20 @@
+{
+  "$schema": "../vendor/exact/scripts/app.schema.json",
+  "name": "Vela",
+  "short_name": "Vela",
+  "id": "app.ether.vela",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "app.ether.vela",
+    "name": "Vela"
+  },
+  "host": {
+    "web": {}
+  },
+  "deploy": {
+    "store": {
+      "web": "0"
+    }
+  }
+}

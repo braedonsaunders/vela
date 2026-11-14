@@ -2,7 +2,7 @@
 
 A cinematic, deeply skinnable viewing client for Ether, built with [Exact](https://github.com/expo/exact).
 
-**Status: product specification and protocol research. No runnable client yet.**
+**Status: early client scaffold.**
 
 Vela starts as a desktop/mobile web app and installable PWA. Ether serves its build as an app with its own protocol, Apps card, and configuration. The client lives in this separate repository. Native apps and adapters for other servers follow later.
 
@@ -13,3 +13,11 @@ Vela starts as a desktop/mobile web app and installable PWA. Ether serves its bu
 The official experience centers fast search over a cinematic backdrop, with Ether's automatic recommendations beneath it. Vela supplies the presentation and playback experience; Ether supplies identity, discovery, personalization, media, and server-side recovery.
 
 Vela includes no media or provider credentials.
+
+## Develop
+
+From the repository root, run `source tools/env.sh`, then `cd client`.
+
+- Start the web dev loop: `bun exact.mjs web`
+- Build and type-check: `bun exact.mjs contract build app.contract --json --errors-only`
+- Capture the app: `bun exact.mjs agent web "screenshot .exact/shell.png"`
