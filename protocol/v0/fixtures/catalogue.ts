@@ -45,6 +45,6 @@ export function guide(from: number, until: number, ids: string[]): Programme[] {
   const hour = 3600000, start = Math.floor(from / hour) * hour;
   return channels.filter(c => !ids.length || ids.includes(c.id)).flatMap((c, i) => Array.from({ length: Math.ceil((until - start) / hour) }, (_, n) => {
     const t = start + n * hour;
-    return { id: `${c.id}:${t}`, channelId: c.id, name: ['Morning Edition', 'A World Outside', 'The Long Journey', 'In Conversation', 'Evening Stories', 'After the Headlines'][(n + i) % 6]!, summary: `An hour of original programming from ${c.name}.`, start: new Date(t).toISOString(), end: new Date(t + hour).toISOString(), artwork: c.artwork };
+    return { id: `${c.id}:${t}`, channelId: c.id, name: ['Morning Edition', 'A World Outside', 'The Long Journey', 'In Conversation', 'Evening Stories', 'After the Headlines'][((Math.floor(t / hour) + i) % 6 + 6) % 6]!, summary: `An hour of original programming from ${c.name}.`, start: new Date(t).toISOString(), end: new Date(t + hour).toISOString(), artwork: c.artwork };
   }));
 }
