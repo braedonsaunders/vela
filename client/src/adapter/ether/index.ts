@@ -3,7 +3,7 @@ import type { ServerAdapter } from '../index';
 import type { StreamEvent } from '../../../app.contract.d.ts';
 
 export class VelaError extends Error {
-  constructor(readonly detail: V.ProtocolError, readonly status: number) { super(detail.message); }
+  constructor(readonly detail: V.ProtocolError, readonly status: number, readonly retryAfter: string | null = null) { super(detail.message); }
 }
 
 /** The caller supplies stable mutation keys and persists every rotated token. */
@@ -73,7 +73,7 @@ export class EtherAdapter implements ServerAdapter {
       let detail: V.ProtocolError;
       try { detail = ((await response.json()) as V.ErrorResponse).error; }
       catch { detail = { class: 'transient', code: 'http_error', message: `Server returned ${response.status}`, retry: { allowed: false } }; }
-      throw new VelaError(detail, response.status);
+      throw new VelaError(detail, response.status, response.headers.get('retry-after'));
     }
     const value = await response.json() as T;
     const etag = response.headers.get('etag');

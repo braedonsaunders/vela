@@ -73,10 +73,11 @@ async function session(store: Parameters<Sources['uiBootstrap']>[1]): Promise<Et
   await ready;
   return api;
 }
+let authOptions = { passwordAvailable: false, quickAvailable: false };
 const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '') => {
   const capabilities = await server(store).capabilities();
-  return { authenticated: !!store.get('vela.session'), passwordAvailable: capabilities.features.passwordSignIn.available,
-    quickAvailable: capabilities.features.quickConnect.available, error };
+  authOptions = { passwordAvailable: capabilities.features.passwordSignIn.available, quickAvailable: capabilities.features.quickConnect.available };
+  return { authenticated: !!store.get('vela.session'), ...authOptions, error };
 };
 let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, driftLabel: '', canCatchUp: false };
 const sources: Sources = {
@@ -130,12 +131,11 @@ const sources: Sources = {
     const value = store.get('vela.session');
     const version = authVersion;
     if (value) {
-      while (interactions?.size) await interactions.flush(key(store));
       const tokens = JSON.parse(value) as { refreshToken: string };
       await api.revoke({ refreshToken: tokens.refreshToken, idempotencyKey: key(store) });
       if (version === authVersion) { store.set('vela.session', ''); authVersion++; ready = undefined; activeQuick = ''; ai = undefined; features = undefined; interactions = undefined; }
     }
-    return authModel(store);
+    return { authenticated: !!store.get('vela.session'), ...authOptions, error: '' };
   },
   cancelQuick: async ([secret], store) => {
     if (activeQuick === secret) activeQuick = '';
@@ -219,8 +219,8 @@ const sources: Sources = {
     const api = await session(store);
     interactions ??= new InteractionQueue(api);
     if (!interactions.add({ receiptToken: receipt, kind, occurredAt: new Date(at).toISOString() })) return { accepted: false };
-    if (kind !== 'visible' || interactions.size >= 16) await interactions.flush(key(store));
-    return { accepted: true };
+    if (kind !== 'visible' || interactions.size >= 16) await interactions.flush(key(store), at);
+    return { accepted: !interactions.disabled };
   },
   uiPlayback: async ([id, kind, epoch], store) => {
     const api = await session(store);
@@ -232,8 +232,8 @@ const sources: Sources = {
     const api = await session(store);
     return sessionEvents(api, API, id);
   },
-  flushInteractions: async (_args, store) => {
-    while (interactions?.size) await interactions.flush(key(store));
+  flushInteractions: async ([at], store) => {
+    while (interactions?.size) if (!await interactions.flush(key(store), at)) return { accepted: false };
     return { accepted: true };
   },
   uiPlayer: ([planJson, eventJson, replyJson, localeJSON]) => withLocale(localeJSON, () => playerPresentation(planJson, eventJson, replyJson, localeJSON)),
