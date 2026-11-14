@@ -22,6 +22,12 @@ theme
   ink.inverse = #111419  scheme=fixed
     when pack=installed: #111419fe
   brand.warm = #dcb998  scheme=fixed
+  // The Vela mark: its light and shadow beams on dark grounds and on paper, and the splash's lift.
+  brand.light = #f5f1e9  scheme=fixed
+  brand.shadow = #dcb998  scheme=fixed
+  brand.paper-light = #111419  scheme=fixed
+  brand.paper-shadow = #a65b38  scheme=fixed
+  brand.lift = #131820  scheme=fixed
     when pack=installed: #dcb998fe
 
   // Cinematic type and geometry a runtime skin pack may replace (docs/skin-distribution.md).

@@ -59,3 +59,58 @@ If asset conversion is insufficient, supported static single-engine exports can
 be delivered as separate entry builds with a small selector and full navigation;
 genuine one-plan on-demand skin imports require an Exact feature. The owner has
 paused any new loader/multi-engine artifact architecture pending re-measurement.
+
+## 0.1.21 after icon conversion
+
+Clean source `824f6df`: **22,522,116 raw / 2,002,817 gzip9 bytes**.
+The plan has19,885 nodes (-66.3%); entry gzip fell23.0%. This misses the1MB target.
+
+Acorn AST byte ranges identify **22,203,750 bytes (98.6%)** in the generated
+Contract application function. The remaining318,366 bytes contain Exact runtime,
+TypeScript data code, catalogs and boot. Only `en.json` exists in this snapshot:
+Contract text table11,767 bytes and TypeScript catalog14,168 bytes (overlapping
+that runtime/data remainder and generated initialization). No base64 or font data
+URIs occur. Two generic image-data URI strings remain in the runtime. The shared
+symbol registration is under9,390 bytes; image/font bytes remain external.
+Marquee is absent from this snapshot dispatch, map and entry (zero name references).
+
+The following is a **section ledger**, not minifier-source-map precision. All19,885
+creation sites match emitted node IDs; the source plan differs by nine root nodes
+removed in the mounted release. Final minified bytes from each creation site to the
+next are attributed to that site’s source, including following bindings/closures.
+Nested parent calls are matched by tag/class with bounded local reordering; all
+sites matched without global fallback. Shared control-flow punctuation follows the
+preceding site. Sections do not overlap and sum to the exact entry size.
+
+| Largest section source | Bytes |
+|---|---:|
+| skins/cinematic/slots.contract | 3,730,690 |
+| skins/jellytwin/slots.contract | 3,146,361 |
+| skins/mochi/slots.contract | 3,099,156 |
+| skins/cinematic/auth.contract | 2,179,962 |
+| skins/mochi/look.contract | 1,983,232 |
+| skins/mochi/auth.contract | 1,416,215 |
+| skins/jellytwin/look.contract | 1,132,846 |
+| skins/mochi/guide.contract | 713,867 |
+| skins/cinematic/guide.contract | 677,368 |
+| foundation/skin-picker.contract | 639,689 |
+| generated initialization/actions/resources | 594,648 |
+| skins/jellytwin/auth.contract | 590,934 |
+| Exact runtime + TypeScript + catalogs + boot | 318,366 |
+| skins/mochi/library.contract | 314,787 |
+| skins/jellytwin/guide.contract | 234,564 |
+
+Aggregating the same sections: Cinematic7,236,134; Mochi7,762,509; Jelly Twin5,326,440;
+Index384,439; Example92,956; initialization594,648; shared/foundation/root/runtime
+1,124,990 bytes. These totals identify generated UI code, not embedded artwork, as
+the remaining payload. The owner approved separate static engine builds and a
+tiny selector; Exact-supported static dispatch is used, without vendor changes or
+unsupported lazy Contract imports. Cold-load measurements remain pending that build.
+
+The skin owners traced the multiplier to `foundation/skin.contract`: each Shell
+branch receives `children`, so all root routes are compiled once per engine branch.
+This repeats other engines’ routes inside each branch, not just that engine’s own
+chrome. The section ledger above attributes the repeated code to its original
+creation source. Static single-engine dispatch removes this cross product; the
+AuthStage slot can cause a second smaller multiplier. This explains why reducing
+icon node counts alone did not reduce entry bytes proportionally.

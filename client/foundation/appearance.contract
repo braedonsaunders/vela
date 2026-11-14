@@ -1,4 +1,5 @@
 use SkinManifest from "./models.contract"
+use engineOf from "./engine.contract"
 
 // One runtime skin pack the server installed: data only, validated by the data
 // module (src/appearance). packJson is its canonical form for the vela-theme view.
@@ -43,3 +44,9 @@ members Client
   derive packBackdrop = match activePack { case some(p) => p.backdrop, case none => "" }
   derive packWordmark = match activePack { case some(p) => p.wordmark, case none => "" }
   derive packSkins = appearance.packs.map(p => p.id)
+  // What the engine loader and vela-engine keep: the engine of the viewer's own pick
+  // (none while following the server or while the owner forces the default) and the
+  // server default's engine. Hand-off waits for the server's answer and for playback to end.
+  derive pickEngine = (skin == "" or appearance.force ? "" : match first(appearance.packs.filter(p => p.id == skin)) { case some(p) => p.engine, case none => engineOf(skin) })
+  derive serverEngine = (appearance.defaultEngineId != "" ? engineOf(appearance.defaultEngineId) : engineOf(serverSkin))
+  derive engineSettled = (current(appearanceBase) or current(home)) and playingId == ""
