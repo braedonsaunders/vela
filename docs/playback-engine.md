@@ -175,3 +175,34 @@ generation to 1, retained source generation 0, and accepted playhead 54.021332s
 (drift 5.978668s). This checks the live observation/control boundary; it does not
 qualify a moving live window, reconnect traces or a physical tuner. The temporary
 browser and server were stopped after this drive.
+
+## Authenticated watch drive (Chrome, 2026-11-13)
+
+Real app on `127.0.0.1:3000`, shared mock on `:7777`, signed in through the
+`demo` / `vela` form, opened a title and used Resume into `/watch`. The saved
+12-second position appeared in both the video and controls. Source changes used
+the actual Playback path menu and the server command endpoint; seeks used the
+actual scrub input. The ladder was the mock's generated muxed H.264/AAC media.
+Times below are browser `performance.now()` differences, not wall-clock guesses.
+
+| Drive / observation | Measured result | Interpretation |
+| --- | --- | --- |
+| Healthy 6 Mbps ladder | 360p → 540p after 16.00 s of pipeline snapshots; no `waiting` events | Conservative warm-up observed; this includes paused prebuffer time |
+| Buffered Play → `playing` | 5.40 ms | Warm start with 31.24 s buffered; **not** cold startup |
+| Collapse 6 → 1 Mbps, then restore at +14.00 s | 720p → 540p at +13.45 s, with 24.49 s playable ahead; 360p at +18.64 s, with 23.29 s ahead | Both reductions preceded buffer exhaustion; 0 `waiting`/`stalled` events during the run, 0 dropped frames |
+| Restore → higher quality in 60 s fixture | Not observed before all segments were downloaded | Remaining media was already buffered before throughput recovery plus 12 s up-switch hysteresis; longer fixture qualification follows |
+| Every second CMAF response truncated | First accepted adaptive buffer after 1.65 s; no engine errors; buffer built through 51.95 s from position 20 | Truncated transfer retried; no corrupt partial append was treated as playable |
+| Every CMAF response HTTP 502 | Explicit terminal network failure after 1.23 s from seek marker | Retries exhausted; UI exposed `Media HTTP 502` and stopped source work |
+| Offered fallback made unavailable before selection | UI showed `Fallback unavailable` within the 1.87 s observation window | Source stayed direct, source generation stayed 1, position stayed 28; denied media was never activated |
+
+The initial 720p in the collapse trace was selected using the quality menu, then
+returned to Auto before the cap changed. Thus the trace demonstrates automatic
+protective down-switching, not an automatic ramp to 720p. No test suite or test
+harness was added. Instrumentation only observed the shipping engine's emitted
+snapshots and the actual video's browser events during the manual drive.
+
+The drive fixed inherited detail-modal sizing (watch explicitly requests fullscreen
+presentation), stale-plan early return swallowing server rejection, and repeated
+ended observations after the server had closed the session. The cinematic chrome
+owns no network requests: its seek/path intents are authorized through the data
+adapter; rejected requests retain the current source and show their reason.

@@ -7,7 +7,7 @@ export const roster = { 'vela-player': { snapshot: false }, 'vela-context': { sn
 interface ContextHandle { context: true; disposed: boolean }
 interface Handle {
   engine: PlaybackEngine; video: HTMLVideoElement; sessionJson: string; lastCommand: number;
-  serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
+  endedReport: string; serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
 }
 export function create(tag: string, element: HTMLElement, json: string, event: (kind: number, payload: string) => void): Handle | ContextHandle {
   if (tag === 'vela-context') {
@@ -19,11 +19,14 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   const root = element.shadowRoot ?? element.attachShadow({ mode: 'open' });
   const video = document.createElement('video'); video.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:#000';
   root.replaceChildren(video);
-  const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0, serverError: '' };
+  const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0, serverError: '', endedReport: '' };
   handle.engine = new PlaybackEngine(video, value => {
     event(8, JSON.stringify(value));
     const now = performance.now();
     if (value.type === 'snapshot' && now - handle.lastReport >= 1000) {
+      const endedKey = `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}`;
+      if (value.snapshot.state === 'ended' && handle.endedReport === endedKey) return;
+      if (value.snapshot.state === 'ended') handle.endedReport = endedKey;
       const report = observation(value.snapshot, ++handle.sequence);
       if (report) { handle.lastReport = now; event(8, JSON.stringify({ type: 'observation', sessionId: value.snapshot.sessionId, observation: report })); }
     }
@@ -34,6 +37,7 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
 export function setProps(handle: Handle | ContextHandle, json: string) {
   if ('context' in handle) return;
   const props = JSON.parse(json) as Record<string, string>;
+  if (props.serverError !== handle.serverError) { handle.serverError = props.serverError ?? ''; if (handle.serverError) handle.engine.rejectCommand(handle.serverError); }
   const input = props.plan || props.session || '';
   if (input && input !== handle.sessionJson) {
     let session: PlaybackSession;
@@ -49,7 +53,6 @@ export function setProps(handle: Handle | ContextHandle, json: string) {
     if (props.plan && current.sessionId === session.id && current.sourceId === session.selectedSourceId && current.sourceGeneration === session.sourceGeneration && current.seekGeneration === session.seekGeneration) handle.engine.updateSession(session);
     else void handle.engine.load(session);
   }
-  if (props.serverError !== handle.serverError) { handle.serverError = props.serverError ?? ''; if (handle.serverError) handle.engine.rejectCommand(handle.serverError); }
   applyCommand(handle, props);
 }
 function applyCommand(handle: Handle, props: Record<string, string>) {

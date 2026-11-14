@@ -1103,11 +1103,16 @@ function create(tag, element, json, event) {
   const video = document.createElement("video");
   video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000";
   root.replaceChildren(video);
-  const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0, serverError: "" };
+  const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0, serverError: "", endedReport: "" };
   handle.engine = new PlaybackEngine(video, (value) => {
     event(8, JSON.stringify(value));
     const now = performance.now();
     if (value.type === "snapshot" && now - handle.lastReport >= 1000) {
+      const endedKey = `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}`;
+      if (value.snapshot.state === "ended" && handle.endedReport === endedKey)
+        return;
+      if (value.snapshot.state === "ended")
+        handle.endedReport = endedKey;
       const report = observation(value.snapshot, ++handle.sequence);
       if (report) {
         handle.lastReport = now;
@@ -1128,6 +1133,11 @@ function setProps(handle, json) {
   if ("context" in handle)
     return;
   const props = JSON.parse(json);
+  if (props.serverError !== handle.serverError) {
+    handle.serverError = props.serverError ?? "";
+    if (handle.serverError)
+      handle.engine.rejectCommand(handle.serverError);
+  }
   const input = props.plan || props.session || "";
   if (input && input !== handle.sessionJson) {
     let session;
@@ -1151,11 +1161,6 @@ function setProps(handle, json) {
       handle.engine.updateSession(session);
     else
       handle.engine.load(session);
-  }
-  if (props.serverError !== handle.serverError) {
-    handle.serverError = props.serverError ?? "";
-    if (handle.serverError)
-      handle.engine.rejectCommand(handle.serverError);
   }
   applyCommand(handle, props);
 }
