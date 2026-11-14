@@ -1,4 +1,5 @@
 /** Local-only release packager. No publishing and no changes to vendor/exact. */
+import { generateLocales } from '../locales';
 import { writePwaAssets } from './pwa-assets';
 import { createHash } from 'node:crypto';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from 'node:fs/promises';
@@ -40,6 +41,7 @@ try {
     else await copyFile(from, to);
   }
   const client = join(work, 'client');
+  await generateLocales(client);
   const manifestPath = join(client, 'app.json');
   const app = JSON.parse(await readFile(manifestPath, 'utf8'));
   app.start_url = '/vela';

@@ -41,3 +41,8 @@ The routine compile check remains `bun exact.mjs contract build app.contract
 --json --errors-only` from `client/`. For a single visual look, use the running
 loop at port 8765. Distribution and PWA packaging are described in
 [distribution.md](docs/distribution.md).
+
+Language catalogs live in `client/strings/<locale>.json`. Dev startup and release
+packaging generate the TypeScript catalog registry automatically. After adding a
+locale during a running loop, run `bun tools/locales.ts` (or restart the dev
+command); edits to already imported catalogs use Exact's ordinary reload.
