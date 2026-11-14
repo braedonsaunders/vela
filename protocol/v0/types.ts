@@ -58,7 +58,7 @@ export type RowEntry = { id: ID; receiptToken: string } & (
 export interface Row { id: ID; name: string; purpose: 'continue' | 'nextUp' | 'recentlyReleased' | 'recentlyAdded' | 'collection' | 'recommendation' | 'live' | 'watchlist';
   receiptToken: string; style?: string; items: RowEntry[]; nextCursor?: Cursor; continuation: 'more' | 'exhausted' | 'unknown' }
 export interface Hero { title: Title; receiptToken: string; trailer?: Extra }
-export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; hero?: Hero; rows: Row[]; nextCursor?: Cursor }
+export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID }
 export interface SearchRequest extends Mutation { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
 export interface SearchResponse extends Page<Title> { query: string; generation: number; receiptToken?: string }

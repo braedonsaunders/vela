@@ -39,7 +39,9 @@ export function detail(id: string): TitleDetail | undefined {
     extras: extras.filter(e => e.parentId === id), chapters: [], cast: [] };
 }
 // Unbound fixtures are bound to a grant by the HTTP layer before delivery.
-export const rows: Row[] = collections.map(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, style: row === 3 ? 'landscape' : 'poster', items: titles.slice(row * 15, row * 15 + 15).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }));
+export const featuredTitles = [titles[0]!, titles[15]!, titles[30]!, titles[45]!];
+const featuredIds = new Set(featuredTitles.map(t => t.id));
+export const rows: Row[] = collections.map(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, style: row === 3 ? 'landscape' : 'poster', items: titles.slice(row * 15, row * 15 + 15).filter(t => !featuredIds.has(t.id)).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }));
 const channelNames = ['World News', 'Field & Forest', 'Cinema One', 'Classic Evenings', 'Discovery Lab', 'Coastal Living', 'Matchday', 'The Kitchen', 'Young Explorers', 'Arts & Culture', 'Night Music', 'Open Roads'];
 const programmeGenres = ['News', 'Sports', 'Movies', 'Kids', 'Documentary', 'Drama', 'Comedy', 'Music', 'Lifestyle'];
 export const channels: Channel[] = Array.from({ length: 170 }, (_, i) => ({ id: `channel-${i + 1}`, number: String(i < 150 ? 101 + i : 1980 + i - 150),

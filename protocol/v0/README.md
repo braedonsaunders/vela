@@ -71,7 +71,7 @@ services. Web-code redeem uses RedeemWebCode for the console's IssueWebCode Watc
 handoff; it is single-use, expiring and device-bound. Device grants appear in
 Sign-in & devices and revocation invalidates API, events and media access.
 
-Rows/ordering/hero use Experience and frontend_experience, including owner layout
+Rows/ordering/heroes use Experience and frontend_experience, including owner layout
 and viewer policy. Receipt tokens map to issued row/entry handles. Visibility is
 actual viewport visibility; selected means click; played means actual playback.
 Never fabricate rank handles or treat prefetch as an impression. Artwork URLs are
@@ -79,6 +79,16 @@ sized policy-checked grants. Detail/children use Item/Children; extras use Extra
 and ExtraStreams; live data uses LiveTV. Capability declarations pass through host
 capability policy and do not prove hardware decoding. Plans use the session broker;
 source substitution must validate edition, timeline, codecs and track mappings.
+
+Bootstrap.heroes is an optional ordered list of at most five featured titles from
+the personalized experience service. Each Hero preserves its issued receiptToken;
+policy-filter and deduplicate title IDs against each other and the home rows.
+Omission or an empty array means no featured source is currently available. There
+is no singular hero field or legacy fallback. Clients may rotate presentation in
+this order; they must not invent candidates, rank handles or playback readiness.
+An optional trailer is metadata; preview playback still requires an actual ready,
+unexpired cachedPlayback grant. The mock's four explicit demo selections have
+grant-bound receipts and are absent from its home-row fixtures.
 
 Artwork size width/height are delivered pixel dimensions when both are positive.
 Use0/0 for an unmeasured source URL; clients discover its natural dimensions from

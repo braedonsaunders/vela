@@ -2,7 +2,7 @@ import { renderArtwork } from './artwork';
 import { libraries, libraryEntries } from '../protocol/v0/fixtures/libraries';
 import { createHmac } from 'node:crypto';
 import type * as V from '../protocol/v0/types';
-import { allTitles, channels, detail, extras, guide, rows, titles } from '../protocol/v0/fixtures/catalogue';
+import { allTitles, channels, detail, extras, featuredTitles, guide, rows, titles } from '../protocol/v0/fixtures/catalogue';
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia } from './media';
 import { serveLive, liveFaults } from './live';
 import { applyCommand, createSession, events, observe, sessions, snapshot, type Session } from './sessions';
@@ -133,7 +133,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       const direct = preview.plan.paths.find(p => p.kind === 'direct' && p.readiness === 'ready');
       if (direct) trailer = { ...extra, cachedPlayback: { status: 'ready', url: direct.url, expiresAt: new Date(Math.min(g.expires, preview.expires)).toISOString() } };
     }
-    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, hero: { title: titles[0], receiptToken: receipt(g, 'hero'), ...(trailer ? { trailer } : {}) }, rows: rows.map(r => boundRow(g, r)) } satisfies V.Bootstrap, g.id);
+    const heroes = featuredTitles.map((title): V.Hero => ({ title, receiptToken: receipt(g, `hero:${title.id}`), ...(trailer?.parentId === title.id ? { trailer } : {}) }));
+    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: rows.map(r => boundRow(g, r)) } satisfies V.Bootstrap, g.id);
   }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';
