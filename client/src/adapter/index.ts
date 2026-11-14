@@ -4,6 +4,7 @@ import type * as V from '../../wire/v0/types';
 export interface ServerAdapter {
   capabilities(): Promise<V.ServerCapabilities>;
   negotiate(request: V.NegotiateRequest): Promise<V.NegotiateResponse>;
+  issueWebCode(request: V.WebCodeIssueRequest): Promise<V.WebCodeIssueResponse>;
   redeemWebCode(request: V.WebCodeRedeemRequest): Promise<V.Tokens>;
   signIn(request: V.SignInRequest): Promise<V.Tokens>;
   deviceGrant(request: V.DeviceGrantRequest): Promise<V.DeviceGrant>;

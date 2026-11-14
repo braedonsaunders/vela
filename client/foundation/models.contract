@@ -6,6 +6,7 @@ shape Card
   summary: string
   facts: string
   yearLabel: string
+  durationLabel: string
   progressLabel: string
   seasonNumberLabel: string
   episodeNumberLabel: string
@@ -119,6 +120,11 @@ shape AuthModel
   authenticated: bool
   passwordAvailable: bool
   quickAvailable: bool
+  secureOrigin: string
+  error: string
+
+shape SecureSwitchReply
+  url: string
   error: string
 
 shape QuickModel
