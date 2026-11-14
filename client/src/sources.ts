@@ -84,6 +84,7 @@ const sources: Sources = {
     const value = store.get('vela.session');
     const version = authVersion;
     if (value) {
+      while (interactions?.size) await interactions.flush(key(store));
       const tokens = JSON.parse(value) as { refreshToken: string };
       await api.revoke({ refreshToken: tokens.refreshToken, idempotencyKey: key(store) });
       if (version === authVersion) { store.set('vela.session', ''); authVersion++; ready = undefined; activeQuick = ''; ai = undefined; interactions = undefined; }
