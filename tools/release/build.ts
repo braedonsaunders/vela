@@ -81,6 +81,7 @@ try {
     let html = await readFile(path, 'utf8');
     if (!html.includes('<base href="/">')) throw new Error(`Unexpected base tag in ${name}`);
     html = html.replace('<base href="/">', `<base href="/vela/"><meta name="theme-color" content="#0c1015"><link rel="apple-touch-icon" href="/vela/vela-icon-180.png"><script type="module" src="${installUrl}"></script>`);
+    html = html.replace(/<link rel="icon"[^>]*>/, '<link rel="icon" type="image/svg+xml" href="/vela/vela-icon.svg">');
     const references = [...html.matchAll(/(?:src|href)="\.\/([^"?#]+\.(?:js|css))"/g)].map(m => m[1]);
     for (const asset of new Set(references)) html = html.replaceAll(`"./${asset}"`, `"${await immutableUrl(asset)}"`);
     await writeFile(path, html);
