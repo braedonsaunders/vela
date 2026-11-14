@@ -27,6 +27,21 @@ function decide(condition: string, engine: string): boolean | undefined {
 const indent = (line: string) => line.length - line.trimStart().length;
 const dedent = (lines: string[]) => lines.map(line => line.slice(2));
 
+/** Rewrite `else if C` chains as `else` + a nested `if C`, so every branch is one block. */
+function nestElseIf(lines: string[]): string[] {
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(\s*)else if (.+)$/.exec(lines[i]);
+    if (!m) continue;
+    const at = m[1].length;
+    let j = i + 1;
+    // The rest of the chain: this branch's body, then any later else / else if and their bodies.
+    while (j < lines.length && (lines[j].trim() === '' || indent(lines[j]) > at || (indent(lines[j]) === at && /^\s*else\b/.test(lines[j])))) j++;
+    const rest = lines.slice(i + 1, j).map(line => line.trim() === '' ? line : `  ${line}`);
+    return nestElseIf([...lines.slice(0, i), `${m[1]}else`, `${m[1]}  if ${m[2]}`, ...rest, ...lines.slice(j)]);
+  }
+  return lines;
+}
+
 /** Replace each decidable `if`/`else` on the skin by the branch that runs. */
 function pruneBlocks(lines: string[], engine: string): string[] {
   const out: string[] = [];
@@ -92,7 +107,7 @@ export async function prepareEngine(client: string, engine: string): Promise<voi
   if (!ENGINES.includes(engine)) throw new Error(`Unknown engine ${engine}; one of ${ENGINES.join(', ')}`);
   const dispatch = join(client, 'foundation/skin.contract');
   const source = await readFile(dispatch, 'utf8');
-  const pruned = pruneBlocks(source.split('\n'), engine).map(line => pruneFunction(line, engine)).join('\n');
+  const pruned = pruneBlocks(nestElseIf(source.split('\n')), engine).map(line => pruneFunction(line, engine)).join('\n');
   if (/\bskin [!=]= "/.test(pruned)) throw new Error('foundation/skin.contract still dispatches on skin after pruning: a condition the profile cannot decide');
   await writeFile(dispatch, pruneImports(pruned));
   const marker = join(client, 'foundation/engine.contract');
