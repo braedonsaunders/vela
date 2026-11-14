@@ -15,17 +15,18 @@ component Detail
     playExtra: action
     selectTitle: action
     observe: action
-  state pickedSeason = ""
+    season: string
   state seasonDirection = 1
   derive episodesSeason = match first(model.episodes) { case some(e) => e.seasonId, case none => "" }
-  derive selectedSeason = (pickedSeason != "" ? pickedSeason : episodesSeason != "" ? episodesSeason : match first(model.title) { case some(t) => (t.kind == "season" ? t.id : match first(model.seasons) { case some(s) => s.id, case none => "" }), case none => "" })
-  derive seasonLoading = pickedSeason != "" and episodesSeason != "" and episodesSeason != pickedSeason
+  // The foundation owns the selection (the visit's ?season=); without one the page shows
+  // the season its episodes belong to.
+  derive selectedSeason = (season != "" ? season : episodesSeason != "" ? episodesSeason : match first(model.title) { case some(t) => (t.kind == "season" ? t.id : match first(model.seasons) { case some(s) => s.id, case none => "" }), case none => "" })
+  derive seasonLoading = season != "" and episodesSeason != "" and episodesSeason != season
   derive upNext = match first(model.episodes.filter(e => not e.played)) { case some(e) => [e], case none => [] }
   // A season swaps only the episode list, sliding in tab order; the page and its scroll stay.
   action pickSeason(id: string)
     if id != selectedSeason
       seasonDirection = (model.seasons.map(x => x.id).indexOf(id) >= model.seasons.map(x => x.id).indexOf(selectedSeason) ? 1 : -1)
-      pickedSeason = id
       selectTitle(id, "season", "")
   action castBack
     scrollBy("detail-cast", -640, 0)

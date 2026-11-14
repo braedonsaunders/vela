@@ -15,6 +15,8 @@ export interface GuideProgramme {
   at: number; span: number;
   /** Percent elapsed while airing, otherwise 0. */
   progress: number; remainingLabel: string; durationLabel: string;
+  /** A future programme's start for people: minutes within the hour, else its clock time and day. */
+  startsLabel: string;
   episode: string; rating: string; genre: string; tone: number; art: string;
 }
 export interface GuideChannel {
@@ -183,6 +185,8 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
             at: (Math.max(a, start) - start) / MINUTE, span: (Math.min(b, end) - Math.max(a, start)) / MINUTE,
             progress: onAir ? Math.round((now - a) / (b - a) * 1000) / 10 : 0,
             remainingLabel: onAir ? left(b - now) : '', durationLabel: minute(Math.round((b - a) / MINUTE)),
+            startsLabel: a <= now ? '' : a - now < HOUR ? msg('live.startsIn', { minutes: number(Math.ceil((a - now) / MINUTE)) })
+              : a < midnight(now, 1) ? msg('live.startsAt', { time: time(a) }) : a < midnight(now, 2) ? msg('live.startsTomorrow', { time: time(a) }) : msg('live.startsOn', { day: weekday.format(a), time: time(a) }),
             episode, rating: p.rating ?? '', genre, tone: tone(genre),
             art: picture(p.artwork, ['still', 'backdrop', 'poster'], 640, 360, origin),
           };
@@ -213,6 +217,19 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       p.upId = vertical(row - 1); p.downId = vertical(row + 1);
     }));
     return model;
+  });
+}
+
+/**
+ * Where a server timestamp falls in the guide: its local day offset from today (-1 outside
+ * the guide's week or unparseable) and its minute from that day's local midnight.
+ */
+export function guideFocus(at: string, now: number, localeJSON?: string) {
+  const ms = Date.parse(at);
+  if (!Number.isFinite(ms)) return { day: -1, minute: 0 };
+  return withLocale(localeJSON, () => {
+    const start = midnight(ms, 0), day = Math.round((start - midnight(now, 0)) / DAY);
+    return { day: day >= 0 && day < DAYS ? day : -1, minute: (ms - start) / MINUTE };
   });
 }
 

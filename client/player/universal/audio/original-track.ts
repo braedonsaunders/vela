@@ -26,7 +26,7 @@ export interface PreparedOriginalAudioSwitch {
 export async function prepareOriginalAudioSwitch(options: {
   url: string; tracks: readonly OriginalAudioIdentity[]; trackId: string;
   registry: ReturnType<typeof createAudioPackages>; maximumOutputChannels: number | null;
-  signal: AbortSignal; nightMode?: boolean;
+  signal: AbortSignal; nightMode?: boolean; forceSoftware?: boolean;
 }): Promise<PreparedOriginalAudioSwitch> {
   const ordered = [...options.tracks].sort((a, b) => a.streamIndex - b.streamIndex);
   if (!ordered.length || ordered.some((track, index) => !track.id || !track.codec || !Number.isSafeInteger(track.streamIndex) ||
@@ -113,7 +113,7 @@ export async function prepareOriginalAudioSwitch(options: {
     signal.throwIfAborted();
     if (!selected) throw new Error('Selected original audio disappeared during preparation');
     const audioOptions = await prepareAudioOptions(options.registry, selected, options.maximumOutputChannels,
-      signal, options.nightMode ?? false, !selected.nativeSupported);
+      signal, options.nightMode ?? false, options.forceSoftware || !selected.nativeSupported);
     signal.throwIfAborted();
     if (!isSupportedCustomAudioInputLayout(audioOptions.audioDecoder?.codec ?? selected.codec, selected.channels, selected.sampleRate))
       throw new Error('Selected original audio has no qualified decoded output layout/rate');
