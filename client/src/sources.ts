@@ -18,6 +18,7 @@ import { msg, setLocale, time, withLocale } from '../foundation/i18n';
 
 export function createAnswer(devOrigin: string, MOCK: boolean, version: string): Answer {
 let API = '';
+let pageOriginBound = '';
 function bindOrigin(pageOrigin: string): void {
   const candidate = MOCK ? devOrigin : pageOrigin;
   let parsed: URL;
@@ -99,12 +100,24 @@ async function session(store: Parameters<Sources['uiBootstrap']>[1]): Promise<Et
   if (!store.get('vela.session')) throw new Error('Sign in to your Vela server');
   return api;
 }
-let authOptions = { passwordAvailable: false, quickAvailable: false };
+let authOptions = { passwordAvailable: false, quickAvailable: false, secureOrigin: '' };
+function advertisedSecureOrigin(origins: string[] | undefined, requested?: string): string {
+  let page: URL;
+  try { page = new URL(pageOriginBound); } catch { return ''; }
+  if (page.protocol !== 'http:') return '';
+  for (const origin of origins ?? []) {
+    try {
+      const url = new URL(origin);
+      if (url.protocol === 'https:' && !url.username && !url.password && url.pathname === '/' && !url.search && !url.hash && origin === url.origin && (!requested || requested === origin)) return origin;
+    } catch { /* Ignore malformed publisher values. */ }
+  }
+  return '';
+}
 let authCapabilities: Promise<ServerCapabilities> | undefined;
 const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '') => {
   if (!authCapabilities) authCapabilities = server(store).capabilities().finally(() => { authCapabilities = undefined; });
   const capabilities = await authCapabilities;
-  authOptions = { passwordAvailable: capabilities.features.passwordSignIn.available, quickAvailable: capabilities.features.quickConnect.available };
+  authOptions = { passwordAvailable: capabilities.features.passwordSignIn.available, quickAvailable: capabilities.features.quickConnect.available, secureOrigin: advertisedSecureOrigin(capabilities.secureOrigins) };
   return { authenticated: !!store.get('vela.session'), ...authOptions, error };
 };
 let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, driftLabel: '', canCatchUp: false };
@@ -120,6 +133,7 @@ const sources: Sources = {
   uiAuth: async ([code, _epoch, isFragment, pageOrigin, mediaJSON, localeJSON], store) => {
     setLocale(localeJSON);
     bindOrigin(pageOrigin);
+    pageOriginBound = pageOrigin;
     const api = server(store, parseMediaCapabilities(mediaJSON));
     if (code && !store.get('vela.session')) {
       let decoded = code;
@@ -194,6 +208,20 @@ const sources: Sources = {
   cancelQuick: async ([secret], store) => {
     if (activeQuick === secret) activeQuick = '';
     return { accepted: true };
+  },
+  issueSecureSwitch: async ([targetOrigin, at], store) => {
+    try {
+      const api = await session(store);
+      const version = authVersion;
+      const capabilities = await api.capabilities();
+      const origin = advertisedSecureOrigin(capabilities.secureOrigins, targetOrigin);
+      if (!origin) throw new Error('Secure connection is no longer available');
+      const issued = await api.issueWebCode({ targetOrigin: origin, device, idempotencyKey: key(store) });
+      if (version !== authVersion || issued.targetOrigin !== origin || !issued.code || !Number.isFinite(Date.parse(issued.expiresAt)) || Date.parse(issued.expiresAt) <= at) throw new Error('Invalid secure connection handoff');
+      return { url: `${origin}/vela/#code=${encodeURIComponent(issued.code)}`, error: '' };
+    } catch (error) {
+      return { url: '', error: error instanceof Error ? error.message : 'Secure connection unavailable' };
+    }
   },
   uiBootstrap: async ([at, localeJSON, artWidth], store) => {
     const api = await session(store);

@@ -35,7 +35,7 @@ use Detail as MarqueeDetail from "../skins/marquee/detail.contract"
 use Library as MarqueeLibrary, CollectionPage as MarqueeCollection from "../skins/marquee/library.contract"
 use PlayerChrome as MarqueePlayerChrome from "../skins/marquee/player.contract"
 use Guide as MarqueeGuide from "../skins/marquee/guide.contract"
-use LiveControls as MarqueeLiveControls from "../skins/marquee/live.contract"
+use LiveControls as MarqueeLiveControls, MiniGuide as MarqueeMiniGuide from "../skins/marquee/live.contract"
 use AuthStage as MarqueeAuthStage, AuthNotice as MarqueeAuthNotice, SignIn as MarqueeSignIn, QuickConnect as MarqueeQuickConnect from "../skins/marquee/auth.contract"
 
 fn skinDetailPresentation(skin: string, width: number, doc: SkinDoc): string = (skin == "doc" ? DocPresentation(doc, width) : skin == "mochi" ? MochiPresentation(width) : skin == "example" ? ExamplePresentation(width) : skin == "index" or skin == "editorial" ? IndexPresentation(width) : skin == "jellytwin" ? JellyPresentation(width) : skin == "marquee" ? MarqueePresentation(width) : CinePresentation(width))
@@ -58,6 +58,10 @@ component Shell
     libraries: LibraryNav[]
     section: string
     openLibrary: action
+    secureOrigin: string
+    secureBusy: bool
+    secureError: string
+    goSecure: action
     doc: SkinDoc
   slot
   view
@@ -84,7 +88,7 @@ component Shell
               MarqueeShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
                 children
             else
-              CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
+              CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary, secureOrigin=secureOrigin, secureBusy=secureBusy, secureError=secureError, goSecure=goSecure)
                 children
 
 component Home
@@ -133,7 +137,7 @@ component Home
               JellyHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, libraries=libraries, openLibrary=openLibrary, live=live, canLive=canLive)
                 children
             else if skin == "marquee"
-              MarqueeHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, playHero=playHero)
+              MarqueeHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, playHero=playHero, cardPreview=cardPreview, previewIntent=previewIntent)
                 children
             else
               CineHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero, reachEnd=reachEnd, reachRowEnd=reachRowEnd, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, cardPreview=cardPreview, previewIntent=previewIntent, playHero=playHero)
@@ -329,7 +333,9 @@ component MiniGuide
     if skin == "mochi"
       MochiMiniGuide(model=model, playing=playing, target=target, small=small, still=still, tune=tune)
     else
-      if skin != "example" and skin != "index" and skin != "editorial" and skin != "marquee" and skin != "jellytwin"
+      if skin == "marquee"
+        MarqueeMiniGuide(model=model, playing=playing, target=target, small=small, still=still, tune=tune)
+      else if skin != "example" and skin != "index" and skin != "editorial" and skin != "jellytwin"
         CineMiniGuide(model=model, playing=playing, target=target, small=small, still=still, tune=tune)
 
 component PlayerChrome
@@ -505,6 +511,10 @@ component SignIn
     editPassword: action
     submit: action
     quick: action
+    secureOrigin: string
+    secureBusy: bool
+    secureError: string
+    goSecure: action
   view
     if skin == "mochi"
       MochiSignIn(username=username, password=password, passwordAvailable=passwordAvailable, quickAvailable=quickAvailable, error=error, busy=busy, still=still, editUsername=editUsername, editPassword=editPassword, submit=submit, quick=quick)
@@ -514,7 +524,7 @@ component SignIn
       else if skin == "marquee"
         MarqueeSignIn(username=username, password=password, passwordAvailable=passwordAvailable, quickAvailable=quickAvailable, error=error, busy=busy, still=still, editUsername=editUsername, editPassword=editPassword, submit=submit, quick=quick)
       else
-        CineSignIn(username=username, password=password, passwordAvailable=passwordAvailable, quickAvailable=quickAvailable, error=error, busy=busy, still=still, editUsername=editUsername, editPassword=editPassword, submit=submit, quick=quick)
+        CineSignIn(username=username, password=password, passwordAvailable=passwordAvailable, quickAvailable=quickAvailable, error=error, busy=busy, still=still, editUsername=editUsername, editPassword=editPassword, submit=submit, quick=quick, secureOrigin=secureOrigin, secureBusy=secureBusy, secureError=secureError, goSecure=goSecure)
 
 component QuickConnect
   props

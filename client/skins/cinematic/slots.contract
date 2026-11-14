@@ -23,6 +23,10 @@ component Shell
     libraries: LibraryNav[]
     section: string
     openLibrary: action
+    secureOrigin: string
+    secureBusy: bool
+    secureError: string
+    goSecure: action
   slot
   state menuOpen = false
   derive compact = viewport.width < 640
@@ -91,6 +95,13 @@ component Shell
                   for color, c in skinManifest(skin).swatches.slice(0, 4) key=`${c}`
                     column width=10 height=10 border-radius=5 background-color=color box-shadow="inset 0px 0px 0px 1px var(--cinematic.glass-edge-strong)"
                 image "symbol:forward-chevron" width=12 height=12 color="ink.quiet" aria-hidden=true
+          if secureOrigin != ""
+            button press=goSecure disabled=secureBusy testId="secure-switch-menu" class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
+              row gap=10 align-items="center"
+                image "symbol:lock" width=16 height=16 color="brand.warm" aria-hidden=true
+                column gap=2 text-align="left"
+                  text t("secure.action") font-size=14 color="ink.primary"
+                  text (secureError != "" ? secureError : secureOrigin) font-size=11 color=(secureError != "" ? "brand.warm" : "ink.quiet") line-clamp=1
           vela-install pwaAction="install" buttonLabel=t("pwa.install")
           vela-install pwaAction="update" buttonLabel=t("pwa.update")
           button press=leaveSession class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
@@ -257,10 +268,15 @@ component Shelf
     column position="relative" gap=(small ? 2 : 4) padding-bottom=(small ? 18 : 28)
       text row.name role="heading" aria-level=2 font-size=(small ? 18 : 21) font-weight=650 letter-spacing="-0.012em" padding-left=gutter(small) padding-right=gutter(small)
       scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" mask-image="linear-gradient(90deg, black 0%, black 94%, transparent 100%)" scroll=scrolled
-        row gap=(small ? 12 : 18) align-items="flex-start" padding-top=(small ? 14 : 16) padding-bottom=(small ? 18 : 22) padding-left=gutter(small) padding-right=gutter(small)
+        row gap=(row.presentation == "ranked" ? (small ? 22 : 40) : small ? 12 : 18) align-items="flex-start" padding-top=(small ? 14 : 16) padding-bottom=(small ? 18 : 22) padding-left=gutter(small) padding-right=gutter(small)
           for card, i in row.items key=card.id
-            column position="relative" z-index=(preview.cardId == card.id ? 5 : 0) animation=enter(still, stagger(i, 45, 8))
-              TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false, rowId=row.id, previewable=row.previewOnFocus, preview=preview, intent=intent)
+            // A ranked row (Top 10): each of its first ten posters stands on a large outlined
+            // numeral to its left, in server order; the poster overlaps only the numeral's right edge.
+            row position="relative" z-index=(preview.cardId == card.id ? 5 : 0) align-items="flex-end" animation=enter(still, stagger(i, 45, 8))
+              if row.presentation == "ranked" and i < 10
+                text formatNumber(i + 1, "decimal") aria-hidden=true font-family="\"Arial Black\", \"Helvetica Neue\", Arial, sans-serif" font-weight=900 font-size=(small ? 220 : 348) line-height=0.74 letter-spacing=(i == 9 ? "-0.2em" : "-0.09em") color="cinematic.rank-fill" -webkit-text-stroke=(small ? "3px var(--cinematic.rank-stroke)" : "5px var(--cinematic.rank-stroke)") mask-image="linear-gradient(180deg, black 0%, black 50%, rgba(0, 0, 0, 0.25) 100%)" margin-right=(small ? -30 : -50) padding-bottom=(small ? 44 : 52) flex-shrink=0 user-select="none"
+              column position="relative"
+                TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false, rowId=row.id, previewable=row.previewOnFocus, preview=preview, intent=intent)
           children
 
 // A row-shaped placeholder while titles load.

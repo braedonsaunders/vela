@@ -1,5 +1,5 @@
 use buildEngine from "./engine.contract"
-use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, libraryQuery from "./models.contract"
+use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, SecureSwitchReply, libraryQuery from "./models.contract"
 
 shape Time
   epochAtZero: number
@@ -38,12 +38,30 @@ members Client
   action receiveOrigin(origin: string)
     pageOrigin = origin
   derive localeJSON = `{"locale":"${time.locale}","formatLocale":"${time.formatLocale}","resolvedLocale":"${time.resolvedLocale}","timeZone":"${time.timeZone}","utcOffset":${time.utcOffset}}`
-  resource auth = uiAuth(webCode, time.epochAtZero, fragmentCode != "" or capturedFragment, pageOrigin, mediaCapabilitiesJSON, localeJSON) when current(time) and pageOrigin != "" and mediaCapabilitiesJSON != "" as shape AuthModel transient
+  resource auth = uiAuth(webCode, time.epochAtZero, fragmentCode != "" or capturedFragment, pageOrigin, mediaCapabilitiesJSON, localeJSON) when current(time) and pageOrigin != "" and mediaCapabilitiesJSON != "" and fragmentCode == "" and searchParam(top(nav), "webCode") == "" as shape AuthModel transient
   mutation cancelledAI as shape ReceiptReply
   task cancelEmptySearch when query.trim() == ""
     after(1, cancelSearch)
   action cancelSearch
     send cancelledAI = cancelAISearch(time.epochAtZero)
+  state secureNavigate = ""
+  derive secureOriginsJSON = (auth.secureOrigin == "" ? "[]" : `["${auth.secureOrigin}"]`)
+  mutation secureSwitch as shape SecureSwitchReply then finishSecureSwitch
+  derive secureBusy = pending(secureSwitch)
+  derive secureError = match secureSwitch { case some(r) => r.error, case none => "" }
+  action goSecure
+    if auth.secureOrigin != "" and not secureBusy
+      if auth.authenticated
+        send secureSwitch = issueSecureSwitch(auth.secureOrigin, time.epochAtZero + performanceNow())
+      else
+        secureNavigate = `${auth.secureOrigin}/vela/`
+  action finishSecureSwitch
+    match secureSwitch
+      case some(r)
+        if auth.authenticated and auth.secureOrigin != "" and r.error == "" and r.url != ""
+          secureNavigate = r.url
+      case none
+        homeAuthChecked = homeAuthChecked
   mutation signedOut as shape AuthModel refreshes auth
   state homeAuthChecked = false
   action logout
@@ -361,7 +379,12 @@ members Client
   resource collection = uiCollection(collectionId) with localeJSON, artWidth when auth.authenticated and collectionId != "" as shape CollectionModel
   resource detail = uiDetail(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape DetailModel
   resource related = uiRelated(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape FeedRow[] else empty()
-  derive detailSurface = DetailModel(detail, related=(current(related) ? related : []))
+  // A show's seasons stay on the show's own visit: the chosen season is a query on it, and only
+  // its episodes are read, so picking a season never remounts the page or drops the tabs.
+  derive detailSeason = (top(nav).name == "title" ? searchParam(top(nav), "season") : "")
+  resource seasonDetail = uiDetail(detailSeason) with localeJSON, artWidth when auth.authenticated and detailSeason != "" as shape DetailModel else empty()
+  derive seasonReady = match first(seasonDetail.title) { case some(t) => t.id == detailSeason, case none => false }
+  derive detailSurface = DetailModel(detail, related=(current(related) ? related : []), episodes=(detailSeason != "" and seasonReady ? seasonDetail.episodes : detail.episodes))
   derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" ? top(nav).params.id : "")
   resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero, `${top(nav).id}`, searchParam(top(nav), "position")) when auth.authenticated and playingId != "" as shape PlaybackModel transient
   state streamAttempt = 0
@@ -427,7 +450,10 @@ members Client
       if kind == "collection" or kind == "directory" or kind == "playlist"
         nav = push(nav, path("collection", id))
       else
-        nav = push(nav, path("title", id))
+        if kind == "season" and top(nav).name == "title" and current(detail) and detail.seasons.filter(x => x.id == id).length > 0
+          nav = replace(nav, path("title", detailId) + `?season=${encodeURIComponent(id)}`)
+        else
+          nav = push(nav, path("title", id))
     if token != ""
       send receipt = interaction(token, "selected", time.epochAtZero + performanceNow())
   action observe(token: string, entry: IntersectionObserverEntry)

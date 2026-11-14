@@ -108,7 +108,7 @@ component Guide
           GuideTile(tile=tile, small=small, still=still, watch=watch, message=tileMessage, unmute=tileUnmute, tuneIn=tileTuneIn)
       if model.channels.length == 0
         column flex=1 align-items="center" justify-content="center" gap=12 padding=32 color="jellytwin.secondary" role="status"
-          Icon(name="live", size=44)
+          Icon(name="symbol:icon.jelly-live", size=44)
           text t("live.noChannels") font-size=17
       else
         if tab == "channels"
@@ -144,8 +144,7 @@ component Guide
                             row gap=5 align-items="center" min-width=0
                               text c.name font-size=14 font-weight=500 color="jellytwin.ink-strong" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
                               if c.favorite
-                                column color="jellytwin.accent" aria-label=t("live.favourite")
-                                  Icon(name="star", size=12)
+                                image "symbol:star-fill" width=12 height=12 flex-shrink=0 color="jellytwin.accent" aria-label=t("live.favourite")
                     if not c.listed
                       button press=watch(c.id) aria-label=t("ui.watchChannel", channel=c.name) position="sticky" left=(rail + 3) margin-left=3 margin-top=3 height=(row - 7) width=max(120, min(width, portW - rail - 8)) box-sizing="border-box" class=Cell background-color="jellytwin.guide-cell" padding-left=14 align-items="center" text-align="left"
                         text t("live.noListings") font-size=14 color="jellytwin.secondary"
@@ -187,7 +186,7 @@ component ProgrammeDialog
         row gap=10 align-items="center"
           text `${channel.number} · ${channel.name}` font-size=13 color="jellytwin.secondary" flex=1 min-width=0 line-clamp=1
           button id="jt-programme-close" press=dismiss aria-label=t("live.close") class=IconBtn width=36 height=36
-            Icon(name="close", size=20)
+            Icon(name="symbol:close", size=20)
         text programme.name font-size=(small ? 21 : 24) font-weight=600 color="jellytwin.ink-strong"
         row gap=12 align-items="center" flex-wrap="wrap" font-size=14
           text t("ui.startEnd", start=programme.startLabel, end=programme.endLabel) font-variant-numeric="tabular-nums" color="jellytwin.ink-strong"
@@ -208,7 +207,7 @@ component ProgrammeDialog
           text programme.summary font-size=15 line-height=1.55 color="jellytwin.ink"
         row gap=10 margin-top=6
           button press=watch(channel.id) class=Submit testId="guide-watch"
-            Icon(name="play", size=20)
+            Icon(name="symbol:play-fill", size=20)
             text (programme.airing ? t("live.watch") : t("ui.watchChannel", channel=channel.name))
 
 component GuideTab
@@ -266,7 +265,7 @@ component GuideTile
       if tile.state == "tune-in"
         button press=tuneIn aria-label=t("live.tuneInTo", channel=tile.channelName) position="absolute" inset=0 class=TileButton background-color="jellytwin.overlay"
           row gap=6 align-items="center" justify-content="center"
-            Icon(name="play", size=16)
+            Icon(name="symbol:play-fill", size=16)
             text t("live.tuneIn") font-size=13 font-weight=600
       else
         button press=watch(tile.channelId) aria-label=t("ui.watchChannel", channel=tile.channelName) position="absolute" inset=0 class=TileButton background-color="transparent" testId="guide-tile"
@@ -276,7 +275,7 @@ component GuideTile
           text tile.channelName font-size=11 font-weight=600 color="jellytwin.ink-strong" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
       if tile.state == "playing"
         button press=unmute aria-label=(tile.muted ? t("live.unmutePreview") : t("live.mutePreview")) aria-pressed=(not tile.muted) position="absolute" right=4 bottom=4 class=IconBtn width=28 height=28 background-color="jellytwin.overlay"
-          Icon(name=(tile.muted ? "muted" : "volume"), size=16)
+          Icon(name=(tile.muted ? "symbol:speaker-mute" : "symbol:speaker"), size=16)
 
 style DayButton
   box-sizing = "border-box"

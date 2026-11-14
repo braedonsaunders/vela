@@ -6,7 +6,7 @@ fn side(small: bool): string = (small ? "14px" : "3.3%")
 // The default tile colour for an item without artwork, chosen from its identity so it stays stable.
 fn tileColor(id: string): string = (id.length % 5 == 0 ? "jellytwin.tile-1" : id.length % 5 == 1 ? "jellytwin.tile-2" : id.length % 5 == 2 ? "jellytwin.tile-3" : id.length % 5 == 3 ? "jellytwin.tile-4" : "jellytwin.tile-5")
 
-fn kindIcon(kind: string): string = (kind == "movies" or kind == "movie" ? "movie" : kind == "shows" or kind == "show" or kind == "season" or kind == "episode" ? "tv" : kind == "live" ? "live" : "folder")
+fn kindIcon(kind: string): string = (kind == "movies" or kind == "movie" ? "symbol:icon.jelly-film" : kind == "shows" or kind == "show" or kind == "season" or kind == "episode" ? "symbol:icon.jelly-tv" : kind == "live" ? "symbol:icon.jelly-live" : "symbol:icon.jelly-folder")
 
 keyframes jtSpin
   from rotate=0
@@ -33,39 +33,37 @@ keyframes jtRise
 fn fadeIn(still: bool): string = (still ? "none" : "jtFade 260ms ease-out both")
 fn riseIn(still: bool): string = (still ? "jtFade 200ms linear both" : "jtRise 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
 
-// Icons: the platform's roles where one matches, else the skin's own single-path
-// templates (assets/icons/jelly-*.svg, declared in app.tamber). One image node each.
-fn iconSrc(name: string): string = (name == "menu" ? "symbol:menu" : name == "search" ? "symbol:search" : name == "user" ? "symbol:person" : name == "back" ? "symbol:back" : name == "home" ? "symbol:home" : name == "movie" ? "symbol:icon.jelly-film" : name == "tv" ? "symbol:icon.jelly-tv" : name == "live" ? "symbol:icon.jelly-live" : name == "folder" ? "symbol:icon.jelly-folder" : name == "play" ? "symbol:play-fill" : name == "pause" ? "symbol:pause-fill" : name == "rewind" ? "symbol:icon.jelly-rewind" : name == "forward" ? "symbol:icon.jelly-fastforward" : name == "subtitles" ? "symbol:icon.jelly-subtitles" : name == "audio" ? "symbol:waveform" : name == "settings" ? "symbol:settings" : name == "fullscreen" ? "symbol:icon.jelly-fullscreen" : name == "pip" ? "symbol:icon.jelly-pip" : name == "volume" ? "symbol:speaker" : name == "muted" ? "symbol:speaker-mute" : name == "check" ? "symbol:checkmark" : name == "heart" ? "symbol:heart" : name == "heart-fill" ? "symbol:heart-fill" : name == "sort" ? "symbol:sort" : name == "filter" ? "symbol:filter" : name == "left" ? "symbol:icon.jelly-left" : name == "right" ? "symbol:icon.jelly-right" : name == "up" ? "symbol:icon.jelly-up" : name == "down" ? "symbol:icon.jelly-down" : name == "close" ? "symbol:close" : name == "info" ? "symbol:info" : name == "star" ? "symbol:star-fill" : name == "logout" ? "symbol:sign-out" : name == "palette" ? "symbol:sparkles" : name == "phone" ? "symbol:smartphone" : name == "alert" ? "symbol:alert" : name == "chapters" ? "symbol:list" : name == "lowdelay" ? "symbol:icon.jelly-bolt" : "symbol:circle")
-
+// An icon: a platform role (`symbol:search`) or one of the skin's single-path templates
+// (`symbol:icon.jelly-film`, assets/icons/jelly-*.svg declared in app.tamber). One node.
 component Icon
   props
     name: string
     size: number
   view
-    image iconSrc(name) width=size height=size flex-shrink=0 aria-hidden=true
+    image name width=size height=size flex-shrink=0 aria-hidden=true
 
-// The Vela mark (the four-pointed sail) and wordmark, painted in the skin's gradient.
+// The Vela lockup (brand/README.md): the two-tone searchlight V and the wordmark, one image.
+// `size` is its height; the lockup stays at least 72 px wide.
 component Wordmark
   props
     size: number
   view
-    row align-items="center" gap=(size * 0.3) aria-hidden=true
-      svg width=(size * 0.95) height=(size * 0.95) viewBox="0 0 24 24"
-        linearGradient id="jt-mark" x1=0 y1=0 x2=1 y2=1
-          stop offset="0%" stop-color="var(--jellytwin.violet)"
-          stop offset="100%" stop-color="var(--jellytwin.accent)"
-        path d="M12 0C12.9 7.6 16.4 11.1 24 12C16.4 12.9 12.9 16.4 12 24C11.1 16.4 7.6 12.9 0 12C7.6 11.1 11.1 7.6 12 0Z" fill="url(#jt-mark)"
-      text t("jellytwin.wordmark") font-size=size font-weight=300 letter-spacing="0.12em" line-height=1 color="jellytwin.ink-strong"
+    image "assets/brand/vela-lockup.svg" alt="" height=max(28, size) width=max(28, size) * 2.629 flex-shrink=0 aria-hidden=true
 
-// The indeterminate spinner: an accent arc turning on a faint ring.
+// The indeterminate spinner: an accent arc turning on a faint ring. One node.
 component Spinner
   props
     size: number
     still: bool
   view
-    svg width=size height=size viewBox="0 0 48 48" aria-hidden=true flex-shrink=0 animation=(still ? "none" : "jtSpin 900ms linear infinite")
-      circle cx=24 cy=24 r=20 fill="none" stroke="var(--jellytwin.track)" stroke-width=4
-      circle cx=24 cy=24 r=20 fill="none" stroke="var(--jellytwin.accent)" stroke-width=4 stroke-linecap="round" stroke-dasharray="40 126"
+    column width=size height=size class=SpinnerRing animation=(still ? "none" : "jtSpin 900ms linear infinite") aria-hidden=true
+
+style SpinnerRing
+  box-sizing = "border-box"
+  flex-shrink = 0
+  border-radius = 999
+  border = "3px solid var(--jellytwin.track)"
+  border-top-color = "jellytwin.accent"
 
 // A round, transparent icon button that tints with the accent on hover and focus.
 style IconBtn

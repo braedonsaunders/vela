@@ -180,7 +180,15 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const terms = body.query.toLowerCase().split(/\s+/).filter(Boolean);
     const items = titles.filter(t => terms.every((term: string) => (body.mode === 'fast' ? t.name : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
     const paging = new URL(url); if (body.cursor) paging.searchParams.set('cursor', body.cursor); if (body.limit) paging.searchParams.set('limit', String(body.limit));
-    return json({ ...page(items, paging, g, `search:${body.mode}:${body.query}`), query: body.query, generation: body.generation });
+    const titlePage = page(items, paging, g, `search:${body.mode}:${body.query}`);
+    const limit = Number(paging.searchParams.get('limit') ?? 50);
+    const matches = (text: string) => terms.length > 0 && terms.every((term: string) => text.toLowerCase().includes(term));
+    const now = Date.now();
+    const live = body.mode === 'fast' ? {
+      channels: channels.filter(c => matches(`${c.number} ${c.name} ${c.group ?? ''} ${(c.guides ?? []).map(g => g.name).join(' ')}`)).slice(0, limit),
+      programmes: guide(now, now + 86400000, []).filter(p => matches(`${p.name} ${p.episodeTitle ?? ''} ${p.summary ?? ''} ${(p.genres ?? []).join(' ')}`)).slice(0, limit),
+    } : undefined;
+    return json({ ...titlePage, query: body.query, generation: body.generation, ...(live ? { live } : {}) } satisfies V.SearchResponse);
   }
   if (path.startsWith('/search/ai')) fail('policy', 'feature_unavailable', 'AI search unavailable');
   if (method === 'POST' && path === '/interactions') {

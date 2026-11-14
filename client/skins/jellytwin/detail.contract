@@ -48,13 +48,13 @@ component Detail
                   text title.rating font-size=12 padding="1px 6px" border="1px solid var(--jellytwin.secondary)" border-radius=3
                 if title.played
                   row gap=4 align-items="center" color="jellytwin.accent"
-                    Icon(name="check", size=16)
+                    Icon(name="symbol:checkmark", size=16)
                     text t("jellytwin.played") font-size=14
               row gap=(small ? 14 : 12) align-items="flex-start" flex-wrap="wrap" justify-content=(small ? "center" : "flex-start") margin-top=4
                 if model.canPlay
-                  RoundAction(icon="play", label=(model.resumeSeconds > 0 ? t("jellytwin.resume") : t("ui.play")), primary=true, small=small, testId="detail-play", press=play(title.id))
+                  RoundAction(icon="symbol:play-fill", label=(model.resumeSeconds > 0 ? t("jellytwin.resume") : t("ui.play")), primary=true, small=small, testId="detail-play", press=play(title.id))
                 for trailer in trailers key=trailer.id
-                  RoundAction(icon="movie", label=t("jellytwin.trailer"), primary=false, small=small, testId=`detail-trailer-${trailer.id}`, press=playExtra(trailer.id))
+                  RoundAction(icon="symbol:icon.jelly-film", label=t("jellytwin.trailer"), primary=false, small=small, testId=`detail-trailer-${trailer.id}`, press=playExtra(trailer.id))
               if model.canPlay and model.resumeSeconds > 0 and title.durationSeconds > 0
                 column gap=6 width=(small ? "70%" : 320)
                   column height=5 border-radius=3 background-color="jellytwin.track" overflow="hidden" role="progressbar" aria-label=t("ui.watchProgress") aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=min(title.durationSeconds, max(0, model.resumeSeconds))
@@ -79,7 +79,7 @@ component Detail
               Poster(card=episode, wide=true, width=(small ? "58vw" : "clamp(240px, 21.5vw, 400px)"), domId="", small=small, still=still, selectTitle=selectTitle, observe=observe)
               if not small
                 button press=play(episode.id) aria-label=(episode.progressSeconds > 0 ? t("ui.resumeTitle", title=episode.name) : t("ui.playTitle", title=episode.name)) class=IconBtn width=56 height=56 background-color="jellytwin.raised"
-                  Icon(name="play", size=28)
+                  Icon(name="symbol:play-fill", size=28)
         if model.seasons.length > 0
           Section(row=FeedRow(id="detail-seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if model.episodes.length > 0
@@ -94,16 +94,17 @@ component Detail
               row gap=(small ? 10 : 16) padding-left=side(small) padding-right=side(small) padding-bottom=6
                 for extra in model.extras key=extra.id
                   ExtraCard(extra=extra, small=small, playExtra=playExtra)
-        if model.cast.length > 0
+        if model.castPeople.length > 0
           column gap=10 padding-bottom=(small ? 18 : 26)
-            text t("jellytwin.castAndCrew") role="heading" aria-level=2 font-size=(small ? 17 : 21) font-weight=600 color="jellytwin.ink-strong" padding-left=side(small) padding-right=side(small)
+            text t("jellytwin.castAndCrew") role="heading" aria-level=2 class=DetailHeading padding-left=side(small) padding-right=side(small)
             scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
               row gap=(small ? 10 : 16) padding-left=side(small) padding-right=side(small) padding-bottom=6 role="list"
-                for person in model.cast key=person
-                  column role="listitem" width=(small ? "26vw" : "clamp(110px, 8.6vw, 160px)") flex-shrink=0 gap=6 align-items="center"
-                    column width="100%" aspect-ratio="2 / 3" border-radius=6 background-color=tileColor(person) align-items="center" justify-content="center" color="jellytwin.secondary" aria-hidden=true
-                      Icon(name="user", size=(small ? 34 : 46))
-                    text person font-size=13 font-weight=500 color="jellytwin.ink-strong" text-align="center" line-clamp=2
+                for person, i in model.castPeople key=`${i}`
+                  column role="listitem" width=(small ? "26vw" : "clamp(110px, 8.6vw, 160px)") flex-shrink=0 gap=2 align-items="center" text-align="center"
+                    image (person.portrait != "" ? person.portrait : "symbol:person") alt="" width="100%" aspect-ratio="2 / 3" box-sizing="border-box" padding=(person.portrait != "" ? "0px" : "30%") border-radius=6 object-fit=(person.portrait != "" ? "cover" : "contain") background-color=tileColor(person.name) color="jellytwin.secondary" margin-bottom=4
+                    text person.name class=PersonName
+                    if person.role != ""
+                      text person.role class=PersonRole
         for related in model.related key=related.id
           Section(row=FeedRow(related, name=(related.name != "" ? related.name : t("jellytwin.moreLikeThis"))), small=small, still=still, selectTitle=selectTitle, observe=observe)
 
@@ -157,10 +158,9 @@ component EpisodeRow
           image episode.backdrop alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover"
         column position="absolute" inset=0 align-items="center" justify-content="center" background-color="jellytwin.overlay" opacity=(over ? 1 : 0) transition=(still ? "none" : "opacity 140ms linear") aria-hidden=true
           column width=44 height=44 border-radius=22 align-items="center" justify-content="center" background-color="jellytwin.accent"
-            Icon(name="play", size=24)
+            Icon(name="symbol:play-fill", size=24)
         if episode.played
-          column position="absolute" top=6 right=6 width=22 height=22 border-radius=11 align-items="center" justify-content="center" background-color="jellytwin.accent" aria-hidden=true
-            Icon(name="check", size=14)
+          image "symbol:checkmark" position="absolute" top=6 right=6 width=14 height=14 padding=4 border-radius=11 background-color="jellytwin.accent" aria-hidden=true
         if episode.progressSeconds > 0 and episode.durationSeconds > 0 and not episode.played
           column position="absolute" left=0 right=0 bottom=0 height=4 background-color="jellytwin.overlay" aria-hidden=true
             column height="100%" width=`${min(100, episode.progressSeconds / episode.durationSeconds * 100)}%` background-color="jellytwin.accent"
@@ -188,7 +188,7 @@ component ExtraCard
     column width=(small ? "52vw" : "clamp(220px, 18vw, 320px)") flex-shrink=0 gap=6
       button press=playExtra(extra.id) disabled=(not extra.ready) aria-label=(extra.ready ? t("ui.playTitle", title=extra.name) : t("ui.titleNotAvailable", title=extra.name)) width="100%" aspect-ratio="16 / 9" padding=0 border="none" border-radius=6 background-color=tileColor(extra.id) color="jellytwin.ink-strong" display="flex" align-items="center" justify-content="center" cursor=(extra.ready ? "pointer" : "default") class=ExtraHost
         column width=48 height=48 border-radius=24 align-items="center" justify-content="center" background-color=(extra.ready ? "jellytwin.accent" : "jellytwin.raised") opacity=(extra.ready ? 1 : 0.6)
-          Icon(name=(extra.ready ? "play" : "info"), size=24)
+          Icon(name=(extra.ready ? "symbol:play-fill" : "symbol:info"), size=24)
       text extra.name font-size=13 font-weight=500 color="jellytwin.ink-strong" text-align="center" line-clamp=1
       if not extra.ready
         text t("ui.notAvailableYet") font-size=12 color="jellytwin.secondary" text-align="center"
@@ -198,3 +198,21 @@ style ExtraHost
     box-shadow = "0px 0px 0px 3px var(--jellytwin.accent)"
   :focus-visible
     box-shadow = "0px 0px 0px 3px var(--jellytwin.accent)"
+
+style DetailHeading
+  font-size = 20
+  font-weight = 600
+  color = "jellytwin.ink-strong"
+
+style PersonName
+  width = "100%"
+  font-size = 13
+  font-weight = 500
+  color = "jellytwin.ink-strong"
+  line-clamp = 2
+
+style PersonRole
+  width = "100%"
+  font-size = 12
+  color = "jellytwin.secondary"
+  line-clamp = 1

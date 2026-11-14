@@ -19,7 +19,7 @@ export interface ServerCapabilities {
   secureOrigins?: string[];
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
-    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature; trailerPreview?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
+    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature; trailerPreview?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -55,7 +55,7 @@ export interface Chapter { id: ID; name: string; startSeconds: number; endSecond
 /** Verified source stream facts only; omitted when streams are estimated or unknown. */
 export interface MediaSummary { video: { codec?: string; width?: number; height?: number; bitDepth?: number; colorTransfer?: string; dolbyVisionProfile?: number }[]; audio: { codec?: string; channels?: number; language?: string }[] }
 export interface TitleDetail { title: Title; canPlay?: boolean; seasons?: Title[]; episodes?: Title[];
-  extras: Extra[]; chapters: Chapter[]; crew?: { name: string; role?: string }[]; mediaSummary?: MediaSummary; cast: { name: string; role?: string; artwork?: ArtworkRef }[] }
+  extras: Extra[]; chapters: Chapter[]; crew?: { name: string; role?: string; artwork?: ArtworkRef }[]; mediaSummary?: MediaSummary; cast: { name: string; role?: string; artwork?: ArtworkRef }[] }
 export type RowEntry = { id: ID; receiptToken: string } & (
   { kind: 'title'; title: Title } | { kind: 'channel'; channel: Channel } |
   { kind: 'collection' | 'playlist' | 'directory'; name: string; artwork: ArtworkRef[]; targetId: ID });
@@ -69,7 +69,8 @@ export interface Hero { title: Title; receiptToken: string; reason: HeroReason; 
 export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID }
 export interface SearchRequest extends Mutation { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
-export interface SearchResponse extends Page<Title> { query: string; generation: number; receiptToken?: string }
+export interface LiveSearchResults { channels: Channel[]; programmes: Programme[] }
+export interface SearchResponse extends Page<Title> { query: string; generation: number; receiptToken?: string; live?: LiveSearchResults }
 export interface AISearchRequest extends Mutation { query: string; generation: number; previousJobId?: ID }
 export interface AISearchJob { id: ID; generation: number; status: 'queued' | 'running' | 'complete' | 'cancelled' | 'failed'; results?: SearchResponse; error?: ProtocolError }
 export interface CancelRequest extends Mutation { generation: number }
@@ -89,7 +90,8 @@ export type TrailerPreviewResponse = { state: 'ready'; grant: PreviewGrant } |
 export interface SwitchBoundary { atSeconds: number; independent: boolean; timelineId: ID;
   /** Source replacement requires this compatibility proof, not just a matching title. */
   compatibility: 'same-source' | 'verified-timeline'; audioTrackIds: ID[]; subtitleTrackIds: ID[] }
-export interface PlaybackPathBase { original?: boolean; range?: boolean; byteLength?: number; id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
+export interface OriginalVideo { isInterlaced?: boolean; fieldOrder?: 'progressive' | 'tt' | 'bb' | 'tb' | 'bt'; rotation?: number; codec?: string; width?: number; height?: number; bitDepth?: number; profile?: string; level?: number; frameRate?: number; colorPrimaries?: string; colorTransfer?: string; colorSpace?: string; colorRange?: string; dvProfile?: number; dvLevel?: number; dvBlSignalCompatibilityId?: number; rpuPresent?: boolean; elPresent?: boolean; blPresent?: boolean }
+export interface PlaybackPathBase { originalVideo?: OriginalVideo; original?: boolean; range?: boolean; byteLength?: number; id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
   mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
   timelineOriginSeconds?: number; initialRenditionId?: ID; audioRenditions?: AudioRendition[];
   qualities: Quality[]; boundaries: SwitchBoundary[] }
@@ -124,7 +126,8 @@ export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'sourc
   code: string; message: string; retry: { allowed: boolean; afterSeconds?: number; maxAttempts?: number };
   requestId?: ID; currentGenerations?: Generations }
 export interface ErrorResponse { error: ProtocolError }
-export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string }
+export interface LiveGuide { id: ID; name: string }
+export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string; guides?: LiveGuide[] }
 export interface Programme { id: ID; channelId: ID; name: string; summary: string; start: Timestamp; end: Timestamp;
   titleId?: ID; episodeTitle?: string; seasonNumber?: number; episodeNumber?: number; artwork: ArtworkRef[]; rating?: string; genres?: string[] }
 export interface GuideQuery { from: Timestamp; until: Timestamp; channelIds?: ID[]; cursor?: Cursor; limit?: number }
@@ -199,3 +202,6 @@ export type ServerEvent = { cursor: Cursor } & ({ type: 'appearance'; appearance
 
 export interface WebCodeIssueRequest extends Mutation { targetOrigin: string; device: Device }
 export interface WebCodeIssueResponse { code: string; targetOrigin: string; expiresAt: Timestamp }
+
+export interface AudioFallbackRequest extends Mutation, Generations { trackId: ID; positionSeconds: number; preferredCodec: 'aac' }
+export interface AudioFallbackResponse { id: ID; audioGeneration: number; trackId: ID; url: string; mimeType: 'application/vnd.apple.mpegurl'; codec: 'mp4a.40.2'; timelineOriginSeconds: 0 }

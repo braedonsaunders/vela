@@ -1,5 +1,5 @@
 use Card, LibraryModel, LibraryOption, cardName from "../../foundation/models.contract"
-use TitleCard, Empty, unwatched, progressPct, subLine from "./slots.contract"
+use TitleCard, Empty, noPreview, unwatched, progressPct, subLine from "./slots.contract"
 use Glyph, Solid, Spinner, Block, Art, Pick, Primary, Secondary, Round, barH, gutter, arrive, kindLabel from "./look.contract"
 
 // Poster sizes the toolbar's slider steps through.
@@ -21,6 +21,7 @@ component Library
     selectTitle: action
     observe: action
   state list = false
+  state asked = false
   state size = 1
   derive directions = match first(model.sorts.filter(s => s.id == model.sort)) { case some(s) => s.directions, case none => [] }
   derive kindChoices = [LibraryOption(id="", label=t("marquee.allTypes"))].concat(model.kinds)
@@ -43,6 +44,9 @@ component Library
     setFilter("played", v)
   action resize(v: number)
     size = v
+  // Library pages never preview.
+  action quiet(cardId: string, on: bool)
+    asked = on
   action showGrid
     list = false
   action showList
@@ -103,7 +107,7 @@ component Library
             else
               column display="grid" grid-template-columns=`repeat(auto-fill, minmax(${posterMin(size, small)}px, 1fr))` column-gap=(small ? 12 : 20) row-gap=(small ? 18 : 28) padding=(small ? "16px 14px" : "24px 40px")
                 for card in model.items key=card.id
-                  TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=true)
+                  TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=true, preview=noPreview(), intent=quiet)
           if model.more
             row justify-content="center" padding-top=16
               if moreLoading
@@ -187,6 +191,9 @@ component CollectionPage
     close: action
     selectTitle: action
     observe: action
+  state asked = false
+  action quiet(cardId: string, on: bool)
+    asked = on
   view
     column min-height="100%" background-color="marquee.page" color="marquee.ink" padding-bottom=60
       row position="sticky" top=0 z-index=5 align-items="center" gap=10 height=(small ? 52 : 60) padding-left=(small ? "4px" : "24px") padding-right=gutter(small) background-color="marquee.chrome-glass" backdrop-filter="blur(18px)"
@@ -200,4 +207,4 @@ component CollectionPage
       else
         column display="grid" grid-template-columns=`repeat(auto-fill, minmax(${small ? 104 : 150}px, 1fr))` column-gap=(small ? 12 : 20) row-gap=(small ? 18 : 28) padding=(small ? "16px 14px" : "24px 40px")
           for card in items key=card.id
-            TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=true)
+            TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=true, preview=noPreview(), intent=quiet)

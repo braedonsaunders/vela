@@ -367,3 +367,58 @@ own device ID and redeems normally. The issuing device field validates the
 current authenticated request; it does not bind or transfer the grant. Codes are
 single-use for60 seconds, bound to the account, exact trusted TLS origin and Vela
 surface. Credentials are not forwarded by HTTP redirects.
+
+### Audio-only fallback
+
+`POST /sessions/:id/audio-fallback` accepts `AudioFallbackRequest` and returns
+`AudioFallbackResponse`. It authorizes a real local AAC pipeline on the selected
+source track; `features.audioFallback.available` is true only when that pipeline
+is available. Audio-only HLS is broker-scoped. Its fMP4 timestamps are title-absolute
+(`timelineOriginSeconds: 0`). It does not bump video source or seek generations.
+Replacement invalidates the previous audio URL and increments `audioGeneration`.
+Stale source/seek generations return409; capacity/source failures use the ordinary
+classified error model. `DELETE /sessions/:id/audio-fallback/:audioId` accepts
+`Mutation` and returns `Ack`, canceling only that audio pipeline idempotently.
+
+`PlaybackPath.originalVideo` contains only actual, non-estimated source-probe
+facts. Missing facts are omitted. Explicit false DV presence flags and compatibility
+ID0 are preserved; absence is not proof of a compatible base layer. These facts
+are admission input for the original-file decoder, not a promise of support.
+
+Cast and crew credits may each carry `artwork?: ArtworkRef`. Emit only known
+portrait grants authorized for the current title credit. Neutral `Person.ThumbPath`
+and `PersonArtwork` can supply detached known descriptors without a metadata
+lookup or provider refresh. Missing portraits are omitted, including legacy
+name-only director/writer credits; clients leave the portrait empty.
+
+### Named live Guides
+
+`Channel.guides?: LiveGuide[]` carries actual owner-defined Guide memberships,
+in owner order and filtered to the viewer. Each descriptor is `{id,name}`; IDs
+remain stable across rename, and a channel may belong to several Guides. Clients
+use IDs for membership/filter state and deduplicate descriptors by ID for tabs.
+Omission means membership is unknown; an empty array means known no membership.
+`Channel.group` remains the independent provider group string. There is no global
+empty-Guide catalogue or new endpoint; memberships arrive with channel pages.
+These named Guides are channel groupings, separate from `/live/guide` programme
+time windows. The mock includes provider-derived memberships and overlapping
+House picks for its first six channels.
+
+Original-video probes may additionally carry `isInterlaced`, `fieldOrder`
+(`progressive`, `tt`, `bb`, `tb`, `bt`) and `rotation` in degrees. These are actual
+probe facts, not defaults: omit unknown field order/rotation/interlace state and
+preserve explicitly known zero rotation or false interlace. Rotation is signed counterclockwise degrees from the display matrix, preserved
+without normalization to0–360. For example, positive90 is counterclockwise90;
+missing rotation/matrix is omitted rather than defaulted to zero.
+
+### Live results in fast search
+
+Fast `POST /search` responses may include `live: LiveSearchResults`, containing
+`channels: Channel[]` and `programmes: Programme[]` in server order. The existing
+query and generation identify all lanes. Omission means unavailable; present empty
+arrays mean no matches. These are bounded, unpaged lanes: title-page cursors and
+continuation describe `items` only, never live totals or completeness. There is no
+new endpoint and no invented receipt. Programme IDs and channel IDs match the live
+API; programme.channelId references a viewer-authorized tunable channel, and its
+start/end are authoritative. Descriptive and AI responses omit these live lanes.
+The mock searches its visible channel/Guide labels and a24-hour programme window.

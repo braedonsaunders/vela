@@ -4,6 +4,7 @@ import type * as V from '../../wire/v0/types';
 export interface ServerAdapter {
   capabilities(): Promise<V.ServerCapabilities>;
   negotiate(request: V.NegotiateRequest): Promise<V.NegotiateResponse>;
+  issueWebCode(request: V.WebCodeIssueRequest): Promise<V.WebCodeIssueResponse>;
   redeemWebCode(request: V.WebCodeRedeemRequest): Promise<V.Tokens>;
   signIn(request: V.SignInRequest): Promise<V.Tokens>;
   deviceGrant(request: V.DeviceGrantRequest): Promise<V.DeviceGrant>;
@@ -25,6 +26,8 @@ export interface ServerAdapter {
   cancelAI(id: string, request: V.CancelRequest): Promise<V.AISearchJob>;
   interactions(request: V.InteractionsRequest): Promise<V.Ack>;
   playback(request: V.PlaybackRequest): Promise<V.PlaybackPlan>;
+  createAudioFallback(id: string, request: V.AudioFallbackRequest, signal?: AbortSignal): Promise<V.AudioFallbackResponse>;
+  cancelAudioFallback(id: string, audioId: string, request: V.Mutation, signal?: AbortSignal): Promise<V.Ack>;
   observe(id: string, request: V.PlayerObservation): Promise<V.Ack>;
   command(id: string, request: V.SessionCommand): Promise<V.PlaybackPlan>;
   channels(cursor?: string, limit?: number): Promise<V.Page<V.Channel>>;

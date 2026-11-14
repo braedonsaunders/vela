@@ -53,13 +53,13 @@ component Library
             column flex=1
           if model.canFavorite
             button press=setFilter("favorite", (model.favoriteFilter ? "" : "true")) aria-pressed=model.favoriteFilter aria-label=t("library.filter.favorites") testId="jt-favourites" class=IconBtn width=40 height=40 color=(model.favoriteFilter ? "jellytwin.accent" : "jellytwin.ink-strong")
-              Icon(name=(model.favoriteFilter ? "heart-fill" : "heart"), size=21)
+              Icon(name=(model.favoriteFilter ? "symbol:heart-fill" : "symbol:heart"), size=21)
           if model.sorts.length > 1 or directions.length > 1
             button id="jt-library-sort" popovertarget="jt-sort-menu" aria-label=t("library.sortBy") testId="jt-sort" class=IconBtn width=40 height=40
-              Icon(name="sort", size=21)
+              Icon(name="symbol:sort", size=21)
           if hasFilters
             button popovertarget="jt-filter-menu" aria-label=t("jellytwin.filters") testId="jt-filter" class=IconBtn width=40 height=40 color=(filtering ? "jellytwin.accent" : "jellytwin.ink-strong")
-              Icon(name="filter", size=21)
+              Icon(name="symbol:filter", size=21)
       column id="jt-sort-menu" popover="auto" toggle=menuChanged position="absolute" position-area="bottom span-left" margin-top=4 role="dialog" aria-label=t("library.sortBy") class=Sheet width=(small ? "calc(100vw - 28px)" : 280) max-height="70vh" overflow-y="auto"
         text t("library.sortBy") font-size=13 font-weight=600 color="jellytwin.secondary" padding="8px 16px 4px"
         for sort in model.sorts key=sort.id
@@ -93,7 +93,7 @@ component Library
             Spinner(size=48, still=still)
         else
           if model.items.length == 0
-            EmptyState(icon="filter", title=t("library.empty"), message=t("library.emptyHint"))
+            EmptyState(icon="symbol:filter", title=t("library.empty"), message=t("library.emptyHint"))
           else
             column aria-busy=loading opacity=(loading ? 0.6 : 1) transition=(still ? "none" : "opacity 160ms linear")
               Grid(items=model.items, small=small, still=still, selectTitle=selectTitle, observe=observe)
@@ -126,7 +126,5 @@ component ChoiceRow
     press: action
   view
     button press=press() role="menuitemradio" aria-checked=on class=MenuRow color=(on ? "jellytwin.accent" : "jellytwin.ink-strong")
-      column width=20 align-items="center"
-        if on
-          Icon(name="check", size=18)
+      image "symbol:checkmark" width=18 height=18 flex-shrink=0 opacity=(on ? 1 : 0) aria-hidden=true
       text label line-clamp=1

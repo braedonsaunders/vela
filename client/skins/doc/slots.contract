@@ -1,13 +1,9 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
-use Card, FeedRow, HomeModel, HeroAction, Viewport, LibraryNav, CardPreview from "../../foundation/models.contract"
-use Style, Env, Ctx, DocSlot, SkinDoc, L1, heroActFor, num, styleAt from "../../renderer/levels.contract"
+use HomeModel, Viewport, LibraryNav from "../../foundation/models.contract"
+use Style, Env, Ctx, DocSlot, SkinDoc, L1, heroActFor, num, styleAt, rootCtx from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 
-fn noCard(): Card = Card(id="", kind="", name="", summary="", facts="", yearLabel="", progressLabel="", seasonNumberLabel="", episodeNumberLabel="", year=0, rating="", seasonId="", seasonNumber=0, episodeNumber=0, played=false, progressSeconds=0, durationSeconds=0, genres=[], poster="", backdrop="", logo="", accent="", receipt="")
-fn noRow(): FeedRow = FeedRow(id="", name="", receipt="", items=[], nextCursor="", continuation="", previewOnFocus=false, presentation="")
-fn noHome(): HomeModel = HomeModel(viewer="", defaultSkinId="", skins=[], hero=[], heroActions=[], heroPreviewIds=[], previews=[], rows=[], nextCursor="", liveAvailable=false, aiAvailable=false, descriptiveAvailable=false, trailerPreviewAvailable=false)
-fn rootCtx(): Ctx = Ctx(hot=false, card=noCard(), row=noRow(), hero=noCard(), heroAct=heroActFor(noHome(), ""), dest=LibraryNav(id="", name="", kind="", backdrop=""), index=0)
 fn part(s: string, i: number): string = match s.split("|").at(i) { case some(x) => x, case none => "" }
 fn toggled(flags: string[], f: string): string[] = (flags.includes(f) ? flags.filter(x => x != f) : flags.concat([f]))
 fn detailPresentation(doc: SkinDoc, width: number): string = (width < 640 ? doc.detailSmall : doc.detailWide)
@@ -54,7 +50,7 @@ component Shell
   slot
   state flags: string[] = []
   state pickerOpen = false
-  derive env = Env(styles=doc.styles, home=noHome(), libraries=libraries, viewer=viewer, section=section, query="", heroIndex=0, small=viewport.width < 640, still=viewport.prefersReducedMotion, canLive=canLive, flags=flags)
+  derive env = Env(styles=doc.styles, home=[], libraries=libraries, viewer=viewer, section=section, query="", heroIndex=0, small=viewport.width < 640, still=viewport.prefersReducedMotion, canLive=canLive, flags=flags)
   action act(name: string, arg: string)
     if name == "home"
       flags = []
@@ -110,13 +106,12 @@ component Home
     playHero: action
   slot
   state flags: string[] = []
-  derive env = Env(styles=doc.styles, home=model, libraries=[], viewer=model.viewer, section="home", query=query, heroIndex=heroIndex, small=small, still=still, canLive=model.liveAvailable, flags=flags)
+  derive env = Env(styles=doc.styles, home=[model], libraries=[], viewer=model.viewer, section="home", query=query, heroIndex=heroIndex, small=small, still=still, canLive=model.liveAvailable, flags=flags)
   action act(name: string, arg: string)
     if name == "select"
       selectTitle(part(arg, 0), part(arg, 1), part(arg, 2))
     if name == "play"
-      let a = heroActFor(model, arg)
-      playHero(a.targetId, a.positionSeconds, a.hasPosition)
+      playHero(heroActFor(model, arg).map(a => a.targetId).join(""), num(heroActFor(model, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(model, arg).map(a => a.hasPosition).includes(true))
     if name == "pickHero"
       pickHero(match parseNumber(arg) { case some(x) => x, case none => 0 })
     if name == "toggle"

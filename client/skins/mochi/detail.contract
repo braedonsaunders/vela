@@ -41,22 +41,22 @@ component Detail
                   column position="relative" flex=1 border-radius=13 overflow="hidden"
                     FadeImage(src=title.poster)
                 column position="absolute" top=-11 left="34%" width=56 height=20 rotate="6deg" background-color="mochi.butter" opacity=0.9 border="2px solid var(--mochi.ink)" box-sizing="border-box"
-            column gap=(small ? 12 : 14) flex=1 min-width=0 padding-bottom=(small ? 0 : 6)
-              row gap=8 align-items="center" flex-wrap="wrap" animation=hop(still, 160)
+            column gap=(small ? 12 : 14) flex=1 min-width=0 animation=hop(still, 160) padding-bottom=(small ? 0 : 6)
+              row gap=8 align-items="center" flex-wrap="wrap"
                 text kindLabel(title.kind) class=Label font-size=11 padding="4px 10px" border-radius=999 background-color="mochi.mint" border="2px solid var(--mochi.ink)"
                 for fact in model.mediaFacts key=fact
                   text fact class=Label font-size=11 padding="4px 10px" border-radius=8 background-color="mochi.card" border="2px solid var(--mochi.ink)"
               if title.logo != "" and small
-                image title.logo alt=title.name role="heading" aria-level=1 height=80 width="auto" max-width="85%" object-fit="contain" align-self="flex-start" animation=hop(still, 200)
+                image title.logo alt=title.name role="heading" aria-level=1 height=80 width="auto" max-width="85%" object-fit="contain" align-self="flex-start"
               else
-                text title.name role="heading" aria-level=1 class=Title font-size=(small ? 34 : 54) animation=hop(still, 200)
-              row gap=6 flex-wrap="wrap" animation=hop(still, 240)
+                text title.name role="heading" aria-level=1 class=Title font-size=(small ? 34 : 54)
+              row gap=6 flex-wrap="wrap"
                 for fact in [title.facts].concat(title.genres.slice(0, 4)).filter(f => f != "") key=fact
                   text fact font-size=13 font-weight=600 padding="4px 12px" border-radius=999 background-color="mochi.lavender-soft" font-variant-numeric="tabular-nums"
-          column gap=(small ? 16 : 20) padding-left=(small ? "20px" : "max(48px, 5vw)") padding-right=(small ? "20px" : "max(48px, 5vw)") padding-top=(small ? 16 : 24) max-width="56rem"
+          column gap=(small ? 16 : 20) animation=hop(still, 260) padding-left=(small ? "20px" : "max(48px, 5vw)") padding-right=(small ? "20px" : "max(48px, 5vw)") padding-top=(small ? 16 : 24) max-width="56rem"
             if title.summary != ""
-              text title.summary font-size=(small ? 15 : 17) line-height=1.6 color="mochi.ink-soft" animation=hop(still, 280)
-            row gap=14 align-items="center" flex-wrap="wrap" animation=hop(still, 320)
+              text title.summary font-size=(small ? 15 : 17) line-height=1.6 color="mochi.ink-soft"
+            row gap=14 align-items="center" flex-wrap="wrap"
               if model.canPlay
                 PlayButton(label=(model.resumeSeconds > 0 ? t("ui.resumePositionIn", position=model.resumePosition) : t("ui.play")), accessible="", small=small, still=still, press=play(title.id))
               for trailer in model.extras.filter(e => e.kind == "trailer" and e.ready) key=trailer.id

@@ -438,6 +438,28 @@ function destroyEngine(handle) {
     handle.overlay?.remove();
 }
 
+// player/universal/loader.ts
+function canAttemptOriginal() {
+  return isSecureContext && !!navigator.gpu && typeof VideoDecoder === "function";
+}
+async function loadOriginalRuntime(options) {
+  if (!canAttemptOriginal())
+    throw new Error("Secure WebGPU and WebCodecs are required for original playback");
+  const base = new URL("./universal/", import.meta.url);
+  const response = await fetch(new URL("assets.json", base), { signal: AbortSignal.any([options.signal, AbortSignal.timeout(1e4)]), credentials: "same-origin" });
+  if (!response.ok)
+    throw new Error(`Original runtime assets HTTP ${response.status}`);
+  const manifest = await response.json();
+  if (manifest.version !== 1 || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
+    throw new Error("Original runtime asset identity mismatch");
+  options.signal.throwIfAborted();
+  const moduleURL = new URL("runtime.js", base);
+  moduleURL.searchParams.set("v", manifest.assetKey);
+  const module = await import(moduleURL.href);
+  options.signal.throwIfAborted();
+  return new module.UniversalRuntime({ ...options, assets: { baseURL: new URL("libraries/", base).href, assetKey: manifest.assetKey, audioDecoderURL: new URL("libraries/audio-decoders/", base).href } });
+}
+
 // player/model.ts
 function codecKnown(rendition) {
   return rendition.codecStatus !== "pending" && /codecs="[^"]+"/.test(rendition.mime);
@@ -1303,6 +1325,8 @@ class PlaybackEngine {
   session;
   source;
   pipeline;
+  original;
+  originalClosing = Promise.resolve();
   status = "idle";
   backend = null;
   audioPreference;
@@ -1364,10 +1388,14 @@ class PlaybackEngine {
     } : event);
   }
   position() {
-    return this.terminalMedia?.position ?? (this.video.readyState >= 1 && Number.isFinite(this.video.currentTime) ? this.nativeOrigin + this.video.currentTime : this.resumePosition);
+    return this.terminalMedia?.position ?? this.original?.position ?? (this.video.readyState >= 1 && Number.isFinite(this.video.currentTime) ? this.nativeOrigin + this.video.currentTime : this.resumePosition);
   }
   duration() {
-    return this.terminalMedia?.duration ?? (Number.isFinite(this.video.duration) ? this.nativeOrigin + this.video.duration : this.session?.duration ?? null);
+    return this.terminalMedia?.duration ?? this.original?.readout.duration ?? (Number.isFinite(this.video.duration) ? this.nativeOrigin + this.video.duration : this.session?.duration ?? null);
+  }
+  frameMetrics() {
+    const quality = this.video.getVideoPlaybackQuality?.();
+    return { frames: this.original?.readout.frames ?? quality?.totalVideoFrames ?? null, dropped: this.original?.readout.dropped ?? quality?.droppedVideoFrames ?? null };
   }
   saveVolume() {
     if (this.ambient)
@@ -1390,7 +1418,7 @@ class PlaybackEngine {
     if (!this.session || !this.source || !this.wantsPlay || ["failed", "ended", "recovering"].includes(this.status))
       return;
     const now = performance.now();
-    if (this.position() > this.lastPosition + 0.02 && !this.video.paused) {
+    if (this.position() > this.lastPosition + 0.02 && (this.original ? this.status === "playing" : !this.video.paused)) {
       this.everPlayed = true;
       this.lastAdvance = now;
       this.lastPosition = this.position();
@@ -1480,13 +1508,13 @@ class PlaybackEngine {
       waiting: !!this.pendingSeek || ["loading", "buffering", "recovering"].includes(this.status) || this.wantsPlay && this.video.seeking,
       volume: this.video.volume,
       muted: this.video.muted,
-      preparation: ["loading", "buffering"].includes(this.status) && (quality?.totalVideoFrames ?? 0) === 0 ? this.video.readyState < 1 ? "media-metadata" : this.video.paused ? "starting" : "initial-buffer" : null,
+      preparation: ["loading", "buffering"].includes(this.status) && (this.original?.readout.frames ?? quality?.totalVideoFrames ?? 0) === 0 ? this.video.readyState < 1 ? "media-metadata" : this.video.paused ? "starting" : "initial-buffer" : null,
       position: this.position(),
       duration: this.duration(),
       playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: this.nativeOrigin + ranges.start(i), end: this.nativeOrigin + ranges.end(i) })),
       throughputBps: this.pipeline?.bandwidth.bps ?? null,
-      droppedFrames: quality?.droppedVideoFrames ?? null,
-      totalFrames: quality?.totalVideoFrames ?? null,
+      droppedFrames: this.terminalMedia?.dropped ?? this.original?.readout.dropped ?? quality?.droppedVideoFrames ?? null,
+      totalFrames: this.terminalMedia?.frames ?? this.original?.readout.frames ?? quality?.totalVideoFrames ?? null,
       audioTrackIds,
       audioTrackId: this.pipeline?.audioTrackId ?? this.audio,
       pendingAudioTrackId: this.pipeline?.pendingAudioTrackId ?? null,
@@ -1546,7 +1574,7 @@ class PlaybackEngine {
     if (source.edition !== this.session?.edition)
       return false;
     if (source.delivery === "file")
-      return !!this.video.canPlayType(source.mime);
+      return source.original && canAttemptOriginal() || !!this.video.canPlayType(source.mime);
     return !!this.video.canPlayType("application/vnd.apple.mpegurl") || !!source.renditions?.some((r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass().isTypeSupported(r.mime)));
   }
   useNativeHls(source) {
@@ -1567,7 +1595,7 @@ class PlaybackEngine {
         this.publish();
       }, 1000);
     const pending = this.pendingSwitch;
-    const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && pending.source === session.sourceGeneration && pending.seek === session.seekGeneration;
+    const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && (pending.source + 1 === session.sourceGeneration && pending.seek === session.seekGeneration || pending.source === session.sourceGeneration && pending.seek + 1 === session.seekGeneration);
     const position = handoff ? Math.max(pending.position, this.position()) : session.position ?? 0;
     const recovery = !!handoff && pending.recovery;
     this.pendingSwitch = undefined;
@@ -1658,6 +1686,7 @@ class PlaybackEngine {
     if (!touchVideo)
       return;
     if (state === "paused") {
+      this.original?.pause();
       this.video.pause();
       this.status = "paused";
       this.publish();
@@ -1667,8 +1696,9 @@ class PlaybackEngine {
   endPlayback(position) {
     if (this.status === "ended" && this.terminalMedia)
       return;
-    this.terminalMedia = { position: position ?? this.position(), duration: this.duration() };
+    this.terminalMedia = { position: position ?? this.position(), duration: this.duration(), ...this.frameMetrics() };
     this.pendingSeek = undefined;
+    this.releaseOriginal();
     this.detachMedia();
     this.status = "ended";
     this.failure = null;
@@ -1688,7 +1718,14 @@ class PlaybackEngine {
     this.lastObservation = -Infinity;
     this.publish();
   }
+  releaseOriginal() {
+    const original = this.original;
+    this.original = undefined;
+    if (original)
+      this.originalClosing = original.dispose().catch(() => {});
+  }
   resetMedia() {
+    this.releaseOriginal();
     this.nativeOrigin = 0;
     this.terminalMedia = undefined;
     this.video.pause();
@@ -1717,6 +1754,67 @@ class PlaybackEngine {
     this.lastObservation = -Infinity;
     this.publish();
     try {
+      await this.originalClosing;
+      cancelled(token.signal);
+      if (source.original && !this.session?.live && canAttemptOriginal()) {
+        this.backend = "webgpu";
+        this.startupDeadlineMs = 65000;
+        const parent = this.video.parentElement;
+        if (!(parent instanceof HTMLDivElement))
+          throw new Error("Original renderer surface is missing");
+        const original = await loadOriginalRuntime({
+          surface: { container: parent, video: this.video },
+          signal: token.signal,
+          onFailure: (reason) => {
+            if (this.controller.current(token))
+              this.recover(new PlaybackFault(reason, "decoder"), token);
+          },
+          onEvent: (event) => {
+            if (!this.controller.current(token) || !this.original)
+              return;
+            if (event.type === "waiting")
+              this.status = "buffering";
+            else if (event.type === "playing" || event.type === "statechange") {
+              this.status = this.original.readout.state;
+              if (this.status === "playing") {
+                this.failure = null;
+                if (this.pendingSeek?.authorized)
+                  this.pendingSeek = undefined;
+              }
+            } else if (event.type === "ended") {
+              this.endPlayback();
+              return;
+            }
+            this.publish();
+          }
+        });
+        cancelled(token.signal);
+        this.original = original;
+        if (!this.wantsPlay)
+          original.pause();
+        if (this.subtitle)
+          throw new Error("Selected subtitles require a compatible fallback; original overlay is not ready");
+        const info = source.originalVideo;
+        await original.open({
+          url: source.url,
+          container: "",
+          duration: this.session?.duration ?? null,
+          position,
+          video: { ...info, codec: info?.codec ?? "", width: info?.width ?? 0, height: info?.height ?? 0 },
+          audio: (this.session?.audioTracks ?? []).map((t) => {
+            if (t.streamIndex === undefined || !t.codec)
+              throw new Error("Original audio identity is unavailable");
+            return { id: t.id, codec: t.codec, channels: t.channels, streamIndex: t.streamIndex };
+          }),
+          selectedAudioId: this.audio
+        });
+        cancelled(token.signal);
+        this.status = original.readout.state;
+        if (this.pendingSeek?.authorized && this.status === "paused")
+          this.pendingSeek = undefined;
+        this.publish();
+        return;
+      }
       if (source.delivery === "hls" && !this.useNativeHls(source)) {
         this.backend = "mse";
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish(), () => {
@@ -1803,6 +1901,7 @@ class PlaybackEngine {
   requestSeek(seconds) {
     this.pendingSeek = { position: seconds, startedAt: performance.now(), authorized: false };
     this.status = "buffering";
+    this.original?.pause();
     this.video.pause();
     this.lastObservation = -Infinity;
     this.publish();
@@ -1815,10 +1914,10 @@ class PlaybackEngine {
     } });
   }
   requestSwitch(source, position, recovery = false) {
-    const boundary = source.boundaries?.filter((at) => at <= position).sort((a, b) => b - a)[0];
+    const boundary = "onDemand" in source ? position : source.boundaries?.filter((at) => at <= position).sort((a, b) => b - a)[0];
     if (boundary === undefined)
       throw new Error("No independent switch boundary offered by server");
-    this.pendingSwitch = { startedAt: performance.now(), sessionId: this.session.id, sourceId: source.id, source: this.controller.source + 1, seek: this.controller.seek, position, recovery };
+    this.pendingSwitch = { startedAt: performance.now(), sessionId: this.session.id, sourceId: source.id, source: this.controller.source, seek: this.controller.seek, position, recovery };
     this.emit({ type: "session-command", sessionId: this.session.id, command: {
       kind: "switch",
       pathId: source.id,
@@ -1831,13 +1930,14 @@ class PlaybackEngine {
   fail(failure) {
     const position = this.position();
     const duration = this.duration();
+    const metrics = this.frameMetrics();
     this.pendingSeek = undefined;
     this.failure = failure;
     this.status = "failed";
     this.controller.cancel();
     this.detachMedia();
     this.resetMedia();
-    this.terminalMedia = { position, duration };
+    this.terminalMedia = { position, duration, ...metrics };
     this.emit({ type: "error", failure });
     this.lastObservation = -Infinity;
     this.publish();
@@ -1863,6 +1963,12 @@ class PlaybackEngine {
       }
       const source = this.candidates().find((s) => !this.attempted.has(s.id) && s.recoveryAllowed !== false && s.timeline === this.source?.timeline && s.edition === this.source?.edition && (!this.audio || s.audioTrackId === this.audio));
       if (!source) {
+        const pending = this.session?.onDemandSources?.find((s) => !this.attempted.has(s.id));
+        if (pending && this.session?.serverControlled) {
+          this.attempted.add(pending.id);
+          this.requestSwitch(pending, position, true);
+          return;
+        }
         this.fail({ ...failure, recoverable: false });
         return;
       }
@@ -1879,6 +1985,10 @@ class PlaybackEngine {
     }
   }
   async play() {
+    if (this.original) {
+      this.original.resume();
+      return;
+    }
     const token = this.controller.token();
     try {
       await this.video.play();
@@ -1949,6 +2059,8 @@ class PlaybackEngine {
     return !!document.pictureInPictureEnabled && !!this.video.requestPictureInPicture || !!this.video.webkitSetPresentationMode && !!this.video.webkitSupportsPresentationMode?.("picture-in-picture");
   }
   fullscreenAvailable() {
+    if (this.backend === "webgpu")
+      return !!document.fullscreenEnabled && !!this.fullscreenContainer.requestFullscreen;
     return !!document.fullscreenEnabled && !!this.fullscreenContainer.requestFullscreen || !!this.video.webkitEnterFullscreen && this.video.webkitSupportsFullscreen !== false;
   }
   applySubtitle() {
@@ -1989,6 +2101,7 @@ class PlaybackEngine {
         case "pause":
           this.localTransportIntent = "paused";
           this.wantsPlay = false;
+          this.original?.pause();
           this.video.pause();
           break;
         case "retry":
@@ -2037,6 +2150,7 @@ class PlaybackEngine {
         }
         case "mute":
           this.video.muted = command.muted ?? !this.video.muted;
+          this.original?.setMuted(this.video.muted);
           this.saveVolume();
           this.lastObservation = -Infinity;
           break;
@@ -2044,8 +2158,10 @@ class PlaybackEngine {
           if (!Number.isFinite(command.value) || command.value < 0 || command.value > 1)
             throw new Error("Volume outside 0–1");
           this.video.volume = command.value;
+          this.original?.setVolume(command.value);
           if (command.value > 0)
             this.video.muted = false;
+          this.original?.setMuted(this.video.muted);
           this.saveVolume();
           this.lastObservation = -Infinity;
           break;
@@ -2085,6 +2201,8 @@ class PlaybackEngine {
           break;
         }
         case "subtitle":
+          if (this.original && command.trackId)
+            throw new Error("Original subtitle overlay is not available");
           if (command.trackId && !this.session?.subtitleTracks.some((t) => t.id === command.trackId && t.url))
             throw new Error("Unknown WebVTT track");
           this.subtitle = command.trackId;
@@ -2166,8 +2284,9 @@ function sessionFromPlan(plan) {
     seekGeneration: plan.seekGeneration,
     audioTrackId: plan.selectedAudioTrackId,
     subtitleTrackId: plan.selectedSubtitleTrackId ?? undefined,
-    audioTracks: plan.audioTracks.map((t) => ({ id: t.id, label: t.name, language: t.language })),
+    audioTracks: plan.audioTracks.map((t) => ({ id: t.id, label: t.name, language: t.language, codec: t.codec, channels: t.channels, streamIndex: t.streamIndex })),
     subtitleTracks: plan.subtitleTracks.filter((t) => t.codec.toLowerCase() === "webvtt" || t.codec.toLowerCase() === "vtt").map((t) => ({ id: t.id, label: t.name, language: t.language, url: t.url })),
+    onDemandSources: plan.paths.filter((p) => p.readiness === "on-demand" && !!p.sourceId && p.sourceId === selected.sourceId && !!p.timelineId && p.timelineId === selected.timelineId && (p.edition ?? "") === edition).map((p) => ({ id: p.id, onDemand: true })),
     sources: plan.paths.filter((p) => p.readiness === "ready" && (p.edition ?? "") === edition).map((p) => ({
       id: p.id,
       strategy: p.kind,
@@ -2179,6 +2298,8 @@ function sessionFromPlan(plan) {
       audioTrackId: plan.selectedAudioTrackId,
       boundaries: p.boundaries.filter((b) => b.independent).map((b) => b.atSeconds),
       recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some((b) => b.independent && (b.compatibility === "verified-timeline" || b.compatibility === "same-source" && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
+      original: p.original,
+      originalVideo: p.originalVideo,
       timelineOriginSeconds: p.timelineOriginSeconds,
       initialRenditionId: p.initialRenditionId,
       audioRenditions: p.audioRenditions,
@@ -2229,12 +2350,13 @@ function create(tag, element, json, event) {
   if (tag === "vela-preview")
     return createPreview(element, json, event);
   if (tag === "vela-context") {
-    const handle = { context: true, disposed: false };
+    const handle = { context: true, disposed: false, lastNavigation: "", event };
     const props = JSON.parse(json);
     queueMicrotask(() => {
       if (!handle.disposed)
         event(8, props.probe === "media" ? JSON.stringify(mediaCapabilities()) : props.probe === "network" ? JSON.stringify({ saveData: navigator.connection?.saveData === true }) : location.origin);
     });
+    navigateSecurely(handle, props);
     return handle;
   }
   if (tag !== "vela-player")
@@ -2243,7 +2365,10 @@ function create(tag, element, json, event) {
   const root = element.shadowRoot ?? element.attachShadow({ mode: "open" });
   const video = document.createElement("video");
   video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000";
-  root.replaceChildren(video);
+  const surface = document.createElement("div");
+  surface.style.cssText = "position:relative;width:100%;height:100%";
+  surface.append(video);
+  root.replaceChildren(surface);
   const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0, serverError: "", endedReport: "" };
   handle.engine = new PlaybackEngine(video, (value) => {
     event(8, JSON.stringify(value));
@@ -2271,7 +2396,7 @@ function create(tag, element, json, event) {
   return handle;
 }
 function setProps(handle, json) {
-  if ("engine" in handle) {
+  if ("leaving" in handle) {
     setEngine(handle, json);
     return;
   }
@@ -2287,8 +2412,10 @@ function setProps(handle, json) {
     setPreview(handle, json);
     return;
   }
-  if ("context" in handle)
+  if ("context" in handle) {
+    navigateSecurely(handle, JSON.parse(json));
     return;
+  }
   const props = JSON.parse(json);
   if (props.serverError !== handle.serverError) {
     handle.serverError = props.serverError ?? "";
@@ -2366,7 +2493,7 @@ function applyCommand(handle, props) {
   }
 }
 function destroy(handle) {
-  if ("engine" in handle) {
+  if ("leaving" in handle) {
     destroyEngine(handle);
     return;
   }
@@ -2388,6 +2515,26 @@ function destroy(handle) {
   }
   handle.engine.dispose();
   handle.video.remove();
+}
+function navigateSecurely(handle, props) {
+  const target = props.secureNavigate;
+  if (!target || handle.disposed || target === handle.lastNavigation)
+    return;
+  try {
+    if (target.length > 8192)
+      throw new Error("Invalid secure handoff");
+    const url = new URL(target);
+    const allowed = JSON.parse(props.secureOrigins || "[]");
+    if (url.protocol !== "https:" || url.username || url.password || !["/vela", "/vela/"].includes(url.pathname) || !Array.isArray(allowed) || !allowed.some((origin) => typeof origin === "string" && origin === url.origin))
+      throw new Error("Invalid secure handoff");
+    handle.lastNavigation = target;
+    queueMicrotask(() => {
+      if (!handle.disposed)
+        location.replace(url.href);
+    });
+  } catch {
+    handle.event(8, JSON.stringify({ secureNavigation: "rejected" }));
+  }
 }
 export {
   abi,

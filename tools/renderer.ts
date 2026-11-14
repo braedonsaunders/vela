@@ -106,22 +106,26 @@ function level(d: number): string {
 `;
 }
 
+// Contexts are zero-or-one lists (a record the renderer never has to construct, as
+// foundation records gain fields): `m(list, expr)` reads a field or yields "".
+const m = (list: string, expr: string) => `${list}.map(x => ${expr}).join("")`;
+const yes = (cond: string) => `(${cond} ? "true" : "false")`;
 const vocabulary: [string, string][] = [
-  ...['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rating', 'progressLabel', 'poster', 'backdrop', 'logo', 'accent', 'receipt'].flatMap(f => [[`card.${f}`, `c.card.${f}`], [`hero.${f}`, `c.hero.${f}`]] as [string, string][]),
-  ['card.played', '(c.card.played ? "true" : "false")'], ['card.progressPct', 'pct(c.card.progressSeconds, c.card.durationSeconds)'],
-  ['card.hasProgress', '(c.card.progressSeconds > 0 and c.card.durationSeconds > 0 and not c.card.played ? "true" : "false")'],
-  ['card.label', 'cardName(c.card)'], ['card.kindId', '`${c.card.id}|${c.card.kind}|${c.card.receipt}`'], ['hero.kindId', '`${c.hero.id}|${c.hero.kind}|${c.hero.receipt}`'],
-  ['row.id', 'c.row.id'], ['row.name', 'c.row.name'], ['row.presentation', 'c.row.presentation'],
-  ['heroAct.reasonLabel', 'c.heroAct.reasonLabel'], ['heroAct.actionLabel', 'c.heroAct.actionLabel'], ['heroAct.actionDetail', 'c.heroAct.actionDetail'],
-  ['heroAct.action', 'c.heroAct.action'], ['heroAct.progressPct', '(c.heroAct.progress * 100).toString()'], ['heroAct.hasProgress', '(c.heroAct.progress > 0 ? "true" : "false")'],
-  ['dest.id', 'c.dest.id'], ['dest.name', 'c.dest.name'], ['dest.kind', 'c.dest.kind'], ['dest.on', '(e.section == c.dest.id ? "true" : "false")'],
+  ...['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rating', 'progressLabel', 'poster', 'backdrop', 'logo', 'accent', 'receipt'].flatMap(f => [[`card.${f}`, m('c.card', `x.${f}`)], [`hero.${f}`, m('c.hero', `x.${f}`)]] as [string, string][]),
+  ['card.played', m('c.card', yes('x.played'))], ['card.progressPct', m('c.card', 'pct(x.progressSeconds, x.durationSeconds)')],
+  ['card.hasProgress', m('c.card', yes('x.progressSeconds > 0 and x.durationSeconds > 0 and not x.played'))],
+  ['card.label', m('c.card', 'cardName(x)')], ['card.kindId', m('c.card', '`${x.id}|${x.kind}|${x.receipt}`')], ['hero.kindId', m('c.hero', '`${x.id}|${x.kind}|${x.receipt}`')],
+  ['card.factsLine', m('c.card', '[x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · ")')], ['hero.factsLine', m('c.hero', '[x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · ")')],
+  ['row.id', m('c.row', 'x.id')], ['row.name', m('c.row', 'x.name')], ['row.presentation', m('c.row', 'x.presentation')], ['row.hasMore', m('c.row', yes('x.nextCursor != ""'))],
+  ...['reasonLabel', 'actionLabel', 'actionDetail', 'action', 'targetId'].map(f => [`heroAct.${f}`, m('c.heroAct', `x.${f}`)] as [string, string]),
+  ['heroAct.progressPct', m('c.heroAct', '(x.progress * 100).toString()')], ['heroAct.hasProgress', m('c.heroAct', yes('x.progress > 0'))],
+  ['heroAct.playable', m('c.heroAct', yes('x.action != "details" and x.targetId != ""'))],
+  ['dest.id', m('c.dest', 'x.id')], ['dest.name', m('c.dest', 'x.name')], ['dest.kind', m('c.dest', 'x.kind')], ['dest.on', m('c.dest', yes('e.section == x.id'))],
   ['env.viewer', 'e.viewer'], ['env.viewerInitial', 'e.viewer.slice(0, 1).toUpperCase()'], ['env.section', 'e.section'], ['env.query', 'e.query'],
-  ['env.small', '(e.small ? "true" : "false")'], ['env.still', '(e.still ? "true" : "false")'], ['env.searching', '(e.query != "" ? "true" : "false")'],
-  ['env.canLive', '(e.canLive ? "true" : "false")'], ['env.heroCount', 'e.home.hero.length.toString()'], ['env.heroIndex', 'e.heroIndex.toString()'],
-  ['hero.factsLine', '[c.hero.facts].concat(c.hero.genres.slice(0, 3)).filter(f => f != "").join(" · ")'], ['card.factsLine', '[c.card.facts].concat(c.card.genres.slice(0, 3)).filter(f => f != "").join(" · ")'],
-  ['heroAct.playable', '(c.heroAct.action != "details" and c.heroAct.targetId != "" ? "true" : "false")'], ['heroAct.targetId', 'c.heroAct.targetId'],
-  ['env.rotating', '(e.home.hero.length > 1 and not e.still and e.query == "" ? "true" : "false")'], ['env.rowCount', 'e.home.rows.length.toString()'],
-  ['index', 'c.index.toString()'], ['index.label', '(c.index + 1).toString()'], ['index.current', '(c.index == e.heroIndex ? "true" : "false")'],
+  ['env.small', yes('e.small')], ['env.still', yes('e.still')], ['env.searching', yes('e.query != ""')], ['env.canLive', yes('e.canLive')],
+  ['env.heroCount', m('e.home', 'x.hero.length.toString()')], ['env.heroIndex', 'e.heroIndex.toString()'], ['env.rowCount', m('e.home', 'x.rows.length.toString()')],
+  ['env.rotating', m('e.home', yes('x.hero.length > 1 and not e.still and e.query == ""'))],
+  ['index', 'c.index.toString()'], ['index.label', '(c.index + 1).toString()'], ['index.current', yes('c.index == e.heroIndex')],
 ];
 
 function core(): string {
@@ -150,17 +154,17 @@ shape Cond
 // Where a node is drawn: the records repeat nodes stepped into, and the item's index.
 shape Ctx
   hot: bool
-  card: Card
-  row: FeedRow
-  hero: Card
-  heroAct: HeroAction
-  dest: LibraryNav
+  card: Card[]
+  row: FeedRow[]
+  hero: Card[]
+  heroAct: HeroAction[]
+  dest: LibraryNav[]
   index: number
 
 // What every node may read: the slot's models, the viewport class and the skin's flags.
 shape Env
   styles: Style[]
-  home: HomeModel
+  home: HomeModel[]
   libraries: LibraryNav[]
   viewer: string
   section: string
@@ -204,12 +208,13 @@ fn num(s: string): number = match parseNumber(s) { case some(x) => x, case none 
 fn holds(k: Cond, c: Ctx, e: Env): bool = (k.is == "eq" ? val(k.k, c, e) == k.v : k.is == "ne" ? val(k.k, c, e) != k.v : k.is == "gt" ? num(val(k.k, c, e)) > num(k.v) : k.is == "lt" ? num(val(k.k, c, e)) < num(k.v) : val(k.k, c, e) != "" and val(k.k, c, e) != "false" and val(k.k, c, e) != "0")
 fn shows(conds: Cond[], c: Ctx, e: Env): bool = not conds.map(k => holds(k, c, e) == k.not).includes(true)
 fn motion(mk: string, md: number, mdl: number, me: string, mf: string, mit: string, mdir: string, msk: string, msd: number, step: number, cap: number, i: number, e: Env): string = (e.still ? (msk == "" ? "none" : \`\${msk} \${msd}ms linear both\`) : \`\${mk} \${md}ms \${me} \${mdl + min(i, cap) * step}ms \${mit} \${mdir} \${mf}\`)
-fn heroActFor(home: HomeModel, id: string): HeroAction = match first(home.heroActions.filter(a => a.heroId == id)) { case some(a) => a, case none => HeroAction(heroId="", reason="", reasonLabel="", action="", targetId="", targetKind="", hasPosition=false, positionSeconds=0, actionLabel="", actionDetail="", progress=0) }
-fn ctxKey(c: Ctx, j: number): string = \`\${j}:\${c.card.id}:\${c.row.id}:\${c.hero.id}:\${c.dest.id}\`
+fn heroActFor(home: HomeModel, id: string): HeroAction[] = home.heroActions.filter(a => a.heroId == id).slice(0, 1)
+fn rootCtx(): Ctx = Ctx(hot=false, card=[], row=[], hero=[], heroAct=[], dest=[], index=0)
+fn ctxKey(c: Ctx, j: number): string = \`\${j}:\${c.card.map(x => x.id).join("")}:\${c.row.map(x => x.id).join("")}:\${c.hero.map(x => x.id).join("")}:\${c.dest.map(x => x.id).join("")}\`
 ${Array.from({ length: DEPTH - 1 }, (_, i) => i + 1).map(d => `fn ctxs${d}(n: N${d}, c: Ctx, e: Env): Ctx[] = ${ctxsBody(d)}`).join('\n')}
 `;
 }
-const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? e.home.rows.slice(0, n.lim).map(r => Ctx(c, row=r)) : n.rep == "row.items" ? c.row.items.slice(0, n.lim).map(x => Ctx(c, card=x)) : n.rep == "home.heroes" ? e.home.hero.slice(0, n.lim).map(h => Ctx(c, hero=h, heroAct=heroActFor(e.home, h.id))) : n.rep == "home.hero" ? e.home.hero.slice(e.heroIndex, e.heroIndex + 1).map(h => Ctx(c, hero=h, heroAct=heroActFor(e.home, h.id))) : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=l)) : [])`;
+const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : [])`;
 
 export async function generate(out = resolve(import.meta.dir, '../client/renderer')) {
   let levels = '';

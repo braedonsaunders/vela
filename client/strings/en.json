@@ -182,7 +182,6 @@
   "pwa.install": "Install Vela",
   "pwa.update": "Update ready, reload",
   "jellytwin.name": "Jelly Twin",
-  "jellytwin.wordmark": "vela",
   "jellytwin.openMenu": "Open menu",
   "jellytwin.closeMenu": "Close menu",
   "jellytwin.menu": "Menu",
@@ -384,5 +383,11 @@
   "marquee.genresColumn": "Genres",
   "marquee.emptyCollection": "This collection is empty",
   "skin.marquee.tagline": "Your media server at home: charcoal hubs, a sidebar and amber accents.",
-  "marquee.remaining": "−{time}"
+  "marquee.remaining": "−{time}",
+  "secure.title": "A secure address is available",
+  "secure.body": "Your server also answers at {origin}. Continue there so your password and viewing stay private.",
+  "secure.action": "Switch to the secure address",
+  "ui.scrollBack": "Scroll back",
+  "ui.scrollOn": "Scroll on",
+  "live.guides": "Guides"
 }

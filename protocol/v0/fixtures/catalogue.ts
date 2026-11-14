@@ -56,12 +56,27 @@ export const featuredSources: (Pick<Hero, 'title' | 'reason' | 'action' | 'label
 ];
 export const featuredTitles = featuredSources.map(source => source.title);
 const featuredIds = new Set(featuredTitles.map(t => t.id));
-export const rows: Row[] = collections.map(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, previewOnFocus: row % 2 === 0, style: row === 3 ? 'landscape' : 'poster', items: [...titles.slice(row * 15, row * 15 + 15), ...additionalTitles.filter(t => t.id.startsWith(`title-${row + 1}-`))].filter(t => !featuredIds.has(t.id)).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }));
+const topTen: Row = {
+  id: 'row-top10', name: 'Top 10 this week', purpose: 'recommendation', presentation: 'ranked', style: 'landscape',
+  receiptToken: 'row-top10', previewOnFocus: false, continuation: 'exhausted',
+  items: ['title-3-2', 'title-1-4', 'title-6-3', 'title-2-5', 'title-5-4', 'title-4-3', 'title-1-7', 'title-6-8', 'title-2-10', 'title-5-9'].map(id => {
+    const title = titles.find(title => title.id === id);
+    if (!title || featuredIds.has(id)) throw new Error(`Invalid Top 10 fixture title: ${id}`);
+    return { id: `top10:${id}`, kind: 'title', title, receiptToken: `top10:${id}` };
+  }),
+};
+export const rows: Row[] = [topTen, ...collections.map<Row>(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, previewOnFocus: row % 2 === 0, style: row === 3 ? 'landscape' : 'poster', items: [...titles.slice(row * 15, row * 15 + 15), ...additionalTitles.filter(t => t.id.startsWith(`title-${row + 1}-`))].filter(t => !featuredIds.has(t.id)).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }))];
 const channelNames = ['World News', 'Field & Forest', 'Cinema One', 'Classic Evenings', 'Discovery Lab', 'Coastal Living', 'Matchday', 'The Kitchen', 'Young Explorers', 'Arts & Culture', 'Night Music', 'Open Roads'];
 const programmeGenres = ['News', 'Sports', 'Movies', 'Kids', 'Documentary', 'Drama', 'Comedy', 'Music', 'Lifestyle'];
+const fixtureGuides = [
+  { id: 'guide-news', name: 'News' }, { id: 'guide-sports', name: 'Sports' }, { id: 'guide-movies', name: 'Movies' },
+  { id: 'guide-kids', name: 'Kids' }, { id: 'guide-documentary', name: 'Documentary' }, { id: 'guide-drama', name: 'Drama' },
+  { id: 'guide-comedy', name: 'Comedy' }, { id: 'guide-music', name: 'Music' }, { id: 'guide-lifestyle', name: 'Lifestyle' },
+];
+const houseGuide = { id: 'guide-house-picks', name: 'House picks' };
 export const channels: Channel[] = Array.from({ length: 170 }, (_, i) => ({ id: `channel-${i + 1}`, number: String(i < 150 ? 101 + i : 1980 + i - 150),
   name: i < channelNames.length ? channelNames[i]! : `${['North', 'Coastal', 'Studio', 'Vista', 'Metro'][i % 5]} ${programmeGenres[i % programmeGenres.length]} ${Math.floor(i / 45) + 1}`,
-  kind: 'tv', group: programmeGenres[i % programmeGenres.length], artwork: i % 5 === 4 ? [] : [artwork(`channel-${i + 1}`, 'channel')], favorite: i < 6 }));
+  kind: 'tv', group: programmeGenres[i % programmeGenres.length], guides: [fixtureGuides[i % fixtureGuides.length]!, ...(i < 6 ? [houseGuide] : [])], artwork: i % 5 === 4 ? [] : [artwork(`channel-${i + 1}`, 'channel')], favorite: i < 6 }));
 export function guide(from: number, until: number, ids: string[]): Programme[] {
   const minute = 60000, durations = [15, 25, 30, 45, 60, 90, 120], cycle = 385;
   return channels.flatMap((c, i) => {
