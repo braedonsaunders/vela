@@ -370,3 +370,19 @@ remain blocked by media authorization, not claimed as passes. No fallback editio
 was selected. In-app Close now queues an explicit broker stop before navigating
 back; its dedicated root mutation survives route changes. Full browser unload
 cannot guarantee delivery of an in-flight authenticated command.
+
+### 0.1.6 / Ether 0.3.11-lab.3 retry checkpoint
+
+Ether fixed the media-route mount in `8019bd952`; previously `/sessions/media`
+fell through to Plex bearer authentication. Vela 0.1.6 includes explicit queued
+stop (`87a05db`), one stop-only stale-generation retry (`d0aba0d`), single-flight
+web-code redemption (`7956d15`), and initial play intent for a new ready session
+(`707dba1`). Metadata-ready revisions still preserve an explicit pause.
+
+The fresh retry was blocked **before media**: its single `/auth/sign-in` POST
+returned HTTP 503 and the UI displayed “rate limited” (`lab-10-auth-rate-limit.png`).
+No playback POST or new session was opened. Ether was asked for the natural reset
+and correct error classification; credentials were not repeatedly retried.
+The previous failed movie session was independently confirmed expired and closed
+by Ether logs. Codec playback, seek, stop acknowledgement, resume and live remain
+unverified until an authenticated drive succeeds; installing fixes is not a pass.
