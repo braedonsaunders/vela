@@ -15,7 +15,7 @@ const STYLE: [string, string][] = [
   ['color', 'color'], ['backgroundColor', 'background-color'], ['backgroundImage', 'background-image'], ['opacity', 'opacity'],
   ['borderWidth', 'border-width'], ['borderStyle', 'border-style'], ['borderColor', 'border-color'], ['borderRadius', 'border-radius'], ['boxShadow', 'box-shadow'], ['filter', 'filter'], ['backdropFilter', 'backdrop-filter'], ['maskImage', 'mask-image'],
   ['fontFamily', 'font-family'], ['fontSize', 'font-size'], ['fontWeight', 'font-weight'], ['fontStyle', 'font-style'], ['lineHeight', 'line-height'], ['letterSpacing', 'letter-spacing'], ['textTransform', 'text-transform'],
-  ['textAlign', 'text-align'], ['textShadow', 'text-shadow'], ['lineClamp', 'line-clamp'], ['whiteSpace', 'white-space'], ['fontVariantNumeric', 'font-variant-numeric'],
+  ['textAlign', 'text-align'], ['textShadow', 'text-shadow'], ['textStroke', '-webkit-text-stroke'], ['lineClamp', 'line-clamp'], ['whiteSpace', 'white-space'], ['fontVariantNumeric', 'font-variant-numeric'],
   ['objectFit', 'object-fit'], ['transformOrigin', 'transform-origin'], ['translate', 'translate'], ['scale', 'scale'],
   ['transition', 'transition'], ['animation', 'animation'], ['pointerEvents', 'pointer-events'], ['cursor', 'cursor'],
 ];
@@ -115,10 +115,14 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   const own = base as Record<string, number>;
   level.s = intern(base, r);
   level.pos = base.position === 'absolute' ? 1 : base.position === 'sticky' ? 2 : 0;
+  const still = (o: Style | undefined) => o && Object.fromEntries(Object.entries(o).filter(([k]) => !['scale', 'translate', 'transition'].includes(k))) as Style;
   level.hh = !!node.hover; level.hf = !!node.focus; level.grp = node.group === true; level.hg = !!node.groupHover; level.fade = false;
   level.gs = node.groupHover ? intern(style([...variant, node.groupHover], r, undefined, weight), r) : level.s;
+  level.gs2 = node.groupHover ? intern(style([...variant, still(node.groupHover)], r, undefined, weight), r) : level.s;
   level.hs = node.hover ? intern(style([...variant, node.hover], r, undefined, weight), r) : level.s;
+  level.hs2 = node.hover ? intern(style([...variant, still(node.hover)], r, undefined, weight), r) : level.s;
   level.fs = node.focus ? intern(style([...variant, node.focus], r, undefined, weight), r) : level.s;
+  level.fs2 = node.focus ? intern(style([...variant, still(node.focus)], r, undefined, weight), r) : level.s;
   if (node.motion) {
     const m = r.doc.motion?.[node.motion];
     if (!m || !(KEYFRAMES.has(m.keyframes) || m.keyframes === 'none') || (m.still && !(KEYFRAMES.has(m.still.keyframes) || m.still.keyframes === 'none'))) throw new Error(`Unknown motion ${node.motion}`);
