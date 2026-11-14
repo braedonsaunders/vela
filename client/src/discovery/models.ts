@@ -28,19 +28,9 @@ export function entry(item: RowEntry, origin?: string, artWidth = 2560) {
 export function feedRow(row: Row, origin?: string, artWidth = 2560) {
   return { id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin, artWidth)), nextCursor: row.nextCursor ?? '', continuation: row.continuation, previewOnFocus: row.previewOnFocus ?? false };
 }
-export function homeModel(data: Bootstrap, origin?: string, now?: number, artWidth = 2560) {
+export function homeModel(data: Bootstrap, origin?: string, _now?: number, artWidth = 2560) {
   const heroes = (data.heroes ?? []).slice(0, 6);
   const previews: { id: string; url: string; expiresAt: number }[] = [];
-  for (const hero of heroes) {
-    const cached = hero.trailer?.cachedPlayback;
-    if (cached?.status !== 'ready' || !origin || now === undefined) continue;
-    const expiresAt = Date.parse(cached.expiresAt);
-    if (!Number.isFinite(expiresAt) || expiresAt <= now) continue;
-    try {
-      const url = new URL(cached.url, `${origin}/`);
-      if (url.origin === origin && url.pathname.startsWith('/sessions/media/')) previews.push({ id: hero.title.id, url: url.href, expiresAt });
-    } catch { /* Invalid grant: leave preview unavailable. */ }
-  }
   return { viewer: data.viewer.name, defaultSkinId: data.defaultSkinId, skins: data.capabilities.skins.map(s => s.id),
     hero: heroes.map(hero => card(hero.title, hero.receiptToken, origin, artWidth)),
     heroActions: heroes.map(hero => {
