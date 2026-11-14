@@ -90,8 +90,7 @@ component Shell
                 Destinations(libraries=libraries, section=section, canLive=canLive, still=still, compact=true, home=home, live=live, openLibrary=openLibrary)
       if viewer != "" and menuOpen
         column id="viewer-settings" role="dialog" aria-label=t("ui.profileAndAppearance") position="absolute" top=(compact ? 74 : 92) right=(compact ? 12 : "max(24px, 3.6vw)") z-index=30 width=272 box-sizing="border-box" padding=20 gap=16 border="3px solid var(--mochi.ink)" border-radius=24 background-color="mochi.card" color="mochi.ink" box-shadow="6px 6px 0px var(--mochi.lavender)" transform-origin="top right" animation=(still ? "mochiFade 160ms linear both" : `mochiPop 360ms ${boing()} both`) -exact-exit-animation=(still ? "mochiVanish 120ms linear both" : "mochiVanish 160ms ease-in both")
-          svg position="absolute" top=-14 right=34 width=24 height=14 viewBox="0 0 24 14" aria-hidden=true
-            path d="M1 13.5L12 1.5L23 13.5" fill="var(--mochi.card)" stroke="var(--mochi.ink)" stroke-width=3 stroke-linejoin="round"
+          image "assets/mochi/tail-up.svg" alt="" position="absolute" top=-14 right=34 width=24 height=14 aria-hidden=true
           row gap=12 align-items="center"
             Mascot(mood="happy", size=44)
             column gap=2 flex=1 min-width=0
@@ -264,8 +263,7 @@ component ShelfHeading
         PixelIcon(name="star", size=(small ? 16 : 18))
       column gap=2 min-width=0
         text name role="heading" aria-level=2 class=Pixel font-size=(small ? 19 : 23) color="mochi.ink" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
-        svg width=72 height=7 viewBox="0 0 72 7" aria-hidden=true
-          path d="M1 4Q5 1 9 4T17 4T25 4T33 4T41 4T49 4T57 4T65 4T71 4" fill="none" stroke=(name.length % 3 == 0 ? "var(--mochi.pink)" : name.length % 3 == 1 ? "var(--mochi.lavender)" : "var(--mochi.mint)") stroke-width=2.5 stroke-linecap="round"
+        image (name.length % 3 == 0 ? "assets/mochi/squiggle-pink.svg" : name.length % 3 == 1 ? "assets/mochi/squiggle-lavender.svg" : "assets/mochi/squiggle-mint.svg") alt="" width=72 height=7 aria-hidden=true
 
 // The shelf itself; a caller may add trailing content after the last card
 // (home rows add their end-of-row sentinel and a loading Mochi there).
@@ -425,8 +423,7 @@ component EmptyState
       column position="relative" align-items="center"
         column padding="12px 22px" border-radius=24 border="3px solid var(--mochi.ink)" background-color="mochi.card" box-shadow="5px 5px 0px var(--mochi.shadow-pink)"
           text title class=Title font-size=26
-        svg width=24 height=14 viewBox="0 0 24 14" margin-top=-3 aria-hidden=true
-          path d="M1 0.5L12 12.5L23 0.5" fill="var(--mochi.card)" stroke="var(--mochi.ink)" stroke-width=3 stroke-linejoin="round"
+        image "assets/mochi/tail-down.svg" alt="" width=24 height=14 margin-top=-3 aria-hidden=true
       column animation=(still ? "none" : "mochiFloat 3.2s ease-in-out infinite")
         Mascot(mood=mood, size=86)
       if message != ""
@@ -502,7 +499,8 @@ component SearchField
         button press=edit("") aria-label=t("ui.clearSearch") class=Bubble width=40 height=40 padding=0 flex-shrink=0 display="flex" align-items="center" justify-content="center"
           PixelIcon(name="close", size=12)
 
-// Waiting and failure moments the foundation reports, shaped like what is coming.
+// Waiting and failure moments the foundation reports: Mochi hopping where the content
+// will be (inside a banner-shaped frame on home), or a sad Mochi when it failed.
 component Status
   props
     kind: string
@@ -510,31 +508,14 @@ component Status
     small: bool
     still: bool
   view
-    if kind == "home"
-      column role="status" aria-label=message padding-top=(small ? 6 : 10) gap=(small ? 26 : 34) animation=(still ? "mochiFade 200ms linear both" : "mochiFade 400ms ease-out both")
-        column position="relative" margin-left=gutter(small) margin-right=gutter(small) height=(small ? "440px" : "clamp(380px, 54vh, 560px)") border="3px dashed var(--mochi.shadow)" border-radius=(small ? 26 : 34) align-items="center" justify-content="center" background-color="mochi.lavender-soft" box-sizing="border-box"
-          Loader(message=message, size=(small ? 64 : 80), still=still, night=false)
-        column align-items="center" padding-left=gutter(small) padding-right=gutter(small)
-          Skeleton(width="min(720px, 100%)", height="62px", radius=31, still=still)
-        RowSkeleton(small=small, still=still)
+    if kind == "failure"
+      column padding-top=(small ? 24 : 48)
+        EmptyState(mood="sad", title=t("ui.somethingWentQuiet"), message=message, still=still)
     else
-      if kind == "library"
-        column role="status" aria-label=message gap=26 padding-top=(small ? 18 : 26)
-          column gap=14 padding-left=gutter(small) padding-right=gutter(small)
-            Skeleton(width=(small ? "60%" : "320px"), height=(small ? "40px" : "56px"), radius=14, still=still)
-            row gap=10
-              Skeleton(width="200px", height="42px", radius=21, still=still)
-              Skeleton(width="140px", height="42px", radius=21, still=still)
-          column align-items="center" padding="20px 0px"
-            Loader(message=message, size=60, still=still, night=false)
-      else
-        if kind == "detail"
-          column role="status" aria-label=message min-height="70vh" align-items="center" justify-content="center" gap=20 padding=32
-            Loader(message=message, size=(small ? 72 : 90), still=still, night=false)
-        else
-          if kind == "loading"
-            column padding="96px 24px" align-items="center"
-              Loader(message=message, size=64, still=still, night=false)
-          else
-            column padding-top=(small ? 24 : 48)
-              EmptyState(mood="sad", title=t("ui.somethingWentQuiet"), message=message, still=still)
+      column role="status" aria-label=message padding-top=(kind == "home" ? (small ? 6 : 10) : kind == "detail" ? 0 : (small ? 48 : 72)) gap=(small ? 26 : 34) animation=(still ? "mochiFade 200ms linear both" : "mochiFade 400ms ease-out both")
+        column position="relative" margin-left=(kind == "home" ? gutter(small) : "0px") margin-right=(kind == "home" ? gutter(small) : "0px") height=(kind == "home" ? (small ? "440px" : "clamp(380px, 54vh, 560px)") : kind == "detail" ? "70vh" : "auto") border=(kind == "home" ? "3px dashed var(--mochi.shadow)" : "none") border-radius=(small ? 26 : 34) align-items="center" justify-content="center" background-color=(kind == "home" ? "mochi.lavender-soft" : "mochi.page-clear") box-sizing="border-box"
+          Loader(message=message, size=(small ? 64 : 80), still=still, night=false)
+        if kind == "home"
+          column align-items="center" padding-left=gutter(small) padding-right=gutter(small)
+            Skeleton(width="min(720px, 100%)", height="62px", radius=31, still=still)
+          RowSkeleton(small=small, still=still)

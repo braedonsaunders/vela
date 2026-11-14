@@ -216,16 +216,14 @@ style Picker
   font-size = 14
   font-weight = 600
 
-// Pixel-art icons drawn on a nine-by-nine grid, filled with the current colour.
-fn pixelPath(name: string): string = (name == "play" ? "M1 1h2v1h-2zM1 2h4v1h-4zM1 3h6v1h-6zM1 4h7v1h-7zM1 5h6v1h-6zM1 6h4v1h-4zM1 7h2v1h-2z" : name == "pause" ? "M2 1h2v1h-2zM6 1h2v1h-2zM2 2h2v1h-2zM6 2h2v1h-2zM2 3h2v1h-2zM6 3h2v1h-2zM2 4h2v1h-2zM6 4h2v1h-2zM2 5h2v1h-2zM6 5h2v1h-2zM2 6h2v1h-2zM6 6h2v1h-2zM2 7h2v1h-2zM6 7h2v1h-2z" : name == "heart" ? "M1 1h2v1h-2zM6 1h2v1h-2zM0 2h4v1h-4zM5 2h4v1h-4zM0 3h9v1h-9zM0 4h9v1h-9zM1 5h7v1h-7zM2 6h5v1h-5zM3 7h3v1h-3zM4 8h1v1h-1z" : name == "star" ? "M4 0h1v1h-1zM4 1h1v1h-1zM3 2h3v1h-3zM0 3h9v1h-9zM1 4h7v1h-7zM2 5h5v1h-5zM2 6h2v1h-2zM5 6h2v1h-2zM1 7h2v1h-2zM6 7h2v1h-2zM1 8h1v1h-1zM7 8h1v1h-1z" : name == "sparkle" ? "M4 0h1v1h-1zM4 1h1v1h-1zM4 2h1v1h-1zM3 3h3v1h-3zM0 4h9v1h-9zM3 5h3v1h-3zM4 6h1v1h-1zM4 7h1v1h-1zM4 8h1v1h-1z" : name == "search" ? "M1 0h4v1h-4zM0 1h1v1h-1zM5 1h1v1h-1zM0 2h1v1h-1zM5 2h1v1h-1zM0 3h1v1h-1zM5 3h1v1h-1zM0 4h1v1h-1zM5 4h1v1h-1zM1 5h4v1h-4zM5 6h2v1h-2zM6 7h2v1h-2zM7 8h2v1h-2z" : name == "close" ? "M0 0h2v1h-2zM7 0h2v1h-2zM0 1h3v1h-3zM6 1h3v1h-3zM1 2h3v1h-3zM5 2h3v1h-3zM2 3h5v1h-5zM3 4h3v1h-3zM2 5h5v1h-5zM1 6h3v1h-3zM5 6h3v1h-3zM0 7h3v1h-3zM6 7h3v1h-3zM0 8h2v1h-2zM7 8h2v1h-2z" : name == "back" ? "M5 0h2v1h-2zM4 1h3v1h-3zM3 2h3v1h-3zM2 3h3v1h-3zM1 4h3v1h-3zM2 5h3v1h-3zM3 6h3v1h-3zM4 7h3v1h-3zM5 8h2v1h-2z" : name == "forward" ? "M2 0h2v1h-2zM2 1h3v1h-3zM3 2h3v1h-3zM4 3h3v1h-3zM5 4h3v1h-3zM4 5h3v1h-3zM3 6h3v1h-3zM2 7h3v1h-3zM2 8h2v1h-2z" : name == "home" ? "M4 0h1v1h-1zM3 1h3v1h-3zM2 2h5v1h-5zM1 3h7v1h-7zM0 4h9v1h-9zM1 5h7v1h-7zM1 6h3v1h-3zM5 6h3v1h-3zM1 7h3v1h-3zM5 7h3v1h-3zM1 8h3v1h-3zM5 8h3v1h-3z" : name == "tv" ? "M1 0h1v1h-1zM7 0h1v1h-1zM2 1h1v1h-1zM6 1h1v1h-1zM3 2h1v1h-1zM5 2h1v1h-1zM0 3h9v1h-9zM0 4h1v1h-1zM8 4h1v1h-1zM0 5h1v1h-1zM8 5h1v1h-1zM0 6h1v1h-1zM8 6h1v1h-1zM0 7h9v1h-9zM1 8h1v1h-1zM7 8h1v1h-1z" : name == "speaker" ? "M4 0h1v1h-1zM3 1h2v1h-2zM7 1h1v1h-1zM0 2h5v1h-5zM8 2h1v1h-1zM0 3h5v1h-5zM6 3h1v1h-1zM8 3h1v1h-1zM0 4h5v1h-5zM6 4h1v1h-1zM8 4h1v1h-1zM0 5h5v1h-5zM8 5h1v1h-1zM3 6h2v1h-2zM7 6h1v1h-1zM4 7h1v1h-1z" : name == "mute" ? "M4 0h1v1h-1zM3 1h2v1h-2zM0 2h5v1h-5zM6 2h1v1h-1zM8 2h1v1h-1zM0 3h5v1h-5zM7 3h1v1h-1zM0 4h5v1h-5zM6 4h1v1h-1zM8 4h1v1h-1zM0 5h5v1h-5zM3 6h2v1h-2zM4 7h1v1h-1z" : name == "sliders" ? "M1 0h2v1h-2zM0 1h9v1h-9zM1 2h2v1h-2zM6 4h2v1h-2zM0 5h9v1h-9zM6 6h2v1h-2z" : name == "check" ? "M8 0h1v1h-1zM7 1h2v1h-2zM6 2h2v1h-2zM0 3h1v1h-1zM5 3h2v1h-2zM0 4h2v1h-2zM4 4h2v1h-2zM1 5h4v1h-4zM2 6h2v1h-2z" : name == "lock" ? "M2 0h5v1h-5zM1 1h2v1h-2zM6 1h2v1h-2zM1 2h2v1h-2zM6 2h2v1h-2zM0 3h9v1h-9zM0 4h9v1h-9zM0 5h4v1h-4zM5 5h4v1h-4zM0 6h4v1h-4zM5 6h4v1h-4zM0 7h9v1h-9z" : name == "pip" ? "M0 0h9v1h-9zM0 1h1v1h-1zM8 1h1v1h-1zM0 2h1v1h-1zM8 2h1v1h-1zM0 3h1v1h-1zM4 3h3v1h-3zM8 3h1v1h-1zM0 4h1v1h-1zM4 4h3v1h-3zM8 4h1v1h-1zM0 5h1v1h-1zM8 5h1v1h-1zM0 6h9v1h-9z" : name == "full" ? "M0 0h3v1h-3zM6 0h3v1h-3zM0 1h1v1h-1zM8 1h1v1h-1zM0 2h1v1h-1zM8 2h1v1h-1zM0 6h1v1h-1zM8 6h1v1h-1zM0 7h1v1h-1zM8 7h1v1h-1zM0 8h3v1h-3zM6 8h3v1h-3z" : name == "out" ? "M0 0h4v1h-4zM0 1h1v1h-1zM0 2h1v1h-1zM5 2h1v1h-1zM0 3h1v1h-1zM2 3h7v1h-7zM0 4h1v1h-1zM5 4h1v1h-1zM0 5h1v1h-1zM0 6h4v1h-4z" : name == "rewind" ? "M4 1h1v1h-1zM8 1h1v1h-1zM3 2h2v1h-2zM7 2h2v1h-2zM2 3h3v1h-3zM6 3h3v1h-3zM1 4h8v1h-8zM2 5h3v1h-3zM6 5h3v1h-3zM3 6h2v1h-2zM7 6h2v1h-2zM4 7h1v1h-1zM8 7h1v1h-1z" : name == "ffwd" ? "M0 1h1v1h-1zM4 1h1v1h-1zM0 2h2v1h-2zM4 2h2v1h-2zM0 3h3v1h-3zM4 3h3v1h-3zM0 4h8v1h-8zM0 5h3v1h-3zM4 5h3v1h-3zM0 6h2v1h-2zM4 6h2v1h-2zM0 7h1v1h-1zM4 7h1v1h-1z" : name == "grid" ? "M1 0h3v1h-3zM5 0h3v1h-3zM1 1h3v1h-3zM5 1h3v1h-3zM1 2h3v1h-3zM5 2h3v1h-3zM1 4h3v1h-3zM5 4h3v1h-3zM1 5h3v1h-3zM5 5h3v1h-3zM1 6h3v1h-3zM5 6h3v1h-3z" : name == "alert" ? "M4 0h1v1h-1zM3 1h3v1h-3zM3 2h1v1h-1zM5 2h1v1h-1zM2 3h2v1h-2zM5 3h2v1h-2zM2 4h2v1h-2zM5 4h2v1h-2zM1 5h7v1h-7zM1 6h3v1h-3zM5 6h3v1h-3zM0 7h9v1h-9z" : name == "phone" ? "M2 0h5v1h-5zM2 1h1v1h-1zM6 1h1v1h-1zM2 2h1v1h-1zM6 2h1v1h-1zM2 3h1v1h-1zM6 3h1v1h-1zM2 4h1v1h-1zM6 4h1v1h-1zM2 5h1v1h-1zM6 5h1v1h-1zM2 6h2v1h-2zM5 6h2v1h-2zM2 7h5v1h-5z" : name == "layers" ? "M4 0h1v1h-1zM2 1h2v1h-2zM5 1h2v1h-2zM0 2h2v1h-2zM7 2h2v1h-2zM2 3h2v1h-2zM5 3h2v1h-2zM0 4h1v1h-1zM4 4h1v1h-1zM8 4h1v1h-1zM1 5h2v1h-2zM6 5h2v1h-2zM3 6h3v1h-3z" : name == "sort" ? "M2 0h1v1h-1zM1 1h3v1h-3zM0 2h5v1h-5zM2 3h1v1h-1zM5 3h1v1h-1zM2 4h1v1h-1zM5 4h1v1h-1zM2 5h1v1h-1zM5 5h1v1h-1zM4 6h5v1h-5zM5 7h3v1h-3zM6 8h1v1h-1z" : "")
-
+// Pixel-art icons drawn on a nine-by-nine grid (assets/icons/mochi-*.svg, declared in
+// app.tamber's icons as icon.mochi-<name>), tinted by the current colour.
 component PixelIcon
   props
     name: string
     size: number
   view
-    svg width=size height=size viewBox="0 0 9 9" flex-shrink=0 aria-hidden=true
-      path d=pixelPath(name) fill="currentcolor"
+    image `symbol:icon.mochi-${name}` width=size height=size flex-shrink=0 aria-hidden=true
 
 // Mochi: an original round rice-cake friend with a star clip. Moods: happy, wow,
 // sleepy (nothing here yet) and sad (something went wrong). Purely decorative.
@@ -234,34 +232,7 @@ component Mascot
     mood: string
     size: number
   view
-    svg width=size height=(size * 0.9) viewBox="0 0 64 58" aria-hidden=true overflow="visible"
-      path d="M32 8C49 8 61 20 61 36C61 50 49 55 32 55C15 55 3 50 3 36C3 20 15 8 32 8Z" fill="var(--mochi.mascot)" stroke="var(--mochi.ink)" stroke-width=3 stroke-linejoin="round"
-      ellipse cx=20 cy=20 rx=7 ry=3.4 fill="var(--mochi.card)" opacity=0.95 transform="rotate(-24 20 20)"
-      path d="M49.5 1.5L51.6 7.4L57.5 9.5L51.6 11.6L49.5 17.5L47.4 11.6L41.5 9.5L47.4 7.4Z" fill="var(--mochi.butter)" stroke="var(--mochi.ink)" stroke-width=2 stroke-linejoin="round"
-      ellipse cx=15 cy=40 rx=5 ry=2.8 fill="var(--mochi.blush)" opacity=0.85
-      ellipse cx=49 cy=40 rx=5 ry=2.8 fill="var(--mochi.blush)" opacity=0.85
-      if mood == "sleepy"
-        path d="M18 33Q22.5 37 27 33M37 33Q41.5 37 46 33" fill="none" stroke="var(--mochi.ink)" stroke-width=2.6 stroke-linecap="round"
-        path d="M29.5 42Q32 43.5 34.5 42" fill="none" stroke="var(--mochi.ink)" stroke-width=2.2 stroke-linecap="round"
-      else
-        if mood == "sad"
-          ellipse cx=23 cy=34 rx=3 ry=3.6 fill="var(--mochi.ink)"
-          ellipse cx=41 cy=34 rx=3 ry=3.6 fill="var(--mochi.ink)"
-          circle cx=24.1 cy=32.7 r=1.1 fill="var(--mochi.card)"
-          circle cx=42.1 cy=32.7 r=1.1 fill="var(--mochi.card)"
-          path d="M18.5 27.5L25 29.5M45.5 27.5L39 29.5" fill="none" stroke="var(--mochi.ink)" stroke-width=2.2 stroke-linecap="round"
-          path d="M28 44Q32 40.5 36 44" fill="none" stroke="var(--mochi.ink)" stroke-width=2.4 stroke-linecap="round"
-          path d="M47.5 38C47.5 38 45.5 41 45.5 42.4C45.5 43.6 46.4 44.4 47.5 44.4C48.6 44.4 49.5 43.6 49.5 42.4C49.5 41 47.5 38 47.5 38Z" fill="var(--mochi.sky)" stroke="var(--mochi.ink)" stroke-width=1.4
-        else
-          ellipse cx=23 cy=33 rx=3.4 ry=4.2 fill="var(--mochi.ink)"
-          ellipse cx=41 cy=33 rx=3.4 ry=4.2 fill="var(--mochi.ink)"
-          circle cx=24.3 cy=31.4 r=1.3 fill="var(--mochi.card)"
-          circle cx=42.3 cy=31.4 r=1.3 fill="var(--mochi.card)"
-          if mood == "wow"
-            ellipse cx=32 cy=42.5 rx=3 ry=3.6 fill="var(--mochi.ink)"
-            ellipse cx=32 cy=44 rx=1.8 ry=1.4 fill="var(--mochi.blush)"
-          else
-            path d="M27 40.5Q29.5 44 32 40.5Q34.5 44 37 40.5" fill="none" stroke="var(--mochi.ink)" stroke-width=2.4 stroke-linecap="round" stroke-linejoin="round"
+    image `assets/mochi/mascot-${mood}.svg` alt="" width=size height=(size * 0.9) flex-shrink=0 aria-hidden=true
 
 // Mochi hopping with a squash, over a shadow that breathes with it: the skin's
 // loading moment. Reduced motion holds Mochi still.
@@ -326,8 +297,7 @@ component SpeechBubble
       column position="absolute" bottom="calc(100% + 12px)" left="50%" translate="-50% 0px" z-index=40 pointer-events="none" aria-hidden=true align-items="center"
         column transform-origin="50% 100%" align-items="center" animation=(still ? "mochiFade 120ms linear both" : `mochiBubble 300ms ${boing()} both`)
           text message white-space="nowrap" padding="6px 12px" border-radius=14 border="2.5px solid var(--mochi.ink)" background-color=(night ? "mochi.butter-soft" : "mochi.card") color="mochi.ink" font-family="Fredoka, ui-rounded, system-ui, sans-serif" font-size=13 font-weight=600 box-shadow="0px 3px 0px var(--mochi.ink)"
-          svg width=16 height=9 viewBox="0 0 16 9" margin-top=-2.5
-            path d="M1 0L8 7.5L15 0" fill=(night ? "var(--mochi.butter-soft)" : "var(--mochi.card)") stroke="var(--mochi.ink)" stroke-width=2.5 stroke-linejoin="round"
+          image (night ? "assets/mochi/tail-small-butter.svg" : "assets/mochi/tail-small.svg") alt="" width=16 height=9 margin-top=-2.5
 
 // A loading placeholder: a candy block swept by a soft highlight.
 component Skeleton
@@ -383,6 +353,4 @@ component Petal
   props
     size: number
   view
-    svg width=size height=size viewBox="0 0 20 20" aria-hidden=true
-      path d="M10 1C14 5 17 9 16 13C15 17 12 19 10 18C8 19 5 17 4 13C3 9 6 5 10 1Z" fill="var(--mochi.sakura)" opacity=0.85
-      path d="M10 18L10 11" stroke="var(--mochi.pink-deep)" stroke-width=1 opacity=0.5
+    image "assets/mochi/petal.svg" alt="" width=size height=size aria-hidden=true
