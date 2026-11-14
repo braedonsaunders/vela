@@ -214,26 +214,27 @@ component TitleCard
     selectTitle(card.id, card.kind, card.receipt)
   view
     column position="relative" width=(fill ? "100%" : small ? 132 : "clamp(146px, 11.6vw, 208px)") flex-shrink=0 gap=10 intersect=observe(card.receipt)
-      button press=choose aria-label=cardName(card) testId=`title-${card.id}` hover=hoverCard focus=focusCard blur=restCard position="relative" width="100%" aspect-ratio="2 / 3" padding=0 border="3px solid var(--mochi.ink)" border-radius=(small ? 16 : 20) overflow="hidden" background-color=accent(card.name) color="mochi.ink" text-align="left" cursor="pointer" translate=(lifted and not still ? "0px -8px" : "0px 0px") rotate=(lifted and not still ? `${tilt(card.name)}deg` : "0deg") scale=(lifted and not still ? 1.03 : 1) box-shadow=(card.name.length % 3 == 0 ? (lifted ? "7px 10px 0px var(--mochi.shadow-pink)" : "4px 5px 0px var(--mochi.shadow-pink)") : card.name.length % 3 == 1 ? (lifted ? "7px 10px 0px var(--mochi.shadow)" : "4px 5px 0px var(--mochi.shadow)") : (lifted ? "7px 10px 0px var(--mochi.mint)" : "4px 5px 0px var(--mochi.mint)")) transition=lift(still)
-        :focus-visible
-          box-shadow="0px 0px 0px 3px var(--mochi.card), 0px 0px 0px 7px var(--mochi.focus)"
-        if card.poster != ""
-          FadeImage(src=card.poster)
-        else
-          column position="absolute" inset=0 padding=14 gap=10 justify-content="flex-end" background-image="linear-gradient(160deg, var(--mochi.card) 0%, var(--mochi.page-clear) 70%)"
-            column color="mochi.ink"
-              PixelIcon(name="star", size=18)
-            text card.name class=Title font-size=(small ? 18 : 21) line-clamp=4
-        column position="absolute" inset=0 pointer-events="none" border-radius=(small ? 13 : 17) box-shadow="inset 0px 0px 0px 3px var(--mochi.edge)" aria-hidden=true
-        if card.played
-          row position="absolute" top=8 right=8 width=26 height=26 border-radius=13 align-items="center" justify-content="center" background-color="mochi.mint" border="2px solid var(--mochi.ink)" box-sizing="border-box" color="mochi.ink" aria-hidden=true
-            PixelIcon(name="check", size=12)
-        if card.progressSeconds > 0 and card.durationSeconds > 0 and not card.played
-          column position="absolute" left=10 right=10 bottom=10 height=10 border-radius=5 background-color="mochi.card" border="2px solid var(--mochi.ink)" box-sizing="border-box" overflow="hidden" aria-hidden=true
-            column height="100%" width=`${min(100, card.progressSeconds / card.durationSeconds * 100)}%` background-color="mochi.pink" background-image="repeating-linear-gradient(135deg, var(--mochi.pink) 0px, var(--mochi.pink) 4px, var(--mochi.pink-hover) 4px, var(--mochi.pink-hover) 8px)"
-        if lifted and not still
-          column position="absolute" top=10 left=10 color="mochi.card" animation="mochiPop 300ms ease-out both" aria-hidden=true
-            Twinkle(size=14, color="mochi.card", delay=0, still=still)
+      column animation=(lifted and not still ? "mochiWiggle 520ms ease-in-out both" : "none")
+        button press=choose aria-label=cardName(card) testId=`title-${card.id}` hover=hoverCard focus=focusCard blur=restCard position="relative" width="100%" aspect-ratio="2 / 3" padding=0 border="3px solid var(--mochi.ink)" border-radius=(small ? 16 : 20) overflow="hidden" background-color=accent(card.name) color="mochi.ink" text-align="left" cursor="pointer" translate=(lifted and not still ? "0px -8px" : "0px 0px") rotate=(lifted and not still ? `${tilt(card.name)}deg` : "0deg") scale=(lifted and not still ? 1.03 : 1) box-shadow=(card.name.length % 3 == 0 ? (lifted ? "7px 10px 0px var(--mochi.shadow-pink)" : "4px 5px 0px var(--mochi.shadow-pink)") : card.name.length % 3 == 1 ? (lifted ? "7px 10px 0px var(--mochi.shadow)" : "4px 5px 0px var(--mochi.shadow)") : (lifted ? "7px 10px 0px var(--mochi.mint)" : "4px 5px 0px var(--mochi.mint)")) transition=lift(still)
+          :focus-visible
+            box-shadow="0px 0px 0px 3px var(--mochi.card), 0px 0px 0px 7px var(--mochi.focus)"
+          if card.poster != ""
+            FadeImage(src=card.poster)
+          else
+            column position="absolute" inset=0 padding=14 gap=10 justify-content="flex-end" background-image="linear-gradient(160deg, var(--mochi.card) 0%, var(--mochi.page-clear) 70%)"
+              column color="mochi.ink"
+                PixelIcon(name="star", size=18)
+              text card.name class=Title font-size=(small ? 18 : 21) line-clamp=4
+          column position="absolute" inset=0 pointer-events="none" border-radius=(small ? 13 : 17) box-shadow="inset 0px 0px 0px 3px var(--mochi.edge)" aria-hidden=true
+          if card.played
+            row position="absolute" top=8 right=8 width=26 height=26 border-radius=13 align-items="center" justify-content="center" background-color="mochi.mint" border="2px solid var(--mochi.ink)" box-sizing="border-box" color="mochi.ink" aria-hidden=true
+              PixelIcon(name="check", size=12)
+          if card.progressSeconds > 0 and card.durationSeconds > 0 and not card.played
+            column position="absolute" left=10 right=10 bottom=10 height=10 border-radius=5 background-color="mochi.card" border="2px solid var(--mochi.ink)" box-sizing="border-box" overflow="hidden" aria-hidden=true
+              column height="100%" width=`${min(100, card.progressSeconds / card.durationSeconds * 100)}%` background-color="mochi.pink" background-image="repeating-linear-gradient(135deg, var(--mochi.pink) 0px, var(--mochi.pink) 4px, var(--mochi.pink-hover) 4px, var(--mochi.pink-hover) 8px)"
+          if lifted and not still
+            column position="absolute" top=10 left=10 color="mochi.card" animation="mochiPop 300ms ease-out both" aria-hidden=true
+              Twinkle(size=14, color="mochi.card", delay=0, still=still)
       for n in [bursts] key=`burst-${n}`
         if n > 0
           Burst(still=still)

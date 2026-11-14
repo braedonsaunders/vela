@@ -321,7 +321,7 @@ component GuideHero
           if p.tone >= 0
             column position="absolute" left="-8%" top="-60%" width="60%" height="200%" background-color=toneColor(p.tone) opacity=0.14 mask-image="radial-gradient(closest-side, black 0%, transparent 100%)"
       column position="absolute" inset=0 pointer-events="none" aria-hidden=true background-image="linear-gradient(0deg, var(--mochi.night) 0%, var(--mochi.night-veil) 45%, var(--mochi.night-clear) 100%), linear-gradient(90deg, var(--mochi.night-deep) 0%, var(--mochi.night-veil) 40%, var(--mochi.night-veil) 100%)"
-      column position="relative" height="100%" justify-content="flex-end" box-sizing="border-box" padding-left=side(small) padding-right=(small ? "calc(16px + 132px)" : "calc(max(28px, 4vw) + clamp(214px, 28vh, 300px) + 28px)") padding-bottom=(small ? 12 : 16)
+      column position="relative" height="100%" justify-content="flex-end" box-sizing="border-box" padding-left=side(small) padding-right=(small ? "calc(16px + 148px)" : "calc(max(28px, 4vw) + clamp(224px, 28vh, 310px) + 32px)") padding-bottom=(small ? 12 : 16)
         for p in picked key=`copy-${p.id}`
           column gap=(small ? 4 : 7) min-width=0 animation=(still ? "none" : `guideSwap 420ms ${settle()} both`) role="region" aria-label=t("live.selectedProgramme") aria-live="polite"
             row gap=10 align-items="center" min-width=0
