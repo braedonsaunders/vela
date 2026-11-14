@@ -37,7 +37,7 @@ export class EtherAdapter implements ServerAdapter {
     return this.refreshing;
   }
 
-  private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown, auth = true, cacheable = false): Promise<T> {
+  private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown, auth = true, cacheable = false, retryAuth = true): Promise<T> {
     let tokens = auth ? await this.credentials.get() : null;
     if (auth && !tokens) throw new Error('Sign in required');
     const key = JSON.stringify([this.origin, tokens?.viewer.id ?? '', tokens?.viewer.policyRevision ?? '', this.capabilityContext, 0, path]);
@@ -49,7 +49,7 @@ export class EtherAdapter implements ServerAdapter {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     let response = await send(tokens);
-    if (response.status === 401 && tokens) { tokens = await this.refresh(tokens); response = await send(tokens, false); }
+    if (response.status === 401 && tokens && retryAuth) { tokens = await this.refresh(tokens); response = await send(tokens, false); }
     if (response.status === 304 && cached) return cached.body as T;
     if (!response.ok) {
       let detail: V.ProtocolError;
@@ -70,7 +70,15 @@ export class EtherAdapter implements ServerAdapter {
   pollDevice(r: V.DevicePollRequest) { return this.request<V.GrantPoll>('POST', '/auth/device/poll', r, false); }
   quickConnect(r: V.DeviceGrantRequest) { return this.request<V.QuickConnect>('POST', '/auth/quick-connect', r, false); }
   pollQuickConnect(r: V.QuickPollRequest) { return this.request<V.GrantPoll>('POST', '/auth/quick-connect/poll', r, false); }
-  revoke(r: V.RevokeRequest) { return this.request<V.Ack>('POST', '/auth/revoke', r); }
+  async revoke(r: V.RevokeRequest) {
+    const before = await this.credentials.get();
+    try { return await this.request<V.Ack>('POST', '/auth/revoke', r, true, false, false); }
+    catch (error) {
+      if (!(error instanceof VelaError) || error.status !== 401 || !before) throw error;
+      const rotated = await this.refresh(before);
+      return this.request<V.Ack>('POST', '/auth/revoke', { refreshToken: rotated.refreshToken, idempotencyKey: this.credentials.refreshKey() }, true, false, false);
+    }
+  }
   bootstrap() { return this.request<V.Bootstrap>('GET', '/bootstrap', undefined, true, true); }
   rows(q: V.RowsQuery) { return this.request<V.Page<V.Row>>('GET', `/rows${query(q)}`, undefined, true, true); }
   row(id: string, cursor?: string, limit?: number) { return this.request<V.Row>('GET', `/rows/${encodeURIComponent(id)}${query({ cursor, limit })}`, undefined, true, true); }
@@ -83,6 +91,8 @@ export class EtherAdapter implements ServerAdapter {
   playback(r: V.PlaybackRequest) { return this.request<V.PlaybackPlan>('POST', '/playback', r); }
   observe(id: string, r: V.PlayerObservation) { return this.request<V.Ack>('POST', `/sessions/${encodeURIComponent(id)}/observations`, r); }
   command(id: string, r: V.SessionCommand) { return this.request<V.PlaybackPlan>('POST', `/sessions/${encodeURIComponent(id)}/commands`, r); }
+  channels(cursor?: string, limit?: number) { return this.request<V.Page<V.Channel>>('GET', `/live/channels${query({ cursor, limit })}`, undefined, true, true); }
+  guide(q: V.GuideQuery) { return this.request<V.GuideResponse>('GET', `/live/guide${query({ ...q, channelIds: q.channelIds?.join(',') })}`, undefined, true, true); }
   snapshot(id: string) { return this.request<V.SessionSnapshot>('GET', `/sessions/${encodeURIComponent(id)}`); }
 }
 function query(values: object): string {

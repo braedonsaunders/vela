@@ -22,5 +22,7 @@ export interface ServerAdapter {
   playback(request: V.PlaybackRequest): Promise<V.PlaybackPlan>;
   observe(id: string, request: V.PlayerObservation): Promise<V.Ack>;
   command(id: string, request: V.SessionCommand): Promise<V.PlaybackPlan>;
+  channels(cursor?: string, limit?: number): Promise<V.Page<V.Channel>>;
+  guide(query: V.GuideQuery): Promise<V.GuideResponse>;
   snapshot(id: string): Promise<V.SessionSnapshot>;
 }
