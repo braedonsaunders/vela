@@ -1,4 +1,4 @@
-use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, libraryQuery from "./models.contract"
+use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, libraryQuery from "./models.contract"
 
 shape Time
   epochAtZero: number
@@ -140,7 +140,7 @@ members Client
   // Featured titles: the foundation rotates the shown hero; skins only present it.
   state heroIndex = 0
   derive heroAt = (current(home) and home.hero.length > 0 ? heroIndex % home.hero.length : 0)
-  derive heroHasPreview = (previewRow == "@hero" and cardPreview.cardId != "")
+  derive heroHasPreview = (current(home) and home.hero.length > 0 ? home.previews.filter(p => home.hero.slice(heroAt, heroAt + 1).map(h => h.id).includes(p.id)).length > 0 : false)
   task rotateHero when top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and current(home) and home.hero.length > 1 and not heroHasPreview
     every(9000, nextHero)
   action nextHero
@@ -160,72 +160,7 @@ members Client
   state rowMoreLoading: string[] = []
   derive allHomeRows = home.rows.concat(homeExtraRows).map(r => match first(homeUpdatedRows.filter(u => u.id == r.id)) { case some(u) => u, case none => r })
   derive homeMoreCursor = (homeRowsLoaded ? homeRowsCursor : home.nextCursor)
-  derive homeSurface = HomeModel(home, rows=allHomeRows, nextCursor=homeMoreCursor, previews=(previewRow == "@hero" and cardPreview.cardId != "" ? [HeroPreview(id=cardPreview.cardId, url=cardPreview.url, expiresAt=cardPreview.expiresAt)] : []))
-  state previewTarget = ""
-  state previewRow = ""
-  state previewGeneration = 0
-  state previewRetryAt = 0
-  state previewAskedGeneration = -1
-  state previewDwellAt = 0
-  state cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=0)
-  derive previewAllowed = auth.authenticated and current(home) and home.trailerPreviewAvailable and top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and not saveData
-  derive heroPreviewId = match first(home.hero.slice(heroAt, heroAt + 1)) { case some(h) => h.id, case none => "" }
-  derive previewDesired = (previewAllowed ? (previewTarget != "" ? previewTarget : heroPreviewId) : "")
-  mutation previewFetch as shape CardPreview then acceptPreview
-  mutation previewCancelled as shape ReceiptReply queue
-  task previewContext when current(home) key=`${top(nav).name}:${libraryId}:${query}:${page.visibilityState}:${still}:${saveData}:${heroAt}:${auth.authenticated}`
-    change(clearPreview)
-  action clearPreview
-    previewTarget = ""
-    previewRow = ""
-    previewRetryAt = 0
-    previewGeneration = previewGeneration + 1
-    previewDwellAt = time.epochAtZero + performanceNow() + 700
-    cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
-    send previewCancelled = uiPreviewCancel(previewGeneration)
-  action previewIntent(cardId: string, rowId: string, on: bool)
-    if on and previewAllowed and cardId != "" and allHomeRows.filter(r => r.id == rowId and r.previewOnFocus and r.items.filter(c => c.id == cardId).length > 0).length > 0
-      if previewTarget != cardId or previewRow != rowId
-        previewTarget = cardId
-        previewRow = rowId
-        previewRetryAt = 0
-        previewGeneration = previewGeneration + 1
-        previewDwellAt = time.epochAtZero + performanceNow() + 700
-        cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
-        send previewCancelled = uiPreviewCancel(previewGeneration)
-    else if not on and ((previewTarget != "" and (rowId == "" or rowId == previewRow) and (cardId == "" or cardId == previewTarget)) or (rowId == "" and cardId == "" and previewRow == "@hero"))
-      previewTarget = ""
-      previewRow = ""
-      previewRetryAt = 0
-      previewGeneration = previewGeneration + 1
-      cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
-      send previewCancelled = uiPreviewCancel(previewGeneration)
-  task previewDwell when previewDesired != "" key=`${previewDesired}:${previewGeneration}`
-    after(700, requestPreview)
-  action requestPreview
-    if previewDesired != "" and not pending(previewFetch)
-      previewAskedGeneration = previewGeneration
-      send previewFetch = uiPreviewRequest(previewDesired, previewGeneration, time.epochAtZero + performanceNow())
-  action acceptPreview
-    match previewFetch
-      case some(p)
-        if p.generation == previewGeneration and previewDesired != ""
-          if p.cardId == previewDesired
-            cardPreview = p
-            previewRow = (previewTarget == "" ? "@hero" : previewRow)
-            previewRetryAt = 0
-          else if p.retryAfterSeconds > 0
-            previewRetryAt = time.epochAtZero + performanceNow() + p.retryAfterSeconds * 1000
-      case none
-        previewRetryAt = 0
-  task retryPreview when previewDesired != ""
-    every(1000, pollPreview)
-  action pollPreview
-    if time.epochAtZero + performanceNow() >= previewDwellAt and not pending(previewFetch) and (previewAskedGeneration != previewGeneration or (previewRetryAt > 0 and time.epochAtZero + performanceNow() >= previewRetryAt))
-      previewRetryAt = 0
-      previewAskedGeneration = previewGeneration
-      send previewFetch = uiPreviewRequest(previewDesired, previewGeneration, time.epochAtZero + performanceNow())
-
+  derive homeSurface = HomeModel(home, rows=allHomeRows, nextCursor=homeMoreCursor)
   derive homeMoreLoading = pending(homeRowsPage)
   mutation homeRowsPage as shape HomeRowsPage queue then appendHomeRows
   mutation homeRowPage as shape HomeRowPage queue then appendHomeRow

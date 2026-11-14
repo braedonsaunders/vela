@@ -196,16 +196,16 @@ component SearchSurface
           if model.items.length == 0
             text t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription") role="status" color="index.secondary"
           else
-            Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+            Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
-          Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
           column gap=12
             text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 font-size=22
             if ai.aiStatus == "queued" or ai.aiStatus == "running"
               text t("ui.exploringYourDescription") role="status" color="index.secondary"
             if ai.items.length > 0
-              Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+              Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
             if ai.aiStatus == "failed"
               text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="index.secondary"
 
@@ -233,9 +233,9 @@ component Detail
               button press=play(title.id) background-color="index.ink" color="index.page" border="none" padding="12px 20px" align-self="start" testId="detail-play"
                 text (model.resumeSeconds > 0 ? t("ui.resumeWatching") : t("ui.play"))
       if model.seasons.length > 0
-        Row(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        Row(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
       if model.episodes.length > 0
-        Row(row=FeedRow(id="episodes", name=t("ui.episodes"), receipt="", items=model.episodes, nextCursor="", continuation="exhausted"), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        Row(row=FeedRow(id="episodes", name=t("ui.episodes"), receipt="", items=model.episodes, nextCursor="", continuation="exhausted", previewOnFocus=false), small=small, still=still, selectTitle=selectTitle, observe=observe)
       if model.extras.length > 0
         column padding="0px 7%" gap=14
           text t("ui.extras") role="heading" aria-level=2 font-size=24

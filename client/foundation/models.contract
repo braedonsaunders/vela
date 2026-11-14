@@ -31,14 +31,6 @@ shape FeedRow
   items: Card[]
   nextCursor: string
   continuation: string
-  previewOnFocus: bool
-
-shape CardPreview
-  cardId: string
-  url: string
-  expiresAt: number
-  retryAfterSeconds: number
-  generation: number
 
 // A cached, same-origin, unexpired preview grant for one featured title.
 shape HeroPreview
@@ -57,7 +49,6 @@ shape HomeModel
   liveAvailable: bool
   aiAvailable: bool
   descriptiveAvailable: bool
-  trailerPreviewAvailable: bool
 
 shape SearchModel
   query: string
