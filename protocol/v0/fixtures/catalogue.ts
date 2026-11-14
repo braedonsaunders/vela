@@ -40,11 +40,30 @@ export function detail(id: string): TitleDetail | undefined {
 }
 // Unbound fixtures are bound to a grant by the HTTP layer before delivery.
 export const rows: Row[] = collections.map(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, style: row === 3 ? 'landscape' : 'poster', items: titles.slice(row * 15, row * 15 + 15).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }));
-export const channels: Channel[] = ['World News', 'Field & Forest', 'Cinema One', 'Classic Evenings', 'Discovery Lab', 'Coastal Living', 'Matchday', 'The Kitchen', 'Young Explorers', 'Arts & Culture', 'Night Music', 'Open Roads'].map((name, i) => ({ id: `channel-${i + 1}`, number: String(101 + i), name, kind: 'tv', artwork: [artwork(`channel-${i + 1}`, 'channel')], favorite: i < 2 }));
+const channelNames = ['World News', 'Field & Forest', 'Cinema One', 'Classic Evenings', 'Discovery Lab', 'Coastal Living', 'Matchday', 'The Kitchen', 'Young Explorers', 'Arts & Culture', 'Night Music', 'Open Roads'];
+const programmeGenres = ['News', 'Sports', 'Movies', 'Kids', 'Documentary', 'Drama', 'Comedy', 'Music', 'Lifestyle'];
+export const channels: Channel[] = Array.from({ length: 170 }, (_, i) => ({ id: `channel-${i + 1}`, number: String(i < 150 ? 101 + i : 1980 + i - 150),
+  name: i < channelNames.length ? channelNames[i]! : `${['North', 'Coastal', 'Studio', 'Vista', 'Metro'][i % 5]} ${programmeGenres[i % programmeGenres.length]} ${Math.floor(i / 45) + 1}`,
+  kind: 'tv', group: programmeGenres[i % programmeGenres.length], artwork: i % 5 === 4 ? [] : [artwork(`channel-${i + 1}`, 'channel')], favorite: i < 6 }));
 export function guide(from: number, until: number, ids: string[]): Programme[] {
-  const hour = 3600000, start = Math.floor(from / hour) * hour;
-  return channels.filter(c => !ids.length || ids.includes(c.id)).flatMap((c, i) => Array.from({ length: Math.ceil((until - start) / hour) }, (_, n) => {
-    const t = start + n * hour;
-    return { id: `${c.id}:${t}`, channelId: c.id, name: ['Morning Edition', 'A World Outside', 'The Long Journey', 'In Conversation', 'Evening Stories', 'After the Headlines'][((Math.floor(t / hour) + i) % 6 + 6) % 6]!, summary: `An hour of original programming from ${c.name}.`, start: new Date(t).toISOString(), end: new Date(t + hour).toISOString(), artwork: c.artwork };
-  }));
+  const minute = 60000, durations = [15, 25, 30, 45, 60, 90, 120], cycle = 385;
+  return channels.flatMap((c, i) => {
+    if (i % 4 === 3 || ids.length && !ids.includes(c.id)) return [];
+    const result: Programme[] = [], phase = (i * 13) % cycle;
+    for (let n = Math.floor((from / minute - phase) / cycle); (n * cycle + phase) * minute < until; n++) {
+      let at = (n * cycle + phase) * minute;
+      for (let j = 0; j < durations.length; j++) {
+        const start = at, end = start + durations[(j + i) % durations.length]! * minute; at = end;
+        if (end <= from || start >= until || i < 2 && j === 3) continue;
+        const k = ((n * 7 + j + i) % 6 + 6) % 6;
+        result.push({ id: `${c.id}:${start}`, channelId: c.id,
+          name: ['Morning Edition', 'A World Outside', 'The Long Journey', 'In Conversation', 'Evening Stories', 'After the Headlines'][k]!,
+          summary: [`Original programming from ${c.name}.`, `The people and places behind today's stories, with reports from our correspondents.`, `A new journey across familiar landscapes. Our team meets the people shaping local communities, follows the quiet rhythms of the season and uncovers stories that deserve a closer look.`][(i + j) % 3]!,
+          start: new Date(start).toISOString(), end: new Date(end).toISOString(), genres: [programmeGenres[i % programmeGenres.length]!],
+          ...((i + j) % 2 === 0 ? { episodeTitle: ['New Beginnings', 'On the Road', 'The Turning Point'][j % 3], seasonNumber: 1 + i % 5, episodeNumber: j + 1, rating: i % 3 ? 'PG' : 'TV-14' } : {}),
+          artwork: (i + j) % 5 < 2 ? [artwork(`programme-${i}-${k}`, 'still')] : [] });
+      }
+    }
+    return result;
+  });
 }

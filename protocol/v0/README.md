@@ -101,7 +101,10 @@ receiptToken means no receipt was issued: clients skip interaction reporting for
 that entry rather than manufacturing attribution.
 
 Library.browse advertises only implemented sorts/directions and filters, with
-defaults. `server` means the unchanged source order and supports asc only. Other
+defaults. Optional filters.genres lists actual offered choices in server order;
+omit it when unknown and do not invent a genre selector's choices. Optional
+Channel.group and Programme.genres carry actual host metadata when available.
+`server` means the unchanged source order and supports asc only. Other
 sort names map to actual neutral catalogue orders, not client sorting. A missing
 filter field or false support flag means unsupported. Query filters are single
 kind/genre/year values and exact `true`/`false` played/favorite values; omitted

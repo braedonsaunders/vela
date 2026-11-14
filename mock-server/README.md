@@ -75,6 +75,20 @@ Reset by POSTing the all-zero/false object. Media uses the broker path
 
 Only routine check: `cd mock-server && bun x tsc --noEmit`.
 
+Authenticated `GET /vela/v0/libraries` lists the fixture's five published views
+in server order; `/libraries/:id/items` supplies scoped, receipted grid pages with
+advertised sort/filter options (movies, shows, documentaries, live, mixed).
+Unsupported filters/sorts fail400, changed query/snapshot cursors fail409, and
+unknown library IDs fail404. These demo views are all visible to the demo viewer.
+Production visibility remains Ether's responsibility; no hidden production
+library rules or IDs are simulated as authoritative data.
+
+The guide fixture has170 channels, six favourites,80% logos, and25% without
+listings. Programmes follow fixed channel-seeded schedules with15–120min slots,
+two channels with gaps, varied episode metadata/artwork and explicit fixture
+genres. IDs and programme facts remain stable across overlapping guide windows.
+The existing24h window cap and100-item maximum pages still apply.
+
 Initial API track selection and in-session track mutation are advertised unavailable
 in this mock: native HLS alternate-audio selection and the external WebVTT are
 real, but the mock cannot reconfigure an active muxed MSE source. Unsupported track

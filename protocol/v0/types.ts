@@ -78,7 +78,7 @@ export interface SwitchBoundary { atSeconds: number; independent: boolean; timel
   compatibility: 'same-source' | 'verified-timeline'; audioTrackIds: ID[]; subtitleTrackIds: ID[] }
 export interface PlaybackPath { id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
   url: string; mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
-  initialRenditionId?: ID; audioRenditions?: AudioRendition[];
+  timelineOriginSeconds?: number; initialRenditionId?: ID; audioRenditions?: AudioRendition[];
   readiness: 'ready' | 'preparing' | 'unavailable'; qualities: Quality[]; boundaries: SwitchBoundary[] }
 export interface Fallback { state: 'unsupported' | 'idle' | 'preparing' | 'ready' | 'unavailable' | 'capacity'; pathId?: ID; reason?: string }
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID;
@@ -110,9 +110,9 @@ export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'sourc
   code: string; message: string; retry: { allowed: boolean; afterSeconds?: number; maxAttempts?: number };
   requestId?: ID; currentGenerations?: Generations }
 export interface ErrorResponse { error: ProtocolError }
-export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string }
+export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string }
 export interface Programme { id: ID; channelId: ID; name: string; summary: string; start: Timestamp; end: Timestamp;
-  titleId?: ID; episodeTitle?: string; seasonNumber?: number; episodeNumber?: number; artwork: ArtworkRef[]; rating?: string }
+  titleId?: ID; episodeTitle?: string; seasonNumber?: number; episodeNumber?: number; artwork: ArtworkRef[]; rating?: string; genres?: string[] }
 export interface GuideQuery { from: Timestamp; until: Timestamp; channelIds?: ID[]; cursor?: Cursor; limit?: number }
 export interface GuideResponse extends Page<Programme> { from: Timestamp; until: Timestamp }
 export interface ExtrasResponse { items: Extra[] }
@@ -130,7 +130,7 @@ export interface LibraryBrowseOptions {
   sorts: { id: LibrarySort; directions: SortDirection[] }[];
   defaultSort: LibrarySort; defaultDirection: SortDirection;
   /** Boolean fields declare support; kind lists supported values. */
-  filters: { kind?: TitleKind[]; genre?: boolean; year?: boolean; played?: boolean; favorite?: boolean };
+  filters: { kind?: TitleKind[]; genre?: boolean; genres?: string[]; year?: boolean; played?: boolean; favorite?: boolean };
 }
 export interface Library { id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
 export interface LibrariesQuery { cursor?: Cursor; limit?: number }

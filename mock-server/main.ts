@@ -1,4 +1,5 @@
 import { renderArtwork } from './artwork';
+import { libraries, libraryEntries } from '../protocol/v0/fixtures/libraries';
 import { createHmac } from 'node:crypto';
 import type * as V from '../protocol/v0/types';
 import { allTitles, channels, detail, extras, guide, rows, titles } from '../protocol/v0/fixtures/catalogue';
@@ -86,6 +87,38 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return json({ capabilities, client: body.client });
   }
   const g = authenticate(req);
+  if (method === 'GET' && path === '/libraries') return cached(req, page(libraries, url, g, `libraries:${viewer.policyRevision}:${mac(JSON.stringify(libraries))}`), g.id);
+  const libraryMatch = /^\/libraries\/([^/]+)\/items$/.exec(path);
+  if (method === 'GET' && libraryMatch) {
+    const library = libraries.find(l => l.id === libraryMatch[1]);
+    if (!library) fail('not-found', 'library_not_found', 'Library not found');
+    const q = url.searchParams, options = library.browse;
+    const invalid = () => fail('request', 'invalid_library_query', 'Unsupported or malformed library query');
+    for (const key of q.keys()) if (!['cursor','limit','sort','direction','kind','genre','year','played','favorite'].includes(key) || q.getAll(key).length !== 1) invalid();
+    const sort = q.get('sort') ?? options.defaultSort, direction = q.get('direction') ?? options.defaultDirection;
+    if (!options.sorts.some(s => s.id === sort && s.directions.includes(direction as V.SortDirection))) invalid();
+    const kind = q.get('kind'), genre = q.get('genre'), year = q.get('year');
+    if (kind !== null && !options.filters.kind?.includes(kind as V.TitleKind)) invalid();
+    if (genre !== null && (!options.filters.genre || !genre.trim() || genre.length > 100)) invalid();
+    if (year !== null && (!options.filters.year || !/^\d{1,4}$/.test(year) || Number(year) < 1)) invalid();
+    for (const key of ['played','favorite'] as const) if (q.has(key) && (!options.filters[key] || !['true','false'].includes(q.get(key)!))) invalid();
+    let items = libraryEntries(library.id).filter(e => {
+      if (e.kind !== 'title') return true;
+      const t = e.title;
+      return (!kind || kind === t.kind) && (!genre || t.genres.some(g => g.toLowerCase() === genre.trim().toLowerCase()))
+        && (!year || t.year === Number(year)) && (!q.has('played') || !!t.watch?.played === (q.get('played') === 'true'))
+        && (!q.has('favorite') || !!t.watch?.favorite === (q.get('favorite') === 'true'));
+    });
+    if (sort !== 'server') items.sort((a, b) => {
+      if (a.kind !== 'title' || b.kind !== 'title') return 0;
+      const cmp = sort === 'title' ? a.title.name.localeCompare(b.title.name, 'en') : (a.title.year ?? 0) - (b.title.year ?? 0);
+      return (cmp || a.id.localeCompare(b.id)) * (direction === 'desc' ? -1 : 1);
+    });
+    const query = [sort, direction, kind, genre?.trim().toLowerCase(), year, q.get('played'), q.get('favorite'), q.get('limit') ?? '50'];
+    const scope = `library:${library.id}:${viewer.policyRevision}:${mac(JSON.stringify([query, items]))}`;
+    items = items.map(i => ({ ...i, receiptToken: receipt(g, `library:${scope}:${i.id}`) }));
+    return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, url, g, scope) } satisfies V.LibraryContents, g.id);
+  }
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
