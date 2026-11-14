@@ -15,7 +15,7 @@ export interface GuideChannel {
   now: string; next: string; programmes: GuideProgramme[];
 }
 export interface GuideModel {
-  from: string; until: string; nowOffset: number; showNow: boolean; channels: GuideChannel[];
+  from: string; until: string; fromLabel: string; untilLabel: string; nowOffset: number; showNow: boolean; channels: GuideChannel[];
 }
 
 async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise<T[]> {
@@ -48,7 +48,7 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
   }
   const label = (value: number) => new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   return {
-    from, until, nowOffset: Math.max(0, Math.min(100, (now - start) / (end - start) * 100)),
+    from, until, fromLabel: label(start), untilLabel: label(end), nowOffset: Math.max(0, Math.min(100, (now - start) / (end - start) * 100)),
     showNow: now >= start && now < end,
     channels: channels.map(channel => {
       const entries = (grouped.get(channel.id) ?? []).filter(p => {

@@ -16,6 +16,7 @@ component Guide
           text "Earlier"
         button press=next aria-label="Later programmes" buttonStyle="bordered"
           text "Later"
+      text `${model.fromLabel} – ${model.untilLabel}` color="ink.secondary" font-size=13
       if model.channels.length == 0
         text "No channels are available." role="status" color="ink.secondary"
       if small

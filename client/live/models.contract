@@ -21,6 +21,8 @@ shape GuideChannel
 shape GuideModel
   from: string
   until: string
+  fromLabel: string
+  untilLabel: string
   nowOffset: number
   showNow: bool
   channels: GuideChannel[]
