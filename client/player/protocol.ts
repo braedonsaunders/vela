@@ -10,7 +10,8 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
     position: plan.positionSeconds, duration: plan.durationSeconds, live: !!plan.channelId, liveWindowStart: plan.live?.windowStartSeconds, liveEdge: plan.live?.liveEdgeSeconds, liveMaxDrift: plan.live?.maxDriftSeconds, lowDelay: plan.live?.mode === 'low-delay', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
     audioTrackId: plan.selectedAudioTrackId, subtitleTrackId: plan.selectedSubtitleTrackId ?? undefined,
     audioTracks: plan.audioTracks.map(t => ({ id: t.id, label: t.name, language: t.language, codec: t.codec, channels: t.channels, streamIndex: t.streamIndex })),
-    subtitleTracks: plan.subtitleTracks.filter(t => t.codec.toLowerCase() === 'webvtt' || t.codec.toLowerCase() === 'vtt').map(t => ({ id: t.id, label: t.name, language: t.language, url: t.url })),
+    subtitleTracks: plan.subtitleTracks.map(t => ({ id: t.id, label: t.name, language: t.language, codec: t.codec, streamIndex: t.streamIndex,
+      url: t.delivery?.kind === 'external' ? t.delivery.url : t.url, delivery: t.delivery, forced: t.forced, hearingImpaired: t.hearingImpaired })),
     onDemandSources: plan.paths.filter(p => p.readiness === 'on-demand' && !!p.sourceId && p.sourceId === selected.sourceId && !!p.timelineId && p.timelineId === selected.timelineId && (p.edition ?? '') === edition).map(p => ({id:p.id,onDemand:true})),
     sources: plan.paths.filter((p): p is PlaybackPath & { readiness: 'ready'; url: string } => p.readiness === 'ready' && (p.edition ?? '') === edition).map(p => ({
       id: p.id, strategy: p.kind, delivery: p.transport, url: p.url, mime: p.mimeType,

@@ -1402,3 +1402,28 @@ images `lab-31-overlay-before.png` and `lab-32-overlay-fixed.png` were inspected
 Real Close player returned broker stop200/ended, own-family revoke200/accepted;
 the test Chrome was closed. Native fix3ec6089 and UI a549994/8bdb8d0 are paired;
 the universal runtime e2e583f40c93c9f6 is unchanged. No extra stream was opened.
+
+### Lab.14 fallback track verification
+
+One installed0.1.30 session requested1917 at120s with H.264/AAC fallback
+capabilities. The broker selected an H.264 remux with three audio tracks and one
+external WebVTT subtitle, rather than the FraMeSToR/PGS source. Audio1→2 returned
+200 with source/seek generations2/2. Subtitle4 on/off returned200 at a nonzero
+position. Final playback reached169.901s,360frames,0drops; playing observations
+returned200. Stop returned200/ended, own-family revoke200/accepted, Chrome closed.
+
+| Requested check | Measured result |
+| --- | --- |
+| Audio switch | Pass: server command200 and playback resumed |
+| Offered subtitle on/off | Selection pass: both commands200; glyph appearance not qualified |
+| Ladder, rung and Auto | Unqualified: selected remux qualities were empty |
+| PGS burn-in | Unqualified: selected source offered WebVTT only |
+| Prepare lower fallback |403 feature_unavailable; sent to Ether owner |
+
+The engine projection now preserves typed subtitle delivery and all offered audio
+tracks. Burn-in and server-managed audio use authorized tracks commands; embedded
+subtitle rendering remains a separate subsystem under construction. Pending codec
+qualities start their selected init and wait for exact codec verification before
+SourceBuffer creation. New speed support is advertised only when the installed
+runtime/backend implements it. No PGS rendering or nonexistent quality is implied
+by listing an actually offered server track/path.

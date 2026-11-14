@@ -16,6 +16,8 @@ shape PlayerView
   waiting: bool
   volume: number
   muted: bool
+  speed: number
+  speeds: number[]
   preparation: string
   ready: bool
   state: string
@@ -31,7 +33,9 @@ shape PlayerView
   backend: string
   quality: string
   lockedQuality: string
+  qualityAuto: bool
   pendingAudioId: string
+  pendingSubtitleId: string
   audioId: string
   audioLabel: string
   subtitleId: string

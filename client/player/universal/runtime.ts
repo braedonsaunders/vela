@@ -223,6 +223,11 @@ export class UniversalRuntime {
     this.audioSwitch?.abort(); void this.readout; this.advancePresentation();
     await this.controller?.seek(secondsToMicroseconds(position)); this.loop?.schedule(this.wantsPlaying);
   }
+  async setSpeed(value: number) {
+    if (!Number.isFinite(value) || value < 0.5 || value > 2) throw new Error('Playback speed must be between 0.5 and 2');
+    await this.controller?.setPlaybackRate(value);
+    this.loop?.schedule(this.wantsPlaying);
+  }
   dispose(): Promise<void> {
     if (this.disposing) return this.disposing;
     if (this.disposed) return Promise.resolve();

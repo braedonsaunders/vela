@@ -12,6 +12,8 @@ export interface OriginalBackend {
   setVolume(volume: number): void; setMuted(muted: boolean): void;
   readonly audioTrackIds: string[]; readonly pendingAudioTrackId: string | null;
   selectAudio(trackId: string): Promise<void>;
+  /** Optional for compatibility with an already-installed immutable payload. */
+  setSpeed?(value: number): Promise<void>;
   seek(position: number): Promise<void>; dispose(): Promise<void>;
 }
 export interface OriginalRuntimeOptions {

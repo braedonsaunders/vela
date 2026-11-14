@@ -1,6 +1,7 @@
 import type { SessionCommand, AudioRendition, OriginalVideo } from '../wire/v0/types';
+import type { SubtitleDelivery } from '../../protocol/v0/types';
 /** Local engine input. protocol.ts translates the versioned server plan here. */
-export interface Track { id: string; label: string; language?: string; url?: string; codec?: string; channels?: number; streamIndex?: number }
+export interface Track { id: string; label: string; language?: string; url?: string; codec?: string; channels?: number; streamIndex?: number; delivery?: SubtitleDelivery; forced?: boolean; hearingImpaired?: boolean }
 export interface Rendition { id: string; url: string; bandwidth: number; mime: string; height?: number; audioGroupId?: string; codecStatus?: 'pending' | 'verified' }
 export function codecKnown(rendition: Rendition) {
   return rendition.codecStatus !== 'pending' && /codecs="[^"]+"/.test(rendition.mime);
@@ -23,6 +24,7 @@ export type Command = { id: number } & (
   { type: 'play' | 'pause' | 'pip' | 'fullscreen' | 'catchUp' | 'retry' } |
   { type: 'seekBy'; seconds: number } | { type: 'switchPath'; pathId: string } | { type: 'seek'; seconds: number } | { type: 'volume'; value: number } | { type: 'mute'; muted?: boolean } |
   { type: 'audio'; trackId: string } | { type: 'subtitle'; trackId: string | null } |
+  { type: 'speed'; value: number } |
   { type: 'quality'; renditionId: string | null } | { type: 'lowDelay'; enabled: boolean });
 export type FailureKind = 'network' | 'source' | 'decoder' | 'unsupported' | 'action';
 export interface Failure { kind: FailureKind; message: string; recoverable: boolean }
@@ -39,6 +41,8 @@ export interface Snapshot {
   sourceId: string | null; strategy: Source['strategy'] | null;
   backend: 'file' | 'native-hls' | 'mse' | 'webgpu' | null; renditionId: string | null; qualityIds: string[];
   capabilities: { pip: boolean; fullscreen: boolean; audioSwitch: boolean }; lockedQuality: string | null;
+  audioTracks: Track[]; subtitleTracks: Track[]; renditions: Rendition[];
+  speed: number; speeds: number[]; pendingSubtitleTrackId: string | null;
   diagnostics?: { metadataDiscrepancies: string[] };
   live: LiveSnapshot | null;
   seekTarget: number | null; waiting: boolean; volume: number; muted: boolean;
