@@ -279,5 +279,10 @@
   "live.channelUp": "Previous channel",
   "live.channelDown": "Next channel",
   "live.channels": "Channels",
-  "live.watching": "Watching"
+  "live.watching": "Watching",
+  "live.zoom": "Zoom",
+  "live.hours": "{hours} h",
+  "live.hoursAcross": "Show {hours} hours across",
+  "live.fullGuide": "Full-screen guide",
+  "live.exitFullGuide": "Exit full-screen guide"
 }

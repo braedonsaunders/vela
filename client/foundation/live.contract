@@ -2,6 +2,7 @@ use GuideModel, LiveStatus, LiveIdentity from "../live/models.contract"
 
 members Client
   state guideDay = 0
+  state guideZoom = 1 persist
   state guideNow = 0
   state lowDelay = false
   resource guide = uiGuide(guideNow, guideDay) with localeJSON when auth.authenticated and (top(nav).name == "live" or top(nav).name == "liveWatch") and guideNow > 0 as shape GuideModel else empty()
@@ -58,6 +59,8 @@ members Client
     guideDay = max(0, guideDay - 1)
   action laterGuide
     guideDay = min(6, guideDay + 1)
+  action setGuideZoom(zoom: number)
+    guideZoom = max(0, min(2, zoom))
   action chooseGuideDay(day: number)
     guideDay = max(0, min(6, day))
   action watchChannel(id: string)

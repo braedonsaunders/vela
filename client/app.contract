@@ -57,7 +57,7 @@ component Client
             Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "example"] : ["cinematic", "index"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section="live", openLibrary=openLibrary)
               column flex=1 min-height=0
                 if guideReady
-                  Guide(skin=activeSkin, model=guide, small=small, still=still, watch=watchChannel, previous=earlierGuide, next=laterGuide, chooseDay=chooseGuideDay)
+                  Guide(skin=activeSkin, model=guide, small=small, still=still, zoom=guideZoom, watch=watchChannel, previous=earlierGuide, next=laterGuide, chooseDay=chooseGuideDay, setZoom=setGuideZoom)
                 else
                   if failed(guide)
                     text t("ui.theGuideCouldnTBeLoadedCheckYourConnection") role="status" padding=32 padding-top=(small ? 88 : 112)

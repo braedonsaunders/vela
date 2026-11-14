@@ -182,8 +182,8 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
     });
     const model: GuideModel = {
       day, dayLabel: day === 0 ? msg('live.today') : long.format(start), fromLabel: time(start), untilLabel: time(end), minutes, nowMinute, nowLabel: time(now),
-      // Land half an hour before now, or at this time of day on a later day.
-      landing: Math.max(0, Math.min(minutes - 180, ((now - midnight(now, 0)) / MINUTE) - 30)),
+      // The time of day to land on: now today, the same clock time on a later day. The skin places it.
+      landing: Math.max(0, Math.min(minutes, (now - midnight(now, 0)) / MINUTE)),
       ticks: Array.from({ length: Math.floor(minutes / 30) }, (_, n) => ({ id: String(start + n * 1800000), label: time(start + n * 1800000), minute: n * 30, hour: n % 2 === 0 })),
       days: Array.from({ length: DAYS }, (_, offset) => { const at = midnight(now, offset) + 12 * HOUR; return { offset, label: dayName(offset, at), date: date.format(at) }; }),
       groups,

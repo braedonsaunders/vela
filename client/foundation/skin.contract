@@ -157,10 +157,12 @@ component Guide
     model: GuideModel
     small: bool
     still: bool
+    zoom: number
     watch: action
     previous: action
     next: action
     chooseDay: action
+    setZoom: action
   view
     if skin == "example"
       scroll flex=1 min-height=0
@@ -171,7 +173,7 @@ component Guide
           IndexGuide(model=model, small=small, watch=watch, previous=previous, next=next)
       else
         column flex=1 min-height=0
-          CineGuide(model=model, small=small, still=still, watch=watch, chooseDay=chooseDay)
+          CineGuide(model=model, small=small, still=still, zoom=zoom, watch=watch, chooseDay=chooseDay, setZoom=setZoom)
 
 component LiveControls
   props

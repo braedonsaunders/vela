@@ -15,7 +15,8 @@ keyframes guidePulse
   100% opacity=0 scale=2.6
 
 // Grid geometry, in CSS pixels. Minutes become pixels at `ppm` per minute.
-fn ppm(small: bool): number = (small ? 4 : 6)
+// Zoom 0, 1, 2 shows about 4.5, 3 and 2 hours across a laptop panel; phones keep one scale.
+fn ppm(small: bool, zoom: number): number = (small ? 4 : zoom == 0 ? 4 : zoom == 2 ? 9 : 6)
 fn rowH(small: bool): number = (small ? 68 : 72)
 fn railW(small: bool): number = (small ? 84 : 264)
 fn rulerH(): number = 44
@@ -36,9 +37,12 @@ component Guide
     model: GuideModel
     small: bool
     still: bool
+    zoom: number
     watch: action
     chooseDay: action
+    setZoom: action
   state selChannel = ""
+  state expanded = false
   state selProgramme = ""
   state filter = "all"
   state mode = "now"
@@ -50,11 +54,13 @@ component Guide
   state landed = -1
   derive rows = model.channels.filter(c => keep(c, filter))
   derive grid = not small or mode == "guide"
-  derive scale = ppm(small)
+  derive scale = ppm(small, zoom)
   derive row = rowH(small)
   derive rail = railW(small)
   derive width = model.minutes * scale
-  derive col = (colBase < 0 ? floor(model.landing / 30) : colBase)
+  // Open with the landing time a third of the way across the panel, so the past reads to its left.
+  derive landingMin = max(0, min(model.minutes - (portW - rail) / scale, model.landing - (portW - rail) / scale / 3))
+  derive col = (colBase < 0 ? floor(landingMin / 30) : colBase)
   derive firstRow = max(0, rowBase - 6)
   derive lastRow = min(rows.length, rowBase + ceil(portH / row) + 8)
   derive winFrom = col * 30 - 150
@@ -65,7 +71,7 @@ component Guide
 
   action scrolled(x: number, y: number)
     if landed < 0
-      landed = model.landing
+      landed = landingMin
     let r = floor(y / row / 4) * 4
     if r != rowBase
       rowBase = r
@@ -86,6 +92,22 @@ component Guide
   action pickFilter(value: string)
     filter = value
     rowBase = 0
+  // Zooming keeps the time at the panel's left edge where it was.
+  action pickZoom(z: number)
+    landed = col * 30
+    colBase = col
+    setZoom(z)
+  action toggleExpanded
+    expanded = not expanded
+    if expanded
+      requestFullscreen("guide-page")
+    else
+      exitFullscreen()
+  action pageKey(k: string)
+    if k == "Escape" and expanded
+      preventDefault()
+      expanded = false
+      exitFullscreen()
   action pickMode(value: string)
     mode = value
     landed = -1
@@ -150,9 +172,10 @@ component Guide
       focus(match first(rows.slice(index, index + 1)) { case some(c) => cellAt(c, max(col * 30, model.nowMinute)), case none => "" })
 
   view
-    column height="100%" min-height=0 box-sizing="border-box" padding-top=(grid ? 0 : (small ? 116 : 112)) background-image="radial-gradient(ellipse 70% 60% at 82% 0%, var(--cinematic.guide-aura), transparent 70%)"
+    // Expanded hides the preview so the grid takes the page, and asks the browser for full screen.
+    column id="guide-page" key=pageKey height="100%" min-height=0 box-sizing="border-box" background-color="surface.page" padding-top=(expanded ? 96 : grid ? 0 : (small ? 116 : 112)) background-image="radial-gradient(ellipse 70% 60% at 82% 0%, var(--cinematic.guide-aura), transparent 70%)"
       text t("ui.channelGuide") role="heading" aria-level=1 position="absolute" width=1 height=1 overflow="hidden" opacity=0
-      if grid
+      if grid and not expanded
         for c in heroFallback key=`hero-${c.id}`
           GuideHero(channel=c, programmeId=(selChannel == c.id and selProgramme != "" ? selProgramme : c.nowId), small=small, still=still, watch=watch)
       // Toolbar: days, the time stepper and filters. Phones put the view switch first and the days beneath.
@@ -177,7 +200,7 @@ component Guide
               GuideDayChip(label=d.label, date=d.date, offset=d.offset, on=(d.offset == model.day), small=small, pick=pickDay)
       else
         row flex-shrink=0 align-items="center" gap=14 padding-left=side(small) padding-right=side(small) padding-top=6 padding-bottom=16 role="toolbar" aria-label=t("live.guideControls")
-          row gap=6 align-items="center" flex-shrink=0 role="group" aria-label=t("live.day")
+          row gap=6 align-items="center" flex-shrink=1 min-width=0 overflow-x="auto" scrollbar-width="none" role="group" aria-label=t("live.day")
             for d in model.days key=d.offset
               GuideDayChip(label=d.label, date=d.date, offset=d.offset, on=(d.offset == model.day), small=small, pick=pickDay)
           row gap=6 align-items="center" flex-shrink=0
@@ -191,8 +214,14 @@ component Guide
                 text t("live.now") font-size=13 font-weight=650
             button press=shift(2) aria-label=t("ui.laterProgrammes") class=IconButton width=38 height=38 padding=11
               image "symbol:forward-chevron" width=16 height=16 aria-hidden=true
-          column flex=1
+          column flex=1 min-width=0
+          row gap=2 padding=3 border-radius=999 flex-shrink=0 background-color="cinematic.control" border="1px solid var(--cinematic.glass-edge)" role="group" aria-label=t("live.zoom")
+            for z in [0, 1, 2] key=z
+              button press=pickZoom(z) aria-pressed=(z == zoom) aria-label=t("live.hoursAcross", hours=(z == 0 ? "4½" : z == 1 ? "3" : "2")) class=GuideTab height=30 padding-left=10 padding-right=10 background-color=(z == zoom ? "ink.primary" : "transparent") color=(z == zoom ? "ink.inverse" : "ink.secondary")
+                text t("live.hours", hours=(z == 0 ? "4½" : z == 1 ? "3" : "2")) font-size=12 font-weight=650 white-space="nowrap" font-variant-numeric="tabular-nums"
           row gap=8 align-items="center" flex-shrink=0
+            button press=toggleExpanded aria-pressed=expanded aria-label=(expanded ? t("live.exitFullGuide") : t("live.fullGuide")) class=IconButton width=38 height=38 padding=11
+              image (expanded ? "symbol:close" : "symbol:layers") width=16 height=16 aria-hidden=true
             button press=pickFilter(filter == "favourites" ? "all" : "favourites") aria-pressed=(filter == "favourites") aria-label=t("live.favourites") class=IconButton width=38 height=38 padding=10 color=(filter == "favourites" ? "brand.warm" : "ink.primary")
               image (filter == "favourites" ? "symbol:star-fill" : "symbol:star") width=17 height=17 aria-hidden=true
             select value=filter change=pickFilter aria-label=t("live.filter") class=GuideSelect
@@ -218,7 +247,7 @@ component Guide
           if grid
             column flex=1 min-height=0 margin-left=(small ? 0 : side(small)) margin-right=(small ? 0 : side(small)) margin-bottom=(small ? 0 : 24) border-radius=(small ? 0 : 20) overflow="hidden" border=(small ? "none" : "1px solid var(--cinematic.glass-edge)") border-top="1px solid var(--cinematic.glass-edge)" background-color="cinematic.guide-panel" box-shadow=(small ? "none" : "0px 40px 120px var(--cinematic.shadow)")
               for day in [model.day] key=day
-                scroll id="guide-grid" testId="guide-grid" scroll=scrolled resize=measured scrollLeft=((landed < 0 ? model.landing : landed) * scale) flex=1 min-height=0 overflow="auto" overscroll-behavior="contain" scroll-padding-left=rail scroll-padding-top=rulerH() role="grid" aria-label=t("ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch")
+                scroll id="guide-grid" testId="guide-grid" scroll=scrolled resize=measured scrollLeft=((landed < 0 ? landingMin : landed) * scale) flex=1 min-height=0 overflow="auto" overscroll-behavior="contain" scroll-padding-left=rail scroll-padding-top=rulerH() role="grid" aria-label=t("ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch")
                   column position="relative" width=(rail + width) height=(rulerH() + rows.length * row) flex-shrink=0
                     // Half-hour and hour lines under every row, drawn once.
                     column position="absolute" left=rail top=rulerH() width=width height=(rows.length * row) aria-hidden=true background-image=`repeating-linear-gradient(90deg, var(--cinematic.guide-hour) 0px 1px, transparent 1px ${30 * scale}px, var(--cinematic.guide-half) ${30 * scale}px ${30 * scale + 1}px, transparent ${30 * scale + 1}px ${60 * scale}px)`
@@ -234,7 +263,7 @@ component Guide
                             column position="absolute" left=0 bottom=0 width=1 height=(tick.hour ? 10 : 6) background-color=(tick.hour ? "cinematic.glass-edge-strong" : "cinematic.glass-edge")
                             text tick.label padding-left=10 font-size=12 font-weight=(tick.hour ? 650 : 500) color=(tick.hour ? "ink.primary" : "ink.quiet") font-variant-numeric="tabular-nums" white-space="nowrap"
                         if model.nowMinute >= 0
-                          column id="guide-now-anchor" position="absolute" left=(max(0, model.nowMinute - 30) * scale) top=0 width=1 height=1 aria-hidden=true
+                          column id="guide-now-anchor" position="absolute" left=(max(0, model.nowMinute - (portW - rail) / scale / 3) * scale) top=0 width=1 height=1 aria-hidden=true
                           row position="absolute" left=(model.nowMinute * scale) bottom=7 translate="-50% 0px" z-index=2 gap=5 align-items="center" padding="3px 8px" border-radius=999 background-color="cinematic.guide-now" box-shadow="0px 4px 18px var(--cinematic.guide-now-glow)" aria-hidden=true
                             text model.nowLabel font-size=11 font-weight=700 color="ink.primary" font-variant-numeric="tabular-nums" white-space="nowrap"
                     // Channel rows, windowed around the port.
