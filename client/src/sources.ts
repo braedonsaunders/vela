@@ -3,7 +3,7 @@ import type { AISearchJob, ClientCapabilities, Device, ServerCapabilities, Token
 import { EtherAdapter, VelaError } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
-import { loadGuide, liveIdentity } from './live/guide';
+import { guideFocus, loadGuide, liveIdentity } from './live/guide';
 import { artworkURL } from './discovery/artwork';
 import { liveStatus, stopPlan } from './live/player';
 import { InteractionQueue } from './telemetry';
@@ -121,6 +121,7 @@ const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '
 };
 let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, driftLabel: '', canCatchUp: false };
 const sources: Sources = {
+  uiGuideFocus: async ([at, epoch, localeJSON]) => guideFocus(at, epoch, localeJSON),
   uiLiveIdentity: async ([channelId, epoch, localeJSON], store) => liveIdentity(await session(store), channelId, epoch, localeJSON),
   uiGuide: async ([epoch, day, localeJSON], store) => loadGuide(await session(store), day, epoch, store.get('vela.session') ?? '', API, localeJSON),
   liveEvent: async ([json, localeJSON]) => {

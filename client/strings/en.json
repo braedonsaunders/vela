@@ -389,5 +389,8 @@
   "secure.action": "Switch to the secure address",
   "ui.scrollBack": "Scroll back",
   "ui.scrollOn": "Scroll on",
-  "live.guides": "Guides"
+  "live.guides": "Guides",
+  "live.startsAt": "Starts at {time}",
+  "live.startsOn": "Starts {day} at {time}",
+  "live.startsTomorrow": "Starts tomorrow at {time}"
 }
