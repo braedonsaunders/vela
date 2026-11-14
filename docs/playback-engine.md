@@ -730,3 +730,33 @@ ask is to emit the actual offset on every initial/seek/track-restart path and
 retain original title timestamps for MSE fMP4. A lighter capability-driven SDR
 base and shorter production waits remain Ether-side work; no new lab stream was
 opened for this analysis.
+
+### Separate MSE audio qualification
+
+The optional delivery descriptor is `PlaybackPath.audioRenditions[]` containing
+`{trackId,groupId,url,mimeType,bitrate?}`, paired with a video's
+`Quality.audioGroupId`. Such qualities carry video-only media and omit
+`audioCodec`. The pipeline creates a distinct audio SourceBuffer. It prefetches
+replacement audio before removing the old buffered tail at a shared future
+segment boundary; the video buffer and playback clock remain intact. The current
+track remains selected until that boundary becomes audible; `pendingAudioTrackId`
+(and PlayerView.pendingAudioId) exposes the choice in flight. Prefetch failures
+retain old audio; append failures enter visible source recovery. Descriptors are
+not fabricated for muxed paths or unavailable audio.
+
+Chrome local mock `transcode-mse` drive (2026-11-14):
+
+| Check | Measurement |
+|---|---|
+| Actual separate buffers | Two SourceBuffers; backend MSE, audio-en initially playing at 10.387546 s / 252 frames |
+| English → Spanish at aligned future boundary | audio-es active by 22.816704 s / 550 frames; pending null; same video SourceBuffer and MediaSource; source/seek generations unchanged at 1/1 |
+| WebVTT on MSE | sub-en loaded four cues, text track mode showing |
+| Errors and continued progress | No engine error in the drive; Spanish still active at 59.309160 s |
+| Cleanup | Stop HTTP 200, state ended; mock grant revoked and owned Chrome closed |
+
+This is local fixture qualification, not a real Ether alternate-track pass.
+Ether currently plans to omit separate audio groups until it genuinely packages
+them; its alternative is an authorized generation-changing tracks command.
+Pending-codec qualities also require a separate client integration before that
+server branch can deploy; the installed client must not receive empty codec
+strings as if they were verified.
