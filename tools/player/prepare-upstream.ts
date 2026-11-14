@@ -1,6 +1,9 @@
 /** Assemble the real upstream runtime; this is an asset build, not a check lane. */
-import { cp, mkdir, readFile, copyFile } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { cp, mkdir, readFile, copyFile, readdir } from 'node:fs/promises';
+import { resolve, join, dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
+import { transformUpstreamAudio } from '../../client/player/universal/audio/ffmpeg/upstream-transform';
 const root = resolve(import.meta.dir, '../..');
 const upstream = join(root, 'vendor/webgpu-player');
 const revision = 'a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2';
@@ -28,6 +31,34 @@ await mkdir(sourceDir, { recursive: true });
 const bunny = join(upstream, 'vendor/mediabunny');
 await run(['git', 'archive', '--format=tar.gz', '--prefix=mediabunny/', `--output=${join(sourceDir, 'mediabunny.tar.gz')}`, 'HEAD'], bunny);
 await copyFile(join(bunny, 'LICENSE'), join(sourceDir, 'Mediabunny-LICENSE'));
-const build = JSON.parse(await readFile(join(upstream, 'bin/build-info.json'), 'utf8')) as { assetKey: string };
-await Bun.write(join(destination, 'assets.json'), JSON.stringify({ version: 1, upstreamRevision: revision, assetKey: build.assetKey, libraries: './libraries/', sources: './sources/' }, null, 2) + '\n');
-console.log(`Universal runtime assets assembled at ${destination}`);
+// Vela's codec-private/layout hooks are explicit build-time adaptations. The
+// pinned checkout stays pristine; corresponding Vela hook source ships too.
+const { build } = await import(pathToFileURL(join(upstream, 'node_modules/esbuild/lib/main.js')).href);
+const plugin = { name:'vela-audio', setup(builder: any) {
+  builder.onLoad({filter:/\.ts$/}, async ({path}: {path:string}) => {
+    const transformed = transformUpstreamAudio(path, await readFile(path, 'utf8'));
+    if (transformed !== null) return {contents:transformed, loader:'ts', resolveDir:dirname(path)};
+  });
+}};
+const common = {bundle:true, platform:'browser', target:'es2022', absWorkingDir:upstream,
+  alias:{mediabunny:join(bunny, 'src/index.ts')}, plugins:[plugin]};
+const { getWorkerEntryPoints } = await import(pathToFileURL(join(upstream, 'scripts/library-assets.mjs')).href);
+for (const [target, entry] of getWorkerEntryPoints()) {
+  await build({...common, entryPoints:[entry], format:'iife', outfile:join(libraries,target)});
+}
+await build({...common, entryPoints:[join(root,'client/player/universal/runtime.ts')], format:'esm', outfile:join(destination,'runtime.js')});
+await cp(join(root,'client/player/universal/audio/ffmpeg'), join(sourceDir,'vela-audio-hooks'), {recursive:true});
+const audioDirectory = Bun.argv.find(arg => arg.startsWith('--audio-dir='))?.slice(12);
+if (audioDirectory) await run([process.execPath, join(root,'client/player/universal/audio/install-packages.ts'), join(libraries,'audio-decoders'), `--from=${resolve(audioDirectory)}`], root);
+const hash = createHash('sha256');
+async function hashFiles(directory: string) {
+  for (const entry of (await readdir(directory,{withFileTypes:true})).sort((a,b)=>a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
+    const file=join(directory,entry.name);
+    if (entry.isDirectory()) await hashFiles(file);
+    else if (entry.isFile()) { hash.update(file.slice(destination.length)); hash.update(await readFile(file)); }
+  }
+}
+await hashFiles(libraries); hash.update(await readFile(join(destination,'runtime.js')));
+const assetKey = hash.digest('hex').slice(0,16);
+await Bun.write(join(destination, 'assets.json'), JSON.stringify({ version:1, upstreamRevision:revision, assetKey, libraries:'./libraries/', sources:'./sources/' },null,2)+'\n');
+console.log(`Universal runtime assets assembled at ${destination}, key ${assetKey}`);

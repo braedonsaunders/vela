@@ -106,6 +106,7 @@ shape DetailModel
   cast: string[]
   castPeople: CastPerson[]
   crew: string[]
+  crewPeople: CastPerson[]
   mediaFacts: string[]
   related: FeedRow[]
 

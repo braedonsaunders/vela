@@ -28,7 +28,7 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
   const quality = path?.qualities.find(q => q.id === snapshot?.renditionId);
   const capability = snapshot?.capabilities;
   const selectedAudio = plan?.audioTracks.find(t => t.id === snapshot?.audioTrackId || !snapshot && t.id === plan.selectedAudioTrackId);
-  const subtitles = (plan?.subtitleTracks ?? []).filter(t => !!t.url && ['webvtt', 'vtt'].includes(t.codec.toLowerCase()));
+  const subtitles = (snapshot?.backend === 'webgpu' ? [] : plan?.subtitleTracks ?? []).filter(t => !!t.url && ['webvtt', 'vtt'].includes(t.codec.toLowerCase()));
   const sourceGeneration = snapshot?.sourceGeneration ?? plan?.sourceGeneration ?? 0;
   const seekGeneration = snapshot?.seekGeneration ?? plan?.seekGeneration ?? 0;
   return {
