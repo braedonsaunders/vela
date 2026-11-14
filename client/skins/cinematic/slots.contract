@@ -32,18 +32,19 @@ component Shell
         if viewer != ""
           button popovertarget="viewer-settings" aria-label=t("ui.profileAndAppearance") testId="profile-menu" background-color="surface.raised" border="1px solid var(--surface.line)" border-radius=24 padding=(viewport.width < 640 ? "10px 14px" : "10px 18px") color="ink.primary"
             text (viewport.width < 640 ? viewer.slice(0, 1) : viewer) font-size=13
-      column id="viewer-settings" popover="auto" position="absolute" top=72 right="5%" left="auto" bottom="auto" margin=0 padding=22 gap=16 border="1px solid var(--surface.line)" border-radius=20 background-color="surface.raised" color="ink.primary" min-width=210
-        text viewer font-weight=600
-        if skins.length > 1
-          text t("ui.appearance") font-size=12 color="ink.secondary"
-          select value=skin change=chooseSkin aria-label=t("ui.appearance") testId="skin-picker" background-color="surface.page" color="ink.primary" border="1px solid var(--surface.line)" padding=10 border-radius=10
-            for name in skins key=name
-              option value=name
-                text skinLabel(name)
-        vela-install pwaAction="install" buttonLabel=t("pwa.install")
-        vela-install pwaAction="update" buttonLabel=t("pwa.update")
-        button press=signOut background-color="transparent" border="none" color="ink.secondary" text-align="left" padding=0
-          text t("ui.signOut")
+      if viewer != ""
+        column id="viewer-settings" popover="auto" position="absolute" top=72 right="5%" left="auto" bottom="auto" margin=0 padding=22 gap=16 border="1px solid var(--surface.line)" border-radius=20 background-color="surface.raised" color="ink.primary" min-width=210
+          text viewer font-weight=600
+          if skins.length > 1
+            text t("ui.appearance") font-size=12 color="ink.secondary"
+            select value=skin change=chooseSkin aria-label=t("ui.appearance") testId="skin-picker" background-color="surface.page" color="ink.primary" border="1px solid var(--surface.line)" padding=10 border-radius=10
+              for name in skins key=name
+                option value=name
+                  text skinLabel(name)
+          vela-install pwaAction="install" buttonLabel=t("pwa.install")
+          vela-install pwaAction="update" buttonLabel=t("pwa.update")
+          button press=signOut background-color="transparent" border="none" color="ink.secondary" text-align="left" padding=0
+            text t("ui.signOut")
       children
 
 component TitleCard
@@ -144,26 +145,26 @@ component SearchSurface
     column gap=22 padding="0px 0px 40px" animation=(still ? "none" : "arrive 200ms ease both")
       text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 font-size=24 padding="0px 5%"
       if error
-        text t("ui.searchIsUnavailableTryAnotherQuery") role="status" color="ink.secondary"
+        text t("ui.searchIsUnavailableTryAnotherQuery") role="status" color="ink.secondary" padding="0px 5%"
       else
         if loading
-          text t("ui.findingTitles") role="status" color="ink.secondary"
+          text t("ui.findingTitles") role="status" color="ink.secondary" padding="0px 5%"
         else
           if model.items.length == 0
-            text t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription") role="status" color="ink.secondary"
+            text t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription") role="status" color="ink.secondary" padding="0px 5%"
           else
             Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
           Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
         if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
           column gap=12
-            text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 font-size=22
+            text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 font-size=22 padding="0px 5%"
             if ai.aiStatus == "queued" or ai.aiStatus == "running"
-              text t("ui.exploringYourDescription") role="status" color="ink.secondary"
+              text t("ui.exploringYourDescription") role="status" color="ink.secondary" padding="0px 5%"
             if ai.items.length > 0
               Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items), small=small, still=still, selectTitle=selectTitle, observe=observe)
             if ai.aiStatus == "failed"
-              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="ink.secondary"
+              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="ink.secondary" padding="0px 5%"
 
 component Detail
   props
@@ -314,10 +315,15 @@ component SearchField
   props
     query: string
     edit: action
+  state focused = false
+  action focusField
+    focused = true
+  action blurField
+    focused = false
   view
-    row align-items="center" gap=12 padding="8px 18px" border-radius=32 background-color="surface.glass" border="1px solid var(--surface.line)" box-shadow="0px 16px 50px var(--cinematic.search-shadow)"
+    row align-items="center" gap=12 padding="8px 18px" border-radius=32 background-color="surface.glass" border=(focused ? "1px solid var(--brand.warm)" : "1px solid var(--surface.line)") box-shadow="0px 16px 50px var(--cinematic.search-shadow)"
       image "symbol:search" color="ink.secondary" width=20 height=20
-      input value=query input=edit placeholder=t("ui.aTitleAFeelingAWorldToGetLostIn") aria-label=t("ui.searchYourLibrary") testId="search" border-radius=14 flex=1 min-width=0 padding="12px 0px" border="none" background-color="transparent" color="ink.primary" font-size=15
+      input value=query input=edit focus=focusField blur=blurField outline="none" placeholder=t("ui.aTitleAFeelingAWorldToGetLostIn") aria-label=t("ui.searchYourLibrary") testId="search" border-radius=14 flex=1 min-width=0 padding="12px 0px" border="none" background-color="transparent" color="ink.primary" font-size=15
         ::placeholder
           color="ink.secondary"
       if query != ""

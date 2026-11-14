@@ -25,7 +25,7 @@ component Client
       for e in stack(nav) key=e.id
         if e.name == "home"
           column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width) : "none") navigationScroll="home-scroll" position="absolute" inset=0
-            Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins.filter(id => ["cinematic", "index", "editorial", "example"].includes(id)), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=home.liveAvailable, canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
+            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? home.skins.filter(id => ["cinematic", "index", "editorial", "example"].includes(id)) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
               scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") flex=1 min-height=0
                 if failed(auth)
                   text t("ui.yourServerCouldNotBeReachedReopenVelaWhenTheConnectionIsRestored") padding=32 role="status"
@@ -51,7 +51,7 @@ component Client
                             SearchSurface(skin=activeSkin, query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=homeSmall, still=still, selectTitle=selectTitle, observe=observe)
         if e.name == "live"
           column navigationKey=`${e.id}` navigationPresentation="fullscreen" position="absolute" inset=0 background-color=pageColor color=inkColor
-            Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins.filter(id => ["cinematic", "index", "editorial", "example"].includes(id)), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=home.liveAvailable, canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
+            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? home.skins.filter(id => ["cinematic", "index", "editorial", "example"].includes(id)) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome)
               scroll flex=1 min-height=0
                 if failed(guide)
                   text t("ui.theGuideCouldnTBeLoadedCheckYourConnection") role="status" padding=32

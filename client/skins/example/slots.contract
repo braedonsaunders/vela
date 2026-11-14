@@ -28,19 +28,20 @@ component Shell
     column height="100%" color="ink.primary" background-color="surface.page" gap=12
       row role="navigation" aria-label=t("ui.mainNavigation") gap=12 padding=16 flex-wrap="wrap"
         text t("example.name") role="heading" aria-level=1
-        button press=home
-          text t("ui.home")
-        button press=search
-          text t("ui.search")
-        if canLive
-          button press=live
-            text t("ui.live")
-        select value=skin change=chooseSkin aria-label=t("ui.appearance")
-          for id in skins key=id
-            option value=id
-              text skinLabel(id)
-        button press=signOut
-          text t("ui.signOut")
+        if viewer != ""
+          button press=home
+            text t("ui.home")
+          button press=search
+            text t("ui.search")
+          if canLive
+            button press=live
+              text t("ui.live")
+          select value=skin change=chooseSkin aria-label=t("ui.appearance")
+            for id in skins key=id
+              option value=id
+                text skinLabel(id)
+          button press=signOut
+            text t("ui.signOut")
       children
 
 component TitleCard
