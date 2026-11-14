@@ -1128,3 +1128,43 @@ late-frame count0, worst video/audio-master lag8.416ms. Native view and browser
 were closed afterward. This qualifies the relative-URL fix locally; a further
 real original attempt still requires fresh owner-idle clearance. No HDR, physical
 lip-sync, real-title seek or production beta pass is claimed.
+
+### Real original-file qualification — Street Fighter, successful cleared run
+
+A single owner-idle HTTPS lab session used the same-origin verified runtime
+`01f921f13df02482`, normal viewer authentication/negotiate and the broker's
+original-file grant. This was a diagnostic native-view host, not a packaged
+`/watch` UI drive. It stayed on `primary`, original direct/file, WebGPU, with
+WebCodecs H.264 and decoded AAC PCM. No fallback switch occurred.
+
+| Measurement | Result |
+|---|---|
+| Broker plan |190.5ms from Start |
+| First GPU-presented frame |1,154.3ms from trusted Start |
+| Pre-seek sample |63 decoded/59 presented,0 dropped, position2.433833s |
+| Video vs audio-master timing |Worst lag8.917ms before seek;7.963ms after; late count0, clock resets0 |
+| Audio |AAC PCM output, physical clock correlation present,0 underflow/overflow/dropped PCM frames |
+| Authorized seek |Target60s/buffering immediate; broker command200; first new GPU frame175.8ms; source generation1 retained, seek generation2 |
+| Resumed sample |61.208627s,33 decoded/29 presented,0 dropped, fallback count0 |
+| Final sample |97.442635s,903 frames in seek generation2,0 dropped; original/direct/WebGPU retained |
+| Observations and cleanup |144 observations200; stop200/ended; revoke200; videos removed; dedicated Chrome closed |
+
+These are software queue/clock measurements, not physical lip-sync, CPU/GPU power,
+HDR or surround qualification. Screenshot `client/.exact/lab-27-universal-direct.png`
+retains actual decoded imagery but exposed a canvas-position integration defect:
+the upstream canvas CSS was outside the native view's shadow root. Vela now
+supplies scoped absolute-overlay/visibility rules inside that root; this keeps
+the custom renderer above the HTML video rather than below it in normal flow.
+
+### One player, default universal admission
+
+The earlier opt-in beta policy is superseded. There is no player toggle or active
+persisted choice. The host removes the obsolete `vela.player.beta` key and always
+runs the exact secure-device/installed-assets probe. Capable devices advertise
+`originalPlayback`; `/watch` passes the negotiated plan to the same `vela-player`
+view, which chooses the original backend when offered. HTTP, unsupported device,
+unsupported source, or failed universal start uses internal automatic fallback;
+there is no user-facing old/new backend selector. Data negotiation serializes
+capability changes before playback requests. Production packaging requires the
+verified shared runtime payload; the qualified runtime key remains
+`01f921f13df02482` because this policy/layout change affects the host only.
