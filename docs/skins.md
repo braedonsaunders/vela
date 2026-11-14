@@ -11,7 +11,7 @@ optional artwork, metadata and capabilities to these presentation records.
 | Slot | Props and content |
 | --- | --- |
 | Shell | `viewer:string`, `skin:string`, `skins:string[]`, `chooseSkin(string)`, `signOut()`; one children slot containing the route scroll surface |
-| Home | `model:HomeModel`, `query:string`, `small:bool`, `still:bool`, `selectTitle(id,receipt)`, `observe(receipt,IntersectionObserverEntry)`; children slot holds the foundation search field |
+| Home | `model:HomeModel`, `query:string`, `small:bool`, `still:bool`, `selectTitle(id,kind,receipt)`, `observe(receipt,IntersectionObserverEntry)`; children slot holds the foundation search field |
 | SearchSurface | `query:string`, `model:SearchModel`, `descriptive:SearchModel`, `ai:SearchModel`, `generation:number`, `loading:bool`, `error:bool`, `aiAvailable:bool`, `small`, `still`, `selectTitle`, `observe` |
 | Row | `row:FeedRow`, `small`, `still`, `selectTitle`, `observe` |
 | TitleCard | `card:Card`, `small`, `still`, `selectTitle`, `observe` |
@@ -51,8 +51,7 @@ cinematic skin intentionally renders immediate artwork only.
 Colors are Tamber tokens in `client/app.tamber`. A skin may add its own namespaced
 tokens and choose entirely different layout, typography and geometry. Asset access
 continues to follow server viewer policy. Unknown skin IDs fall back to cinematic.
-The v0 root exposes selection state; alternate compiled slot dispatch is added when
-the next skin package exists, rather than pretending a color change is another skin.
+Both compiled skins are dispatched by the foundation state.
 
 Auth slots: `SignIn` receives username, password, passwordAvailable, quickAvailable, error, busy and editUsername/editPassword/submit/quick actions. `QuickConnect` receives model:QuickModel, error:string and cancel action. Foundation owns auth state, silent webCode redemption, URL cleanup, server poll interval and terminal grant handling.
 
@@ -60,9 +59,27 @@ PlaybackModel carries `sessionId` and serialized `planJson`. The foundation seed
 engine from uiPlayback, then uses matching sessionEvents stream plans. Stream failures
 retry at most three times. Chrome never interprets the transport or invents recovery.
 
-## Contract gaps
+## Complete slot API
 
-- Shell has no viewport input or route actions, so Index cannot recompose its rail for mobile or offer Search, Live and Library navigation honestly. Add responsive state and supported navigation actions, with capability information for unavailable destinations.
-- The Home child is a fully styled cinematic search field. A search field slot receiving query and edit action would let each skin control its presentation while keeping search behaviour shared.
-- Detail is wrapped in a root-owned modal, preventing Index from choosing a true split-pane route. Expose presentation selection to the root while preserving the navigation stack and focus restoration.
-- Cards expose a preformatted facts string rather than structured metadata, limiting accessible table columns; expose stable display fields alongside the formatted string.
+Shell also receives `viewport:Viewport`, `canLive:bool`, `canLibrary:bool` and
+`home()`, `search()`, `live()`, `library()` navigation callbacks. Omit unsupported
+destinations using capabilities; Library currently has no route and stays hidden.
+`SearchField(query:string, edit(string))` owns all field presentation. Home's content
+slot receives that skin's SearchField, with shared behaviour in the foundation.
+
+Each skin exports `detailPresentation(width:number):string` (modal, fullscreen or
+empty for ordinary stack presentation) and `detailSplit(width:number):string`
+(none or the split list width). The root binds these to Exact navigation attributes.
+Index splits at 900 pixels; cinematic uses an overlay and mobile fullscreen sheet.
+Retained stack entries preserve browse state, scroll and focus across both.
+
+Card additionally exposes year:number (0 means absent), rating:string,
+durationSeconds:number (0 means absent) and genres:string[]. Keep facts for compact
+labels; use structured fields for semantic columns. Selection callbacks now take
+`selectTitle(id, kind, receipt)` so title, channel and collection identities route
+correctly. Collection contents are supplied in server order via uiCollection.
+
+Foundation dispatch supports installed cinematic and index packages, with editorial
+as an alias for index for older mock bootstrap responses. Unknown skin IDs use
+cinematic. The persisted picker overrides the server bootstrap default. Switching
+skins preserves the foundation's current query, navigation and receipt deduplication.

@@ -1,0 +1,15 @@
+component PlayerChrome
+  props
+    titleId: string
+    command: action
+  view
+    row padding=20 gap=14 flex-wrap="wrap" justify-content="center" background-color="surface.raised"
+      button press=command("play") aria-label="Play" buttonStyle="bordered"
+        text "Play"
+      button press=command("pause") aria-label="Pause" buttonStyle="bordered"
+        text "Pause"
+      button press=command("pip") aria-label="Picture in picture" buttonStyle="bordered"
+        text "Picture in picture"
+      button press=command("fullscreen") aria-label="Fullscreen" buttonStyle="bordered"
+        text "Fullscreen"
+
