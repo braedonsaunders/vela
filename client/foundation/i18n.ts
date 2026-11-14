@@ -27,7 +27,7 @@ export function msg(key: string, params: Record<string, string | number> = {}): 
 }
 export function number(value: number, options?: Intl.NumberFormatOptions): string { return new Intl.NumberFormat(current.formatLocale, options).format(value); }
 export function plural(value: number): string {
-  return typeof Intl.PluralRules === 'function' ? new Intl.PluralRules(current.formatLocale).select(value) : value === 1 ? 'one' : 'other';
+  return typeof Intl.PluralRules === 'function' ? new Intl.PluralRules(current.resolvedLocale).select(value) : value === 1 ? 'one' : 'other';
 }
 export function minute(value: number): string { return number(value, { style: 'unit', unit: 'minute', unitDisplay: 'short' }); }
 export function time(value: number): string { return new Intl.DateTimeFormat(current.formatLocale, { timeZone: current.timeZone, hour: 'numeric', minute: '2-digit' }).format(value); }
