@@ -219,7 +219,7 @@ component Home
                     text t("ui.exploreTitle") font-size=15
                     image "symbol:forward-chevron" width=14 height=14 aria-hidden=true
         column padding-top=(small ? 26 : 34) padding-bottom=(small ? 10 : 14) padding-left=(small ? "16px" : "max(28px, 4vw)") padding-right=(small ? "16px" : "max(28px, 4vw)") align-items="center" -exact-layout-transition=(still ? "none" : "640ms ease-out")
-          column width="100%" max-width=720 animation=enter(still, 560)
+          column width="100%" max-width=720 animation=enter(still, 420)
             children
       if not searching
         column position="relative" padding-top=(small ? 14 : 22)

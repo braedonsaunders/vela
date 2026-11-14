@@ -130,7 +130,8 @@ style PrimaryPill
   :focus-visible
     box-shadow = "0px 0px 0px 2px var(--surface.page), 0px 0px 0px 4px var(--brand.warm)"
   :disabled
-    opacity = 0.42
+    background-color = "cinematic.control-hover"
+    color = "ink.quiet"
 
 style GhostPill
   border = "1px solid var(--cinematic.glass-edge)"

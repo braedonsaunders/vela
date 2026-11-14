@@ -52,7 +52,16 @@ tokens and choose entirely different layout, typography and geometry. Asset acce
 continues to follow server viewer policy. Unknown skin IDs fall back to cinematic.
 Both compiled skins are dispatched by the foundation state.
 
-Auth slots: `SignIn` receives username, password, passwordAvailable, quickAvailable, error, busy and editUsername/editPassword/submit/quick actions. `QuickConnect` receives model:QuickModel, error:string and cancel action. Foundation owns auth state, silent webCode redemption, URL cleanup, server poll interval and terminal grant handling.
+Auth slots (cinematic only, used for every skin before sign-in): `AuthStage(still)` is the
+ambient stage with one children slot; inside it the foundation shows `AuthNotice(kind, still)`
+(`offline`, `connecting`, `redeeming` a web code), `SignIn` (username, password,
+passwordAvailable, quickAvailable, error, busy, still and editUsername/editPassword/submit/quick
+actions) or `QuickConnect` (model:QuickModel, error, still, cancel). Foundation owns auth
+state, silent webCode redemption, URL cleanup, server poll interval and terminal grant handling.
+
+`Status(skin, kind, message, small, still)` presents waiting and failure moments the
+foundation reports (`home`, `detail` skeletons, `loading`, `failure`). Cinematic draws
+shimmer skeletons and designed failures; Index and example keep a plain status line.
 
 PlaybackModel carries `sessionId` and serialized `planJson`. The foundation seeds the
 engine from uiPlayback, then uses matching sessionEvents stream plans. Stream failures
@@ -128,3 +137,29 @@ the host's real media capability probe as well as its trusted page origin.
 Home also receives active:bool from foundation route/page visibility. Cinematic
 preview pauses for covered routes as well as search, document hiding and viewport
 exit; a retained home behind a detail cannot keep its preview playing.
+
+## Cinematic design tokens
+
+`client/skins/cinematic/look.contract` is the one source for the official skin's motion,
+type and surfaces; reuse it rather than writing literals.
+
+- Curves: `glide()` (arrivals and lifts, `cubic-bezier(0.16, 1, 0.3, 1)`), `sweep()`
+  (symmetric drifts), `release()` (exits). Durations: `quick()` 180, `base()` 360,
+  `slow()` 640, `reveal()` 1100 ms.
+- Ready-made animations taking `still`: `enter(still, delayMs)` (rise into place;
+  dissolve when still), `open(still)` (surface zooming open), `expose(still)` (artwork
+  exposing from black), `drift(still)` (32 s Ken Burns; none when still), `chrome(still)`
+  (fade + short slide for chrome that shows and hides), `stagger(i, step, cap)`.
+- Exit and layout values must be literals on the JS target: exits use
+  `vanish 320ms ease-in both` (`vanish 160ms linear both` when still); layout moves
+  `640ms ease-out` (`none` when still).
+- Keyframes: rise, dissolve, vanish, pop, open, expose, drift, shimmer, spin, breathe,
+  glow and the aurora set. Import the names you use.
+- Type: `Display`/`DisplayItalic` (Instrument Serif, SIL OFL, bundled under
+  `client/assets/fonts`) for titles; the platform UI face for everything read. `Eyebrow`
+  (11 px, 0.24 em tracking, uppercase) for labels; `Meta` for tabular facts.
+- Surfaces: `Glass`, `PrimaryPill`, `GhostPill`, `IconButton`, `Field` styles; the
+  `Skeleton` component for shimmer placeholders. Colours are `cinematic.*` tokens in
+  `client/app.tamber` (glass, glass-edge, scrims, skeleton, player scrims, ember/tide/dusk).
+- Reduced motion replaces movement with dissolves and holds artwork still; it never
+  removes state changes.
