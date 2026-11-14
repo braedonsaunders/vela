@@ -1,14 +1,13 @@
 /** One local release containing supported static Exact engine builds. Never publishes. */
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { stageUniversalAssets } from './universal-assets';
 import { ENGINES } from '../engine';
 import { finalizeEngineRoot } from './engine-root';
 import { writePwaAssets, pwaIcons } from './pwa-assets';
-const root = resolve(import.meta.dir, '../..'), output = join(homedir(), '.scratch/tmp/vela/release');
+const root = resolve(import.meta.dir, '../..'), output = join(root, '.artifacts/release');
 const assetArgument = process.argv.find(arg => arg.startsWith('--universal-assets='));
 if (process.argv.includes('--universal-assets') || assetArgument === '--universal-assets=') throw new Error('Use --universal-assets=<verified payload directory>');
 const version = (await readFile(join(import.meta.dir, 'VERSION'), 'utf8')).trim();

@@ -36,18 +36,32 @@ function subscribeBetaPlayer(listener) {
 }
 
 // client/player/universal/loader.ts
+function assetLocation() {
+  const descriptor = window.velaUniversalAssets;
+  if (descriptor === undefined)
+    return { base: new URL("./universal/", import.meta.url) };
+  if (!descriptor || typeof descriptor !== "object")
+    throw new Error("Invalid shared original runtime descriptor");
+  const { baseURL, assetKey } = descriptor;
+  if (typeof baseURL !== "string" || typeof assetKey !== "string" || !/^[a-f0-9]{16}$/.test(assetKey))
+    throw new Error("Invalid shared original runtime identity");
+  const base = new URL(baseURL, location.origin);
+  if (base.origin !== location.origin || base.username || base.password || base.search || base.hash || base.pathname !== `/vela/universal/${assetKey}/`)
+    throw new Error("Original runtime assets must use the same-origin immutable base");
+  return { base, assetKey };
+}
 function canAttemptOriginal() {
   return isSecureContext && !!navigator.gpu && typeof VideoFrame === "function" && typeof Worker === "function";
 }
 async function loadOriginalRuntime(options) {
   if (!canAttemptOriginal())
     throw new Error("Secure WebGPU, workers and VideoFrame are required for original playback");
-  const base = new URL("./universal/", import.meta.url);
+  const { base, assetKey } = assetLocation();
   const response = await fetch(new URL("assets.json", base), { signal: AbortSignal.any([options.signal, AbortSignal.timeout(1e4)]), credentials: "same-origin" });
   if (!response.ok)
     throw new Error(`Original runtime assets HTTP ${response.status}`);
   const manifest = await response.json();
-  if (manifest.version !== 1 || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
+  if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
     throw new Error("Original runtime asset identity mismatch");
   options.signal.throwIfAborted();
   const moduleURL = new URL("runtime.js", base);
@@ -72,11 +86,12 @@ async function originalPlaybackCapabilities(signal) {
       clearTimeout(timer);
   }
   signal.throwIfAborted();
-  const response = await fetch(new URL("./universal/assets.json", import.meta.url), { credentials: "same-origin", signal: AbortSignal.any([signal, AbortSignal.timeout(1e4)]) });
+  const { base, assetKey } = assetLocation();
+  const response = await fetch(new URL("assets.json", base), { credentials: "same-origin", signal: AbortSignal.any([signal, AbortSignal.timeout(1e4)]) });
   if (!response.ok)
     return null;
   const manifest = await response.json();
-  if (manifest.version !== 1 || !/^[a-f0-9]{16}$/.test(manifest.assetKey ?? "") || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
+  if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey ?? "") || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
     return null;
   const declaration = manifest.originalPlayback;
   if (!declaration || declaration.version !== 1 || declaration.range !== true || declaration.webgpu !== true)
@@ -1638,13 +1653,13 @@ class PlaybackEngine {
       canCatchUp: this.catchUpTarget() !== null
     };
   }
-  publish() {
+  publish(force = false) {
     if (this.disposed)
       return;
     if (this.pipeline?.audioTrackId)
       this.audio = this.pipeline.audioTrackId;
     const now = performance.now();
-    if (now - this.lastObservation < 250)
+    if (!force && now - this.lastObservation < 250)
       return;
     this.lastObservation = now;
     this.emit({ type: "snapshot", snapshot: this.snapshot() });
@@ -2035,7 +2050,7 @@ class PlaybackEngine {
     const failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
     this.status = "recovering";
     this.failure = failure;
-    this.publish();
+    this.publish(true);
     try {
       const retry = this.backend === "webgpu" ? decoderRetry(failure.message) : null;
       if (retry && this.source?.original && !this.localDecoderRetries.has(this.source.id)) {
@@ -2473,11 +2488,14 @@ function create(tag, element, json, event) {
   surface.style.cssText = "position:relative;width:100%;height:100%";
   surface.append(video);
   root.replaceChildren(surface);
-  const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0, serverError: "", endedReport: "" };
+  const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0, serverError: "", endedReport: "", reportedFailure: "" };
   handle.engine = new PlaybackEngine(video, (value) => {
     event(8, JSON.stringify(value));
     const now = performance.now();
-    if (value.type === "snapshot" && handle.engine.observationAllowed && now - handle.lastReport >= 1000) {
+    const failureKey = value.type === "snapshot" && value.snapshot.failure ? `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}:${value.snapshot.sourceId}:${value.snapshot.failure.kind}:${value.snapshot.failure.message}` : "";
+    if (value.type === "snapshot" && handle.engine.observationAllowed && (now - handle.lastReport >= 1000 || failureKey !== "" && failureKey !== handle.reportedFailure)) {
+      if (failureKey)
+        handle.reportedFailure = failureKey;
       const endedKey = `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}`;
       if (value.snapshot.state === "ended" && handle.endedReport === endedKey)
         return;
@@ -2643,6 +2661,8 @@ function navigateSecurely(handle, props) {
   }
 }
 function updateContext(handle, props) {
+  if (props.betaPlayer === "")
+    handle.betaInput = "";
   if (handle.probe === "beta" && (props.betaPlayer === "true" || props.betaPlayer === "false") && props.betaPlayer !== handle.betaInput) {
     handle.betaInput = props.betaPlayer;
     setBetaPlayer(props.betaPlayer === "true");

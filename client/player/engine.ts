@@ -123,11 +123,11 @@ export class PlaybackEngine {
       reconnecting: this.status === 'recovering' || !!this.pipeline?.retrying,
       delivery: this.pipeline?.delivery ?? 'unknown', canCatchUp: this.catchUpTarget() !== null };
   }
-  private publish() {
+  private publish(force = false) {
     if (this.disposed) return;
     if (this.pipeline?.audioTrackId) this.audio = this.pipeline.audioTrackId;
     const now = performance.now();
-    if (now - this.lastObservation < 250) return;
+    if (!force && now - this.lastObservation < 250) return;
     this.lastObservation = now; this.emit({ type: 'snapshot', snapshot: this.snapshot() });
   }
   private supported(source: Source) {
@@ -327,7 +327,7 @@ export class PlaybackEngine {
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === 'TimeoutError' ? 'network' : 'source';
     const position = this.position();
     const failure: Failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
-    this.status = 'recovering'; this.failure = failure; this.publish();
+    this.status = 'recovering'; this.failure = failure; this.publish(true);
     try {
       const retry = this.backend === 'webgpu' ? decoderRetry(failure.message) : null;
       if (retry && this.source?.original && !this.localDecoderRetries.has(this.source.id)) {

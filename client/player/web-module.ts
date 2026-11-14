@@ -13,7 +13,7 @@ export const roster = { 'vela-player': { snapshot: false }, 'vela-context': { sn
 interface ContextHandle { context: true; disposed: boolean; lastNavigation: string; probe: string; betaInput: string; revision: number; abort: AbortController; cleanup: () => void; event: (kind: number, payload: string) => void }
 interface Handle {
   engine: PlaybackEngine; video: HTMLVideoElement; sessionJson: string; lastCommand: number;
-  endedReport: string; serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
+  endedReport: string; reportedFailure: string; serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
 }
 export function create(tag: string, element: HTMLElement, json: string, event: (kind: number, payload: string) => void): Handle | ContextHandle | PreviewHandle | InstallHandle | ThemeHandle | EngineHandle {
   if (tag === 'vela-engine') return createEngine(json);
@@ -35,11 +35,14 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   const video = document.createElement('video'); video.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:#000';
   const surface = document.createElement('div'); surface.style.cssText = 'position:relative;width:100%;height:100%';
   surface.append(video); root.replaceChildren(surface);
-  const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0, serverError: '', endedReport: '' };
+  const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0, serverError: '', endedReport: '', reportedFailure: '' };
   handle.engine = new PlaybackEngine(video, value => {
     event(8, JSON.stringify(value));
     const now = performance.now();
-    if (value.type === 'snapshot' && handle.engine.observationAllowed && now - handle.lastReport >= 1000) {
+    const failureKey = value.type === 'snapshot' && value.snapshot.failure
+      ? `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}:${value.snapshot.sourceId}:${value.snapshot.failure.kind}:${value.snapshot.failure.message}` : '';
+    if (value.type === 'snapshot' && handle.engine.observationAllowed && (now - handle.lastReport >= 1000 || failureKey !== '' && failureKey !== handle.reportedFailure)) {
+      if (failureKey) handle.reportedFailure = failureKey;
       const endedKey = `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}`;
       if (value.snapshot.state === 'ended' && handle.endedReport === endedKey) return;
       if (value.snapshot.state === 'ended') handle.endedReport = endedKey;
@@ -118,6 +121,7 @@ function navigateSecurely(handle: ContextHandle, props: Record<string, string>) 
 }
 
 function updateContext(handle: ContextHandle, props: Record<string,string>) {
+  if (props.betaPlayer === '') handle.betaInput = '';
   if (handle.probe === 'beta' && (props.betaPlayer === 'true' || props.betaPlayer === 'false') && props.betaPlayer !== handle.betaInput) {
     handle.betaInput = props.betaPlayer; setBetaPlayer(props.betaPlayer === 'true');
   }

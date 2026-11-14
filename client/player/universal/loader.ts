@@ -20,14 +20,27 @@ export interface OriginalRuntimeOptions {
   signal: AbortSignal; onEvent: (event: {type: string}) => void;
   onFailure: (reason: string, position: number) => void;
 }
+/** Production shares an immutable payload across skin engines. Only an absent
+ * descriptor uses diagnostic-relative assets; invalid explicit bases fail closed. */
+function assetLocation(): {base: URL; assetKey?: string} {
+  const descriptor = (window as Window & {velaUniversalAssets?:unknown}).velaUniversalAssets;
+  if (descriptor === undefined) return {base:new URL('./universal/',import.meta.url)};
+  if (!descriptor || typeof descriptor !== 'object') throw new Error('Invalid shared original runtime descriptor');
+  const {baseURL,assetKey} = descriptor as {baseURL?:unknown;assetKey?:unknown};
+  if (typeof baseURL !== 'string' || typeof assetKey !== 'string' || !/^[a-f0-9]{16}$/.test(assetKey)) throw new Error('Invalid shared original runtime identity');
+  const base = new URL(baseURL,location.origin);
+  if (base.origin !== location.origin || base.username || base.password || base.search || base.hash || base.pathname !== `/vela/universal/${assetKey}/`)
+    throw new Error('Original runtime assets must use the same-origin immutable base');
+  return {base,assetKey};
+}
 export function canAttemptOriginal() { return isSecureContext && !!(navigator as Navigator & {gpu?: unknown}).gpu && typeof VideoFrame === 'function' && typeof Worker === 'function'; }
 export async function loadOriginalRuntime(options: Omit<OriginalRuntimeOptions, 'assets'>): Promise<OriginalBackend> {
   if (!canAttemptOriginal()) throw new Error('Secure WebGPU, workers and VideoFrame are required for original playback');
-  const base = new URL('./universal/', import.meta.url);
+  const {base,assetKey} = assetLocation();
   const response = await fetch(new URL('assets.json', base), {signal: AbortSignal.any([options.signal, AbortSignal.timeout(10000)]), credentials:'same-origin'});
   if (!response.ok) throw new Error(`Original runtime assets HTTP ${response.status}`);
   const manifest = await response.json() as {version: number; assetKey: string; upstreamRevision: string};
-  if (manifest.version !== 1 || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== 'a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2') throw new Error('Original runtime asset identity mismatch');
+  if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== 'a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2') throw new Error('Original runtime asset identity mismatch');
   options.signal.throwIfAborted();
   const moduleURL = new URL('runtime.js', base); moduleURL.searchParams.set('v', manifest.assetKey);
   const module = await import(moduleURL.href) as {UniversalRuntime: new (options: OriginalRuntimeOptions) => OriginalBackend};
@@ -46,11 +59,12 @@ export async function originalPlaybackCapabilities(signal: AbortSignal): Promise
     if (!adapter) return null;
   } finally { if (timer) clearTimeout(timer); }
   signal.throwIfAborted();
-  const response = await fetch(new URL('./universal/assets.json',import.meta.url),
+  const {base,assetKey} = assetLocation();
+  const response = await fetch(new URL('assets.json',base),
     {credentials:'same-origin',signal:AbortSignal.any([signal,AbortSignal.timeout(10000)])});
   if (!response.ok) return null;
   const manifest = await response.json() as {version?:number;assetKey?:string;upstreamRevision?:string;originalPlayback?:ClientCapabilities['originalPlayback']};
-  if (manifest.version !== 1 || !/^[a-f0-9]{16}$/.test(manifest.assetKey ?? '') ||
+  if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey ?? '') ||
       manifest.upstreamRevision !== 'a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2') return null;
   const declaration = manifest.originalPlayback;
   if (!declaration || declaration.version !== 1 || declaration.range !== true || declaration.webgpu !== true) return null;
