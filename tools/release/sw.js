@@ -1,7 +1,7 @@
 // __VELA_SHELL__ is replaced by the packager with exact URLs and SHA-256 values.
 const shell = __VELA_SHELL__;
 const cacheName = `vela-shell-${shell.version}-${shell.digest}`;
-const assets = new Map(shell.files.map(file => [new URL(file.url, self.location.origin).href, file]));
+const assets = new Map([...shell.files, ...(shell.engineFiles ?? [])].map(file => [new URL(file.url, self.location.origin).href, file]));
 const hash = async bytes => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
 self.addEventListener('install', event => event.waitUntil((async () => {
   const cache = await caches.open(cacheName);
@@ -28,7 +28,7 @@ self.addEventListener('fetch', event => {
     event.respondWith(fetch(request).catch(async () => await (await caches.open(cacheName)).match(shell.offlineUrl) || new Response('<h1>You’re offline</h1><p>Reconnect to browse and play.</p>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } })));
     return;
   }
-  // Exact allowlist only. Fixed-name app entry/styles/native modules and API/art/media bypass.
+  // Exact immutable allowlist only. Engine assets are cached only on request; no other engine is prefetched.
   if (!assets.has(url.href)) return;
   event.respondWith((async () => {
     const cache = await caches.open(cacheName), cached = await cache.match(request);
