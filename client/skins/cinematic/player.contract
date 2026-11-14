@@ -70,7 +70,7 @@ component PlayerChrome
             text "+10" font-size=14
           column gap=4 flex=1 min-width=100
             text `${model.path} · ${model.quality}` font-size=12 font-weight=550 testId="player-quality"
-            text (model.lockedQuality == "" ? "AUTO QUALITY" : "QUALITY LOCKED") font-size=8 letter-spacing="1.5px" color="ink.quiet"
+            text (model.backend == "file" ? "ORIGINAL QUALITY" : model.backend == "native-hls" ? "BROWSER MANAGED" : model.qualities.length <= 1 ? "FIXED QUALITY" : model.lockedQuality == "" ? "AUTO QUALITY" : "QUALITY LOCKED") font-size=8 letter-spacing="1.5px" color="ink.quiet"
           if model.chapters.length > 0
             select value="" change=chapter aria-label="Chapters" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
               option value=""

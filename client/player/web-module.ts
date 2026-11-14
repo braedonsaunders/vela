@@ -52,6 +52,7 @@ function applyCommand(handle: Handle, props: Record<string, string>) {
     if (typeof value === 'string') {
       const decoded = decodeURIComponent(value), base = { id: command.id, type: command.type };
       switch (command.type) {
+        case 'lowDelay': command = { ...base, type: 'lowDelay', enabled: decoded === 'true' }; break;
         case 'seek': command = { ...base, type: 'seek', seconds: Number(decoded) }; break;
         case 'quality': command = { ...base, type: 'quality', renditionId: decoded || null }; break;
         case 'audio': command = { ...base, type: 'audio', trackId: decoded }; break;

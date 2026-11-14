@@ -16,7 +16,7 @@ optional artwork, metadata and capabilities to these presentation records.
 | Row | `row:FeedRow`, `small`, `still`, `selectTitle`, `observe` |
 | TitleCard | `card:Card`, `small`, `still`, `selectTitle`, `observe` |
 | Detail | `model:DetailModel`, `small`, `still`, `play(id)`, `playExtra(id)`, `selectTitle`, `observe` |
-| PlayerChrome | `titleId:string`, `command(kind:string)`; foundation owns plan and engine-event forwarding, chrome sends play/pause/pip/fullscreen commands |
+| PlayerChrome | `model:PlayerView`, `title:string`, `visible:bool`, `small:bool`, `still:bool`, `serverError:string`, `command(kind,value)`, `seek(seconds)`, `editing(bool)`, `close()`; presentation-only cinematic controls over engine observations and server-authorized seeks/path changes |
 | Guide | Initial unavailable placeholder; live worker owns the final guide contract |
 
 Action props are declared `action` in Exact; arguments above document their inferred
@@ -83,3 +83,18 @@ Foundation dispatch supports installed cinematic and index packages, with editor
 as an alias for index for older mock bootstrap responses. Unknown skin IDs use
 cinematic. The persisted picker overrides the server bootstrap default. Switching
 skins preserves the foundation's current query, navigation and receipt deduplication.
+
+PlayerView is declared in `client/foundation/player-models.contract`. It exposes
+actual playable buffer ranges, position, duration, backend/path/quality, available
+track/quality/path options, chapters and supported browser actions. An absent audio
+menu means the backend cannot actually switch the offered tracks. WebVTT menus
+contain only tracks the plan supplies with renderable URLs. Buffering, recovering
+and failed are distinct engine states; server rejection is shown verbatim.
+
+The shared player foundation owns command sequencing, transport authorization,
+keyboard shortcuts (Space/K, J/L or arrows, F), and the 3.5-second chrome idle task.
+Focused controls and paused/recovering playback keep chrome visible. Skins receive
+`still` for reduced motion and disable the opacity transition when it is true.
+Source/seek authorization comes back as a PlaybackPlan; the newest revision wins
+over an older command reply. Controls never claim a local source change when the
+server rejects fallback availability or capacity.
