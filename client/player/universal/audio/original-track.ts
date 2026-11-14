@@ -97,7 +97,9 @@ export async function prepareOriginalAudioSwitch(options: {
         throw new Error(`Original audio speaker mask is unqualified for ${expected.id}`);
       if (actualCodec.startsWith('pcm_') && channels > 2 && !channelMask)
         throw new Error(`Original multichannel PCM speaker positions are unavailable for ${expected.id}`);
-      if (expected.language && normalizeLanguage(expected.language) !== normalizeLanguage(language)) throw new Error(`Original audio language differs for ${expected.id}`);
+      const expectedLanguage = normalizeLanguage(expected.language ?? ''), actualLanguage = normalizeLanguage(language);
+      if (expectedLanguage && actualLanguage && expectedLanguage !== actualLanguage)
+        throw new Error(`Original audio language differs for ${expected.id}`);
       if (index === ordinal) {
         const decoderConfig = await track.getDecoderConfig();
         let nativeSupported = false;
@@ -122,8 +124,10 @@ export async function prepareOriginalAudioSwitch(options: {
   } finally { signal.removeEventListener('abort', abort); input.dispose(); }
 }
 class MetadataReadError extends Error {}
-function normalizeLanguage(value: string): string {
+/** Unknown language metadata cannot contradict a known language on the other side. */
+function normalizeLanguage(value: string): string | null {
   const [language, ...region] = value.trim().toLowerCase().split(/[-_]/);
   const base = ({ en:'eng', fr:'fra', fre:'fra', de:'deu', ger:'deu', es:'spa', it:'ita', pt:'por', ja:'jpn', ko:'kor', zh:'zho', chi:'zho', ru:'rus', nl:'nld', dut:'nld' } as Record<string, string>)[language] ?? language;
+  if (!base || base === 'und' || base === 'unknown' || base === 'unk') return null;
   return [base, ...region].join('-');
 }
