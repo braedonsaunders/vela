@@ -9,7 +9,7 @@ export interface Source {
 export interface PlaybackSession {
   id: string; mediaId: string; edition: string; sources: Source[]; position?: number;
   audioTracks: Track[]; subtitleTracks: Track[]; audioTrackId?: string;
-  subtitleTrackId?: string; live?: boolean; sourceGeneration?: number; seekGeneration?: number;
+  subtitleTrackId?: string; live?: boolean; liveWindowStart?: number; liveMaxDrift?: number; lowDelay?: boolean; sourceGeneration?: number; seekGeneration?: number;
 }
 export type Command = { id: number } & (
   { type: 'play' | 'pause' | 'pip' | 'fullscreen' } |

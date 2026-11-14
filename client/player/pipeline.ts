@@ -31,6 +31,7 @@ export class SegmentPipeline {
   readonly abr = new AdaptiveBitrate();
   current?: Rendition;
   lowDelay = false;
+  liveWindowStart = 0; maxLiveDrift = 45;
   private media?: MediaSource; private objectUrl?: string; private buffer?: SourceBuffer;
   private dropPrevious = { dropped: 0, total: 0 }; private dropRatio = 0;
   private driftPenalty = 0;
@@ -111,8 +112,9 @@ export class SegmentPipeline {
     this.current = rendition; this.onRendition(rendition);
     this.buffer = media.addSourceBuffer(rendition.mime);
     let list = await this.playlist(rendition, signal);
+    if (live) list.segments.forEach(s => { s.start += this.liveWindowStart; });
     if (!live && list.ended) media.duration = list.segments.reduce((sum, s) => sum + s.duration, 0);
-    let next = live ? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find(s => s.start + s.duration > position);
+    let next = live ? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find(s => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
     if (!next) throw new PlaybackFault('Position outside source timeline', 'source');
     let sequence = next.sequence, init = '', first = true;
     // Live sliding manifests are anchored by overlapping sequence, never reset to zero.
@@ -178,9 +180,10 @@ export class SegmentPipeline {
         const gap = this.video.buffered.start(i) - this.video.currentTime;
         if (gap > 0.02 && gap <= 0.25) { this.video.currentTime = this.video.buffered.start(i) + 0.01; break; }
       }
-      if (live && this.lowDelay && this.video.buffered.length) {
+      if (live && this.video.buffered.length) {
         const drift = this.video.buffered.end(this.video.buffered.length - 1) - this.video.currentTime;
-        this.video.playbackRate = drift > 8 ? 1.03 : 1;
+        if (drift > Math.max(this.maxLiveDrift, target + 6)) this.video.currentTime = this.video.buffered.end(this.video.buffered.length - 1) - target;
+        this.video.playbackRate = this.lowDelay && drift > 8 ? 1.03 : 1;
       }
     }
   }

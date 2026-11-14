@@ -212,6 +212,8 @@ class SegmentPipeline {
   abr = new AdaptiveBitrate;
   current;
   lowDelay = false;
+  liveWindowStart = 0;
+  maxLiveDrift = 45;
   media;
   objectUrl;
   buffer;
@@ -345,9 +347,13 @@ class SegmentPipeline {
     this.onRendition(rendition);
     this.buffer = media.addSourceBuffer(rendition.mime);
     let list = await this.playlist(rendition, signal);
+    if (live)
+      list.segments.forEach((s) => {
+        s.start += this.liveWindowStart;
+      });
     if (!live && list.ended)
       media.duration = list.segments.reduce((sum, s) => sum + s.duration, 0);
-    let next = live ? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find((s) => s.start + s.duration > position);
+    let next = live ? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find((s) => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
     if (!next)
       throw new PlaybackFault("Position outside source timeline", "source");
     let sequence = next.sequence, init = "", first = true;
@@ -454,9 +460,11 @@ class SegmentPipeline {
             break;
           }
         }
-      if (live && this.lowDelay && this.video.buffered.length) {
+      if (live && this.video.buffered.length) {
         const drift = this.video.buffered.end(this.video.buffered.length - 1) - this.video.currentTime;
-        this.video.playbackRate = drift > 8 ? 1.03 : 1;
+        if (drift > Math.max(this.maxLiveDrift, target + 6))
+          this.video.currentTime = this.video.buffered.end(this.video.buffered.length - 1) - target;
+        this.video.playbackRate = this.lowDelay && drift > 8 ? 1.03 : 1;
       }
     }
   }
@@ -576,6 +584,7 @@ class PlaybackEngine {
     this.failure = null;
     this.attempted.clear();
     this.recovering = false;
+    this.lowDelay = session.lowDelay ?? false;
     this.audio = session.audioTrackId ?? null;
     this.subtitle = session.subtitleTrackId ?? null;
     const source = this.candidates().find((s) => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
@@ -608,6 +617,8 @@ class PlaybackEngine {
         this.backend = "mse";
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
         pipeline.lowDelay = this.lowDelay;
+        pipeline.liveWindowStart = this.session?.liveWindowStart ?? 0;
+        pipeline.maxLiveDrift = this.session?.liveMaxDrift ?? 45;
         pipeline.abr.manual = this.manualQuality;
         pipeline.run(source.renditions ?? [], position, !!this.session?.live, token.signal).catch((e) => {
           if (this.controller.current(token))
@@ -679,7 +690,7 @@ class PlaybackEngine {
     if (!this.controller.current(token) || this.recovering)
       return;
     this.recovering = true;
-    const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError ? "network" : "source";
+    const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError" ? "network" : "source";
     const position = this.video.currentTime || this.session?.position || 0;
     this.status = "recovering";
     this.failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
@@ -851,6 +862,9 @@ function sessionFromPlan(plan) {
     edition,
     position: plan.positionSeconds,
     live: !!plan.live,
+    liveWindowStart: plan.live?.windowStartSeconds,
+    liveMaxDrift: plan.live?.maxDriftSeconds,
+    lowDelay: plan.live?.mode === "low-delay",
     sourceGeneration: plan.sourceGeneration,
     seekGeneration: plan.seekGeneration,
     audioTrackId: plan.selectedAudioTrackId,
@@ -955,8 +969,8 @@ function setProps(handle, json) {
   applyCommand(handle, props);
 }
 function applyCommand(handle, props) {
-  if (props.command) {
-    const command = JSON.parse(props.command);
+  if (props.playerCommand) {
+    const command = JSON.parse(props.playerCommand);
     if (!Number.isSafeInteger(command.id))
       throw new Error("Command requires integer id");
     if (command.id > handle.lastCommand) {

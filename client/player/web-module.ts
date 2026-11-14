@@ -42,8 +42,8 @@ export function setProps(handle: Handle, json: string) {
   applyCommand(handle, props);
 }
 function applyCommand(handle: Handle, props: Record<string, string>) {
-  if (props.command) {
-    const command = JSON.parse(props.command) as Command;
+  if (props.playerCommand) {
+    const command = JSON.parse(props.playerCommand) as Command;
     if (!Number.isSafeInteger(command.id)) throw new Error('Command requires integer id');
     if (command.id > handle.lastCommand) { handle.lastCommand = command.id; void handle.engine.command(command); }
   }

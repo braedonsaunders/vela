@@ -61,6 +61,7 @@ export class PlaybackEngine {
   async load(session: PlaybackSession) {
     this.controller.start(session.id, session.sourceGeneration, session.seekGeneration); this.resetMedia(); this.session = session;
     this.source = undefined; this.failure = null; this.attempted.clear(); this.recovering = false;
+    this.lowDelay = session.lowDelay ?? false;
     this.audio = session.audioTrackId ?? null; this.subtitle = session.subtitleTrackId ?? null;
     const source = this.candidates().find(s => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) { this.fail({ kind: 'unsupported', message: 'No browser-compatible source for this edition', recoverable: false }); return; }
@@ -78,7 +79,7 @@ export class PlaybackEngine {
       if (source.delivery === 'hls' && !this.video.canPlayType('application/vnd.apple.mpegurl')) {
         this.backend = 'mse';
         const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish());
-        pipeline.lowDelay = this.lowDelay; pipeline.abr.manual = this.manualQuality;
+        pipeline.lowDelay = this.lowDelay; pipeline.liveWindowStart = this.session?.liveWindowStart ?? 0; pipeline.maxLiveDrift = this.session?.liveMaxDrift ?? 45; pipeline.abr.manual = this.manualQuality;
         void pipeline.run(source.renditions ?? [], position, !!this.session?.live, token.signal).catch(e => { if (this.controller.current(token)) void this.recover(e, token); });
       } else {
         this.backend = source.delivery === 'file' ? 'file' : 'native-hls';
@@ -108,7 +109,7 @@ export class PlaybackEngine {
   private async recover(error: unknown, token: Generation) {
     if (!this.controller.current(token) || this.recovering) return;
     this.recovering = true;
-    const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError ? 'network' : 'source';
+    const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === 'TimeoutError' ? 'network' : 'source';
     const position = this.video.currentTime || this.session?.position || 0;
     this.status = 'recovering'; this.failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true }; this.publish();
     try {

@@ -33,7 +33,7 @@ finds `modules/web/index.js` by convention). Do not import the engine from app.t
 Place the view underneath Contract PlayerChrome in a sized overlay. Fullscreen
 must target their shared parent (supplied through the module's container option).
 
-Props are strings: `session` (JSON PlaybackSession), `command` (JSON command
+Props are strings: `session` (JSON PlaybackSession), `playerCommand` (JSON command
 with monotonically increasing `id`). Repeated props never repeat a command.
 Commands: play, pause, seek(seconds), volume(value), audio(trackId),
 subtitle(trackId|null), quality(renditionId|null), lowDelay(enabled), pip,
@@ -108,3 +108,6 @@ alongside engine edits so Exact's stock web command can consume it immediately.
 Native HLS manages its own quality and throughput; manual quality there emits an
 explicit unsupported action. Same-source seek on MSE rebuilds the pipeline,
 retains seek generation, and does not claim a seamless transition.
+
+Exact reserves `command` as a host attribute. The native view prop is
+`playerCommand`; the JSON payload retains its `type` field.
