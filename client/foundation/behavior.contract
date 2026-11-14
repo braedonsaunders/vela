@@ -170,10 +170,10 @@ members Client
   state cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=0)
   derive previewAllowed = auth.authenticated and current(home) and home.trailerPreviewAvailable and top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and not saveData
   derive heroPreviewId = match first(home.hero.slice(heroAt, heroAt + 1)) { case some(h) => h.id, case none => "" }
-  derive previewDesired = (previewAllowed ? (previewTarget != "" ? previewTarget : heroPreviewId) : "")
+  derive previewDesired = (previewAllowed ? (previewTarget != "" ? previewTarget : (home.heroPreviewIds.includes(heroPreviewId) ? heroPreviewId : "")) : "")
   mutation previewFetch as shape CardPreview then acceptPreview
   mutation previewCancelled as shape ReceiptReply queue
-  task previewContext when current(home) key=`${top(nav).name}:${libraryId}:${query}:${page.visibilityState}:${still}:${saveData}:${heroAt}:${auth.authenticated}`
+  task previewContext when current(home) key=`${top(nav).name}:${libraryId}:${query}:${page.visibilityState}:${still}:${saveData}:${heroAt}:${auth.authenticated}:${home.trailerPreviewAvailable}:${home.heroPreviewIds.join(",")}`
     change(clearPreview)
   action clearPreview
     previewTarget = ""
@@ -198,6 +198,16 @@ members Client
       previewRow = ""
       previewRetryAt = 0
       previewGeneration = previewGeneration + 1
+      previewDwellAt = time.epochAtZero + performanceNow() + 700
+      cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
+      send previewCancelled = uiPreviewCancel(previewGeneration)
+  action cancelPreviewOnScroll(x: number, y: number)
+    if previewTarget != "" or previewRow == "@hero"
+      previewTarget = ""
+      previewRow = ""
+      previewRetryAt = 0
+      previewGeneration = previewGeneration + 1
+      previewDwellAt = time.epochAtZero + performanceNow() + 700
       cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
       send previewCancelled = uiPreviewCancel(previewGeneration)
   task previewDwell when previewDesired != "" key=`${previewDesired}:${previewGeneration}`

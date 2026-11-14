@@ -42,7 +42,7 @@ export function homeModel(data: Bootstrap, origin?: string, now?: number, artWid
     } catch { /* Invalid grant: leave preview unavailable. */ }
   }
   return { viewer: data.viewer.name, defaultSkinId: data.defaultSkinId, skins: data.capabilities.skins.map(s => s.id),
-    hero: heroes.map(hero => card(hero.title, hero.receiptToken, origin, artWidth)), previews,
+    hero: heroes.map(hero => card(hero.title, hero.receiptToken, origin, artWidth)), heroPreviewIds: heroes.filter(hero => hero.previewOnFocus === true).map(hero => hero.title.id), previews,
     rows: data.rows.map(row => feedRow(row, origin, artWidth)), nextCursor: data.nextCursor ?? '',
     liveAvailable: data.capabilities.features.liveTV.available, aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available, trailerPreviewAvailable: data.capabilities.features.trailerPreview?.available ?? false };
 }

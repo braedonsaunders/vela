@@ -51,6 +51,7 @@ shape HomeModel
   defaultSkinId: string
   skins: string[]
   hero: Card[]
+  heroPreviewIds: string[]
   previews: HeroPreview[]
   rows: FeedRow[]
   nextCursor: string
