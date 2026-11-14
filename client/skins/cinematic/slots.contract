@@ -482,7 +482,7 @@ component SearchSurface
       if channels.length > 0 or airing.length > 0
         LiveLane(name=t("live.onNow"), small=small, still=still)
           for channel in channels key=`c-${channel.id}`
-            LiveTile(title=(channel.nowTitle != "" ? channel.nowTitle : channel.name), detail=(channel.nowEndLabel != "" ? t("search.live.until", channel=channel.name, time=channel.nowEndLabel) : channel.name), artwork="", logo=channel.logo, mark=channel.name, live=(channel.nowTitle != ""), progress=channel.nowProgress, chip="", enabled=true, small=small, still=still, open=selectTitle(channel.id, "channel", ""))
+            LiveTile(title=(channel.nowTitle != "" ? channel.nowTitle : channel.name), detail=(channel.nowEndLabel != "" ? t("search.live.until", channel=channel.name, time=channel.nowEndLabel) : t("search.live.channel", number=channel.number)), artwork="", logo=channel.logo, mark=channel.name, live=(channel.nowTitle != ""), progress=channel.nowProgress, chip="", enabled=true, small=small, still=still, open=selectTitle(channel.id, "channel", ""))
           for p in airing key=`p-${p.id}`
             LiveTile(title=p.name, detail=t("search.live.until", channel=(p.episode != "" ? `${p.episode} · ${p.channelName}` : p.channelName), time=p.endLabel), artwork=p.artwork, logo=p.channelLogo, mark=p.channelName, live=true, progress=p.progress, chip="", enabled=p.navigable, small=small, still=still, open=openLiveProgramme(p.id))
       if upcoming.length > 0

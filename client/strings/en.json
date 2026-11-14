@@ -403,5 +403,6 @@
   "player.beta.label": "New player (beta)",
   "player.beta.help": "Applies to the next video. Requires a secure connection and WebGPU; unsupported media falls back.",
   "search.live.comingUp": "Coming up",
-  "search.live.until": "{channel} · until {time}"
+  "search.live.until": "{channel} · until {time}",
+  "search.live.channel": "Channel {number}"
 }
