@@ -16,7 +16,7 @@ async function files(dir: string): Promise<string[]> {
 }
 
 /** Keep ESM module URLs canonical; only asset values receive content addresses. */
-export async function externalizeAssets(dist: string) {
+export async function externalizeAssets(dist: string, base = '/vela/') {
   const replacements = new Map<string, string>();
   const assets: { source: string; path: string; bytes: number }[] = [];
   const assetRoot = join(dist, 'assets');
@@ -53,7 +53,7 @@ export async function externalizeAssets(dist: string) {
         } catch { return literal; }
         const name = `inline-${hash(bytes).slice(0, 20)}.${ext}`;
         extracted.set(name, bytes); inlineOccurrences++; inlineSourceBytes += Buffer.byteLength(literal);
-        return `${quote}/vela/assets/${name}${quote}`;
+        return `${quote}${base}assets/${name}${quote}`;
       });
     if (text !== before) await writeFile(path, text);
   }
