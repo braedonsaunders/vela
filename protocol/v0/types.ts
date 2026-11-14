@@ -125,7 +125,8 @@ export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'sourc
   code: string; message: string; retry: { allowed: boolean; afterSeconds?: number; maxAttempts?: number };
   requestId?: ID; currentGenerations?: Generations }
 export interface ErrorResponse { error: ProtocolError }
-export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string }
+export interface LiveGuide { id: ID; name: string }
+export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string; guides?: LiveGuide[] }
 export interface Programme { id: ID; channelId: ID; name: string; summary: string; start: Timestamp; end: Timestamp;
   titleId?: ID; episodeTitle?: string; seasonNumber?: number; episodeNumber?: number; artwork: ArtworkRef[]; rating?: string; genres?: string[] }
 export interface GuideQuery { from: Timestamp; until: Timestamp; channelIds?: ID[]; cursor?: Cursor; limit?: number }

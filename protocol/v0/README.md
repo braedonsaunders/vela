@@ -390,3 +390,16 @@ portrait grants authorized for the current title credit. Neutral `Person.ThumbPa
 and `PersonArtwork` can supply detached known descriptors without a metadata
 lookup or provider refresh. Missing portraits are omitted, including legacy
 name-only director/writer credits; clients leave the portrait empty.
+
+### Named live Guides
+
+`Channel.guides?: LiveGuide[]` carries actual owner-defined Guide memberships,
+in owner order and filtered to the viewer. Each descriptor is `{id,name}`; IDs
+remain stable across rename, and a channel may belong to several Guides. Clients
+use IDs for membership/filter state and deduplicate descriptors by ID for tabs.
+Omission means membership is unknown; an empty array means known no membership.
+`Channel.group` remains the independent provider group string. There is no global
+empty-Guide catalogue or new endpoint; memberships arrive with channel pages.
+These named Guides are channel groupings, separate from `/live/guide` programme
+time windows. The mock includes provider-derived memberships and overlapping
+House picks for its first six channels.
