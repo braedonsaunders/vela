@@ -91,8 +91,12 @@ component TitleCard
       button disabled=(card.kind != "movie" and card.kind != "show" and card.kind != "season" and card.kind != "episode") press=selectTitle(card.id, card.kind, card.receipt) aria-label=`Details for ${card.name}` testId=`title-${card.id}` flex=1 min-width=0 padding=4 border="none" background-color="transparent" color="#22221e" text-align="left"
         text card.name font-size=16 font-weight=600
       if not small
-        text card.kind width=90 font-size=12 color="#55554d"
-      text card.facts width=(small ? 100 : 200) font-size=12 color="#55554d" line-clamp=1
+        text card.kind width=80 font-size=12 color="#55554d"
+        text (card.year > 0 ? `${card.year}` : "—") width=54 font-size=12 color="#55554d"
+        text card.rating width=50 font-size=12 color="#55554d"
+        text card.genres.join(", ") width=150 font-size=12 color="#55554d" line-clamp=1
+      else
+        text card.facts width=100 font-size=12 color="#55554d" line-clamp=1
 
 component Row
   props
