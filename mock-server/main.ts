@@ -80,11 +80,12 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (!p.approved) return json({ status: 'pending' });
     p.result ??= issue(p.device); return json({ status: 'approved', tokens: p.result });
   }
-  const g = authenticate(req);
   if (method === 'POST' && path === '/negotiate') {
-    if (!body.client?.protocolVersions?.includes(0)) fail('request', 'unsupported_version', 'Protocol v0 required');
-    g.client = body.client; return json({ capabilities, client: body.client });
+    if (!body.client?.device?.id || !body.client?.protocolVersions?.includes(0)) fail('request', 'unsupported_version', 'Protocol v0 and device required');
+    if (req.headers.has('authorization')) { const grant = authenticate(req); grant.client = body.client; }
+    return json({ capabilities, client: body.client });
   }
+  const g = authenticate(req);
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
@@ -198,8 +199,8 @@ async function dispatch(req: Request): Promise<Response> {
   if (req.method !== 'POST') return api(req, url, undefined);
   let raw: string, body: any; try { raw = await req.text(); if (raw.length > 262144) fail('request', 'body_too_large', 'Body exceeds 256KiB'); body = JSON.parse(raw); } catch (e) { if (e instanceof Response) throw e; fail('request', 'invalid_json', 'JSON object required'); }
   if (!body || typeof body.idempotencyKey !== 'string' || !body.idempotencyKey || body.idempotencyKey.length > 200) fail('request', 'idempotency_required', 'Nonempty idempotencyKey required');
-  if (!/^\/vela\/v0\/auth\/(sign-in|refresh|device(?:\/poll)?|quick-connect(?:\/poll)?|web-code\/redeem)$/.test(url.pathname)) authenticate(req);
-  const identity = access.get(req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '')?.id ?? body.device?.id ?? 'anonymous';
+  if (url.pathname !== '/vela/v0/negotiate' && !/^\/vela\/v0\/auth\/(sign-in|refresh|device(?:\/poll)?|quick-connect(?:\/poll)?|web-code\/redeem)$/.test(url.pathname)) authenticate(req);
+  const identity = access.get(req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '')?.id ?? body.device?.id ?? body.client?.device?.id ?? 'anonymous';
   const key = `${identity}:${url.pathname}:${body.idempotencyKey}`, old = idempotency.get(key);
   if (old && old.expires > Date.now()) { if (old.body !== raw) fail('conflict', 'idempotency_conflict', 'Key reused with different body'); return (await old.response).clone(); }
   const response = api(req, url, body).catch(e => { if (e instanceof Response) return e; throw e; });

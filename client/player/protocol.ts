@@ -7,7 +7,7 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
   const edition = selected.edition ?? '';
   return {
     id: plan.sessionId, serverControlled: true, selectedSourceId: plan.selectedPathId, mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? '', edition,
-    position: plan.positionSeconds, live: !!plan.live, liveWindowStart: plan.live?.windowStartSeconds, liveEdge: plan.live?.liveEdgeSeconds, liveMaxDrift: plan.live?.maxDriftSeconds, lowDelay: plan.live?.mode === 'low-delay', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+    position: plan.positionSeconds, live: !!plan.channelId, liveWindowStart: plan.live?.windowStartSeconds, liveEdge: plan.live?.liveEdgeSeconds, liveMaxDrift: plan.live?.maxDriftSeconds, lowDelay: plan.live?.mode === 'low-delay', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
     audioTrackId: plan.selectedAudioTrackId, subtitleTrackId: plan.selectedSubtitleTrackId ?? undefined,
     audioTracks: plan.audioTracks.map(t => ({ id: t.id, label: t.name, language: t.language })),
     subtitleTracks: plan.subtitleTracks.filter(t => t.codec.toLowerCase() === 'webvtt' || t.codec.toLowerCase() === 'vtt').map(t => ({ id: t.id, label: t.name, language: t.language, url: t.url })),

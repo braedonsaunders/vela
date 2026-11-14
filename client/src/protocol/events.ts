@@ -9,7 +9,7 @@ const cursors = new Map<string, string>();
 export async function sessionEvents(api: EtherAdapter, origin: string, sessionId: string): Promise<{ planJson: string; sessionId: string }> {
   let snapshot: SessionSnapshot = await api.snapshot(sessionId);
   let revision = snapshot.revision;
-  return api.streamSession(sessionId, cursors.get(sessionId) ?? snapshot.cursor, (event: StreamEvent) => {
+  return api.streamSession(sessionId, cursors.get(sessionId) ?? snapshot.cursor, async (event: StreamEvent) => {
       if (event.type === 'error') throw new Error(event.message || 'Session stream disconnected');
       if (typeof event.data !== 'string') throw new Error('Invalid session event');
       const value = JSON.parse(event.data) as SessionEvent;
@@ -18,12 +18,12 @@ export async function sessionEvents(api: EtherAdapter, origin: string, sessionId
       switch (value.type) {
         case 'snapshot': snapshot = value.snapshot; break;
         case 'plan': snapshot = { ...snapshot, plan: value.plan, cursor: value.cursor, revision: value.revision }; break;
-        case 'ended': snapshot = { ...snapshot, cursor: value.cursor, revision: value.revision }; break;
+        case 'ended': snapshot = { ...snapshot, plan: { ...snapshot.plan, state: 'ended', revision: value.revision }, cursor: value.cursor, revision: value.revision }; break;
         case 'error': throw new Error(value.error.message);
-        default: throw new Error('Unknown session event; refresh snapshot');
+        default: snapshot = await api.snapshot(sessionId); break;
       }
-      revision = value.revision;
-      cursors.set(sessionId, value.cursor);
+      revision = snapshot.revision;
+      cursors.set(sessionId, snapshot.cursor);
       return { planJson: JSON.stringify(mediaPlan(snapshot.plan, origin)), sessionId };
     });
 }

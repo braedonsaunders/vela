@@ -7,7 +7,7 @@ IDs, continuation cursors, receipt tokens and source identities are opaque.
 ## Endpoints
 
 All endpoints require `Authorization: Bearer <accessToken>` except capabilities,
-sign-in, refresh, grant initiation/polling, quick-connect initiation/polling and
+negotiation, sign-in, refresh, grant initiation/polling, quick-connect initiation/polling and
 web-code redemption. Authenticated calls also require `X-Vela-Device-Id: <device.id>`.
 Device identity binds credentials and sessions. All POSTs
 require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
@@ -165,3 +165,16 @@ episodes alongside seasons; child/detail endpoints remain authoritative for
 explicit season navigation. Extra.cachedPlayback is present only for ready cached
 media with a current broker-scoped URL and expiry; metadata availability alone
 never authorizes trailer autoplay. Omit cachedPlayback without that capability.
+
+Negotiation is public discovery: its client field echoes device declarations,
+not a grant of decoding support or owner policy. Playback applies authenticated
+capability policy. The bearer/device-header rule applies to JSON control endpoints;
+artwork and media resources use their own scoped URL grants. Retried mutation
+bodies must use identical serialized JSON within the idempotency scope.
+
+channelId identifies live playback even when no live window is observable. The
+optional live object can report only a mode; omit unknown window/drift fields.
+Mode is the initial player buffering preference, not a server latency guarantee.
+Track.codec describes the delivered track format (for example WebVTT for a VTT
+sidecar), while mediaSummary retains source codec facts. Empty publishedRanges
+means no publication proof was reported; it does not prove a media outage.
