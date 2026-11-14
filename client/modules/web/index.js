@@ -405,6 +405,9 @@ class SegmentPipeline {
     const last = list.segments.at(-1);
     this.publishedEdge = last ? last.start + last.duration : null;
   }
+  streamingAllowed = true;
+  request;
+  detachStreaming;
   media;
   objectUrl;
   buffer;
@@ -416,6 +419,10 @@ class SegmentPipeline {
     this.onRendition = onRendition;
   }
   dispose() {
+    this.detachStreaming?.();
+    this.detachStreaming = undefined;
+    this.request?.abort();
+    this.request = undefined;
     if (this.buffer?.updating) {
       try {
         this.buffer.abort();
@@ -511,6 +518,20 @@ class SegmentPipeline {
     if (!playable.length)
       throw new PlaybackFault("No supported segmented codec", "source");
     const media = this.media = new MS;
+    this.streamingAllowed = !("streaming" in media) || !!media.streaming;
+    const start = () => {
+      this.streamingAllowed = true;
+    };
+    const stop = () => {
+      this.streamingAllowed = false;
+      this.request?.abort(new DOMException("Browser paused managed media loading", "AbortError"));
+    };
+    media.addEventListener("startstreaming", start);
+    media.addEventListener("endstreaming", stop);
+    this.detachStreaming = () => {
+      media.removeEventListener("startstreaming", start);
+      media.removeEventListener("endstreaming", stop);
+    };
     this.video.disableRemotePlayback = true;
     this.objectUrl = URL.createObjectURL(media);
     this.video.src = this.objectUrl;
@@ -553,7 +574,7 @@ class SegmentPipeline {
     while (!signal.aborted) {
       const ahead = bufferAhead(this.video);
       const target = live ? this.lowDelay ? 6 : 18 + this.driftPenalty : 30;
-      if (ahead >= target || "streaming" in media && !media.streaming) {
+      if (ahead >= target || !this.streamingAllowed) {
         await delay(250, signal);
         continue;
       }
@@ -619,7 +640,7 @@ class SegmentPipeline {
       }
       this.segmentStarted = performance.now();
       this.segmentDuration = next.duration;
-      const request = new AbortController;
+      const request = this.request = new AbortController;
       const abort = () => request.abort();
       signal.addEventListener("abort", abort, { once: true });
       let abandon;
@@ -635,6 +656,8 @@ class SegmentPipeline {
         });
       } catch (error) {
         cancelled(signal);
+        if (!this.streamingAllowed && request.signal.aborted)
+          continue;
         if (!abandon)
           throw request.signal.reason instanceof PlaybackFault ? request.signal.reason : error;
         rendition = abandon;
@@ -644,6 +667,8 @@ class SegmentPipeline {
         init = "";
         continue;
       } finally {
+        if (this.request === request)
+          this.request = undefined;
         this.segmentStarted = null;
         clearTimeout(timeout);
         signal.removeEventListener("abort", abort);
@@ -706,6 +731,7 @@ class PlaybackEngine {
     this.video = video;
     this.emit = emit;
     this.fullscreenContainer = fullscreenContainer;
+    video.crossOrigin = "anonymous";
     video.playsInline = true;
     video.controls = false;
     video.preload = "auto";
@@ -753,7 +779,7 @@ class PlaybackEngine {
       strategy: this.source?.strategy ?? null,
       backend: this.backend,
       renditionId: this.pipeline?.current?.id ?? null,
-      capabilities: { pip: !!document.pictureInPictureEnabled && !!this.video.requestPictureInPicture, fullscreen: !!this.fullscreenContainer.requestFullscreen || !!this.video.webkitEnterFullscreen, audioSwitch: (this.video.audioTracks?.length ?? 0) > 1 },
+      capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: (this.session?.audioTracks.length ?? 0) > 1 && !!this.session?.audioTracks.every((t) => !!this.nativeAudio(t.id)) },
       lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
       position: Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0,
@@ -823,7 +849,8 @@ class PlaybackEngine {
   useNativeHls(source) {
     const native = !!this.video.canPlayType("application/vnd.apple.mpegurl");
     const segmented = !!source.renditions?.some((r) => mediaSourceClass()?.isTypeSupported(r.mime));
-    return native && (!segmented || navigator.vendor === "Apple Computer, Inc.");
+    const managed = "ManagedMediaSource" in globalThis;
+    return native && (!segmented || navigator.vendor === "Apple Computer, Inc." && !managed);
   }
   candidates() {
     const priority = { direct: 0, remux: 1, transcode: 2 };
@@ -1032,16 +1059,40 @@ class PlaybackEngine {
       this.emit({ type: "error", failure: { kind: "action", message: e instanceof Error ? e.message : String(e), recoverable: true } });
     }
   }
+  nativeAudio(id) {
+    const tracks = Array.from(this.video.audioTracks ?? []);
+    const byId = tracks.find((t) => t.id === id);
+    if (byId)
+      return byId;
+    const preference = this.session?.audioTracks.find((t) => t.id === id);
+    if (!preference?.language)
+      return;
+    const language = (value) => {
+      try {
+        return Intl.getCanonicalLocales(value)[0]?.split("-")[0] ?? "";
+      } catch {
+        return "";
+      }
+    };
+    const wanted = language(preference.language);
+    const matches = wanted ? tracks.filter((t) => language(t.language) === wanted) : [];
+    return matches.length === 1 ? matches[0] : undefined;
+  }
   applyNativeAudio() {
-    const tracks = this.video.audioTracks;
-    if (!tracks || !this.audio)
-      return false;
-    const selected = Array.from(tracks).find((t) => t.id === this.audio);
+    const selected = this.audio ? this.nativeAudio(this.audio) : undefined;
     if (!selected)
       return false;
-    for (const track of Array.from(tracks))
+    for (const track of Array.from(this.video.audioTracks ?? []))
       track.enabled = track === selected;
     return true;
+  }
+  pipAvailable() {
+    if (this.video.disablePictureInPicture)
+      return false;
+    return !!document.pictureInPictureEnabled && !!this.video.requestPictureInPicture || !!this.video.webkitSetPresentationMode && !!this.video.webkitSupportsPresentationMode?.("picture-in-picture");
+  }
+  fullscreenAvailable() {
+    return !!document.fullscreenEnabled && !!this.fullscreenContainer.requestFullscreen || !!this.video.webkitEnterFullscreen && this.video.webkitSupportsFullscreen !== false;
   }
   applySubtitle() {
     this.track?.remove();
@@ -1162,13 +1213,24 @@ class PlaybackEngine {
             this.video.playbackRate = 1;
           break;
         case "pip":
-          if (!document.pictureInPictureEnabled || !this.video.requestPictureInPicture)
+          if (!this.pipAvailable())
             throw new Error("Picture-in-picture is unavailable");
-          await this.video.requestPictureInPicture();
+          if (document.pictureInPictureElement === this.video)
+            await document.exitPictureInPicture();
+          else if (document.pictureInPictureEnabled && this.video.requestPictureInPicture)
+            await this.video.requestPictureInPicture();
+          else
+            this.video.webkitSetPresentationMode?.("picture-in-picture");
           break;
         case "fullscreen":
-          if (this.fullscreenContainer.requestFullscreen)
+          if (!this.fullscreenAvailable())
+            throw new Error("Fullscreen is unavailable");
+          if (document.fullscreenElement === this.fullscreenContainer)
+            await document.exitFullscreen();
+          else if (document.fullscreenEnabled && this.fullscreenContainer.requestFullscreen)
             await this.fullscreenContainer.requestFullscreen();
+          else if (this.video.webkitDisplayingFullscreen)
+            this.video.webkitExitFullscreen?.();
           else if (this.video.webkitEnterFullscreen)
             this.video.webkitEnterFullscreen();
           else

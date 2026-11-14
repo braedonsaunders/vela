@@ -46,11 +46,13 @@ export class SegmentPipeline {
     this.publishedStart = list.segments[0]?.start ?? null;
     const last = list.segments.at(-1); this.publishedEdge = last ? last.start + last.duration : null;
   }
+  private streamingAllowed = true; private request?: AbortController; private detachStreaming?: () => void;
   private media?: MediaSource; private objectUrl?: string; private buffer?: SourceBuffer;
   private dropPrevious = { dropped: 0, total: 0 }; private dropRatio = 0;
   private driftPenalty = 0;
   constructor(private video: HTMLVideoElement, private onRendition: (r: Rendition) => void) {}
   dispose() {
+    this.detachStreaming?.(); this.detachStreaming = undefined; this.request?.abort(); this.request = undefined;
     if (this.buffer?.updating) { try { this.buffer.abort(); } catch {} }
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     this.buffer = undefined; this.media = undefined; this.objectUrl = undefined;
@@ -113,6 +115,11 @@ export class SegmentPipeline {
     const playable = ladder.filter(r => MS.isTypeSupported(r.mime));
     if (!playable.length) throw new PlaybackFault('No supported segmented codec', 'source');
     const media = this.media = new MS();
+    this.streamingAllowed = !('streaming' in media) || !!(media as MediaSource & { streaming: boolean }).streaming;
+    const start = () => { this.streamingAllowed = true; };
+    const stop = () => { this.streamingAllowed = false; this.request?.abort(new DOMException('Browser paused managed media loading', 'AbortError')); };
+    media.addEventListener('startstreaming', start); media.addEventListener('endstreaming', stop);
+    this.detachStreaming = () => { media.removeEventListener('startstreaming', start); media.removeEventListener('endstreaming', stop); };
     // ManagedMediaSource requires disabling remote playback before attachment.
     this.video.disableRemotePlayback = true;
     this.objectUrl = URL.createObjectURL(media); this.video.src = this.objectUrl;
@@ -135,7 +142,7 @@ export class SegmentPipeline {
     while (!signal.aborted) {
       const ahead = bufferAhead(this.video);
       const target = live ? (this.lowDelay ? 6 : 18 + this.driftPenalty) : 30;
-      if (ahead >= target || ('streaming' in media && !(media as MediaSource & { streaming: boolean }).streaming)) { await delay(250, signal); continue; }
+      if (ahead >= target || !this.streamingAllowed) { await delay(250, signal); continue; }
       const quality = this.video.getVideoPlaybackQuality?.();
       if (quality) {
         const total = quality.totalVideoFrames - this.dropPrevious.total;
@@ -171,7 +178,7 @@ export class SegmentPipeline {
       if (next.gap) { this.upstreamGap = true; throw new PlaybackFault('Publisher marked segment unavailable (EXT-X-GAP)', 'source'); }
       if (next.init !== init) { await this.append(await this.bytes(next.init, signal), signal); init = next.init; }
       this.segmentStarted = performance.now(); this.segmentDuration = next.duration;
-      const request = new AbortController();
+      const request = this.request = new AbortController();
       const abort = () => request.abort(); signal.addEventListener('abort', abort, { once: true });
       let abandon: Rendition | undefined;
       let bytes: ArrayBuffer;
@@ -183,9 +190,10 @@ export class SegmentPipeline {
         });
       } catch (error) {
         cancelled(signal);
+        if (!this.streamingAllowed && request.signal.aborted) continue;
         if (!abandon) throw request.signal.reason instanceof PlaybackFault ? request.signal.reason : error;
         rendition = abandon; list = await this.playlist(rendition, signal); this.current = rendition; this.onRendition(rendition); init = ''; continue;
-      } finally { this.segmentStarted = null; clearTimeout(timeout); signal.removeEventListener('abort', abort); }
+      } finally { if (this.request === request) this.request = undefined; this.segmentStarted = null; clearTimeout(timeout); signal.removeEventListener('abort', abort); }
       await this.append(bytes, signal);
       if (first) { this.video.currentTime = live ? Math.max(next.start, position) : position; first = false; }
       sequence++;

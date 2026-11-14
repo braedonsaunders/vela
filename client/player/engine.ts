@@ -3,7 +3,7 @@ import { SessionController, cancelled, delay, type Generation } from './session'
 import { mediaSourceClass, PlaybackFault, SegmentPipeline } from './pipeline';
 
 interface NativeAudioTrack { id: string; language: string; enabled: boolean }
-type ExtendedVideo = HTMLVideoElement & { audioTracks?: ArrayLike<NativeAudioTrack>; webkitEnterFullscreen?: () => void };
+type ExtendedVideo = HTMLVideoElement & { audioTracks?: ArrayLike<NativeAudioTrack>; webkitEnterFullscreen?: () => void; webkitExitFullscreen?: () => void; webkitSupportsFullscreen?: boolean; webkitDisplayingFullscreen?: boolean; webkitSupportsPresentationMode?: (mode: string) => boolean; webkitSetPresentationMode?: (mode: string) => void };
 /** Browser host only. This module must never enter Exact's data-module bundle. */
 export class PlaybackEngine {
   readonly controller = new SessionController();
@@ -17,7 +17,7 @@ export class PlaybackEngine {
   private wantsPlay = false; private lowDelay = false; private manualQuality: string | null = null;
   private track?: HTMLTrackElement; private lastObservation = 0;
   constructor(readonly video: ExtendedVideo, private emit: (event: EngineEvent) => void, private fullscreenContainer: HTMLElement = video) {
-    video.playsInline = true; video.controls = false; video.preload = 'auto';
+    video.crossOrigin = 'anonymous'; video.playsInline = true; video.controls = false; video.preload = 'auto';
     for (const [name, handler] of Object.entries({
       playing: () => { this.status = 'playing'; this.failure = null; },
       pause: () => { if (!['loading', 'recovering', 'failed'].includes(this.status)) this.status = 'paused'; },
@@ -38,7 +38,7 @@ export class PlaybackEngine {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? null,
-      capabilities: { pip: !!document.pictureInPictureEnabled && !!this.video.requestPictureInPicture, fullscreen: !!this.fullscreenContainer.requestFullscreen || !!this.video.webkitEnterFullscreen, audioSwitch: (this.video.audioTracks?.length ?? 0) > 1 }, lockedQuality: this.manualQuality,
+      capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: (this.session?.audioTracks.length ?? 0) > 1 && !!this.session?.audioTracks.every(t => !!this.nativeAudio(t.id)) }, lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
       position: Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0,
       duration: Number.isFinite(this.video.duration) ? this.video.duration : null,
@@ -86,7 +86,8 @@ export class PlaybackEngine {
   private useNativeHls(source: Source) {
     const native = !!this.video.canPlayType('application/vnd.apple.mpegurl');
     const segmented = !!source.renditions?.some(r => mediaSourceClass()?.isTypeSupported(r.mime));
-    return native && (!segmented || navigator.vendor === 'Apple Computer, Inc.');
+    const managed = 'ManagedMediaSource' in globalThis;
+    return native && (!segmented || navigator.vendor === 'Apple Computer, Inc.' && !managed);
   }
   private candidates() {
     const priority = { direct: 0, remux: 1, transcode: 2 };
@@ -190,13 +191,31 @@ export class PlaybackEngine {
     try { await this.video.play(); if (this.controller.current(token)) { this.status = 'playing'; this.publish(); } }
     catch (e) { if (!this.controller.current(token)) return; this.emit({ type: 'error', failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true } }); }
   }
+  private nativeAudio(id: string): NativeAudioTrack | undefined {
+    const tracks = Array.from(this.video.audioTracks ?? []);
+    const byId = tracks.find(t => t.id === id); if (byId) return byId;
+    const preference = this.session?.audioTracks.find(t => t.id === id);
+    if (!preference?.language) return undefined;
+    const language = (value: string) => { try { return Intl.getCanonicalLocales(value)[0]?.split('-')[0] ?? ''; } catch { return ''; } };
+    const wanted = language(preference.language);
+    const matches = wanted ? tracks.filter(t => language(t.language) === wanted) : [];
+    // A language proves identity only when exactly one native track matches.
+    return matches.length === 1 ? matches[0] : undefined;
+  }
   private applyNativeAudio() {
-    const tracks = this.video.audioTracks;
-    if (!tracks || !this.audio) return false;
-    const selected = Array.from(tracks).find(t => t.id === this.audio);
+    const selected = this.audio ? this.nativeAudio(this.audio) : undefined;
     if (!selected) return false;
-    for (const track of Array.from(tracks)) track.enabled = track === selected;
+    for (const track of Array.from(this.video.audioTracks ?? [])) track.enabled = track === selected;
     return true;
+  }
+  private pipAvailable() {
+    if (this.video.disablePictureInPicture) return false;
+    return !!document.pictureInPictureEnabled && !!this.video.requestPictureInPicture ||
+      !!this.video.webkitSetPresentationMode && !!this.video.webkitSupportsPresentationMode?.('picture-in-picture');
+  }
+  private fullscreenAvailable() {
+    return !!document.fullscreenEnabled && !!this.fullscreenContainer.requestFullscreen ||
+      !!this.video.webkitEnterFullscreen && this.video.webkitSupportsFullscreen !== false;
   }
   private applySubtitle() {
     this.track?.remove(); this.track = undefined;
@@ -255,10 +274,15 @@ export class PlaybackEngine {
           this.subtitle = command.trackId; this.applySubtitle(); break;
         case 'lowDelay': this.lowDelayOverride = command.enabled; this.lowDelay = command.enabled; if (this.pipeline) this.pipeline.lowDelay = command.enabled; if (!command.enabled) this.video.playbackRate = 1; break;
         case 'pip':
-          if (!document.pictureInPictureEnabled || !this.video.requestPictureInPicture) throw new Error('Picture-in-picture is unavailable');
-          await this.video.requestPictureInPicture(); break;
+          if (!this.pipAvailable()) throw new Error('Picture-in-picture is unavailable');
+          if (document.pictureInPictureElement === this.video) await document.exitPictureInPicture();
+          else if (document.pictureInPictureEnabled && this.video.requestPictureInPicture) await this.video.requestPictureInPicture();
+          else this.video.webkitSetPresentationMode?.('picture-in-picture'); break;
         case 'fullscreen':
-          if (this.fullscreenContainer.requestFullscreen) await this.fullscreenContainer.requestFullscreen();
+          if (!this.fullscreenAvailable()) throw new Error('Fullscreen is unavailable');
+          if (document.fullscreenElement === this.fullscreenContainer) await document.exitFullscreen();
+          else if (document.fullscreenEnabled && this.fullscreenContainer.requestFullscreen) await this.fullscreenContainer.requestFullscreen();
+          else if (this.video.webkitDisplayingFullscreen) this.video.webkitExitFullscreen?.();
           else if (this.video.webkitEnterFullscreen) this.video.webkitEnterFullscreen();
           else throw new Error('Fullscreen is unavailable'); break;
       }
