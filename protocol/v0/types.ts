@@ -55,7 +55,7 @@ export interface Chapter { id: ID; name: string; startSeconds: number; endSecond
 /** Verified source stream facts only; omitted when streams are estimated or unknown. */
 export interface MediaSummary { video: { codec?: string; width?: number; height?: number; bitDepth?: number; colorTransfer?: string; dolbyVisionProfile?: number }[]; audio: { codec?: string; channels?: number; language?: string }[] }
 export interface TitleDetail { title: Title; canPlay?: boolean; seasons?: Title[]; episodes?: Title[];
-  extras: Extra[]; chapters: Chapter[]; crew?: { name: string; role?: string }[]; mediaSummary?: MediaSummary; cast: { name: string; role?: string; artwork?: ArtworkRef }[] }
+  extras: Extra[]; chapters: Chapter[]; crew?: { name: string; role?: string; artwork?: ArtworkRef }[]; mediaSummary?: MediaSummary; cast: { name: string; role?: string; artwork?: ArtworkRef }[] }
 export type RowEntry = { id: ID; receiptToken: string } & (
   { kind: 'title'; title: Title } | { kind: 'channel'; channel: Channel } |
   { kind: 'collection' | 'playlist' | 'directory'; name: string; artwork: ArtworkRef[]; targetId: ID });

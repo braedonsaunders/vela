@@ -384,3 +384,9 @@ classified error model. `DELETE /sessions/:id/audio-fallback/:audioId` accepts
 facts. Missing facts are omitted. Explicit false DV presence flags and compatibility
 ID0 are preserved; absence is not proof of a compatible base layer. These facts
 are admission input for the original-file decoder, not a promise of support.
+
+Cast and crew credits may each carry `artwork?: ArtworkRef`. Emit only known
+portrait grants authorized for the current title credit. Neutral `Person.ThumbPath`
+and `PersonArtwork` can supply detached known descriptors without a metadata
+lookup or provider refresh. Missing portraits are omitted, including legacy
+name-only director/writer credits; clients leave the portrait empty.
