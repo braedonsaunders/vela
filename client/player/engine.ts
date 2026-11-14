@@ -1,3 +1,4 @@
+import { decoderRetry, type DecoderRetry } from './universal/retry';
 import { canAttemptOriginal, loadOriginalRuntime, type OriginalBackend } from './universal/loader';
 import { codecKnown } from './model';
 import type { Command, EngineEvent, Failure, LiveSnapshot, PlaybackSession, Snapshot, Source } from './model';
@@ -13,6 +14,7 @@ export class PlaybackEngine {
   readonly controller = new SessionController();
   private session?: PlaybackSession; private source?: Source; private pipeline?: SegmentPipeline;
   private original?: OriginalBackend;
+  private localDecoderRetries = new Set<string>();
   private originalClosing: Promise<void> = Promise.resolve();
   private status: Snapshot['state'] = 'idle'; private backend: Snapshot['backend'] = null;
   private audioPreference?: string;
@@ -146,6 +148,7 @@ export class PlaybackEngine {
   }
   async load(session: PlaybackSession) {
     if (!this.timer) this.timer = setInterval(() => { this.checkWaiting(); this.publish(); }, 1000);
+    if (session.id !== this.session?.id || session.sourceGeneration !== this.controller.source || session.seekGeneration !== this.controller.seek) this.localDecoderRetries.clear();
     const pending = this.pendingSwitch;
     const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && ((pending.source + 1 === session.sourceGeneration && pending.seek === session.seekGeneration) || (pending.source === session.sourceGeneration && pending.seek + 1 === session.seekGeneration));
     const position = handoff ? Math.max(pending.position, this.position()) : session.position ?? 0;
@@ -230,7 +233,7 @@ export class PlaybackEngine {
     this.video.pause(); this.pipeline?.dispose(); this.pipeline = undefined;
     this.track?.remove(); this.track = undefined; this.video.removeAttribute('src'); this.video.load(); this.video.playbackRate = 1;
   }
-  private async activate(source: Source, position: number, recovery = false, initial = false) {
+  private async activate(source: Source, position: number, recovery = false, initial = false, retry?: DecoderRetry) {
     this.startupDeadlineMs = source.renditions?.some(r => !codecKnown(r)) ? 60000 : 45000;
     this.resumePosition = position; this.waitSince = performance.now(); this.lastAdvance = this.waitSince; this.lastPosition = position; this.everPlayed = false;
     const token = this.controller.changeSource(!initial); this.resetMedia(); this.source = source;
@@ -243,7 +246,7 @@ export class PlaybackEngine {
         this.backend = 'webgpu'; this.startupDeadlineMs = 65000;
         const parent = this.video.parentElement;
         if (!(parent instanceof HTMLDivElement)) throw new Error('Original renderer surface is missing');
-        const original = await loadOriginalRuntime({ surface:{container:parent,video:this.video}, signal:token.signal,
+        const original = await loadOriginalRuntime({ surface:{container:parent,video:this.video}, signal:token.signal, retry,
           onFailure: reason => { if (this.controller.current(token)) void this.recover(new PlaybackFault(reason,'decoder'),token); },
           onEvent: event => {
             if (!this.controller.current(token) || !this.original) return;
@@ -326,6 +329,13 @@ export class PlaybackEngine {
     const failure: Failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
     this.status = 'recovering'; this.failure = failure; this.publish();
     try {
+      const retry = this.backend === 'webgpu' ? decoderRetry(failure.message) : null;
+      if (retry && this.source?.original && !this.localDecoderRetries.has(this.source.id)) {
+        this.localDecoderRetries.add(this.source.id);
+        this.recovering = false;
+        // Local decoder replacement retains the broker's source/seek identity.
+        await this.activate(this.source, position, true, true, retry); return;
+      }
       // Requests already retry twice; source handoff is bounded by plan length.
       await delay(300, token.signal);
       // A delayed recovery must not fail media that has since genuinely resumed.

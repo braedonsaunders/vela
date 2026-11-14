@@ -11,6 +11,7 @@ import { gzipSync } from 'node:zlib';
 
 const root = resolve(import.meta.dir, '../..');
 const committed = process.argv.includes('--committed');
+if (process.argv.some(arg => arg.startsWith('--universal-assets'))) throw new Error('Use release/build.ts for shared universal assets');
 const mapReport = process.argv.includes('--map-report');
 const engine = process.argv[process.argv.indexOf('--engine') + 1];
 if (!process.argv.includes('--engine') || !/^[a-z][a-z0-9-]*$/.test(engine)) throw new Error('Use build.ts to produce the multi-engine release');

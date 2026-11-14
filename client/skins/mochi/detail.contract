@@ -15,10 +15,20 @@ component Detail
     playExtra: action
     selectTitle: action
     observe: action
-  derive selectedSeason = match first(model.title) { case some(t) => (t.kind == "season" ? t.id : match first(model.seasons) { case some(s) => s.id, case none => "" }), case none => "" }
+  // The foundation's current season is the one its episodes belong to. A picked tab
+  // lights at once and holds only until the foundation answers with any new season,
+  // so Back and other navigation always show the foundation's choice.
+  state pickedSeason = ""
+  state pickedFrom = ""
+  derive episodesSeason = match first(model.episodes) { case some(e) => e.seasonId, case none => "" }
+  derive pending = pickedSeason != "" and pickedSeason != episodesSeason and episodesSeason == pickedFrom
+  derive selectedSeason = (pending ? pickedSeason : episodesSeason != "" ? episodesSeason : match first(model.title) { case some(t) => (t.kind == "season" ? t.id : match first(model.seasons) { case some(s) => s.id, case none => "" }), case none => "" })
   derive upNext = match first(model.episodes.filter(e => not e.played)) { case some(e) => [e], case none => [] }
   action pickSeason(id: string)
-    selectTitle(id, "season", "")
+    if id != selectedSeason
+      pickedFrom = episodesSeason
+      pickedSeason = id
+      selectTitle(id, "season", "")
   view
     column gap=(small ? 34 : 46) padding-bottom=72 color="mochi.ink" font-family="Fredoka, ui-rounded, system-ui, sans-serif"
       for title in model.title key=title.id
@@ -86,7 +96,7 @@ component Detail
                 if episode.facts != ""
                   text episode.facts font-size=13 color="mochi.ink-soft"
               PlayButton(label=(episode.progressSeconds > 0 ? t("ui.resumeEpisode") : t("ui.playEpisode")), accessible=(episode.progressSeconds > 0 ? t("ui.resumeTitle", title=episode.name) : t("ui.playTitle", title=episode.name)), small=true, still=still, press=play(episode.id))
-          column gap=(small ? 12 : 14)
+          column gap=(small ? 12 : 14) aria-busy=pending opacity=(pending ? 0.5 : 1) transition="opacity 200ms linear"
             for episode, i in model.episodes key=episode.id
               EpisodeCard(episode=episode, small=small, still=still, play=play, selectTitle=selectTitle, delay=min(i, 8) * 40)
       if model.extras.length > 0
@@ -170,7 +180,7 @@ style SeasonPill
   flex-shrink = 0
   cursor = "pointer"
   :hover
-    background-color = "mochi.lavender-soft"
+    scale = 1.05
   :active
     -exact-press-scale = 0.94
   :focus-visible

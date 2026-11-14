@@ -1,5 +1,5 @@
 use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, CardPreview, cardName, skinLabel from "../../foundation/models.contract"
-use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill, FadeImage, GhostPill from "./look.contract"
+use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill, FadeImage, GhostPill, BetaSwitch from "./look.contract"
 use Wordmark, Pulse from "./auth.contract"
 use SkinPicker, skinManifest from "../../foundation/skin-picker.contract"
 
@@ -27,6 +27,8 @@ component Shell
     secureBusy: bool
     secureError: string
     goSecure: action
+    beta: bool
+    toggleBeta: action
   slot
   state menuOpen = false
   derive compact = viewport.width < 640
@@ -102,6 +104,7 @@ component Shell
                 column gap=2 text-align="left"
                   text t("secure.action") font-size=14 color="ink.primary"
                   text (secureError != "" ? secureError : secureOrigin) font-size=11 color=(secureError != "" ? "brand.warm" : "ink.quiet") line-clamp=1
+          BetaSwitch(on=beta, toggle=toggleBeta, still=still)
           vela-install pwaAction="install" buttonLabel=t("pwa.install")
           vela-install pwaAction="update" buttonLabel=t("pwa.update")
           button press=leaveSession class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
@@ -435,42 +438,65 @@ component SearchSurface
     loading: bool
     error: bool
     aiAvailable: bool
+    descriptiveState: string
+    aiState: string
     small: bool
     still: bool
     selectTitle: action
     observe: action
+  // Several words read as a description, not a name: an empty answer is then about the
+  // mood, never "nothing by that name".
+  derive describing = query.trim().split(" ").filter(w => w != "").length > 1 and descriptiveState != "off"
+  derive vibes = (descriptiveState == "ready" ? descriptive.items : [])
+  derive titlesFound = not loading and not error and model.items.length > 0
+  derive aiRunning = aiState == "loading" or (aiState == "ready" and (ai.aiStatus == "queued" or ai.aiStatus == "running"))
+  derive aiFailed = aiState == "failed" or (aiState == "ready" and ai.aiStatus == "failed")
+  derive aiShown = aiAvailable and (aiRunning or aiFailed or (aiState == "ready" and ai.aiStatus == "complete"))
   view
     column position="relative" gap=(small ? 18 : 26) padding-bottom=72 animation=(still ? "dissolve 240ms linear both" : "rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both")
       column padding-left=gutter(small) padding-right=gutter(small) gap=6
         text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 class=Display font-size=(small ? 32 : 46) line-clamp=2
-      if error
+      if loading
+        column
+          text t("ui.findingTitles") role="status" position="absolute" width=1 height=1 overflow="hidden" opacity=0
+          RowSkeleton(small=small, still=still)
+      else if titlesFound
+        Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
+      else if descriptiveState == "loading" or vibes.length > 0 or aiRunning
+        // The title lane came up empty but a slower lane is still answering; its own state shows below.
+        column
+      else if error
         EmptyState(icon="symbol:alert", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"), still=still)
+      else if describing and descriptiveState == "failed"
+        EmptyState(icon="symbol:alert", title=t("search.moodUnavailable"), message=t("search.moodUnavailableMessage"), still=still)
+      else if describing
+        EmptyState(icon="symbol:search", title=t("search.noMood"), message=t("search.noMoodMessage"), still=still)
       else
-        if loading
-          column
-            text t("ui.findingTitles") role="status" position="absolute" width=1 height=1 overflow="hidden" opacity=0
-            RowSkeleton(small=small, still=still)
-        else
-          if model.items.length == 0
-            EmptyState(icon="symbol:search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"), still=still)
-          else
-            Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-        if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
-          column animation=enter(still, 120)
-            Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-        if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
-          column gap=10 animation=enter(still, 160)
-            row gap=10 align-items="center" padding-left=gutter(small) padding-right=gutter(small)
-              image "symbol:sparkles" width=18 height=18 color="brand.warm" aria-hidden=true
-              text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 class=Display font-size=(small ? 26 : 30)
-            if ai.aiStatus == "queued" or ai.aiStatus == "running"
-              row gap=12 align-items="center" padding-left=gutter(small) padding-right=gutter(small) role="status"
-                Pulse(still=still)
-                text t("ui.exploringYourDescription") color="ink.secondary" font-size=14
-            if ai.items.length > 0
-              Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-            if ai.aiStatus == "failed"
-              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="ink.secondary" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
+        EmptyState(icon="symbol:search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"), still=still)
+      if descriptiveState == "loading" and not loading
+        row gap=12 align-items="center" padding-left=gutter(small) padding-right=gutter(small) role="status" animation=enter(still, 80)
+          Pulse(still=still)
+          text t("search.lookingForVibe") color="ink.secondary" font-size=15
+      if vibes.length > 0
+        column animation=enter(still, 120)
+          Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=vibes, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
+      if descriptiveState == "failed" and titlesFound
+        text t("search.moodUnavailableBelowTitles") color="ink.secondary" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
+      if aiShown
+        column gap=10 animation=enter(still, 160)
+          row gap=10 align-items="center" padding-left=gutter(small) padding-right=gutter(small)
+            image "symbol:sparkles" width=18 height=18 color="brand.warm" aria-hidden=true
+            text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 class=Display font-size=(small ? 26 : 30)
+          if aiRunning
+            row gap=12 align-items="center" padding-left=gutter(small) padding-right=gutter(small) role="status"
+              Pulse(still=still)
+              text t("ui.exploringYourDescription") color="ink.secondary" font-size=14
+          if aiState == "ready" and ai.items.length > 0
+            Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          if aiFailed
+            text (titlesFound ? t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") : t("search.discoveryUnavailable")) color="ink.secondary" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
+          if aiState == "ready" and ai.aiStatus == "complete" and ai.items.length == 0
+            text t("search.discoveryEmpty") color="ink.secondary" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
 
 fn detailPresentation(width: number): string = "fullscreen"
 fn detailSplit(width: number): string = "none"
