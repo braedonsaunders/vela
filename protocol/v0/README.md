@@ -407,6 +407,6 @@ House picks for its first six channels.
 Original-video probes may additionally carry `isInterlaced`, `fieldOrder`
 (`progressive`, `tt`, `bb`, `tb`, `bt`) and `rotation` in degrees. These are actual
 probe facts, not defaults: omit unknown field order/rotation/interlace state and
-preserve explicitly known zero rotation or false interlace. Rotation is passed
-through as probed; decoder admission must use the source convention rather than
-silently guessing its sign or a missing orientation.
+preserve explicitly known zero rotation or false interlace. Rotation is signed counterclockwise degrees from the display matrix, preserved
+without normalization to0–360. For example, positive90 is counterclockwise90;
+missing rotation/matrix is omitted rather than defaulted to zero.
