@@ -2,7 +2,7 @@ import type { Answer, Sources } from '../app.contract.d.ts';
 import type { AISearchJob, ClientCapabilities, Device } from '../wire/v0/types';
 import { EtherAdapter } from './adapter/ether';
 import { SessionCredentials } from './session';
-import { card, entry, homeModel, detailModel } from './discovery/models';
+import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
 import { loadGuide } from './live/guide';
 import { liveStatus } from './live/player';
 import { InteractionQueue } from './telemetry';
@@ -135,6 +135,10 @@ const sources: Sources = {
       await (await session(store)).cancelAI(previous.job.id, { generation: previous.generation, idempotencyKey: `cancel-${previous.epoch}-${previous.generation}` });
     // A start still in flight detects that it was superseded and cancels itself.
     return { accepted: true };
+  },
+  uiRelated: async ([id], store) => {
+    const data = await (await session(store)).rows({ placement: 'detail', titleId: id });
+    return data.items.map(row => feedRow(row, API));
   },
   uiDetail: async ([id], store) => detailModel(await (await session(store)).detail(id), API),
   uiSearch: async ([query, generation, epoch], store) => {

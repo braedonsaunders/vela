@@ -1,4 +1,4 @@
-import type { ArtworkRef, Bootstrap, RowEntry, Title, TitleDetail } from '../../wire/v0/types';
+import type { ArtworkRef, Bootstrap, Row, RowEntry, Title, TitleDetail } from '../../wire/v0/types';
 import { artworkURL } from './artwork';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number, origin?: string): string {
@@ -19,10 +19,13 @@ export function entry(item: RowEntry, origin?: string) {
     poster: art(artwork, 'poster', 400, 600, origin), backdrop: art(artwork, 'backdrop', 1280, 720, origin),
     logo: art(artwork, 'logo', 400, 200, origin), accent: artwork.find(a => a.color)?.color ?? '', receipt: item.receiptToken };
 }
+export function feedRow(row: Row, origin?: string) {
+  return { id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin)) };
+}
 export function homeModel(data: Bootstrap, origin?: string) {
   return { viewer: data.viewer.name, defaultSkinId: data.defaultSkinId, skins: data.capabilities.skins.map(s => s.id),
     hero: data.hero ? [card(data.hero.title, data.hero.receiptToken, origin)] : [],
-    rows: data.rows.map(row => ({ id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin)) })),
+    rows: data.rows.map(row => feedRow(row, origin)),
     liveAvailable: data.capabilities.features.liveTV.available, aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available };
 }
 export function detailModel(data: TitleDetail, origin?: string) {
