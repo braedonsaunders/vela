@@ -37,7 +37,7 @@ export interface LoadedAudioPackage {
 export class AudioPackageRegistry<P extends LoadedAudioPackage> {
   private loaded = new Map<AudioPackageId, P>();
   constructor(private baseURL: string, private loadPackage: (bytes: ArrayBuffer) => Promise<P>,
-    private fetchBytes: typeof fetch = fetch) {}
+    private fetchBytes: typeof fetch = (...args) => globalThis.fetch(...args)) {}
 
   async load(codec: string, signal: AbortSignal): Promise<{ codec: string; source: P } | null> {
     const id = packageForCodec(codec);
