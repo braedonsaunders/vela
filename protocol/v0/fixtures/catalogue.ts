@@ -39,7 +39,8 @@ export function detail(id: string): TitleDetail | undefined {
     extras: extras.filter(e => e.parentId === id), chapters: [], cast: [] };
 }
 // Unbound fixtures are bound to a grant by the HTTP layer before delivery.
-export const featuredTitles = [titles[0]!, titles[15]!, titles[30]!, titles[45]!];
+export const featuredSources = [0, 1, 2, 3].map(row => ({ title: titles[row * 15]!, rowId: `row-${row + 1}` }));
+export const featuredTitles = featuredSources.map(source => source.title);
 const featuredIds = new Set(featuredTitles.map(t => t.id));
 export const rows: Row[] = collections.map(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, previewOnFocus: row % 2 === 0, style: row === 3 ? 'landscape' : 'poster', items: titles.slice(row * 15, row * 15 + 15).filter(t => !featuredIds.has(t.id)).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }));
 const channelNames = ['World News', 'Field & Forest', 'Cinema One', 'Classic Evenings', 'Discovery Lab', 'Coastal Living', 'Matchday', 'The Kitchen', 'Young Explorers', 'Arts & Culture', 'Night Music', 'Open Roads'];
