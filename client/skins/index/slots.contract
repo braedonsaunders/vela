@@ -127,6 +127,8 @@ component Home
     still: bool
     selectTitle: action
     observe: action
+    heroIndex: number
+    pickHero: action
   slot
   view
     column background-color="index.page" color="index.ink"
@@ -134,7 +136,7 @@ component Home
         text t("ui.theViewingIndex") role="heading" aria-level=1 font-size=(small ? 28 : 42) font-weight=700
         children
         if query == ""
-          for hero in model.hero key=hero.id
+          for hero in model.hero.slice(heroIndex, heroIndex + 1) key=hero.id
             column gap=8 padding="16px 0px" intersect=observe(hero.receipt)
               text t("ui.featured") font-size=11 letter-spacing="2px"
               button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) background-color="transparent" color="index.ink" border="none" text-align="left" padding=0

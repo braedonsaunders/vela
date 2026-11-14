@@ -30,14 +30,18 @@ shape FeedRow
   receipt: string
   items: Card[]
 
+// A cached, same-origin, unexpired preview grant for one featured title.
+shape HeroPreview
+  id: string
+  url: string
+  expiresAt: number
+
 shape HomeModel
   viewer: string
   defaultSkinId: string
   skins: string[]
   hero: Card[]
-  trailerReady: bool
-  trailerUrl: string
-  trailerExpiresAt: number
+  previews: HeroPreview[]
   rows: FeedRow[]
   liveAvailable: bool
   aiAvailable: bool

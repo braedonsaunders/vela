@@ -1,103 +1,496 @@
-use GuideModel from "../../live/models.contract"
+use GuideModel, GuideChannel, GuideProgramme from "../../live/models.contract"
+use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, glide, quick, base from "./look.contract"
+
+// The channel guide as an app: a preview of the focused programme, a toolbar of
+// days and filters, then one grid that scrolls on both axes inside its panel with
+// a sticky time ruler and channel rail. Rows and programmes are windowed around
+// the visible port, so a lineup of hundreds scrolls as smoothly as a dozen.
+
+keyframes guideSwap
+  from opacity=0 translate="10px 0px"
+
+keyframes guidePulse
+  0% opacity=1 scale=1
+  70% opacity=0 scale=2.6
+  100% opacity=0 scale=2.6
+
+// Grid geometry, in CSS pixels. Minutes become pixels at `ppm` per minute.
+fn ppm(small: bool): number = (small ? 4 : 6)
+fn rowH(small: bool): number = (small ? 68 : 76)
+fn railW(small: bool): number = (small ? 84 : 248)
+fn rulerH(): number = 44
+fn side(small: bool): string = (small ? "16px" : "max(28px, 4vw)")
+
+// Server genres map to palette slots in the data module; -1 has no colour cue.
+fn toneColor(n: number): string = (n == 0 ? "cinematic.tone-news" : n == 1 ? "cinematic.tone-sport" : n == 2 ? "cinematic.tone-film" : n == 3 ? "cinematic.tone-kids" : n == 4 ? "cinematic.tone-factual" : n == 5 ? "cinematic.tone-drama" : n == 6 ? "cinematic.tone-comedy" : n == 7 ? "cinematic.tone-music" : n == 8 ? "cinematic.tone-life" : "cinematic.tone-other")
+
+fn keep(c: GuideChannel, filter: string): bool = (filter == "all" ? true : filter == "favourites" ? c.favorite : filter == "listed" ? c.listed : c.group == filter)
+
+// The programme under `t` minutes in a row, else the next one, else the last; a row without listings focuses its rail cell.
+fn cellAt(c: GuideChannel, t: number): string = match first(c.programmes.filter(p => p.at + p.span > t)) { case some(p) => `guide-${p.id}`, case none => match first(c.programmes.slice(-1)) { case some(p) => `guide-${p.id}`, case none => `guide-rail-${c.id}` } }
+
+fn metaLine(p: GuideProgramme): string = ([p.airing ? p.remainingLabel : t("ui.startEnd", start=p.startLabel, end=p.endLabel), p.episode].filter(s => s != "").join(" · "))
 
 component Guide
   props
     model: GuideModel
     small: bool
+    still: bool
     watch: action
-    previous: action
-    next: action
-  state selectedChannel = ""
-  state selectedProgramme = ""
-  action selectProgramme(channel: string, programme: string)
-    selectedChannel = channel
-    selectedProgramme = programme
-    focus("programme-sheet")
-  action dismissProgramme
-    let id = selectedProgramme
-    selectedProgramme = ""
-    focus(`guide-${id}`)
-  action sheetKey(k: string)
-    if k == "Escape"
-      preventDefault()
-      dismissProgramme()
-  action move(channel: string, airing: bool, leftId: string, rightId: string, upId: string, downId: string, k: string, event: KeyboardEvent)
+    chooseDay: action
+  state selChannel = ""
+  state selProgramme = ""
+  state filter = "all"
+  state mode = "now"
+  state rowBase = 0
+  state colBase = -1
+  state portW = 1200
+  state portH = 640
+  state focusMin = -1
+  derive rows = model.channels.filter(c => keep(c, filter))
+  derive grid = not small or mode == "guide"
+  derive scale = ppm(small)
+  derive row = rowH(small)
+  derive rail = railW(small)
+  derive width = model.minutes * scale
+  derive col = (colBase < 0 ? floor(model.landing / 30) : colBase)
+  derive firstRow = max(0, rowBase - 6)
+  derive lastRow = min(rows.length, rowBase + ceil(portH / row) + 8)
+  derive winFrom = col * 30 - 150
+  derive winTo = col * 30 + portW / scale + 150
+  // The preview follows selection; with none it shows the first channel airing something.
+  derive heroChannels = (selChannel != "" ? model.channels.filter(c => c.id == selChannel) : model.channels.filter(c => c.nowId != "").slice(0, 1))
+  derive heroFallback = (heroChannels.length == 0 ? model.channels.slice(0, 1) : heroChannels)
+
+  action scrolled(x: number, y: number)
+    let r = floor(y / row / 4) * 4
+    if r != rowBase
+      rowBase = r
+    let c = floor(x / scale / 30)
+    if c != colBase
+      colBase = c
+  action measured(w: number, h: number)
+    portW = w
+    portH = h
+  action pickDay(offset: number)
+    rowBase = 0
+    colBase = -1
+    focusMin = -1
+    selChannel = ""
+    selProgramme = ""
+    chooseDay(offset)
+  action pickFilter(value: string)
+    filter = value
+    rowBase = 0
+  action pickMode(value: string)
+    mode = value
+  action jumpNow
+    if model.day != 0
+      pickDay(0)
+    else
+      selChannel = ""
+      selProgramme = ""
+      if still
+        scrollIntoView("guide-now-anchor", block="nearest", inline="start")
+      else
+        scrollIntoView("guide-now-anchor", block="nearest", inline="start", behavior="smooth")
+  action shift(hours: number)
+    let target = col * 30 + hours * 60
+    if target < 0 and model.day > 0
+      pickDay(model.day - 1)
+    else
+      if target > model.minutes - 60 and model.day < model.days.length - 1
+        pickDay(model.day + 1)
+      else
+        let id = `guide-tick-${max(0, min(model.minutes - 30, target))}`
+        if still
+          scrollIntoView(id, block="nearest", inline="start")
+        else
+          scrollIntoView(id, block="nearest", inline="start", behavior="smooth")
+  action select(channel: string, programme: string)
+    selChannel = channel
+    selProgramme = programme
+  action press(channel: string, programme: string)
+    selChannel = channel
+    selProgramme = programme
+    focusMin = -1
+  action move(index: number, at: number, airing: bool, channel: string, leftId: string, rightId: string, k: string, event: KeyboardEvent)
     if k == "Enter" and airing
       preventDefault()
       watch(channel)
     if not event.metaKey and not event.ctrlKey and not event.altKey
-      if k == "ArrowLeft" or k == "ArrowRight" or k == "ArrowUp" or k == "ArrowDown"
+      if k == "ArrowLeft" and leftId != ""
         preventDefault()
-        let target = (k == "ArrowLeft" ? leftId : (k == "ArrowRight" ? rightId : (k == "ArrowUp" ? upId : downId)))
-        if target != ""
-          focus(target)
+        focusMin = -1
+        focus(leftId)
+      if k == "ArrowRight" and rightId != ""
+        preventDefault()
+        focusMin = -1
+        focus(rightId)
+      if k == "ArrowUp" or k == "ArrowDown" or k == "PageUp" or k == "PageDown"
+        preventDefault()
+        let step = (k == "ArrowUp" ? -1 : k == "ArrowDown" ? 1 : k == "PageUp" ? -6 : 6)
+        let target = max(0, min(rows.length - 1, index + step))
+        let t = (focusMin >= 0 ? focusMin : max(at, col * 30))
+        focusMin = t
+        focus(match first(rows.slice(target, target + 1)) { case some(c) => cellAt(c, t), case none => "" })
+  action railKey(index: number, k: string)
+    if k == "ArrowUp" or k == "ArrowDown"
+      preventDefault()
+      let target = max(0, min(rows.length - 1, index + (k == "ArrowUp" ? -1 : 1)))
+      focus(match first(rows.slice(target, target + 1)) { case some(c) => `guide-rail-${c.id}`, case none => "" })
+    if k == "ArrowRight"
+      preventDefault()
+      focus(match first(rows.slice(index, index + 1)) { case some(c) => cellAt(c, max(col * 30, model.nowMinute)), case none => "" })
+
   view
-    column gap=20 padding="36px 5% 64px" background-image="radial-gradient(ellipse at 85% 0%, var(--cinematic.guide-aura), transparent 65%)"
-      text t("ui.liveTelevision") color="brand.warm" font-size=11 letter-spacing="3px"
-      text t("ui.channelGuide") role="heading" aria-level=1 font-size=(small ? 36 : 52) font-weight=550 letter-spacing="-1px"
-      row gap=12 align-items="center"
-        button press=previous aria-label=t("ui.earlierProgrammes") buttonStyle="bordered"
-          text t("live.previous")
-        button press=next aria-label=t("ui.laterProgrammes") buttonStyle="bordered"
-          text t("live.next")
-      text model.dayLabel color="ink.secondary" font-size=13
-      for channel in model.channels.filter(c => c.id == selectedChannel) key=`sheet-${channel.id}`
-        for programme in channel.programmes.filter(p => p.id == selectedProgramme) key=programme.id
-          column id="programme-sheet" tabindex=-1 key=sheetKey role="region" aria-label=programme.name gap=12 padding=24 border="1px solid var(--surface.line)" border-radius=16 background-color="surface.raised" max-width="35rem"
-            row gap=12 align-items="center"
-              column gap=6 flex=1
-                text channel.name font-size=12 color="brand.warm"
-                text programme.name font-size=24 font-weight=550
-              button press=dismissProgramme aria-label=t("live.close") buttonStyle="bordered"
-                text t("ui.close")
-            text t("ui.startEnd", start=programme.startLabel, end=programme.endLabel) color="ink.secondary" font-size=13
-            if programme.summary != ""
-              text programme.summary color="ink.secondary" line-height=1.6
-            if programme.airing
-              button press=watch(channel.id) buttonStyle="bordered"
-                text t("live.watch")
-            else
-              text (programme.ended ? t("ui.thisProgrammeHasEnded") : t("live.startsIn", minutes=programme.startsInLabel)) color="ink.secondary"
+    column height="100%" min-height=0 box-sizing="border-box" padding-top=(small ? 72 : 96) background-image="radial-gradient(ellipse 70% 60% at 82% 0%, var(--cinematic.guide-aura), transparent 70%)"
+      text t("ui.channelGuide") role="heading" aria-level=1 position="absolute" width=1 height=1 overflow="hidden" opacity=0
+      if grid
+        for c in heroFallback key=`hero-${c.id}`
+          GuideHero(channel=c, programmeId=(selChannel == c.id and selProgramme != "" ? selProgramme : c.nowId), small=small, still=still, watch=watch)
+      // Toolbar: days, the time stepper and filters.
+      row flex-shrink=0 align-items="center" gap=(small ? 10 : 14) padding-left=side(small) padding-right=side(small) padding-top=(small ? 10 : 6) padding-bottom=(small ? 12 : 16) role="toolbar" aria-label=t("live.guideControls")
+        if small
+          row gap=4 padding=4 border-radius=999 background-color="cinematic.control" border="1px solid var(--cinematic.glass-edge)" role="tablist" aria-label=t("live.view")
+            button press=pickMode("now") role="tab" aria-selected=(mode == "now") class=GuideTab background-color=(mode == "now" ? "ink.primary" : "transparent") color=(mode == "now" ? "ink.inverse" : "ink.secondary")
+              text t("live.onNow") font-size=13 font-weight=650
+            button press=pickMode("guide") role="tab" aria-selected=(mode == "guide") class=GuideTab background-color=(mode == "guide" ? "ink.primary" : "transparent") color=(mode == "guide" ? "ink.inverse" : "ink.secondary")
+              text t("live.guide") font-size=13 font-weight=650
+          column flex=1
+        if grid
+          row gap=6 align-items="center" overflow-x="auto" flex-shrink=(small ? 1 : 0) min-width=0 scrollbar-width="none" role="group" aria-label=t("live.day")
+            for d in model.days key=d.offset
+              button press=pickDay(d.offset) aria-pressed=(d.offset == model.day) class=GuideChip background-color=(d.offset == model.day ? "ink.primary" : "cinematic.control") color=(d.offset == model.day ? "ink.inverse" : "ink.primary") border-color=(d.offset == model.day ? "ink.primary" : "cinematic.glass-edge")
+                row gap=6 align-items="baseline"
+                  text d.label font-size=13 font-weight=650 white-space="nowrap"
+                  if not small and d.offset > 1
+                    text d.date font-size=12 opacity=0.62 white-space="nowrap"
+          if not small
+            row gap=6 align-items="center" flex-shrink=0
+              button press=shift(-2) aria-label=t("ui.earlierProgrammes") class=IconButton width=38 height=38 padding=11
+                image "symbol:back" width=16 height=16 aria-hidden=true
+              button press=jumpNow class=GuideChip height=38 padding-left=14 padding-right=16
+                row gap=9 align-items="center"
+                  column position="relative" width=8 height=8 aria-hidden=true
+                    column position="absolute" inset=0 border-radius=4 background-color="cinematic.guide-now" animation=(still ? "none" : "guidePulse 2.2s ease-out infinite")
+                    column position="absolute" inset=0 border-radius=4 background-color="cinematic.guide-now"
+                  text t("live.now") font-size=13 font-weight=650
+              button press=shift(2) aria-label=t("ui.laterProgrammes") class=IconButton width=38 height=38 padding=11
+                image "symbol:forward-chevron" width=16 height=16 aria-hidden=true
+        if not small
+          row flex=1 min-width=0 gap=6 align-items="center" justify-content="flex-end" overflow-x="auto" scrollbar-width="none" role="group" aria-label=t("live.filter") mask-image="linear-gradient(90deg, transparent 0px, black 24px, black 100%)" padding-left=24
+            GuideFilter(label=t("live.allChannels"), value="all", on=(filter == "all"), pick=pickFilter)
+            GuideFilter(label=t("live.favourites"), value="favourites", on=(filter == "favourites"), pick=pickFilter)
+            GuideFilter(label=t("live.withListings"), value="listed", on=(filter == "listed"), pick=pickFilter)
+            if model.groups.length > 0
+              column width=1 height=20 flex-shrink=0 background-color="cinematic.glass-edge" margin="0px 6px"
+              for g in model.groups key=g
+                GuideFilter(label=g, value=g, on=(filter == g), pick=pickFilter)
+        else
+          button press=pickFilter(filter == "favourites" ? "all" : "favourites") aria-pressed=(filter == "favourites") aria-label=t("live.favourites") class=IconButton width=38 height=38 padding=10 color=(filter == "favourites" ? "brand.warm" : "ink.primary")
+            image (filter == "favourites" ? "symbol:star-fill" : "symbol:star") width=17 height=17 aria-hidden=true
+          if grid
+            button press=jumpNow aria-label=t("live.jumpToNow") class=GuideChip height=38 padding-left=12 padding-right=12
+              row gap=7 align-items="center"
+                column width=7 height=7 border-radius=4 background-color="cinematic.guide-now" aria-hidden=true
+                text t("live.now") font-size=13 font-weight=650
       if model.channels.length == 0
-        text t("live.noChannels") role="status" color="ink.secondary"
-      if small
-        for channel in model.channels key=channel.id
-          button press=watch(channel.id) aria-label=t("ui.watchChannel", channel=channel.name) padding=16 border="none" border-radius=12 background-color="surface.raised" color="ink.primary" text-align="left"
-            column gap=6
-              row gap=12 align-items="center"
-                if channel.logo != ""
-                  image channel.logo alt="" width=48 height=30 object-fit="contain" border-radius=4
-                column gap=4
-                  text (channel.favorite ? t("ui.channel", channel=channel.name) : channel.name) font-weight=600
-                  text channel.number color="ink.quiet" font-size=11
-              text (channel.now == "" ? t("ui.noCurrentProgrammeInformation") : t("ui.nowProgramme", programme=channel.now)) color="ink.secondary"
-              if channel.next != ""
-                text t("ui.nextProgramme", programme=channel.next) color="ink.quiet"
+        column flex=1 align-items="center" justify-content="center" gap=10 padding=32
+          text t("live.noChannels") role="status" font-size=17 color="ink.secondary"
       else
-        column width="100%" gap=3 role="grid" aria-label=t("ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch")
-          row height=54 gap=4
-            column width=200 flex-shrink=0
-            column flex=1 min-width=0 position="relative"
-              for tick in model.ticks key=tick.id
-                column position="absolute" left=`${tick.minute / model.minutes * 100}%` top=0 bottom=0 width=1 background-color="surface.line"
-                  text tick.label position="absolute" top=0 right=-60 width=60 font-size=11 color="ink.secondary" text-align="left"
-              if model.nowMinute >= 0
-                column position="absolute" left=`${model.nowMinute / model.minutes * 100}%` bottom=0 pointer-events="none"
-                  text t("live.now") color="ink.inverse" background-color="brand.warm" border-radius=12 padding="4px 8px" font-size=10 font-weight=650
-          for channel in model.channels key=channel.id
-            row height=88 gap=4 role="row"
-              button press=watch(channel.id) aria-label=t("ui.watchChannel", channel=channel.name) box-sizing="border-box" width=200 flex-shrink=0 padding=12 border="none" background-color="surface.raised" color="ink.primary" text-align="left"
+        if rows.length == 0
+          column flex=1 align-items="center" justify-content="center" gap=14 padding=32
+            text t("live.noMatches") role="status" font-size=17 color="ink.secondary"
+            button press=pickFilter("all") class=GhostPill height=42 padding-left=20 padding-right=20
+              text t("live.allChannels") font-size=14
+        else
+          if grid
+            column flex=1 min-height=0 margin-left=(small ? 0 : side(small)) margin-right=(small ? 0 : side(small)) margin-bottom=(small ? 0 : 24) border-radius=(small ? 0 : 20) overflow="hidden" border=(small ? "none" : "1px solid var(--cinematic.glass-edge)") border-top="1px solid var(--cinematic.glass-edge)" background-color="cinematic.guide-panel" box-shadow=(small ? "none" : "0px 40px 120px var(--cinematic.shadow)")
+              for day in [model.day] key=day
+                scroll id="guide-grid" scroll=scrolled resize=measured flex=1 min-height=0 overflow="auto" overscroll-behavior="contain" scroll-padding-left=rail scroll-padding-top=rulerH() role="grid" aria-label=t("ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch")
+                  column position="relative" width=(rail + width) height=(rulerH() + rows.length * row) flex-shrink=0
+                    // Half-hour and hour lines under every row, drawn once.
+                    column position="absolute" left=rail top=rulerH() width=width height=(rows.length * row) aria-hidden=true background-image=`repeating-linear-gradient(90deg, var(--cinematic.guide-hour) 0px 1px, transparent 1px ${30 * scale}px, var(--cinematic.guide-half) ${30 * scale}px ${30 * scale + 1}px, transparent ${30 * scale + 1}px ${60 * scale}px)`
+                    if model.nowMinute >= 0
+                      column position="absolute" left=rail top=rulerH() width=(model.nowMinute * scale) height=(rows.length * row) background-color="cinematic.guide-past" aria-hidden=true pointer-events="none"
+                    // The time ruler: sticky on top, its corner sticky on the left too.
+                    row position="sticky" top=0 z-index=6 height=rulerH() width=(rail + width) background-color="cinematic.guide-ruler" backdrop-filter="blur(18px) saturate(1.3)" border-bottom="1px solid var(--cinematic.glass-edge)"
+                      row position="sticky" left=0 z-index=7 width=rail height=rulerH() flex-shrink=0 box-sizing="border-box" padding-left=(small ? 12 : 20) align-items="center" background-color="cinematic.guide-rail" border-right="1px solid var(--cinematic.glass-edge)"
+                        text (small ? model.days.filter(d => d.offset == model.day).map(d => d.label).join("") : model.dayLabel) class=Eyebrow font-size=10 letter-spacing="0.16em" color="ink.secondary" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+                      column position="relative" width=width height=rulerH() flex-shrink=0
+                        for tick in model.ticks key=tick.id
+                          column id=`guide-tick-${tick.minute}` position="absolute" left=(tick.minute * scale) top=0 bottom=0 width=(30 * scale) justify-content="center" aria-hidden=true
+                            column position="absolute" left=0 bottom=0 width=1 height=(tick.hour ? 10 : 6) background-color=(tick.hour ? "cinematic.glass-edge-strong" : "cinematic.glass-edge")
+                            text tick.label padding-left=10 font-size=12 font-weight=(tick.hour ? 650 : 500) color=(tick.hour ? "ink.primary" : "ink.quiet") font-variant-numeric="tabular-nums" white-space="nowrap"
+                        if model.nowMinute >= 0
+                          column id="guide-now-anchor" position="absolute" left=(max(0, model.nowMinute - 30) * scale) top=0 width=1 height=1 aria-hidden=true
+                          column id="guide-landing" position="absolute" left=(model.landing * scale) top=0 width=1 height=1 aria-hidden=true
+                          row position="absolute" left=(model.nowMinute * scale) bottom=7 translate="-50% 0px" z-index=2 gap=5 align-items="center" padding="3px 8px" border-radius=999 background-color="cinematic.guide-now" box-shadow="0px 4px 18px var(--cinematic.guide-now-glow)" aria-hidden=true
+                            text model.nowLabel font-size=11 font-weight=700 color="ink.primary" font-variant-numeric="tabular-nums" white-space="nowrap"
+                        else
+                          column id="guide-landing" position="absolute" left=(model.landing * scale) top=0 width=1 height=1 aria-hidden=true
+                    // Channel rows, windowed around the port.
+                    for c, i in rows.slice(firstRow, lastRow) key=c.id
+                      row position="absolute" left=0 top=(rulerH() + (firstRow + i) * row) width=(rail + width) height=row role="row" border-bottom="1px solid var(--cinematic.hairline)" box-sizing="border-box"
+                        GuideRail(channel=c, index=(firstRow + i), small=small, rail=rail, row=row, selected=(c.id == selChannel), watch=watch, select=select, railKey=railKey)
+                        if not c.listed
+                          button id=`guide-empty-${c.id}` press=watch(c.id) aria-label=t("ui.watchChannel", channel=c.name) position="sticky" left=(rail + 6) margin-left=6 margin-top=6 height=(row - 13) width=max(120, min(width, portW - rail - 12)) box-sizing="border-box" class=GuideEmpty
+                            row gap=10 align-items="center" padding-left=16
+                              text t("live.noListings") font-size=13 color="ink.quiet"
+                              text "·" font-size=13 color="ink.quiet" aria-hidden=true
+                              text t("live.watch") font-size=13 font-weight=600 color="ink.secondary"
+                        for p in c.programmes.filter(p => p.at + p.span > winFrom and p.at < winTo) key=p.id
+                          GuideCell(programme=p, channel=c, index=(firstRow + i), scale=scale, rail=rail, row=row, small=small, nowMinute=model.nowMinute, selected=(c.id == selChannel and p.id == selProgramme), focusMin=focusMin, select=select, press=press, move=move)
+                    if model.nowMinute >= 0
+                      column position="absolute" left=(rail + model.nowMinute * scale - 1) top=rulerH() width=2 height=(rows.length * row) z-index=2 background-color="cinematic.guide-now" box-shadow="0px 0px 14px var(--cinematic.guide-now-glow)" pointer-events="none" aria-hidden=true
+          else
+            GuideNowList(rows=rows, still=still, watch=watch)
+
+// The preview: the selected programme over its artwork, with progress and Watch.
+component GuideHero
+  props
+    channel: GuideChannel
+    programmeId: string
+    small: bool
+    still: bool
+    watch: action
+  derive picked = channel.programmes.filter(p => p.id == programmeId)
+  view
+    column position="relative" flex-shrink=0 height=(small ? 176 : "clamp(250px, 34vh, 360px)") overflow="hidden"
+      for p in picked key=`art-${p.id}`
+        column position="absolute" inset=0 aria-hidden=true animation=(still ? "none" : `guideSwap 520ms ${glide()} both`)
+          if p.art != ""
+            image p.art alt="" position="absolute" top=0 right=0 width=(small ? "100%" : "64%") height="100%" object-fit="cover" mask-image="linear-gradient(90deg, transparent 0%, black 46%)" opacity=(small ? 0.42 : 0.9)
+          if p.tone >= 0
+            column position="absolute" left="-8%" top="-30%" width="60%" height="140%" background-color=toneColor(p.tone) opacity=0.16 mask-image="radial-gradient(closest-side, black 0%, transparent 100%)"
+      if picked.length == 0 or picked.filter(p => p.art != "").length == 0
+        if channel.logo != "" and not small
+          column position="absolute" right=side(small) top=36 bottom=36 width="min(34vw, 420px)" align-items="center" justify-content="center" border-radius=22 overflow="hidden" class=GuideIdent aria-hidden=true
+            image channel.logo alt="" width="62%" height="62%" object-fit="contain" opacity=0.92
+      column position="absolute" inset=0 pointer-events="none" aria-hidden=true background-image="linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-clear) 38%), linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-mid) 36%, var(--cinematic.scrim-clear) 70%)"
+      column position="relative" height="100%" justify-content="flex-end" box-sizing="border-box" padding-left=side(small) padding-right=side(small) padding-bottom=(small ? 14 : 22) max-width=(small ? "none" : "52rem")
+        for p in picked key=`copy-${p.id}`
+          column gap=(small ? 7 : 10) animation=(still ? "none" : `guideSwap 420ms ${glide()} both`) role="region" aria-label=t("live.selectedProgramme") aria-live="polite"
+            row gap=10 align-items="center" flex-wrap="wrap"
+              if p.airing
+                row gap=6 align-items="center" padding="3px 8px" border-radius=6 background-color="cinematic.guide-now"
+                  column width=6 height=6 border-radius=3 background-color="ink.primary" aria-hidden=true
+                  text t("live.liveBadge") font-size=10 font-weight=750 letter-spacing="0.14em"
+              text `${channel.number} · ${channel.name}` class=Eyebrow font-size=10 letter-spacing="0.18em" color="ink.secondary" white-space="nowrap"
+              if p.genre != ""
+                row gap=6 align-items="center"
+                  column width=6 height=6 border-radius=3 background-color=toneColor(p.tone) aria-hidden=true
+                  text p.genre font-size=12 color="ink.secondary"
+            text p.name class=Display font-size=(small ? 30 : 56) line-clamp=(small ? 1 : 2) text-shadow="0px 4px 40px var(--cinematic.shadow)"
+            row gap=12 align-items="center" flex-wrap="wrap"
+              text t("ui.startEnd", start=p.startLabel, end=p.endLabel) font-size=14 font-weight=600 font-variant-numeric="tabular-nums"
+              if p.airing
+                column width=(small ? 72 : 160) height=3 border-radius=2 background-color="cinematic.track-strong" overflow="hidden" role="progressbar" aria-label=t("live.progress") aria-valuemin=0 aria-valuemax=100 aria-valuenow=p.progress
+                  column height=3 width=`${p.progress}%` background-color="brand.warm" transition=(still ? "none" : `width ${base()}ms ${glide()}`)
+                text p.remainingLabel font-size=13 color="brand.warm" font-variant-numeric="tabular-nums"
+              else
+                text (p.ended ? t("live.ended") : t("live.startsIn", minutes=p.startsInLabel)) font-size=13 color="ink.secondary"
+              if p.episode != "" and not small
+                text p.episode font-size=13 color="ink.secondary"
+              if p.rating != ""
+                text p.rating font-size=10 font-weight=700 letter-spacing="0.06em" padding="2px 6px" border-radius=4 border="1px solid var(--cinematic.glass-edge-strong)" color="ink.secondary"
+            if p.summary != "" and not small
+              text p.summary font-size=15 line-height=1.55 color="ink.secondary" line-clamp=2 max-width="42rem"
+            if not small
+              row gap=12 margin-top=6 align-items="center"
+                button press=watch(channel.id) class=PrimaryPill height=48 padding-left=22 padding-right=26 testId="guide-watch"
+                  row gap=10 align-items="center"
+                    image "symbol:play-fill" width=16 height=16 aria-hidden=true
+                    text (p.airing ? t("live.watch") : t("ui.watchChannel", channel=channel.name)) font-size=15
+        if picked.length == 0
+          column gap=10 animation=(still ? "none" : `guideSwap 420ms ${glide()} both`)
+            text `${channel.number}` class=Eyebrow font-size=10 color="ink.secondary"
+            text channel.name class=Display font-size=(small ? 30 : 56)
+            text (channel.listed ? t("live.nothingNow") : t("live.noListings")) font-size=14 color="ink.secondary"
+            if not small
+              button press=watch(channel.id) class=PrimaryPill height=48 padding-left=22 padding-right=26 align-self="flex-start" margin-top=6
                 row gap=10 align-items="center"
-                  if channel.logo != ""
-                    image channel.logo alt="" width=44 height=28 object-fit="contain" border-radius=4
-                  column gap=5
-                    text (channel.favorite ? t("ui.channel", channel=channel.name) : channel.name) font-size=13 font-weight=600 line-clamp=1
-                    text channel.number color="ink.quiet" font-size=11
-              column flex=1 min-width=0 position="relative" background-color="surface.raised"
-                for programme in channel.programmes key=programme.id
-                  button id=`guide-${programme.id}` key=move(channel.id, programme.airing, programme.leftId, programme.rightId, programme.upId, programme.downId) press=selectProgramme(channel.id, programme.id) aria-label=t("ui.programmeStartToEndChannelProgrammeDetails", programme=programme.name, start=programme.startLabel, end=programme.endLabel, channel=channel.name) position="absolute" left=`${programme.at / model.minutes * 100}%` width=`${programme.span / model.minutes * 100}%` height="100%" box-sizing="border-box" padding=14 border="1px solid var(--surface.line)" background-color=(programme.airing ? "cinematic.guide-airing" : "surface.raised") opacity=(programme.ended ? 0.45 : 1) color="ink.primary" text-align="left" overflow="hidden" border-radius=6
-                    column gap=4
-                      text programme.name font-weight=600 line-clamp=1
-                      text t("ui.startEnd", start=programme.startLabel, end=programme.endLabel) font-size=11 color="ink.secondary"
-                if model.nowMinute >= 0
-                  column position="absolute" left=`${model.nowMinute / model.minutes * 100}%` top=0 bottom=0 width=2 background-color="brand.warm" pointer-events="none"
+                  image "symbol:play-fill" width=16 height=16 aria-hidden=true
+                  text t("live.watch") font-size=15
+
+// A channel's cell in the sticky rail: number, logo or monogram, name and what is on now.
+component GuideRail
+  props
+    channel: GuideChannel
+    index: number
+    small: bool
+    rail: number
+    row: number
+    selected: bool
+    watch: action
+    select: action
+    railKey: action
+  view
+    button id=`guide-rail-${channel.id}` press=watch(channel.id) focus=select(channel.id, "") key=railKey(index) role="rowheader" aria-label=t("ui.watchChannel", channel=channel.name) position="sticky" left=0 z-index=3 flex-shrink=0 width=rail height=(row - 1) box-sizing="border-box" padding-left=(small ? 8 : 16) padding-right=(small ? 8 : 14) class=GuideRailCell background-color=(selected ? "cinematic.guide-rail-on" : "cinematic.guide-rail")
+      row gap=(small ? 0 : 12) align-items="center" width="100%" justify-content=(small ? "center" : "flex-start")
+        if not small
+          text channel.number width=34 flex-shrink=0 text-align="right" font-size=12 color="ink.quiet" font-variant-numeric="tabular-nums"
+        column position="relative" width=(small ? 64 : 58) height=(small ? 40 : 36) flex-shrink=0 border-radius=8 overflow="hidden" align-items="center" justify-content="center" background-color="cinematic.guide-logo" border="1px solid var(--cinematic.hairline)"
+          if channel.logo != ""
+            image channel.logo alt="" width="100%" height="100%" object-fit="cover"
+          else
+            text channel.name.slice(0, 2).toUpperCase() font-size=13 font-weight=750 letter-spacing="0.04em" color="ink.secondary"
+          if small
+            text channel.number position="absolute" right=3 bottom=2 font-size=9 font-weight=700 color="ink.primary" text-shadow="0px 1px 3px var(--cinematic.shadow)" font-variant-numeric="tabular-nums"
+        if not small
+          column gap=4 flex=1 min-width=0
+            row gap=5 align-items="center"
+              text channel.name font-size=14 font-weight=620 color="ink.primary" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
+              if channel.favorite
+                image "symbol:star-fill" width=10 height=10 color="brand.warm" flex-shrink=0 aria-label=t("live.favourite")
+            if channel.nowId != ""
+              column height=2 border-radius=1 background-color="cinematic.track" overflow="hidden" margin-top=3 aria-hidden=true
+                column height=2 width=`${channel.nowProgress}%` background-color="brand.warm"
+              text channel.nowRemaining font-size=11 color="ink.quiet" font-variant-numeric="tabular-nums"
+            else
+              text (channel.listed ? channel.group : t("live.noListings")) font-size=11 color="ink.quiet" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+
+// One programme block on the timeline; its label stays readable beside the rail when it began earlier.
+component GuideCell
+  props
+    programme: GuideProgramme
+    channel: GuideChannel
+    index: number
+    scale: number
+    rail: number
+    row: number
+    small: bool
+    nowMinute: number
+    selected: bool
+    focusMin: number
+    select: action
+    press: action
+    move: action
+  derive w = programme.span * scale
+  derive elapsed = (programme.airing ? max(0, min(w, (nowMinute - programme.at) * scale)) : 0)
+  view
+    button id=`guide-${programme.id}` press=press(channel.id, programme.id) focus=select(channel.id, programme.id) key=move(index, programme.at, programme.airing, channel.id, programme.leftId, programme.rightId) role="gridcell" aria-selected=selected aria-label=t("ui.programmeStartToEndChannelProgrammeDetails", programme=programme.name, start=programme.startLabel, end=programme.endLabel, channel=channel.name) position="absolute" left=(rail + programme.at * scale + 2) top=5 width=max(2, w - 4) height=(row - 11) box-sizing="border-box" padding=0 display="flex" flex-direction="row" align-items="stretch" overflow="clip" text-align="left" class=GuideCell background-color=(programme.airing ? "cinematic.guide-live" : "cinematic.guide-cell") border=(programme.airing ? "1px solid var(--cinematic.guide-live-edge)" : "1px solid var(--cinematic.hairline)") opacity=(programme.ended ? 0.46 : 1) box-shadow=(selected ? "inset 0px 0px 0px 2px var(--brand.warm)" : "none") background-image=(programme.airing ? `linear-gradient(90deg, var(--cinematic.guide-live-fill) 0px, var(--cinematic.guide-live-fill) ${elapsed}px, transparent ${elapsed}px)` : "none")
+      if programme.tone >= 0 and w > 24
+        column position="absolute" left=0 top=10 bottom=10 width=3 border-radius=2 background-color=toneColor(programme.tone) opacity=(programme.ended ? 0.5 : 0.9) aria-hidden=true
+      if programme.airing
+        column position="absolute" left=0 bottom=0 height=2 width=elapsed background-color="brand.warm" aria-hidden=true
+      if w > 30
+        column position="sticky" left=(rail + 12) height="100%" justify-content="center" gap=(small ? 3 : 4) padding-left=12 padding-right=10 box-sizing="border-box" max-width=max(0, w - 4) min-width=0 flex-shrink=1
+          text programme.name font-size=(small ? 13 : 14) font-weight=(programme.airing ? 680 : 600) color="ink.primary" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+          if w > 80
+            text metaLine(programme) font-size=12 color=(programme.airing ? "brand.warm" : "ink.secondary") font-variant-numeric="tabular-nums" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+
+component GuideFilter
+  props
+    label: string
+    value: string
+    on: bool
+    pick: action
+  view
+    button press=pick(value) aria-pressed=on class=GuideChip flex-shrink=0 background-color=(on ? "ink.primary" : "cinematic.control") color=(on ? "ink.inverse" : "ink.primary") border-color=(on ? "ink.primary" : "cinematic.glass-edge")
+      text label font-size=13 font-weight=620 white-space="nowrap"
+
+// Phones: every channel with what is on now and next, one tap from watching.
+component GuideNowList
+  props
+    rows: GuideChannel[]
+    still: bool
+    watch: action
+  view
+    list id="guide-now-list" virtualized=true appearance="none" flex=1 min-height=0 estimated-item-height=98 padding-bottom=24 aria-label=t("live.onNow")
+      for c in rows key=c.id
+        button press=watch(c.id) aria-label=t("ui.watchChannel", channel=c.name) class=GuideNowRow
+          row gap=14 align-items="center" width="100%"
+            column position="relative" width=76 height=48 flex-shrink=0 border-radius=10 overflow="hidden" align-items="center" justify-content="center" background-color="cinematic.guide-logo" border="1px solid var(--cinematic.hairline)"
+              if c.logo != ""
+                image c.logo alt="" width="100%" height="100%" object-fit="cover"
+              else
+                text c.name.slice(0, 2).toUpperCase() font-size=15 font-weight=750 color="ink.secondary"
+            column flex=1 min-width=0 gap=4
+              row gap=6 align-items="center"
+                text c.number font-size=11 color="ink.quiet" font-variant-numeric="tabular-nums"
+                text c.name font-size=12 font-weight=600 color="ink.secondary" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
+                if c.favorite
+                  image "symbol:star-fill" width=9 height=9 color="brand.warm" flex-shrink=0 aria-label=t("live.favourite")
+              text (c.now != "" ? c.now : (c.listed ? t("live.nothingNow") : t("live.noListings"))) font-size=16 font-weight=(c.now != "" ? 640 : 500) color=(c.now != "" ? "ink.primary" : "ink.quiet") white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+              if c.nowId != ""
+                row gap=8 align-items="center"
+                  column flex=1 height=2 border-radius=1 background-color="cinematic.track" overflow="hidden" aria-hidden=true
+                    column height=2 width=`${c.nowProgress}%` background-color="brand.warm"
+                  text c.nowRemaining font-size=11 color="ink.quiet" font-variant-numeric="tabular-nums" flex-shrink=0
+              if c.nextLabel != ""
+                text c.nextLabel font-size=12 color="ink.quiet" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+
+style GuideChip
+  box-sizing = "border-box"
+  height = 36
+  padding = "0px 14px"
+  border-radius = 999
+  border = "1px solid var(--cinematic.glass-edge)"
+  background-color = "cinematic.control"
+  color = "ink.primary"
+  transition = "background-color 180ms linear, color 180ms linear, border-color 180ms linear"
+  :hover
+    border-color = "cinematic.glass-edge-strong"
+  :active
+    -exact-press-scale = 0.97
+  :focus-visible
+    box-shadow = "0px 0px 0px 2px var(--surface.page), 0px 0px 0px 4px var(--brand.warm)"
+
+style GuideTab
+  height = 30
+  padding = "0px 14px"
+  border = "none"
+  border-radius = 999
+  :focus-visible
+    box-shadow = "0px 0px 0px 2px var(--brand.warm)"
+
+style GuideRailCell
+  border = "none"
+  border-right = "1px solid var(--cinematic.glass-edge)"
+  color = "ink.primary"
+  text-align = "left"
+  transition = "background-color 160ms linear"
+  :hover
+    background-color = "cinematic.guide-rail-on"
+  :focus-visible
+    box-shadow = "inset 0px 0px 0px 2px var(--brand.warm)"
+
+style GuideCell
+  border-radius = 10
+  color = "ink.primary"
+  transition = "border-color 160ms linear, box-shadow 200ms ease"
+  :hover
+    border-color = "cinematic.glass-edge-strong"
+  :focus-visible
+    border-color = "brand.warm"
+    box-shadow = "inset 0px 0px 0px 1px var(--brand.warm), 0px 10px 34px var(--cinematic.shadow)"
+
+style GuideEmpty
+  border = "1px dashed var(--cinematic.glass-edge)"
+  border-radius = 10
+  background-color = "transparent"
+  text-align = "left"
+  :hover
+    background-color = "cinematic.guide-cell"
+  :focus-visible
+    box-shadow = "inset 0px 0px 0px 2px var(--brand.warm)"
+
+style GuideIdent
+  background-image = "radial-gradient(ellipse at 50% 40%, var(--cinematic.guide-ident) 0%, transparent 75%)"
+  border = "1px solid var(--cinematic.hairline)"
+
+style GuideNowRow
+  box-sizing = "border-box"
+  width = "100%"
+  padding = "12px 16px"
+  border = "none"
+  border-bottom = "1px solid var(--cinematic.hairline)"
+  background-color = "transparent"
+  color = "ink.primary"
+  text-align = "left"
+  :active
+    background-color = "cinematic.guide-cell"
+  :focus-visible
+    box-shadow = "inset 0px 0px 0px 2px var(--brand.warm)"

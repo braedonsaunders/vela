@@ -134,6 +134,16 @@ members Client
     quickSecret = ""
   state homeAt = 0
   state homeLocale = ""
+  // Featured titles: the foundation rotates the shown hero; skins only present it.
+  state heroIndex = 0
+  derive heroAt = (current(home) and home.hero.length > 0 ? heroIndex % home.hero.length : 0)
+  derive heroHasPreview = (current(home) and home.hero.length > 0 ? home.previews.filter(p => home.hero.slice(heroAt, heroAt + 1).map(h => h.id).includes(p.id)).length > 0 : false)
+  task rotateHero when top(nav).name == "home" and query == "" and page.visibilityState == "visible" and not still and current(home) and home.hero.length > 1 and not heroHasPreview
+    every(9000, nextHero)
+  action nextHero
+    heroIndex = (heroAt + 1) % max(1, home.hero.length)
+  action pickHero(i: number)
+    heroIndex = i
   task captureHomeTime when auth.authenticated key=localeJSON
     after(1, stampHomeTime)
   action stampHomeTime

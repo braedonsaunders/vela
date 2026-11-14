@@ -30,16 +30,19 @@ export function feedRow(row: Row, origin?: string, artWidth = 2560) {
 }
 export function homeModel(data: Bootstrap, origin?: string, now?: number, artWidth = 2560) {
   const heroes = (data.heroes ?? []).slice(0, 5);
-  const cached = heroes[0]?.trailer?.cachedPlayback;
-  let trailerUrl = '';
-  if (cached?.status === 'ready' && origin && now !== undefined && Date.parse(cached.expiresAt) > now) {
+  const previews: { id: string; url: string; expiresAt: number }[] = [];
+  for (const hero of heroes) {
+    const cached = hero.trailer?.cachedPlayback;
+    if (cached?.status !== 'ready' || !origin || now === undefined) continue;
+    const expiresAt = Date.parse(cached.expiresAt);
+    if (!Number.isFinite(expiresAt) || expiresAt <= now) continue;
     try {
       const url = new URL(cached.url, `${origin}/`);
-      if (url.origin === origin && url.pathname.startsWith('/sessions/media/')) trailerUrl = url.href;
+      if (url.origin === origin && url.pathname.startsWith('/sessions/media/')) previews.push({ id: hero.title.id, url: url.href, expiresAt });
     } catch { /* Invalid grant: leave preview unavailable. */ }
   }
   return { viewer: data.viewer.name, defaultSkinId: data.defaultSkinId, skins: data.capabilities.skins.map(s => s.id),
-    hero: heroes.map(hero => card(hero.title, hero.receiptToken, origin, artWidth)), trailerReady: trailerUrl !== '', trailerUrl, trailerExpiresAt: trailerUrl && cached ? Date.parse(cached.expiresAt) : 0,
+    hero: heroes.map(hero => card(hero.title, hero.receiptToken, origin, artWidth)), previews,
     rows: data.rows.map(row => feedRow(row, origin, artWidth)),
     liveAvailable: data.capabilities.features.liveTV.available, aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available };
 }

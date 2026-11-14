@@ -23,7 +23,7 @@ export interface GuideChannel {
   programmes: GuideProgramme[];
 }
 export interface GuideModel {
-  day: number; dayLabel: string; fromLabel: string; untilLabel: string; minutes: number; nowMinute: number; landing: number;
+  day: number; dayLabel: string; fromLabel: string; untilLabel: string; minutes: number; nowMinute: number; nowLabel: string; landing: number;
   ticks: { id: string; label: string; minute: number; hour: boolean }[];
   days: { offset: number; label: string; date: string }[];
   groups: string[];
@@ -181,7 +181,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       };
     });
     const model: GuideModel = {
-      day, dayLabel: day === 0 ? msg('live.today') : long.format(start), fromLabel: time(start), untilLabel: time(end), minutes, nowMinute,
+      day, dayLabel: day === 0 ? msg('live.today') : long.format(start), fromLabel: time(start), untilLabel: time(end), minutes, nowMinute, nowLabel: time(now),
       // Land half an hour before now, or at this time of day on a later day.
       landing: Math.max(0, Math.min(minutes - 180, ((now - midnight(now, 0)) / MINUTE) - 30)),
       ticks: Array.from({ length: Math.floor(minutes / 30) }, (_, n) => ({ id: String(start + n * 1800000), label: time(start + n * 1800000), minute: n * 30, hour: n % 2 === 0 })),

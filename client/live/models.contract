@@ -50,6 +50,7 @@ shape GuideModel
   untilLabel: string
   minutes: number
   nowMinute: number
+  nowLabel: string
   landing: number
   ticks: GuideTick[]
   days: GuideDay[]

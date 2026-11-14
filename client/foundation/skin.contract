@@ -57,17 +57,19 @@ component Home
     still: bool
     selectTitle: action
     observe: action
+    heroIndex: number
+    pickHero: action
   slot
   view
     if skin == "example"
-      ExampleHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe)
+      ExampleHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero)
         children
     else
       if skin == "index" or skin == "editorial"
-        IndexHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe)
+        IndexHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero)
           children
       else
-        CineHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe)
+        CineHome(model=model, active=active, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe, heroIndex=heroIndex, pickHero=pickHero)
           children
 
 component SearchSurface

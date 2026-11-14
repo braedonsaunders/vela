@@ -82,6 +82,8 @@ component Home
     still: bool
     selectTitle: action
     observe: action
+    heroIndex: number
+    pickHero: action
   slot
   view
     column padding=16 gap=16

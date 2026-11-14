@@ -55,14 +55,14 @@ component Client
         if e.name == "live"
           column navigationKey=`${e.id}` navigationPresentation="fullscreen" position="absolute" inset=0 background-color=pageColor color=inkColor
             Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "example"] : ["cinematic", "index"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section="live", openLibrary=openLibrary)
-              scroll flex=1 min-height=0
-                if failed(guide)
-                  text t("ui.theGuideCouldnTBeLoadedCheckYourConnection") role="status" padding=32
+              column flex=1 min-height=0
+                if guideReady
+                  Guide(skin=activeSkin, model=guide, small=small, still=still, watch=watchChannel, previous=earlierGuide, next=laterGuide, chooseDay=chooseGuideDay)
                 else
-                  if not current(guide)
-                    text t("ui.loadingTheGuide") role="status" padding=32
+                  if failed(guide)
+                    text t("ui.theGuideCouldnTBeLoadedCheckYourConnection") role="status" padding=32 padding-top=(small ? 88 : 112)
                   else
-                    Guide(skin=activeSkin, model=guide, small=small, watch=watchChannel, previous=earlierGuide, next=laterGuide)
+                    text t("ui.loadingTheGuide") role="status" padding=32 padding-top=(small ? 88 : 112)
         if e.name == "title"
           column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=skinDetailPresentation(activeSkin, viewport.width) navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 box-sizing="border-box" padding=(indexSkin or small ? "0px" : "4vh 4vw") background-color=(indexSkin ? pageColor : "media.overlay") backdrop-filter=(indexSkin ? "none" : "blur(18px) saturate(1.1)") animation=(indexSkin ? "none" : still ? "dissolve 200ms linear both" : "dissolve 420ms ease-out both") color=inkColor
             column position="relative" flex=1 min-height=0 overflow="hidden" border-radius=(indexSkin or small ? 0 : 28) background-color=pageColor box-shadow=(indexSkin or small ? "none" : "0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)") animation=(indexSkin ? "none" : still ? "dissolve 240ms linear both" : "open 680ms cubic-bezier(0.16, 1, 0.3, 1) both")

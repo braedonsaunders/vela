@@ -28,6 +28,34 @@ theme
   cinematic.footer-scrim = #000000f0  scheme=fixed
   cinematic.guide-aura = #77533525  scheme=fixed
   cinematic.guide-airing = #b78c6330  scheme=fixed
+  // Live guide: an opaque rail and ruler over a translucent panel, a broadcast-red now line, genre cues.
+  cinematic.guide-panel = #0b0e12cc  scheme=fixed
+  cinematic.guide-rail = #0d1015  scheme=fixed
+  cinematic.guide-rail-on = #191d24  scheme=fixed
+  cinematic.guide-ruler = #0d1015f0  scheme=fixed
+  cinematic.guide-logo = #ffffff0a  scheme=fixed
+  cinematic.guide-cell = #ffffff0b  scheme=fixed
+  cinematic.guide-cell-hover = #ffffff17  scheme=fixed
+  cinematic.guide-live = #dcb9981a  scheme=fixed
+  cinematic.guide-live-hover = #dcb99829  scheme=fixed
+  cinematic.guide-live-fill = #dcb9982e  scheme=fixed
+  cinematic.guide-live-edge = #dcb99859  scheme=fixed
+  cinematic.guide-past = #00000038  scheme=fixed
+  cinematic.guide-hour = #ffffff14  scheme=fixed
+  cinematic.guide-half = #ffffff08  scheme=fixed
+  cinematic.guide-now = #e8513f  scheme=fixed
+  cinematic.guide-now-glow = #e8513f80  scheme=fixed
+  cinematic.guide-ident = #ffffff12  scheme=fixed
+  cinematic.tone-news = #5b8def  scheme=fixed
+  cinematic.tone-sport = #3fbf7f  scheme=fixed
+  cinematic.tone-film = #e0904f  scheme=fixed
+  cinematic.tone-kids = #f2c94c  scheme=fixed
+  cinematic.tone-factual = #45b5b0  scheme=fixed
+  cinematic.tone-drama = #b06ad9  scheme=fixed
+  cinematic.tone-comedy = #f07f9c  scheme=fixed
+  cinematic.tone-music = #d95fd0  scheme=fixed
+  cinematic.tone-life = #9fbf5a  scheme=fixed
+  cinematic.tone-other = #8d96a3  scheme=fixed
   cinematic.search-shadow = #00000040  scheme=fixed
   cinematic.card-shadow = #00000088  scheme=fixed
   cinematic.scrim-clear = #090b0e00  scheme=fixed
