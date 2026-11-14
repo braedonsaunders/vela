@@ -20,6 +20,9 @@ members Client
   resource page = exactPage() as shape PageState
   resource time = exactTime() as shape Time
   resource viewport = exactViewport() as shape Viewport
+  derive artDpr = match viewport.devicePixelRatio { case some(d) => d, case none => 1 }
+  derive artPixels = viewport.width * artDpr
+  derive artWidth = (artPixels <= 1280 ? 1280 : artPixels <= 1920 ? 1920 : artPixels <= 2560 ? 2560 : 3840)
   state capturedWebCode = ""
   state capturedFragment = false
   derive fragmentCode = match first(fragment(top(nav)).split("&").filter(p => p.startsWith("code=")).map(p => p.slice(5))) { case some(c) => c, case none => "" }
@@ -136,19 +139,19 @@ members Client
   action stampHomeTime
     homeAt = time.epochAtZero + performanceNow()
     homeLocale = localeJSON
-  resource home = uiBootstrap(homeAt) with localeJSON when auth.authenticated and homeAt > 0 and homeLocale == localeJSON as shape HomeModel
+  resource home = uiBootstrap(homeAt) with localeJSON, artWidth when auth.authenticated and homeAt > 0 and homeLocale == localeJSON as shape HomeModel
   task checkHomeAuth when failed(home) and auth.authenticated and not homeAuthChecked
     after(1, recheckHomeAuth)
   action recheckHomeAuth
     homeAuthChecked = true
     refresh auth
-  resource results = uiSearch(query, generation, time.epochAtZero) with localeJSON when auth.authenticated and query.trim() != "" as shape SearchModel transient
-  resource descriptive = uiDescriptive(query, generation, time.epochAtZero) with localeJSON when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel transient
-  resource ai = uiAI(query, generation, time.epochAtZero) with localeJSON when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel transient
+  resource results = uiSearch(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" as shape SearchModel transient
+  resource descriptive = uiDescriptive(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel transient
+  resource ai = uiAI(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel transient
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
-  resource collection = uiCollection(collectionId) with localeJSON when auth.authenticated and collectionId != "" as shape CollectionModel
-  resource detail = uiDetail(detailId) with localeJSON when auth.authenticated and detailId != "" as shape DetailModel
-  resource related = uiRelated(detailId) with localeJSON when auth.authenticated and detailId != "" as shape FeedRow[] else empty()
+  resource collection = uiCollection(collectionId) with localeJSON, artWidth when auth.authenticated and collectionId != "" as shape CollectionModel
+  resource detail = uiDetail(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape DetailModel
+  resource related = uiRelated(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape FeedRow[] else empty()
   derive detailSurface = DetailModel(detail, related=(current(related) ? related : []))
   derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" ? top(nav).params.id : "")
   resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero, `${top(nav).id}`) when auth.authenticated and playingId != "" as shape PlaybackModel transient

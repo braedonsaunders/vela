@@ -176,7 +176,7 @@ const sources: Sources = {
     if (activeQuick === secret) activeQuick = '';
     return { accepted: true };
   },
-  uiBootstrap: async ([at, localeJSON], store) => {
+  uiBootstrap: async ([at, localeJSON, artWidth], store) => {
     const api = await session(store);
     const version = authVersion;
     if (!negotiation || negotiation.version !== version) {
@@ -190,11 +190,11 @@ const sources: Sources = {
     const bootstrap = await api.bootstrap();
     if (authVersion !== version) throw new Error('Session changed during bootstrap');
     features = bootstrap.capabilities.features;
-    return withLocale(localeJSON, () => homeModel(bootstrap, API, at));
+    return withLocale(localeJSON, () => homeModel(bootstrap, API, at, artWidth));
   },
-  uiCollection: async ([id, localeJSON], store) => {
+  uiCollection: async ([id, localeJSON, artWidth], store) => {
     const data = await (await session(store)).collection(id);
-    return withLocale(localeJSON, () => ({ name: data.collection.name, items: data.items.map(item => entry(item, API)) }));
+    return withLocale(localeJSON, () => ({ name: data.collection.name, items: data.items.map(item => entry(item, API, artWidth)) }));
   },
   cancelAISearch: async (_args, store) => {
     const previous = ai;
@@ -204,23 +204,23 @@ const sources: Sources = {
     // A start still in flight detects that it was superseded and cancels itself.
     return { accepted: true };
   },
-  uiRelated: async ([id, localeJSON], store) => {
+  uiRelated: async ([id, localeJSON, artWidth], store) => {
     const data = await (await session(store)).rows({ placement: 'detail', titleId: id });
-    return withLocale(localeJSON, () => data.items.map(row => feedRow(row, API)));
+    return withLocale(localeJSON, () => data.items.map(row => feedRow(row, API, artWidth)));
   },
-  uiDetail: async ([id, localeJSON], store) => { const detail = await (await session(store)).detail(id); return withLocale(localeJSON, () => detailModel(detail, API)); },
-  uiSearch: async ([query, generation, epoch, localeJSON], store) => {
+  uiDetail: async ([id, localeJSON, artWidth], store) => { const detail = await (await session(store)).detail(id); return withLocale(localeJSON, () => detailModel(detail, API, artWidth)); },
+  uiSearch: async ([query, generation, epoch, localeJSON, artWidth], store) => {
     const api = await session(store);
     const result = await api.search({ query, generation, mode: 'fast', idempotencyKey: `search-${epoch}-${generation}` });
-    return withLocale(localeJSON, () => ({ query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API)), descriptive: [], ai: [], aiStatus: 'unavailable' }));
+    return withLocale(localeJSON, () => ({ query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API, artWidth)), descriptive: [], ai: [], aiStatus: 'unavailable' }));
   },
-  uiDescriptive: async ([query, generation, epoch, localeJSON], store) => {
+  uiDescriptive: async ([query, generation, epoch, localeJSON, artWidth], store) => {
     const api = await session(store);
     if (!features?.descriptiveSearch.available) return lane(query, generation);
     const result = await api.search({ query, generation, mode: 'descriptive', idempotencyKey: `descriptive-${epoch}-${generation}` });
-    return withLocale(localeJSON, () => ({ ...lane(result.query, result.generation), items: result.items.map(t => card(t, '', API)) }));
+    return withLocale(localeJSON, () => ({ ...lane(result.query, result.generation), items: result.items.map(t => card(t, '', API, artWidth)) }));
   },
-  uiAI: async ([query, generation, epoch, localeJSON], store) => {
+  uiAI: async ([query, generation, epoch, localeJSON, artWidth], store) => {
     const api = await session(store);
     if (!features?.aiSearch.available) return lane(query, generation);
     if (!ai || ai.epoch !== epoch || ai.generation !== generation || ai.query !== query) {
@@ -247,7 +247,7 @@ const sources: Sources = {
     }
     if (!ai || ai.epoch !== epoch || ai.generation !== generation || !ai.job || ai.job.generation !== generation) return lane(query, generation);
     const job = ai.job;
-    return withLocale(localeJSON, () => ({ ...lane(query, generation), items: (job.results?.items ?? []).map(t => card(t, '', API)), aiStatus: job.status }));
+    return withLocale(localeJSON, () => ({ ...lane(query, generation), items: (job.results?.items ?? []).map(t => card(t, '', API, artWidth)), aiStatus: job.status }));
   },
   interaction: async ([receipt, kind, at], store) => {
     if (kind !== 'visible' && kind !== 'selected' && kind !== 'played') throw new Error('Invalid interaction');

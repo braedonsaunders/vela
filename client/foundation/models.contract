@@ -74,6 +74,7 @@ shape ReceiptReply
   accepted: bool
 
 shape Viewport
+  devicePixelRatio: option<number>
   width: number
   height: number
   prefersReducedMotion: bool
