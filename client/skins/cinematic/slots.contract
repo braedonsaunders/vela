@@ -101,7 +101,7 @@ component Home
   slot
   view
     column
-      column position="relative" min-height=(query != "" ? 160 : small ? 360 : 432) justify-content="end" overflow="hidden"
+      column position="relative" min-height=(query != "" ? 160 : model.hero.length == 0 ? 0 : small ? 360 : 432) justify-content="end" overflow="hidden"
         if query == ""
           for hero in model.hero key=hero.id
             column position="absolute" inset=0
