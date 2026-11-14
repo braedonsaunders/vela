@@ -10,7 +10,7 @@ optional artwork, metadata and capabilities to these presentation records.
 
 | Slot | Props and content |
 | --- | --- |
-| Shell | `viewer:string`, `skin:string`, `skins:string[]`, `chooseSkin(string)`; one children slot containing the route scroll surface |
+| Shell | `viewer:string`, `skin:string`, `skins:string[]`, `chooseSkin(string)`, `signOut()`; one children slot containing the route scroll surface |
 | Home | `model:HomeModel`, `query:string`, `small:bool`, `still:bool`, `selectTitle(id,receipt)`, `observe(receipt,IntersectionObserverEntry)`; children slot holds the foundation search field |
 | SearchSurface | `query:string`, `model:SearchModel`, `descriptive:SearchModel`, `ai:SearchModel`, `generation:number`, `loading:bool`, `error:bool`, `aiAvailable:bool`, `small`, `still`, `selectTitle`, `observe` |
 | Row | `row:FeedRow`, `small`, `still`, `selectTitle`, `observe` |
@@ -53,3 +53,5 @@ tokens and choose entirely different layout, typography and geometry. Asset acce
 continues to follow server viewer policy. Unknown skin IDs fall back to cinematic.
 The v0 root exposes selection state; alternate compiled slot dispatch is added when
 the next skin package exists, rather than pretending a color change is another skin.
+
+Auth slots: `SignIn` receives username, password, passwordAvailable, quickAvailable, error, busy and editUsername/editPassword/submit/quick actions. `QuickConnect` receives model:QuickModel, error:string and cancel action. Foundation owns auth state, silent webCode redemption, URL cleanup, server poll interval and terminal grant handling.

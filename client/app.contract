@@ -1,5 +1,5 @@
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./foundation/models.contract"
-use Shell, Home, SearchSurface, Detail, PlayerChrome from "./skins/cinematic/slots.contract"
+use Shell, Home, SearchSurface, Detail, PlayerChrome, SignIn, QuickConnect from "./skins/cinematic/slots.contract"
 
 routes nav
   home "/"
@@ -15,23 +15,37 @@ component Client
       for e in stack(nav) key=e.id
         if e.name == "home"
           column navigationKey=`${e.id}` navigationScroll="home-scroll" position="absolute" inset=0
-            Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins, chooseSkin=chooseSkin)
+            Shell(viewer=home.viewer, skin=activeSkin, skins=home.skins, chooseSkin=chooseSkin, signOut=logout)
               scroll id="home-scroll" flex=1 min-height=0
-                if failed(home)
-                  text "Your library couldn't be reached. Check your server connection." padding=32 role="status"
+                if failed(auth)
+                  text "Your server could not be reached. Reopen Vela when the connection is restored." padding=32 role="status"
                 else
-                  if not current(home)
-                    text "Finding your evening…" padding=32 role="status"
+                  if not current(auth)
+                    text "Connecting to your library…" padding=32 role="status"
                   else
-                    Home(model=home, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe)
-                      row align-items="center" gap=12 padding="8px 18px" border-radius=32 background-color="surface.glass" border="1px solid var(--surface.line)" box-shadow="0px 16px 50px #00000040"
-                        image "symbol:search" color="ink.secondary" width=20 height=20
-                        input value=query input=edit placeholder="A title, a feeling, a world to get lost in…" aria-label="Search your library" testId="search" flex=1 min-width=0 padding="12px 0px" border="none" background-color="transparent" color="ink.primary" font-size=15
-                        if query != ""
-                          button press=edit("") aria-label="Clear search" border="none" background-color="transparent" color="ink.secondary" padding=8
-                            image "symbol:close"
-                    if query != ""
-                      SearchSurface(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
+                    if not auth.authenticated
+                      if quickSecret != ""
+                        QuickConnect(model=quickModel, error=quickError, cancel=cancelCode)
+                      else
+                        SignIn(username=username, password=password, passwordAvailable=auth.passwordAvailable, quickAvailable=auth.quickAvailable, error=authError, busy=(pending(signedIn) or pending(quickStarted)), editUsername=editUsername, editPassword=editPassword, submit=submitSignIn, quick=startCode)
+                    else
+                      if failed(home)
+                        text "Your library couldn't be reached. Check your server connection." padding=32 role="status"
+                      else
+                        if not current(home)
+                          text "Finding your evening…" padding=32 role="status"
+                        else
+                          Home(model=home, query=query, small=small, still=still, selectTitle=selectTitle, observe=observe)
+                            row align-items="center" gap=12 padding="8px 18px" border-radius=32 background-color="surface.glass" border="1px solid var(--surface.line)" box-shadow="0px 16px 50px #00000040"
+                              image "symbol:search" color="ink.secondary" width=20 height=20
+                              input value=query input=edit placeholder="A title, a feeling, a world to get lost in…" aria-label="Search your library" testId="search" flex=1 min-width=0 padding="12px 0px" border="none" background-color="transparent" color="ink.primary" font-size=15
+                                ::placeholder
+                                  color="ink.secondary"
+                              if query != ""
+                                button press=edit("") aria-label="Clear search" border="none" background-color="transparent" color="ink.secondary" padding=8
+                                  image "symbol:close"
+                          if query != ""
+                            SearchSurface(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(not current(results) or results.query != query or results.generation != generation), error=failed(results), aiAvailable=home.aiAvailable, small=small, still=still, selectTitle=selectTitle, observe=observe)
         if e.name == "title"
           column navigationKey=`${e.id}` navigationPresentation=(small ? "fullscreen" : "modal") navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 background-color="surface.page" color="ink.primary"
             row padding="16px 5%" align-items="center"

@@ -1,4 +1,4 @@
-use Card, FeedRow, HomeModel, SearchModel, DetailModel from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, QuickModel from "../../foundation/models.contract"
 
 keyframes arrive
   from opacity=0 translate="0px 10px"
@@ -9,6 +9,7 @@ component Shell
     skin: string
     skins: string[]
     chooseSkin: action
+    signOut: action
   slot
   view
     column height="100%" min-height=0 background-color="surface.page" color="ink.primary" color-scheme="dark" font-family="system-ui, sans-serif"
@@ -21,7 +22,9 @@ component Shell
             for name in skins key=name
               option value=name
                 text name
-        text viewer font-size=12 color="ink.secondary"
+        if viewer != ""
+          button press=signOut aria-label="Sign out" background-color="transparent" border="none" color="ink.secondary"
+            text viewer font-size=12
       children
 
 component TitleCard
@@ -188,3 +191,49 @@ component Guide
   view
     column padding=24
       text "Live guide is not available." role="status" color="ink.secondary"
+
+component SignIn
+  props
+    username: string
+    password: string
+    passwordAvailable: bool
+    quickAvailable: bool
+    error: string
+    busy: bool
+    editUsername: action
+    editPassword: action
+    submit: action
+    quick: action
+  view
+    column max-width=380 width="85%" align-self="center" gap=20 padding="48px 0px"
+      text "Welcome to your evening." role="heading" aria-level=1 font-size=40 line-height=1.1 letter-spacing="-1px"
+      text "Sign in to your library." color="ink.secondary" font-size=15
+      if error != ""
+        text error role="alert" color="brand.warm"
+      if passwordAvailable
+        column gap=8
+          text "Username" font-size=12 color="ink.secondary"
+          input value=username input=editUsername autocomplete="username" aria-label="Username" testId="username" padding=14 border-radius=12 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary"
+        column gap=8
+          text "Password" font-size=12 color="ink.secondary"
+          input type="password" value=password input=editPassword submit=submit autocomplete="current-password" aria-label="Password" testId="password" padding=14 border-radius=12 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary"
+        button press=submit disabled=(busy or username.trim() == "" or password == "") padding=15 border-radius=24 border="none" background-color="ink.primary" color="ink.inverse" testId="sign-in"
+          text (busy ? "Signing in…" : "Sign in") font-weight=600
+      if quickAvailable
+        button press=quick disabled=busy padding=15 border-radius=24 border="1px solid var(--surface.line)" background-color="surface.raised" color="ink.primary" testId="quick-connect"
+          text "Connect with a code"
+
+component QuickConnect
+  props
+    model: QuickModel
+    error: string
+    cancel: action
+  view
+    column max-width=420 width="85%" align-self="center" gap=24 padding="48px 0px" align-items="center"
+      text "An easier way in." role="heading" aria-level=1 font-size=38 letter-spacing="-1px"
+      text "Approve this code from a signed-in Ether device." color="ink.secondary" text-align="center" line-height=1.6
+      text model.code font-size=44 font-weight=600 letter-spacing="8px" color="brand.warm" testId="connect-code"
+      text `Expires ${model.expiresAt}` color="ink.secondary" font-size=12
+      text (error == "" ? "Waiting for approval…" : error) role="status" color="ink.secondary"
+      button press=cancel border="1px solid var(--surface.line)" border-radius=24 padding="12px 28px" background-color="surface.raised" color="ink.primary"
+        text "Cancel"
