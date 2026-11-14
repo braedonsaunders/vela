@@ -50,3 +50,10 @@ To assemble an already built distribution without downloading or rebuilding:
 The prepared directory must contain all four hash-pinned modules and all matching
 source archives/licences/source-offer files. A missing general package or source
 file fails preparation rather than producing a partially working runtime.
+
+For one bounded runtime retry after a native decoder failure, call
+`prepareOriginalAudioSwitch({ ...options, forceSoftware: true })`. The helper
+still records the exact native probe in `actualTrack.nativeSupported`; the flag
+only overrides decoder selection passed to `prepareAudioOptions`. A failed
+software preparation rejects before touching the currently audible track. The
+runtime owns the retry bound and subsequent Ether fallback.

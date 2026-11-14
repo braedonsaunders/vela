@@ -13,8 +13,9 @@ import { secondsToMicroseconds, microsecondsToSeconds } from '../../../vendor/we
 import type { CustomPlaybackControllerEvent, CustomPlaybackTelemetry } from '../../../vendor/webgpu-player/src/pipeline/CustomPlaybackControllerTypes';
 import { createAudioPackages, createBrowserCustomAudioOutputFactory } from './audio/upstream';
 import { prepareOriginalAudioSwitch } from './audio/original-track';
-import { VideoPackages } from './video/packages';
+import { videoPackageId, VideoPackages } from './video/packages';
 import { outputLayout } from './audio/policy';
+import type { DecoderRetry } from './retry';
 import type { UniversalReadout } from './loader';
 import { probeOriginal } from './probe';
 import { upstreamOptions, type OriginalMedia } from './source';
@@ -22,6 +23,7 @@ import { upstreamOptions, type OriginalMedia } from './source';
 export interface RuntimeOptions {
   surface: { container: HTMLDivElement; video: HTMLVideoElement };
   assets: { baseURL: string; assetKey: string; audioDecoderURL: string; videoDecoderURL: string };
+  retry?: DecoderRetry;
   signal: AbortSignal;
   onEvent: (event: CustomPlaybackControllerEvent) => void;
   onFailure: (reason: string, position: number) => void;
@@ -92,7 +94,7 @@ export class UniversalRuntime {
       const registry = this.audioRegistry = createAudioPackages(this.options.assets.audioDecoderURL);
       const maximumChannels = this.maximumChannels = prewarm?.audioContext.destination.maxChannelCount ?? null;
       const preparedAudio = media.selectedAudioId ? await prepareOriginalAudioSwitch({url:media.url,
-        tracks:media.audio, trackId:media.selectedAudioId, registry, maximumOutputChannels:maximumChannels, signal}) : null;
+        tracks:media.audio, trackId:media.selectedAudioId, registry, maximumOutputChannels:maximumChannels, signal, forceSoftware:this.options.retry?.audio}) : null;
       if (preparedAudio) media = this.media = {...media, audio:media.audio.map(track =>
         track.id === media.selectedAudioId ? preparedAudio.actualTrack : track)};
       const options = upstreamOptions(media);
@@ -108,7 +110,8 @@ export class UniversalRuntime {
       signal.throwIfAborted();
       if (!presentation) throw new Error('Original presentation preparation superseded');
       // A generic vector cannot override the actual file's rejected config.
-      const capabilities = media.video.nativeSupported ? probedCapabilities : withoutNativeVideo(probedCapabilities);
+      const forceGPU = this.options.retry?.video === true && videoPackageId(media.video.codec) !== null;
+      const capabilities = media.video.nativeSupported && !forceGPU ? probedCapabilities : withoutNativeVideo(probedCapabilities);
       const eligibilityOptions = {
         ...presentation, audioDecoders: packageSelection ? [packageSelection.source] : [],
         audioRenderTarget: { binauralHeadphones: false, speakerLayout: outputLayout(maximumChannels, audio?.channels ?? 2) },
@@ -117,7 +120,7 @@ export class UniversalRuntime {
       // Native exact-config decode is preferred. Load only the selected codec's
       // independently served GPU package when the native route cannot qualify.
       let eligibility = getCustomPlaybackEligibility(options, capabilities, eligibilityOptions);
-      if (!media.video.nativeSupported || !eligibility.eligible) {
+      if (forceGPU || !media.video.nativeSupported || !eligibility.eligible) {
         const decoder = await new VideoPackages(this.options.assets.videoDecoderURL).load(media.video.codec, signal);
         if (decoder) {
           const gpuVideoDecoders = await getGPUVideoDecoderOffers(this.presenter, [decoder], options);

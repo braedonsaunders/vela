@@ -317,7 +317,16 @@ members Client
   action recheckHomeAuth
     homeAuthChecked = true
     refresh auth
-  resource results = uiSearch(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" as shape SearchModel transient
+  state searchTime = 0
+  state searchTimeQuery = ""
+  state searchTimeGeneration = -1
+  task captureSearchTime when auth.authenticated and query.trim() != "" key=`${query}:${generation}`
+    after(1, stampSearchTime)
+  action stampSearchTime
+    searchTime = time.epochAtZero + performanceNow()
+    searchTimeQuery = query
+    searchTimeGeneration = generation
+  resource results = uiSearch(query, generation, time.epochAtZero, searchTime) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and searchTime > 0 and searchTimeQuery == query and searchTimeGeneration == generation as shape SearchModel transient
   resource descriptive = uiDescriptive(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and home.descriptiveAvailable as shape SearchModel transient
   resource ai = uiAI(query, generation, time.epochAtZero) with localeJSON, artWidth when auth.authenticated and query.trim() != "" and home.aiAvailable as shape SearchModel transient
   // Each optional search lane's honest state for this query: "off" when the server does
@@ -457,6 +466,17 @@ members Client
   action openLive
     libraryPages = 1
     nav = (top(nav).name == "home" ? replace(nav, path("home") + librarySection("@live", "")) : open(nav, path("home") + librarySection("@live", "")))
+  action openLiveProgramme(id: string)
+    match first(results.liveProgrammes.filter(p => p.id == id))
+      case some(p)
+        if current(results) and results.query == query and results.generation == generation
+          let now = time.epochAtZero + performanceNow()
+          if p.startMs <= now and now < p.endMs
+            nav = push(nav, path("liveWatch", p.channelId))
+          else if p.startMs <= now + 518400000
+            nav = (top(nav).name == "home" ? replace(nav, path("home") + `?lib=%40live&ch=${encodeURIComponent(p.channelId)}&prog=${encodeURIComponent(p.id)}&at=${encodeURIComponent(p.startISO)}`) : open(nav, path("home") + `?lib=%40live&ch=${encodeURIComponent(p.channelId)}&prog=${encodeURIComponent(p.id)}&at=${encodeURIComponent(p.startISO)}`))
+      case none
+        generation = generation
   action selectTitle(id: string, kind: string, token: string)
     if kind == "channel"
       nav = push(nav, path("liveWatch", id))
