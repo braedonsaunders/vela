@@ -85,5 +85,5 @@ component Client
               if not current(playback)
                 text "Preparing playback…" role="status" margin="auto"
               else
-                vela-player plan=watchPlan playerCommand=watchCommandJson serverError=watchReply.error message=watchMessage position="absolute" inset=0 width="100%" height="100%"
-                PlayerChrome(model=watchModel, title=watchModel.title, visible=(not watchHidden or not watchModel.playing or watchEditing), small=small, still=still, serverError=watchReply.error, command=watchControl, seek=watchSeek, editing=editWatch, close=close)
+                vela-player plan=(watchModel.planJson != "" ? watchModel.planJson : currentPlan) playerCommand=watchCommandJson serverError=watchReply.error message=watchMessage position="absolute" inset=0 width="100%" height="100%"
+                PlayerChrome(model=watchModel, title=watchTitle, visible=(not watchHidden or not watchModel.playing or watchEditing), small=small, still=still, serverError=watchReply.error, command=watchControl, seek=watchSeek, editing=editWatch, close=close)

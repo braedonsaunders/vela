@@ -6,7 +6,7 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
   if (!selected) throw new Error('Plan selected path is absent');
   const edition = selected.edition ?? '';
   return {
-    id: plan.sessionId, selectedSourceId: plan.selectedPathId, mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? '', edition,
+    id: plan.sessionId, serverControlled: true, selectedSourceId: plan.selectedPathId, mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? '', edition,
     position: plan.positionSeconds, live: !!plan.live, liveWindowStart: plan.live?.windowStartSeconds, liveEdge: plan.live?.liveEdgeSeconds, liveMaxDrift: plan.live?.maxDriftSeconds, lowDelay: plan.live?.mode === 'low-delay', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
     audioTrackId: plan.selectedAudioTrackId, subtitleTrackId: plan.selectedSubtitleTrackId ?? undefined,
     audioTracks: plan.audioTracks.map(t => ({ id: t.id, label: t.name, language: t.language })),
@@ -15,7 +15,8 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
       id: p.id, strategy: p.kind, delivery: p.transport, url: p.url, mime: p.mimeType,
       edition: p.edition ?? '', timeline: p.timelineId ?? `unverified:${p.id}`,
       audioTrackId: plan.selectedAudioTrackId,
-      recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some(b => b.independent && b.compatibility === 'verified-timeline' && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
+      boundaries: p.boundaries.filter(b => b.independent).map(b => b.atSeconds),
+      recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some(b => b.independent && (b.compatibility === 'verified-timeline' || b.compatibility === 'same-source' && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
       renditions: p.qualities.map(q => ({ id: q.id, url: q.url, bandwidth: q.bitrate, height: q.height,
         mime: `video/mp4; codecs="${q.videoCodec}${q.audioCodec ? `,${q.audioCodec}` : ''}"` })),
     })),

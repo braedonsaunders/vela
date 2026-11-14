@@ -37,6 +37,7 @@ export class PlaybackEngine {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? null,
+      capabilities: { pip: !!document.pictureInPictureEnabled && !!this.video.requestPictureInPicture, fullscreen: !!this.fullscreenContainer.requestFullscreen || !!this.video.webkitEnterFullscreen, audioSwitch: (this.video.audioTracks?.length ?? 0) > 1 }, lockedQuality: this.manualQuality,
       live: this.liveSnapshot(),
       position: Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0,
       duration: Number.isFinite(this.video.duration) ? this.video.duration : null,
@@ -152,6 +153,17 @@ export class PlaybackEngine {
       if (this.video.readyState >= 1) done(); else if (token.signal.aborted) abort();
     });
   }
+  rejectCommand(message: string) { if (message) this.fail({ kind: 'source', message, recoverable: false }); }
+  private requestSeek(seconds: number) {
+    this.emit({ type: 'session-command', sessionId: this.session!.id, command: { kind: 'seek', positionSeconds: seconds,
+      sourceGeneration: this.controller.source, seekGeneration: this.controller.seek, idempotencyKey: crypto.randomUUID() } });
+  }
+  private requestSwitch(source: Source, position: number) {
+    const boundary = source.boundaries?.filter(at => at <= position).sort((a,b) => b-a)[0];
+    if (boundary === undefined) throw new Error('No independent switch boundary offered by server');
+    this.emit({ type: 'session-command', sessionId: this.session!.id, command: { kind: 'switch', pathId: source.id, atSeconds: boundary,
+      sourceGeneration: this.controller.source, seekGeneration: this.controller.seek, idempotencyKey: crypto.randomUUID() } });
+  }
   private fail(failure: Failure) { this.controller.cancel(); this.pipeline?.dispose(); this.video.pause(); this.failure = failure; this.status = 'failed'; this.emit({ type: 'error', failure }); this.publish(); }
   private async recover(error: unknown, token: Generation) {
     if (!this.controller.current(token) || this.recovering) return;
@@ -165,7 +177,9 @@ export class PlaybackEngine {
       const source = this.candidates().find(s => !this.attempted.has(s.id) && s.recoveryAllowed !== false && s.timeline === this.source?.timeline && s.edition === this.source?.edition && (!this.audio || s.audioTrackId === this.audio));
       if (!source) { this.fail({ ...this.failure!, recoverable: false }); return; }
       // Release the guard before activation so a failed replacement can advance again.
-      this.recovering = false; await this.activate(source, position, true);
+      this.recovering = false;
+      if (this.session?.serverControlled) this.requestSwitch(source, position);
+      else await this.activate(source, position, true);
     } catch (e) { if (this.controller.current(token)) this.fail({ kind, message: String(e), recoverable: false }); }
     finally { this.recovering = false; }
   }
@@ -199,8 +213,18 @@ export class PlaybackEngine {
       switch (command.type) {
         case 'play': this.wantsPlay = true; await this.play(); break;
         case 'pause': this.wantsPlay = false; this.video.pause(); break;
+        case 'retry': if (this.session) await this.load({ ...this.session, position: this.video.currentTime || this.resumePosition }); break;
+        case 'switchPath': {
+          const source = this.candidates().find(s => s.id === command.pathId);
+          if (!source || source.id === this.source?.id) break;
+          if (source.recoveryAllowed === false) throw new Error('Source has no compatibility proof');
+          if (this.session?.serverControlled) this.requestSwitch(source, this.video.currentTime);
+          else await this.activate(source, this.video.currentTime);
+          break;
+        }
         case 'seek': {
           if (!Number.isFinite(command.seconds) || command.seconds < 0 || Number.isFinite(this.video.duration) && command.seconds > this.video.duration) throw new Error('Seek outside media timeline');
+          if (this.session?.serverControlled) { this.requestSeek(command.seconds); break; }
           this.controller.changeSeek();
           if (this.backend === 'mse' && this.source) await this.activate(this.source, command.seconds, false, true);
           else this.video.currentTime = command.seconds;

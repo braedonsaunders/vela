@@ -1,15 +1,115 @@
+use PlayerView from "../../foundation/player-models.contract"
+
 component PlayerChrome
   props
-    titleId: string
+    model: PlayerView
+    title: string
+    visible: bool
+    small: bool
+    still: bool
+    serverError: string
     command: action
+    seek: action
+    editing: action
+    close: action
+  derive failure = (serverError != "" ? serverError : model.reason)
+  derive shown = (visible or model.state != "playing")
+  action scrub(v: number)
+    seek(v)
+  action audio(v: string)
+    command("audio", v)
+  action subtitles(v: string)
+    command("subtitle", v)
+  action quality(v: string)
+    command("quality", v)
+  action path(v: string)
+    command("switchPath", v)
+  action chapter(v: string)
+    match first(model.chapters.filter(c => c.id == v))
+      case some(c)
+        seek(c.seconds)
+      case none
+        command("play", "")
   view
-    row padding=20 gap=14 flex-wrap="wrap" justify-content="center" background-color="surface.raised"
-      button press=command("play") aria-label="Play" buttonStyle="bordered"
-        text "Play"
-      button press=command("pause") aria-label="Pause" buttonStyle="bordered"
-        text "Pause"
-      button press=command("pip") aria-label="Picture in picture" buttonStyle="bordered"
-        text "Picture in picture"
-      button press=command("fullscreen") aria-label="Fullscreen" buttonStyle="bordered"
-        text "Fullscreen"
-
+    column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="ink.primary"
+      row padding=(small ? "20px 18px 50px" : "28px 36px 72px") gap=20 align-items="center" background-image="linear-gradient(180deg, #000000c9, transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease")
+        button press=close pointer-events=(shown ? "auto" : "none") aria-label="Close player" border="none" background-color="#ffffff16" color="ink.primary" border-radius=24 padding=12
+          image "symbol:close" width=20 height=20
+        column gap=5 flex=1
+          text "NOW PLAYING" font-size=9 letter-spacing="3px" color="ink.secondary"
+          text title font-size=(small ? 18 : 24) font-weight=550 letter-spacing="-0.5px" line-clamp=1
+        text "vela" font-size=25 letter-spacing="-1.5px" opacity=0.7
+      if model.state == "loading" or model.state == "buffering" or model.state == "recovering" or model.state == "failed" or serverError != ""
+        column align-self="center" align-items="center" gap=14 padding=24 max-width=480 border-radius=20 background-color="#090b0ed9" role="status" testId="player-status"
+          text (model.state == "recovering" ? "Finding a way forward" : model.state == "failed" or serverError != "" ? "Playback interrupted" : model.state == "loading" ? "Preparing your screening" : "Building a little breathing room") font-size=22 font-weight=500 text-align="center"
+          if failure != ""
+            text failure color="ink.secondary" font-size=13 line-height=1.5 text-align="center"
+          if model.state == "failed" or serverError != ""
+            button press=command("retry", "") pointer-events="auto" border="none" border-radius=22 padding="12px 24px" background-color="ink.primary" color="ink.inverse"
+              text "Try again"
+      column padding=(small ? "48px 18px 20px" : "80px 36px 30px") gap=18 background-image="linear-gradient(0deg, #000000f0, #00000099 62%, transparent)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 220ms ease") pointer-events=(shown ? "auto" : "none") focusin=editing(true) focusout=editing(false)
+        if model.actionError != "" and failure == ""
+          text model.actionError color="brand.warm" font-size=12 role="status"
+        row gap=14 align-items="center"
+          text model.elapsed font-size=12 font-variant-numeric="tabular-nums" min-width=38 color="ink.secondary"
+          column flex=1 position="relative" height=24 justify-content="center"
+            column position="absolute" left=0 right=0 height=3 border-radius=2 background-color="#ffffff25" overflow="hidden"
+              for range in model.buffered key=range.id
+                column position="absolute" top=0 bottom=0 left=`${range.left}%` width=`${range.width}%` background-color="#ffffff55"
+              column position="absolute" left=0 top=0 bottom=0 width=`${model.progress}%` background-color="brand.warm"
+            for chapter in model.chapters key=chapter.id
+              column position="absolute" left=`${chapter.percent}%` height=7 width=1 background-color="#000000d9" aria-hidden=true
+            input type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub aria-label="Playback position" testId="player-scrub" disabled=(model.duration <= 0) width="100%" opacity=0.15 accent-color="brand.warm"
+          text model.remaining font-size=12 font-variant-numeric="tabular-nums" color="ink.secondary"
+        row gap=(small ? 12 : 22) align-items="center" flex-wrap="wrap"
+          button press=command(model.playing ? "pause" : "play", "") aria-label=(model.playing ? "Pause" : "Play") testId="player-toggle" padding=12 border="none" border-radius=26 background-color="ink.primary" color="ink.inverse"
+            text (model.playing ? "Pause" : "Play") font-size=13 font-weight=650
+          button press=seek(max(0, model.position - 10)) aria-label="Back 10 seconds" border="none" padding=8 background-color="transparent" color="ink.primary"
+            text "−10" font-size=14
+          button press=seek(min(model.duration, model.position + 10)) disabled=(model.duration <= 0) aria-label="Forward 10 seconds" border="none" padding=8 background-color="transparent" color="ink.primary"
+            text "+10" font-size=14
+          column gap=4 flex=1 min-width=100
+            text `${model.path} · ${model.quality}` font-size=12 font-weight=550 testId="player-quality"
+            text (model.lockedQuality == "" ? "AUTO QUALITY" : "QUALITY LOCKED") font-size=8 letter-spacing="1.5px" color="ink.quiet"
+          if model.chapters.length > 0
+            select value="" change=chapter aria-label="Chapters" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
+              option value=""
+                text "Chapters"
+              for chapter in model.chapters key=chapter.id
+                option value=chapter.id
+                  text chapter.label
+          if model.pip
+            button press=command("pip", "") aria-label="Picture in picture" border="none" padding=8 background-color="transparent" color="ink.primary"
+              text "PiP" font-size=12
+          if model.fullscreen
+            button press=command("fullscreen", "") aria-label="Fullscreen" border="none" padding=8 background-color="transparent" color="ink.primary"
+              text "Fullscreen" font-size=12
+        row gap=12 align-items="center" flex-wrap="wrap"
+          if model.audio.length > 1
+            select value=model.audioId change=audio aria-label="Audio track" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
+              for track in model.audio key=track.id
+                option value=track.id
+                  text track.label
+          else
+            text model.audioLabel color="ink.quiet" font-size=11
+          if model.subtitles.length > 0
+            select value=model.subtitleId change=subtitles aria-label="Subtitles" testId="player-subtitles" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
+              option value=""
+                text "Subtitles off"
+              for track in model.subtitles key=track.id
+                option value=track.id
+                  text track.label
+          if model.qualities.length > 1
+            select value=model.lockedQuality change=quality aria-label="Quality" testId="player-quality-select" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
+              option value=""
+                text "Auto quality"
+              for quality in model.qualities key=quality.id
+                option value=quality.id
+                  text quality.label
+          if model.paths.length > 1
+            select value=model.pathId change=path aria-label="Playback path" testId="player-path" background-color="#ffffff12" color="ink.primary" border="none" border-radius=8 padding=8 font-size=12
+              for path in model.paths key=path.id
+                option value=path.id
+                  text path.label
+          if not small
+            text "SPACE play / pause   ·   ← → seek   ·   F fullscreen" margin-left="auto" color="ink.quiet" font-size=10
