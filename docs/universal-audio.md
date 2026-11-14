@@ -348,3 +348,22 @@ actual 48kHz format and their correct software package in a runtime without
 AudioDecoder. A mismatched expected FLAC codec for an ALAC track was refused.
 Eight metadata range requests were made, none larger than 262,144 bytes. Browser
 native support, a real mid-play switch and pending-state UI remain lead-owned.
+
+## Nested-worker asset diagnosis
+
+The playback lead's three native-view attempts produced zero frames and timed out
+while serving artifacts through a Playwright page.route overlay. The focused
+no-media diagnostic proved that the overlay intercepted the top-level worker but
+not the nested audio worker: the child load failed and only the parent's route
+handler ran. This was a qualification-environment failure, not evidence against
+the decoded audio formats.
+
+A temporary localhost:8794 server then served the lead's **real** complete
+client/modules/web tree with JS/WASM/JSON/bin MIME and byte-range support, and
+proxied the existing mock API/media without rewriting payloads, Range or
+Content-Range. Direct checks returned worker JS 200/application/javascript,
+output-stage and libdovi WASM 200/application/wasm, and a correct 206 range with
+WASM magic 0061736d01000000. The lead's actual worker bootstrap and in-worker
+WASM fetch/compile passed without a media source. Any further source attempt
+required the parent's renewed clearance after the three-attempt limit. This
+no-source proof does not itself qualify native-view playback.
