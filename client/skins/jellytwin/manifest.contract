@@ -1,0 +1,3 @@
+use SkinManifest from "../../foundation/models.contract"
+
+fn manifest(): SkinManifest = SkinManifest(id="jellytwin", name=t("jellytwin.name"), tagline=t("skin.jellytwin.tagline"), preview="assets/skins/jellytwin.jpg", swatches=["#101010", "#ffffff", "#00a4dc", "#aa5cc3", "#292929"])

@@ -195,3 +195,47 @@ theme
   mochi.tone-music = #f0a0ff  scheme=fixed
   mochi.tone-life = #c8eb94  scheme=fixed
   mochi.tone-other = #c5bcd6  scheme=fixed
+
+  // Jelly Twin: a near-black page, raised greys, a cyan accent and its cyan-to-violet gradient.
+  jellytwin.page = #101010  scheme=fixed
+  jellytwin.header = #101010f2  scheme=fixed
+  jellytwin.drawer = #1c1c1c  scheme=fixed
+  jellytwin.raised = #292929  scheme=fixed
+  jellytwin.raised-hover = #383838  scheme=fixed
+  jellytwin.card = #242424  scheme=fixed
+  jellytwin.field = #292929  scheme=fixed
+  jellytwin.line = #ffffff1f  scheme=fixed
+  jellytwin.ink = #ffffffde  scheme=fixed
+  jellytwin.ink-strong = #ffffff  scheme=fixed
+  jellytwin.secondary = #ffffff99  scheme=fixed
+  jellytwin.quiet = #ffffff66  scheme=fixed
+  jellytwin.accent = #00a4dc  scheme=fixed
+  jellytwin.accent-soft = #00a4dc33  scheme=fixed
+  jellytwin.violet = #aa5cc3  scheme=fixed
+  jellytwin.violet-soft = #aa5cc340  scheme=fixed
+  jellytwin.hover = #ffffff14  scheme=fixed
+  jellytwin.overlay = #00000099  scheme=fixed
+  jellytwin.scrim = #000000b3  scheme=fixed
+  jellytwin.scrim-clear = #10101000  scheme=fixed
+  jellytwin.scrim-page = #101010d9  scheme=fixed
+  jellytwin.osd-top = #000000b3  scheme=fixed
+  jellytwin.osd-bottom = #000000d9  scheme=fixed
+  jellytwin.track = #ffffff40  scheme=fixed
+  jellytwin.buffer = #ffffff73  scheme=fixed
+  jellytwin.popup = #202020f7  scheme=fixed
+  jellytwin.shadow = #000000a6  scheme=fixed
+  jellytwin.danger = #cb272a  scheme=fixed
+  jellytwin.guide-cell = #1f1f1f  scheme=fixed
+  jellytwin.guide-cell-hover = #2e2e2e  scheme=fixed
+  jellytwin.guide-airing = #10303d  scheme=fixed
+  jellytwin.guide-head = #181818  scheme=fixed
+  jellytwin.tile-1 = #00455c  scheme=fixed
+  jellytwin.tile-2 = #44007e  scheme=fixed
+  jellytwin.tile-3 = #1e5631  scheme=fixed
+  jellytwin.tile-4 = #6b2c1f  scheme=fixed
+  jellytwin.tile-5 = #234a7a  scheme=fixed
+  jellytwin.cat-news = #2f7dbf  scheme=fixed
+  jellytwin.cat-sport = #2e9a54  scheme=fixed
+  jellytwin.cat-film = #a43b76  scheme=fixed
+  jellytwin.cat-kids = #d38b1c  scheme=fixed
+  jellytwin.cat-other = #5b5b5b  scheme=fixed

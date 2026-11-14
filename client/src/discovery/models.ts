@@ -26,7 +26,7 @@ export function entry(item: RowEntry, origin?: string, artWidth = 2560) {
     logo: art(artwork, 'logo', logoWidth, Math.ceil(logoWidth / 2), origin), accent: artwork.find(a => a.color)?.color ?? '', receipt: item.receiptToken };
 }
 export function feedRow(row: Row, origin?: string, artWidth = 2560) {
-  return { id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin, artWidth)), nextCursor: row.nextCursor ?? '', continuation: row.continuation, previewOnFocus: row.previewOnFocus ?? false };
+  return { id: row.id, name: row.name, receipt: row.receiptToken, items: row.items.map(item => entry(item, origin, artWidth)), nextCursor: row.nextCursor ?? '', continuation: row.continuation };
 }
 export function homeModel(data: Bootstrap, origin?: string, now?: number, artWidth = 2560) {
   const heroes = (data.heroes ?? []).slice(0, 5);
@@ -44,7 +44,7 @@ export function homeModel(data: Bootstrap, origin?: string, now?: number, artWid
   return { viewer: data.viewer.name, defaultSkinId: data.defaultSkinId, skins: data.capabilities.skins.map(s => s.id),
     hero: heroes.map(hero => card(hero.title, hero.receiptToken, origin, artWidth)), previews,
     rows: data.rows.map(row => feedRow(row, origin, artWidth)), nextCursor: data.nextCursor ?? '',
-    liveAvailable: data.capabilities.features.liveTV.available, aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available, trailerPreviewAvailable: data.capabilities.features.trailerPreview?.available ?? false };
+    liveAvailable: data.capabilities.features.liveTV.available, aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available };
 }
 export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560) {
   const facts: string[] = [];

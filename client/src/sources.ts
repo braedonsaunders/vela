@@ -7,7 +7,6 @@ import { loadGuide, liveIdentity } from './live/guide';
 import { artworkURL } from './discovery/artwork';
 import { liveStatus, stopPlan } from './live/player';
 import { InteractionQueue } from './telemetry';
-import { PreviewCoordinator } from './discovery/preview';
 import { sessionEvents } from './protocol/events';
 import { mediaPlan } from './protocol/media';
 import { randomId } from './protocol/id';
@@ -47,17 +46,11 @@ let interactions: InteractionQueue | undefined;
 let ready: Promise<void> | undefined;
 let activeQuick = "";
 let authVersion = 0;
-let previewEpoch = 0;
-let previews: PreviewCoordinator | undefined;
 // Successful panel answers are kept only for this authentication session and display context.
 const librarySnapshots = new Map<string, { version: number; locale: string; width: number; value: Awaited<ReturnType<Sources['uiLibrary']>> }>();
 const libraryRequests = new Map<string, number>();
 function resetSessionSnapshots(): void {
   authVersion++;
-  previewEpoch++;
-  if (previews) void previews.cancel(previewEpoch).catch(() => {});
-  previews = undefined;
-  previewEpoch = 0;
   librarySnapshots.clear();
   libraryRequests.clear();
 }
@@ -209,20 +202,6 @@ const sources: Sources = {
     features = bootstrap.capabilities.features;
     return withLocale(localeJSON, () => homeModel(bootstrap, API, at, artWidth));
   },
-  uiPreviewCancel: async ([generation]) => {
-    previewEpoch = Math.max(previewEpoch, generation);
-    if (previews) await previews.cancel(generation);
-    return { accepted: true };
-  },
-  uiPreviewRequest: async ([id, generation, at], store) => {
-    previewEpoch = Math.max(previewEpoch, generation);
-    const version = authVersion;
-    const api = await session(store);
-    if (version !== authVersion || generation !== previewEpoch || !features?.trailerPreview?.available)
-      return { cardId: '', url: '', expiresAt: 0, retryAfterSeconds: 0, generation };
-    if (!previews) previews = new PreviewCoordinator(api, API, client, () => key(store));
-    return previews.request(id, generation, at);
-  },
   uiHomeRows: async ([cursor, heroIds, homeAt, localeJSON, artWidth], store) => {
     if (!cursor) throw new Error('Home row cursor is missing');
     const data = await (await session(store)).rows({ cursor, placement: 'home' });
@@ -240,12 +219,15 @@ const sources: Sources = {
   },
   uiLibraries: async (_args, store) => {
     const api = await session(store);
-    const items: { id: string; name: string; kind: string }[] = [];
+    const items: { id: string; name: string; kind: string; backdrop: string }[] = [];
     const seen = new Set<string>();
     let cursor: string | undefined;
     for (let n = 0; n < 100; n++) {
       const page = await api.libraries({ cursor, limit: 100 });
-      items.push(...page.items.map(({ id, name, kind }) => ({ id, name, kind })));
+      items.push(...page.items.map(({ id, name, kind, artwork }) => {
+        const image = artwork.find(a => a.kind === 'backdrop');
+        return { id, name, kind, backdrop: image ? artworkURL(image, 960, 540, API) ?? '' : '' };
+      }));
       if (page.continuation === 'exhausted') return items;
       if (page.continuation !== 'more' || !page.nextCursor || seen.has(page.nextCursor)) throw new Error('Library list is incomplete');
       cursor = page.nextCursor; seen.add(cursor);

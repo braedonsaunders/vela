@@ -1,0 +1,161 @@
+use PlayerView from "../../foundation/player-models.contract"
+use Icon, Spinner, IconBtn, Raised, Submit, MenuRow, Sheet from "./look.contract"
+
+// The on-screen display: a top bar with the way back and the title, the accent spinner
+// while the engine waits, and a bottom bar with the timeline and a row of round icon
+// buttons; subtitles, audio and settings open action sheets above the bar.
+component PlayerChrome
+  props
+    model: PlayerView
+    title: string
+    visible: bool
+    small: bool
+    still: bool
+    busy: bool
+    serverError: string
+    command: action
+    seek: action
+    editing: action
+    close: action
+  state scrubbing = false
+  derive blocked = busy or model.state == "ended"
+  derive failure = (serverError != "" ? serverError : model.reason)
+  derive failed = model.state == "failed" or serverError != ""
+  derive waiting = not failed and (model.waiting or model.state == "loading" or model.state == "buffering" or model.state == "recovering")
+  derive shown = (visible or model.state != "playing")
+  derive level = (model.muted ? 0 : max(0, min(1, model.volume)))
+  derive hasSettings = model.qualities.length > 1 or model.paths.length > 1 or model.chapters.length > 0
+  action menuChanged(e: ToggleEvent)
+    editing(e.newState == "open")
+  action scrubFocus(on: bool)
+    scrubbing = on
+    editing(on)
+  action scrub(v: number)
+    seek(v)
+  action setVolume(v: number)
+    command("volume", `${v}`)
+  view
+    column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="jellytwin.ink-strong" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif"
+      row padding=(small ? "10px 8px 48px" : "14px 20px 80px") gap=10 align-items="center" background-image="linear-gradient(180deg, var(--jellytwin.osd-top) 0%, transparent 100%)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 300ms ease") pointer-events=(shown ? "auto" : "none") inert=(not shown)
+        button press=close aria-label=t("ui.closePlayer") class=IconBtn width=46 height=46
+          Icon(name="back", size=26)
+        text title font-size=(small ? 17 : 20) font-weight=500 line-clamp=1 flex=1 min-width=0 text-shadow="0px 1px 6px var(--jellytwin.shadow)"
+      if failed
+        column pointer-events="auto" align-self="center" align-items="center" text-align="center" gap=14 padding=(small ? "24px 20px" : "30px 36px") margin="0px 16px" max-width=440 box-sizing="border-box" class=Sheet role="alert" testId="player-status"
+          column color="jellytwin.danger"
+            Icon(name="alert", size=34)
+          text t("ui.playbackInterrupted") font-size=21 font-weight=600
+          if failure != ""
+            text failure font-size=14 line-height=1.5 color="jellytwin.ink"
+          row gap=10 margin-top=6 flex-wrap="wrap" justify-content="center"
+            button press=command("retry", "") class=Submit height=42
+              text t("ui.tryAgain")
+            button press=close class=Raised height=42
+              text t("ui.closePlayer")
+      else
+        if waiting
+          column align-self="center" align-items="center" gap=14 role="status" aria-label=(model.state == "recovering" ? t("ui.recoveringPlayback") : model.state == "loading" ? t("ui.preparingPlayback") : t("ui.buffering")) testId="player-status"
+            Spinner(size=(small ? 52 : 64), still=still)
+            if model.preparation != "" and model.state == "loading"
+              text model.preparation font-size=14 color="jellytwin.ink" text-shadow="0px 1px 6px var(--jellytwin.shadow)"
+      column padding=(small ? "48px 10px 10px" : "90px 24px 16px") gap=(small ? 4 : 6) background-image="linear-gradient(0deg, var(--jellytwin.osd-bottom) 0%, transparent 100%)" opacity=(shown ? 1 : 0) transition=(still ? "none" : "opacity 300ms ease") pointer-events=(shown ? "auto" : "none") inert=(not shown)
+        if model.actionError != "" and failure == ""
+          text model.actionError role="status" font-size=13 color="jellytwin.ink" padding="0px 8px 4px"
+        row gap=12 align-items="center" padding="0px 8px"
+          text model.elapsed font-size=13 font-variant-numeric="tabular-nums" min-width=44
+          column position="relative" flex=1 min-width=0 height=24 justify-content="center"
+            column position="absolute" left=0 right=0 height=(scrubbing ? 6 : 4) border-radius=3 background-color="jellytwin.track" overflow="hidden" transition=(still ? "none" : "height 140ms ease")
+              for range in model.buffered key=range.id
+                column position="absolute" top=0 bottom=0 left=`${range.left}%` width=`${range.width}%` background-color="jellytwin.buffer"
+              column position="absolute" left=0 top=0 bottom=0 width=`${model.progress}%` background-image="linear-gradient(90deg, var(--jellytwin.violet) 0%, var(--jellytwin.accent) 100%)" background-color="jellytwin.accent"
+            for chapter in model.chapters key=chapter.id
+              column position="absolute" left=`${chapter.percent}%` width=3 height=(scrubbing ? 6 : 4) background-color="jellytwin.ink-strong" opacity=0.7 aria-hidden=true
+            column position="absolute" left=`calc(${model.progress}% - 7px)` width=14 height=14 border-radius=7 background-color="jellytwin.accent" box-shadow="0px 1px 4px var(--jellytwin.shadow)" scale=(scrubbing ? 1.25 : 1) transition=(still ? "none" : "scale 140ms ease") aria-hidden=true
+            input focus=scrubFocus(true) blur=scrubFocus(false) type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub aria-label=t("ui.playbackPosition") testId="player-scrub" disabled=(model.duration <= 0 or blocked) position="absolute" left=0 right=0 width="100%" height=24 margin=0 opacity=0 cursor="pointer"
+          text model.remaining font-size=13 font-variant-numeric="tabular-nums" min-width=44 text-align="right"
+        row align-items="center" gap=(small ? 0 : 2)
+          button disabled=blocked press=command("seekBy", "-10") aria-label=t("ui.back10Seconds") class=IconBtn width=(small ? 42 : 48) height=(small ? 42 : 48)
+            Icon(name="rewind", size=(small ? 24 : 28))
+          button disabled=(model.state == "ended") press=command(model.playing ? "pause" : "play", "") aria-label=(model.state == "ended" ? t("ui.finished") : model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" class=IconBtn width=(small ? 48 : 56) height=(small ? 48 : 56)
+            Icon(name=(model.playing ? "pause" : "play"), size=(small ? 30 : 36))
+          button disabled=(model.duration <= 0 or blocked) press=command("seekBy", "10") aria-label=t("ui.forward10Seconds") class=IconBtn width=(small ? 42 : 48) height=(small ? 42 : 48)
+            Icon(name="forward", size=(small ? 24 : 28))
+          column flex=1 min-width=0
+            if not small
+              text (model.quality != "" ? t("ui.pathQuality", path=model.path, quality=model.quality) : model.path) testId="player-quality" font-size=12 color="jellytwin.secondary" padding-left=10 line-clamp=1
+          if model.subtitles.length > 0
+            button popovertarget="jt-subtitles" aria-label=t("ui.subtitles") testId="player-subtitles-button" class=IconBtn width=44 height=44 color=(model.subtitleId != "" ? "jellytwin.accent" : "jellytwin.ink-strong")
+              Icon(name="subtitles", size=24)
+          if model.audio.length > 1
+            button popovertarget="jt-audio" aria-label=t("ui.audioTrack") testId="player-audio-button" class=IconBtn width=44 height=44
+              Icon(name="audio", size=22)
+          if hasSettings
+            button popovertarget="jt-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" class=IconBtn width=44 height=44
+              Icon(name="settings", size=24)
+          if model.pip and not small
+            button press=command("pip", "") aria-label=t("ui.pictureInPicture") class=IconBtn width=44 height=44
+              Icon(name="pip", size=23)
+          if model.fullscreen
+            button press=command("fullscreen", "") aria-label=t("ui.fullscreen") class=IconBtn width=44 height=44
+              Icon(name="fullscreen", size=23)
+          button press=command("mute", "") aria-label=(model.muted ? t("ui.unmute") : t("ui.mute")) aria-pressed=model.muted testId="player-mute" class=IconBtn width=44 height=44
+            Icon(name=(model.muted or model.volume <= 0 ? "muted" : "volume"), size=23)
+          if not small
+            column position="relative" width=96 height=24 justify-content="center" flex-shrink=0 margin-right=4
+              column position="absolute" left=0 right=0 height=4 border-radius=2 background-color="jellytwin.track" overflow="hidden"
+                column height=4 width=`${level * 100}%` background-color="jellytwin.accent"
+              column position="absolute" left=`calc(${level * 100}% - 6px)` width=12 height=12 border-radius=6 background-color="jellytwin.accent" aria-hidden=true
+              input type="range" min=0 max=1 step=0.01 value=level change=setVolume focus=editing(true) blur=editing(false) aria-label=t("ui.volume") testId="player-volume" position="absolute" left=0 width="100%" height=24 margin=0 opacity=0 cursor="pointer"
+      if model.subtitles.length > 0
+        column id="jt-subtitles" popover="auto" toggle=menuChanged position="absolute" position-area="top span-left" margin-bottom=10 pointer-events="auto" role="dialog" aria-label=t("ui.subtitles") class=Sheet width=(small ? "calc(100vw - 24px)" : 300) max-height="60vh" overflow-y="auto"
+          SheetTitle(label=t("ui.subtitles"))
+          TrackRow(label=t("ui.off"), on=(model.subtitleId == ""), disabled=blocked, press=command("subtitle", ""))
+          for track in model.subtitles key=track.id
+            TrackRow(label=track.label, on=(model.subtitleId == track.id), disabled=blocked, press=command("subtitle", track.id))
+      if model.audio.length > 1
+        column id="jt-audio" popover="auto" toggle=menuChanged position="absolute" position-area="top span-left" margin-bottom=10 pointer-events="auto" role="dialog" aria-label=t("ui.audioTrack") aria-busy=(model.pendingAudioId != "") class=Sheet width=(small ? "calc(100vw - 24px)" : 300) max-height="60vh" overflow-y="auto"
+          SheetTitle(label=t("ui.audio"))
+          for track in model.audio key=track.id
+            TrackRow(label=track.label, on=((model.pendingAudioId != "" ? model.pendingAudioId : model.audioId) == track.id), disabled=blocked, press=command("audio", track.id))
+          if model.pendingAudioId != ""
+            row gap=10 align-items="center" padding="8px 16px" role="status"
+              Spinner(size=16, still=still)
+              text t("ui.switchingAudioSoon") font-size=13 color="jellytwin.secondary"
+      if hasSettings
+        column id="jt-settings" popover="auto" toggle=menuChanged position="absolute" position-area="top span-left" margin-bottom=10 pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") class=Sheet width=(small ? "calc(100vw - 24px)" : 320) max-height="70vh" overflow-y="auto"
+          if model.qualities.length > 1
+            SheetTitle(label=t("ui.quality"))
+            TrackRow(label=t("ui.autoAdaptToYourConnection"), on=(model.lockedQuality == ""), disabled=blocked, press=command("quality", ""))
+            for quality in model.qualities key=quality.id
+              TrackRow(label=quality.label, on=(model.lockedQuality == quality.id), disabled=blocked, press=command("quality", quality.id))
+          if model.paths.length > 1
+            SheetTitle(label=t("ui.delivery"))
+            for path in model.paths key=path.id
+              TrackRow(label=path.label, on=(model.pathId == path.id), disabled=blocked, press=command("switchPath", path.id))
+          if model.chapters.length > 0
+            SheetTitle(label=t("ui.chapters"))
+            for chapter in model.chapters key=chapter.id
+              button press=seek(chapter.seconds) disabled=blocked class=MenuRow
+                column width=20 color="jellytwin.secondary"
+                  Icon(name="chapters", size=18)
+                text chapter.label line-clamp=1
+          text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 color="jellytwin.secondary" padding="10px 16px 6px"
+
+component SheetTitle
+  props
+    label: string
+  view
+    text label font-size=13 font-weight=600 color="jellytwin.secondary" padding="10px 16px 4px"
+
+component TrackRow
+  props
+    label: string
+    on: bool
+    disabled: bool
+    press: action
+  view
+    button press=press() disabled=disabled role="menuitemradio" aria-checked=on class=MenuRow color=(on ? "jellytwin.accent" : "jellytwin.ink-strong")
+      column width=20 align-items="center"
+        if on
+          Icon(name="check", size=18)
+      text label line-clamp=1

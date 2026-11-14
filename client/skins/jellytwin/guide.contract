@@ -1,0 +1,335 @@
+use GuideModel, GuideChannel, GuideProgramme, LiveTile from "../../live/models.contract"
+use Icon, Spinner, IconBtn, Raised, Submit, Tab, Sheet, side, tileColor, jtFade, jtPop from "./look.contract"
+
+// Live TV: Guide and Channels tabs; the guide is one grid that scrolls on both axes with
+// a sticky time header and channel column. Rows and programmes are windowed around the
+// visible port so a long lineup stays light.
+
+fn ppm(small: bool): number = (small ? 4 : 5)
+fn rowH(small: bool): number = (small ? 60 : 68)
+fn railW(small: bool): number = (small ? 78 : 210)
+fn headH(): number = 40
+fn category(n: number): string = (n == 0 ? "jellytwin.cat-news" : n == 1 ? "jellytwin.cat-sport" : n == 2 ? "jellytwin.cat-film" : n == 3 ? "jellytwin.cat-kids" : "jellytwin.cat-other")
+
+component Guide
+  props
+    model: GuideModel
+    small: bool
+    still: bool
+    tile: LiveTile
+    watch: action
+    chooseDay: action
+    tileMessage: action
+    tileUnmute: action
+    tileTuneIn: action
+    retune: action
+  state tab = "guide"
+  state selChannel = ""
+  state selProgramme = ""
+  state rowBase = 0
+  state colBase = -1
+  state portW = 1200
+  state portH = 640
+  state landed = -1
+  derive scale = ppm(small)
+  derive row = rowH(small)
+  derive rail = railW(small)
+  derive width = model.minutes * scale
+  derive landingMin = max(0, min(model.minutes - (portW - rail) / scale, model.landing - 30))
+  derive col = (colBase < 0 ? floor(landingMin / 30) : colBase)
+  derive firstRow = max(0, rowBase - 6)
+  derive lastRow = min(model.channels.length, rowBase + ceil(portH / row) + 8)
+  derive winFrom = col * 30 - 150
+  derive winTo = col * 30 + portW / scale + 150
+  action scrolled(x: number, y: number)
+    if landed < 0
+      landed = landingMin
+    let r = floor(y / row / 4) * 4
+    if r != rowBase
+      rowBase = r
+    let c = floor(x / scale / 30)
+    if c != colBase
+      colBase = c
+  action measured(w: number, h: number)
+    portW = w
+    portH = h
+  action pickDay(offset: number)
+    rowBase = 0
+    colBase = -1
+    landed = -1
+    selChannel = ""
+    selProgramme = ""
+    chooseDay(offset)
+  action pickTab(v: string)
+    tab = v
+  action open(channel: string, programme: string, airing: bool)
+    selChannel = channel
+    selProgramme = programme
+    if airing
+      retune(channel)
+    focus("jt-programme-close")
+  action dismiss
+    let id = selProgramme
+    selChannel = ""
+    selProgramme = ""
+    focus(`jt-guide-${id}`)
+  action pageKey(k: string)
+    if k == "Escape" and selProgramme != ""
+      preventDefault()
+      dismiss()
+  action move(index: number, at: number, leftId: string, rightId: string, k: string, event: KeyboardEvent)
+    if not event.metaKey and not event.ctrlKey and not event.altKey
+      if k == "ArrowLeft" and leftId != ""
+        preventDefault()
+        focus(leftId)
+      if k == "ArrowRight" and rightId != ""
+        preventDefault()
+        focus(rightId)
+      if k == "ArrowUp" or k == "ArrowDown"
+        preventDefault()
+        let target = max(0, min(model.channels.length - 1, index + (k == "ArrowUp" ? -1 : 1)))
+        focus(match first(model.channels.slice(target, target + 1)) { case some(c) => match first(c.programmes.filter(p => p.at + p.span > at)) { case some(p) => `jt-guide-${p.id}`, case none => `jt-rail-${c.id}` }, case none => "" })
+  view
+    column key=pageKey height="100%" min-height=0 position="relative" background-color="jellytwin.page" color="jellytwin.ink" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif"
+      text t("ui.channelGuide") role="heading" aria-level=1 position="absolute" width=1 height=1 overflow="hidden" opacity=0
+      row role="tablist" aria-label=t("jellytwin.liveTv") justify-content="center" flex-shrink=0 padding-top=6 border-bottom="1px solid var(--jellytwin.line)"
+        GuideTab(label=t("live.guide"), on=(tab == "guide"), still=still, press=pickTab("guide"))
+        GuideTab(label=t("live.channels"), on=(tab == "channels"), still=still, press=pickTab("channels"))
+      row flex-shrink=0 align-items="center" gap=12 padding-left=side(small) padding-right=side(small) padding-top=10 padding-bottom=10
+        if tab == "guide"
+          scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" flex=1 min-width=0
+            row gap=6 role="group" aria-label=t("live.day")
+              for d in model.days key=d.offset
+                button press=pickDay(d.offset) aria-pressed=(d.offset == model.day) class=DayButton background-color=(d.offset == model.day ? "jellytwin.accent" : "jellytwin.raised")
+                  text (d.offset > 1 ? `${d.label} ${d.date}` : d.label) font-size=14 white-space="nowrap"
+        else
+          text t("jellytwin.channelCount", count=formatNumber(model.channels.length, "decimal")) font-size=14 color="jellytwin.secondary" flex=1
+        if tile.state != "off"
+          GuideTile(tile=tile, small=small, still=still, watch=watch, message=tileMessage, unmute=tileUnmute, tuneIn=tileTuneIn)
+      if model.channels.length == 0
+        column flex=1 align-items="center" justify-content="center" gap=12 padding=32 color="jellytwin.secondary" role="status"
+          Icon(name="live", size=44)
+          text t("live.noChannels") font-size=17
+      else
+        if tab == "channels"
+          scroll flex=1 min-height=0
+            column display="grid" grid-template-columns=(small ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fill, minmax(230px, 1fr))") gap=(small ? 10 : 16) padding-left=side(small) padding-right=side(small) padding-top=6 padding-bottom=40
+              for c in model.channels key=c.id
+                ChannelCard(channel=c, small=small, watch=watch)
+        else
+          for day in [model.day] key=day
+            scroll id="jt-guide-grid" testId="guide-grid" scroll=scrolled resize=measured scrollLeft=((landed < 0 ? landingMin : landed) * scale) flex=1 min-height=0 overflow="auto" overscroll-behavior="contain" scroll-padding-left=rail scroll-padding-top=headH() role="grid" aria-label=t("ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch") border-top="1px solid var(--jellytwin.line)"
+              column position="relative" width=(rail + width) height=(headH() + model.channels.length * row) flex-shrink=0
+                row position="sticky" top=0 z-index=6 height=headH() width=(rail + width) background-color="jellytwin.guide-head" border-bottom="1px solid var(--jellytwin.line)"
+                  row position="sticky" left=0 z-index=7 width=rail height=headH() flex-shrink=0 box-sizing="border-box" padding-left=(small ? 8 : 16) align-items="center" background-color="jellytwin.guide-head" border-right="1px solid var(--jellytwin.line)"
+                    text (small ? model.days.filter(d => d.offset == model.day).map(d => d.label).join("") : model.dayLabel) font-size=13 font-weight=600 color="jellytwin.secondary" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+                  column position="relative" width=width height=headH() flex-shrink=0
+                    for tick in model.ticks key=tick.id
+                      column position="absolute" left=(tick.minute * scale) top=0 bottom=0 width=(30 * scale) justify-content="center" box-sizing="border-box" padding-left=10 border-left=(tick.hour ? "1px solid var(--jellytwin.line)" : "none") aria-hidden=true
+                        text tick.label font-size=13 font-weight=(tick.hour ? 600 : 400) color=(tick.hour ? "jellytwin.ink-strong" : "jellytwin.secondary") font-variant-numeric="tabular-nums" white-space="nowrap"
+                for c, i in model.channels.slice(firstRow, lastRow) key=c.id
+                  row position="absolute" left=0 top=(headH() + (firstRow + i) * row) width=(rail + width) height=row role="row" border-bottom="1px solid var(--jellytwin.line)" box-sizing="border-box"
+                    button id=`jt-rail-${c.id}` press=watch(c.id) role="rowheader" aria-label=t("ui.watchChannel", channel=c.name) position="sticky" left=0 z-index=3 flex-shrink=0 width=rail height=(row - 1) box-sizing="border-box" padding-left=(small ? 6 : 12) padding-right=(small ? 6 : 10) class=RailCell
+                      row gap=(small ? 0 : 10) align-items="center" width="100%" justify-content=(small ? "center" : "flex-start")
+                        column width=(small ? 60 : 64) height=(small ? 38 : 40) flex-shrink=0 border-radius=4 overflow="hidden" align-items="center" justify-content="center" background-color=tileColor(c.id) position="relative"
+                          if c.logo != ""
+                            image c.logo alt="" width="100%" height="100%" object-fit="contain"
+                          else
+                            text c.name.slice(0, 3).toUpperCase() font-size=12 font-weight=700 color="jellytwin.ink-strong"
+                          if small
+                            text c.number position="absolute" right=2 bottom=1 font-size=9 font-weight=700 color="jellytwin.ink-strong" text-shadow="0px 1px 3px var(--jellytwin.shadow)"
+                        if not small
+                          column gap=2 flex=1 min-width=0
+                            text c.number font-size=12 color="jellytwin.secondary" font-variant-numeric="tabular-nums"
+                            row gap=5 align-items="center" min-width=0
+                              text c.name font-size=14 font-weight=500 color="jellytwin.ink-strong" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
+                              if c.favorite
+                                column color="jellytwin.accent" aria-label=t("live.favourite")
+                                  Icon(name="star", size=12)
+                    if not c.listed
+                      button press=watch(c.id) aria-label=t("ui.watchChannel", channel=c.name) position="sticky" left=(rail + 3) margin-left=3 margin-top=3 height=(row - 7) width=max(120, min(width, portW - rail - 8)) box-sizing="border-box" class=Cell background-color="jellytwin.guide-cell" padding-left=14 align-items="center" text-align="left"
+                        text t("live.noListings") font-size=14 color="jellytwin.secondary"
+                    for p in c.programmes.filter(p => p.at + p.span > winFrom and p.at < winTo) key=p.id
+                      button id=`jt-guide-${p.id}` press=open(c.id, p.id, p.airing) key=move(firstRow + i, p.at, p.leftId, p.rightId) role="gridcell" aria-selected=(c.id == selChannel and p.id == selProgramme) aria-label=t("ui.programmeStartToEndChannelProgrammeDetails", programme=p.name, start=p.startLabel, end=p.endLabel, channel=c.name) position="absolute" left=(rail + p.at * scale + 1) top=3 width=max(2, p.span * scale - 3) height=(row - 7) box-sizing="border-box" padding=0 overflow="clip" text-align="left" class=Cell background-color=(p.airing ? "jellytwin.guide-airing" : "jellytwin.guide-cell") opacity=(p.ended ? 0.55 : 1)
+                        if p.tone >= 0 and p.span * scale > 16
+                          column position="absolute" left=0 top=0 bottom=0 width=4 background-color=category(p.tone) aria-hidden=true
+                        if p.airing
+                          column position="absolute" left=0 bottom=0 height=3 width=`${p.progress}%` background-color="jellytwin.accent" aria-hidden=true
+                        if p.span * scale >= 48
+                          column position="sticky" left=(rail + 6) height="100%" justify-content="center" gap=3 padding-left=12 padding-right=8 box-sizing="border-box" max-width=max(0, p.span * scale - 3) min-width=0
+                            row gap=6 align-items="center" min-width=0
+                              if p.airing and p.span * scale > 160
+                                text t("live.liveBadge") font-size=9 font-weight=700 letter-spacing="0.06em" padding="1px 4px" border-radius=2 background-color="jellytwin.danger" color="jellytwin.ink-strong" flex-shrink=0
+                              text p.name font-size=(small ? 13 : 14) font-weight=500 color="jellytwin.ink-strong" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+                            if p.span * scale > 110
+                              text t("ui.startEnd", start=p.startLabel, end=p.endLabel) font-size=12 color="jellytwin.secondary" font-variant-numeric="tabular-nums" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+                if model.nowMinute >= 0
+                  column position="absolute" left=(rail + model.nowMinute * scale - 1) top=0 width=2 height=(headH() + model.channels.length * row) z-index=4 background-color="jellytwin.accent" pointer-events="none" aria-hidden=true
+      for c in model.channels.filter(c => c.id == selChannel) key=`sel-${c.id}`
+        for p in c.programmes.filter(p => p.id == selProgramme) key=`dlg-${p.id}`
+          column position="absolute" inset=0 z-index=20 align-items="center" justify-content=(small ? "flex-end" : "center")
+            button press=dismiss tabindex=-1 aria-label=t("live.close") position="absolute" inset=0 border="none" background-color="jellytwin.overlay"
+            ProgrammeDialog(channel=c, programme=p, small=small, still=still, watch=watch, dismiss=dismiss)
+
+component ProgrammeDialog
+  props
+    channel: GuideChannel
+    programme: GuideProgramme
+    small: bool
+    still: bool
+    watch: action
+    dismiss: action
+  view
+    column role="dialog" aria-label=programme.name position="relative" width=(small ? "100%" : 520) max-width="100%" box-sizing="border-box" class=Sheet border-radius=(small ? "10px 10px 0px 0px" : 8) overflow="hidden" padding=0 animation=(still ? "jtFade 160ms linear both" : "jtPop 200ms ease-out both")
+      if programme.art != ""
+        image programme.art alt="" width="100%" height=(small ? 170 : 240) object-fit="cover" aria-hidden=true
+      column gap=10 padding=(small ? 18 : 24)
+        row gap=10 align-items="center"
+          text `${channel.number} · ${channel.name}` font-size=13 color="jellytwin.secondary" flex=1 min-width=0 line-clamp=1
+          button id="jt-programme-close" press=dismiss aria-label=t("live.close") class=IconBtn width=36 height=36
+            Icon(name="close", size=20)
+        text programme.name font-size=(small ? 21 : 24) font-weight=600 color="jellytwin.ink-strong"
+        row gap=12 align-items="center" flex-wrap="wrap" font-size=14
+          text t("ui.startEnd", start=programme.startLabel, end=programme.endLabel) font-variant-numeric="tabular-nums" color="jellytwin.ink-strong"
+          if programme.episode != ""
+            text programme.episode color="jellytwin.secondary"
+          if programme.genre != ""
+            text programme.genre color="jellytwin.secondary"
+          if programme.rating != ""
+            text programme.rating font-size=12 padding="1px 6px" border="1px solid var(--jellytwin.secondary)" border-radius=3
+        if programme.airing
+          row gap=10 align-items="center"
+            column flex=1 height=4 border-radius=2 background-color="jellytwin.track" overflow="hidden" role="progressbar" aria-label=t("live.progress") aria-valuemin=0 aria-valuemax=100 aria-valuenow=programme.progress
+              column height=4 width=`${programme.progress}%` background-color="jellytwin.accent"
+            text programme.remainingLabel font-size=13 color="jellytwin.secondary" font-variant-numeric="tabular-nums"
+        else
+          text (programme.ended ? t("live.ended") : t("live.startsIn", minutes=programme.startsInLabel)) font-size=13 color="jellytwin.secondary"
+        if programme.summary != ""
+          text programme.summary font-size=15 line-height=1.55 color="jellytwin.ink"
+        row gap=10 margin-top=6
+          button press=watch(channel.id) class=Submit testId="guide-watch"
+            Icon(name="play", size=20)
+            text (programme.airing ? t("live.watch") : t("ui.watchChannel", channel=channel.name))
+
+component GuideTab
+  props
+    label: string
+    on: bool
+    still: bool
+    press: action
+  view
+    button press=press() role="tab" aria-selected=on class=Tab color=(on ? "jellytwin.accent" : "jellytwin.ink") font-weight=(on ? 600 : 400)
+      text label
+      if on
+        column sharedElement="jt-live-tab" -exact-layout-transition=(still ? "none" : "300ms ease-out") position="absolute" left=12 right=12 bottom=0 height=3 border-radius=2 background-image="linear-gradient(90deg, var(--jellytwin.violet) 0%, var(--jellytwin.accent) 100%)" aria-hidden=true
+
+// A channel card for the Channels tab: logo, name and what is on now.
+component ChannelCard
+  props
+    channel: GuideChannel
+    small: bool
+    watch: action
+  view
+    button press=watch(channel.id) aria-label=t("ui.watchChannel", channel=channel.name) border-radius=6 class=ChannelHost
+      column width="100%" aspect-ratio="16 / 9" align-items="center" justify-content="center" background-color=tileColor(channel.id) border-radius=6 overflow="hidden" position="relative"
+        if channel.logo != ""
+          image channel.logo alt="" width="70%" height="70%" object-fit="contain"
+        else
+          text channel.name font-size=(small ? 16 : 20) font-weight=700 color="jellytwin.ink-strong" padding=10 text-align="center" line-clamp=2
+        if channel.nowId != ""
+          column position="absolute" left=0 right=0 bottom=0 height=4 background-color="jellytwin.overlay" aria-hidden=true
+            column height=4 width=`${channel.nowProgress}%` background-color="jellytwin.accent"
+      column gap=2 width="100%" padding="6px 2px 0px" text-align="center"
+        text `${channel.number} ${channel.name}` font-size=14 font-weight=500 color="jellytwin.ink-strong" line-clamp=1
+        text (channel.now != "" ? channel.now : (channel.listed ? t("live.nothingNow") : t("live.noListings"))) font-size=13 color="jellytwin.secondary" line-clamp=1
+
+// The live preview tile: one muted stream with its channel and an honest state.
+component GuideTile
+  props
+    tile: LiveTile
+    small: bool
+    still: bool
+    watch: action
+    message: action
+    unmute: action
+    tuneIn: action
+  view
+    column position="relative" height=(small ? 64 : 96) aspect-ratio="16 / 9" flex-shrink=0 border-radius=6 overflow="hidden" background-color="media.ground" box-shadow="0px 4px 16px var(--jellytwin.shadow)"
+      if tile.planJson != "" and (tile.state == "connecting" or tile.state == "playing")
+        vela-player plan=tile.planJson playerCommand=tile.commandJson message=message ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+      if tile.state == "connecting"
+        column position="absolute" inset=0 align-items="center" justify-content="center" role="status" aria-label=t("live.tuning", channel=tile.channelName)
+          Spinner(size=22, still=still)
+      if tile.state == "unavailable"
+        column position="absolute" inset=0 align-items="center" justify-content="center" padding=6 role="status"
+          text t("live.previewUnavailable") font-size=11 color="jellytwin.secondary" text-align="center"
+      if tile.state == "tune-in"
+        button press=tuneIn aria-label=t("live.tuneInTo", channel=tile.channelName) position="absolute" inset=0 class=TileButton background-color="jellytwin.overlay"
+          row gap=6 align-items="center" justify-content="center"
+            Icon(name="play", size=16)
+            text t("live.tuneIn") font-size=13 font-weight=600
+      else
+        button press=watch(tile.channelId) aria-label=t("ui.watchChannel", channel=tile.channelName) position="absolute" inset=0 class=TileButton background-color="transparent" testId="guide-tile"
+      row position="absolute" left=0 top=0 right=0 gap=5 align-items="center" padding="4px 6px" background-image="linear-gradient(180deg, var(--jellytwin.osd-top) 0%, transparent 100%)" pointer-events="none"
+        text t("live.liveBadge") font-size=9 font-weight=700 letter-spacing="0.06em" padding="1px 4px" border-radius=2 background-color="jellytwin.danger" color="jellytwin.ink-strong" flex-shrink=0
+        if not small
+          text tile.channelName font-size=11 font-weight=600 color="jellytwin.ink-strong" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
+      if tile.state == "playing"
+        button press=unmute aria-label=(tile.muted ? t("live.unmutePreview") : t("live.mutePreview")) aria-pressed=(not tile.muted) position="absolute" right=4 bottom=4 class=IconBtn width=28 height=28 background-color="jellytwin.overlay"
+          Icon(name=(tile.muted ? "muted" : "volume"), size=16)
+
+style DayButton
+  box-sizing = "border-box"
+  height = 34
+  padding = "0px 14px"
+  border = "none"
+  border-radius = 4
+  color = "jellytwin.ink-strong"
+  flex-shrink = 0
+  cursor = "pointer"
+  :focus-visible
+    box-shadow = "0px 0px 0px 2px var(--jellytwin.ink-strong)"
+
+style RailCell
+  border = "none"
+  background-color = "jellytwin.guide-head"
+  color = "jellytwin.ink-strong"
+  text-align = "left"
+  cursor = "pointer"
+  border-right = "1px solid var(--jellytwin.line)"
+  :hover
+    background-color = "jellytwin.guide-cell-hover"
+  :focus-visible
+    box-shadow = "inset 0px 0px 0px 2px var(--jellytwin.accent)"
+
+style Cell
+  display = "flex"
+  border = "none"
+  border-radius = 3
+  color = "jellytwin.ink-strong"
+  cursor = "pointer"
+  :hover
+    background-color = "jellytwin.guide-cell-hover"
+  :focus-visible
+    box-shadow = "inset 0px 0px 0px 2px var(--jellytwin.accent)"
+
+style ChannelHost
+  display = "flex"
+  flex-direction = "column"
+  align-items = "stretch"
+  padding = 0
+  border = "none"
+  background-color = "transparent"
+  color = "jellytwin.ink-strong"
+  cursor = "pointer"
+  :hover
+    opacity = 0.9
+  :focus-visible
+    box-shadow = "0px 0px 0px 3px var(--jellytwin.accent)"
+
+style TileButton
+  border = "none"
+  color = "jellytwin.ink-strong"
+  cursor = "pointer"
+  :focus-visible
+    box-shadow = "inset 0px 0px 0px 2px var(--jellytwin.accent)"

@@ -1,0 +1,41 @@
+use Icon, IconBtn, Raised from "./look.contract"
+
+// Live state over the player: the delivery mode, honest delivery states, low delay,
+// catch-up and channel up/down, in the skin's popup surface.
+component LiveControls
+  props
+    lowDelay: bool
+    reconnecting: bool
+    delivery: string
+    drift: number
+    driftLabel: string
+    canCatchUp: bool
+    toggleLowDelay: action
+    catchUp: action
+    zap: action
+  view
+    column gap=10 padding="12px 14px" min-width=230 max-width=320 border-radius=6 background-color="jellytwin.popup" color="jellytwin.ink-strong" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" box-shadow="0px 8px 30px var(--jellytwin.shadow)"
+      row gap=10 align-items="center"
+        text t("live.liveBadge") font-size=10 font-weight=700 letter-spacing="0.06em" padding="2px 6px" border-radius=2 background-color="jellytwin.danger"
+        text (lowDelay ? t("live.lowDelay") : t("live.adaptive")) font-size=14 font-weight=500 color="jellytwin.ink" flex=1
+        button press=zap(-1) aria-label=t("live.channelUp") class=IconBtn width=34 height=34
+          Icon(name="up", size=20)
+        button press=zap(1) aria-label=t("live.channelDown") class=IconBtn width=34 height=34
+          Icon(name="down", size=20)
+      if reconnecting
+        text t("live.reconnecting") role="status" font-size=13 color="jellytwin.secondary"
+      if delivery == "upstream-gap"
+        text t("live.gap") role="status" font-size=13 color="jellytwin.secondary"
+      if delivery == "segment-delayed"
+        text t("live.delayed") role="status" font-size=13 color="jellytwin.secondary"
+      if delivery == "waiting-for-publication"
+        text t("live.publication") role="status" font-size=13 color="jellytwin.secondary"
+      if drift > 0
+        text t("live.behind", seconds=driftLabel) role="status" font-size=13 color="jellytwin.secondary" font-variant-numeric="tabular-nums"
+      row gap=8 flex-wrap="wrap"
+        button press=toggleLowDelay aria-label=t("ui.toggleLowDelay") aria-pressed=lowDelay class=Raised height=34 padding="0px 12px" background-color=(lowDelay ? "jellytwin.accent" : "jellytwin.raised")
+          Icon(name="lowdelay", size=16)
+          text (lowDelay ? t("ui.lowDelayOn") : t("ui.useLowDelay")) font-size=13
+        if canCatchUp and drift > 0
+          button press=catchUp class=Raised height=34 padding="0px 12px"
+            text t("live.catchUp") font-size=13
