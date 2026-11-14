@@ -30,7 +30,6 @@ component AuthStage
         Wordmark(size=46, still=still)
         column class=Glass width="100%" box-sizing="border-box" padding="clamp(28px, 5vw, 44px) clamp(22px, 4.5vw, 40px)" border-radius=28 box-shadow="0px 40px 120px var(--cinematic.card-shadow), inset 0px 1px 0px var(--cinematic.ring)" -exact-layout-transition=(still ? "none" : "560ms ease-out")
           children
-        text t("ui.yourEveningReimagined") class=Eyebrow font-size=10 color="ink.quiet" text-align="center"
 
 // A signed-out moment with nothing to fill in: connecting, redeeming a web code, offline.
 component AuthNotice

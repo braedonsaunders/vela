@@ -47,6 +47,9 @@ keyframes dissolve
 keyframes vanish
   to opacity=0
 
+keyframes pop
+  from opacity=0 scale=0.94 translate="0px -6px"
+
 keyframes open
   from opacity=0 scale=0.94 translate="0px 28px"
 

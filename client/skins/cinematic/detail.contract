@@ -1,0 +1,175 @@
+use Card, FeedRow, DetailModel, ExtraModel, cardName from "../../foundation/models.contract"
+use Row from "./slots.contract"
+use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, enter, expose, drift, base, glide, quick from "./look.contract"
+
+fn kindLabel(kind: string): string = (kind == "movie" ? t("ui.film") : kind == "show" ? t("ui.series") : kind == "season" ? t("ui.season") : t("ui.episode"))
+fn side(small: bool): string = (small ? "20px" : "max(32px, 5.5vw)")
+
+// A title opened over the page: an artwork band, then episodes, extras, people and related rows.
+component Detail
+  props
+    model: DetailModel
+    small: bool
+    still: bool
+    play: action
+    playExtra: action
+    selectTitle: action
+    observe: action
+  derive selectedSeason = match first(model.title) { case some(t) => (t.kind == "season" ? t.id : match first(model.seasons) { case some(s) => s.id, case none => "" }), case none => "" }
+  derive upNext = match first(model.episodes.filter(e => not e.played)) { case some(e) => [e], case none => [] }
+  action pickSeason(id: string)
+    selectTitle(id, "season", "")
+  view
+    column gap=(small ? 36 : 52) padding-bottom=72
+      for title in model.title key=title.id
+        column position="relative" min-height=(small ? 600 : "min(80vh, 780px)") justify-content="flex-end" overflow="hidden"
+          column position="absolute" inset=0 overflow="hidden" aria-hidden=true mask-image="linear-gradient(180deg, black 0%, black 78%, transparent 100%)" animation=expose(still)
+            if title.backdrop != ""
+              image title.backdrop alt="" width="100%" height="100%" object-fit="cover" transform-origin="58% 40%" animation=drift(still)
+            column position="absolute" left="-12%" bottom="0%" width="70%" height="80%" background-color=(title.accent == "" ? "brand.warm" : title.accent) opacity=0.18 mask-image="radial-gradient(closest-side, black 0%, transparent 100%)"
+            column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-mid) 38%, var(--cinematic.scrim-clear) 72%), linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-strong) 20%, var(--cinematic.scrim-clear) 60%), linear-gradient(180deg, var(--cinematic.nav-scrim) 0%, var(--cinematic.scrim-clear) 22%)"
+            image "assets/grain.svg" alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="fill" opacity=0.05
+          column position="relative" padding-top=(small ? 96 : 120) padding-bottom=(small ? 8 : 12) padding-left=side(small) padding-right=side(small) max-width="58rem" gap=(small ? 14 : 18)
+            row gap=10 align-items="center" animation=enter(still, 140)
+              column width=24 height=2 border-radius=1 background-color=(title.accent == "" ? "brand.warm" : title.accent)
+              text kindLabel(title.kind) class=Eyebrow font-size=10 color="brand.warm"
+            if title.logo != ""
+              image title.logo alt=title.name role="heading" aria-level=1 height=(small ? 92 : 150) width="auto" max-width=(small ? "80%" : "min(560px, 80%)") object-fit="contain" align-self="flex-start" animation=enter(still, 200)
+            else
+              text title.name role="heading" aria-level=1 class=Display font-size=(small ? 46 : 84) text-shadow="0px 4px 40px var(--cinematic.shadow)" animation=enter(still, 200)
+            text ([title.facts].concat(title.genres.slice(0, 3)).filter(f => f != "").join(" · ")) font-size=14 color="ink.secondary" font-variant-numeric="tabular-nums" animation=enter(still, 260)
+            if model.mediaFacts.length > 0
+              row gap=8 flex-wrap="wrap" animation=enter(still, 300)
+                for fact in model.mediaFacts key=fact
+                  text fact font-size=11 font-weight=650 letter-spacing="0.06em" color="ink.primary" padding="5px 9px" border-radius=6 border="1px solid var(--cinematic.glass-edge-strong)" background-color="cinematic.control" backdrop-filter="blur(12px)"
+            if title.summary != ""
+              text title.summary color="ink.primary" opacity=0.88 font-size=(small ? 15 : 17) line-height=1.6 max-width="42rem" animation=enter(still, 340)
+            row gap=12 align-items="center" flex-wrap="wrap" margin-top=(small ? 6 : 10) animation=enter(still, 400)
+              if model.canPlay
+                button press=play(title.id) class=PrimaryPill height=(small ? 50 : 56) padding-left=(small ? 22 : 30) padding-right=(small ? 26 : 34) testId="detail-play" transition=`background-color 180ms linear`
+                  row gap=10 align-items="center"
+                    image "symbol:play-fill" width=18 height=18 aria-hidden=true
+                    text (model.resumeSeconds > 0 ? t("ui.resumePositionIn", position=model.resumePosition) : t("ui.play")) font-size=16
+              for trailer in model.extras.filter(e => e.kind == "trailer" and e.ready) key=trailer.id
+                button press=playExtra(trailer.id) class=GhostPill height=(small ? 50 : 56) padding-left=22 padding-right=26 transition=`background-color 180ms linear`
+                  row gap=10 align-items="center"
+                    image "symbol:play" width=16 height=16 aria-hidden=true
+                    text t("ui.watchTrailer") font-size=15
+            if model.canPlay and model.resumeSeconds > 0 and title.durationSeconds > 0
+              column width=(small ? "60%" : 260) height=3 border-radius=2 background-color="cinematic.track-strong" overflow="hidden" role="progressbar" aria-label=t("ui.watchProgress") aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=min(title.durationSeconds, max(0, model.resumeSeconds)) animation=enter(still, 440)
+                column height=3 width=`${min(100, model.resumeSeconds / title.durationSeconds * 100)}%` background-color="brand.warm"
+      if model.seasons.length > 0 or model.episodes.length > 0
+        column padding-left=side(small) padding-right=side(small) gap=(small ? 18 : 24) animation=enter(still, 480)
+          row align-items="flex-end" justify-content="space-between" flex-wrap="wrap" gap=16
+            text t("ui.episodes") role="heading" aria-level=2 class=Display font-size=(small ? 30 : 38)
+          if model.seasons.length > 1
+            scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" margin-left=(small ? "-20px" : "0px") margin-right=(small ? "-20px" : "0px")
+              row gap=8 role="group" aria-label=t("ui.season") testId="season-picker" padding-left=(small ? 20 : 0) padding-right=(small ? 20 : 0) padding-top=2 padding-bottom=2
+                for season in model.seasons key=season.id
+                  button press=pickSeason(season.id) aria-pressed=(season.id == selectedSeason) class=SeasonPill background-color=(season.id == selectedSeason ? "ink.primary" : "cinematic.control") color=(season.id == selectedSeason ? "ink.inverse" : "ink.primary") transition=`background-color ${quick()}ms linear, color ${quick()}ms linear`
+                    text season.name font-size=14
+          for episode in upNext key=episode.id
+            row flex-direction=(small ? "column" : "row") align-items=(small ? "stretch" : "center") gap=(small ? 16 : 24) padding=(small ? 16 : 20) border-radius=20 background-color="cinematic.glass" border="1px solid var(--cinematic.glass-edge)" box-shadow="inset 0px 1px 0px var(--cinematic.ring), 0px 24px 60px -20px var(--cinematic.card-shadow)"
+              if episode.backdrop != ""
+                image episode.backdrop alt="" width=(small ? "100%" : 220) aspect-ratio="16 / 9" object-fit="cover" border-radius=12 flex-shrink=0
+              column gap=8 flex=1 min-width=0
+                text (episode.progressSeconds > 0 ? t("ui.continueWatching") : t("ui.upNext")) class=Eyebrow font-size=10 color="brand.warm"
+                text (episode.episodeNumber > 0 ? t("ui.numberTitle", number=episode.episodeNumberLabel, title=episode.name) : episode.name) role="heading" aria-level=3 class=Display font-size=(small ? 24 : 30)
+                if episode.facts != ""
+                  text episode.facts font-size=13 color="ink.secondary"
+              button align-self=(small ? "stretch" : "center") press=play(episode.id) aria-label=(episode.progressSeconds > 0 ? t("ui.resumeTitle", title=episode.name) : t("ui.playTitle", title=episode.name)) class=PrimaryPill height=50 padding-left=22 padding-right=26 flex-shrink=0 transition=`background-color 180ms linear`
+                row gap=10 align-items="center" justify-content="center"
+                  image "symbol:play-fill" width=16 height=16 aria-hidden=true
+                  text (episode.progressSeconds > 0 ? t("ui.resumeEpisode") : t("ui.playEpisode")) font-size=15
+          column
+            for episode, i in model.episodes key=episode.id
+              EpisodeRow(episode=episode, small=small, still=still, play=play, selectTitle=selectTitle, delay=min(i, 8) * 40)
+      if model.extras.length > 0
+        column gap=16 animation=enter(still, 520)
+          text t("ui.extras") role="heading" aria-level=2 class=Display font-size=(small ? 28 : 34) padding-left=side(small) padding-right=side(small)
+          scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
+            row gap=14 padding-left=side(small) padding-right=side(small) padding-top=4 padding-bottom=8
+              for extra in model.extras key=extra.id
+                ExtraTile(extra=extra, small=small, still=still, playExtra=playExtra)
+      if model.cast.length > 0
+        column gap=16 padding-left=side(small) padding-right=side(small) animation=enter(still, 560)
+          text t("ui.featuring") role="heading" aria-level=2 class=Display font-size=(small ? 28 : 34)
+          row gap=10 flex-wrap="wrap"
+            for person in model.cast key=person
+              row gap=10 align-items="center" padding="6px 16px 6px 6px" border-radius=999 background-color="cinematic.control" border="1px solid var(--cinematic.glass-edge)"
+                text person.slice(0, 1).toUpperCase() width=30 height=30 border-radius=15 display="flex" align-items="center" justify-content="center" font-size=13 font-weight=650 color="ink.primary" background-image="linear-gradient(135deg, var(--cinematic.placeholder-top) 0%, var(--cinematic.placeholder-bottom) 100%)" aria-hidden=true
+                text person font-size=14 color="ink.primary"
+      if model.crew.length > 0
+        column gap=12 padding-left=side(small) padding-right=side(small) animation=enter(still, 580)
+          text t("ui.behindTheStory") role="heading" aria-level=2 class=Display font-size=(small ? 28 : 34)
+          text model.crew.join(" · ") font-size=15 color="ink.secondary" line-height=1.7 max-width="48rem"
+      if model.related.length > 0
+        column animation=enter(still, 600)
+          for related in model.related key=related.id
+            Row(row=related, small=small, still=still, selectTitle=selectTitle, observe=observe)
+
+style SeasonPill
+  height = 40
+  padding = "0px 18px"
+  border = "1px solid var(--cinematic.glass-edge)"
+  border-radius = 999
+  font-weight = 600
+  flex-shrink = 0
+  :hover
+    border-color = "cinematic.glass-edge-strong"
+  :focus-visible
+    box-shadow = "0px 0px 0px 2px var(--brand.warm)"
+
+// One episode: a still that lifts and shows a play mark on hover, then its text.
+component EpisodeRow
+  props
+    episode: Card
+    small: bool
+    still: bool
+    play: action
+    selectTitle: action
+    delay: number
+  state lifted = false
+  action hoverRow(over: bool)
+    lifted = over
+  view
+    row gap=(small ? 14 : 24) align-items=(small ? "flex-start" : "center") padding="18px 0px" border-bottom="1px solid var(--cinematic.hairline)" hover=hoverRow animation=enter(still, delay)
+      button press=selectTitle(episode.id, episode.kind, episode.receipt) aria-label=cardName(episode) testId=`episode-${episode.id}` focus=hoverRow(true) blur=hoverRow(false) position="relative" width=(small ? 128 : 220) aspect-ratio="16 / 9" padding=0 border="none" border-radius=10 overflow="hidden" background-color="surface.raised" color="ink.primary" flex-shrink=0 cursor="pointer" scale=(lifted and not still ? 1.03 : 1) box-shadow=(lifted ? "0px 20px 40px -14px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)" : "0px 0px 0px 1px var(--cinematic.hairline)") transition=`scale ${base()}ms ${glide()}, box-shadow ${base()}ms ${glide()}`
+        :focus-visible
+          box-shadow="0px 0px 0px 3px var(--ink.primary)"
+        if episode.backdrop != ""
+          image episode.backdrop alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover"
+        else
+          column position="absolute" inset=0 align-items="center" justify-content="center" background-image="linear-gradient(160deg, var(--cinematic.placeholder-top) 0%, var(--cinematic.placeholder-bottom) 100%)"
+            text (episode.episodeNumber > 0 ? episode.episodeNumberLabel : t("ui.episode")) class=Display font-size=(small ? 26 : 34) color="ink.secondary"
+        column position="absolute" inset=0 align-items="center" justify-content="center" background-color="cinematic.scrim-soft" opacity=(lifted ? 1 : 0) transition=`opacity ${base()}ms ${glide()}` aria-hidden=true
+          column width=44 height=44 border-radius=22 align-items="center" justify-content="center" background-color="cinematic.glass" backdrop-filter="blur(10px)" border="1px solid var(--cinematic.glass-edge-strong)"
+            image "symbol:play-fill" width=16 height=16 color="ink.primary"
+        if episode.progressSeconds > 0 and episode.durationSeconds > 0
+          column position="absolute" left=8 right=8 bottom=8 height=3 border-radius=2 background-color="cinematic.track-strong" overflow="hidden" role="progressbar" aria-label=t("ui.titleWatchProgress", title=episode.name) aria-valuemin=0 aria-valuemax=episode.durationSeconds aria-valuenow=min(episode.durationSeconds, max(0, episode.progressSeconds))
+            column height=3 width=`${min(100, episode.progressSeconds / episode.durationSeconds * 100)}%` background-color="brand.warm"
+      column flex=1 min-width=0 gap=6
+        text (episode.episodeNumber > 0 ? t("ui.numberTitle", number=episode.episodeNumberLabel, title=episode.name) : episode.name) role="heading" aria-level=3 font-size=(small ? 15 : 18) font-weight=600 line-clamp=2
+        text (episode.played ? t("ui.factsWatched", facts=episode.facts) : episode.facts) color="ink.quiet" font-size=12 font-variant-numeric="tabular-nums"
+        if not small and episode.summary != ""
+          text episode.summary color="ink.secondary" font-size=14 line-clamp=2 line-height=1.55 max-width="46rem"
+      if not small
+        button press=play(episode.id) aria-label=t("ui.playTitle", title=episode.name) class=IconButton width=44 height=44 padding=13 flex-shrink=0
+          image "symbol:play-fill" width=16 height=16
+
+// An extra (trailer, featurette): a glass tile that plays, or says it is unavailable.
+component ExtraTile
+  props
+    extra: ExtraModel
+    small: bool
+    still: bool
+    playExtra: action
+  view
+    button press=playExtra(extra.id) disabled=(not extra.ready) aria-label=(extra.ready ? t("ui.playTitle", title=extra.name) : t("ui.titleNotAvailable", title=extra.name)) class=GhostPill border-radius=16 width=(small ? 220 : 280) height=(small ? 96 : 110) padding=18 flex-shrink=0 transition=`background-color 180ms linear`
+      row gap=14 align-items="center" height="100%"
+        column width=40 height=40 border-radius=20 align-items="center" justify-content="center" background-color=(extra.ready ? "ink.primary" : "cinematic.control") flex-shrink=0
+          image (extra.ready ? "symbol:play-fill" : "symbol:lock") width=14 height=14 color=(extra.ready ? "ink.inverse" : "ink.quiet") aria-hidden=true
+        column gap=4 flex=1 min-width=0 text-align="left"
+          text extra.name font-size=15 font-weight=600 line-clamp=2
+          if not extra.ready
+            text t("ui.notAvailableYet") font-size=12 color="ink.quiet"

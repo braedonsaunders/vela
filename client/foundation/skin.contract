@@ -8,7 +8,8 @@ use LiveControls as CineLiveControls from "../skins/cinematic/live.contract"
 use Guide as IndexGuide from "../skins/index/guide.contract"
 use LiveControls as IndexLiveControls from "../skins/index/live.contract"
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport from "./models.contract"
-use Shell as CineShell, Home as CineHome, SearchSurface as CineSearchSurface, Row as CineRow, Detail as CineDetail, SearchField as CineSearchField, detailPresentation as CinePresentation, detailSplit as CineSplit from "../skins/cinematic/slots.contract"
+use Status as CineStatus, Shell as CineShell, Home as CineHome, SearchSurface as CineSearchSurface, Row as CineRow, SearchField as CineSearchField, detailPresentation as CinePresentation, detailSplit as CineSplit from "../skins/cinematic/slots.contract"
+use Detail as CineDetail from "../skins/cinematic/detail.contract"
 use Shell as IndexShell, Home as IndexHome, SearchSurface as IndexSearchSurface, Row as IndexRow, Detail as IndexDetail, SearchField as IndexSearchField, detailPresentation as IndexPresentation, detailSplit as IndexSplit from "../skins/index/slots.contract"
 
 fn skinDetailPresentation(skin: string, width: number): string = (skin == "example" ? ExamplePresentation(width) : skin == "index" or skin == "editorial" ? IndexPresentation(width) : CinePresentation(width))
@@ -197,3 +198,18 @@ component PlayerChrome
         IndexPlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
       else
         CinePlayerChrome(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
+
+// Loading and failure moments. Cinematic draws skeletons and designed failures;
+// other skins keep a plain status line.
+component Status
+  props
+    skin: string
+    kind: string
+    message: string
+    small: bool
+    still: bool
+  view
+    if skin == "index" or skin == "editorial" or skin == "example"
+      text message padding=32 role="status"
+    else
+      CineStatus(kind=kind, message=message, small=small, still=still)

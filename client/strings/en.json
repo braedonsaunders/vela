@@ -213,5 +213,11 @@
   "data.fixedQuality": "Fixed quality",
   "ui.mute": "Mute",
   "ui.unmute": "Unmute",
-  "ui.volume": "Volume"
+  "ui.volume": "Volume",
+  "ui.nothingHereYet": "Nothing here yet",
+  "ui.yourLibraryHasNoRowsYet": "Your library hasn't offered any rows yet. Titles appear here as your server adds them.",
+  "ui.searchUnavailable": "Search is resting",
+  "ui.noMatches": "Nothing by that name",
+  "ui.notAvailableYet": "Not available yet",
+  "ui.somethingWentQuiet": "Something went quiet"
 }

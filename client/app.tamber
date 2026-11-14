@@ -56,6 +56,13 @@ theme
   cinematic.player-mid = #00000033  scheme=fixed
   cinematic.player-bottom = #000000eb  scheme=fixed
   cinematic.track-strong = #ffffff47  scheme=fixed
+  cinematic.nav-scrim = #07090cb3  scheme=fixed
+  cinematic.hairline = #ffffff0f  scheme=fixed
+  cinematic.sheen = #ffffff21  scheme=fixed
+  cinematic.placeholder-top = #2a2622  scheme=fixed
+  cinematic.placeholder-bottom = #121418  scheme=fixed
+  cinematic.search = #161a21a6  scheme=fixed
+  cinematic.search-focus = #1b2029cc  scheme=fixed
 
   // Index light page palette, plus its independent light-on-video chrome.
   index.rail = #e3dfd3  scheme=fixed
