@@ -28,14 +28,14 @@ export const titles: Title[] = collections.flatMap(([_, ...names], row) => names
 })));
 const show: Title = { id: 'show-meridian', kind: 'show', name: 'Meridian Station', summary: 'At a remote coastal weather station, a new team maps the strange rhythms of an isolated island.', year: 2025, genres: ['Drama', 'Mystery'], rating: 'TV-14', artwork: [artwork('show-meridian'), artwork('show-meridian', 'backdrop')] };
 export const seasons: Title[] = [1, 2].map(n => ({ ...show, id: `season-meridian-${n}`, kind: 'season', name: `Season ${n}`, showId: show.id, seasonNumber: n }));
-export const episodes: Title[] = seasons.flatMap(s => ['Arrival', 'The Night Watch', 'Pressure Drop', 'A Distant Light', 'The Sounding', 'Home Waters'].map((name, i) => ({ ...show, id: `episode-${s.seasonNumber}-${i + 1}`, kind: 'episode', name, showId: show.id, seasonId: s.id, seasonNumber: s.seasonNumber, episodeNumber: i + 1, durationSeconds: 2700 + i * 60 })));
+export const episodes: Title[] = seasons.flatMap(s => ['Arrival', 'The Night Watch', 'Pressure Drop', 'A Distant Light', 'The Sounding', 'Home Waters'].map((name, i) => ({ ...show, id: `episode-${s.seasonNumber}-${i + 1}`, kind: 'episode', name, showId: show.id, seasonId: s.id, seasonNumber: s.seasonNumber, episodeNumber: i + 1, durationSeconds: 180, watch: { positionSeconds: i === 1 ? 68 : 0, played: i === 0, favorite: false, watchlisted: false } })));
 titles.splice(14, 1, show);
 export const allTitles = [...titles, ...seasons, ...episodes];
-export const extras: Extra[] = [{ id: 'extra-meridian-trailer', parentId: show.id, kind: 'trailer', name: 'Meridian Station — First Look', durationSeconds: 60, availability: 'ready' }];
+export const extras: Extra[] = [{ id: 'extra-observatory-preview', parentId: titles[0]!.id, kind: 'trailer', name: 'Synthetic cached preview', durationSeconds: 180, availability: 'ready' }, { id: 'extra-meridian-trailer', parentId: show.id, kind: 'trailer', name: 'Meridian Station — First Look', durationSeconds: 60, availability: 'ready' }];
 export function detail(id: string): TitleDetail | undefined {
   const title = allTitles.find(t => t.id === id);
   return title && { title, canPlay: title.kind === 'movie' || title.kind === 'episode',
-    ...(title.kind === 'show' ? { seasons, episodes: episodes.filter(e => e.seasonId === seasons[0]?.id) } : title.kind === 'season' ? { episodes: episodes.filter(e => e.seasonId === id) } : {}),
+    ...(title.kind === 'show' ? { seasons, episodes: episodes.filter(e => e.seasonId === seasons[0]?.id) } : title.kind === 'season' ? { seasons, episodes: episodes.filter(e => e.seasonId === id) } : {}),
     extras: extras.filter(e => e.parentId === id), chapters: [], cast: [] };
 }
 // Unbound fixtures are bound to a grant by the HTTP layer before delivery.

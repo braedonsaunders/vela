@@ -11,7 +11,7 @@ const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
 const capabilities: V.ServerCapabilities = { protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.2.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, extras: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
-interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean }
+interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean; client?: V.ClientCapabilities; previewSessionId?: string }
 const grants = new Map<string, Grant>(), access = new Map<string, Grant>(), refresh = new Map<string, Grant>();
 function issue(device: V.Device): V.Tokens {
   if (!device?.id) fail('request', 'device_required', 'A device id is required');
@@ -83,11 +83,24 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   const g = authenticate(req);
   if (method === 'POST' && path === '/negotiate') {
     if (!body.client?.protocolVersions?.includes(0)) fail('request', 'unsupported_version', 'Protocol v0 required');
-    return json({ capabilities, client: body.client });
+    g.client = body.client; return json({ capabilities, client: body.client });
   }
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
-  if (method === 'GET' && path === '/bootstrap') return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, hero: { title: titles[0], receiptToken: receipt(g, 'hero') }, rows: rows.map(r => boundRow(g, r)) } satisfies V.Bootstrap, g.id);
+  if (method === 'GET' && path === '/bootstrap') {
+    let trailer: V.Extra | undefined;
+    const extra = extras.find(e => e.parentId === titles[0]?.id);
+    if (extra && g.client && !faults.capacityExhausted && await Bun.file(`${mediaRoot}/direct.mp4`).exists()) {
+      let preview = g.previewSessionId && sessions.get(g.previewSessionId);
+      if (!preview || preview.expires <= Date.now() || preview.plan.state === 'ended') {
+        preview = await createSession(g.id, { idempotencyKey: `cached-preview:${g.id}`, client: g.client, extraId: extra.id, positionSeconds: 0, allowTranscode: false });
+        g.previewSessionId = preview.plan.sessionId;
+      }
+      const direct = preview.plan.paths.find(p => p.kind === 'direct' && p.readiness === 'ready');
+      if (direct) trailer = { ...extra, cachedPlayback: { status: 'ready', url: direct.url, expiresAt: new Date(Math.min(g.expires, preview.expires)).toISOString() } };
+    }
+    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, hero: { title: titles[0], receiptToken: receipt(g, 'hero'), ...(trailer ? { trailer } : {}) }, rows: rows.map(r => boundRow(g, r)) } satisfies V.Bootstrap, g.id);
+  }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';
     if (!['home','detail','library'].includes(placement)) fail('request', 'invalid_placement', 'Unknown row placement');
