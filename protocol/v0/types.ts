@@ -116,3 +116,6 @@ export interface ExtrasResponse { items: Extra[] }
 export interface WebCodeRedeemRequest extends Mutation { code: string; device: Device }
 
 export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean }
+
+export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[] }
+export interface CollectionContents extends Page<RowEntry> { collection: Collection }

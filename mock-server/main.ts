@@ -87,6 +87,12 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, hero: { title: titles[0], receiptToken: receipt(g, 'hero') }, rows: rows.map(r => boundRow(g, r)) } satisfies V.Bootstrap, g.id);
   if (method === 'GET' && path === '/rows') return cached(req, page(rows.map(r => boundRow(g, r)), url, g, 'rows'), g.id);
+  const collectionMatch = /^\/collections\/([^/]+)$/.exec(path);
+  if (method === 'GET' && collectionMatch) {
+    const row = rows.find(r => r.id === collectionMatch[1]);
+    if (!row) fail('not-found', 'collection_not_found', 'Collection not found');
+    return cached(req, { collection: { id: row.id, kind: 'collection', name: row.name, artwork: [] }, ...page(boundRow(g, row).items, url, g, `collection:${row.id}`) } satisfies V.CollectionContents, g.id);
+  }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
   if (method === 'GET' && rowMatch) { const r = rows.find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); const p = page(boundRow(g, r).items, url, g, r.id); return cached(req, { ...boundRow(g, r), ...p }, g.id); }
   const titleMatch = /^\/titles\/([^/]+)(?:\/(children|extras|watch))?$/.exec(path);
