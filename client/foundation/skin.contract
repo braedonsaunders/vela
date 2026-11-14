@@ -33,7 +33,7 @@ use Detail as MarqueeDetail from "../skins/marquee/detail.contract"
 use Library as MarqueeLibrary, CollectionPage as MarqueeCollection from "../skins/marquee/library.contract"
 use PlayerChrome as MarqueePlayerChrome from "../skins/marquee/player.contract"
 use Guide as MarqueeGuide from "../skins/marquee/guide.contract"
-use LiveControls as MarqueeLiveControls from "../skins/marquee/live.contract"
+use LiveControls as MarqueeLiveControls, MiniGuide as MarqueeMiniGuide from "../skins/marquee/live.contract"
 use AuthStage as MarqueeAuthStage, AuthNotice as MarqueeAuthNotice, SignIn as MarqueeSignIn, QuickConnect as MarqueeQuickConnect from "../skins/marquee/auth.contract"
 
 fn skinDetailPresentation(skin: string, width: number): string = (skin == "mochi" ? MochiPresentation(width) : skin == "example" ? ExamplePresentation(width) : skin == "index" or skin == "editorial" ? IndexPresentation(width) : skin == "jellytwin" ? JellyPresentation(width) : skin == "marquee" ? MarqueePresentation(width) : CinePresentation(width))
@@ -321,7 +321,9 @@ component MiniGuide
     if skin == "mochi"
       MochiMiniGuide(model=model, playing=playing, target=target, small=small, still=still, tune=tune)
     else
-      if skin != "example" and skin != "index" and skin != "editorial" and skin != "marquee" and skin != "jellytwin"
+      if skin == "marquee"
+        MarqueeMiniGuide(model=model, playing=playing, target=target, small=small, still=still, tune=tune)
+      else if skin != "example" and skin != "index" and skin != "editorial" and skin != "jellytwin"
         CineMiniGuide(model=model, playing=playing, target=target, small=small, still=still, tune=tune)
 
 component PlayerChrome

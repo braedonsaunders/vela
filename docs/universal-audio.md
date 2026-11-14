@@ -315,3 +315,36 @@ bytes, including nonzero starts, retirement and EOS. It does not establish full
 native-view recovery with video still direct, source-switch UI, lip-sync or a
 human listening pass. The dedicated browser, temporary HTTP server and owned
 media work were stopped. No lab stream was opened.
+
+## Original audio-track switch preparation
+
+`prepareOriginalAudioSwitch` in `audio/original-track.ts` returns an actual
+container ordinal, prepared audio options, optional observed source layout and
+actual track facts. It does not touch a controller, video or active output. The
+lead can call setAudioStreamIndex only after successful preparation, leaving old
+audio intact when preparation fails.
+
+The helper requires a complete broker audio inventory with unique IDs/source
+stream indices, checks it against the actual audio inventory in file order, and
+compares codec, count/rate/mask and optional expected language for each track.
+Two/three-letter language aliases are normalized; declared regional distinctions
+are retained. It never substitutes another track. Actual source masks remain
+nullable; unknown multichannel PCM positions and unqualified masks are rejected.
+It reads actual decoder configuration and native canDecode support before choosing
+an on-demand package; sample rate and output layout must have a qualified route.
+
+It opens the ORIGINAL through UrlSource with upstream HTTP range validation:
+actual HTTP requests capped at 256 KiB, cache 8 MiB, total metadata-read budget
+32 MiB, finite retries, per-read deadlines and a 30s preparation bound. A changed
+resource length/ETag refuses preparation. Range-ignored whole-file fallback is
+rejected, and the Input is always disposed before returning. No sink speaker mask
+is invented. Night algorithm changes still use the controller's existing output
+reconfiguration API; the upstream track-switch API omits that field.
+
+A read-only source-integration drive exercised real file bytes and the pinned
+demuxer through an in-process range-response adapter (not a network/server
+qualification). ALAC Matroska/MP4, MP2 Matroska and WMA v2 ASF returned ordinal 0,
+actual 48kHz format and their correct software package in a runtime without
+AudioDecoder. A mismatched expected FLAC codec for an ALAC track was refused.
+Eight metadata range requests were made, none larger than 262,144 bytes. Browser
+native support, a real mid-play switch and pending-state UI remain lead-owned.
