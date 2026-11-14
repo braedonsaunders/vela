@@ -384,5 +384,8 @@
   "marquee.genresColumn": "Genres",
   "marquee.emptyCollection": "This collection is empty",
   "skin.marquee.tagline": "Your media server at home: charcoal hubs, a sidebar and amber accents.",
-  "marquee.remaining": "−{time}"
+  "marquee.remaining": "−{time}",
+  "secure.title": "A secure address is available",
+  "secure.body": "Your server also answers at {origin}. Continue there so your password and viewing stay private.",
+  "secure.action": "Switch to the secure address"
 }

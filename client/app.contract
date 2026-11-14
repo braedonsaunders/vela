@@ -34,7 +34,7 @@ component Client
       for e in stack(nav) key=e.id
         if e.name == "home"
           column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width) : "none") navigationScroll="home-scroll" position="absolute" inset=0
-            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "jellytwin", "mochi", "marquee", "example"] : ["cinematic", "index", "jellytwin", "mochi", "marquee"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section=(libraryId == "" ? "home" : libraryId == "@live" ? "live" : libraryId), openLibrary=openLibrary)
+            Shell(viewer=(auth.authenticated and current(home) ? home.viewer : ""), skin=activeSkin, skins=(auth.authenticated and current(home) ? (home.skins.includes("example") ? ["cinematic", "index", "jellytwin", "mochi", "marquee", "example"] : ["cinematic", "index", "jellytwin", "mochi", "marquee"]) : []), chooseSkin=chooseSkin, signOut=logout, viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, home=goHome, search=openSearch, live=openLive, library=goHome, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section=(libraryId == "" ? "home" : libraryId == "@live" ? "live" : libraryId), openLibrary=openLibrary, secureOrigin=(auth.authenticated and current(home) ? auth.secureOrigin : ""), secureBusy=secureBusy, secureError=secureError, goSecure=goSecure)
               if failed(auth) or not current(auth) or not auth.authenticated
                 scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") flex=1 min-height=0
                   AuthStage(skin=activeSkin, still=still, backdrop=packBackdrop, wordmark=packWordmark)
@@ -47,7 +47,7 @@ component Client
                         if quickSecret != ""
                           QuickConnect(skin=activeSkin, model=quickModel, error=quickError, still=still, cancel=cancelCode)
                         else
-                          SignIn(skin=activeSkin, username=username, password=password, passwordAvailable=auth.passwordAvailable, quickAvailable=auth.quickAvailable, error=authError, busy=(pending(signedIn) or pending(quickStarted)), still=still, editUsername=editUsername, editPassword=editPassword, submit=submitSignIn, quick=startCode)
+                          SignIn(skin=activeSkin, username=username, password=password, passwordAvailable=auth.passwordAvailable, quickAvailable=auth.quickAvailable, error=authError, busy=(pending(signedIn) or pending(quickStarted)), still=still, editUsername=editUsername, editPassword=editPassword, submit=submitSignIn, quick=startCode, secureOrigin=auth.secureOrigin, secureBusy=secureBusy, secureError=secureError, goSecure=goSecure)
               else
                 // Home and the libraries side by side: the track pans to the active section.
                 column flex=1 min-height=0 position="relative" overflow="hidden"

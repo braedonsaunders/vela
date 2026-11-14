@@ -23,6 +23,10 @@ component Shell
     libraries: LibraryNav[]
     section: string
     openLibrary: action
+    secureOrigin: string
+    secureBusy: bool
+    secureError: string
+    goSecure: action
   slot
   state menuOpen = false
   derive compact = viewport.width < 640
@@ -91,6 +95,13 @@ component Shell
                   for color, c in skinManifest(skin).swatches.slice(0, 4) key=`${c}`
                     column width=10 height=10 border-radius=5 background-color=color box-shadow="inset 0px 0px 0px 1px var(--cinematic.glass-edge-strong)"
                 image "symbol:forward-chevron" width=12 height=12 color="ink.quiet" aria-hidden=true
+          if secureOrigin != ""
+            button press=goSecure disabled=secureBusy testId="secure-switch-menu" class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
+              row gap=10 align-items="center"
+                image "symbol:lock" width=16 height=16 color="brand.warm" aria-hidden=true
+                column gap=2 text-align="left"
+                  text t("secure.action") font-size=14 color="ink.primary"
+                  text (secureError != "" ? secureError : secureOrigin) font-size=11 color=(secureError != "" ? "brand.warm" : "ink.quiet") line-clamp=1
           vela-install pwaAction="install" buttonLabel=t("pwa.install")
           vela-install pwaAction="update" buttonLabel=t("pwa.update")
           button press=leaveSession class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
