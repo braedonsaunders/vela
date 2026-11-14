@@ -3,12 +3,18 @@ import type { Command, PlaybackSession } from './model';
 import type { PlaybackPlan } from '../../protocol/v0/types';
 import { observation, sessionFromPlan } from './protocol';
 export const abi = 1;
-export const roster = { 'vela-player': { snapshot: false } };
+export const roster = { 'vela-player': { snapshot: false }, 'vela-context': { snapshot: false } };
+interface ContextHandle { context: true; disposed: boolean }
 interface Handle {
   engine: PlaybackEngine; video: HTMLVideoElement; sessionJson: string; lastCommand: number;
   serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
 }
-export function create(tag: string, element: HTMLElement, json: string, event: (kind: number, payload: string) => void): Handle {
+export function create(tag: string, element: HTMLElement, json: string, event: (kind: number, payload: string) => void): Handle | ContextHandle {
+  if (tag === 'vela-context') {
+    const handle: ContextHandle = { context: true, disposed: false };
+    queueMicrotask(() => { if (!handle.disposed) event(8, location.origin); });
+    return handle;
+  }
   if (tag !== 'vela-player') throw new Error(`Unknown player view: ${tag}`);
   const root = element.shadowRoot ?? element.attachShadow({ mode: 'open' });
   const video = document.createElement('video'); video.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:#000';
@@ -25,7 +31,8 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   try { setProps(handle, json); } catch (error) { handle.engine.dispose(); video.remove(); throw error; }
   return handle;
 }
-export function setProps(handle: Handle, json: string) {
+export function setProps(handle: Handle | ContextHandle, json: string) {
+  if ('context' in handle) return;
   const props = JSON.parse(json) as Record<string, string>;
   const input = props.plan || props.session || '';
   if (input && input !== handle.sessionJson) {
@@ -64,4 +71,4 @@ function applyCommand(handle: Handle, props: Record<string, string>) {
     if (command.id > handle.lastCommand) { handle.lastCommand = command.id; void handle.engine.command(command); }
   }
 }
-export function destroy(handle: Handle) { handle.engine.dispose(); handle.video.remove(); }
+export function destroy(handle: Handle | ContextHandle) { if ('context' in handle) { handle.disposed = true; return; } handle.engine.dispose(); handle.video.remove(); }

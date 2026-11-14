@@ -1087,8 +1087,16 @@ function observation(snapshot, sequence) {
 
 // client/player/web-module.ts
 var abi = 1;
-var roster = { "vela-player": { snapshot: false } };
+var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false } };
 function create(tag, element, json, event) {
+  if (tag === "vela-context") {
+    const handle = { context: true, disposed: false };
+    queueMicrotask(() => {
+      if (!handle.disposed)
+        event(8, location.origin);
+    });
+    return handle;
+  }
   if (tag !== "vela-player")
     throw new Error(`Unknown player view: ${tag}`);
   const root = element.shadowRoot ?? element.attachShadow({ mode: "open" });
@@ -1117,6 +1125,8 @@ function create(tag, element, json, event) {
   return handle;
 }
 function setProps(handle, json) {
+  if ("context" in handle)
+    return;
   const props = JSON.parse(json);
   const input = props.plan || props.session || "";
   if (input && input !== handle.sessionJson) {
@@ -1185,6 +1195,10 @@ function applyCommand(handle, props) {
   }
 }
 function destroy(handle) {
+  if ("context" in handle) {
+    handle.disposed = true;
+    return;
+  }
   handle.engine.dispose();
   handle.video.remove();
 }

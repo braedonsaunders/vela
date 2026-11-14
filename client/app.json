@@ -18,7 +18,8 @@
     }
   },
   "modules": [
-    "vela-player"
+    "vela-player",
+    "vela-context"
   ],
   "env": [
     "API_BASE_URL",
