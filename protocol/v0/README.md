@@ -80,6 +80,15 @@ and ExtraStreams; live data uses LiveTV. Capability declarations pass through ho
 capability policy and do not prove hardware decoding. Plans use the session broker;
 source substitution must validate edition, timeline, codecs and track mappings.
 
+Artwork size width/height are delivered pixel dimensions when both are positive.
+Use0/0 for an unmeasured source URL; clients discover its natural dimensions from
+the image and must not interpret zero as a zero-sized render box. Do not invent
+dimensions or fetch/decode image bytes merely to populate metadata. Known-size
+URLs must serve their advertised aspect-preserving size, clamped to the source
+without upscaling. Ether's Vela image grants use canonical w/h parameters (not
+width/height aliases), capped at4000; explicit w=0 requests the source/default
+image and preserves an unmeasured-source URL against client sizing fallbacks.
+
 ## Cache and mutation semantics
 
 Cacheable GETs: capabilities, bootstrap, libraries/library items, rows, detail/children/extras, channels and

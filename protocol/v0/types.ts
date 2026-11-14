@@ -35,6 +35,7 @@ export interface QuickPollRequest extends Mutation { secret: string; device: Dev
 export interface QuickApproveRequest extends Mutation { code: string }
 export interface ArtworkRef {
   id: ID; kind: 'poster' | 'backdrop' | 'logo' | 'still' | 'person' | 'channel'; tag: string;
+  /** Positive dimensions describe delivered pixels; 0/0 means an unmeasured source. */
   sizes: { width: number; height: number; url: string }[]; blurHash?: string; thumbHash?: string; color?: string;
 }
 export type TitleKind = 'movie' | 'show' | 'season' | 'episode';
