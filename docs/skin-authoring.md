@@ -141,6 +141,26 @@ viewport-sized, `position="relative"` Shell root (it covers its positioned ances
 `choose` is the Shell's `chooseSkin`. The root dissolves the app into the newly chosen
 skin from that skin's page ground; reduced motion shortens it to a quick fade.
 
+## Size: assets, not components
+
+Exact inlines a component at every place it is used. An icon or illustration
+written as an `svg` component therefore copies its whole tree into the compiled
+plan once per use: one skin's 30-glyph icon component used across its views
+measured 32,520 plan nodes, over half of the whole app. Keep the plan small:
+
+- Icons are assets. Use a built-in role (`image "symbol:play-fill"`) where one
+  fits; otherwise save the glyph as `client/assets/icons/<skin>-<name>.svg`,
+  declare it in `app.tamber`'s `icons` (`icon.<skin>-<name> = icon(svg
+  "icons/<skin>-<name>.svg")`) and draw it with
+  `image "symbol:icon.<skin>-<name>" width=.. height=..`: one node per use.
+- Illustrations, mascots and decorative art are image assets
+  (`image "assets/<skin>/<name>.svg"`), not drawn trees.
+- Keep heavy components behind few call sites (for example one placeholder
+  component reused by a loop, not several hand-unrolled copies).
+- Measure: `bun exact.mjs contract build app.contract --map -o /tmp/app.plan`
+  writes a map whose nodes name their source file and component; count nodes per
+  file to see what your skin adds.
+
 ## Register and build
 
 1. Add the Contract files under `client/skins/<id>/`. Use Tamber tokens for appearance;

@@ -162,11 +162,11 @@ component Home
         for row in model.rows key=row.id
           Row(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
           if row.nextCursor != ""
-            column height=1 intersect=reachRowEnd(row.id) aria-hidden=true
+            column height=1 intersect=reachRowEnd(row.id) intersect-margin="0px 0px 100% 0px" aria-hidden=true
             if rowMoreLoading.includes(row.id)
               text t("ui.loadingMore") role="status" color="index.secondary" padding="8px 4%"
         if model.nextCursor != ""
-          column height=1 intersect=reachEnd aria-hidden=true
+          column height=1 intersect=reachEnd intersect-margin="0px 0px 100% 0px" aria-hidden=true
           if homeMoreLoading
             text t("ui.loadingMore") role="status" color="index.secondary" padding="8px 4%"
 
