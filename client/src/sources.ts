@@ -3,21 +3,30 @@ import type { AISearchJob, ClientCapabilities, Device } from '../wire/v0/types';
 import { EtherAdapter } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, homeModel, detailModel } from './discovery/models';
+import { InteractionQueue } from './telemetry';
 
 export function createAnswer(API: string, MOCK: boolean): Answer {
-const device: Device = { id: 'vela-dev', name: 'Vela browser', platform: 'web', appVersion: '0.1' };
-const client: ClientCapabilities = { device, protocolVersions: [0], containers: ['mp4'], videoCodecs: ['h264'], audioCodecs: ['aac'], subtitleFormats: [], hls: true, mse: true };
+let device: Device;
+let client: ClientCapabilities;
+function key(store: Parameters<Sources['uiBootstrap']>[1]): string {
+  const n = Number(store.get('vela.counter') || '0') + 1;
+  store.set('vela.counter', String(n));
+  return `${device.id}-${n}`;
+}
 let adapter: EtherAdapter | undefined;
+let interactions: InteractionQueue | undefined;
 let ready: Promise<void> | undefined;
+let activeQuick = "";
+let authVersion = 0;
 let ai: { epoch: number; generation: number; query: string; job?: AISearchJob; starting?: Promise<AISearchJob> } | undefined;
 const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable' });
 function server(store: Parameters<Sources['uiBootstrap']>[1]): EtherAdapter {
   if (!adapter) {
-    const credentials = new SessionCredentials(store, device, () => {
-      const n = Number(store.get('vela.counter') || '0') + 1;
-      store.set('vela.counter', String(n));
-      return `refresh-${n}`;
-    });
+    let id = store.get('vela.device');
+    if (!id) { id = crypto.randomUUID(); store.set('vela.device', id); }
+    device = { id, name: 'Vela browser', platform: 'web', appVersion: '0.1' };
+    client = { device, protocolVersions: [0], containers: ['mp4'], videoCodecs: ['h264'], audioCodecs: ['aac'], subtitleFormats: [], hls: true, mse: true };
+    const credentials = new SessionCredentials(store, device, () => key(store));
     adapter = new EtherAdapter(API, credentials, JSON.stringify(client));
   }
   return adapter;
@@ -26,14 +35,64 @@ async function session(store: Parameters<Sources['uiBootstrap']>[1]): Promise<Et
   const api = server(store);
   if (!ready) ready = (async () => {
     if (store.get('vela.session')) return;
-    if (!MOCK) throw new Error('Sign in to your Vela server');
-    const tokens = await api.signIn({ idempotencyKey: 'vela-dev-sign-in', username: 'demo', password: 'vela', device });
+    if (!MOCK || store.get('vela.session') === '') throw new Error('Sign in to your Vela server');
+    const tokens = await api.signIn({ idempotencyKey: key(store), username: 'demo', password: 'vela', device });
     store.set('vela.session', JSON.stringify(tokens));
   })().catch(e => { ready = undefined; throw e; });
   await ready;
   return api;
 }
+const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '') => {
+  const capabilities = await server(store).capabilities();
+  return { authenticated: !!store.get('vela.session'), passwordAvailable: capabilities.features.passwordSignIn.available,
+    quickAvailable: capabilities.features.quickConnect.available, error };
+};
 const sources: Sources = {
+  uiAuth: async ([code], store) => {
+    const api = server(store);
+    if (code && !store.get('vela.session')) {
+      const tokens = await api.redeemWebCode({ code, device, idempotencyKey: key(store) });
+      store.set('vela.session', JSON.stringify(tokens));
+    } else if (MOCK && store.get('vela.session') === null) await session(store);
+    return authModel(store);
+  },
+  signIn: async ([username, password], store) => {
+    const api = server(store);
+    try {
+      const tokens = await api.signIn({ username, password, device, idempotencyKey: key(store) });
+      store.set('vela.session', JSON.stringify(tokens)); authVersion++; ready = undefined;
+      return authModel(store);
+    } catch (error) { return authModel(store, error instanceof Error ? error.message : 'Sign in failed'); }
+  },
+  startQuick: async (_args, store) => {
+    const api = server(store);
+    const grant = await api.quickConnect({ device, idempotencyKey: key(store) });
+    activeQuick = grant.secret;
+    return { ...grant, status: 'pending' };
+  },
+  pollQuick: async ([secret], store) => {
+    const api = server(store);
+    if (!secret || activeQuick !== secret) return authModel(store, 'Connection cancelled');
+    const result = await api.pollQuickConnect({ secret, device, idempotencyKey: key(store) });
+    if (activeQuick !== secret) return authModel(store, 'Connection cancelled');
+    if (result.status === 'approved') { store.set('vela.session', JSON.stringify(result.tokens)); activeQuick = ''; authVersion++; ready = undefined; }
+    return authModel(store, result.status === 'expired' ? 'Code expired' : result.status === 'denied' ? 'Connection denied' : '');
+  },
+  signOut: async (_args, store) => {
+    const api = server(store);
+    const value = store.get('vela.session');
+    const version = authVersion;
+    if (value) {
+      const tokens = JSON.parse(value) as { refreshToken: string };
+      await api.revoke({ refreshToken: tokens.refreshToken, idempotencyKey: key(store) });
+      if (version === authVersion) { store.set('vela.session', ''); authVersion++; ready = undefined; activeQuick = ''; ai = undefined; interactions = undefined; }
+    }
+    return authModel(store);
+  },
+  cancelQuick: async ([secret], store) => {
+    if (activeQuick === secret) activeQuick = '';
+    return { accepted: true };
+  },
   uiBootstrap: async (_args, store) => homeModel(await (await session(store)).bootstrap()),
   uiDetail: async ([id], store) => detailModel(await (await session(store)).detail(id)),
   uiSearch: async ([query, generation, epoch], store) => {
@@ -77,7 +136,10 @@ const sources: Sources = {
   },
   interaction: async ([receipt, kind, at], store) => {
     if (kind !== 'visible' && kind !== 'selected' && kind !== 'played') throw new Error('Invalid interaction');
-    await (await session(store)).interactions({ idempotencyKey: `interaction-${kind}-${receipt}-${at}`, interactions: [{ receiptToken: receipt, kind, occurredAt: new Date(at).toISOString() }] });
+    const api = await session(store);
+    interactions ??= new InteractionQueue(api);
+    if (!interactions.add({ receiptToken: receipt, kind, occurredAt: new Date(at).toISOString() })) return { accepted: false };
+    if (kind !== 'visible' || interactions.size >= 16) await interactions.flush(key(store));
     return { accepted: true };
   },
   uiPlayback: async ([id, kind, epoch], store) => {
@@ -86,9 +148,14 @@ const sources: Sources = {
     const plan = await api.playback({ ...(kind === 'extra' ? { extraId: id } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${kind}-${id}` });
     return { planJson: JSON.stringify(plan) };
   },
+  flushInteractions: async (_args, store) => {
+    while (interactions?.size) await interactions.flush(key(store));
+    return { accepted: true };
+  },
   playerEvent: async ([json], store) => {
     const event = JSON.parse(json);
-    if (event.type !== 'observation' || typeof event.sessionId !== 'string' || !event.observation) throw new Error('Unsupported player event');
+    if (event.type !== 'observation') return { accepted: true };
+    if (typeof event.sessionId !== 'string' || !event.observation) throw new Error('Invalid player observation');
     await (await session(store)).observe(event.sessionId, event.observation);
     return { accepted: true };
   },
