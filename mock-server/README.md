@@ -70,6 +70,20 @@ four numeric fields also work on media URLs. Faults snapshot per request.
 Capacity blocks new playback and transcode switch attempts. Unavailable fallback
 removes transcode offers from new plans and rejects switches on existing plans.
 These are controlled faults, not a production resource or network simulator.
+Per-session codec verification is opt-in on playback creation:
+`POST /vela/v0/playback?pendingCodecs=true` with the normal VOD MSE client body
+selects the muxed `transcode` path. Add `pendingCodecPath=transcode-mse` to select
+the generated separate-audio path instead. Every transcode quality starts with
+codecStatus=pending, empty videoCodec and absent audioCodec. A successful full
+GET of that quality's init.mp4 schedules its actual fixture codecs for250ms later,
+publishing a newer plan/SSE revision with the same source/seek generations, quality
+ID and URL. Other rungs remain pending. Separate video retains absent audioCodec;
+its audio-only rendition MIME remains authoritative. HEAD, playlist reads, failed
+init requests and audio init reads do not verify video qualities. The update is
+discarded after generation changes, stop, grant revocation or expiry.
+Use `pendingCodecs=never` to leave codecs pending after init for the client timeout
+drive. Each new mode/session needs a fresh idempotency key. Default sessions are
+unchanged; no global admin switch or dev restart is required to change modes.
 Reset by POSTing the all-zero/false object. Media uses the broker path
 `/sessions/media/<session>/<token>/...` with byte ranges and session grants.
 

@@ -5,7 +5,7 @@ import type * as V from '../protocol/v0/types';
 import { allTitles, channels, detail, extras, featuredTitles, guide, rows, titles } from '../protocol/v0/fixtures/catalogue';
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia } from './media';
 import { serveLive, liveFaults } from './live';
-import { applyCommand, createSession, events, observe, sessions, snapshot, type Session } from './sessions';
+import { applyCommand, createSession, events, observe, requestedInit, sessions, snapshot, type Session } from './sessions';
 
 const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
 const secret = crypto.randomUUID();
@@ -189,7 +189,18 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (!await Bun.file(`${mediaRoot}/master.m3u8`).exists()) fail('source', 'media_not_generated', 'Run mock-server/scripts/make-media.ts first');
     if (body.positionSeconds === undefined) body = { ...body, positionSeconds: title?.watch?.positionSeconds ?? 0 };
     if (body.positionSeconds !== undefined && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > fixtureDurationSeconds)) fail('request', 'invalid_position', `Synthetic fixture is ${fixtureDurationSeconds} seconds`);
-    return json((await createSession(g.id, body)).plan);
+    const pendingMode = url.searchParams.get('pendingCodecs');
+    let pending: { neverVerify: boolean; pathId: string } | undefined;
+    if (pendingMode !== null) {
+      if (!['true', 'never'].includes(pendingMode)) fail('request', 'invalid_pending_codecs', 'Use pendingCodecs=true or never');
+      const pathId = url.searchParams.get('pendingCodecPath') ?? 'transcode';
+      if (!['transcode', 'transcode-mse'].includes(pathId) || body.channelId || !body.client.mse || body.allowTranscode === false || faults.fallbackUnavailable) fail('request', 'invalid_pending_codecs', 'Pending-codec fixture requires a VOD MSE transcode path');
+      if (pathId === 'transcode-mse' && !await Bun.file(`${mediaRoot}/mse.json`).exists()) fail('source', 'media_not_generated', 'Generate the separate audio MSE fixture first');
+      pending = { neverVerify: pendingMode === 'never', pathId };
+    }
+    const s = await createSession(g.id, body, pending);
+    if (pending && !s.plan.paths.some(p => p.id === pending.pathId)) { sessions.delete(s.plan.sessionId); fail('source', 'media_not_generated', 'Requested MSE fixture is unavailable'); }
+    return json(s.plan);
   }
   const match = /^\/sessions\/([^/]+)(?:\/(events|commands|observations))?$/.exec(path);
   if (match) {
@@ -222,7 +233,13 @@ async function dispatch(req: Request): Promise<Response> {
     fail('not-found', 'endpoint_not_found', 'Admin endpoint not found');
   }
   const media = /^\/sessions\/media\/([^/]+)\/([^/]+)\/(.+)$/.exec(url.pathname);
-  if (media) { const s = sessions.get(media[1]), g = s && grants.get(s.owner); if (!s || !g || g.revoked || g.expires < Date.now() || s.mediaToken !== media[2] || s.plan.state === 'ended') fail('auth', 'invalid_media_grant', 'Invalid media grant'); return media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3]); }
+  if (media) {
+    const s = sessions.get(media[1]), g = s && grants.get(s.owner);
+    if (!s || !g || g.revoked || g.expires < Date.now() || s.expires <= Date.now() || s.mediaToken !== media[2] || s.plan.state === 'ended') fail('auth', 'invalid_media_grant', 'Invalid media grant');
+    const response = await (media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3]));
+    if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
+    return response;
+  }
   const art = /^\/vela\/v0\/artwork\/([a-z0-9-]+)$/.exec(url.pathname);
   if (art && req.method === 'GET') {
     // Only synthetic assets: no private or remotely fetched imagery.

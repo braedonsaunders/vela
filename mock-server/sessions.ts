@@ -2,7 +2,8 @@ import type { PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, 
 import { faults, mediaRoot, fixtureDurationSeconds } from './media';
 import { liveWindow } from './live';
 import { mseFixture } from './mse';
-export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number }
+interface PendingCodecs { neverVerify: boolean; values: Map<string, { videoCodec: string; audioCodec?: string }>; timers: Map<string, ReturnType<typeof setTimeout>> }
+export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number; pendingCodecs?: PendingCodecs }
 export const sessions = new Map<string, Session>();
 export function snapshot(s: Session): SessionSnapshot {
   return { cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: s.plan.live ? [{ startSeconds: liveWindow().windowStartSeconds, endSeconds: liveWindow().liveEdgeSeconds }] : s.plan.paths.length ? [{ startSeconds: 0, endSeconds: fixtureDurationSeconds }] : [], lastObservationSequence: s.sequence };
@@ -14,9 +15,13 @@ export function publish(s: Session) {
   const event: SessionEvent = s.plan.state === 'ended' ? { ...base, type: 'ended', reason: 'stopped' } : { ...base, type: 'plan', plan: structuredClone(s.plan) };
   s.history.push(event); if (s.history.length > 128) s.history.shift();
   for (const [c, close] of s.listeners) { c.enqueue(encode(event)); if (event.type === 'ended') close(); }
-  if (event.type === 'ended') s.listeners.clear();
+  if (event.type === 'ended') {
+    s.listeners.clear();
+    for (const timer of s.pendingCodecs?.timers.values() ?? []) clearTimeout(timer);
+    s.pendingCodecs?.timers.clear();
+  }
 }
-export async function createSession(owner: string, request: PlaybackRequest): Promise<Session> {
+export async function createSession(owner: string, request: PlaybackRequest, pending?: { neverVerify: boolean; pathId: string }): Promise<Session> {
   const id = crypto.randomUUID(), token = crypto.randomUUID(), base = `/sessions/media/${id}/${token}`;
   const available = await Bun.file(`${mediaRoot}/master.m3u8`).exists();
   const tracks = ['en', 'es'].map((language, n) => ({ id: `audio-${language}`, kind: 'audio' as const, language, name: n ? 'Spanish · test tone' : 'English · test tone', codec: 'aac', channels: 2, default: n === 0 }));
@@ -50,7 +55,36 @@ export async function createSession(owner: string, request: PlaybackRequest): Pr
     plan.subtitleTracks = []; plan.selectedSubtitleTrackId = null; plan.chapters = [];
   }
   const s: Session = { owner, mediaToken: token, plan, history: [], listeners: new Map(), sequence: 0, expires: Date.now() + 86400000 };
+  if (pending) {
+    s.pendingCodecs = { neverVerify: pending.neverVerify, values: new Map(), timers: new Map() };
+    for (const p of plan.paths.filter(p => p.kind === 'transcode')) for (const q of p.qualities) {
+      s.pendingCodecs.values.set(`${p.id}:${q.id}`, { videoCodec: q.videoCodec, ...(q.audioCodec ? { audioCodec: q.audioCodec } : {}) });
+      q.videoCodec = ''; delete q.audioCodec; q.codecStatus = 'pending';
+    }
+    plan.selectedPathId = pending.pathId;
+  }
   sessions.set(id, s); return s;
+}
+export function requestedInit(s: Session, resource: string, authorized: () => boolean) {
+  const pending = s.pendingCodecs;
+  if (!pending || pending.neverVerify) return;
+  for (const path of s.plan.paths.filter(p => p.kind === 'transcode')) for (const quality of path.qualities) {
+    const prefix = `/sessions/media/${s.plan.sessionId}/${s.mediaToken}/`;
+    const init = quality.url.startsWith(prefix) ? quality.url.slice(prefix.length).replace(/index\.m3u8$/, 'init.mp4') : undefined;
+    const key = `${path.id}:${quality.id}`;
+    if (resource !== init || quality.codecStatus !== 'pending' || pending.timers.has(key)) continue;
+    const source = s.plan.sourceGeneration, seek = s.plan.seekGeneration;
+    const timer = setTimeout(() => {
+      pending.timers.delete(key);
+      if (!authorized() || s.expires <= Date.now() || s.plan.state === 'ended' || source !== s.plan.sourceGeneration || seek !== s.plan.seekGeneration) return;
+      const codecs = pending.values.get(key);
+      if (!codecs) return;
+      Object.assign(quality, codecs, { codecStatus: 'verified' });
+      pending.values.delete(key);
+      publish(s);
+    }, 250);
+    pending.timers.set(key, timer);
+  }
 }
 export function applyCommand(s: Session, cmd: SessionCommand) {
   switch (cmd.kind) {
