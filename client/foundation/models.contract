@@ -7,6 +7,7 @@ shape Card
   facts: string
   year: number
   rating: string
+  progressSeconds: number
   durationSeconds: number
   genres: string[]
   poster: string
@@ -53,6 +54,8 @@ shape DetailModel
   episodes: Card[]
   extras: ExtraModel[]
   cast: string[]
+  mediaFacts: string[]
+  related: FeedRow[]
 
 shape ReceiptReply
   accepted: bool
