@@ -326,3 +326,11 @@ ClientCapabilities.hls declares native HLS acceptance (the browser's HLS MIME
 probe); mse separately declares MSE availability. MSE alone does not promise TS
 demux or make an unqualified master playlist playable. A server may offer native
 HLS with empty qualities; an MSE path needs explicit compatible rendition metadata.
+
+### Ranked rows
+
+`Row.presentation: "ranked"` opts into a Top 10 surface. Rank is the one-based
+position in the final server-ordered `items`, with at most ten entries. Clients
+keep that order, entry identities and receipt tokens. Omission uses the ordinary
+row surface. Landscape artwork may use existing backdrop/cover artwork; portrait
+artwork remains a fallback. No inferred rank or new receipt is issued by the client.
