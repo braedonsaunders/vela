@@ -146,8 +146,8 @@ const sources: Sources = {
   },
   uiPlayback: async ([id, kind, epoch], store) => {
     const api = await session(store);
-    if (kind !== 'title' && kind !== 'extra') throw new Error('Unsupported playback target');
-    const plan = await api.playback({ ...(kind === 'extra' ? { extraId: id } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${kind}-${id}` });
+    if (kind !== 'title' && kind !== 'extra' && kind !== 'channel') throw new Error('Unsupported playback target');
+    const plan = await api.playback({ ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${kind}-${id}` });
     return { planJson: JSON.stringify(plan), sessionId: plan.sessionId };
   },
   sessionEvents: async ([id], store) => {
