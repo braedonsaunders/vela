@@ -121,8 +121,8 @@ component Facts
         row gap=10 align-items="center" flex-wrap="wrap"
           if title.rating != "" and not small
             text title.rating font-size=12 font-weight=700 padding="2px 6px" border="1px solid var(--marquee.ink-faint)" border-radius=3 color="marquee.ink-dim"
-          if title.durationSeconds > 0 and not small
-            text title.facts.split(" · ").slice(-1).join("") font-size=15 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
+          if title.durationLabel != "" and not small
+            text title.durationLabel font-size=15 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
           if title.played
             row gap=6 align-items="center" color="marquee.ink-dim"
               Glyph(name="check", size=16)
@@ -190,7 +190,7 @@ component EpisodeCard
       column gap=3 min-width=0 flex=1
         button press=selectTitle(episode.id, episode.kind, episode.receipt) aria-label=cardName(episode) class=TextLink
           text episode.name font-size=(small ? 14 : 15) font-weight=600 line-clamp=(small ? 2 : 1)
-        text ([subLine(episode), episode.facts.split(" · ").slice(-1).join("")].filter(s => s != "").join(" · ")) font-size=13 color="marquee.ink-faint" font-variant-numeric="tabular-nums"
+        text ([subLine(episode), episode.durationLabel].filter(s => s != "").join(" · ")) font-size=13 color="marquee.ink-faint" font-variant-numeric="tabular-nums"
         if episode.summary != "" and not small
           text episode.summary font-size=13 color="marquee.ink-dim" line-height=1.5 line-clamp=2 margin-top=2
 
