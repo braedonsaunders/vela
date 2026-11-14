@@ -112,3 +112,5 @@ export interface Programme { id: ID; channelId: ID; name: string; summary: strin
 export interface GuideQuery { from: Timestamp; until: Timestamp; channelIds?: ID[]; cursor?: Cursor; limit?: number }
 export interface GuideResponse extends Page<Programme> { from: Timestamp; until: Timestamp }
 export interface ExtrasResponse { items: Extra[] }
+/** One-use console Watch hand-off; redeem against the same Ether instance. */
+export interface WebCodeRedeemRequest extends Mutation { code: string; device: Device }
