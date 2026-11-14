@@ -48,6 +48,14 @@ direct/native/muxed paths and live remain unchanged. The descriptor is local bui
 metadata, not an unauthenticated HTTP resource. Media resources use session grants
 and the same fault injection as muxed segments.
 
+`bun mock-server/scripts/make-media.ts --ts-only` adds `ts360/`, `ts540/`,
+`ts720/` and `ts-master.m3u8` for native MPEG-TS HLS qualification (full generation
+also creates them). It remuxes the existing English muxed variants, refuses to
+overwrite TS outputs, and leaves all fMP4/native/audio files alone. These resources
+are served through the same session media grant; `.ts` uses video/mp2t and receives
+segment fault injection. A manual native-only path can use the TS master with
+qualities=[]; TS is not offered to the fMP4 MSE pipeline or added to normal plans.
+
 GET/POST `/__admin/faults` reads/patches:
 
 ```json

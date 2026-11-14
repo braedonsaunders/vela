@@ -2,12 +2,27 @@ import { mkdir } from 'node:fs/promises';
 import { mediaRoot, fixtureDurationSeconds } from '../media';
 import { mseDescriptor, mseLadder, mseAudioGroup } from '../mse';
 const mseOnly = process.argv.includes('--mse-only');
+const tsOnly = process.argv.includes('--ts-only');
+if (mseOnly && tsOnly) throw new Error('Choose --mse-only or --ts-only');
 await mkdir(mediaRoot, { recursive: true });
+if (tsOnly) { await makeTs(); console.log(`TS media ready: ${mediaRoot}`); process.exit(0); }
 if (await Bun.file(`${mediaRoot}/mse.json`).exists()) throw new Error('MSE fixture already generated; do not overwrite media while a player may be using it.');
 for (const [height] of mseLadder) if (await Bun.file(`${mediaRoot}/video${height}/index.m3u8`).exists()) throw new Error(`Existing video${height} playlist; stop players before removing an incomplete MSE generation.`);
 async function ff(args: string[]) {
   const p = Bun.spawn(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', ...args], { stdout: 'inherit', stderr: 'inherit' });
   if (await p.exited) throw new Error('ffmpeg failed');
+}
+async function makeTs() {
+  for (const file of ['ts-master.m3u8', ...mseLadder.map(([h]) => `ts${h}/index.m3u8`)]) {
+    if (await Bun.file(`${mediaRoot}/${file}`).exists()) throw new Error(`Existing ${file}; refusing to overwrite TS media.`);
+  }
+  for (const [height] of mseLadder) {
+    const dir = `${mediaRoot}/ts${height}`;
+    await mkdir(dir, { recursive: true });
+    await ff(['-i', `${mediaRoot}/v${height}/index.m3u8`, '-map', '0:v:0', '-map', '0:a:0', '-c', 'copy', '-f', 'hls', '-hls_time', '4', '-hls_playlist_type', 'vod', '-hls_segment_type', 'mpegts', '-hls_flags', 'independent_segments', '-hls_segment_filename', `${dir}/seg-%03d.ts`, `${dir}/index.m3u8`]);
+  }
+  await Bun.write(`${mediaRoot}/ts-master.m3u8`, '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-INDEPENDENT-SEGMENTS\n'
+    + mseLadder.map(([height, width, bitrate]) => `#EXT-X-STREAM-INF:BANDWIDTH=${bitrate + 128000},RESOLUTION=${width}x${height},CODECS="avc1.64001f,mp4a.40.2"\nts${height}/index.m3u8\n`).join(''));
 }
 // Synthetic imagery and tones only. Fixed keyframes align all renditions at 4 seconds.
 if (!mseOnly) {
@@ -36,4 +51,5 @@ await Bun.write(`${mediaRoot}/${descriptor.url}`, '#EXTM3U\n#EXT-X-VERSION:7\n#E
   + ['en', 'es'].map((language, n) => `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="${mseAudioGroup}",NAME="${n ? 'Spanish' : 'English'}",LANGUAGE="${language}",DEFAULT=${n ? 'NO' : 'YES'},AUTOSELECT=YES,URI="a_${language}/index.m3u8"\n`).join('')
   + mseLadder.map(([height, width, bitrate]) => `#EXT-X-STREAM-INF:BANDWIDTH=${bitrate + 128000},RESOLUTION=${width}x${height},CODECS="avc1.64001f,mp4a.40.2",AUDIO="${mseAudioGroup}"\nvideo${height}/index.m3u8\n`).join(''));
 await Bun.write(`${mediaRoot}/mse.json`, JSON.stringify(descriptor, null, 2) + '\n');
+if (!mseOnly) await makeTs();
 console.log(`Media ready: ${mediaRoot}`);
