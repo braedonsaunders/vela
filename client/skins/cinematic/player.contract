@@ -1,5 +1,5 @@
 use PlayerView from "../../foundation/player-models.contract"
-use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, BetaSwitch, chrome, enter, base, glide, spin, breathe, dissolve from "./look.contract"
+use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, chrome, enter, base, glide, spin, breathe, dissolve from "./look.contract"
 
 // A screening's controls: a top bar with the title, a centred spinner while the
 // engine waits, a failure card, and a bottom bar with the timeline and icon
@@ -17,8 +17,6 @@ component PlayerChrome
     seek: action
     editing: action
     close: action
-    beta: bool
-    toggleBeta: action
   state scrubbing = false
   action menuChanged(e: ToggleEvent)
     editing(e.newState == "open")
@@ -26,6 +24,7 @@ component PlayerChrome
     scrubbing = on
     editing(on)
   derive blocked = busy or model.state == "ended"
+  derive hasSettings = model.audio.length > 1 or model.subtitles.length > 0 or model.qualities.length > 1 or model.paths.length > 1 or model.chapters.length > 0
   derive failure = (serverError != "" ? serverError : model.reason)
   derive failed = model.state == "failed" or serverError != ""
   derive waiting = not failed and (model.waiting or model.state == "loading" or model.state == "buffering" or model.state == "recovering")
@@ -112,67 +111,67 @@ component PlayerChrome
           row flex=1 min-width=0 justify-content="flex-end"
             if not small
               text (model.quality != "" ? model.quality : model.path) testId="player-quality" font-size=11 font-weight=600 color="ink.secondary" letter-spacing="0.04em" line-clamp=1 padding="4px 10px" border="1px solid var(--cinematic.glass-edge)" border-radius=6 margin-right=6
-          button popovertarget="player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" class=Bare width=44 height=44 padding=11 flex-shrink=0
-            image "symbol:adjust" width=22 height=22
+          if hasSettings
+            button popovertarget="player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" class=Bare width=44 height=44 padding=11 flex-shrink=0
+              image "symbol:adjust" width=22 height=22
           if model.pip
             button press=command("pip", "") aria-label=t("ui.pictureInPicture") class=Bare width=44 height=44 padding=10 flex-shrink=0
               PipIcon()
           if model.fullscreen
             button press=command("fullscreen", "") aria-label=t("ui.fullscreen") class=Bare width=44 height=44 padding=10 flex-shrink=0
               FullscreenIcon()
-      column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=12 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 340) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=24 gap=18 border="1px solid var(--cinematic.glass-edge)" border-radius=22 background-color="cinematic.popover" backdrop-filter="blur(30px) saturate(1.4)" color="ink.primary" box-shadow="0px 30px 90px var(--cinematic.shadow), inset 0px 1px 0px var(--cinematic.ring)"
-        column gap=6
-          text t("ui.yourScreening") class=Eyebrow font-size=10 color="ink.quiet"
-          text t("ui.playbackSettings") class=Display font-size=26
-          text (model.backend == "file" ? t("ui.originalQuality") : model.backend == "native-hls" ? t("ui.browserManaged") : model.qualities.length <= 1 ? t("ui.fixedQuality") : model.lockedQuality == "" ? t("ui.autoQuality") : t("ui.qualityLocked")) class=Eyebrow font-size=9 color="brand.warm"
-        if model.chapters.length > 0
-          SettingLabel(label=t("ui.chapters"))
-          select focus=editing(true) blur=editing(false) disabled=blocked value="" change=chapter aria-label=t("ui.chapters") class=MenuSelect
-            option value=""
-              text t("ui.chapters")
-            for chapter in model.chapters key=chapter.id
-              option value=chapter.id
-                text chapter.label
-        if model.audio.length > 1
-          SettingLabel(label=t("ui.audio"))
-          select disabled=blocked value=(model.pendingAudioId != "" ? model.pendingAudioId : model.audioId) change=audio aria-label=t("ui.audioTrack") aria-busy=(model.pendingAudioId != "") class=MenuSelect
-            for track in model.audio key=track.id
-              option value=track.id
-                text track.label
-          if model.pendingAudioId != ""
-            row gap=8 align-items="center" role="status"
-              Spinner(size=14, still=still)
-              text t("ui.switchingAudioSoon") font-size=12 color="ink.secondary"
-        else
-          if model.audioLabel != ""
+      if hasSettings
+        column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=12 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 340) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=24 gap=18 border="1px solid var(--cinematic.glass-edge)" border-radius=22 background-color="cinematic.popover" backdrop-filter="blur(30px) saturate(1.4)" color="ink.primary" box-shadow="0px 30px 90px var(--cinematic.shadow), inset 0px 1px 0px var(--cinematic.ring)"
+          column gap=6
+            text t("ui.yourScreening") class=Eyebrow font-size=10 color="ink.quiet"
+            text t("ui.playbackSettings") class=Display font-size=26
+            text (model.backend == "file" ? t("ui.originalQuality") : model.backend == "native-hls" ? t("ui.browserManaged") : model.qualities.length <= 1 ? t("ui.fixedQuality") : model.lockedQuality == "" ? t("ui.autoQuality") : t("ui.qualityLocked")) class=Eyebrow font-size=9 color="brand.warm"
+          if model.chapters.length > 0
+            SettingLabel(label=t("ui.chapters"))
+            select focus=editing(true) blur=editing(false) disabled=blocked value="" change=chapter aria-label=t("ui.chapters") class=MenuSelect
+              option value=""
+                text t("ui.chapters")
+              for chapter in model.chapters key=chapter.id
+                option value=chapter.id
+                  text chapter.label
+          if model.audio.length > 1
             SettingLabel(label=t("ui.audio"))
-            text model.audioLabel font-size=13 color="ink.secondary"
-        if model.subtitles.length > 0
-          SettingLabel(label=t("ui.subtitles"))
-          select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles" class=MenuSelect
-            option value=""
-              text t("ui.off")
-            for track in model.subtitles key=track.id
-              option value=track.id
-                text track.label
-        if model.qualities.length > 1
-          SettingLabel(label=t("ui.quality"))
-          select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select" class=MenuSelect
-            option value=""
-              text t("ui.autoAdaptToYourConnection")
-            for quality in model.qualities key=quality.id
-              option value=quality.id
-                text quality.label
-        if model.paths.length > 1
-          SettingLabel(label=t("ui.delivery"))
-          select disabled=blocked value=model.pathId change=path aria-label=t("ui.playbackPath") testId="player-path" class=MenuSelect
-            for path in model.paths key=path.id
-              option value=path.id
-                text path.label
-        text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 color="ink.secondary"
-        column height=1 background-color="cinematic.glass-edge"
-        BetaSwitch(on=beta, toggle=toggleBeta, still=still)
-        text t("ui.spacePlayPauseSeekFFullscreen") font-size=10 line-height=1.5 letter-spacing="0.04em" color="ink.quiet"
+            select disabled=blocked value=(model.pendingAudioId != "" ? model.pendingAudioId : model.audioId) change=audio aria-label=t("ui.audioTrack") aria-busy=(model.pendingAudioId != "") class=MenuSelect
+              for track in model.audio key=track.id
+                option value=track.id
+                  text track.label
+            if model.pendingAudioId != ""
+              row gap=8 align-items="center" role="status"
+                Spinner(size=14, still=still)
+                text t("ui.switchingAudioSoon") font-size=12 color="ink.secondary"
+          else
+            if model.audioLabel != ""
+              SettingLabel(label=t("ui.audio"))
+              text model.audioLabel font-size=13 color="ink.secondary"
+          if model.subtitles.length > 0
+            SettingLabel(label=t("ui.subtitles"))
+            select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles" class=MenuSelect
+              option value=""
+                text t("ui.off")
+              for track in model.subtitles key=track.id
+                option value=track.id
+                  text track.label
+          if model.qualities.length > 1
+            SettingLabel(label=t("ui.quality"))
+            select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select" class=MenuSelect
+              option value=""
+                text t("ui.autoAdaptToYourConnection")
+              for quality in model.qualities key=quality.id
+                option value=quality.id
+                  text quality.label
+          if model.paths.length > 1
+            SettingLabel(label=t("ui.delivery"))
+            select disabled=blocked value=model.pathId change=path aria-label=t("ui.playbackPath") testId="player-path" class=MenuSelect
+              for path in model.paths key=path.id
+                option value=path.id
+                  text path.label
+          text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 color="ink.secondary"
+          text t("ui.spacePlayPauseSeekFFullscreen") font-size=10 line-height=1.5 letter-spacing="0.04em" color="ink.quiet"
 
 style Bare
   border = "none"

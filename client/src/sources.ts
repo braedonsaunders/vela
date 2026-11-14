@@ -11,6 +11,7 @@ import { InteractionQueue } from './telemetry';
 import { PreviewCoordinator } from './discovery/preview';
 import { sessionEvents } from './protocol/events';
 import { appearanceModel, appearanceStream } from './appearance';
+import { skinDoc } from './skin';
 import { mediaPlan } from './protocol/media';
 import { randomId } from './protocol/id';
 import { playerPresentation } from '../player/presentation';
@@ -437,6 +438,12 @@ const sources: Sources = {
     if (position !== undefined && (!Number.isFinite(position) || position < 0)) throw new Error('Invalid playback position');
     const plan = await api.playback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}` });
     return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId };
+  },
+  uiSkinDoc: async ([url, width, localeJSON], store) => {
+    const path = new URL(url).pathname;
+    if (!path.startsWith('/vela/v0/appearance/skins/')) throw new Error('Skin document outside the appearance tree');
+    // The model is built from the same tables tools/renderer.ts generates its shapes from.
+    return skinDoc(await server(store).skinDocument(path.slice('/vela/v0'.length)), width, API, String(JSON.parse(localeJSON).locale ?? 'en')) as unknown as Awaited<ReturnType<Sources['uiSkinDoc']>>;
   },
   uiAppearance: async (_args, store) => appearanceModel(await server(store).appearance(), API),
   appearanceEvents: async ([_attempt, floor], store) => {

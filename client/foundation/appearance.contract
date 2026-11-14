@@ -1,5 +1,7 @@
 use SkinManifest from "./models.contract"
 use engineOf from "./engine.contract"
+use SkinDoc from "../renderer/levels.contract"
+use emptyDoc from "../skins/doc/slots.contract"
 
 // One runtime skin pack the server installed: data only, validated by the data
 // module (src/appearance). packJson is its canonical form for the vela-theme view.
@@ -16,12 +18,22 @@ shape PackEntry
 
 // The server's appearance: its default skin (an engine or a pack id), the engine
 // that default runs on, the owner's force flag and every installed pack.
+// An installed skin document (drawn by the doc engine).
+shape DocEntry
+  id: string
+  name: string
+  tagline: string
+  url: string
+  preview: string
+  swatches: string[]
+
 shape AppearanceModel
   revision: number
   defaultSkinId: string
   defaultEngineId: string
   force: bool
   packs: PackEntry[]
+  docs: DocEntry[]
 
 fn packManifest(p: PackEntry): SkinManifest = SkinManifest(id=p.id, name=p.name, tagline=p.tagline, preview=p.preview, swatches=p.swatches)
 
@@ -35,7 +47,7 @@ members Client
     after(3000, reconnectAppearance)
   action reconnectAppearance
     appearanceAttempt = appearanceAttempt + 1
-  derive appearance = (current(appearanceLive) ? appearanceLive : current(appearanceBase) ? appearanceBase : AppearanceModel(revision=0, defaultSkinId="", defaultEngineId="", force=false, packs=[]))
+  derive appearance = (current(appearanceLive) ? appearanceLive : current(appearanceBase) ? appearanceBase : AppearanceModel(revision=0, defaultSkinId="", defaultEngineId="", force=false, packs=[], docs=[]))
   // The viewer's own pick wins unless the owner forces the default.
   derive serverSkin = (appearance.defaultSkinId != "" ? appearance.defaultSkinId : current(home) ? home.defaultSkinId : "")
   derive requestedSkin = (skin == "" or appearance.force ? serverSkin : skin)
@@ -50,3 +62,9 @@ members Client
   derive pickEngine = (skin == "" or appearance.force ? "" : match first(appearance.packs.filter(p => p.id == skin)) { case some(p) => p.engine, case none => engineOf(skin) })
   derive serverEngine = (appearance.defaultEngineId != "" ? engineOf(appearance.defaultEngineId) : engineOf(serverSkin))
   derive engineSettled = (current(appearanceBase) or current(home)) and playingId == ""
+  // A skin document the viewer or server wants, drawn by the doc engine once it has loaded.
+  derive activeDocUrl = match first(appearance.docs.filter(d => d.id == requestedSkin)) { case some(d) => d.url, case none => "" }
+  derive docWidth = (viewport.width < 640 ? 400 : viewport.width >= 1200 ? 1300 : 900)
+  resource skinDocument = uiSkinDoc(activeDocUrl, docWidth) with localeJSON when activeDocUrl != "" as shape SkinDoc
+  derive docReady = activeDocUrl != "" and current(skinDocument)
+  derive activeDoc = (docReady ? skinDocument : emptyDoc())

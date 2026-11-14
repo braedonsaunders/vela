@@ -82,6 +82,15 @@ export class UniversalRuntime {
   get presentationTelemetry() { return this.presenter.getTelemetry(); }
   get telemetry(): CustomPlaybackTelemetry | null { return this.controller?.getTelemetry() ?? null; }
   async open(media: OriginalMedia) {
+    // Wire media URLs may be origin-relative. Normalize once before demux and
+    // track preparation so every consumer uses the same absolute source.
+    if (!media.url.trim()) throw new Error('Original media URL is empty');
+    let url: URL;
+    try { url = new URL(media.url,document.baseURI); }
+    catch { throw new Error('Original media URL is invalid'); }
+    if (!['http:','https:'].includes(url.protocol) || url.username || url.password)
+      throw new Error('Original media requires a scoped HTTP source');
+    media = {...media,url:url.href};
     this.initialPosition = media.position;
     const availability = getCustomPlaybackRuntimeAvailability(undefined, { audioOutput: media.selectedAudioId !== null, nativeVideoDecoder: false });
     if (!availability.available) throw new Error(`Original playback unavailable: ${availability.reason}`);

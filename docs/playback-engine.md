@@ -1057,3 +1057,127 @@ host+runtime+workers+decoder/source payload before opening the first original
 stream. No Playwright page routing overlay is used for those assets. Common SDR
 qualification precedes beta packaging; HDR/DV7, subtitle overlays, rotation
 rendering and live are follow-up gates, not claims of this beta.
+
+### First real original beta attempt — lab HTTPS, 2026-11-14
+
+One owner-idle Street Fighter (2026) session used the standalone same-origin
+host/runtime; installed app shell0.1.25 stayed unchanged. The diagnostic used
+normal authenticated negotiate/playback/observation/command endpoints. An initial
+non-semver diagnostic version failed negotiate;0.1.25 negotiated successfully.
+No second playback session was opened.
+
+| Measurement | Result |
+|---|---|
+| Broker plan from trusted Start | 7,327.2 ms |
+| Original offered | Direct/ranged MP4; H.264 High/L40,1920x1012,8bit BT.709 limited; AAC stereo/source stream1 |
+| Original delivery | 19 HTTPS206 reads; browser-reported4,723,992 transferred bytes in60.1 ms |
+| Direct GPU first frame, sync lag, seek | FAIL: no GPU frame; sync and seek unqualified |
+| Automatic fallback | Authorized same-session switch200, remux HLS playing natively |
+| Fallback sample | Position72.347225 s,1,740 video frames,0 dropped; observations200 |
+| Cleanup | Stop200/ended, current revoke200, video removed, Chrome closed; coordinator subsequently signed out test-only viewer to retire stale auth families |
+
+Client admission failed after successful original delivery. Snapshot coalescing
+lost the exception before replacement playback cleared it. There is no cached
+moov capture to prove which admission check failed; persisted probe facts report
+one English48k AAC stereo track, but do not prove its actual container language.
+The independently proven unknown-language defect is fixed by790fa13: only two
+known unequal languages reject; actual unknown language is retained, not relabelled.
+The first attempt is therefore not claimed as an original-play success.
+
+Recovery now forces its first failure snapshot through the250ms coalescer. A new
+failure fingerprint can send one error observation despite the ordinary1s rate.
+A local no-media native-view drive preserved a missing audio identity at28.8ms
+(recovering) and330.6ms (failed), with one error observation and zero media fetches.
+The same drive advertised with a matching same-origin shared asset descriptor
+and omitted original capability for a cross-origin descriptor.
+
+Production uses `window.velaUniversalAssets={baseURL,assetKey}` and validates the
+exact same-origin `/vela/universal/<key>/` path plus manifest identity. Explicitly
+invalid descriptors fail closed; only an absent descriptor uses diagnostic-relative
+assets. `prepare-upstream.ts --reuse-assets=<verified-payload>` restores validated
+WASM/libraries while rebundling current host/workers from the pinned sources;
+it does not rebuild the compiler toolchain or fetch media. This recovered the
+build after the external scratch drive disconnected. The diagnostic screenshot
+was on that disconnected drive and is unavailable; the measured results above
+were retained independently in the drive transcript.
+
+### Second cleared lab attempt and relative-URL correction
+
+The corrected diagnostic retained the actual failure: `Failed to construct 'URL':
+Invalid URL`, before any GPU frame. Its original broker URL was origin-relative.
+The manual diagnostic bypassed the normal data adapter's `mediaPlan` URL
+normalization: demux accepted the relative URL, then audio preparation's strict
+`new URL(url)` rejected it. This is a diagnostic/runtime boundary defect, not
+proof that the normal app adapter fails. Runtime `open` now resolves a nonempty
+URL against `document.baseURI` once before every demux/audio consumer, rejecting
+non-HTTP schemes and embedded credentials.
+
+| Second lab attempt | Result |
+|---|---|
+| Plan response |99.3 ms |
+| Original first frame, sync and seek |No GPU frame; sync/seek unqualified; exact URL-construction failure captured |
+| Automatic fallback |Same-session remux HLS playing;52.418297 s,1,261 frames,0 dropped |
+| Cleanup |Stop200/ended, revoke200, native view removed, dedicated Chrome closed |
+
+One local drive then supplied the **relative** path
+`/diagnostic/universal-avc.mp4` through the real native view: eight-second tagged
+BT.709 AVC/AAC fixture, stereo44,100Hz source. The runtime resolved the expected
+same-origin absolute URL. First GPU frame757.3ms; measured sample37 decoded/
+33 presented frames at1.342251s,0 dropped frames,0 PCM underrun/overflow/drop,
+late-frame count0, worst video/audio-master lag8.416ms. Native view and browser
+were closed afterward. This qualifies the relative-URL fix locally; a further
+real original attempt still requires fresh owner-idle clearance. No HDR, physical
+lip-sync, real-title seek or production beta pass is claimed.
+
+### Real original-file qualification — Street Fighter, successful cleared run
+
+A single owner-idle HTTPS lab session used the same-origin verified runtime
+`01f921f13df02482`, normal viewer authentication/negotiate and the broker's
+original-file grant. This was a diagnostic native-view host, not a packaged
+`/watch` UI drive. It stayed on `primary`, original direct/file, WebGPU, with
+WebCodecs H.264 and decoded AAC PCM. No fallback switch occurred.
+
+| Measurement | Result |
+|---|---|
+| Broker plan |190.5ms from Start |
+| First GPU-presented frame |1,154.3ms from trusted Start |
+| Pre-seek sample |63 decoded/59 presented,0 dropped, position2.433833s |
+| Video vs audio-master timing |Worst lag8.917ms before seek;7.963ms after; late count0, clock resets0 |
+| Audio |AAC PCM output, physical clock correlation present,0 underflow/overflow/dropped PCM frames |
+| Authorized seek |Target60s/buffering immediate; broker command200; first new GPU frame175.8ms; source generation1 retained, seek generation2 |
+| Resumed sample |61.208627s,33 decoded/29 presented,0 dropped, fallback count0 |
+| Final sample |97.442635s,903 frames in seek generation2,0 dropped; original/direct/WebGPU retained |
+| Observations and cleanup |144 observations200; stop200/ended; revoke200; videos removed; dedicated Chrome closed |
+
+These are software queue/clock measurements, not physical lip-sync, CPU/GPU power,
+HDR or surround qualification. Screenshot `client/.exact/lab-27-universal-direct.png`
+retains actual decoded imagery but exposed a canvas-position integration defect:
+the upstream canvas CSS was outside the native view's shadow root. Vela now
+supplies scoped absolute-overlay/visibility rules inside that root; this keeps
+the custom renderer above the HTML video rather than below it in normal flow.
+
+### One player, default universal admission
+
+The earlier opt-in beta policy is superseded. There is no player toggle or active
+persisted choice. The host removes the obsolete `vela.player.beta` key and always
+runs the exact secure-device/installed-assets probe. Capable devices advertise
+`originalPlayback`; `/watch` passes the negotiated plan to the same `vela-player`
+view, which chooses the original backend when offered. HTTP, unsupported device,
+unsupported source, or failed universal start uses internal automatic fallback;
+there is no user-facing old/new backend selector. Data negotiation serializes
+capability changes before playback requests. Production packaging requires the
+verified shared runtime payload; the qualified runtime key remains
+`01f921f13df02482` because this policy/layout change affects the host only.
+
+Ether independently confirmed the successful Street Fighter delivery from lab
+logs: the test device's session ran16:23:42–16:26 with candidate opens and media
+preparation, and **zero** `transcode session starting` or `ffmpeg started` entries.
+The direct/original client result therefore also has server-side evidence of no
+FFmpeg encode or remux.
+
+Next HEVC candidates were selected from persisted probe facts only, with no new
+source fetch: The Mummy (1999), HEVC Main8-bit816p BT.709 + E-AC-3 English5.1;
+The Mummy (1959), HEVC Main10/1080p SDR + E-AC-3 mono; and Model Citizen (2026),
+HEVC Main10/2160p SDR + AAC5.1. Probe factsVersion6 omitted field order, so these
+are not evidence of progressive scan. No HEVC, HDR/DV7, or new live qualification
+has yet occurred; each lab stream still needs fresh owner-idle clearance.

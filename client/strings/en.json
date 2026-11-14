@@ -400,6 +400,7 @@
   "search.moodUnavailableBelowTitles": "Mood search couldn't finish this time. Your title matches are above.",
   "search.discoveryUnavailable": "Discovery couldn't finish this time. Try again in a moment.",
   "search.discoveryEmpty": "Nothing further afield for that description yet.",
-  "player.beta.label": "New player (beta)",
-  "player.beta.help": "Applies to the next video. Requires a secure connection and WebGPU; unsupported media falls back."
+  "search.live.comingUp": "Coming up",
+  "search.live.until": "{channel} · until {time}",
+  "search.live.channel": "Channel {number}"
 }

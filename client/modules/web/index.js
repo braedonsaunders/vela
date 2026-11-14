@@ -1,53 +1,30 @@
-// client/player/beta.ts
-var key = "vela.player.beta";
-var changed = "vela:player-beta";
-var volatile = null;
-function betaPlayerEnabled() {
-  if (volatile !== null)
-    return volatile;
-  try {
-    return localStorage.getItem(key) === "true";
-  } catch {
-    return false;
-  }
-}
-function setBetaPlayer(enabled) {
-  const previous = betaPlayerEnabled();
-  volatile = enabled;
-  try {
-    localStorage.setItem(key, String(enabled));
-  } catch {}
-  if (previous !== enabled)
-    window.dispatchEvent(new Event(changed));
-}
-function subscribeBetaPlayer(listener) {
-  const storage = (event) => {
-    if (event.key === key || event.key === null) {
-      volatile = null;
-      listener();
-    }
-  };
-  window.addEventListener(changed, listener);
-  window.addEventListener("storage", storage);
-  return () => {
-    window.removeEventListener(changed, listener);
-    window.removeEventListener("storage", storage);
-  };
-}
-
 // client/player/universal/loader.ts
+function assetLocation() {
+  const descriptor = window.velaUniversalAssets;
+  if (descriptor === undefined)
+    return { base: new URL("./universal/", import.meta.url) };
+  if (!descriptor || typeof descriptor !== "object")
+    throw new Error("Invalid shared original runtime descriptor");
+  const { baseURL, assetKey } = descriptor;
+  if (typeof baseURL !== "string" || typeof assetKey !== "string" || !/^[a-f0-9]{16}$/.test(assetKey))
+    throw new Error("Invalid shared original runtime identity");
+  const base = new URL(baseURL, location.origin);
+  if (base.origin !== location.origin || base.username || base.password || base.search || base.hash || base.pathname !== `/vela/universal/${assetKey}/`)
+    throw new Error("Original runtime assets must use the same-origin immutable base");
+  return { base, assetKey };
+}
 function canAttemptOriginal() {
   return isSecureContext && !!navigator.gpu && typeof VideoFrame === "function" && typeof Worker === "function";
 }
 async function loadOriginalRuntime(options) {
   if (!canAttemptOriginal())
     throw new Error("Secure WebGPU, workers and VideoFrame are required for original playback");
-  const base = new URL("./universal/", import.meta.url);
+  const { base, assetKey } = assetLocation();
   const response = await fetch(new URL("assets.json", base), { signal: AbortSignal.any([options.signal, AbortSignal.timeout(1e4)]), credentials: "same-origin" });
   if (!response.ok)
     throw new Error(`Original runtime assets HTTP ${response.status}`);
   const manifest = await response.json();
-  if (manifest.version !== 1 || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
+  if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
     throw new Error("Original runtime asset identity mismatch");
   options.signal.throwIfAborted();
   const moduleURL = new URL("runtime.js", base);
@@ -72,11 +49,12 @@ async function originalPlaybackCapabilities(signal) {
       clearTimeout(timer);
   }
   signal.throwIfAborted();
-  const response = await fetch(new URL("./universal/assets.json", import.meta.url), { credentials: "same-origin", signal: AbortSignal.any([signal, AbortSignal.timeout(1e4)]) });
+  const { base, assetKey } = assetLocation();
+  const response = await fetch(new URL("assets.json", base), { credentials: "same-origin", signal: AbortSignal.any([signal, AbortSignal.timeout(1e4)]) });
   if (!response.ok)
     return null;
   const manifest = await response.json();
-  if (manifest.version !== 1 || !/^[a-f0-9]{16}$/.test(manifest.assetKey ?? "") || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
+  if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey ?? "") || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
     return null;
   const declaration = manifest.originalPlayback;
   if (!declaration || declaration.version !== 1 || declaration.range !== true || declaration.webgpu !== true)
@@ -91,6 +69,9 @@ async function originalPlaybackCapabilities(signal) {
 
 // client/player/media-capabilities.ts
 async function mediaCapabilities(signal) {
+  try {
+    localStorage.removeItem("vela.player.beta");
+  } catch {}
   const video = document.createElement("video");
   const supports = (mime) => video.canPlayType(mime) !== "";
   const MS = globalThis.ManagedMediaSource ?? globalThis.MediaSource;
@@ -101,7 +82,7 @@ async function mediaCapabilities(signal) {
     ["av1", 'video/mp4; codecs="av01.0.05M.08"']
   ];
   const audioFormats = [["aac", 'audio/mp4; codecs="mp4a.40.2"'], ["opus", 'audio/webm; codecs="opus"'], ["ac3", 'audio/mp4; codecs="ac-3"'], ["eac3", 'audio/mp4; codecs="ec-3"']];
-  const originalPlayback = betaPlayerEnabled() ? await originalPlaybackCapabilities(signal).catch(() => null) : null;
+  const originalPlayback = await originalPlaybackCapabilities(signal).catch(() => null);
   return {
     ...originalPlayback ? { originalPlayback } : {},
     containers: [supports("video/mp4") ? "mp4" : "", supports("video/webm") ? "webm" : ""].filter(Boolean),
@@ -1638,13 +1619,13 @@ class PlaybackEngine {
       canCatchUp: this.catchUpTarget() !== null
     };
   }
-  publish() {
+  publish(force = false) {
     if (this.disposed)
       return;
     if (this.pipeline?.audioTrackId)
       this.audio = this.pipeline.audioTrackId;
     const now = performance.now();
-    if (now - this.lastObservation < 250)
+    if (!force && now - this.lastObservation < 250)
       return;
     this.lastObservation = now;
     this.emit({ type: "snapshot", snapshot: this.snapshot() });
@@ -2035,7 +2016,7 @@ class PlaybackEngine {
     const failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
     this.status = "recovering";
     this.failure = failure;
-    this.publish();
+    this.publish(true);
     try {
       const retry = this.backend === "webgpu" ? decoderRetry(failure.message) : null;
       if (retry && this.source?.original && !this.localDecoderRetries.has(this.source.id)) {
@@ -2450,14 +2431,10 @@ function create(tag, element, json, event) {
   if (tag === "vela-preview")
     return createPreview(element, json, event);
   if (tag === "vela-context") {
-    const handle = { context: true, disposed: false, lastNavigation: "", probe: "", betaInput: "", revision: 0, abort: new AbortController, cleanup: () => {}, event };
+    const handle = { context: true, disposed: false, lastNavigation: "", probe: "", revision: 0, abort: new AbortController, event };
     const props = JSON.parse(json);
     handle.probe = props.probe ?? "";
-    if (handle.probe === "media" || handle.probe === "beta")
-      handle.cleanup = subscribeBetaPlayer(() => {
-        publishContext(handle);
-      });
-    updateContext(handle, props);
+    navigateSecurely(handle, props);
     queueMicrotask(() => {
       publishContext(handle);
     });
@@ -2471,13 +2448,18 @@ function create(tag, element, json, event) {
   video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000";
   const surface = document.createElement("div");
   surface.style.cssText = "position:relative;width:100%;height:100%";
+  const style = document.createElement("style");
+  style.textContent = ".webgpuPlayerCanvas{position:absolute;display:block;z-index:1;opacity:0;pointer-events:none}.webgpuPlayerCanvas-visible{opacity:1}";
   surface.append(video);
-  root.replaceChildren(surface);
-  const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0, serverError: "", endedReport: "" };
+  root.replaceChildren(style, surface);
+  const handle = { engine: undefined, video, sessionJson: "", lastCommand: -1, planRevision: -1, planSession: "", sequence: 0, lastReport: 0, serverError: "", endedReport: "", reportedFailure: "" };
   handle.engine = new PlaybackEngine(video, (value) => {
     event(8, JSON.stringify(value));
     const now = performance.now();
-    if (value.type === "snapshot" && handle.engine.observationAllowed && now - handle.lastReport >= 1000) {
+    const failureKey = value.type === "snapshot" && value.snapshot.failure ? `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}:${value.snapshot.sourceId}:${value.snapshot.failure.kind}:${value.snapshot.failure.message}` : "";
+    if (value.type === "snapshot" && handle.engine.observationAllowed && (now - handle.lastReport >= 1000 || failureKey !== "" && failureKey !== handle.reportedFailure)) {
+      if (failureKey)
+        handle.reportedFailure = failureKey;
       const endedKey = `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}`;
       if (value.snapshot.state === "ended" && handle.endedReport === endedKey)
         return;
@@ -2517,7 +2499,7 @@ function setProps(handle, json) {
     return;
   }
   if ("context" in handle) {
-    updateContext(handle, JSON.parse(json));
+    navigateSecurely(handle, JSON.parse(json));
     return;
   }
   const props = JSON.parse(json);
@@ -2616,7 +2598,6 @@ function destroy(handle) {
   if ("context" in handle) {
     handle.disposed = true;
     handle.abort.abort();
-    handle.cleanup();
     return;
   }
   handle.engine.dispose();
@@ -2642,17 +2623,10 @@ function navigateSecurely(handle, props) {
     handle.event(8, JSON.stringify({ secureNavigation: "rejected" }));
   }
 }
-function updateContext(handle, props) {
-  if (handle.probe === "beta" && (props.betaPlayer === "true" || props.betaPlayer === "false") && props.betaPlayer !== handle.betaInput) {
-    handle.betaInput = props.betaPlayer;
-    setBetaPlayer(props.betaPlayer === "true");
-  }
-  navigateSecurely(handle, props);
-}
 async function publishContext(handle) {
   const revision = ++handle.revision;
   try {
-    const payload = handle.probe === "media" ? JSON.stringify(await mediaCapabilities(handle.abort.signal)) : handle.probe === "beta" ? String(betaPlayerEnabled()) : handle.probe === "network" ? JSON.stringify({ saveData: navigator.connection?.saveData === true }) : location.origin;
+    const payload = handle.probe === "media" ? JSON.stringify(await mediaCapabilities(handle.abort.signal)) : handle.probe === "network" ? JSON.stringify({ saveData: navigator.connection?.saveData === true }) : location.origin;
     if (!handle.disposed && revision === handle.revision)
       handle.event(8, payload);
   } catch {}

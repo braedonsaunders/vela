@@ -5,7 +5,6 @@ import { writePwaAssets, pwaIcons } from './pwa-assets';
 import { externalizeAssets } from './assets';
 import { createHash } from 'node:crypto';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, symlink, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
@@ -15,7 +14,7 @@ if (process.argv.some(arg => arg.startsWith('--universal-assets'))) throw new Er
 const mapReport = process.argv.includes('--map-report');
 const engine = process.argv[process.argv.indexOf('--engine') + 1];
 if (!process.argv.includes('--engine') || !/^[a-z][a-z0-9-]*$/.test(engine)) throw new Error('Use build.ts to produce the multi-engine release');
-const releases = join(homedir(), '.scratch/tmp/vela/release');
+const releases = join(root, '.artifacts/release');
 const pkg = await Bun.file(join(root, 'client/package.json')).json();
 const version = String(pkg.version ?? (await readFile(join(import.meta.dir, 'VERSION'), 'utf8')).trim());
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) throw new Error('Release version must be a semantic version');

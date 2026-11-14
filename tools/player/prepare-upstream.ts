@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { audioPackages } from '../../client/player/universal/audio/packages';
 import decoderPins from '../../vendor/webgpu-player/tools/pinned-releases.json';
+import { stageUniversalAssets } from '../release/universal-assets';
 import { transformUpstreamAudio } from '../../client/player/universal/audio/ffmpeg/upstream-transform';
 const root = resolve(import.meta.dir, '../..');
 const upstream = join(root, 'vendor/webgpu-player');
@@ -20,12 +21,22 @@ if (Bun.argv.includes('--bootstrap')) {
   await run(['npm', 'ci', '--no-audit', '--no-fund']);
   await run(['make', '-C', 'wasm', 'emsdk']);
 }
-await run(['make', '-C', 'wasm', 'all']);
-await run(['node', 'scripts/build.mjs', '--production']);
 const destination = resolve(Bun.argv.find(arg => arg.startsWith('--out='))?.slice(6) ?? join(root, 'client/modules/web/universal'));
 const libraries = join(destination, 'libraries');
+const reuse = Bun.argv.find(arg => arg.startsWith('--reuse-assets='))?.slice(15);
+let preparedLibraries: string | undefined;
+if (reuse) {
+  // Explicit immutable input restores already built WASM without depending on
+  // the compiler cache. All input hashes/key/source notices are revalidated.
+  const staging = join(root,'client/.exact/universal-verified-input');
+  const identity = await stageUniversalAssets(resolve(reuse),staging);
+  preparedLibraries = join(staging,'universal',identity.assetKey,'libraries');
+} else {
+  await run(['make', '-C', 'wasm', 'all']);
+  await run(['node', 'scripts/build.mjs', '--production']);
+}
 await mkdir(libraries, { recursive: true });
-await cp(join(upstream, 'bin/libraries'), libraries, { recursive: true });
+await cp(preparedLibraries ?? join(upstream, 'bin/libraries'), libraries, { recursive: true });
 await copyFile(join(root, 'THIRD_PARTY_NOTICES'), join(destination, 'THIRD_PARTY_NOTICES'));
 // Workers contain the MPL fork: retain its exact corresponding source and licence.
 const sourceDir = join(destination, 'sources');

@@ -1,4 +1,3 @@
-import { betaPlayerEnabled, setBetaPlayer, subscribeBetaPlayer } from './beta';
 import { mediaCapabilities } from './media-capabilities';
 import { createInstall, type InstallHandle } from './install';
 import { createPreview, setPreview, destroyPreview, type PreviewHandle } from './preview';
@@ -10,10 +9,10 @@ import type { PlaybackPlan } from '../../protocol/v0/types';
 import { observation, sessionFromPlan } from './protocol';
 export const abi = 1;
 export const roster = { 'vela-player': { snapshot: false }, 'vela-context': { snapshot: false }, 'vela-preview': { snapshot: false }, 'vela-install': { snapshot: false }, 'vela-theme': { snapshot: false }, 'vela-engine': { snapshot: false } };
-interface ContextHandle { context: true; disposed: boolean; lastNavigation: string; probe: string; betaInput: string; revision: number; abort: AbortController; cleanup: () => void; event: (kind: number, payload: string) => void }
+interface ContextHandle { context: true; disposed: boolean; lastNavigation: string; probe: string; revision: number; abort: AbortController; event: (kind: number, payload: string) => void }
 interface Handle {
   engine: PlaybackEngine; video: HTMLVideoElement; sessionJson: string; lastCommand: number;
-  endedReport: string; serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
+  endedReport: string; reportedFailure: string; serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
 }
 export function create(tag: string, element: HTMLElement, json: string, event: (kind: number, payload: string) => void): Handle | ContextHandle | PreviewHandle | InstallHandle | ThemeHandle | EngineHandle {
   if (tag === 'vela-engine') return createEngine(json);
@@ -21,11 +20,10 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   if (tag === 'vela-install') return createInstall(element, json, event);
   if (tag === 'vela-preview') return createPreview(element, json, event);
   if (tag === 'vela-context') {
-    const handle: ContextHandle = { context:true, disposed:false, lastNavigation:'', probe:'', betaInput:'', revision:0, abort:new AbortController(), cleanup:()=>{}, event };
+    const handle: ContextHandle = { context:true, disposed:false, lastNavigation:'', probe:'', revision:0, abort:new AbortController(), event };
     const props = JSON.parse(json) as Record<string, string>;
     handle.probe = props.probe ?? '';
-    if (handle.probe === 'media' || handle.probe === 'beta') handle.cleanup = subscribeBetaPlayer(() => { void publishContext(handle); });
-    updateContext(handle,props);
+    navigateSecurely(handle,props);
     queueMicrotask(() => { void publishContext(handle); });
     return handle;
   }
@@ -34,12 +32,19 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   const root = element.shadowRoot ?? element.attachShadow({ mode: 'open' });
   const video = document.createElement('video'); video.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain;background:#000';
   const surface = document.createElement('div'); surface.style.cssText = 'position:relative;width:100%;height:100%';
-  surface.append(video); root.replaceChildren(surface);
-  const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0, serverError: '', endedReport: '' };
+  // Upstream creates its canvas dynamically. Keep its positioning rules inside
+  // this native view's shadow root so the rendered frame overlays the video.
+  const style = document.createElement('style');
+  style.textContent = '.webgpuPlayerCanvas{position:absolute;display:block;z-index:1;opacity:0;pointer-events:none}.webgpuPlayerCanvas-visible{opacity:1}';
+  surface.append(video); root.replaceChildren(style,surface);
+  const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0, serverError: '', endedReport: '', reportedFailure: '' };
   handle.engine = new PlaybackEngine(video, value => {
     event(8, JSON.stringify(value));
     const now = performance.now();
-    if (value.type === 'snapshot' && handle.engine.observationAllowed && now - handle.lastReport >= 1000) {
+    const failureKey = value.type === 'snapshot' && value.snapshot.failure
+      ? `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}:${value.snapshot.sourceId}:${value.snapshot.failure.kind}:${value.snapshot.failure.message}` : '';
+    if (value.type === 'snapshot' && handle.engine.observationAllowed && (now - handle.lastReport >= 1000 || failureKey !== '' && failureKey !== handle.reportedFailure)) {
+      if (failureKey) handle.reportedFailure = failureKey;
       const endedKey = `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}`;
       if (value.snapshot.state === 'ended' && handle.endedReport === endedKey) return;
       if (value.snapshot.state === 'ended') handle.endedReport = endedKey;
@@ -55,7 +60,7 @@ export function setProps(handle: Handle | ContextHandle | PreviewHandle | Instal
   if ('theme' in handle) { setTheme(handle, json); return; }
   if ('install' in handle) { handle.update(json); return; }
   if ('preview' in handle) { setPreview(handle, json); return; }
-  if ('context' in handle) { updateContext(handle,JSON.parse(json) as Record<string,string>); return; }
+  if ('context' in handle) { navigateSecurely(handle,JSON.parse(json) as Record<string,string>); return; }
   const props = JSON.parse(json) as Record<string, string>;
   if (props.serverError !== handle.serverError) { handle.serverError = props.serverError ?? ''; if (handle.serverError) handle.engine.rejectCommand(handle.serverError); }
   const input = props.plan || props.session || '';
@@ -97,7 +102,7 @@ function applyCommand(handle: Handle, props: Record<string, string>) {
     if (command.id > handle.lastCommand) { handle.lastCommand = command.id; void handle.engine.command(command); }
   }
 }
-export function destroy(handle: Handle | ContextHandle | PreviewHandle | InstallHandle | ThemeHandle | EngineHandle) { if ('leaving' in handle) { destroyEngine(handle); return; } if ('theme' in handle) { destroyTheme(handle); return; } if ('install' in handle) { handle.dispose(); return; } if ('preview' in handle) { destroyPreview(handle); return; } if ('context' in handle) { handle.disposed = true; handle.abort.abort(); handle.cleanup(); return; } handle.engine.dispose(); handle.video.remove(); }
+export function destroy(handle: Handle | ContextHandle | PreviewHandle | InstallHandle | ThemeHandle | EngineHandle) { if ('leaving' in handle) { destroyEngine(handle); return; } if ('theme' in handle) { destroyTheme(handle); return; } if ('install' in handle) { handle.dispose(); return; } if ('preview' in handle) { destroyPreview(handle); return; } if ('context' in handle) { handle.disposed = true; handle.abort.abort(); return; } handle.engine.dispose(); handle.video.remove(); }
 
 /** The data realm issues the one-time code and validates the server identity;
  * the host enforces the advertised HTTPS destination and never logs the code. */
@@ -117,17 +122,11 @@ function navigateSecurely(handle: ContextHandle, props: Record<string, string>) 
   }
 }
 
-function updateContext(handle: ContextHandle, props: Record<string,string>) {
-  if (handle.probe === 'beta' && (props.betaPlayer === 'true' || props.betaPlayer === 'false') && props.betaPlayer !== handle.betaInput) {
-    handle.betaInput = props.betaPlayer; setBetaPlayer(props.betaPlayer === 'true');
-  }
-  navigateSecurely(handle,props);
-}
 async function publishContext(handle: ContextHandle) {
   const revision = ++handle.revision;
   try {
     const payload = handle.probe === 'media' ? JSON.stringify(await mediaCapabilities(handle.abort.signal))
-      : handle.probe === 'beta' ? String(betaPlayerEnabled())
+
       : handle.probe === 'network' ? JSON.stringify({saveData:(navigator as Navigator & {connection?:{saveData?:boolean}}).connection?.saveData === true})
       : location.origin;
     if (!handle.disposed && revision === handle.revision) handle.event(8,payload);
