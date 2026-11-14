@@ -41,6 +41,17 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
     throw new Error('Invalid guide window');
   const channels = await allPages(cursor => api.channels(cursor, 100));
   const programmes = await allPages(cursor => api.guide({ from, until, cursor, limit: 100 }));
+  // Mobile now/next stays current even while the grid browses another window.
+  const currentStart = Math.floor(now / 1800000) * 1800000;
+  const currentEnd = currentStart + 7200000;
+  const currentProgrammes = start <= currentStart && end >= currentEnd ? programmes : await allPages(cursor => api.guide({
+    from: new Date(currentStart).toISOString(), until: new Date(currentEnd).toISOString(), cursor, limit: 100,
+  }));
+  const currentByChannel = new Map<string, Programme[]>();
+  for (const programme of currentProgrammes) {
+    if (!currentByChannel.has(programme.channelId)) currentByChannel.set(programme.channelId, []);
+    currentByChannel.get(programme.channelId)!.push(programme);
+  }
   const grouped = new Map<string, Programme[]>();
   for (const programme of programmes) {
     if (!grouped.has(programme.channelId)) grouped.set(programme.channelId, []);
@@ -55,8 +66,12 @@ export async function loadGuide(api: GuideApi, from: string, until: string, now:
         const a = Date.parse(p.start), b = Date.parse(p.end);
         return Number.isFinite(a) && Number.isFinite(b) && b > a && a < end && b > start;
       }).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-      const current = entries.find(p => Date.parse(p.start) <= now && now < Date.parse(p.end));
-      const next = entries.find(p => Date.parse(p.start) > now);
+      const currentEntries = (currentByChannel.get(channel.id) ?? []).filter(p => {
+        const a = Date.parse(p.start), b = Date.parse(p.end);
+        return Number.isFinite(a) && Number.isFinite(b) && b > a;
+      }).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+      const current = currentEntries.find(p => Date.parse(p.start) <= now && now < Date.parse(p.end));
+      const next = currentEntries.find(p => Date.parse(p.start) > now);
       return { id: channel.id, number: channel.number, name: channel.name, favorite: channel.favorite,
         now: current?.name ?? '', next: next?.name ?? '',
         programmes: entries.map(p => {
