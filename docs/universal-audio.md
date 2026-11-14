@@ -284,3 +284,34 @@ requested title time **before any media is appended**. It does not rewrite PTS
 or infer an offset from the request. A broken producer fails explicitly instead
 of exposing the wrong audio master clock. Full fixed-producer/native-view
 qualification remains pending.
+
+### Fixed producer → shipping feeder/native backend pass
+
+Ether's corrected producer uses inner MP4 muxer settings
+`use_editlist=0:avoid_negative_ts=make_non_negative` with
+`frag_discont+skip_sidx`. Disabling edit lists alone was insufficient: the inner
+muxer's automatic timestamp policy still rebased positive starts. The explicit
+make_non_negative policy preserves positive starts while avoiding uint64 wrap
+from AAC's negative encoder priming at position zero.
+
+Ether worker thr_6vb4x5qven captured actual server output at 0/4/6s. It measured no
+edts, mdhd timescale 48,000 and first tfdt 0 / 190,976 / 286,976 respectively. Its
+Chrome MSE check observed buffers 0..10.021333 / 3.978666..9.999999 /
+5.978666..9.999999, and advancing clocks after seeks. That is the producing
+worker's evidence; those bytes were then independently exercised in Vela's path.
+
+The audio worker copied the real 4/6s captures and ran **shipping feedEtherAudio +
+OwnedNativeMediaAudioBackend**, with the new init/tfdt guard, in local Chrome:
+
+| Action | Actual observation |
+| --- | --- |
+| Start generation 1 at absolute 4s | Qualified audio clock advanced to 5.111089s; four media fragments appended |
+| Retire 1, start generation 2 at 6s | Qualified clock advanced to 6.427438s; three media fragments appended |
+| Late stop for old generation 1 | Returned false; generation 2 kept playing |
+| Generation 2 end-of-title | Audio ended event at 9.999999s; zero pending appends |
+
+This qualifies the isolated shipping feeder/backend against fixed server-produced
+bytes, including nonzero starts, retirement and EOS. It does not establish full
+native-view recovery with video still direct, source-switch UI, lip-sync or a
+human listening pass. The dedicated browser, temporary HTTP server and owned
+media work were stopped. No lab stream was opened.
