@@ -78,8 +78,12 @@ export interface Interaction { receiptToken: string; kind: 'visible' | 'selected
   /** Visible means actually in the visible viewport; never merely prefetched. */
   visibleMilliseconds?: number; sessionId?: ID }
 export interface InteractionsRequest extends Mutation { interactions: Interaction[] }
+export type SubtitleDelivery = { kind: 'external'; format: 'webvtt' | 'webvtt-window'; url: string } |
+  { kind: 'embedded' } | { kind: 'burn-in' };
 export interface Track { streamIndex?: number; id: ID; kind: 'audio' | 'subtitle'; language: string; name: string; codec: string;
-  channels?: number; forced?: boolean; hearingImpaired?: boolean; default?: boolean; url?: string }
+  channels?: number; forced?: boolean; hearingImpaired?: boolean; default?: boolean; url?: string;
+  /** Subtitle delivery only; streamIndex remains the full source stream index. */
+  delivery?: SubtitleDelivery }
 export interface AudioRendition { trackId: ID; groupId: ID; url: string; mimeType: string; bitrate?: number }
 export interface Quality { id: ID; width: number; height: number; bitrate: number; videoCodec: string; audioCodec?: string; url: string; codecStatus?: 'pending' | 'verified'; audioGroupId?: ID }
 export interface Generations { sourceGeneration: number; seekGeneration: number }
