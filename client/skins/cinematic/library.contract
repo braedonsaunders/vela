@@ -1,7 +1,7 @@
 use Card, LibraryModel, LibraryOption, LibrarySortOption from "../../foundation/models.contract"
-use TitleGrid, BrowseHeader from "./browse.contract"
+use TitleGrid from "./browse.contract"
 use EmptyState, RowSkeleton, gutter from "./slots.contract"
-use Eyebrow, GhostPill, IconButton, Skeleton, enter, base, glide, quick from "./look.contract"
+use Eyebrow, GhostPill, IconButton, Skeleton, FadeImage, enter, base, glide, quick from "./look.contract"
 use Pulse from "./auth.contract"
 
 // A library: its name, the server's sort and filter choices, then its titles in a grid.
@@ -30,42 +30,48 @@ component Library
   action pickGenre(v: string)
     setFilter("genre", v)
   view
-    column gap=(small ? 22 : 30) padding-bottom=80
-      BrowseHeader(eyebrow=t("library.library"), name=model.name, backdrop=model.backdrop, small=small, still=still, close=close)
-      row gap=10 align-items="center" flex-wrap="wrap" padding-left=gutter(small) padding-right=gutter(small) animation=enter(still, 180)
-        if model.kinds.length > 1
-          row gap=4 padding=4 border-radius=999 background-color="cinematic.control" border="1px solid var(--cinematic.glass-edge)" role="group" aria-label=t("library.filter.all")
-            Chip(label=t("library.filter.all"), on=(model.kindFilter == ""), press=setFilter("kind", ""))
-            for kind in model.kinds key=kind.id
-              Chip(label=kind.label, on=(model.kindFilter == kind.id), press=setFilter("kind", kind.id))
-        if model.canPlayed
-          row gap=4 padding=4 border-radius=999 background-color="cinematic.control" border="1px solid var(--cinematic.glass-edge)" role="group" aria-label=t("library.filter.unwatched")
-            Chip(label=t("library.filter.all"), on=(model.playedFilter == ""), press=setFilter("played", ""))
-            Chip(label=t("library.filter.unwatched"), on=(model.playedFilter == "false"), press=setFilter("played", "false"))
-            Chip(label=t("library.filter.watched"), on=(model.playedFilter == "true"), press=setFilter("played", "true"))
-        if model.canFavorite
-          button press=setFilter("favorite", (model.favoriteFilter ? "" : "true")) aria-pressed=model.favoriteFilter class=GhostPill height=42 padding-left=16 padding-right=18 background-color=(model.favoriteFilter ? "ink.primary" : "cinematic.control") color=(model.favoriteFilter ? "ink.inverse" : "ink.primary") transition=`background-color ${quick()}ms linear, color ${quick()}ms linear`
-            row gap=8 align-items="center"
-              image (model.favoriteFilter ? "symbol:heart-fill" : "symbol:heart") width=15 height=15 aria-hidden=true
-              text t("library.filter.favorites") font-size=14
-        if model.genres.length > 0
-          select value=model.genreFilter change=pickGenre aria-label=t("library.genre") class=GlassSelect
-            option value=""
-              text t("library.anyGenre")
-            for genre in model.genres key=genre.id
-              option value=genre.id
-                text genre.label
-        column flex=1
-        if model.sorts.length > 1
-          row gap=6 align-items="center"
-            text t("library.sortBy") class=Eyebrow font-size=10 color="ink.quiet" padding-right=4
-            select value=model.sort change=pickSort aria-label=t("library.sortBy") class=GlassSelect
-              for sort in model.sorts key=sort.id
-                option value=sort.id
-                  text sort.label
-            if directions.length > 1
-              button press=flip aria-label=(model.direction == "asc" ? t("library.direction.asc") : t("library.direction.desc")) class=IconButton width=42 height=42 padding=12
-                image "symbol:sort" width=18 height=18 rotate=(model.direction == "asc" ? 180 : 0) transition=(still ? "none" : `rotate ${base()}ms ${glide()}`)
+    column position="relative" gap=(small ? 18 : 26) padding-bottom=80
+      if model.backdrop != ""
+        column position="absolute" top=0 left=0 right=0 height=(small ? 260 : 320) overflow="hidden" pointer-events="none" aria-hidden=true mask-image="linear-gradient(180deg, black 0%, transparent 100%)" opacity=0.22
+          FadeImage(src=model.backdrop)
+      // A slim toolbar that stays under the top bar; the library's name is already the active tab.
+      column position="sticky" top=0 padding-top=(small ? 104 : 84) z-index=5 background-color="cinematic.toolbar" backdrop-filter="blur(20px) saturate(1.3)" border-bottom="1px solid var(--cinematic.hairline)"
+        text model.name role="heading" aria-level=1 position="absolute" width=1 height=1 overflow="hidden" opacity=0 pointer-events="none"
+        scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" mask-image=(small ? "linear-gradient(90deg, black 0%, black 90%, transparent 100%)" : "none")
+          row gap=10 align-items="center" padding-top=10 padding-bottom=10 padding-left=gutter(small) padding-right=gutter(small) min-width="100%" box-sizing="border-box"
+            if model.kinds.length > 1
+              row gap=4 padding=4 border-radius=999 background-color="cinematic.control" border="1px solid var(--cinematic.glass-edge)" role="group" aria-label=t("library.filter.all")
+                Chip(label=t("library.filter.all"), on=(model.kindFilter == ""), press=setFilter("kind", ""))
+                for kind in model.kinds key=kind.id
+                  Chip(label=kind.label, on=(model.kindFilter == kind.id), press=setFilter("kind", kind.id))
+            if model.canPlayed
+              row gap=4 padding=4 border-radius=999 background-color="cinematic.control" border="1px solid var(--cinematic.glass-edge)" role="group" aria-label=t("library.filter.unwatched")
+                Chip(label=t("library.filter.all"), on=(model.playedFilter == ""), press=setFilter("played", ""))
+                Chip(label=t("library.filter.unwatched"), on=(model.playedFilter == "false"), press=setFilter("played", "false"))
+                Chip(label=t("library.filter.watched"), on=(model.playedFilter == "true"), press=setFilter("played", "true"))
+            if model.canFavorite
+              button press=setFilter("favorite", (model.favoriteFilter ? "" : "true")) aria-pressed=model.favoriteFilter class=GhostPill height=42 padding-left=16 padding-right=18 background-color=(model.favoriteFilter ? "ink.primary" : "cinematic.control") color=(model.favoriteFilter ? "ink.inverse" : "ink.primary") transition=`background-color ${quick()}ms linear, color ${quick()}ms linear`
+                row gap=8 align-items="center"
+                  image (model.favoriteFilter ? "symbol:heart-fill" : "symbol:heart") width=15 height=15 aria-hidden=true
+                  text t("library.filter.favorites") font-size=14
+            if model.genres.length > 0
+              select value=model.genreFilter change=pickGenre aria-label=t("library.genre") class=GlassSelect
+                option value=""
+                  text t("library.anyGenre")
+                for genre in model.genres key=genre.id
+                  option value=genre.id
+                    text genre.label
+            column flex=1
+            if model.sorts.length > 1
+              row gap=6 align-items="center"
+                text t("library.sortBy") class=Eyebrow font-size=10 color="ink.quiet" padding-right=4
+                select value=model.sort change=pickSort aria-label=t("library.sortBy") class=GlassSelect
+                  for sort in model.sorts key=sort.id
+                    option value=sort.id
+                      text sort.label
+                if directions.length > 1
+                  button press=flip aria-label=(model.direction == "asc" ? t("library.direction.asc") : t("library.direction.desc")) class=IconButton width=42 height=42 padding=12
+                    image "symbol:sort" width=18 height=18 rotate=(model.direction == "asc" ? 180 : 0) transition=(still ? "none" : `rotate ${base()}ms ${glide()}`)
       if loading and model.items.length == 0
         column role="status" aria-label=t("ui.findingTitles")
           RowSkeleton(small=small, still=still)

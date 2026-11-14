@@ -279,15 +279,8 @@ component Home
           image "assets/grain.svg" alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="fill" opacity=0.05
           if hero.backdrop == "" and hero.poster != "" and not small
             image hero.poster alt="" position="absolute" right="max(28px, 6vw)" top="max(110px, 14vh)" height="min(56vh, 520px)" aspect-ratio="2 / 3" object-fit="cover" border-radius=16 box-shadow="0px 50px 120px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)" opacity=(searching ? 0 : 1) transition=`opacity ${slow()}ms ${glide()}` animation=enter(still, 300)
-      // No featured title: a quiet colour field taken from the first shelf's first poster.
-      if model.hero.length == 0
-        for row in model.rows.slice(0, 1) key=row.id
-          for card in row.items.slice(0, 1).filter(c => c.poster != "") key=card.id
-            column position="absolute" top=0 left=0 right=0 height=(small ? "420px" : "560px") overflow="hidden" pointer-events="none" aria-hidden=true mask-image="linear-gradient(180deg, black 0%, black 35%, transparent 100%)" animation=expose(still)
-              image card.poster alt="" position="absolute" top="-30%" left="-10%" width="120%" height="160%" object-fit="cover" filter="blur(110px) saturate(1.6)" opacity=(searching ? 0.25 : 0.42) transition=`opacity ${slow()}ms ${glide()}`
-              image "assets/grain.svg" alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="fill" opacity=0.05
       // The hero copy, then the search box it settles onto.
-      column position="relative" height=(searching ? (small ? "176px" : "190px") : model.hero.length == 0 ? (small ? "200px" : "260px") : small ? "520px" : "clamp(500px, 62vh, 700px)") justify-content="flex-end" box-sizing="border-box" -exact-layout-transition=(still ? "none" : "640ms ease-out")
+      column position="relative" height=(searching ? (small ? "176px" : "190px") : model.hero.length == 0 ? (small ? "176px" : "190px") : small ? "520px" : "clamp(500px, 62vh, 700px)") justify-content="flex-end" box-sizing="border-box" -exact-layout-transition=(still ? "none" : "640ms ease-out")
         if not searching
           for hero in shown key=hero.id
             column padding-left=gutter(small) padding-right=gutter(small) gap=(small ? 12 : 16) max-width=(small ? "none" : "46rem") intersect=observe(hero.receipt) -exact-exit-animation=(still ? "vanish 120ms linear both" : "vanish 240ms ease-in both")
