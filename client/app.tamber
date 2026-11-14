@@ -86,6 +86,7 @@ theme
   cinematic.track-strong = #ffffff47  scheme=fixed
   cinematic.nav-scrim = #07090cb3  scheme=fixed
   cinematic.toolbar = #090b0ed1  scheme=fixed
+  cinematic.ink-track = #11141933  scheme=fixed
   cinematic.hairline = #ffffff0f  scheme=fixed
   cinematic.sheen = #ffffff21  scheme=fixed
   cinematic.placeholder-top = #2a2622  scheme=fixed
