@@ -1,7 +1,7 @@
 import { AdaptiveBitrate, BandwidthEstimator } from './abr';
-import { parsePlaylist, type Playlist, type Segment } from './hls';
+import { parsePlaylist, type Playlist } from './hls';
 import { cancelled, delay } from './session';
-import type { Rendition } from './model';
+import type { LiveSnapshot, Rendition } from './model';
 
 type MediaSourceClass = typeof MediaSource;
 export function mediaSourceClass(): MediaSourceClass | undefined {
@@ -32,6 +32,20 @@ export class SegmentPipeline {
   current?: Rendition;
   lowDelay = false;
   liveWindowStart = 0; maxLiveDrift = 45;
+  publishedEdge: number | null = null; publishedStart: number | null = null;
+  retrying = false;
+  private publicationPending = false; private upstreamGap = false;
+  private segmentStarted: number | null = null; private segmentDuration = 0;
+  get delivery(): LiveSnapshot['delivery'] {
+    if (this.upstreamGap) return 'upstream-gap';
+    if (this.segmentStarted !== null && (this.retrying || performance.now() - this.segmentStarted > Math.max(1000, this.segmentDuration * 1000))) return 'segment-delayed';
+    if (this.publicationPending) return 'waiting-for-publication';
+    return this.publishedEdge === null ? 'unknown' : 'available';
+  }
+  private published(list: Playlist) {
+    this.publishedStart = list.segments[0]?.start ?? null;
+    const last = list.segments.at(-1); this.publishedEdge = last ? last.start + last.duration : null;
+  }
   private media?: MediaSource; private objectUrl?: string; private buffer?: SourceBuffer;
   private dropPrevious = { dropped: 0, total: 0 }; private dropRatio = 0;
   private driftPenalty = 0;
@@ -68,16 +82,17 @@ export class SegmentPipeline {
   }
   private async bytes(url: string, signal: AbortSignal, progress?: (bytes: number, elapsed: number) => void) {
     const deadline = performance.now() + 12000;
-    for (let attempt = 0;; attempt++) {
+    try { for (let attempt = 0;; attempt++) {
       try { return await this.fetchBytes(url, signal, progress); }
       catch (error) {
         cancelled(signal);
         const retryable = error instanceof TypeError || error instanceof PlaybackFault && error.retryable;
         if (!retryable || attempt >= 2 || performance.now() >= deadline) throw error;
+        this.retrying = true;
         this.driftPenalty = Math.min(12, this.driftPenalty + 3);
         await delay(300 * 2 ** attempt, signal);
       }
-    }
+    } } finally { this.retrying = false; }
   }
   private async playlist(r: Rendition, signal: AbortSignal): Promise<Playlist> {
     return parsePlaylist(new TextDecoder().decode(await this.bytes(r.url, signal)), new URL(r.url, document.baseURI).href);
@@ -111,9 +126,9 @@ export class SegmentPipeline {
     this.current = rendition; this.onRendition(rendition);
     this.buffer = media.addSourceBuffer(rendition.mime);
     let list = await this.playlist(rendition, signal);
-    if (live) list.segments.forEach(s => { s.start += this.liveWindowStart; });
+    if (live) { list.segments.forEach(s => { s.start += this.liveWindowStart; }); this.published(list); }
     if (!live && list.ended) media.duration = list.segments.reduce((sum, s) => sum + s.duration, 0);
-    let next = live ? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find(s => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
+    let next = live ? (position > 0 ? list.segments.find(s => s.start + s.duration > position) : undefined) ?? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find(s => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
     if (!next) throw new PlaybackFault('Position outside source timeline', 'source');
     let sequence = next.sequence, init = '', first = true;
     // Live sliding manifests are anchored by overlapping sequence, never reset to zero.
@@ -139,19 +154,23 @@ export class SegmentPipeline {
           if (!anchor) throw new PlaybackFault('Rendition lost timeline overlap', 'source');
           const offset = list.segments.find(s => s.sequence === anchor.sequence)!.start - anchor.start;
           candidate.segments.forEach(s => { s.start += offset; });
-          rendition = choice; list = candidate; this.current = choice; this.onRendition(choice); init = ''; }
+          rendition = choice; list = candidate; if (live) this.published(list); this.current = choice; this.onRendition(choice); init = ''; }
       }
       next = list.segments.find(s => s.sequence === sequence);
       if (!next) {
         if (list.ended) { if (media.readyState === 'open') media.endOfStream(); return; }
+        this.publicationPending = true;
         await delay(Math.max(500, list.targetDuration * 500), signal);
         const fresh = await this.playlist(rendition, signal);
         const overlap = fresh.segments.find(s => list.segments.some(old => old.sequence === s.sequence));
         if (!overlap) throw new PlaybackFault('Live playlist lost timeline overlap', 'source');
         const offset = list.segments.find(s => s.sequence === overlap.sequence)!.start - overlap.start;
-        fresh.segments.forEach(s => { s.start += offset; }); list = fresh; continue;
+        fresh.segments.forEach(s => { s.start += offset; }); list = fresh; if (live) this.published(list); continue;
       }
+      this.publicationPending = false;
+      if (next.gap) { this.upstreamGap = true; throw new PlaybackFault('Publisher marked segment unavailable (EXT-X-GAP)', 'source'); }
       if (next.init !== init) { await this.append(await this.bytes(next.init, signal), signal); init = next.init; }
+      this.segmentStarted = performance.now(); this.segmentDuration = next.duration;
       const request = new AbortController();
       const abort = () => request.abort(); signal.addEventListener('abort', abort, { once: true });
       let abandon: Rendition | undefined;
@@ -166,9 +185,9 @@ export class SegmentPipeline {
         cancelled(signal);
         if (!abandon) throw request.signal.reason instanceof PlaybackFault ? request.signal.reason : error;
         rendition = abandon; list = await this.playlist(rendition, signal); this.current = rendition; this.onRendition(rendition); init = ''; continue;
-      } finally { clearTimeout(timeout); signal.removeEventListener('abort', abort); }
+      } finally { this.segmentStarted = null; clearTimeout(timeout); signal.removeEventListener('abort', abort); }
       await this.append(bytes, signal);
-      if (first) { this.video.currentTime = live ? next.start : position; first = false; }
+      if (first) { this.video.currentTime = live ? Math.max(next.start, position) : position; first = false; }
       sequence++;
       const retain = live ? 15 : 30;
       if (this.video.currentTime > retain && this.buffer.buffered.length && this.buffer.buffered.start(0) < this.video.currentTime - retain - 5) {

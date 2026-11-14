@@ -1,4 +1,4 @@
-import type { Command, EngineEvent, Failure, PlaybackSession, Snapshot, Source } from './model';
+import type { Command, EngineEvent, Failure, LiveSnapshot, PlaybackSession, Snapshot, Source } from './model';
 import { SessionController, cancelled, delay, type Generation } from './session';
 import { mediaSourceClass, PlaybackFault, SegmentPipeline } from './pipeline';
 
@@ -37,12 +37,38 @@ export class PlaybackEngine {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? null,
+      live: this.liveSnapshot(),
       position: Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0,
       duration: Number.isFinite(this.video.duration) ? this.video.duration : null,
       playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: ranges.start(i), end: ranges.end(i) })),
       throughputBps: this.pipeline?.bandwidth.bps ?? null, droppedFrames: quality?.droppedVideoFrames ?? null,
       totalFrames: quality?.totalVideoFrames ?? null, audioTrackId: this.audio, subtitleTrackId: this.subtitle, failure: this.failure,
     };
+  }
+  private catchUpTarget(): number | null {
+    const ranges = this.backend === 'mse' ? this.video.buffered : this.video.seekable;
+    if (!this.session?.live || !ranges.length) return null;
+    const index = ranges.length - 1, start = ranges.start(index), end = ranges.end(index);
+    if (end - start < 0.25) return null;
+    const target = Math.max(start + 0.05, end - (this.lowDelay ? 6 : 18));
+    return target > this.video.currentTime + 0.25 ? Math.min(target, end - 0.1) : null;
+  }
+  private liveSnapshot(): LiveSnapshot | null {
+    if (!this.session?.live) return null;
+    const seekable = this.video.seekable;
+    let edge = this.pipeline?.publishedEdge ?? null;
+    let start = this.pipeline?.publishedStart ?? null;
+    let source: LiveSnapshot['edgeSource'] = edge === null ? null : 'playlist';
+    if (edge === null && seekable.length) {
+      edge = seekable.end(seekable.length - 1); start = seekable.start(0); source = 'seekable';
+    }
+    if (edge === null && Number.isFinite(this.session.liveEdge)) {
+      edge = this.session.liveEdge!; start = this.session.liveWindowStart ?? null; source = 'server';
+    }
+    return { edgeSeconds: edge, windowStartSeconds: start,
+      driftSeconds: edge === null ? null : Math.max(0, edge - this.video.currentTime), edgeSource: source,
+      reconnecting: this.status === 'recovering' || !!this.pipeline?.retrying,
+      delivery: this.pipeline?.delivery ?? 'unknown', canCatchUp: this.catchUpTarget() !== null };
   }
   private publish() {
     if (this.disposed) return;
@@ -77,6 +103,8 @@ export class PlaybackEngine {
   updateSession(session: PlaybackSession) {
     if (session.id !== this.session?.id) throw new Error('Cannot update a different session');
     this.session = session;
+    this.lowDelay = session.lowDelay ?? this.lowDelay;
+    if (this.pipeline) { this.pipeline.lowDelay = this.lowDelay; this.pipeline.maxLiveDrift = session.liveMaxDrift ?? 45; }
     if ((session.subtitleTrackId ?? null) !== this.subtitle) {
       this.subtitle = session.subtitleTrackId ?? null; this.applySubtitle();
     }
@@ -177,6 +205,11 @@ export class PlaybackEngine {
           if (this.backend === 'mse' && this.source) await this.activate(this.source, command.seconds, false, true);
           else this.video.currentTime = command.seconds;
           break;
+        }
+        case 'catchUp': {
+          const target = this.catchUpTarget();
+          if (target === null) throw new Error('No newer usable live buffer or seekable range');
+          await this.command({ id: command.id, type: 'seek', seconds: target }); break;
         }
         case 'volume': if (!Number.isFinite(command.value) || command.value < 0 || command.value > 1) throw new Error('Volume outside 0–1'); this.video.volume = command.value; break;
         case 'quality':

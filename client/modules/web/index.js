@@ -126,11 +126,14 @@ function parsePlaylist(text, base) {
     throw new Error("Requires clear, continuous fMP4 media playlist (not master/TS/encrypted/byte-range HLS)");
   let sequence = 0, start = 0, duration = 0, init = "", targetDuration = 6;
   const segments = [];
+  let gap = false;
   for (const line of text.split(/\r?\n/).map((l) => l.trim())) {
     if (line.startsWith("#EXT-X-MEDIA-SEQUENCE:"))
       sequence = Number(line.split(":")[1]);
     else if (line.startsWith("#EXT-X-TARGETDURATION:"))
       targetDuration = Number(line.split(":")[1]);
+    else if (line === "#EXT-X-GAP")
+      gap = true;
     else if (line.startsWith("#EXT-X-MAP:")) {
       if (/BYTERANGE=/.test(line))
         throw new Error("Byte-range initialization is unsupported");
@@ -143,9 +146,10 @@ function parsePlaylist(text, base) {
     else if (line && !line.startsWith("#")) {
       if (!init || !Number.isFinite(duration) || duration <= 0)
         throw new Error("Invalid fMP4 segment");
-      segments.push({ sequence: sequence++, url: new URL(line, base).href, start, duration, init });
+      segments.push({ sequence: sequence++, url: new URL(line, base).href, start, duration, init, gap });
       start += duration;
       duration = 0;
+      gap = false;
     }
   }
   if (!Number.isFinite(sequence) || !Number.isFinite(targetDuration) || targetDuration <= 0 || !segments.length)
@@ -214,6 +218,27 @@ class SegmentPipeline {
   lowDelay = false;
   liveWindowStart = 0;
   maxLiveDrift = 45;
+  publishedEdge = null;
+  publishedStart = null;
+  retrying = false;
+  publicationPending = false;
+  upstreamGap = false;
+  segmentStarted = null;
+  segmentDuration = 0;
+  get delivery() {
+    if (this.upstreamGap)
+      return "upstream-gap";
+    if (this.segmentStarted !== null && (this.retrying || performance.now() - this.segmentStarted > Math.max(1000, this.segmentDuration * 1000)))
+      return "segment-delayed";
+    if (this.publicationPending)
+      return "waiting-for-publication";
+    return this.publishedEdge === null ? "unknown" : "available";
+  }
+  published(list) {
+    this.publishedStart = list.segments[0]?.start ?? null;
+    const last = list.segments.at(-1);
+    this.publishedEdge = last ? last.start + last.duration : null;
+  }
   media;
   objectUrl;
   buffer;
@@ -277,17 +302,22 @@ class SegmentPipeline {
   }
   async bytes(url, signal, progress) {
     const deadline = performance.now() + 12000;
-    for (let attempt = 0;; attempt++) {
-      try {
-        return await this.fetchBytes(url, signal, progress);
-      } catch (error) {
-        cancelled(signal);
-        const retryable = error instanceof TypeError || error instanceof PlaybackFault && error.retryable;
-        if (!retryable || attempt >= 2 || performance.now() >= deadline)
-          throw error;
-        this.driftPenalty = Math.min(12, this.driftPenalty + 3);
-        await delay(300 * 2 ** attempt, signal);
+    try {
+      for (let attempt = 0;; attempt++) {
+        try {
+          return await this.fetchBytes(url, signal, progress);
+        } catch (error) {
+          cancelled(signal);
+          const retryable = error instanceof TypeError || error instanceof PlaybackFault && error.retryable;
+          if (!retryable || attempt >= 2 || performance.now() >= deadline)
+            throw error;
+          this.retrying = true;
+          this.driftPenalty = Math.min(12, this.driftPenalty + 3);
+          await delay(300 * 2 ** attempt, signal);
+        }
       }
+    } finally {
+      this.retrying = false;
     }
   }
   async playlist(r, signal) {
@@ -342,13 +372,15 @@ class SegmentPipeline {
     this.onRendition(rendition);
     this.buffer = media.addSourceBuffer(rendition.mime);
     let list = await this.playlist(rendition, signal);
-    if (live)
+    if (live) {
       list.segments.forEach((s) => {
         s.start += this.liveWindowStart;
       });
+      this.published(list);
+    }
     if (!live && list.ended)
       media.duration = list.segments.reduce((sum, s) => sum + s.duration, 0);
-    let next = live ? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find((s) => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
+    let next = live ? (position > 0 ? list.segments.find((s) => s.start + s.duration > position) : undefined) ?? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find((s) => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
     if (!next)
       throw new PlaybackFault("Position outside source timeline", "source");
     let sequence = next.sequence, init = "", first = true;
@@ -381,6 +413,8 @@ class SegmentPipeline {
           });
           rendition = choice;
           list = candidate;
+          if (live)
+            this.published(list);
           this.current = choice;
           this.onRendition(choice);
           init = "";
@@ -393,6 +427,7 @@ class SegmentPipeline {
             media.endOfStream();
           return;
         }
+        this.publicationPending = true;
         await delay(Math.max(500, list.targetDuration * 500), signal);
         const fresh = await this.playlist(rendition, signal);
         const overlap = fresh.segments.find((s) => list.segments.some((old) => old.sequence === s.sequence));
@@ -403,12 +438,21 @@ class SegmentPipeline {
           s.start += offset;
         });
         list = fresh;
+        if (live)
+          this.published(list);
         continue;
+      }
+      this.publicationPending = false;
+      if (next.gap) {
+        this.upstreamGap = true;
+        throw new PlaybackFault("Publisher marked segment unavailable (EXT-X-GAP)", "source");
       }
       if (next.init !== init) {
         await this.append(await this.bytes(next.init, signal), signal);
         init = next.init;
       }
+      this.segmentStarted = performance.now();
+      this.segmentDuration = next.duration;
       const request = new AbortController;
       const abort = () => request.abort();
       signal.addEventListener("abort", abort, { once: true });
@@ -434,12 +478,13 @@ class SegmentPipeline {
         init = "";
         continue;
       } finally {
+        this.segmentStarted = null;
         clearTimeout(timeout);
         signal.removeEventListener("abort", abort);
       }
       await this.append(bytes, signal);
       if (first) {
-        this.video.currentTime = live ? next.start : position;
+        this.video.currentTime = live ? Math.max(next.start, position) : position;
         first = false;
       }
       sequence++;
@@ -541,6 +586,7 @@ class PlaybackEngine {
       strategy: this.source?.strategy ?? null,
       backend: this.backend,
       renditionId: this.pipeline?.current?.id ?? null,
+      live: this.liveSnapshot(),
       position: Number.isFinite(this.video.currentTime) ? this.video.currentTime : 0,
       duration: Number.isFinite(this.video.duration) ? this.video.duration : null,
       playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: ranges.start(i), end: ranges.end(i) })),
@@ -550,6 +596,43 @@ class PlaybackEngine {
       audioTrackId: this.audio,
       subtitleTrackId: this.subtitle,
       failure: this.failure
+    };
+  }
+  catchUpTarget() {
+    const ranges = this.backend === "mse" ? this.video.buffered : this.video.seekable;
+    if (!this.session?.live || !ranges.length)
+      return null;
+    const index = ranges.length - 1, start = ranges.start(index), end = ranges.end(index);
+    if (end - start < 0.25)
+      return null;
+    const target = Math.max(start + 0.05, end - (this.lowDelay ? 6 : 18));
+    return target > this.video.currentTime + 0.25 ? Math.min(target, end - 0.1) : null;
+  }
+  liveSnapshot() {
+    if (!this.session?.live)
+      return null;
+    const seekable = this.video.seekable;
+    let edge = this.pipeline?.publishedEdge ?? null;
+    let start = this.pipeline?.publishedStart ?? null;
+    let source = edge === null ? null : "playlist";
+    if (edge === null && seekable.length) {
+      edge = seekable.end(seekable.length - 1);
+      start = seekable.start(0);
+      source = "seekable";
+    }
+    if (edge === null && Number.isFinite(this.session.liveEdge)) {
+      edge = this.session.liveEdge;
+      start = this.session.liveWindowStart ?? null;
+      source = "server";
+    }
+    return {
+      edgeSeconds: edge,
+      windowStartSeconds: start,
+      driftSeconds: edge === null ? null : Math.max(0, edge - this.video.currentTime),
+      edgeSource: source,
+      reconnecting: this.status === "recovering" || !!this.pipeline?.retrying,
+      delivery: this.pipeline?.delivery ?? "unknown",
+      canCatchUp: this.catchUpTarget() !== null
     };
   }
   publish() {
@@ -599,6 +682,11 @@ class PlaybackEngine {
     if (session.id !== this.session?.id)
       throw new Error("Cannot update a different session");
     this.session = session;
+    this.lowDelay = session.lowDelay ?? this.lowDelay;
+    if (this.pipeline) {
+      this.pipeline.lowDelay = this.lowDelay;
+      this.pipeline.maxLiveDrift = session.liveMaxDrift ?? 45;
+    }
     if ((session.subtitleTrackId ?? null) !== this.subtitle) {
       this.subtitle = session.subtitleTrackId ?? null;
       this.applySubtitle();
@@ -799,6 +887,13 @@ class PlaybackEngine {
             this.video.currentTime = command.seconds;
           break;
         }
+        case "catchUp": {
+          const target = this.catchUpTarget();
+          if (target === null)
+            throw new Error("No newer usable live buffer or seekable range");
+          await this.command({ id: command.id, type: "seek", seconds: target });
+          break;
+        }
         case "volume":
           if (!Number.isFinite(command.value) || command.value < 0 || command.value > 1)
             throw new Error("Volume outside 0–1");
@@ -886,6 +981,7 @@ function sessionFromPlan(plan) {
     position: plan.positionSeconds,
     live: !!plan.live,
     liveWindowStart: plan.live?.windowStartSeconds,
+    liveEdge: plan.live?.liveEdgeSeconds,
     liveMaxDrift: plan.live?.maxDriftSeconds,
     lowDelay: plan.live?.mode === "low-delay",
     sourceGeneration: plan.sourceGeneration,
