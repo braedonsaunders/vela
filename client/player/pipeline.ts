@@ -78,7 +78,10 @@ export class SegmentPipeline {
     for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.byteLength; }
     // ResourceTiming transferSize=0 is a cache hit only when timing is exposed.
     const timing = performance.getEntriesByName(response.url).at(-1) as PerformanceResourceTiming | undefined;
-    const cached = response.headers.get('X-Cache')?.toLowerCase() === 'hit' || !!(timing && timing.transferSize === 0 && timing.decodedBodySize > 0);
+    const noStore = /(?:^|,)\s*no-store\b/i.test(response.headers.get('Cache-Control') ?? '');
+    const sameOrigin = new URL(response.url, document.baseURI).origin === location.origin;
+    // Cross-origin zero transferSize can be privacy redaction, especially in Firefox.
+    const cached = response.headers.get('X-Cache')?.toLowerCase() === 'hit' || !noStore && sameOrigin && !!(timing && timing.transferSize === 0 && timing.decodedBodySize > 0);
     this.bandwidth.sample(size, performance.now() - started, cached);
     return bytes.buffer;
   }

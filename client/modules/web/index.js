@@ -32,6 +32,7 @@ function createInstall(element, json, event) {
     if (disposed)
       return;
     button.hidden = action === "update" ? !runtime?.state.updateAvailable : !runtime?.state.installable;
+    button.style.display = button.hidden ? "none" : "inline-block";
     button.textContent = label || (action === "update" ? "Update ready, reload" : "Install Vela");
     button.setAttribute("aria-label", button.textContent);
     if (runtime)
@@ -261,13 +262,13 @@ class AdaptiveBitrate {
     if (dropRatio > 0.05 && current)
       next = sorted.filter((r) => r.bandwidth < current.bandwidth).at(-1) ?? sorted[0];
     if (current && next.bandwidth > current.bandwidth) {
-      if (buffer < 12 || dropRatio > 0.01) {
+      if (dropRatio > 0.01) {
         this.upSince = 0;
         return current;
       }
       if (!this.upSince)
         this.upSince = now;
-      if (now - this.upSince < 12000)
+      if (buffer < 12 || now - this.upSince < 12000)
         return current;
       this.upSince = 0;
       return sorted.find((r) => r.bandwidth > current.bandwidth) ?? current;
@@ -470,7 +471,9 @@ class SegmentPipeline {
       at += chunk.byteLength;
     }
     const timing = performance.getEntriesByName(response.url).at(-1);
-    const cached = response.headers.get("X-Cache")?.toLowerCase() === "hit" || !!(timing && timing.transferSize === 0 && timing.decodedBodySize > 0);
+    const noStore = /(?:^|,)\s*no-store\b/i.test(response.headers.get("Cache-Control") ?? "");
+    const sameOrigin = new URL(response.url, document.baseURI).origin === location.origin;
+    const cached = response.headers.get("X-Cache")?.toLowerCase() === "hit" || !noStore && sameOrigin && !!(timing && timing.transferSize === 0 && timing.decodedBodySize > 0);
     this.bandwidth.sample(size, performance.now() - started, cached);
     return bytes.buffer;
   }

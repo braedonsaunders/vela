@@ -11,6 +11,8 @@ export function createInstall(element: HTMLElement, json: string, event: (kind: 
   const update = () => {
     if (disposed) return;
     button.hidden = action === 'update' ? !runtime?.state.updateAvailable : !runtime?.state.installable;
+    // Exact's author button styles can override the UA [hidden] display rule.
+    button.style.display = button.hidden ? 'none' : 'inline-block';
     button.textContent = label || (action === 'update' ? 'Update ready, reload' : 'Install Vela');
     button.setAttribute('aria-label', button.textContent);
     if (runtime) event(8, JSON.stringify(runtime.state));

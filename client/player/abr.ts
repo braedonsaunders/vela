@@ -22,9 +22,10 @@ export class AdaptiveBitrate {
     if (buffer < 2) next = sorted[0];
     if (dropRatio > 0.05 && current) next = sorted.filter(r => r.bandwidth < current.bandwidth).at(-1) ?? sorted[0];
     if (current && next.bandwidth > current.bandwidth) {
-      if (buffer < 12 || dropRatio > 0.01) { this.upSince = 0; return current; }
+      if (dropRatio > 0.01) { this.upSince = 0; return current; }
       if (!this.upSince) this.upSince = now;
-      if (now - this.upSince < 12000) return current;
+      // Keep throughput stability across browser-managed fetch pauses, but never up-switch on a low buffer.
+      if (buffer < 12 || now - this.upSince < 12000) return current;
       this.upSince = 0;
       return sorted.find(r => r.bandwidth > current.bandwidth) ?? current;
     }

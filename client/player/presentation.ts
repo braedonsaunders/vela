@@ -32,7 +32,7 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
     elapsed: clock(position), remaining: duration > 0 ? clock(Math.max(0, duration - position)) : msg('data.live'),
     progress: duration > 0 ? Math.min(100, position / duration * 100) : 0,
     reason: snapshot?.failure?.message ?? '', actionError: plan ? errors.get(plan.sessionId) ?? '' : '',
-    path: snapshot?.strategy ?? path?.kind ?? '', backend: snapshot?.backend ?? '',
+    path: snapshot?.strategy || path?.kind ? msg(`data.${snapshot?.strategy ?? path?.kind}`) : '', backend: snapshot?.backend ?? '',
     quality: quality ? `${number(quality.height, {useGrouping:false})}p` : path?.kind === 'direct' ? msg('data.original') : snapshot?.backend === 'native-hls' ? msg('data.browserManaged') : msg('data.starting'),
     lockedQuality: snapshot?.lockedQuality ?? '',
     audioId: snapshot?.audioTrackId ?? plan?.selectedAudioTrackId ?? '', audioLabel: selectedAudio?.name ?? msg('data.originalAudio'),
