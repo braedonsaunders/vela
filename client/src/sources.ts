@@ -4,6 +4,7 @@ import { EtherAdapter, VelaError } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
 import { guideFocus, loadGuide, liveIdentity } from './live/guide';
+import { liveSearch } from './live/search';
 import { artworkURL } from './discovery/artwork';
 import { liveStatus, stopPlan } from './live/player';
 import { InteractionQueue } from './telemetry';
@@ -68,7 +69,7 @@ let redemption: { code: string; idempotencyKey: string; pending?: Promise<Tokens
 let negotiation: { version: number; pending: Promise<void> } | undefined;
 let features: ServerCapabilities['features'] | undefined;
 let ai: { epoch: number; generation: number; query: string; job?: AISearchJob; starting?: Promise<AISearchJob> } | undefined;
-const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable' });
+const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable', liveChannels: [], liveProgrammes: [] });
 function server(store: Parameters<Sources['uiBootstrap']>[1], media?: MediaCapabilities): EtherAdapter {
   if (!API) throw new Error('Server origin is unavailable');
   if (!adapter) {
@@ -346,10 +347,10 @@ const sources: Sources = {
     return withLocale(localeJSON, () => data.items.map(row => feedRow(row, API, artWidth)));
   },
   uiDetail: async ([id, localeJSON, artWidth], store) => { const detail = await (await session(store)).detail(id); return withLocale(localeJSON, () => detailModel(detail, API, artWidth)); },
-  uiSearch: async ([query, generation, epoch, localeJSON, artWidth], store) => {
+  uiSearch: async ([query, generation, epoch, at, localeJSON, artWidth], store) => {
     const api = await session(store);
     const result = await api.search({ query, generation, mode: 'fast', idempotencyKey: `search-${epoch}-${generation}` });
-    return withLocale(localeJSON, () => ({ query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API, artWidth)), descriptive: [], ai: [], aiStatus: 'unavailable' }));
+    return withLocale(localeJSON, () => ({ query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API, artWidth)), descriptive: [], ai: [], aiStatus: 'unavailable', ...liveSearch(result.live, API, at) }));
   },
   uiDescriptive: async ([query, generation, epoch, localeJSON, artWidth], store) => {
     const api = await session(store);

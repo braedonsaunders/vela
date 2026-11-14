@@ -184,9 +184,12 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const limit = Number(paging.searchParams.get('limit') ?? 50);
     const matches = (text: string) => terms.length > 0 && terms.every((term: string) => text.toLowerCase().includes(term));
     const now = Date.now();
+    const programmes = body.mode === 'fast' ? guide(now, now + 86400000, []).filter(p => matches(`${p.name} ${p.episodeTitle ?? ''} ${p.summary ?? ''} ${(p.genres ?? []).join(' ')}`)).slice(0, limit) : [];
+    const parentIds = new Set(programmes.map(p => p.channelId));
     const live = body.mode === 'fast' ? {
       channels: channels.filter(c => matches(`${c.number} ${c.name} ${c.group ?? ''} ${(c.guides ?? []).map(g => g.name).join(' ')}`)).slice(0, limit),
-      programmes: guide(now, now + 86400000, []).filter(p => matches(`${p.name} ${p.episodeTitle ?? ''} ${p.summary ?? ''} ${(p.genres ?? []).join(' ')}`)).slice(0, limit),
+      programmes,
+      programmeChannels: channels.filter(c => parentIds.has(c.id)),
     } : undefined;
     return json({ ...titlePage, query: body.query, generation: body.generation, ...(live ? { live } : {}) } satisfies V.SearchResponse);
   }
