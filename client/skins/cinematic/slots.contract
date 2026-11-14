@@ -1,5 +1,5 @@
 use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, CardPreview, cardName, skinLabel from "../../foundation/models.contract"
-use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill, FadeImage, GhostPill, BetaSwitch, breathe from "./look.contract"
+use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill, FadeImage, GhostPill, breathe from "./look.contract"
 use Wordmark, Pulse from "./auth.contract"
 use SkinPicker, skinManifest from "../../foundation/skin-picker.contract"
 
@@ -27,8 +27,6 @@ component Shell
     secureBusy: bool
     secureError: string
     goSecure: action
-    beta: bool
-    toggleBeta: action
   slot
   state menuOpen = false
   derive compact = viewport.width < 640
@@ -104,7 +102,6 @@ component Shell
                 column gap=2 text-align="left"
                   text t("secure.action") font-size=14 color="ink.primary"
                   text (secureError != "" ? secureError : secureOrigin) font-size=11 color=(secureError != "" ? "brand.warm" : "ink.quiet") line-clamp=1
-          BetaSwitch(on=beta, toggle=toggleBeta, still=still)
           vela-install pwaAction="install" buttonLabel=t("pwa.install")
           vela-install pwaAction="update" buttonLabel=t("pwa.update")
           button press=leaveSession class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
@@ -488,7 +485,7 @@ component SearchSurface
       if upcoming.length > 0
         LiveLane(name=t("search.live.comingUp"), small=small, still=still)
           for p in upcoming key=`p-${p.id}`
-            LiveTile(title=p.name, detail=(p.episode != "" ? `${p.episode} · ${p.channelName}` : p.channelName), artwork=p.artwork, logo=p.channelLogo, mark=p.channelName, live=false, progress=0, chip=p.startLabel, enabled=p.navigable, small=small, still=still, open=openLiveProgramme(p.id))
+            LiveTile(title=p.name, detail=(p.episode != "" ? `${p.episode} · ${p.channelName}` : p.channelName), artwork=p.artwork, logo=p.channelLogo, mark=p.channelName, live=false, progress=0, chip=(p.startsInLabel != "" ? p.startsInLabel : p.startLabel), enabled=p.navigable, small=small, still=still, open=openLiveProgramme(p.id))
       if descriptiveState == "loading" and not loading
         row gap=12 align-items="center" padding-left=gutter(small) padding-right=gutter(small) role="status" animation=enter(still, 80)
           Pulse(still=still)
