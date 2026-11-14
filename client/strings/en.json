@@ -387,5 +387,7 @@
   "marquee.remaining": "−{time}",
   "secure.title": "A secure address is available",
   "secure.body": "Your server also answers at {origin}. Continue there so your password and viewing stay private.",
-  "secure.action": "Switch to the secure address"
+  "secure.action": "Switch to the secure address",
+  "ui.scrollBack": "Scroll back",
+  "ui.scrollOn": "Scroll on"
 }
