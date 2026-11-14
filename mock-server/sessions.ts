@@ -27,7 +27,7 @@ export async function createSession(owner: string, request: PlaybackRequest): Pr
         qualities: [[360, 640, 500000], [540, 960, 1100000], [720, 1280, 2200000]].map(([height, width, bitrate]) => ({ id: `${height}p`, width, height, bitrate, videoCodec: 'avc1.64001f', audioCodec: 'mp4a.40.2', url: `${base}/v${height}/index.m3u8` })),
         boundaries: Array.from({ length: 15 }, (_, n) => ({ atSeconds: n * 4, independent: true, timelineId: 'synthetic-60', compatibility: 'same-source' as const, audioTrackIds: tracks.map(t => t.id), subtitleTrackIds: ['sub-en'] })) }]),
     ] : [], selectedPathId: 'direct', audioTracks: tracks, subtitleTracks: [{ id: 'sub-en', kind: 'subtitle', language: 'en', name: 'English', codec: 'webvtt', url: `${base}/subtitles.vtt` }],
-    selectedAudioTrackId: request.audioTrackId ?? 'audio-en', selectedSubtitleTrackId: request.subtitleTrackId ?? null, chapters: [],
+    selectedAudioTrackId: request.audioTrackId ?? 'audio-en', selectedSubtitleTrackId: request.subtitleTrackId ?? null, chapters: [0,20,40].map((startSeconds, i) => ({ id: `chapter-${i + 1}`, name: ['Signal', 'Crossing', 'Homeward'][i], startSeconds, endSeconds: startSeconds + 20 })),
     fallback: { state: faults.fallbackUnavailable ? 'unavailable' : 'unsupported', reason: 'Mock serves pre-generated alternatives; no proactive encoder scheduler.' },
   };
   const s: Session = { owner, mediaToken: token, plan, history: [], listeners: new Map(), sequence: 0, expires: Date.now() + 86400000 };
@@ -47,6 +47,8 @@ export function applyCommand(s: Session, cmd: SessionCommand) {
 export function observe(s: Session, o: PlayerObservation) {
   if (o.sequence <= s.sequence) return;
   s.sequence = o.sequence; s.plan.positionSeconds = o.positionSeconds;
+  if (o.audioTrackId !== undefined && s.plan.audioTracks.some(t => t.id === o.audioTrackId)) s.plan.selectedAudioTrackId = o.audioTrackId;
+  if (o.subtitleTrackId === null || s.plan.subtitleTracks.some(t => t.id === o.subtitleTrackId)) s.plan.selectedSubtitleTrackId = o.subtitleTrackId ?? null;
   s.plan.state = o.state === 'buffering' ? 'recovering' : o.state;
   publish(s);
 }

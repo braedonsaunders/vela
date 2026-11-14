@@ -11,3 +11,6 @@ theme
   ink.quiet = #858d98  scheme=fixed
   ink.inverse = #111419  scheme=fixed
   brand.warm = #dcb998  scheme=fixed
+
+  index.page = #f3f0e8  scheme=fixed
+  index.ink = #22221e  scheme=fixed

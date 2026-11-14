@@ -29,6 +29,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /bootstrap | — | Bootstrap |
 | GET | /rows | RowsQuery (query) | Page<Row> |
 | GET | /rows/:id | cursor, limit (query) | Row |
+| GET | /collections/:id | cursor, limit (query) | CollectionContents |
 | GET | /titles/:id | — | TitleDetail |
 | GET | /titles/:id/children | cursor, limit (query) | Page<Title> |
 | GET | /titles/:id/extras | — | ExtrasResponse |
@@ -149,3 +150,7 @@ Ether initially supports >=0.1.0 <0.2.0. Optional initialTrackSelection,
 sessionTrackChanges and extraPlayback features describe these separate operations.
 Absent feature means unsupported; clients handle feature_unavailable without retry.
 Source/timeline IDs are omitted when unknown; absence never proves compatibility.
+
+Collections, playlists and directories use `/collections/:id`; Collection.kind
+identifies the destination. Contents are RowEntry values in server order with
+viewer-bound receipt tokens. Cache and cursor rules are identical to rows.

@@ -19,10 +19,18 @@ export class InteractionQueue {
   }
   flush(idempotencyKey: string): Promise<void> {
     if (this.sending) return this.sending;
-    if (!this.batch && this.pending.length) this.batch = { idempotencyKey, interactions: this.pending.splice(0) };
+    if (!this.batch && this.pending.length) this.batch = { idempotencyKey, interactions: this.pending.splice(0, 100) };
     if (!this.batch) return Promise.resolve();
     const batch = this.batch;
-    this.sending = this.adapter.interactions(batch).then(() => { if (this.batch === batch) this.batch = undefined; }).finally(() => { this.sending = undefined; });
+    this.sending = (async () => {
+      // The persisted sequence can restart if an agent drive resets its store. Bind
+      // the key to the exact payload so a reset cannot reuse a key for other data.
+      const bytes = new TextEncoder().encode(JSON.stringify(batch.interactions));
+      const digest = await crypto.subtle.digest('SHA-256', bytes);
+      const suffix = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+      await this.adapter.interactions({ ...batch, idempotencyKey: `${batch.idempotencyKey}-${suffix}` });
+      if (this.batch === batch) this.batch = undefined;
+    })().finally(() => { this.sending = undefined; });
     return this.sending;
   }
 }
