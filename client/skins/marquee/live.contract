@@ -1,0 +1,52 @@
+use Glyph, Round from "./look.contract"
+
+// Live state over the player: a red LIVE badge with the delivery mode, honest delivery
+// states, low delay and catch-up, and channel up and down for pointers and touch.
+component LiveControls
+  props
+    lowDelay: bool
+    reconnecting: bool
+    delivery: string
+    drift: number
+    driftLabel: string
+    canCatchUp: bool
+    toggleLowDelay: action
+    catchUp: action
+    zap: action
+  view
+    column gap=10 padding="12px 14px" min-width=240 max-width=320 box-sizing="border-box" border-radius=8 background-color="marquee.menu" box-shadow="0px 12px 40px var(--marquee.shadow)" color="marquee.ink" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
+      row gap=10 align-items="center"
+        text t("live.liveBadge") font-size=11 font-weight=800 letter-spacing="0.1em" padding="3px 7px" border-radius=3 background-color="marquee.live" color="marquee.ink"
+        text (lowDelay ? t("live.lowDelay") : t("live.adaptive")) font-size=14 font-weight=600 color="marquee.ink-dim" flex=1
+        button press=zap(-1) aria-label=t("live.channelUp") class=Round width=32 height=32
+          Glyph(name="up", size=18)
+        button press=zap(1) aria-label=t("live.channelDown") class=Round width=32 height=32
+          Glyph(name="down", size=18)
+      if reconnecting
+        text t("live.reconnecting") role="status" font-size=13 color="marquee.ink-dim"
+      if delivery == "upstream-gap"
+        text t("live.gap") role="status" font-size=13 color="marquee.ink-dim"
+      if delivery == "segment-delayed"
+        text t("live.delayed") role="status" font-size=13 color="marquee.ink-dim"
+      if delivery == "waiting-for-publication"
+        text t("live.publication") role="status" font-size=13 color="marquee.ink-dim"
+      if drift > 0
+        text t("live.behind", seconds=driftLabel) role="status" font-size=13 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
+      row gap=8 flex-wrap="wrap"
+        button press=toggleLowDelay aria-label=t("ui.toggleLowDelay") aria-pressed=lowDelay class=LiveToggle background-color=(lowDelay ? "marquee.amber" : "marquee.control") color=(lowDelay ? "marquee.on-amber" : "marquee.ink")
+          text (lowDelay ? t("ui.lowDelayOn") : t("ui.useLowDelay")) font-size=13 font-weight=700
+        if canCatchUp and drift > 0
+          button press=catchUp class=LiveToggle background-color="marquee.control" color="marquee.ink"
+            text t("live.catchUp") font-size=13 font-weight=700
+
+style LiveToggle
+  box-sizing = "border-box"
+  height = 32
+  padding = "0px 12px"
+  border = "none"
+  border-radius = 4
+  cursor = "pointer"
+  :hover
+    opacity = 0.9
+  :focus-visible
+    box-shadow = "0px 0px 0px 2px var(--marquee.ink)"

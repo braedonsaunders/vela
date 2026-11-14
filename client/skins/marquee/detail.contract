@@ -1,0 +1,248 @@
+use Card, FeedRow, DetailModel, ExtraModel, cardName from "../../foundation/models.contract"
+use Shelf, unwatched, progressPct, subLine from "./slots.contract"
+use Glyph, Solid, Art, Primary, Secondary, Round, gutter, arrive, kindLabel from "./look.contract"
+
+fn personName(person: string): string = person.split(" · ").slice(0, 1).join("")
+fn personRole(person: string): string = person.split(" · ").slice(1).join(" · ")
+fn initials(name: string): string = name.split(" ").filter(w => w != "").slice(0, 2).map(w => w.slice(0, 1).toUpperCase()).join("")
+
+// A title page: the backdrop dimmed behind everything, the poster on the left and the
+// facts on the right with genre chips and a big amber Play, then seasons, episodes,
+// extras, cast and related hubs.
+component Detail
+  props
+    model: DetailModel
+    small: bool
+    still: bool
+    play: action
+    playExtra: action
+    selectTitle: action
+    observe: action
+  derive upNext = model.episodes.filter(e => not e.played).slice(0, 1)
+  derive seasonId = match first(model.title) { case some(t) => (t.kind == "season" ? t.id : match first(model.seasons) { case some(s) => s.id, case none => "" }), case none => "" }
+  derive seasonName = match first(model.seasons.filter(s => s.id == seasonId)) { case some(s) => s.name, case none => t("ui.episodes") }
+  view
+    column position="relative" min-height="100%" padding-bottom=60 overflow-x="hidden"
+      for title in model.title key=title.id
+        // The backdrop: dimmed and faded into the page.
+        column position="absolute" top=0 left=0 right=0 height=(small ? "420px" : "100vh") max-height=(small ? "none" : "900px") overflow="hidden" pointer-events="none" aria-hidden=true
+          if title.backdrop != ""
+            Art(src=title.backdrop, still=still)
+          column position="absolute" inset=0 background-image="linear-gradient(180deg, var(--marquee.page-veil) 0%, var(--marquee.page-veil) 45%, var(--marquee.page) 100%), linear-gradient(90deg, var(--marquee.page-veil) 0%, var(--marquee.page-clear) 100%)"
+        if small
+          column position="relative" gap=16 padding="76px 16px 8px" animation=arrive(still, 0)
+            row gap=16 align-items="flex-end"
+              Poster(card=title, width="38%", still=still)
+              column flex=1 min-width=0 gap=6 padding-bottom=4
+                text kindLabel(title.kind) font-size=12 font-weight=700 letter-spacing="0.06em" text-transform="uppercase" color="marquee.amber"
+                text title.name role="heading" aria-level=1 font-size=24 font-weight=700 line-height=1.15
+                if title.facts != ""
+                  text title.facts font-size=14 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
+            Facts(model=model, title=title, upNext=upNext, small=small, still=still, play=play, playExtra=playExtra)
+        else
+          row position="relative" gap=44 align-items="flex-start" padding="96px 48px 12px" animation=arrive(still, 0)
+            Poster(card=title, width="clamp(220px, 21vw, 300px)", still=still)
+            column flex=1 min-width=0 gap=14 max-width="62rem" padding-top=6
+              text kindLabel(title.kind) font-size=13 font-weight=700 letter-spacing="0.06em" text-transform="uppercase" color="marquee.amber"
+              text title.name role="heading" aria-level=1 font-size=36 font-weight=700 line-height=1.12 letter-spacing="-0.01em"
+              row gap=14 align-items="center" flex-wrap="wrap"
+                if title.year > 0
+                  text title.yearLabel font-size=20 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
+                if title.kind == "episode" and title.episodeNumber > 0
+                  text subLine(title) font-size=16 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
+              Facts(model=model, title=title, upNext=upNext, small=small, still=still, play=play, playExtra=playExtra)
+      column position="relative" gap=(small ? 8 : 14) padding-top=(small ? 16 : 28)
+        if model.seasons.length > 0
+          Shelf(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false), place="detail", small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if model.episodes.length > 0
+          column gap=(small ? 10 : 14) padding-bottom=(small ? 20 : 30)
+            text seasonName role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 padding-left=gutter(small) padding-right=gutter(small)
+            column display="grid" grid-template-columns=(small ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))") column-gap=20 row-gap=(small ? 14 : 26) padding-left=gutter(small) padding-right=gutter(small)
+              for episode in model.episodes key=episode.id
+                EpisodeCard(episode=episode, small=small, still=still, play=play, selectTitle=selectTitle)
+        if model.extras.length > 0
+          column gap=(small ? 10 : 14) padding-bottom=(small ? 20 : 30)
+            text t("ui.extras") role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 padding-left=gutter(small) padding-right=gutter(small)
+            scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
+              row gap=16 padding-left=gutter(small) padding-right=gutter(small) padding-bottom=4
+                for extra in model.extras key=extra.id
+                  ExtraCard(extra=extra, small=small, playExtra=playExtra)
+        if model.cast.length > 0
+          column gap=(small ? 10 : 14) padding-bottom=(small ? 20 : 30)
+            text t("marquee.castAndCrew") role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 padding-left=gutter(small) padding-right=gutter(small)
+            scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
+              row gap=(small ? 14 : 22) padding-left=gutter(small) padding-right=gutter(small) padding-bottom=4 role="list"
+                for person in model.cast key=person
+                  Person(person=person, small=small)
+        if model.crew.length > 0
+          column gap=6 padding-left=gutter(small) padding-right=gutter(small) padding-bottom=(small ? 20 : 30) max-width="60rem"
+            for person in model.crew key=person
+              row gap=10 align-items="baseline"
+                text personName(person) font-size=14 font-weight=600
+                if personRole(person) != ""
+                  text personRole(person) font-size=14 color="marquee.ink-faint"
+        for related in model.related key=related.id
+          Shelf(row=related, place="detail", small=small, still=still, selectTitle=selectTitle, observe=observe)
+
+component Poster
+  props
+    card: Card
+    width: string
+    still: bool
+  view
+    column position="relative" width=width flex-shrink=0 aspect-ratio="2 / 3" border-radius=6 overflow="hidden" background-color="marquee.raised" box-shadow="0px 18px 50px var(--marquee.shadow)" aria-hidden=true
+      if card.poster != ""
+        Art(src=card.poster, still=still)
+      else
+        column position="absolute" inset=0 align-items="center" justify-content="center" color="marquee.ink-faint"
+          Glyph(name=(card.kind == "movie" ? "film" : "tv"), size=40)
+      if card.progressSeconds > 0 and card.durationSeconds > 0 and not card.played
+        column position="absolute" left=0 right=0 bottom=0 height=5 background-color="marquee.scrim"
+          column height=5 width=`${progressPct(card)}%` background-color="marquee.amber"
+
+// The facts column: rating and running time, genre chips, the actions, the summary
+// and the verified media facts.
+component Facts
+  props
+    model: DetailModel
+    title: Card
+    upNext: Card[]
+    small: bool
+    still: bool
+    play: action
+    playExtra: action
+  view
+    column gap=(small ? 14 : 16)
+      row gap=10 align-items="center" flex-wrap="wrap"
+        if title.rating != ""
+          text title.rating font-size=12 font-weight=700 padding="2px 6px" border="1px solid var(--marquee.ink-faint)" border-radius=3 color="marquee.ink-dim"
+        if title.durationSeconds > 0 and not small
+          text title.facts.split(" · ").slice(-1).join("") font-size=15 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
+        if title.played
+          row gap=6 align-items="center" color="marquee.ink-dim"
+            Glyph(name="check", size=16)
+            text t("marquee.watched") font-size=14
+      if title.genres.length > 0
+        row gap=8 flex-wrap="wrap" role="list" aria-label=t("marquee.genres")
+          for genre in title.genres key=genre
+            text genre role="listitem" font-size=13 font-weight=600 padding="5px 12px" border-radius=999 background-color="marquee.control" color="marquee.ink"
+      row gap=10 align-items="center" flex-wrap="wrap" margin-top=4
+        if model.canPlay
+          button press=play(title.id) testId="detail-play" class=Primary height=(small ? 46 : 48) padding="0px 26px" flex-grow=(small ? 1 : 0)
+            row gap=10 align-items="center" justify-content="center"
+              Solid(name="play", size=18)
+              text (model.resumeSeconds > 0 ? t("marquee.resumeFrom", position=model.resumePosition) : t("ui.play")) font-size=16
+        else
+          for episode in upNext key=episode.id
+            button press=play(episode.id) testId="detail-play" aria-label=(episode.progressSeconds > 0 ? t("ui.resumeTitle", title=episode.name) : t("ui.playTitle", title=episode.name)) class=Primary height=(small ? 46 : 48) padding="0px 26px" flex-grow=(small ? 1 : 0)
+              row gap=10 align-items="center" justify-content="center"
+                Solid(name="play", size=18)
+                text (subLine(episode) != "" ? t("marquee.playNumbered", number=subLine(episode)) : t("ui.play")) font-size=16
+        for trailer in model.extras.filter(e => e.kind == "trailer" and e.ready).slice(0, 1) key=trailer.id
+          button press=playExtra(trailer.id) class=Secondary height=(small ? 46 : 48) padding="0px 20px"
+            row gap=8 align-items="center"
+              Glyph(name="film", size=18)
+              text t("ui.watchTrailer") font-size=15
+      if model.canPlay and model.resumeSeconds > 0 and title.durationSeconds > 0
+        column width=(small ? "100%" : 280) height=4 border-radius=2 background-color="marquee.track" overflow="hidden" role="progressbar" aria-label=t("ui.watchProgress") aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=min(title.durationSeconds, max(0, model.resumeSeconds))
+          column height=4 width=`${min(100, model.resumeSeconds / title.durationSeconds * 100)}%` background-color="marquee.amber"
+      if title.summary != ""
+        text title.summary font-size=(small ? 15 : 16) line-height=1.6 color="marquee.ink" max-width="52rem"
+      if model.mediaFacts.length > 0
+        row gap=12 align-items="baseline" flex-wrap="wrap"
+          text t("marquee.media") font-size=12 font-weight=700 letter-spacing="0.06em" text-transform="uppercase" color="marquee.ink-faint"
+          for fact in model.mediaFacts key=fact
+            text fact font-size=13 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
+
+// An episode: its still plays it; its title opens it.
+component EpisodeCard
+  props
+    episode: Card
+    small: bool
+    still: bool
+    play: action
+    selectTitle: action
+  state hot = false
+  action heat(on: bool)
+    hot = on
+  view
+    row flex-direction=(small ? "row" : "column") gap=(small ? 12 : 10) align-items=(small ? "flex-start" : "stretch")
+      button press=play(episode.id) hover=heat focus=heat(true) blur=heat(false) aria-label=(episode.progressSeconds > 0 ? t("ui.resumeTitle", title=episode.name) : t("ui.playTitle", title=episode.name)) testId=`episode-${episode.id}` position="relative" width=(small ? 148 : "100%") flex-shrink=0 aspect-ratio="16 / 9" padding=0 border="none" border-radius=4 overflow="hidden" background-color="marquee.raised" cursor="pointer" outline="none"
+        if episode.backdrop != ""
+          Art(src=episode.backdrop, still=still)
+        else
+          column position="absolute" inset=0 align-items="center" justify-content="center" color="marquee.ink-faint"
+            Glyph(name="tv", size=28)
+        if unwatched(episode)
+          column position="absolute" top=0 right=0 width=0 height=0 border-top="20px solid var(--marquee.amber)" border-left="20px solid transparent" aria-hidden=true
+        if episode.progressSeconds > 0 and episode.durationSeconds > 0 and not episode.played
+          column position="absolute" left=0 right=0 bottom=0 height=4 background-color="marquee.scrim" aria-hidden=true
+            column height=4 width=`${progressPct(episode)}%` background-color="marquee.amber"
+        column position="absolute" inset=0 align-items="center" justify-content="center" background-color="marquee.scrim-soft" opacity=(hot ? 1 : 0) transition=(still ? "none" : "opacity 120ms linear") aria-hidden=true
+          column width=(small ? 38 : 50) height=(small ? 38 : 50) border-radius=999 align-items="center" justify-content="center" background-color="marquee.amber" color="marquee.on-amber" padding-left=3 box-sizing="border-box"
+            Solid(name="play", size=(small ? 18 : 22))
+        column position="absolute" inset=0 border-radius=4 box-shadow="inset 0px 0px 0px 3px var(--marquee.amber)" opacity=(hot ? 1 : 0) aria-hidden=true
+      column gap=3 min-width=0 flex=1
+        button press=selectTitle(episode.id, episode.kind, episode.receipt) aria-label=cardName(episode) class=TextLink
+          text episode.name font-size=(small ? 14 : 15) font-weight=600 line-clamp=(small ? 2 : 1)
+        text ([subLine(episode), episode.facts.split(" · ").slice(-1).join("")].filter(s => s != "").join(" · ")) font-size=13 color="marquee.ink-faint" font-variant-numeric="tabular-nums"
+        if episode.summary != "" and not small
+          text episode.summary font-size=13 color="marquee.ink-dim" line-height=1.5 line-clamp=2 margin-top=2
+
+style TextLink
+  padding = 0
+  border = "none"
+  background-color = "transparent"
+  color = "marquee.ink"
+  text-align = "left"
+  cursor = "pointer"
+  :hover
+    color = "marquee.amber"
+  :focus-visible
+    box-shadow = "0px 0px 0px 2px var(--marquee.amber)"
+
+// A trailer or featurette: plays when ready, says so when it is not.
+component ExtraCard
+  props
+    extra: ExtraModel
+    small: bool
+    playExtra: action
+  view
+    button press=playExtra(extra.id) disabled=(not extra.ready) aria-label=(extra.ready ? t("ui.playTitle", title=extra.name) : t("ui.titleNotAvailable", title=extra.name)) class=ExtraTile width=(small ? 200 : 260)
+      column position="relative" width="100%" aspect-ratio="16 / 9" border-radius=4 align-items="center" justify-content="center" background-image="linear-gradient(160deg, var(--marquee.raised) 0%, var(--marquee.chrome) 100%)" color=(extra.ready ? "marquee.ink" : "marquee.ink-faint")
+        if extra.ready
+          column width=44 height=44 border-radius=999 align-items="center" justify-content="center" background-color="marquee.control" padding-left=3 box-sizing="border-box"
+            Solid(name="play", size=20)
+        else
+          Glyph(name="film", size=28)
+      column gap=2 padding-top=8
+        text extra.name font-size=14 font-weight=600 line-clamp=1
+        text (extra.ready ? kindLabel(extra.kind) : t("ui.notAvailableYet")) font-size=13 color="marquee.ink-faint"
+
+style ExtraTile
+  display = "flex"
+  flex-direction = "column"
+  flex-shrink = 0
+  padding = 0
+  border = "none"
+  background-color = "transparent"
+  color = "marquee.ink"
+  text-align = "left"
+  cursor = "pointer"
+  :hover
+    color = "marquee.amber"
+  :focus-visible
+    box-shadow = "0px 0px 0px 2px var(--marquee.amber)"
+
+// One person in the cast row: their initials in a circle, their name and role.
+component Person
+  props
+    person: string
+    small: bool
+  view
+    column role="listitem" width=(small ? 84 : 110) align-items="center" gap=8 text-align="center" flex-shrink=0
+      text initials(personName(person)) width=(small ? 72 : 96) height=(small ? 72 : 96) border-radius=999 display="flex" align-items="center" justify-content="center" font-size=(small ? 22 : 28) font-weight=700 color="marquee.ink-dim" background-image="linear-gradient(150deg, var(--marquee.raised) 0%, var(--marquee.chrome) 100%)" box-shadow="inset 0px 0px 0px 1px var(--marquee.line)" aria-hidden=true
+      column gap=2 width="100%"
+        text personName(person) font-size=13 font-weight=600 line-clamp=2
+        if personRole(person) != ""
+          text personRole(person) font-size=12 color="marquee.ink-faint" line-clamp=2

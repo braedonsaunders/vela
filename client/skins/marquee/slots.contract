@@ -1,0 +1,629 @@
+use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, cardName from "../../foundation/models.contract"
+use SkinPicker from "../../foundation/skin-picker.contract"
+use Glyph, Solid, Wordmark, Spinner, Block, Art, Primary, Secondary, Round, barH, gutter, gutterPx, quick, arrive, kindLabel, mqFade, mqGone, mqRise, mqDrop, mqSlide, mqSpin, mqPulse, mqSheen from "./look.contract"
+
+fn detailPresentation(width: number): string = "fullscreen"
+fn detailSplit(width: number): string = "none"
+
+// Sidebar widths: full labels, or the icon rail.
+fn railWide(): number = 232
+fn railSlim(): number = 72
+
+// Card geometry, so a shelf can tell how far it has to travel.
+fn posterW(small: bool): number = (small ? 112 : 152)
+fn wideW(small: bool): number = (small ? 224 : 300)
+fn cardGap(small: bool): number = (small ? 10 : 16)
+
+fn libraryGlyph(kind: string): string = (kind == "movies" ? "film" : kind == "shows" ? "tv" : kind == "live" ? "live" : "stack")
+
+// A row is drawn as landscape progress cards when every title in it is part-watched.
+fn resumeRow(row: FeedRow): bool = row.items.length > 0 and row.items.filter(c => c.progressSeconds > 0 and c.durationSeconds > 0 and not c.played).length == row.items.length
+
+fn subLine(card: Card): string = (card.kind == "episode" and card.episodeNumber > 0 ? (card.seasonNumber > 0 ? t("marquee.seasonEpisode", season=card.seasonNumberLabel, episode=card.episodeNumberLabel) : t("marquee.episodeNumber", episode=card.episodeNumberLabel)) : card.year > 0 ? card.yearLabel : "")
+fn unwatched(card: Card): bool = (card.kind == "movie" or card.kind == "episode") and not card.played and card.progressSeconds <= 0
+fn progressPct(card: Card): number = (card.durationSeconds > 0 ? min(100, max(0, card.progressSeconds / card.durationSeconds * 100)) : 0)
+
+// The frame around every signed-in page: a left sidebar of Home and the libraries,
+// and a top bar with the menu, the wordmark, a centred search and the account menu.
+// Phones fold the sidebar into a drawer behind the menu button.
+component Shell
+  props
+    viewer: string
+    skin: string
+    skins: string[]
+    chooseSkin: action
+    signOut: action
+    viewport: Viewport
+    canLive: bool
+    canLibrary: bool
+    home: action
+    search: action
+    live: action
+    library: action
+    libraries: LibraryNav[]
+    section: string
+    openLibrary: action
+  slot
+  state flipped = false
+  state drawer = false
+  state menuOpen = false
+  state pickerOpen = false
+  derive phone = viewport.width < 640
+  derive narrow = viewport.width < 1100
+  derive slim = (narrow != flipped)
+  derive rail = (phone ? 0 : slim ? railSlim() : railWide())
+  derive still = viewport.prefersReducedMotion
+  derive bar = barH(phone)
+  // On a wide home the page draws the bar's middle itself, around the live search field.
+  derive clearBar = section == "home" and not phone
+  action toggleRail
+    if phone
+      drawer = not drawer
+    else
+      flipped = not flipped
+  action closeDrawer
+    drawer = false
+    focus("marquee-menu-button")
+  action toggleMenu
+    menuOpen = not menuOpen
+  action openPicker
+    menuOpen = false
+    pickerOpen = true
+  action closePicker
+    pickerOpen = false
+    focus("marquee-account")
+  action pickSkin(value: string)
+    pickerOpen = false
+    chooseSkin(value)
+  action leave
+    menuOpen = false
+    signOut()
+  action findSomething
+    menuOpen = false
+    drawer = false
+    search()
+    focus("vela-search")
+  action goHome
+    drawer = false
+    home()
+  action goLive
+    drawer = false
+    live()
+  action goLibrary(id: string)
+    drawer = false
+    openLibrary(id)
+  action keys(k: string)
+    if k == "Escape" and menuOpen
+      preventDefault()
+      menuOpen = false
+      focus("marquee-account")
+    if k == "Escape" and drawer
+      preventDefault()
+      closeDrawer()
+  view
+    row position="relative" key=keys height="100%" min-height=0 background-color="marquee.page" color="marquee.ink" color-scheme="dark" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
+      if viewer != "" and not phone
+        column role="navigation" aria-label=t("ui.mainNavigation") width=rail flex-shrink=0 box-sizing="border-box" padding-top=bar background-color="marquee.chrome" overflow-x="hidden" overflow-y="auto" scrollbar-width="none" -exact-layout-transition=(still ? "none" : "200ms ease-out")
+          Destinations(libraries=libraries, section=section, canLive=canLive, slim=slim, still=still, home=goHome, live=goLive, openLibrary=goLibrary)
+      column flex=1 min-width=0 min-height=0 position="relative"
+        children
+      if viewer != ""
+        row position="absolute" top=0 left=0 right=0 height=bar z-index=20 align-items="center" box-sizing="border-box" padding-right=(phone ? 6 : 14) gap=(phone ? 2 : 12) pointer-events="none" background-color=(clearBar ? "marquee.scrim-clear" : "marquee.chrome-glass") backdrop-filter=(clearBar ? "none" : "blur(18px)")
+          row width=(phone ? "auto" : `${rail}px`) min-width=(phone ? 0 : 200) flex-shrink=0 box-sizing="border-box" padding-left=(phone ? 4 : 12) gap=(phone ? 4 : 10) align-items="center" pointer-events="auto" -exact-layout-transition=(still ? "none" : "200ms ease-out")
+            button id="marquee-menu-button" press=toggleRail aria-label=(phone ? t("marquee.openNavigation") : t("marquee.toggleSidebar")) aria-expanded=(phone ? drawer : not slim) class=Round width=44 height=44
+              Glyph(name="menu", size=22)
+            link href="/" aria-label=t("ui.velaHome") text-decoration="none" display="flex" align-items="center" padding="6px 4px" border-radius=4
+              Wordmark(size=(phone ? 22 : 24))
+          if phone
+            column flex=1
+            button press=findSomething aria-label=t("ui.search") class=Round width=44 height=44 pointer-events="auto"
+              Glyph(name="search", size=22)
+          else
+            row flex=1 min-width=0 justify-content="center"
+              if not clearBar
+                button press=findSomething aria-label=t("ui.searchYourLibrary") pointer-events="auto" class=SearchLaunch width="min(560px, 100%)"
+                  row gap=10 align-items="center"
+                    Glyph(name="search", size=18)
+                    text t("ui.search") font-size=15
+          button id="marquee-account" press=toggleMenu aria-expanded=menuOpen aria-controls="marquee-account-menu" aria-label=t("ui.profileAndAppearance") testId="profile-menu" pointer-events="auto" class=Round width=44 height=44
+            text viewer.slice(0, 1).toUpperCase() width=32 height=32 border-radius=16 display="flex" align-items="center" justify-content="center" font-size=14 font-weight=700 color="marquee.on-amber" background-color="marquee.amber" aria-hidden=true
+      if viewer != "" and menuOpen
+        column id="marquee-account-menu" position="absolute" top=(bar - 4) right=(phone ? 8 : 14) z-index=30 width=260 box-sizing="border-box" padding="8px 0px" border-radius=6 background-color="marquee.menu" box-shadow="0px 12px 40px var(--marquee.shadow), 0px 0px 0px 1px var(--marquee.line)" animation=(still ? "mqFade 120ms linear both" : "mqDrop 180ms cubic-bezier(0.2, 0, 0, 1) both") -exact-exit-animation="mqGone 100ms linear both"
+          row gap=12 align-items="center" padding="10px 16px 14px"
+            text viewer.slice(0, 1).toUpperCase() width=36 height=36 border-radius=18 display="flex" align-items="center" justify-content="center" font-size=16 font-weight=700 color="marquee.on-amber" background-color="marquee.amber" aria-hidden=true
+            text viewer font-size=15 font-weight=700 flex=1 min-width=0 line-clamp=1
+          column height=1 background-color="marquee.line"
+          if skins.length > 1
+            button press=openPicker testId="skin-picker" aria-haspopup="dialog" class=MenuRow
+              row gap=12 align-items="center"
+                Glyph(name="grid", size=18)
+                text t("skin.picker.choose") font-size=14
+          column padding="0px 16px"
+            vela-install pwaAction="install" buttonLabel=t("pwa.install")
+            vela-install pwaAction="update" buttonLabel=t("pwa.update")
+          column height=1 background-color="marquee.line"
+          button press=leave class=MenuRow
+            row gap=12 align-items="center"
+              Glyph(name="signout", size=18)
+              text t("ui.signOut") font-size=14
+      if viewer != "" and phone and drawer
+        button press=closeDrawer tabindex=-1 aria-label=t("marquee.closeNavigation") position="absolute" inset=0 z-index=40 border="none" padding=0 background-color="marquee.scrim" animation="mqFade 160ms linear both" -exact-exit-animation="mqGone 120ms linear both"
+        column role="navigation" aria-label=t("ui.mainNavigation") position="absolute" top=0 left=0 bottom=0 z-index=41 width="min(300px, 84vw)" box-sizing="border-box" background-color="marquee.chrome" box-shadow="12px 0px 40px var(--marquee.shadow)" animation=(still ? "mqFade 120ms linear both" : "mqSlide 220ms cubic-bezier(0.2, 0, 0, 1) both") -exact-exit-animation="mqGone 120ms linear both"
+          row height=bar align-items="center" gap=4 padding-left=4 padding-right=4 flex-shrink=0
+            button press=closeDrawer aria-label=t("marquee.closeNavigation") class=Round width=44 height=44
+              Glyph(name="close", size=22)
+            Wordmark(size=22)
+          scroll flex=1 min-height=0
+            Destinations(libraries=libraries, section=section, canLive=canLive, slim=false, still=still, home=goHome, live=goLive, openLibrary=goLibrary)
+      if pickerOpen
+        SkinPicker(skins=skins, current=skin, small=phone, still=still, choose=pickSkin, dismiss=closePicker)
+
+// Home, then the server's libraries in order (a live library opens the guide), then
+// Live when the server offers it without a live library.
+component Destinations
+  props
+    libraries: LibraryNav[]
+    section: string
+    canLive: bool
+    slim: bool
+    still: bool
+    home: action
+    live: action
+    openLibrary: action
+  derive hasLiveLibrary = libraries.filter(l => l.kind == "live").length > 0
+  view
+    column gap=2 padding=(slim ? "10px 8px" : "10px 10px") testId="marquee-sidebar"
+      NavRow(label=t("ui.home"), glyph="home", on=(section == "home"), slim=slim, press=home)
+      if libraries.length > 0 and not slim
+        text t("marquee.libraries") font-size=12 font-weight=700 letter-spacing="0.06em" text-transform="uppercase" color="marquee.ink-faint" padding="18px 12px 8px" white-space="nowrap"
+      if libraries.length > 0 and slim
+        column height=1 margin="10px 8px" background-color="marquee.line"
+      for lib in libraries key=lib.id
+        if lib.kind == "live"
+          if canLive
+            NavRow(label=lib.name, glyph="live", on=(section == "live"), slim=slim, press=live)
+        else
+          NavRow(label=lib.name, glyph=libraryGlyph(lib.kind), on=(section == lib.id), slim=slim, press=openLibrary(lib.id))
+      if canLive and not hasLiveLibrary
+        NavRow(label=t("ui.live"), glyph="live", on=(section == "live"), slim=slim, press=live)
+
+// One sidebar destination: the current one is lit, its icon amber.
+component NavRow
+  props
+    label: string
+    glyph: string
+    on: bool
+    slim: bool
+    press: action
+  view
+    button press=press() testId=`nav-${label}` aria-current=(on ? "page" : "false") aria-label=label title=(slim ? label : "") class=NavItem justify-content=(slim ? "center" : "flex-start") padding=(slim ? "0px" : "0px 12px") background-color=(on ? "marquee.selected" : "transparent") color=(on ? "marquee.ink" : "marquee.ink-dim")
+      row gap=14 align-items="center" min-width=0
+        column color=(on ? "marquee.amber" : "currentcolor") flex-shrink=0
+          Glyph(name=glyph, size=22)
+        if not slim
+          text label font-size=15 font-weight=(on ? 700 : 600) white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
+
+style NavItem
+  display = "flex"
+  align-items = "center"
+  box-sizing = "border-box"
+  width = "100%"
+  height = 44
+  border = "none"
+  border-radius = 6
+  cursor = "pointer"
+  text-align = "left"
+  transition = "background-color 120ms linear, color 120ms linear"
+  :hover
+    background-color = "marquee.hover"
+    color = "marquee.ink"
+  :focus-visible
+    box-shadow = "inset 0px 0px 0px 2px var(--marquee.amber)"
+
+style SearchLaunch
+  box-sizing = "border-box"
+  height = 38
+  padding = "0px 14px"
+  border = "none"
+  border-radius = 6
+  background-color = "marquee.field"
+  color = "marquee.ink-faint"
+  text-align = "left"
+  cursor = "text"
+  :hover
+    background-color = "marquee.field-focus"
+  :focus-visible
+    box-shadow = "0px 0px 0px 2px var(--marquee.amber)"
+
+style MenuRow
+  display = "flex"
+  align-items = "center"
+  box-sizing = "border-box"
+  width = "100%"
+  height = 42
+  padding = "0px 16px"
+  border = "none"
+  background-color = "transparent"
+  color = "marquee.ink"
+  cursor = "pointer"
+  text-align = "left"
+  :hover
+    background-color = "marquee.hover"
+  :focus-visible
+    box-shadow = "inset 0px 0px 0px 2px var(--marquee.amber)"
+
+// The middle of the top bar on a wide page. It sits under the shell's clear bar and
+// carries the bar's colour. Nothing between it and the section's panning track is
+// positioned, so it pins to the top of the section rather than scrolling with it.
+component TopStrip
+  props
+    small: bool
+  slot
+  view
+    row position="absolute" top=0 left=0 right=0 z-index=15 height=barH(small) box-sizing="border-box" padding="0px 76px 0px 24px" align-items="center" justify-content="center" background-color="marquee.chrome-glass" backdrop-filter="blur(18px)"
+      children
+
+// The search field: in the top bar on wide screens, under it on phones.
+component SearchField
+  props
+    query: string
+    edit: action
+  state focused = false
+  action focusField
+    focused = true
+  action blurField
+    focused = false
+  action fieldKey(k: string)
+    if k == "Escape" and query != ""
+      preventDefault()
+      edit("")
+  view
+    row width="100%" max-width=560 align-items="center" gap=10 height=38 box-sizing="border-box" padding="0px 4px 0px 12px" border-radius=6 background-color=(focused ? "marquee.field-focus" : "marquee.field") box-shadow=(focused ? "0px 0px 0px 1px var(--marquee.line-strong)" : "none") transition="background-color 120ms linear, box-shadow 120ms linear"
+      column color=(focused ? "marquee.ink" : "marquee.ink-faint") flex-shrink=0
+        Glyph(name="search", size=18)
+      input id="vela-search" value=query input=edit focus=focusField blur=blurField key=fieldKey outline="none" placeholder=t("ui.search") aria-label=t("ui.searchYourLibrary") testId="search" flex=1 min-width=0 height="100%" padding=0 border="none" background-color="transparent" color="marquee.ink" font-size=15 font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
+        ::placeholder
+          color="marquee.ink-faint"
+      if query != ""
+        button press=edit("") aria-label=t("ui.clearSearch") class=Round width=30 height=30
+          Glyph(name="close", size=16)
+
+// A poster with its title and year beneath. Hover or focus rings the poster in amber;
+// an amber corner marks an unwatched film or episode; a bar shows progress.
+component TitleCard
+  props
+    card: Card
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+    fill: bool
+  state hot = false
+  action heat(on: bool)
+    hot = on
+  view
+    button press=selectTitle(card.id, card.kind, card.receipt) intersect=observe(card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=heat focus=heat(true) blur=heat(false) class=CardButton width=(fill ? "100%" : `${posterW(small)}px`)
+      column position="relative" width="100%" aspect-ratio="2 / 3" border-radius=4 overflow="hidden" background-color="marquee.raised" box-shadow="0px 4px 12px var(--marquee.scrim-faint)"
+        if card.poster != ""
+          Art(src=card.poster, still=still)
+        else
+          Placeholder(card=card, small=small)
+        if unwatched(card)
+          column position="absolute" top=0 right=0 width=0 height=0 border-top=(small ? "18px solid var(--marquee.amber)" : "22px solid var(--marquee.amber)") border-left=(small ? "18px solid transparent" : "22px solid transparent") aria-hidden=true
+        if card.progressSeconds > 0 and card.durationSeconds > 0 and not card.played
+          column position="absolute" left=0 right=0 bottom=0 height=4 background-color="marquee.scrim" aria-hidden=true
+            column height=4 width=`${progressPct(card)}%` background-color="marquee.amber"
+        column position="absolute" inset=0 background-color="marquee.scrim-faint" opacity=(hot ? 1 : 0) transition=(still ? "none" : "opacity 120ms linear") aria-hidden=true
+        column position="absolute" inset=0 border-radius=4 box-shadow="inset 0px 0px 0px 3px var(--marquee.amber)" opacity=(hot ? 1 : 0) transition=(still ? "none" : "opacity 120ms linear") aria-hidden=true
+      column gap=2 padding-top=8 width="100%" min-width=0
+        text card.name font-size=(small ? 13 : 14) font-weight=600 color=(hot ? "marquee.amber" : "marquee.ink") white-space="nowrap" overflow="hidden" text-overflow="ellipsis" transition="color 120ms linear"
+        if subLine(card) != ""
+          text subLine(card) font-size=(small ? 12 : 13) color="marquee.ink-faint" font-variant-numeric="tabular-nums" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+
+// A landscape still for part-watched titles and episodes, with its progress.
+component WideCard
+  props
+    card: Card
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+    fill: bool
+  state hot = false
+  action heat(on: bool)
+    hot = on
+  view
+    button press=selectTitle(card.id, card.kind, card.receipt) intersect=observe(card.receipt) aria-label=cardName(card) testId=`title-${card.id}` hover=heat focus=heat(true) blur=heat(false) class=CardButton width=(fill ? "100%" : `${wideW(small)}px`)
+      column position="relative" width="100%" aspect-ratio="16 / 9" border-radius=4 overflow="hidden" background-color="marquee.raised" box-shadow="0px 4px 12px var(--marquee.scrim-faint)"
+        if card.backdrop != ""
+          Art(src=card.backdrop, still=still)
+        else
+          if card.poster != ""
+            image card.poster alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover" filter="blur(18px) brightness(0.6)" scale=1.2
+            image card.poster alt="" position="absolute" top="8%" bottom="8%" left="50%" translate="-50% 0px" height="84%" aspect-ratio="2 / 3" object-fit="cover" border-radius=3
+          else
+            Placeholder(card=card, small=small)
+        if card.progressSeconds > 0 and card.durationSeconds > 0 and not card.played
+          column position="absolute" left=0 right=0 bottom=0 height=4 background-color="marquee.scrim" aria-hidden=true
+            column height=4 width=`${progressPct(card)}%` background-color="marquee.amber"
+        column position="absolute" inset=0 background-color="marquee.scrim-faint" opacity=(hot ? 1 : 0) transition=(still ? "none" : "opacity 120ms linear") aria-hidden=true
+        column position="absolute" inset=0 border-radius=4 box-shadow="inset 0px 0px 0px 3px var(--marquee.amber)" opacity=(hot ? 1 : 0) transition=(still ? "none" : "opacity 120ms linear") aria-hidden=true
+      column gap=2 padding-top=8 width="100%" min-width=0
+        text card.name font-size=(small ? 13 : 14) font-weight=600 color=(hot ? "marquee.amber" : "marquee.ink") white-space="nowrap" overflow="hidden" text-overflow="ellipsis" transition="color 120ms linear"
+        if subLine(card) != ""
+          text subLine(card) font-size=(small ? 12 : 13) color="marquee.ink-faint" font-variant-numeric="tabular-nums" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+
+style CardButton
+  display = "flex"
+  flex-direction = "column"
+  align-items = "stretch"
+  flex-shrink = 0
+  box-sizing = "border-box"
+  padding = 0
+  border = "none"
+  border-radius = 4
+  background-color = "transparent"
+  color = "marquee.ink"
+  text-align = "left"
+  cursor = "pointer"
+  outline = "none"
+
+// Artwork is absent: the kind's icon and the title on a quiet panel.
+component Placeholder
+  props
+    card: Card
+    small: bool
+  view
+    column position="absolute" inset=0 align-items="center" justify-content="center" gap=10 padding=12 box-sizing="border-box" background-image="linear-gradient(160deg, var(--marquee.raised) 0%, var(--marquee.chrome) 100%)" color="marquee.ink-faint"
+      Glyph(name=(card.kind == "movie" ? "film" : card.kind == "channel" ? "live" : card.kind == "collection" ? "stack" : "tv"), size=(small ? 26 : 32))
+      text card.name font-size=(small ? 12 : 13) font-weight=600 color="marquee.ink-dim" text-align="center" line-clamp=3
+
+// A hub: a heading with paging arrows over a shelf of cards in server order.
+// `place` keeps the shelf's scroller id unique when two pages show the same row.
+component Shelf
+  props
+    row: FeedRow
+    place: string
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  slot
+  state port = 1000
+  state at = 0
+  derive wide = resumeRow(row)
+  derive span = row.items.length * ((wide ? wideW(small) : posterW(small)) + cardGap(small)) + 2 * gutterPx(small)
+  derive id = `hub-${place}-${row.id}`
+  action measured(w: number, h: number)
+    port = w
+  action scrolled(x: number, y: number)
+    at = x
+  action page(dir: number)
+    scrollBy(id, dir * max(200, port - 2 * gutterPx(small) - 60), 0)
+  view
+    column gap=(small ? 6 : 8) padding-bottom=(small ? 20 : 30) role="group" aria-label=row.name
+      row align-items="center" gap=8 min-height=32 padding-left=gutter(small) padding-right=(small ? gutter(small) : "28px")
+        text row.name role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 color="marquee.ink" flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+        if not small and span > port
+          button press=page(-1) disabled=(at <= 2) aria-label=t("marquee.scrollBack", row=row.name) class=Round width=32 height=32
+            Glyph(name="left", size=18)
+          button press=page(1) disabled=(at + port >= span - 4) aria-label=t("marquee.scrollOn", row=row.name) class=Round width=32 height=32
+            Glyph(name="right", size=18)
+      scroll id=id resize=measured scroll=scrolled overflow-x="auto" overflow-y="hidden" scrollbar-width="none" scroll-behavior=(still ? "auto" : "smooth") scroll-padding-left=gutter(small)
+        row gap=cardGap(small) align-items="flex-start" padding-top=4 padding-bottom=4 padding-left=gutter(small) padding-right=gutter(small)
+          for card in row.items key=card.id
+            if wide
+              WideCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
+            else
+              TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false)
+          children
+
+component Row
+  props
+    row: FeedRow
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  view
+    Shelf(row=row, place="row", small=small, still=still, selectTitle=selectTitle, observe=observe)
+
+// A hub-shaped placeholder while titles load.
+component ShelfBlocks
+  props
+    small: bool
+    still: bool
+  view
+    column gap=12 padding-bottom=30 aria-hidden=true
+      column padding-left=gutter(small)
+        Block(width="200px", height="20px", radius=4, still=still)
+      row gap=cardGap(small) padding-left=gutter(small) overflow="hidden"
+        for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] key=`${i}`
+          column gap=8 flex-shrink=0
+            Block(width=`${posterW(small)}px`, height=`${posterW(small) * 1.5}px`, radius=4, still=still)
+            Block(width="70%", height="12px", radius=3, still=still)
+
+// The featured title, as a wide banner over the hubs.
+component Spotlight
+  props
+    hero: Card
+    heroes: Card[]
+    count: number
+    index: number
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+    pickHero: action
+  view
+    column position="relative" margin-left=gutter(small) margin-right=gutter(small) margin-bottom=(small ? 20 : 30) height=(small ? "auto" : "clamp(280px, 30vw, 380px)") min-height=(small ? 0 : 280) border-radius=6 overflow="hidden" background-color="marquee.raised" intersect=observe(hero.receipt) animation=arrive(still, 0)
+      if small
+        column position="relative" width="100%" aspect-ratio="16 / 9"
+          if hero.backdrop != ""
+            Art(src=hero.backdrop, still=still)
+          column position="absolute" inset=0 background-image="linear-gradient(0deg, var(--marquee.raised) 0%, var(--marquee.scrim-clear) 55%)" aria-hidden=true
+      else
+        if hero.backdrop != ""
+          for b in [hero.backdrop] key=b
+            Art(src=b, still=still)
+        column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--marquee.scrim) 0%, var(--marquee.scrim-soft) 40%, var(--marquee.scrim-clear) 72%), linear-gradient(0deg, var(--marquee.scrim-soft) 0%, var(--marquee.scrim-clear) 40%)" aria-hidden=true
+      column position=(small ? "relative" : "absolute") left=0 bottom=0 box-sizing="border-box" width=(small ? "100%" : "min(620px, 62%)") padding=(small ? "0px 16px 16px" : "0px 36px 32px") gap=(small ? 8 : 10)
+        text t("ui.featured") font-size=12 font-weight=700 letter-spacing="0.08em" color="marquee.amber"
+        text hero.name role="heading" aria-level=2 font-size=(small ? 22 : 34) font-weight=700 line-height=1.1 letter-spacing="-0.01em" line-clamp=2
+        text ([hero.yearLabel].concat(hero.genres.slice(0, 3)).concat([hero.rating]).filter(f => f != "").join(" · ")) font-size=(small ? 13 : 14) color="marquee.ink-dim" font-variant-numeric="tabular-nums"
+        if hero.summary != "" and not small
+          text hero.summary font-size=15 color="marquee.ink-dim" line-height=1.5 line-clamp=2
+        row gap=10 align-items="center" margin-top=(small ? 4 : 8)
+          button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) class=Primary height=(small ? 38 : 40) padding="0px 20px"
+            row gap=8 align-items="center"
+              Glyph(name="info", size=18)
+              text t("marquee.moreInfo") font-size=15
+      if count > 1
+        row position="absolute" right=(small ? 14 : 24) bottom=(small ? "auto" : "24px") top=(small ? "12px" : "auto") gap=6 role="group" aria-label=t("ui.featuredTitles")
+          for h, i in heroes key=h.id
+            button press=pickHero(i) aria-label=t("marquee.featuredNumber", position=formatNumber(i + 1, "decimal"), total=formatNumber(count, "decimal")) aria-current=(i == index ? "true" : "false") width=(i == index ? 22 : 8) height=8 padding=0 border="none" border-radius=4 background-color=(i == index ? "marquee.amber" : "marquee.track") cursor="pointer" -exact-layout-transition=(still ? "none" : "200ms ease-out")
+              :focus-visible
+                box-shadow="0px 0px 0px 2px var(--marquee.ink)"
+
+component Home
+  props
+    model: HomeModel
+    active: bool
+    query: string
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+    heroIndex: number
+    pickHero: action
+    reachEnd: action
+    reachRowEnd: action
+    homeMoreLoading: bool
+    rowMoreLoading: string[]
+  slot
+  derive searching = query != ""
+  view
+    column padding-top=(small ? barH(true) : barH(false) + 24) padding-bottom=(searching ? 0 : 48)
+      if small
+        row padding="10px 14px 16px"
+          children
+      else
+        TopStrip(small=false)
+          children
+      if not searching
+        for hero in model.hero.slice(heroIndex, heroIndex + 1) key=hero.id
+          Spotlight(hero=hero, heroes=model.hero, count=model.hero.length, index=heroIndex, small=small, still=still, selectTitle=selectTitle, observe=observe, pickHero=pickHero)
+        for row, i in model.rows key=row.id
+          column animation=arrive(still, min(i, 5) * 40)
+            Shelf(row=row, place="home", small=small, still=still, selectTitle=selectTitle, observe=observe)
+              if row.nextCursor != ""
+                column width=(small ? 48 : 72) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
+                  if rowMoreLoading.includes(row.id)
+                    Spinner(size=24, still=still)
+        if model.nextCursor != ""
+          column min-height=120 intersect=reachEnd
+            if homeMoreLoading
+              ShelfBlocks(small=small, still=still)
+        if model.rows.length == 0 and model.hero.length == 0
+          Empty(glyph="stack", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"))
+
+// A centred empty or failed moment, with what to do next when there is something.
+component Empty
+  props
+    glyph: string
+    title: string
+    message: string
+  view
+    column align-items="center" text-align="center" gap=10 padding="64px 24px" role="status"
+      column color="marquee.ink-faint" margin-bottom=6
+        Glyph(name=glyph, size=44)
+      text title font-size=20 font-weight=700
+      if message != ""
+        text message font-size=15 color="marquee.ink-dim" line-height=1.5 max-width="30rem"
+
+component SearchSurface
+  props
+    query: string
+    model: SearchModel
+    descriptive: SearchModel
+    ai: SearchModel
+    generation: number
+    loading: bool
+    error: bool
+    aiAvailable: bool
+    small: bool
+    still: bool
+    selectTitle: action
+    observe: action
+  view
+    column gap=6 padding-bottom=60 animation=(still ? "mqFade 160ms linear both" : "mqFade 220ms linear both")
+      text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 font-size=(small ? 20 : 24) font-weight=700 padding-left=gutter(small) padding-right=gutter(small) padding-bottom=12 line-clamp=2
+      if error
+        Empty(glyph="alert", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"))
+      else
+        if loading
+          column role="status" aria-label=t("ui.findingTitles")
+            ShelfBlocks(small=small, still=still)
+        else
+          if model.items.length == 0
+            Empty(glyph="search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"))
+          else
+            Shelf(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
+          Shelf(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
+          column gap=8
+            if ai.aiStatus == "queued" or ai.aiStatus == "running"
+              row gap=10 align-items="center" padding-left=gutter(small) padding-right=gutter(small) padding-bottom=12 role="status"
+                Spinner(size=18, still=still)
+                text t("ui.exploringYourDescription") color="marquee.ink-dim" font-size=14
+            if ai.items.length > 0
+              Shelf(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe)
+            if ai.aiStatus == "failed"
+              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="marquee.ink-dim" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
+
+// Waiting and failure moments the foundation reports, shaped like what is coming.
+component Status
+  props
+    kind: string
+    message: string
+    small: bool
+    still: bool
+  view
+    column padding-top=(small ? barH(true) : barH(false)) animation="mqFade 200ms linear both"
+      if kind == "home"
+        if not small
+          TopStrip(small=false)
+        column role="status" aria-label=message gap=0 padding-top=24
+          column margin-left=gutter(small) margin-right=gutter(small) margin-bottom=30
+            Block(width="100%", height=(small ? "200px" : "clamp(280px, 30vw, 380px)"), radius=6, still=still)
+          ShelfBlocks(small=small, still=still)
+          ShelfBlocks(small=small, still=still)
+      else
+        if kind == "library"
+          column role="status" aria-label=message gap=20 padding-top=16
+            row gap=12 padding-left=gutter(small) padding-right=gutter(small)
+              Block(width="160px", height="28px", radius=4, still=still)
+              Block(width="110px", height="28px", radius=4, still=still)
+              Block(width="110px", height="28px", radius=4, still=still)
+            column display="grid" grid-template-columns=`repeat(auto-fill, minmax(${small ? 104 : 150}px, 1fr))` gap=(small ? 12 : 20) padding-left=gutter(small) padding-right=gutter(small)
+              for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17] key=`b-${i}`
+                column aspect-ratio="2 / 3"
+                  Block(width="100%", height="100%", radius=4, still=still)
+        else
+          if kind == "detail"
+            row role="status" aria-label=message gap=36 padding=(small ? "24px 16px" : "48px 48px") align-items="flex-start"
+              if not small
+                Block(width="260px", height="390px", radius=4, still=still)
+              column flex=1 gap=16
+                Block(width="60%", height="34px", radius=4, still=still)
+                Block(width="30%", height="16px", radius=3, still=still)
+                Block(width="200px", height="44px", radius=6, still=still)
+                Block(width="100%", height="72px", radius=4, still=still)
+          else
+            if kind == "loading"
+              column role="status" align-items="center" gap=16 padding="96px 24px"
+                Spinner(size=40, still=still)
+                text message color="marquee.ink-dim" font-size=15
+            else
+              Empty(glyph="alert", title=t("ui.somethingWentQuiet"), message=message)
