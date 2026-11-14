@@ -3,6 +3,7 @@ import { createBrowserCustomAudioOutputFactory } from '../../../../vendor/webgpu
 import type { CustomPlaybackPlayOptions, CustomPlaybackAudioSwitch } from '../../../../vendor/webgpu-player/src/pipeline/CustomPlaybackControllerTypes';
 import { AudioPackageRegistry, canonicalAudioCodec, packageForCodec } from './packages';
 import { outputLayout, downmixPolicy } from './policy';
+import { CUSTOM_MEDIABUNNY_PCM_AUDIO_CODECS } from '../../../../vendor/webgpu-player/src/audio/CustomAudioCodec';
 
 export { createBrowserCustomAudioOutputFactory };
 export function createAudioPackages(baseURL: string) {
@@ -21,11 +22,13 @@ export type VelaAudioOptions = Pick<CustomPlaybackPlayOptions,
  * metadata separately; channel count alone must never guess an input speaker mask. */
 export async function prepareAudioOptions(registry: ReturnType<typeof createAudioPackages>,
   track: { codec: string; channels: number }, maximumOutputChannels: number | null,
-  signal: AbortSignal, nightMode = false): Promise<VelaAudioOptions> {
+  signal: AbortSignal, nightMode = false, forceSoftware = false): Promise<VelaAudioOptions> {
   const codec = canonicalAudioCodec(track.codec);
-  const decoder = packageForCodec(codec) ? await registry.load(codec, signal) : undefined;
+  const native = ['aac', 'opus', 'flac', 'mp3', 'vorbis'].includes(codec) ||
+    (CUSTOM_MEDIABUNNY_PCM_AUDIO_CODECS as readonly string[]).includes(codec);
+  const decoder = (!native || forceSoftware) && packageForCodec(codec) ? await registry.load(codec, signal) : undefined;
   signal.throwIfAborted();
-  if (!decoder && !['aac', 'opus', 'flac', 'mp3', 'vorbis'].includes(codec) && !codec.startsWith('pcm_'))
+  if (!decoder && (!native || forceSoftware))
     throw new Error(`Audio ${codec} requires an Ether audio-only fallback; this engine has no local decoder`);
   return {
     audioOutputMode: 'decoded-pcm', audioDecoder: decoder ?? undefined,

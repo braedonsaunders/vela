@@ -37,6 +37,7 @@ export interface VelaTrackMetadata {
   channelCount: number; sampleRate: number; declaredChannelMask: number | null;
 }
 export function velaTrackConfiguration(metadata: VelaTrackMetadata, codec: string): Uint8Array {
+  codec = codec.replaceAll('-', '_');
   const format: AudioConfiguration = { channels: metadata.channelCount, sampleRate: metadata.sampleRate,
     channelMask: metadata.declaredChannelMask ?? 0,
     description: velaTrackPrivate(metadata.audioTrack, metadata.decoderConfig) };

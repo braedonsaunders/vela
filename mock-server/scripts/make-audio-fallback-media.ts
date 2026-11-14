@@ -4,7 +4,7 @@ import { join } from 'node:path';
 const root = join(homedir(), '.scratch/tmp/vela/media-audio');
 await mkdir(root, { recursive: true });
 for (const [name, codec, extension] of [
-  ['vorbis-stereo', 'vorbis', 'ogg'], ['opus-stereo', 'opus', 'ogg'],
+  ['alac-stereo', 'alac', 'm4a'], ['vorbis-stereo', 'vorbis', 'ogg'], ['opus-stereo', 'opus', 'ogg'],
   ['mp2-stereo', 'mp2', 'mka'], ['wma-stereo', 'wmav2', 'asf'],
   ['aac-stereo', 'aac', 'm4a'], ['pcm-f64-stereo', 'pcm_f64le', 'wav'],
 ] as const) {

@@ -62,7 +62,7 @@ await run([join(em, 'emcc'), join(bridge, 'vela_audio.c'), join(source, 'libavco
   '-sALLOW_MEMORY_GROWTH=1', '-sINITIAL_MEMORY=16777216', '-sMAXIMUM_MEMORY=268435456', '-sMALLOC=emmalloc', '-sASSERTIONS=0', '--no-entry',
   '-sEXPORTED_FUNCTIONS=' + functions.map(f => '_audio_decoder_' + f).join(','),
   `-ffile-prefix-map=${source}=ffmpeg-source`, `-ffile-prefix-map=${bridge}=vela-audio-source`, '-o', modulePath]);
-const manifest = `//! id: vela-audio\n//! name: Vela FFmpeg Audio\n//! decoder: audio\n//! accepts: codec in [${codecs.map(([name]) => name).join(', ')}]\n//! packet: 2 MiB\n//! attribute: 1, libraryVersion\n//! option: 1, velaConfiguration\n//! error: 1, input\n//! error: 2, send\n//! error: 3, receive\n//! error: 4, sampleFormat\n//! error: 5, option\n//! error: 6, output\n//! error: 7, open\n`;
+const manifest = `//! id: vela-audio\n//! name: Vela FFmpeg Audio\n//! decoder: audio\n//! accepts: codec in [${codecs.map(([name]) => name.replaceAll('_', '-')).join(', ')}]\n//! packet: 2 MiB\n//! attribute: 1, libraryVersion\n//! option: 1, velaConfiguration\n//! error: 1, input\n//! error: 2, send\n//! error: 3, receive\n//! error: 4, sampleFormat\n//! error: 5, option\n//! error: 6, output\n//! error: 7, open\n`;
 // Custom WASM section; keep this builder independent of the engine's dev dependencies.
 function leb(n: number) { const bytes: number[] = []; do { let b = n & 127; n = Math.floor(n / 128); bytes.push(b | (n ? 128 : 0)); } while (n); return bytes; }
 const sectionName = new TextEncoder().encode('webgpu-player.decoder');
@@ -76,9 +76,9 @@ const loaded = await loadDecoderPackage(bytes.buffer);
 if (loaded.kind !== 'audio' || loaded.id !== 'vela-audio' || loaded.manifest.codecs.length !== codecs.length) throw new Error('Audio package validation failed');
 await Bun.write(join(output, 'vela-audio.wasm'), bytes);
 const sha256 = new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
-await Bun.write(join(output, 'vela-audio.json'), JSON.stringify({ id: 'vela-audio', file: 'vela-audio.wasm', sha256, codecs: codecs.map(([name]) => name), ffmpegCommit: commit }, null, 2));
+await Bun.write(join(output, 'vela-audio.json'), JSON.stringify({ id: 'vela-audio', file: 'vela-audio.wasm', sha256, codecs: codecs.map(([name]) => name.replaceAll('_', '-')), ffmpegCommit: commit }, null, 2));
 await copyFile(archive, join(output, `ffmpeg-${commit}.tar.gz`));
 await copyFile(join(source, 'COPYING.LGPLv2.1'), join(output, 'FFmpeg-COPYING.LGPLv2.1'));
-await run(['tar', '-czf', join(output, 'vela-audio-source.tar.gz'), '-C', bridge, 'vela_audio.c', 'build.ts', 'codecs.json', 'configuration.ts']);
+await run(['tar', '-czf', join(output, 'vela-audio-source.tar.gz'), '-C', bridge, 'vela_audio.c', 'build.ts', 'codecs.json', 'configuration.ts', 'track-configuration.ts', 'upstream-transform.ts', 'README.md']);
 await Bun.write(join(output, 'VELA-AUDIO-SOURCE.txt'), `Vela FFmpeg Audio, LGPL-2.1-or-later. Complete corresponding source is ffmpeg-${commit}.tar.gz and vela-audio-source.tar.gz beside this file. Build with Emscripten4.0.13 using build.ts; GPL, nonfree and version3 code are disabled. Modules may be replaced/relinked, with reverse engineering permitted for debugging modifications. FFmpeg source archive SHA256 ${sourceHash}.\n`);
 console.log(`Built ${join(output, 'vela-audio.wasm')} ${sha256} (${bytes.length} bytes, ${codecs.length} codecs)`);
