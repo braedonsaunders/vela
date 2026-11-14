@@ -155,3 +155,58 @@ unsupported destinations until a neutral ordered receipt-bearing contents servic
 exists). F3 was corrected after checking the current client probe: it is a contract
 clarification, not a current interoperability defect. Follow-up fixes are not
 assumed present at the pinned SHA above.
+
+## Follow-up read: 193f08aea
+
+Fetched and inspected `193f08aeacae5a87981576d373d71e24760f2185` read-only,
+finding by finding. The initial matrix above remains pinned to its original SHA;
+this table is the disposition at the newer commit. No Ether build/test/browser
+run was performed here. Implementer-reported checks are not substituted for lab E2E.
+
+| Finding | Follow-up disposition | New Ether evidence (same path prefixes as above) |
+|---|---|---|
+| F1 | **Contained, endpoint still unsupported.** Collection/playlist/directory destinations are no longer advertised; GET contents remains absent. | catalog.go:202–214 filters unimplemented entry kinds; frontend.go:328–360 still has no collection route. V README:32,157 continues to describe the generic protocol endpoint. Do not claim the feature implemented. |
+| F2 | Fixed in source. Unknown optional HDR and limits are omitted instead of null/zero placeholders. | playback.go:27–30 uses omitempty. |
+| F3 | Remains withdrawn for the current native-HLS client declaration. | playback.go:201–205 rejects non-direct streaming without declared native HLS; client/player/media-capabilities.ts:16 remains the native MIME probe. |
+| F4 | Fixed in source. | playback.go:246–247 reports webvtt for the VTT broker URL. |
+| F5 | Fixed in source. Observed offered track IDs are validated, subtitle null becomes off, telemetry gets stream indices, and plan stores selections; buffering publishes recovering. | playback.go:469–523. |
+| F6 | Fixed in source. Admission busy/capacity and retired sources classified; source_unresolved is502; known positive RetryAfter is bounded to300s/maxAttempts3. | frontend.go:101–123; playback.go:187. |
+| F7 | **Partial: rotating-bearer namespace replaced, but pairing replay can make the chosen family ambiguous (R1).** | frontend.go:225,242 uses GrantScope+method/path/key; identity/grant_scope.go:23 picks one family by ORDER BY id. |
+| F8 | **Partial: normal single-family rotation survives, but R1 can still terminate a legitimate session.** | events.go:32–44 and playback.go:560 use GrantScopeCurrent; identity/grant_scope.go:38 checks the chosen family's current access. Transient watcher errors do not end the session. |
+| F9 | Fixed in source. Validates/echoes live mode and omits unknown duration/bounds. | playback.go:94–96,264–270; matches V types:86 and README:175–177. |
+| F10 | Fixed in source. Missing/wrong bearer/device is checked before unavailable AI job403. | frontend.go:336–341. |
+| F11 | Fixed in source. Outer row count is bounded independently of the inner50 and truncation is unknown, without inventing a cursor. | catalog.go:151–152,176–178,277–281; rows.go:26–30. |
+| F12 | Fixed in source. Ended retention checked on lookup. | playback.go:300–307 removes entries ended >=10min before returning state/events. |
+| F13 | Fixed in source. Configured neutral identity capabilities drive auth flags; absent portal disables device grant before initiating a pairing. | frontend.go:368–372; auth.go:94–97; app/frontend_identity.go:325–327. |
+| F14 | Fixed in source. One well-formed extra target returns policy403 until supported; malformed/multiple targets remain400. | playback.go:76–92. |
+
+### R1: approved pairing replay can change the supposed stable scope
+
+Both sides: V `protocol/v0/README.md:91–95,120–125` requires stable grant-scoped
+idempotency and a reconnect that preserves healthy sessions. On Ether193f08aea:
+
+1. `auth.go:134–145` polls the pairing and calls `tokens` with no refresh value.
+   `auth.go:31–32` consequently calls IssueRefresh on every approved response.
+2. `internal/identity/quickconnect.go:281–287,312–317` intentionally replays the same
+   access token for another approved poll. A fresh poll idempotency key is legitimate.
+3. `internal/identity/refresh.go:59,69` creates a new random refresh family on every
+   IssueRefresh call; its schema at:19 does not make access_hash unique.
+4. `internal/identity/grant_scope.go:23` chooses `ORDER BY id LIMIT 1` among active
+   families pointing at the access token, which need not be the family whose refresh
+   token the client received.
+
+Concrete allowed sequence: first approved response (accessG, refreshF1) is lost;
+the next fresh-key poll returns the same accessG with refreshF2. When F1 sorts
+first, playback and replay keys bind F1, but the client later refreshes F2. Only
+F2 rotates and the old accessG is revoked (`identity/refresh.go:152`). The new
+bearer maps to F2; the saved session is F1 and fails scope equality
+(`playback.go:310`), while GrantScopeCurrent(F1) sees its revoked old access and
+can end the session. Mutation replay identity drifts as well.
+
+Proposed resolution: approved pairing redemption must reuse the complete scoped
+Tokens outcome, or identity must provide a canonical stable login lineage that
+is unambiguous across repeat IssueRefresh calls. Do not replace this with only
+viewer/device identity or bypass current-family revocation. Sent to Ether's
+implementer as one follow-up blocker with this evidence. Source disposition:
+**10 findings fixed, F1 contained, F7/F8 remain partial on R1; F3 withdrawn.**
+The coordinator should wait for the R1 follow-up read before the lab gate.
