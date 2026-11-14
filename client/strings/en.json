@@ -213,6 +213,5 @@
   "data.fixedQuality": "Fixed quality",
   "ui.mute": "Mute",
   "ui.unmute": "Unmute",
-  "ui.volume": "Volume",
-  "ui.deliveryDetails": "{path} · {quality} · {mode}"
+  "ui.volume": "Volume"
 }
