@@ -646,3 +646,42 @@ it requires coordinator clearance.
    confirm that a ready master never serves HTML, truncated init/TS, or mismatched
    codec/segment timelines. No new stream/provider request is authorized by this
    ask. Client consistency fixes need one separately cleared post-package drive.
+
+### Installed 0.1.9 urgent startup correction
+
+`2172ae3` resolves native HLS masters once and pins their first-listed variant.
+Ether confirmed this is the producing base rung; it does not choose the lowest
+rendition. Native ABR can no longer restart the serial encoder by hopping among
+the master variants. MSE holds its initial rendition until a healthy startup
+buffer, uses expensive-transcode hysteresis, and preserves the next sequence and
+timeline anchor on abandonment. New initialization bytes precede switched media.
+
+The initial wanted-play state stays loading/buffering instead of publishing a
+spurious pause. Autoplay refusal retries muted once, then exposes an error.
+Startup has a 45-second deadline, subsequent no-progress waits 30 seconds, and
+fallback authorization 15 seconds. Failure unloads media and offers Retry rather
+than waiting forever. Volume/mute persist locally; M and up/down control them.
+Cinematic chrome adds a real waiting spinner, volume/mute controls and one
+subtle path/quality readout (`4788995`, `c2a186f`).
+
+Purposeful local mock drives, with no lab stream:
+
+- TS master: progress beyond two seconds in 2.821 s; only first-listed ts360
+  resources, monotonically seg-000 through seg-022 over ~79 s. Observations
+  buffering then playing HTTP 200, no startup paused reports.
+- Muxed fMP4 MSE: readyState 4, 55 frames at 2.168 s, 31.957 s buffered; loading
+  → buffering → playing, no paused reports. Explicit 540p switch fetched new init
+  then seg-021, not seg-000; position advanced 51.225 → 54.002 without rewind.
+- WebVTT loaded four cues in showing mode over MSE. A new engine restored volume
+  0.37 and muted true.
+- A per-request 60-second stalled manifest progressed loading → recovering →
+  failed. Its selected fallback command was deliberately not forwarded by the
+  isolated driver, so the final bounded error was “Source switch authorization
+  timed out”; waiting false, src cleared, paused true. This verifies teardown and
+  bounded fallback, not a measured 45-second first-frame timeout.
+
+Mock sessions stopped with HTTP 200/ended, the mock grant was revoked, and the
+dedicated browser closed. The UI worker's supervisor was left under its owner.
+Ether confirmed client-only 0.1.9 installation (43/43 file hashes, app/SW HTTP
+200), with lab.4 server unchanged. No owner-session or lab playback was opened
+for qualification; real Other Mommy/MobLand validation remains with the owner.
