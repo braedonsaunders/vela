@@ -1168,3 +1168,16 @@ there is no user-facing old/new backend selector. Data negotiation serializes
 capability changes before playback requests. Production packaging requires the
 verified shared runtime payload; the qualified runtime key remains
 `01f921f13df02482` because this policy/layout change affects the host only.
+
+Ether independently confirmed the successful Street Fighter delivery from lab
+logs: the test device's session ran16:23:42–16:26 with candidate opens and media
+preparation, and **zero** `transcode session starting` or `ffmpeg started` entries.
+The direct/original client result therefore also has server-side evidence of no
+FFmpeg encode or remux.
+
+Next HEVC candidates were selected from persisted probe facts only, with no new
+source fetch: The Mummy (1999), HEVC Main8-bit816p BT.709 + E-AC-3 English5.1;
+The Mummy (1959), HEVC Main10/1080p SDR + E-AC-3 mono; and Model Citizen (2026),
+HEVC Main10/2160p SDR + AAC5.1. Probe factsVersion6 omitted field order, so these
+are not evidence of progressive scan. No HEVC, HDR/DV7, or new live qualification
+has yet occurred; each lab stream still needs fresh owner-idle clearance.
