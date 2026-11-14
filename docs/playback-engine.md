@@ -1057,3 +1057,46 @@ host+runtime+workers+decoder/source payload before opening the first original
 stream. No Playwright page routing overlay is used for those assets. Common SDR
 qualification precedes beta packaging; HDR/DV7, subtitle overlays, rotation
 rendering and live are follow-up gates, not claims of this beta.
+
+### First real original beta attempt — lab HTTPS, 2026-11-14
+
+One owner-idle Street Fighter (2026) session used the standalone same-origin
+host/runtime; installed app shell0.1.25 stayed unchanged. The diagnostic used
+normal authenticated negotiate/playback/observation/command endpoints. An initial
+non-semver diagnostic version failed negotiate;0.1.25 negotiated successfully.
+No second playback session was opened.
+
+| Measurement | Result |
+|---|---|
+| Broker plan from trusted Start | 7,327.2 ms |
+| Original offered | Direct/ranged MP4; H.264 High/L40,1920x1012,8bit BT.709 limited; AAC stereo/source stream1 |
+| Original delivery | 19 HTTPS206 reads; browser-reported4,723,992 transferred bytes in60.1 ms |
+| Direct GPU first frame, sync lag, seek | FAIL: no GPU frame; sync and seek unqualified |
+| Automatic fallback | Authorized same-session switch200, remux HLS playing natively |
+| Fallback sample | Position72.347225 s,1,740 video frames,0 dropped; observations200 |
+| Cleanup | Stop200/ended, current revoke200, video removed, Chrome closed; coordinator subsequently signed out test-only viewer to retire stale auth families |
+
+Client admission failed after successful original delivery. Snapshot coalescing
+lost the exception before replacement playback cleared it. There is no cached
+moov capture to prove which admission check failed; persisted probe facts report
+one English48k AAC stereo track, but do not prove its actual container language.
+The independently proven unknown-language defect is fixed by790fa13: only two
+known unequal languages reject; actual unknown language is retained, not relabelled.
+The first attempt is therefore not claimed as an original-play success.
+
+Recovery now forces its first failure snapshot through the250ms coalescer. A new
+failure fingerprint can send one error observation despite the ordinary1s rate.
+A local no-media native-view drive preserved a missing audio identity at28.8ms
+(recovering) and330.6ms (failed), with one error observation and zero media fetches.
+The same drive advertised with a matching same-origin shared asset descriptor
+and omitted original capability for a cross-origin descriptor.
+
+Production uses `window.velaUniversalAssets={baseURL,assetKey}` and validates the
+exact same-origin `/vela/universal/<key>/` path plus manifest identity. Explicitly
+invalid descriptors fail closed; only an absent descriptor uses diagnostic-relative
+assets. `prepare-upstream.ts --reuse-assets=<verified-payload>` restores validated
+WASM/libraries while rebundling current host/workers from the pinned sources;
+it does not rebuild the compiler toolchain or fetch media. This recovered the
+build after the external scratch drive disconnected. The diagnostic screenshot
+was on that disconnected drive and is unavailable; the measured results above
+were retained independently in the drive transcript.
