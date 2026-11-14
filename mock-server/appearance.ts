@@ -7,7 +7,7 @@ const harbor: V.SkinPack = {
   schema: 1, id: 'harbor', version: '1.0.0', name: 'Harbor', tagline: 'Sea-glass light over a night harbour.', engine: 'cinematic',
   palette: { page: '#06121a', raised: '#0e1c26', ink: '#eaf4f5', inkSecondary: '#a6bbc3', inkQuiet: '#7a8f99', inkInverse: '#08131a',
     accent: '#7fd6cb', ember: '#2a78a8', tide: '#139c8f', dusk: '#2f3c78', live: '#ff6b5e' },
-  fonts: { display: { family: 'Harbor Display', files: [{ url: '/vela/v0/appearance/packs/harbor/1.0.0/display.ttf', weight: 400, style: 'normal' }] } },
+  fonts: { display: { family: 'Harbor Display', sizeAdjust: 78, files: [{ url: '/vela/v0/appearance/packs/harbor/1.0.0/display.ttf', weight: 400, style: 'normal' }] } },
   radius: { card: 20, panel: 36, pill: 999 },
   images: { preview: '/vela/v0/appearance/packs/harbor/1.0.0/preview.svg', backdrop: '/vela/v0/appearance/packs/harbor/1.0.0/backdrop.svg', wordmark: '/vela/v0/appearance/packs/harbor/1.0.0/wordmark.svg' },
   swatches: ['#06121a', '#eaf4f5', '#7fd6cb', '#2a78a8', '#139c8f'],

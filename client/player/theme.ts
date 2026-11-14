@@ -20,8 +20,8 @@ const HEX = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i;
 /** How far (RGB distance) a token may sit from a role and still move with it. */
 const NEAR = 48;
 
-interface Pack { id: string; engine: string; palette: Record<string, string>; tokens: Record<string, string>;
-  fonts: { display?: { family: string; files: { url: string; weight: number; style: string }[] } }; radius: { card?: number; panel?: number; pill?: number } }
+interface Pack { id: string; origin: string; engine: string; palette: Record<string, string>; tokens: Record<string, string>;
+  fonts: { display?: { family: string; sizeAdjust?: number; files: { url: string; weight: number; style: string }[] } }; radius: { card?: number; panel?: number; pill?: number } }
 
 const property = (token: string) => `--x-${token.replace(/[^A-Za-z0-9_-]/g, '-')}`;
 const rgb = (hex: string) => [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16));
@@ -83,8 +83,9 @@ function fontFaces(pack: Pack, name: string): FontFace[] {
   return font.files.flatMap(f => {
     let url: URL;
     try { url = new URL(f.url, location.href); } catch { return []; }
-    if (url.origin !== location.origin || !url.pathname.startsWith('/vela/v0/appearance/') || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname)) return [];
-    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, '')}")`, { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap' });
+    // The server's origin, which the data module pinned (the page's own in a release).
+    if (url.origin !== pack.origin || !url.pathname.startsWith('/vela/v0/appearance/') || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname)) return [];
+    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, '')}")`, { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, font.sizeAdjust ?? 100))}%` });
     document.fonts.add(face);
     void face.load().catch(() => document.fonts.delete(face));
     return [face];

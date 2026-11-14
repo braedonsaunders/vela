@@ -37,7 +37,8 @@ function font(v: PackFont | undefined, origin: string) {
     const weight = length(f?.weight, 1000);
     return url && weight && (f.style === 'normal' || f.style === 'italic') ? [{ url, weight, style: f.style }] : [];
   });
-  return files.length ? { family: v.family, files } : undefined;
+  const sizeAdjust = typeof v.sizeAdjust === 'number' && v.sizeAdjust >= 50 && v.sizeAdjust <= 150 ? Math.round(v.sizeAdjust) : 100;
+  return files.length ? { family: v.family, files, sizeAdjust } : undefined;
 }
 
 /** One pack as the page may apply it, or nothing when any required part is invalid. */
@@ -51,7 +52,7 @@ function pack(p: SkinPack, origin: string): PackEntryModel | undefined {
   const fonts = { display: font(p.fonts?.display, origin), text: font(p.fonts?.text, origin) };
   const image = /\.(svg|png|jpe?g|webp|avif)$/;
   const swatches = (Array.isArray(p.swatches) ? p.swatches : []).slice(0, 5).flatMap(c => colour(c) ?? []);
-  const canonical = { id: p.id, version: text(p.version, 32), engine: p.engine, palette, tokens: colours(p.tokens, 256, TOKEN), fonts, radius };
+  const canonical = { id: p.id, origin, version: text(p.version, 32), engine: p.engine, palette, tokens: colours(p.tokens, 256, TOKEN), fonts, radius };
   return { id: p.id, name, tagline: text(p.tagline, 120), engine: p.engine, preview: asset(p.images?.preview, origin, image), backdrop: asset(p.images?.backdrop, origin, image),
     wordmark: asset(p.images?.wordmark, origin, image), swatches, packJson: JSON.stringify(canonical) };
 }

@@ -154,7 +154,8 @@ export interface LibraryContents extends Page<RowEntry> { library: Library; sort
 /** `#rrggbb` or `#rrggbbaa`, lowercase. */
 export type PackColor = string;
 export interface PackFontFile { url: string; weight: number; style: 'normal' | 'italic' }
-export interface PackFont { family: string; files: PackFontFile[] }
+/** sizeAdjust: percent (50-150) so a face with other metrics keeps the engine's line lengths. */
+export interface PackFont { family: string; files: PackFontFile[]; sizeAdjust?: number }
 export interface SkinPack {
   /** Pack schema; a client ignores a schema it does not implement. */
   schema: 1;
