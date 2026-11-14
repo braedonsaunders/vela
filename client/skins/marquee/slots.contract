@@ -1,4 +1,4 @@
-use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, cardName from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, HeroAction, SearchModel, Viewport, LibraryNav, cardName from "../../foundation/models.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use Glyph, Solid, Wordmark, Spinner, Block, Art, Primary, Secondary, Round, barH, gutter, gutterPx, quick, arrive, kindLabel, mqFade, mqGone, mqRise, mqDrop, mqSlide, mqSpin, mqPulse, mqSheen from "./look.contract"
 
@@ -110,7 +110,7 @@ component Shell
       if viewer != ""
         row position="absolute" top=0 left=0 right=0 height=bar z-index=20 align-items="center" box-sizing="border-box" padding-right=(phone ? 6 : 14) gap=(phone ? 2 : 12) pointer-events="none" background-color=(clearBar ? "marquee.scrim-clear" : "marquee.chrome-glass") backdrop-filter=(clearBar ? "none" : "blur(18px)")
           row width=(phone ? "auto" : `${rail}px`) min-width=(phone ? 0 : 200) flex-shrink=0 box-sizing="border-box" padding-left=(phone ? 4 : 12) gap=(phone ? 4 : 10) align-items="center" pointer-events="auto" -exact-layout-transition=(still ? "none" : "200ms ease-out")
-            button id="marquee-menu-button" press=toggleRail aria-label=(phone ? t("marquee.openNavigation") : t("marquee.toggleSidebar")) aria-expanded=(phone ? drawer : not slim) class=Round width=44 height=44
+            button id="marquee-menu-button" testId="marquee-menu" press=toggleRail aria-label=(phone ? t("marquee.openNavigation") : t("marquee.toggleSidebar")) aria-expanded=(phone ? drawer : not slim) class=Round width=44 height=44
               Glyph(name="menu", size=22)
             link href="/" aria-label=t("ui.velaHome") text-decoration="none" display="flex" align-items="center" padding="6px 4px" border-radius=4
               Wordmark(size=(phone ? 22 : 24))
@@ -367,6 +367,10 @@ style CardButton
   text-align = "left"
   cursor = "pointer"
   outline = "none"
+  :hover
+    background-color = "transparent"
+  :focus-visible
+    background-color = "transparent"
 
 // Artwork is absent: the kind's icon and the title on a quiet panel.
 component Placeholder
@@ -448,6 +452,7 @@ component Spotlight
   props
     hero: Card
     heroes: Card[]
+    actions: HeroAction[]
     count: number
     index: number
     small: bool
@@ -455,6 +460,9 @@ component Spotlight
     selectTitle: action
     observe: action
     pickHero: action
+    playHero: action
+  derive mine = actions.filter(a => a.heroId == hero.id)
+  derive primary = mine.filter(a => a.action != "details" and a.targetId != "").slice(0, 1)
   view
     column position="relative" margin-left=gutter(small) margin-right=gutter(small) margin-bottom=(small ? 20 : 30) height=(small ? "auto" : "clamp(280px, 30vw, 380px)") min-height=(small ? 0 : 280) border-radius=6 overflow="hidden" background-color="marquee.raised" intersect=observe(hero.receipt) animation=arrive(still, 0)
       if small
@@ -468,16 +476,30 @@ component Spotlight
             Art(src=b, still=still)
         column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--marquee.scrim) 0%, var(--marquee.scrim-soft) 40%, var(--marquee.scrim-clear) 72%), linear-gradient(0deg, var(--marquee.scrim-soft) 0%, var(--marquee.scrim-clear) 40%)" aria-hidden=true
       column position=(small ? "relative" : "absolute") left=0 bottom=0 box-sizing="border-box" width=(small ? "100%" : "min(620px, 62%)") padding=(small ? "0px 16px 16px" : "0px 36px 32px") gap=(small ? 8 : 10)
-        text t("ui.featured") font-size=12 font-weight=700 letter-spacing="0.08em" color="marquee.amber"
+        text (match first(mine) { case some(a) => (a.reasonLabel != "" ? a.reasonLabel : t("ui.featured")), case none => t("ui.featured") }) font-size=12 font-weight=700 letter-spacing="0.08em" text-transform="uppercase" color="marquee.amber"
         text hero.name role="heading" aria-level=2 font-size=(small ? 22 : 34) font-weight=700 line-height=1.1 letter-spacing="-0.01em" line-clamp=2
         text ([hero.yearLabel].concat(hero.genres.slice(0, 3)).concat([hero.rating]).filter(f => f != "").join(" · ")) font-size=(small ? 13 : 14) color="marquee.ink-dim" font-variant-numeric="tabular-nums"
         if hero.summary != "" and not small
           text hero.summary font-size=15 color="marquee.ink-dim" line-height=1.5 line-clamp=2
-        row gap=10 align-items="center" margin-top=(small ? 4 : 8)
-          button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) class=Primary height=(small ? 38 : 40) padding="0px 20px"
-            row gap=8 align-items="center"
-              Glyph(name="info", size=18)
-              text t("marquee.moreInfo") font-size=15
+        row gap=10 align-items="center" margin-top=(small ? 4 : 8) flex-wrap="wrap"
+          // The server's predicted action (play, resume, next episode) in amber, then More info.
+          for act in primary key=act.heroId
+            button press=playHero(act.targetId, act.positionSeconds, act.hasPosition) testId="hero-primary" class=Primary height=(small ? 38 : 40) padding="0px 20px"
+              row gap=8 align-items="center"
+                Solid(name="play", size=16)
+                text act.actionLabel font-size=15
+                if act.actionDetail != "" and not small
+                  text act.actionDetail font-size=13 font-weight=600 opacity=0.7
+          if primary.length > 0
+            button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) class=Secondary height=(small ? 38 : 40) padding="0px 18px"
+              row gap=8 align-items="center"
+                Glyph(name="info", size=18)
+                text t("marquee.moreInfo") font-size=15
+          else
+            button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) class=Primary height=(small ? 38 : 40) padding="0px 20px"
+              row gap=8 align-items="center"
+                Glyph(name="info", size=18)
+                text t("marquee.moreInfo") font-size=15
       if count > 1
         row position="absolute" right=(small ? 14 : 24) bottom=(small ? "auto" : "24px") top=(small ? "12px" : "auto") gap=6 role="group" aria-label=t("ui.featuredTitles")
           for h, i in heroes key=h.id
@@ -500,6 +522,7 @@ component Home
     reachRowEnd: action
     homeMoreLoading: bool
     rowMoreLoading: string[]
+    playHero: action
   slot
   derive searching = query != ""
   view
@@ -512,7 +535,7 @@ component Home
           children
       if not searching
         for hero in model.hero.slice(heroIndex, heroIndex + 1) key=hero.id
-          Spotlight(hero=hero, heroes=model.hero, count=model.hero.length, index=heroIndex, small=small, still=still, selectTitle=selectTitle, observe=observe, pickHero=pickHero)
+          Spotlight(hero=hero, heroes=model.hero, actions=model.heroActions, count=model.hero.length, index=heroIndex, small=small, still=still, selectTitle=selectTitle, observe=observe, pickHero=pickHero, playHero=playHero)
         for row, i in model.rows key=row.id
           column animation=arrive(still, min(i, 5) * 40)
             Shelf(row=row, place="home", small=small, still=still, selectTitle=selectTitle, observe=observe)

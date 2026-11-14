@@ -43,8 +43,9 @@ component Guide
   derive row = rowH(small)
   derive rail = railW(small)
   derive width = model.minutes * scale
-  // Open with the landing time a quarter of the way across, so a little of the past shows.
-  derive landingMin = max(0, min(model.minutes - (portW - rail) / scale, model.landing - (portW - rail) / scale / 4))
+  // Open with the landing time (now, on today) a quarter of the way across, so a little of the past shows.
+  derive anchorMin = (model.nowMinute >= 0 ? model.nowMinute : model.landing)
+  derive landingMin = max(0, min(model.minutes - (portW - rail) / scale, anchorMin - (portW - rail) / scale / 4))
   derive col = (colBase < 0 ? floor(landingMin / 30) : colBase)
   derive firstRow = max(0, rowBase - 6)
   derive lastRow = min(rows.length, rowBase + ceil(portH / row) + 8)

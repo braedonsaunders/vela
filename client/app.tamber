@@ -341,6 +341,47 @@ theme
   jellytwin.cat-kids = #d38b1c  scheme=fixed
   jellytwin.cat-other = #5b5b5b  scheme=fixed
 
+  // Marquee: charcoal media-server surfaces, near-black chrome and an amber accent.
+  marquee.page = #1f2023  scheme=fixed
+  marquee.chrome = #121315  scheme=fixed
+  marquee.chrome-glass = #121315f2  scheme=fixed
+  marquee.raised = #2c2e32  scheme=fixed
+  marquee.control = #ffffff1a  scheme=fixed
+  marquee.control-hover = #ffffff2b  scheme=fixed
+  marquee.hover = #ffffff14  scheme=fixed
+  marquee.selected = #ffffff1f  scheme=fixed
+  marquee.line = #ffffff12  scheme=fixed
+  marquee.line-strong = #ffffff29  scheme=fixed
+  marquee.field = #ffffff14  scheme=fixed
+  marquee.field-focus = #ffffff21  scheme=fixed
+  marquee.ink = #eeeeee  scheme=fixed
+  marquee.ink-dim = #a7a9ad  scheme=fixed
+  marquee.ink-faint = #74777c  scheme=fixed
+  marquee.amber = #e9a31b  scheme=fixed
+  marquee.amber-hover = #f5b638  scheme=fixed
+  marquee.amber-deep = #b77c0a  scheme=fixed
+  marquee.amber-soft = #e9a31b2e  scheme=fixed
+  marquee.on-amber = #1a1a1a  scheme=fixed
+  marquee.live = #e5484d  scheme=fixed
+  marquee.track = #ffffff33  scheme=fixed
+  marquee.buffer = #ffffff59  scheme=fixed
+  marquee.scrim = #000000b8  scheme=fixed
+  marquee.scrim-soft = #00000066  scheme=fixed
+  marquee.scrim-faint = #00000033  scheme=fixed
+  marquee.scrim-clear = #00000000  scheme=fixed
+  marquee.page-clear = #1f202300  scheme=fixed
+  marquee.page-veil = #1f2023c4  scheme=fixed
+  marquee.shadow = #00000099  scheme=fixed
+  marquee.menu = #2a2c30  scheme=fixed
+  marquee.skeleton = #ffffff0d  scheme=fixed
+  marquee.skeleton-sheen = #ffffff0f  scheme=fixed
+  marquee.guide-cell = #292b2f  scheme=fixed
+  marquee.guide-cell-hover = #33363b  scheme=fixed
+  marquee.guide-air = #34312a  scheme=fixed
+  marquee.guide-air-hover = #3e3a30  scheme=fixed
+  marquee.guide-rail = #18191b  scheme=fixed
+  marquee.guide-past = #0000004d  scheme=fixed
+
 icons
   icon.mochi-alert = icon(svg "icons/mochi-alert.svg")
   icon.mochi-back = icon(svg "icons/mochi-back.svg")
@@ -382,3 +423,15 @@ icons
   icon.jelly-fastforward = icon(svg "icons/jelly-fastforward.svg")
   icon.jelly-bolt = icon(svg "icons/jelly-bolt.svg")
   icon.jelly-live = icon(svg "icons/jelly-live.svg")
+  icon.marquee-film = icon(svg "icons/marquee-film.svg")
+  icon.marquee-tv = icon(svg "icons/marquee-tv.svg")
+  icon.marquee-stack = icon(svg "icons/marquee-stack.svg")
+  icon.marquee-grid = icon(svg "icons/marquee-grid.svg")
+  icon.marquee-left = icon(svg "icons/marquee-left.svg")
+  icon.marquee-right = icon(svg "icons/marquee-right.svg")
+  icon.marquee-down = icon(svg "icons/marquee-down.svg")
+  icon.marquee-up = icon(svg "icons/marquee-up.svg")
+  icon.marquee-expand = icon(svg "icons/marquee-expand.svg")
+  icon.marquee-pip = icon(svg "icons/marquee-pip.svg")
+  icon.marquee-skip-back = icon(svg "icons/marquee-skip-back.svg")
+  icon.marquee-skip-forward = icon(svg "icons/marquee-skip-forward.svg")

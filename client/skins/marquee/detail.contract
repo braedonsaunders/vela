@@ -113,15 +113,16 @@ component Facts
     playExtra: action
   view
     column gap=(small ? 14 : 16)
-      row gap=10 align-items="center" flex-wrap="wrap"
-        if title.rating != ""
-          text title.rating font-size=12 font-weight=700 padding="2px 6px" border="1px solid var(--marquee.ink-faint)" border-radius=3 color="marquee.ink-dim"
-        if title.durationSeconds > 0 and not small
-          text title.facts.split(" · ").slice(-1).join("") font-size=15 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
-        if title.played
-          row gap=6 align-items="center" color="marquee.ink-dim"
-            Glyph(name="check", size=16)
-            text t("marquee.watched") font-size=14
+      if not small or title.played
+        row gap=10 align-items="center" flex-wrap="wrap"
+          if title.rating != "" and not small
+            text title.rating font-size=12 font-weight=700 padding="2px 6px" border="1px solid var(--marquee.ink-faint)" border-radius=3 color="marquee.ink-dim"
+          if title.durationSeconds > 0 and not small
+            text title.facts.split(" · ").slice(-1).join("") font-size=15 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
+          if title.played
+            row gap=6 align-items="center" color="marquee.ink-dim"
+              Glyph(name="check", size=16)
+              text t("marquee.watched") font-size=14
       if title.genres.length > 0
         row gap=8 flex-wrap="wrap" role="list" aria-label=t("marquee.genres")
           for genre in title.genres key=genre
