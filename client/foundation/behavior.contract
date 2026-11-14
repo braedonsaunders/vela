@@ -224,13 +224,11 @@ members Client
   derive libraryPlayed = searchParam(top(nav), "played")
   derive libraryFavorite = searchParam(top(nav), "fav")
   state libraryPages = 1
-  task resetLibraryOnNavigation when libraryId != "" key=top(nav).id
-    change(resetLibraryPages)
-  action resetLibraryPages
-    libraryPages = 1
-  resource libraryModel = uiLibrary(libraryId, librarySort, libraryDirection, libraryKind, libraryGenre, libraryYear, libraryPlayed, libraryFavorite, libraryPages) with localeJSON, artWidth when auth.authenticated and libraryId != "" as shape LibraryModel
-  derive libraryLoading = (libraryPages <= 1 and (pending(libraryModel) or not current(libraryModel)))
-  derive libraryMoreLoading = (libraryPages > 1 and pending(libraryModel))
+  state libraryPagingEntry = ""
+  derive activeLibraryPages = (libraryPagingEntry == `${top(nav).id}` ? libraryPages : 1)
+  resource libraryModel = uiLibrary(libraryId, librarySort, libraryDirection, libraryKind, libraryGenre, libraryYear, libraryPlayed, libraryFavorite, activeLibraryPages) with localeJSON, artWidth when auth.authenticated and libraryId != "" as shape LibraryModel
+  derive libraryLoading = (activeLibraryPages <= 1 and (pending(libraryModel) or not current(libraryModel)))
+  derive libraryMoreLoading = (activeLibraryPages > 1 and pending(libraryModel))
   action openLibrary(id: string)
     libraryPages = 1
     nav = push(nav, path("library", id))
@@ -242,7 +240,8 @@ members Client
     nav = replace(nav, path("library", libraryId) + libraryQuery(librarySort, libraryDirection, (name == "kind" ? value : libraryKind), (name == "genre" ? value : libraryGenre), (name == "year" ? value : libraryYearText), (name == "played" ? value : libraryPlayed), (name == "favorite" ? value : libraryFavorite)))
   action moreLibrary
     if current(libraryModel) and libraryModel.more and not pending(libraryModel)
-      libraryPages = libraryPages + 1
+      libraryPages = activeLibraryPages + 1
+      libraryPagingEntry = `${top(nav).id}`
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
   resource collection = uiCollection(collectionId) with localeJSON, artWidth when auth.authenticated and collectionId != "" as shape CollectionModel
   resource detail = uiDetail(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape DetailModel
