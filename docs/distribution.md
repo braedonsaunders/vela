@@ -23,7 +23,7 @@ When byte attribution is requested, add `--map-report`: the same captured source
 produces `vela-<version>.bundle.json` with raw/gzip9 entry bytes and plan node
 counts by skin and component. This opt-in measurement is not part of routine builds.
 
-Output under `~/.scratch/tmp/vela/release/`:
+Output under `.artifacts/release/`:
 
 - `vela-<version>.tar.gz`: `index.html` and the complete static tree at archive root.
 - `vela-<version>.manifest.json`: schema version 1, client version, supported wire
@@ -213,3 +213,8 @@ The worker caches these immutable URLs only when requested (including the exact
 while beta is off. The descriptor does not by itself enable or qualify codecs,
 HDR, Dolby Vision or Universal playback; those remain native admission and release
 gates. No artifact build or installation is implied by adding this pipeline.
+
+Release output and temporary engine builds now live under `.artifacts/release/`
+in the current internal checkout. This directory is ignored. Worktrees and build
+outputs must not use the disconnected external Scratch drive; only regenerable
+media fixtures may remain under `~/.scratch/tmp/vela/media/`.
