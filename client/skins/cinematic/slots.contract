@@ -55,7 +55,7 @@ component Shell
               column flex=1
             else
               scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" flex=1 min-width=0 mask-image="linear-gradient(90deg, black 0%, black 90%, transparent 100%)"
-                Destinations(libraries=libraries, section=section, canLive=canLive, chips=false, home=home, live=live, openLibrary=openLibrary)
+                Destinations(libraries=libraries, section=section, canLive=canLive, still=still, chips=false, home=home, live=live, openLibrary=openLibrary)
             button press=findSomething aria-label=t("ui.search") class=IconButton width=40 height=40 padding=10 flex-shrink=0
               image "symbol:search" width=18 height=18
             button id="profile-menu-trigger" press=toggleMenu aria-expanded=menuOpen aria-controls="viewer-settings" aria-label=t("ui.profileAndAppearance") testId="profile-menu" class=NavLink flex-shrink=0 padding-top=4 padding-bottom=4 padding-left=4 padding-right=(compact ? 4 : 14)
@@ -66,7 +66,7 @@ component Shell
           if compact
             scroll position="relative" overflow-x="auto" overflow-y="hidden" scrollbar-width="none" mask-image="linear-gradient(90deg, transparent 0%, black 5%, black 88%, transparent 100%)"
               row padding-left=18 padding-right=18 padding-bottom=8
-                Destinations(libraries=libraries, section=section, canLive=canLive, chips=true, home=home, live=live, openLibrary=openLibrary)
+                Destinations(libraries=libraries, section=section, canLive=canLive, still=still, chips=true, home=home, live=live, openLibrary=openLibrary)
       if viewer != "" and menuOpen
         column id="viewer-settings" position="absolute" top=(compact ? 104 : 78) right=(compact ? 12 : "max(28px, 4vw)") z-index=30 width=260 box-sizing="border-box" padding=20 gap=16 border="1px solid var(--cinematic.glass-edge)" border-radius=20 background-color="cinematic.popover" backdrop-filter="blur(30px) saturate(1.4)" color="ink.primary" box-shadow="0px 30px 80px var(--cinematic.shadow), inset 0px 1px 0px var(--cinematic.ring)" transform-origin="top right" animation=(still ? "dissolve 200ms linear both" : "pop 320ms cubic-bezier(0.16, 1, 0.3, 1) both") -exact-exit-animation=(still ? "vanish 120ms linear both" : "vanish 180ms ease-in both")
           row gap=12 align-items="center"
@@ -95,6 +95,7 @@ component Destinations
     libraries: LibraryNav[]
     section: string
     canLive: bool
+    still: bool
     chips: bool
     home: action
     live: action
@@ -102,15 +103,15 @@ component Destinations
   derive hasLiveLibrary = libraries.filter(l => l.kind == "live").length > 0
   view
     row gap=(chips ? 6 : 2) align-items="center"
-      NavItem(label=t("ui.home"), on=(section == "home"), chip=chips, press=home)
+      NavItem(label=t("ui.home"), on=(section == "home"), chip=chips, still=still, press=home)
       for lib in libraries key=lib.id
         if lib.kind == "live"
           if canLive
-            NavItem(label=lib.name, on=(section == "live"), chip=chips, press=live)
+            NavItem(label=lib.name, on=(section == "live"), chip=chips, still=still, press=live)
         else
-          NavItem(label=lib.name, on=(section == lib.id), chip=chips, press=openLibrary(lib.id))
+          NavItem(label=lib.name, on=(section == lib.id), chip=chips, still=still, press=openLibrary(lib.id))
       if canLive and not hasLiveLibrary
-        NavItem(label=t("ui.live"), on=(section == "live"), chip=chips, press=live)
+        NavItem(label=t("ui.live"), on=(section == "live"), chip=chips, still=still, press=live)
 
 // A primary destination in the top bar; the current one carries a soft underline glow.
 component NavItem
@@ -118,6 +119,7 @@ component NavItem
     label: string
     on: bool
     chip: bool
+    still: bool
     press: action
   view
     if chip
@@ -125,13 +127,13 @@ component NavItem
         :focus-visible
           box-shadow="0px 0px 0px 2px var(--brand.warm)"
         if on
-          column sharedElement="nav-chip" -exact-layout-transition="460ms ease-out" position="absolute" inset=-1 border-radius=999 background-color="ink.primary" aria-hidden=true
+          column sharedElement="nav-chip" -exact-layout-transition=(still ? "none" : "460ms ease-out") position="absolute" inset=-1 border-radius=999 background-color="ink.primary" aria-hidden=true
         text label position="relative" font-size=13 font-weight=600 white-space="nowrap"
     else
       button press=press() testId=`nav-${label}` aria-current=(on ? "page" : "false") class=NavLink position="relative" flex-shrink=0 color=(on ? "ink.primary" : "ink.secondary")
         text label font-size=14 font-weight=(on ? 650 : 550) white-space="nowrap"
         if on
-          column sharedElement="nav-underline" -exact-layout-transition="460ms ease-out" position="absolute" left=14 right=14 bottom=4 height=2 border-radius=1 background-color="brand.warm" aria-hidden=true
+          column sharedElement="nav-underline" -exact-layout-transition=(still ? "none" : "460ms ease-out") position="absolute" left=14 right=14 bottom=4 height=2 border-radius=1 background-color="brand.warm" aria-hidden=true
 
 style NavLink
   display = "flex"
