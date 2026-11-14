@@ -43,7 +43,7 @@ component Guide
       text `${model.fromLabel} – ${model.untilLabel}` color="ink.secondary" font-size=13
       for channel in model.channels.filter(c => c.id == selectedChannel) key=`sheet-${channel.id}`
         for programme in channel.programmes.filter(p => p.id == selectedProgramme) key=programme.id
-          column id="programme-sheet" tabindex=-1 key=sheetKey role="dialog" aria-label=programme.name gap=12 padding=24 border="1px solid var(--surface.line)" border-radius=16 background-color="surface.raised" max-width=560
+          column id="programme-sheet" tabindex=-1 key=sheetKey role="region" aria-label=programme.name gap=12 padding=24 border="1px solid var(--surface.line)" border-radius=16 background-color="surface.raised" max-width=560
             row gap=12 align-items="center"
               column gap=6 flex=1
                 text channel.name font-size=12 color="brand.warm"
