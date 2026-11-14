@@ -8,6 +8,7 @@ import { liveStatus } from './live/player';
 import { InteractionQueue } from './telemetry';
 import { sessionEvents } from './protocol/events';
 import { mediaPlan } from './protocol/media';
+import { randomId } from './protocol/id';
 import { playerPresentation } from '../player/presentation';
 import { setLocale, time, withLocale } from '../foundation/i18n';
 
@@ -53,7 +54,7 @@ function server(store: Parameters<Sources['uiBootstrap']>[1], media?: MediaCapab
   if (!adapter) {
     if (!media) throw new Error('Media capabilities are unavailable');
     let id = store.get('vela.device');
-    if (!id) { id = crypto.randomUUID(); store.set('vela.device', id); }
+    if (!id) { id = randomId(); store.set('vela.device', id); }
     device = { id, name: 'Vela browser', platform: 'web', appVersion: version };
     client = { device, protocolVersions: [0], ...media };
     const credentials = new SessionCredentials(store, device, () => key(store));
