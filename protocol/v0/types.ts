@@ -45,10 +45,12 @@ export interface Title {
   showId?: ID; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
 }
 export interface Extra { id: ID; parentId: ID; kind: 'trailer' | 'clip' | 'featurette' | 'other'; name: string;
-  durationSeconds?: number; artwork?: ArtworkRef; availability: 'ready' | 'unresolved' | 'unavailable' }
+  durationSeconds?: number; artwork?: ArtworkRef; cachedPlayback?: { status: 'ready'; url: string; expiresAt: Timestamp }; availability: 'ready' | 'unresolved' | 'unavailable' }
 export interface Chapter { id: ID; name: string; startSeconds: number; endSeconds?: number }
+/** Verified source stream facts only; omitted when streams are estimated or unknown. */
+export interface MediaSummary { video: { codec?: string; width?: number; height?: number; bitDepth?: number; colorTransfer?: string; dolbyVisionProfile?: number }[]; audio: { codec?: string; channels?: number; language?: string }[] }
 export interface TitleDetail { title: Title; canPlay?: boolean; seasons?: Title[]; episodes?: Title[];
-  extras: Extra[]; chapters: Chapter[]; cast: { name: string; role?: string; artwork?: ArtworkRef }[] }
+  extras: Extra[]; chapters: Chapter[]; crew?: { name: string; role?: string }[]; mediaSummary?: MediaSummary; cast: { name: string; role?: string; artwork?: ArtworkRef }[] }
 export type RowEntry = { id: ID; receiptToken: string } & (
   { kind: 'title'; title: Title } | { kind: 'channel'; channel: Channel } |
   { kind: 'collection' | 'playlist' | 'directory'; name: string; artwork: ArtworkRef[]; targetId: ID });

@@ -88,7 +88,15 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, hero: { title: titles[0], receiptToken: receipt(g, 'hero') }, rows: rows.map(r => boundRow(g, r)) } satisfies V.Bootstrap, g.id);
-  if (method === 'GET' && path === '/rows') return cached(req, page(rows.map(r => boundRow(g, r)), url, g, 'rows'), g.id);
+  if (method === 'GET' && path === '/rows') {
+    const placement = url.searchParams.get('placement') ?? 'home';
+    if (!['home','detail','library'].includes(placement)) fail('request', 'invalid_placement', 'Unknown row placement');
+    if (placement === 'detail') {
+      if (!detail(url.searchParams.get('titleId') ?? '')) fail('not-found', 'title_not_found', 'Detail title not found');
+      return cached(req, { items: [], continuation: 'exhausted' }, g.id);
+    }
+    return cached(req, page(placement === 'home' ? rows.map(r => boundRow(g, r)) : [], url, g, `rows:${placement}`), g.id);
+  }
   const collectionMatch = /^\/collections\/([^/]+)$/.exec(path);
   if (method === 'GET' && collectionMatch) {
     const row = rows.find(r => r.id === collectionMatch[1]);

@@ -157,3 +157,11 @@ Source/timeline IDs are omitted when unknown; absence never proves compatibility
 Collections, playlists and directories use `/collections/:id`; Collection.kind
 identifies the destination. Contents are RowEntry values in server order with
 viewer-bound receipt tokens. Cache and cursor rules are identical to rows.
+
+TitleDetail.mediaSummary contains only known fields from verified, non-estimated
+source tracks, without resolving media during browsing. Crew is an optional
+name/role list, deduplicated by person/job. A show may include default-season
+episodes alongside seasons; child/detail endpoints remain authoritative for
+explicit season navigation. Extra.cachedPlayback is present only for ready cached
+media with a current broker-scoped URL and expiry; metadata availability alone
+never authorizes trailer autoplay. Omit cachedPlayback without that capability.

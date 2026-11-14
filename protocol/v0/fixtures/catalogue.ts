@@ -35,7 +35,7 @@ export const extras: Extra[] = [{ id: 'extra-meridian-trailer', parentId: show.i
 export function detail(id: string): TitleDetail | undefined {
   const title = allTitles.find(t => t.id === id);
   return title && { title, canPlay: title.kind === 'movie' || title.kind === 'episode',
-    ...(title.kind === 'show' ? { seasons } : title.kind === 'season' ? { episodes: episodes.filter(e => e.seasonId === id) } : {}),
+    ...(title.kind === 'show' ? { seasons, episodes: episodes.filter(e => e.seasonId === seasons[0]?.id) } : title.kind === 'season' ? { episodes: episodes.filter(e => e.seasonId === id) } : {}),
     extras: extras.filter(e => e.parentId === id), chapters: [], cast: [] };
 }
 // Unbound fixtures are bound to a grant by the HTTP layer before delivery.
