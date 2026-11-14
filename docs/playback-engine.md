@@ -1181,3 +1181,36 @@ The Mummy (1959), HEVC Main10/1080p SDR + E-AC-3 mono; and Model Citizen (2026),
 HEVC Main10/2160p SDR + AAC5.1. Probe factsVersion6 omitted field order, so these
 are not evidence of progressive scan. No HEVC, HDR/DV7, or new live qualification
 has yet occurred; each lab stream still needs fresh owner-idle clearance.
+
+### The Mummy (1999) lab qualification — source/admission blocked
+
+Standing owner authorization permits polite sequential lab drives. A conservative
+HEVC/E-AC-3 declaration first returned a remux plan: the selected default audio
+was Italian AC-3, outside that deliberately narrowed audio declaration. That
+unused session was stopped200/ended with **zero media reads**.
+
+After restoring the full detected audio declarations and explicitly requesting
+the offered English E-AC-3 track2, the broker selected a different best release:
+4K HEVC Main10,23.976fps,10-bit BT.2020/PQ/DV8 compatibility1. Its selected track2
+was now reported as English AAC7-channel, not the earlier SDR/E-AC-3 source.
+The plan returned in137.3ms; the original probe rejected a channel-count mismatch
+before any GPU frame. The old generic message did not retain the actual container
+count, so a value such as8 must not be inferred. The diagnostic now includes
+both `broker=<count>` and `container=<count>` in future ordinary playback errors.
+No HEVC SDR, DV8, E-AC-3, seek or sync pass is claimed for this drive.
+
+Automatic fallback ran. A proposed64KiB private-header artifact was rejected by
+automatic approval review because capture/storage was not explicitly authorized;
+no capture occurred and no indirect capture was attempted. The browser session
+subsequently vanished before cleanup commands could run; no client stop/revoke
+ACK is claimed. Ether independently confirmed the transcode closed16:42:06,
+broker playback ended16:42:06.658, lease released and zero FFmpeg children; the
+owner signed out the test-only viewer, revoking6 auth records. Only then was
+Vela0.1.27 installed,1013/1013 files verified.
+
+The broker chooses a best release for the declared profile. Persisted probe
+candidates do not pin the source used by a later session. A controlled real-title
+HEVC SDR result therefore needs a supported release-pinning mechanism, or must
+qualify the actual returned release and codec facts honestly. The metadata
+mismatch was handed to Ether with exact broker facts; its container-side count
+remains unavailable for this stopped session.

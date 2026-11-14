@@ -55,7 +55,7 @@ export async function probeOriginal(media: OriginalMedia, signal: AbortSignal): 
       const track = audios[selected];
       if (!track) throw new Error('Selected original audio track does not exist in the container');
       const [channels, sampleRate, channelMask, nativeSupported] = await Promise.all([track.getNumberOfChannels(), track.getSampleRate(), track.getChannelMask(), track.canDecode()]);
-      if (ordered[selected].channels !== undefined && ordered[selected].channels !== channels) throw new Error('Original audio layout differs from broker metadata');
+      if (ordered[selected].channels !== undefined && ordered[selected].channels !== channels) throw new Error(`Original audio channels differ for ${ordered[selected].id}: broker=${ordered[selected].channels}, container=${channels}`);
       ordered[selected] = {...ordered[selected], channels, sampleRate, channelMask, nativeSupported};
     }
     const description = config?.description;
