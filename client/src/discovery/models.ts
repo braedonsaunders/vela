@@ -64,5 +64,12 @@ export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560)
   return { title: [card(data.title, '', origin, artWidth)], related: [], mediaFacts: facts, resumePosition: clock(data.title.watch?.positionSeconds ?? 0), crew: (data.crew ?? []).map(c => c.role ? `${c.name} · ${c.role}` : c.name), canPlay: data.canPlay ?? false, resumeSeconds: data.title.watch?.positionSeconds ?? 0,
     seasons: (data.seasons ?? []).map(t => card(t, '', origin, artWidth)), episodes: (data.episodes ?? []).map(t => card(t, '', origin, artWidth)),
     extras: data.extras.map(e => ({ id: e.id, name: e.name, kind: e.kind, ready: e.availability === 'ready' })),
-    cast: data.cast.map(c => c.role ? `${c.name} · ${c.role}` : c.name) };
+    cast: data.cast.map(c => c.role ? `${c.name} · ${c.role}` : c.name),
+    castPeople: data.cast.map(c => {
+      let portrait = '';
+      if (c.artwork) {
+        try { portrait = artworkURL(c.artwork, 160, 160, origin) ?? ''; } catch { /* Malformed optional artwork is unavailable. */ }
+      }
+      return { name: c.name, role: c.role ?? '', portrait };
+    }) };
 }

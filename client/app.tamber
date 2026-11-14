@@ -182,8 +182,10 @@ theme
   cinematic.nav-scrim = #07090cb3  scheme=fixed
     when pack=installed: #07090cb2
   cinematic.toolbar = #090b0ed1  scheme=fixed
-  cinematic.rank = #2a303a  scheme=fixed
-  cinematic.rank-edge = #f5f1e9cc  scheme=fixed
+  cinematic.secure = #dcb99812  scheme=fixed
+  cinematic.secure-edge = #dcb99840  scheme=fixed
+  cinematic.rank-fill = #0e1116  scheme=fixed
+  cinematic.rank-stroke = #d9d3c7  scheme=fixed
     when pack=installed: #090b0ed0
   cinematic.ink-track = #11141933  scheme=fixed
     when pack=installed: #11141932

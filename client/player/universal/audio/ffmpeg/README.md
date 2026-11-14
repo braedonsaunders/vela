@@ -42,3 +42,11 @@ speaker mapping. AC-3, E-AC-3, DTS and TrueHD keep their specialized packages.
 Vela enables the linked peak limiter even for stereo passthrough: floating-point
 PCM is allowed to carry samples above full scale without a downmix. This adds
 limiter lookahead, which the existing pipeline/clock already accounts for.
+
+To assemble an already built distribution without downloading or rebuilding:
+
+    bun client/player/universal/audio/install-packages.ts <destination> --from=<prepared-directory>
+
+The prepared directory must contain all four hash-pinned modules and all matching
+source archives/licences/source-offer files. A missing general package or source
+file fails preparation rather than producing a partially working runtime.

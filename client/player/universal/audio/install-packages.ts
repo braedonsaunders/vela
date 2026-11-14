@@ -1,11 +1,30 @@
 // bun client/player/universal/audio/install-packages.ts <served-decoder-directory>
 // Installs binaries WITH corresponding source and licenses, never into app bundle.
-import { mkdir } from 'node:fs/promises';
+import { mkdir, copyFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { audioPackages, audioPackageRelease, audioSourceFiles } from './packages';
 const target = process.argv[2];
 if (!target) throw new Error('Supply an output directory for separately served audio modules and source');
 await mkdir(resolve(target), { recursive: true });
+const prepared = process.argv.find(arg => arg.startsWith('--from='))?.slice(7);
+if (prepared) {
+  const source = resolve(prepared), destination = resolve(target);
+  for (const entry of Object.values(audioPackages)) {
+    const file = Bun.file(resolve(source, entry.file));
+    if (!await file.exists()) throw new Error(`Prepared audio input lacks ${entry.file}`);
+    const hash = new Bun.CryptoHasher('sha256').update(await file.arrayBuffer()).digest('hex');
+    if (hash !== entry.sha256) throw new Error(`Prepared ${entry.file}: integrity mismatch`);
+  }
+  const files = [...Object.values(audioPackages).map(p => p.file), ...audioSourceFiles,
+    'SOURCE.txt', 'vela-audio.json', 'vela-audio-source.tar.gz', 'VELA-AUDIO-SOURCE.txt'];
+  for (const file of files) {
+    const input = resolve(source, file);
+    if (!await Bun.file(input).exists()) throw new Error(`Prepared audio input lacks required corresponding-source/licence file ${file}`);
+    if (source !== destination) await copyFile(input, resolve(destination, file));
+  }
+  console.log(`Installed verified prepared audio modules and corresponding source from ${source}`);
+  process.exit(0);
+}
 const sumsResponse = await fetch(audioPackageRelease + 'SHA256SUMS');
 if (!sumsResponse.ok) throw new Error(`Audio release checksums HTTP ${sumsResponse.status}`);
 const checksums = new Map((await sumsResponse.text()).trim().split('\n').map(line => {

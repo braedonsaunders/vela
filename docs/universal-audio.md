@@ -246,3 +246,72 @@ mapping or long-run synchronization. Generate/remux it with
 `bun mock-server/scripts/make-audio-reference-media.ts`; it verifies the source
 hash and preserves the adjacent Apache licence/provenance. The session-granted
 mock resource is `audio/truehd-bed-7.1.mkv`.
+
+## Ether segment feeder and MSE timestamp gate
+
+`feedEtherAudio(descriptor, requestedPosition, existingBackend, generation, signal)`
+feeds the existing OwnedNativeMediaAudioBackendPort. It creates no clock or media
+source of its own. Its owner starts the backend, controls playback/gain, and reads
+that backend's qualified clock. It fetches one <=2 MiB fragment at a time, delegates
+backpressure to the backend, rejects >2s fragments, bounds/retries network reads,
+and anchors relative playlist segment 0 at the absolute requested position.
+
+Prepared decoder assets can be installed without recompiling:
+
+    bun client/player/universal/audio/install-packages.ts <served-dir> --from=<prepared-dir>
+
+That mode verifies all four module hashes and requires matching source archives,
+licences and offers. The audio worker's prepared directory is
+`~/.scratch/tmp/vela/audio-packages/`; it is scratch, not a durable release store.
+
+Ether fragment-bound fix e036a0c94 uses 1.536s AAC fragments with bounded folded
+tails and TARGETDURATION 2. Its worker measured all fragment spans <=2s and sizes
+<2 MiB. This resolved the existing native backend's fragment limits.
+
+A subsequent local Chrome MSE drive caught a **separate timeline defect** in the
+representative FFmpeg muxing: FFprobe reported first audio PTS 3.978667 for a 4s
+start, but the actual first tfdt was 0. The init carried a two-entry elst with an
+empty edit for the offset. Chrome MSE ignored that lead-in, producing a zero-based
+buffer. A requested 4s start reached the 4.032s audio end; a requested 6s replacement
+never qualified its clock. Old-generation stop correctly returned false after the
+new generation started, but this was **not** a timeline/playback pass.
+
+`use_editlist=0` alone removed elst but left tfdt at zero, so it was insufficient.
+Ether's coordinator kept audioFallback unadvertised and assigned a mux/real-MSE
+fix. `assertEtherAudioTimeline` now checks the actual init/audio track/timescale,
+rejects edit lists, and requires the first fragment tfdt within 125ms of the
+requested title time **before any media is appended**. It does not rewrite PTS
+or infer an offset from the request. A broken producer fails explicitly instead
+of exposing the wrong audio master clock. Full fixed-producer/native-view
+qualification remains pending.
+
+### Fixed producer → shipping feeder/native backend pass
+
+Ether's corrected producer uses inner MP4 muxer settings
+`use_editlist=0:avoid_negative_ts=make_non_negative` with
+`frag_discont+skip_sidx`. Disabling edit lists alone was insufficient: the inner
+muxer's automatic timestamp policy still rebased positive starts. The explicit
+make_non_negative policy preserves positive starts while avoiding uint64 wrap
+from AAC's negative encoder priming at position zero.
+
+Ether worker thr_6vb4x5qven captured actual server output at 0/4/6s. It measured no
+edts, mdhd timescale 48,000 and first tfdt 0 / 190,976 / 286,976 respectively. Its
+Chrome MSE check observed buffers 0..10.021333 / 3.978666..9.999999 /
+5.978666..9.999999, and advancing clocks after seeks. That is the producing
+worker's evidence; those bytes were then independently exercised in Vela's path.
+
+The audio worker copied the real 4/6s captures and ran **shipping feedEtherAudio +
+OwnedNativeMediaAudioBackend**, with the new init/tfdt guard, in local Chrome:
+
+| Action | Actual observation |
+| --- | --- |
+| Start generation 1 at absolute 4s | Qualified audio clock advanced to 5.111089s; four media fragments appended |
+| Retire 1, start generation 2 at 6s | Qualified clock advanced to 6.427438s; three media fragments appended |
+| Late stop for old generation 1 | Returned false; generation 2 kept playing |
+| Generation 2 end-of-title | Audio ended event at 9.999999s; zero pending appends |
+
+This qualifies the isolated shipping feeder/backend against fixed server-produced
+bytes, including nonzero starts, retirement and EOS. It does not establish full
+native-view recovery with video still direct, source-switch UI, lip-sync or a
+human listening pass. The dedicated browser, temporary HTTP server and owned
+media work were stopped. No lab stream was opened.

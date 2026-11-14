@@ -56,6 +56,10 @@ component Shell
     libraries: LibraryNav[]
     section: string
     openLibrary: action
+    secureOrigin: string
+    secureBusy: bool
+    secureError: string
+    goSecure: action
   slot
   view
     if skin == "mochi"
@@ -77,7 +81,7 @@ component Shell
             MarqueeShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
               children
           else
-            CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary)
+            CineShell(skin=skin, viewer=viewer, skins=skins, chooseSkin=chooseSkin, signOut=signOut, viewport=viewport, canLive=canLive, canLibrary=canLibrary, home=home, search=search, live=live, library=library, libraries=libraries, section=section, openLibrary=openLibrary, secureOrigin=secureOrigin, secureBusy=secureBusy, secureError=secureError, goSecure=goSecure)
               children
 
 component Home
@@ -495,6 +499,10 @@ component SignIn
     editPassword: action
     submit: action
     quick: action
+    secureOrigin: string
+    secureBusy: bool
+    secureError: string
+    goSecure: action
   view
     if skin == "mochi"
       MochiSignIn(username=username, password=password, passwordAvailable=passwordAvailable, quickAvailable=quickAvailable, error=error, busy=busy, still=still, editUsername=editUsername, editPassword=editPassword, submit=submit, quick=quick)
@@ -504,7 +512,7 @@ component SignIn
       else if skin == "marquee"
         MarqueeSignIn(username=username, password=password, passwordAvailable=passwordAvailable, quickAvailable=quickAvailable, error=error, busy=busy, still=still, editUsername=editUsername, editPassword=editPassword, submit=submit, quick=quick)
       else
-        CineSignIn(username=username, password=password, passwordAvailable=passwordAvailable, quickAvailable=quickAvailable, error=error, busy=busy, still=still, editUsername=editUsername, editPassword=editPassword, submit=submit, quick=quick)
+        CineSignIn(username=username, password=password, passwordAvailable=passwordAvailable, quickAvailable=quickAvailable, error=error, busy=busy, still=still, editUsername=editUsername, editPassword=editPassword, submit=submit, quick=quick, secureOrigin=secureOrigin, secureBusy=secureBusy, secureError=secureError, goSecure=goSecure)
 
 component QuickConnect
   props
