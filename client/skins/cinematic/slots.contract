@@ -259,8 +259,12 @@ component Shelf
       scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" mask-image="linear-gradient(90deg, black 0%, black 94%, transparent 100%)" scroll=scrolled
         row gap=(small ? 12 : 18) align-items="flex-start" padding-top=(small ? 14 : 16) padding-bottom=(small ? 18 : 22) padding-left=gutter(small) padding-right=gutter(small)
           for card, i in row.items key=card.id
-            column position="relative" z-index=(preview.cardId == card.id ? 5 : 0) animation=enter(still, stagger(i, 45, 8))
-              TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false, rowId=row.id, previewable=row.previewOnFocus, preview=preview, intent=intent)
+            // A ranked row (Top 10) sets each of its first ten posters on a large rank numeral, in server order.
+            row position="relative" z-index=(preview.cardId == card.id ? 5 : 0) align-items="flex-end" animation=enter(still, stagger(i, 45, 8))
+              if row.presentation == "ranked" and i < 10
+                text formatNumber(i + 1, "decimal") aria-hidden=true class=Display font-size=(small ? 104 : 176) line-height=0.78 letter-spacing="-0.06em" color="cinematic.rank" text-shadow="0px 0px 2px var(--cinematic.rank-edge)" margin-right=(small ? -8 : -12) padding-bottom=(small ? 46 : 52) flex-shrink=0
+              column position="relative"
+                TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=false, rowId=row.id, previewable=row.previewOnFocus, preview=preview, intent=intent)
           children
 
 // A row-shaped placeholder while titles load.

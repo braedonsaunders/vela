@@ -208,3 +208,41 @@ The lab HTTPS page loaded without a DNS rebinding problem. Capability-only probe
 at `https://192-168-68-65.9cf6a8a376b9403baf1de133251c4c46.plex.direct:32550`
 returned isSecureContext=true, a WebGPU adapter, AudioDecoder, AudioWorklet and
 maxChannelCount=2. No lab media session or stream was opened.
+
+## Admission and demux integration follow-up
+
+The initial browser decode figures above did not exercise the full controller's
+eligibility gate. The lead identified that distinction before advertising the
+family coverage. The build-time hook now also extends these pinned host gates:
+
+- ALAC / MP1 / MP2 are package codecs and have metadata aliases.
+- A missing native capability entry is treated as unsupported, avoiding an
+  undefined-property error and requiring an actually offered decoder package.
+- Generic package PCM names map underscores to the manifest's required hyphens.
+- Container admission is narrow: ALAC in MP4/Matroska, MP1/MP2 in Matroska;
+  existing WMA and PCM container rules remain. The 46 compiled codec families
+  are not blanket-added to every container whitelist.
+
+The host eligibility bundle and both worker bundles compile with these hooks.
+A separate source integration drive used the **actual pinned Mediabunny demuxer**,
+its packet reader, the VLA1 metadata helper and the real general decoder:
+
+| Container route | Frames | Private metadata result |
+| --- | ---: | --- |
+| ALAC Matroska | 480,000 | A_ALAC raw private bytes preserved; 5.1 mask 0x3f |
+| ALAC MP4 | 96,000 | Actual alac atom preserved; stereo |
+| MP2 Matroska | 96,768 | A_MPEG/L2 codec-less packets accepted; stereo |
+| WMA v2 ASF | 94,208 | Actual WAVEFORMATEX split to context/extradata; stereo |
+
+This establishes demux/private-byte wiring for these routes. Full audiovisual
+controller/native-view qualification remains with the playback lead.
+
+The pinned upstream Apache-2.0 TrueHD channel-bed reference fba_atmos_cbi.mlp
+(SHA-256 4bb63a8e0e0b2ae86d4dd58a55ace5ec78fd9ff0ceb514c601e0f413ac25b53c)
+also decoded through the real truehd.wasm: 136 access units, 5,440 frames, eight
+planes, mask 0x63f, nonzero sample peak 0.16704595. This short 113ms reference
+qualifies the decoder's 7.1 Atmos channel-bed presentation, not physical channel
+mapping or long-run synchronization. Generate/remux it with
+`bun mock-server/scripts/make-audio-reference-media.ts`; it verifies the source
+hash and preserves the adjacent Apache licence/provenance. The session-granted
+mock resource is `audio/truehd-bed-7.1.mkv`.
