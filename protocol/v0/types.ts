@@ -6,7 +6,9 @@ export interface Page<T> { items: T[]; nextCursor?: Cursor; continuation: 'more'
 export interface Mutation { idempotencyKey: string }
 export interface Ack { accepted: true }
 export interface Device { id: ID; name: string; platform: string; appVersion: string }
+export interface OriginalPlaybackCapabilities { version: 1; range: true; demuxContainers: string[]; videoDecoders: string[]; audioDecoders: string[]; webgpu: boolean }
 export interface ClientCapabilities {
+  originalPlayback?: OriginalPlaybackCapabilities;
   device: Device; protocolVersions: number[]; containers: string[]; videoCodecs: string[];
   audioCodecs: string[]; subtitleFormats: string[]; /** Native HLS acceptance, independent of MSE. */ hls: boolean; mse: boolean;
   maxWidth?: number; maxHeight?: number; maxBitrate?: number; hdr?: string[];
@@ -75,7 +77,7 @@ export interface Interaction { receiptToken: string; kind: 'visible' | 'selected
   /** Visible means actually in the visible viewport; never merely prefetched. */
   visibleMilliseconds?: number; sessionId?: ID }
 export interface InteractionsRequest extends Mutation { interactions: Interaction[] }
-export interface Track { id: ID; kind: 'audio' | 'subtitle'; language: string; name: string; codec: string;
+export interface Track { streamIndex?: number; id: ID; kind: 'audio' | 'subtitle'; language: string; name: string; codec: string;
   channels?: number; forced?: boolean; hearingImpaired?: boolean; default?: boolean; url?: string }
 export interface AudioRendition { trackId: ID; groupId: ID; url: string; mimeType: string; bitrate?: number }
 export interface Quality { id: ID; width: number; height: number; bitrate: number; videoCodec: string; audioCodec?: string; url: string; codecStatus?: 'pending' | 'verified'; audioGroupId?: ID }
@@ -87,7 +89,7 @@ export type TrailerPreviewResponse = { state: 'ready'; grant: PreviewGrant } |
 export interface SwitchBoundary { atSeconds: number; independent: boolean; timelineId: ID;
   /** Source replacement requires this compatibility proof, not just a matching title. */
   compatibility: 'same-source' | 'verified-timeline'; audioTrackIds: ID[]; subtitleTrackIds: ID[] }
-export interface PlaybackPath { id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
+export interface PlaybackPath { original?: boolean; range?: boolean; byteLength?: number; id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
   url: string; mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
   timelineOriginSeconds?: number; initialRenditionId?: ID; audioRenditions?: AudioRendition[];
   readiness: 'ready' | 'preparing' | 'unavailable'; qualities: Quality[]; boundaries: SwitchBoundary[] }
