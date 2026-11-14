@@ -1626,7 +1626,7 @@ class PlaybackEngine {
     this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? false;
     const preferred = this.audioPreference;
     const selected = session.sources.find((s) => s.id === session.selectedSourceId);
-    this.audio = preferred && selected?.audioRenditions?.some((a) => a.trackId === preferred) ? preferred : session.audioTrackId ?? null;
+    this.audio = preferred && (selected?.audioRenditions?.some((a) => a.trackId === preferred) || selected?.original && session.audioTracks.some((track) => track.id === preferred)) ? preferred : session.audioTrackId ?? null;
     this.subtitle = session.subtitleTrackId ?? null;
     const source = this.candidates().find((s) => s.id === session.selectedSourceId) ?? this.candidates().find((s) => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) {
@@ -1658,6 +1658,8 @@ class PlaybackEngine {
       this.applySubtitle();
     }
     if ((session.audioTrackId ?? null) !== this.audio) {
+      if (this.original && this.audioPreference === this.audio && session.audioTracks.some((track) => track.id === this.audio))
+        return;
       const previous = this.audio;
       const preferred = this.audioPreference;
       const selected = session.sources.find((s) => s.id === session.selectedSourceId);
