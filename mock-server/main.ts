@@ -133,7 +133,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
-    const heroes = featuredSources.map(({ title, rowId }): V.Hero => ({ title, receiptToken: receipt(g, `hero:${title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
+    const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
     const firstPage = new URL(url); firstPage.search = '';
     const home = homeRows(g, firstPage);
     return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}) } satisfies V.Bootstrap, g.id);

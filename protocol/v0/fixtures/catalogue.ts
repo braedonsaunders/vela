@@ -1,4 +1,4 @@
-import type { ArtworkRef, Channel, Extra, Programme, Row, Title, TitleDetail } from '../types';
+import type { ArtworkRef, Channel, Extra, Hero, Programme, Row, Title, TitleDetail } from '../types';
 
 export function artwork(id: string, kind: ArtworkRef['kind'] = 'poster'): ArtworkRef {
   const wide = kind !== 'poster';
@@ -39,7 +39,14 @@ export function detail(id: string): TitleDetail | undefined {
     extras: extras.filter(e => e.parentId === id), chapters: [], cast: [] };
 }
 // Unbound fixtures are bound to a grant by the HTTP layer before delivery.
-export const featuredSources = [0, 1, 2, 3].map(row => ({ title: titles[row * 15]!, rowId: `row-${row + 1}` }));
+export const featuredSources: (Pick<Hero, 'title' | 'reason' | 'action' | 'label'> & { rowId: string })[] = [
+  { title: titles[0]!, rowId: 'row-1', reason: 'resume', action: { kind: 'resume', titleId: titles[0]!.id, positionSeconds: titles[0]!.watch!.positionSeconds }, label: 'Continue watching' },
+  { title: episodes[2]!, rowId: 'row-1', reason: 'nextEpisode', action: { kind: 'play', titleId: episodes[2]!.id, positionSeconds: 0 }, label: 'S1 · E3 · New episode' },
+  { title: titles[30]!, rowId: 'row-3', reason: 'forYou', action: { kind: 'details', titleId: titles[30]!.id }, label: 'Picked for you' },
+  { title: titles[45]!, rowId: 'row-4', reason: 'trending', action: { kind: 'play', titleId: titles[45]!.id, positionSeconds: 0 }, label: 'Popular this week' },
+  { title: titles[15]!, rowId: 'row-2', reason: 'newRelease', action: { kind: 'play', titleId: titles[15]!.id, positionSeconds: 0 }, label: 'Recently added' },
+  { title: titles[60]!, rowId: 'row-5', reason: 'featured', action: { kind: 'details', titleId: titles[60]!.id }, label: 'Pinned by your host' },
+];
 export const featuredTitles = featuredSources.map(source => source.title);
 const featuredIds = new Set(featuredTitles.map(t => t.id));
 export const rows: Row[] = collections.map(([name], row) => ({ id: `row-${row + 1}`, name: name!, purpose: row === 0 ? 'recommendation' : 'collection', receiptToken: `row-${row + 1}`, previewOnFocus: row % 2 === 0, style: row === 3 ? 'landscape' : 'poster', items: titles.slice(row * 15, row * 15 + 15).filter(t => !featuredIds.has(t.id)).map(t => ({ id: `${row + 1}:${t.id}`, kind: 'title', title: t, receiptToken: `${row + 1}:${t.id}` })), continuation: 'exhausted' }));

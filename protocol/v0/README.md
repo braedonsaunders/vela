@@ -81,15 +81,45 @@ and ExtraStreams; live data uses LiveTV. Capability declarations pass through ho
 capability policy and do not prove hardware decoding. Plans use the session broker;
 source substitution must validate edition, timeline, codecs and track mappings.
 
-Bootstrap.heroes is an optional ordered list of at most five featured titles from
+Bootstrap.heroes is an optional ordered list of at most six featured titles from
 the personalized experience service. Each Hero preserves its issued receiptToken;
 policy-filter and deduplicate title IDs against each other and the home rows.
 Omission or an empty array means no featured source is currently available. There
 is no singular hero field or legacy fallback. Clients may rotate presentation in
 this order; they must not invent candidates, rank handles or playback readiness.
 An optional trailer is metadata; on-demand preview playback requires a ready,
-unexpired broker grant from the trailer-preview endpoint. The mock's four explicit demo selections have
+unexpired broker grant from the trailer-preview endpoint. The mock's six explicit demo selections have
 grant-bound receipts and are absent from its home-row fixtures.
+
+Each Hero has a required reason (resume, nextEpisode, newRelease, forYou, trending,
+featured), a required action {kind:resume|play|details,titleId,positionSeconds?},
+and an optional short label. The first slot is the host's top predicted action;
+remaining personal picks are interspersed with trending. Fill to at least five
+whenever the authorized library can supply five distinct eligible candidates,
+using actual trending or recently added/released sources when needed; never pad
+with invented candidates or claim exhaustion merely because a bounded shelf is
+short. Fewer is allowed only when the eligible library cannot supply five.
+
+Every hero requires actual authorized landscape backdrop artwork. A backdrop
+reference with a signed URL and honest unknown0/0 dimensions is permitted; known
+portrait or square dimensions are not landscape. Do not fetch art bytes on
+bootstrap merely to infer dimensions. Reason provenance must be preserved by
+the host: resume requires a positive persisted watch offset; nextEpisode requires
+a neutral-selected authorized episode; newRelease may represent recently released
+or recently added content (label must distinguish when appropriate); forYou and
+trending require actual personal/trending producer provenance. Featured requires
+an explicit owner pin of that title, not merely a promoted/hero-style row.
+
+Actions target an actual authorized item. Resume includes its saved position;
+play starts that movie/episode (explicit zero starts over); details opens the
+specified title. Show/season IDs cannot be play/resume targets. A nextEpisode
+action always carries the episode ID, even if the display title is its authorized
+show; preserve the selected episode's receipt. Clients execute the server action,
+not an inferred target from the display card. Labels may include real season/
+episode facts, but are omitted when unavailable. No guessed episode walks,
+positions, release dates, labels or ranking receipts. Update cursor exclusion
+limits alongside the six-hero limit. Required-field client/server changes must
+ship together; do not send this shape's consumers an older hero schema.
 
 ### Trailer previews
 
