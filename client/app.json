@@ -22,7 +22,8 @@
   ],
   "env": [
     "API_BASE_URL",
-    "VELA_MOCK"
+    "VELA_MOCK",
+    "VELA_BUILD_VERSION"
   ],
   "typescript": {
     "sources": {

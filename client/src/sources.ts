@@ -2,11 +2,13 @@ import type { Answer, Sources } from '../app.contract.d.ts';
 import type { AISearchJob, ClientCapabilities, Device } from '../wire/v0/types';
 import { EtherAdapter } from './adapter/ether';
 import { SessionCredentials } from './session';
-import { card, homeModel, detailModel } from './discovery/models';
+import { card, entry, homeModel, detailModel } from './discovery/models';
 import { InteractionQueue } from './telemetry';
 import { sessionEvents } from './protocol/events';
+import { mediaPlan } from './protocol/media';
+import { playerPresentation } from '../player/presentation';
 
-export function createAnswer(API: string, MOCK: boolean): Answer {
+export function createAnswer(API: string, MOCK: boolean, version: string): Answer {
 let device: Device;
 let client: ClientCapabilities;
 function key(store: Parameters<Sources['uiBootstrap']>[1]): string {
@@ -25,7 +27,7 @@ function server(store: Parameters<Sources['uiBootstrap']>[1]): EtherAdapter {
   if (!adapter) {
     let id = store.get('vela.device');
     if (!id) { id = crypto.randomUUID(); store.set('vela.device', id); }
-    device = { id, name: 'Vela browser', platform: 'web', appVersion: '0.1' };
+    device = { id, name: 'Vela browser', platform: 'web', appVersion: version };
     client = { device, protocolVersions: [0], containers: ['mp4'], videoCodecs: ['h264'], audioCodecs: ['aac'], subtitleFormats: [], hls: true, mse: true };
     const credentials = new SessionCredentials(store, device, () => key(store));
     adapter = new EtherAdapter(API, credentials, JSON.stringify(client));
@@ -49,10 +51,12 @@ const authModel = async (store: Parameters<Sources['uiBootstrap']>[1], error = '
     quickAvailable: capabilities.features.quickConnect.available, error };
 };
 const sources: Sources = {
-  uiAuth: async ([code], store) => {
+  uiAuth: async ([code, _epoch, isFragment], store) => {
     const api = server(store);
     if (code && !store.get('vela.session')) {
-      const tokens = await api.redeemWebCode({ code, device, idempotencyKey: key(store) });
+      let decoded = code;
+      try { if (isFragment) decoded = decodeURIComponent(code); } catch { /* Preserve malformed input for the server to reject. */ }
+      const tokens = await api.redeemWebCode({ code: decoded, device, idempotencyKey: key(store) });
       store.set('vela.session', JSON.stringify(tokens));
     } else if (MOCK && store.get('vela.session') === null) await session(store);
     return authModel(store);
@@ -96,6 +100,18 @@ const sources: Sources = {
     return { accepted: true };
   },
   uiBootstrap: async (_args, store) => homeModel(await (await session(store)).bootstrap(), API),
+  uiCollection: async ([id], store) => {
+    const data = await (await session(store)).collection(id);
+    return { name: data.collection.name, items: data.items.map(item => entry(item, API)) };
+  },
+  cancelAISearch: async (_args, store) => {
+    const previous = ai;
+    ai = undefined;
+    if (previous?.job && (previous.job.status === 'queued' || previous.job.status === 'running'))
+      await (await session(store)).cancelAI(previous.job.id, { generation: previous.generation, idempotencyKey: `cancel-${previous.epoch}-${previous.generation}` });
+    // A start still in flight detects that it was superseded and cancels itself.
+    return { accepted: true };
+  },
   uiDetail: async ([id], store) => detailModel(await (await session(store)).detail(id), API),
   uiSearch: async ([query, generation, epoch], store) => {
     const api = await session(store);
@@ -148,7 +164,7 @@ const sources: Sources = {
     const api = await session(store);
     if (kind !== 'title' && kind !== 'extra') throw new Error('Unsupported playback target');
     const plan = await api.playback({ ...(kind === 'extra' ? { extraId: id } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${kind}-${id}` });
-    return { planJson: JSON.stringify(plan), sessionId: plan.sessionId };
+    return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId };
   },
   sessionEvents: async ([id], store) => {
     const api = await session(store);
@@ -160,6 +176,19 @@ const sources: Sources = {
   flushInteractions: async (_args, store) => {
     while (interactions?.size) await interactions.flush(key(store));
     return { accepted: true };
+  },
+  uiPlayer: ([planJson, eventJson, replyJson]) => playerPresentation(planJson, eventJson, replyJson),
+  uiPlayerCommand: async ([json], store) => {
+    let sessionId = '';
+    try {
+      const event = JSON.parse(json);
+      if (event.type !== 'session-command' || typeof event.sessionId !== 'string' || !event.command) throw new Error('Invalid player command');
+      sessionId = event.sessionId;
+      const plan = await (await session(store)).command(sessionId, event.command);
+      return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId, error: '' };
+    } catch (error) {
+      return { planJson: '', sessionId, error: error instanceof Error ? error.message : 'Playback command failed' };
+    }
   },
   playerEvent: async ([json], store) => {
     const event = JSON.parse(json);

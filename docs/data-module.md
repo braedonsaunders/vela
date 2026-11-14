@@ -17,3 +17,12 @@ server supplies a snapshot on a retention gap. Unknown or malformed events fail
 the resource so a retry starts with a new snapshot. The UI owns bounded retries
 and releases the stream when playback leaves the view. End-to-end behavior still
 requires the mock server and player to be exercised together.
+
+A portable multi-origin deployment is blocked by the pinned Exact runtime. Its
+`net.fetch` admission supports fixed origins, subdomain and scheme patterns,
+and local-network grants, but no serving-page same-origin grant. Grants are
+baked from `app.ts`; templating a page setting cannot change them. Ether must
+serve the static artifact without an origin template until Exact provides a
+same-origin grant bound to the trusted serving-page origin (including redirect
+checks). The current build-time `API_BASE_URL` works for development and
+per-origin builds only; a scheme-wide grant would violate Vela's boundary.
