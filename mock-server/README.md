@@ -48,3 +48,10 @@ Reset by POSTing the all-zero/false object. Media uses the broker path
 `/sessions/media/<session>/<token>/...` with byte ranges and session grants.
 
 Only routine check: `cd mock-server && bun x tsc --noEmit`.
+
+Initial API track selection and in-session track mutation are advertised unavailable
+in this mock: native HLS alternate-audio selection and the external WebVTT are
+real, but the mock cannot reconfigure an active muxed MSE source. Unsupported track
+commands return policy/feature_unavailable rather than only changing metadata.
+SSE replacement, revocation, session end and disconnect release heartbeat timers;
+streams also close when their bearer grant expires.

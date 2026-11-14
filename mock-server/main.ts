@@ -8,7 +8,7 @@ const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?
 const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
-const capabilities: V.ServerCapabilities = { protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.2.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, extras: yes, initialTrackSelection: yes, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+const capabilities: V.ServerCapabilities = { protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.2.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, extras: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
 interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean }
 const grants = new Map<string, Grant>(), access = new Map<string, Grant>(), refresh = new Map<string, Grant>();
 function issue(device: V.Device): V.Tokens {
@@ -52,7 +52,7 @@ const json = (data: unknown) => Response.json(data, { headers: { 'Cache-Control'
 interface Pairing { device: V.Device; code: string; expires: number; approved: boolean; result?: V.Tokens }
 const devices = new Map<string, Pairing>(), quick = new Map<string, Pairing>(), webCodes = new Map<string, number>();
 const idempotency = new Map<string, { body: string; response: Promise<Response>; expires: number }>();
-function revoke(g: Grant) { g.revoked = true; for (const s of sessions.values()) if (s.owner === g.id) { for (const c of s.listeners) c.close(); s.listeners.clear(); } }
+function revoke(g: Grant) { g.revoked = true; for (const s of sessions.values()) if (s.owner === g.id) { for (const close of s.listeners.values()) close(); s.listeners.clear(); } }
 function currentSession(id: string, g: Grant): Session { const s = sessions.get(id); if (!s || s.owner !== g.id || s.expires <= Date.now()) fail('not-found', 'session_not_found', 'Session not found'); return s; }
 
 async function api(req: Request, url: URL, body: any): Promise<Response> {
@@ -115,6 +115,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, { ...page(guide(from, until, ids), url, g, `guide:${from}:${until}:${ids.join(',')}`), from: new Date(from).toISOString(), until: new Date(until).toISOString() }, g.id);
   }
   if (method === 'POST' && path === '/playback') {
+    if (body.audioTrackId !== undefined || body.subtitleTrackId != null) fail('policy', 'feature_unavailable', 'Initial track selection is unavailable; use native HLS audio and sidecar subtitles');
     if (!body.client || [body.titleId, body.channelId, body.extraId].filter(Boolean).length !== 1) fail('request', 'invalid_target', 'Exactly one playback target required');
     if (body.channelId) fail('source', 'live_fixture_unavailable', 'Guide fixtures have no real live source');
     const title = allTitles.find(t => t.id === body.titleId), extra = extras.find(e => e.id === body.extraId);
@@ -128,7 +129,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   const match = /^\/sessions\/([^/]+)(?:\/(events|commands|observations))?$/.exec(path);
   if (match) {
     const s = currentSession(match[1], g);
-    if (method === 'GET') return match[2] === 'events' ? events(s, req) : json(snapshot(s));
+    if (method === 'GET') return match[2] === 'events' ? events(s, req, () => !g.revoked && g.expires > Date.now()) : json(snapshot(s));
     if (method === 'POST' && ['commands', 'observations'].includes(match[2])) {
       if (body.sourceGeneration !== s.plan.sourceGeneration || body.seekGeneration !== s.plan.seekGeneration) fail('conflict', 'stale_generation', 'Refresh session state', { currentGenerations: { sourceGeneration: s.plan.sourceGeneration, seekGeneration: s.plan.seekGeneration } });
       if (s.plan.state === 'ended') fail('conflict', 'session_ended', 'Session ended');
@@ -137,7 +138,6 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (!['seek', 'pause', 'resume', 'stop', 'tracks', 'switch'].includes(body.kind)) fail('request', 'invalid_command', 'Unknown command');
       if (body.kind === 'seek' && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > 60)) fail('request', 'invalid_position', 'Position must be 0–60');
       if (body.kind === 'tracks') fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
-      if (body.kind === 'tracks' && ((body.audioTrackId !== undefined && !s.plan.audioTracks.some(t => t.id === body.audioTrackId)) || (body.subtitleTrackId != null && !s.plan.subtitleTracks.some(t => t.id === body.subtitleTrackId)))) fail('request', 'invalid_track', 'Unknown track');
       if (body.kind === 'switch') { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!p.boundaries.some(b => b.atSeconds === body.atSeconds)) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
       applyCommand(s, body); return json(s.plan);
     }
@@ -167,6 +167,7 @@ async function dispatch(req: Request): Promise<Response> {
   if (req.method !== 'POST') return api(req, url, undefined);
   let raw: string, body: any; try { raw = await req.text(); if (raw.length > 262144) fail('request', 'body_too_large', 'Body exceeds 256KiB'); body = JSON.parse(raw); } catch (e) { if (e instanceof Response) throw e; fail('request', 'invalid_json', 'JSON object required'); }
   if (!body || typeof body.idempotencyKey !== 'string' || !body.idempotencyKey || body.idempotencyKey.length > 200) fail('request', 'idempotency_required', 'Nonempty idempotencyKey required');
+  if (!/^\/vela\/v0\/auth\/(sign-in|refresh|device(?:\/poll)?|quick-connect(?:\/poll)?|web-code\/redeem)$/.test(url.pathname)) authenticate(req);
   const identity = access.get(req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '')?.id ?? body.device?.id ?? 'anonymous';
   const key = `${identity}:${url.pathname}:${body.idempotencyKey}`, old = idempotency.get(key);
   if (old && old.expires > Date.now()) { if (old.body !== raw) fail('conflict', 'idempotency_conflict', 'Key reused with different body'); return (await old.response).clone(); }
