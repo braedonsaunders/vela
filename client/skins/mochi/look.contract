@@ -88,11 +88,6 @@ keyframes mochiBlink
   50% opacity=0
   100% opacity=0
 
-keyframes mochiSway
-  0% rotate=-6
-  50% rotate=6
-  100% rotate=-6
-
 keyframes mochiBubble
   from opacity=0 scale=0.6 translate="0px 8px"
 
@@ -321,16 +316,17 @@ component FadeImage
   view
     image src alt="" load=reveal position="absolute" inset=0 width="100%" height="100%" object-fit="cover" opacity=(loaded ? 1 : 0) transition="opacity 360ms cubic-bezier(0.22, 1, 0.36, 1)"
 
-// The Vela wordmark in pixel type, dotted with a star.
+// The Vela mark, Mochi's way: the two-tone searchlight V redrawn in outlined pixels
+// (pink light side reaching the baseline, lavender shadow side stopping short), beside
+// the name in pixel type. Held still: the mark never sways.
 component Wordmark
   props
     size: number
     night: bool
     still: bool
   view
-    row align-items="center" gap=(size * 0.2) aria-hidden=true
-      column color="mochi.pink" animation=(still ? "none" : "mochiSway 3.2s ease-in-out infinite")
-        PixelIcon(name="star", size=(size * 0.7))
+    row align-items="center" gap=(size * 0.24) aria-hidden=true
+      image "assets/mochi/vela-mark.svg" alt="" width=(size * 1.05) height=(size * 1.05) flex-shrink=0
       text t("ui.vela") font-family="\"Pixelify Sans\", ui-monospace, monospace" font-weight=700 font-size=size line-height=1 letter-spacing="0.04em" color=(night ? "mochi.night-ink" : "mochi.ink") text-shadow=(night ? "3px 3px 0px var(--mochi.lavender-deep)" : "3px 3px 0px var(--mochi.pink-soft)")
 
 // A night sky: a gradient, a field of twinkling stars and, unless still, petals

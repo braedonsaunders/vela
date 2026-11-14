@@ -11,7 +11,7 @@ if (!sumsResponse.ok) throw new Error(`Audio release checksums HTTP ${sumsRespon
 const checksums = new Map((await sumsResponse.text()).trim().split('\n').map(line => {
   const [hash, file] = line.trim().split(/\s+\*?/); return [file, hash];
 }));
-for (const file of [...Object.values(audioPackages).map(p => p.file), ...audioSourceFiles]) {
+for (const file of [...Object.entries(audioPackages).filter(([id]) => id !== 'vela-audio').map(([, p]) => p.file), ...audioSourceFiles]) {
   const response = await fetch(audioPackageRelease + file);
   if (!response.ok) throw new Error(`${file}: HTTP ${response.status}`);
   const bytes = await response.arrayBuffer();
@@ -22,3 +22,8 @@ for (const file of [...Object.values(audioPackages).map(p => p.file), ...audioSo
   console.log(`Installed ${file}`);
 }
 await Bun.write(resolve(target, 'SOURCE.txt'), `Vela separately loads LGPL-2.1-or-later audio decoders from WebGPU Player decoders v0.1.1.\nCorresponding FFmpeg, libdcadec and decoder bridge source archives and license texts are served in this same directory. You may replace/relink these modules under LGPL terms. No Vela restriction forbids reverse engineering to debug such modifications.\nUpstream source: https://github.com/alchemyyy/webgpu-player-decoders/tree/672c83e67ce2b0de0070602980f98023e0baaddd\nAtmos HRIR credit: MIT KEMAR measurements, Bill Gardner and Keith Martin, MIT Media Lab, 1994.\n`);
+
+if (process.argv.includes('--general')) {
+  const child = Bun.spawn([process.execPath, new URL('./ffmpeg/build.ts', import.meta.url).pathname, resolve(target)], { stdout: 'inherit', stderr: 'inherit' });
+  if (await child.exited) throw new Error('General audio package build failed');
+}

@@ -1,4 +1,4 @@
-// player/media-capabilities.ts
+// client/player/media-capabilities.ts
 function mediaCapabilities() {
   const video = document.createElement("video");
   const supports = (mime) => video.canPlayType(mime) !== "";
@@ -20,7 +20,7 @@ function mediaCapabilities() {
   };
 }
 
-// player/install.ts
+// client/player/install.ts
 function createInstall(element, json, event) {
   let runtime = window.velaPwa;
   const button = document.createElement("button");
@@ -75,7 +75,7 @@ function createInstall(element, json, event) {
   } };
 }
 
-// player/preview.ts
+// client/player/preview.ts
 function apply(handle) {
   const video = handle.video;
   if (handle.expiryTimer)
@@ -166,7 +166,7 @@ function destroyPreview(handle) {
   handle.video.remove();
 }
 
-// player/theme.ts
+// client/player/theme.ts
 var ENGINES = {
   cinematic: {
     roles: {
@@ -315,7 +315,7 @@ function destroyTheme(handle) {
   handle.sheet.remove();
 }
 
-// player/engine-handoff.ts
+// client/player/engine-handoff.ts
 var CHOSEN = "vela.engine";
 var DEFAULT = "vela.engine.default";
 var HANDOFF = "vela.handoff";
@@ -438,12 +438,12 @@ function destroyEngine(handle) {
     handle.overlay?.remove();
 }
 
-// player/model.ts
+// client/player/model.ts
 function codecKnown(rendition) {
   return rendition.codecStatus !== "pending" && /codecs="[^"]+"/.test(rendition.mime);
 }
 
-// player/session.ts
+// client/player/session.ts
 class SessionController {
   sessionId = "";
   source = 0;
@@ -505,7 +505,7 @@ function delay(ms, signal) {
   });
 }
 
-// player/hls.ts
+// client/player/hls.ts
 function parsePlaylist(text, base) {
   if (!text.trimStart().startsWith("#EXTM3U"))
     throw new Error("Invalid HLS playlist");
@@ -544,7 +544,7 @@ function parsePlaylist(text, base) {
   return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
 }
 
-// player/buffer.ts
+// client/player/buffer.ts
 class PlaybackFault extends Error {
   kind;
   retryable;
@@ -599,7 +599,7 @@ async function appendBuffer(buffer, bytes, video, signal) {
   }
 }
 
-// player/audio.ts
+// client/player/audio.ts
 class AudioBuffer {
   media;
   video;
@@ -760,7 +760,7 @@ class AudioBuffer {
       await mutation(this.buffer, signal, () => this.buffer.remove(0, before));
   }
 }
-// player/abr.ts
+// client/player/abr.ts
 class BandwidthEstimator {
   fast = 0;
   slow = 0;
@@ -832,7 +832,7 @@ class AdaptiveBitrate {
   }
 }
 
-// player/pipeline.ts
+// client/player/pipeline.ts
 function mediaSourceClass() {
   return globalThis.ManagedMediaSource ?? globalThis.MediaSource;
 }
@@ -1258,7 +1258,7 @@ class SegmentPipeline {
   }
 }
 
-// player/native-hls.ts
+// client/player/native-hls.ts
 async function nativeMediaPlaylist(url, signal, depth = 0) {
   if (depth > 1)
     throw new Error("Nested HLS masters are unsupported");
@@ -1285,7 +1285,7 @@ async function nativeMediaPlaylist(url, signal, depth = 0) {
   return nativeMediaPlaylist(variant.href, signal, depth + 1);
 }
 
-// src/protocol/id.ts
+// client/src/protocol/id.ts
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = bytes[6] & 15 | 64;
@@ -1293,7 +1293,7 @@ function randomId() {
   return Array.from(bytes, (b, i) => `${i === 4 || i === 6 || i === 8 || i === 10 ? "-" : ""}${b.toString(16).padStart(2, "0")}`).join("");
 }
 
-// player/engine.ts
+// client/player/engine.ts
 class PlaybackEngine {
   video;
   deliver;
@@ -2142,7 +2142,7 @@ class PlaybackEngine {
   }
 }
 
-// player/protocol.ts
+// client/player/protocol.ts
 function sessionFromPlan(plan) {
   const selected = plan.paths.find((p) => p.id === plan.selectedPathId);
   if (!selected)
@@ -2216,7 +2216,7 @@ function observation(snapshot, sequence) {
   };
 }
 
-// player/web-module.ts
+// client/player/web-module.ts
 var abi = 1;
 var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false }, "vela-theme": { snapshot: false }, "vela-engine": { snapshot: false } };
 function create(tag, element, json, event) {
@@ -2229,12 +2229,13 @@ function create(tag, element, json, event) {
   if (tag === "vela-preview")
     return createPreview(element, json, event);
   if (tag === "vela-context") {
-    const handle = { context: true, disposed: false };
+    const handle = { context: true, disposed: false, lastNavigation: "", event };
     const props = JSON.parse(json);
     queueMicrotask(() => {
       if (!handle.disposed)
         event(8, props.probe === "media" ? JSON.stringify(mediaCapabilities()) : props.probe === "network" ? JSON.stringify({ saveData: navigator.connection?.saveData === true }) : location.origin);
     });
+    navigateSecurely(handle, props);
     return handle;
   }
   if (tag !== "vela-player")
@@ -2271,7 +2272,7 @@ function create(tag, element, json, event) {
   return handle;
 }
 function setProps(handle, json) {
-  if ("engine" in handle) {
+  if ("leaving" in handle) {
     setEngine(handle, json);
     return;
   }
@@ -2287,8 +2288,10 @@ function setProps(handle, json) {
     setPreview(handle, json);
     return;
   }
-  if ("context" in handle)
+  if ("context" in handle) {
+    navigateSecurely(handle, JSON.parse(json));
     return;
+  }
   const props = JSON.parse(json);
   if (props.serverError !== handle.serverError) {
     handle.serverError = props.serverError ?? "";
@@ -2366,7 +2369,7 @@ function applyCommand(handle, props) {
   }
 }
 function destroy(handle) {
-  if ("engine" in handle) {
+  if ("leaving" in handle) {
     destroyEngine(handle);
     return;
   }
@@ -2388,6 +2391,26 @@ function destroy(handle) {
   }
   handle.engine.dispose();
   handle.video.remove();
+}
+function navigateSecurely(handle, props) {
+  const target = props.secureNavigate;
+  if (!target || handle.disposed || target === handle.lastNavigation)
+    return;
+  try {
+    if (target.length > 8192)
+      throw new Error("Invalid secure handoff");
+    const url = new URL(target);
+    const allowed = JSON.parse(props.secureOrigins || "[]");
+    if (url.protocol !== "https:" || url.username || url.password || !["/vela", "/vela/"].includes(url.pathname) || !Array.isArray(allowed) || !allowed.some((origin) => typeof origin === "string" && origin === url.origin))
+      throw new Error("Invalid secure handoff");
+    handle.lastNavigation = target;
+    queueMicrotask(() => {
+      if (!handle.disposed)
+        location.replace(url.href);
+    });
+  } catch {
+    handle.event(8, JSON.stringify({ secureNavigation: "rejected" }));
+  }
 }
 export {
   abi,

@@ -379,3 +379,8 @@ Replacement invalidates the previous audio URL and increments `audioGeneration`.
 Stale source/seek generations return409; capacity/source failures use the ordinary
 classified error model. `DELETE /sessions/:id/audio-fallback/:audioId` accepts
 `Mutation` and returns `Ack`, canceling only that audio pipeline idempotently.
+
+`PlaybackPath.originalVideo` contains only actual, non-estimated source-probe
+facts. Missing facts are omitted. Explicit false DV presence flags and compatibility
+ID0 are preserved; absence is not proof of a compatible base layer. These facts
+are admission input for the original-file decoder, not a promise of support.

@@ -12,7 +12,7 @@ function signal(channels: number) {
 const fixtures = [
   ['truehd-5.1', 'truehd', '5.1(side)', 6], ['dts-5.1', 'dca', '5.1', 6],
   ['eac3-5.1', 'eac3', '5.1', 6], ['ac3-5.1', 'ac3', '5.1', 6],
-  ['flac-7.1', 'flac', '7.1', 8], ['alac-7.1', 'alac', '7.1', 8],
+  ['flac-7.1', 'flac', '7.1', 8], ['alac-5.1', 'alac', '5.1', 6],
   ['pcm-7.1', 'pcm_s24le', '7.1', 8],
 ] as const;
 for (const [name, codec, layout, channels] of fixtures) {
@@ -28,4 +28,4 @@ for (const [name, codec, layout, channels] of fixtures) {
   if (await probe.exited || actual.streams[0]?.channels !== channels) throw new Error(`Encoder changed ${name} channel count`);
   console.log(file);
 }
-await Bun.write(join(root, 'README.txt'), 'Synthetic 10s 48kHz fixtures. WAVE order FL FR FC LFE BL BR SL SR. Each channel solo for 0.8s at its integer second, then all at 8-10s. LFE 80Hz; others 300+100*index Hz. TrueHD/DTS/AC3/EAC3 5.1; FLAC/ALAC/PCM 7.1. The experimental TrueHD encoder supports at most 5.1; never label its output 7.1. DTS is core only: ffmpeg cannot encode DTS-HD MA. No Atmos metadata generated.\n');
+await Bun.write(join(root, 'README.txt'), 'Synthetic 10s 48kHz fixtures. WAVE order FL FR FC LFE BL BR SL SR. Each channel solo for 0.8s at its integer second, then all at 8-10s. LFE 80Hz; others 300+100*index Hz. TrueHD/DTS/AC3/EAC3/ALAC 5.1; FLAC/PCM 7.1. The experimental TrueHD encoder supports at most 5.1; never label its output 7.1. DTS is core only: ffmpeg cannot encode DTS-HD MA. No Atmos metadata generated.\n');
