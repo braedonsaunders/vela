@@ -765,8 +765,6 @@ export const cinematicDoc: SkinDocument = {
   detail: { wide: 'fullscreen', small: 'fullscreen' },
 };
 
-// A compiled control with its own hover style draws no platform hover wash, so a press that
-// carries a hover overlay here opts out of the document's control states.
 // Compiled's pill buttons (PrimaryPill, GhostPill) shrink to .97 while pressed and its round
 // icon buttons (IconButton) to .94; links, chips, tabs and dots keep their size.
 const pressScale = (node: BoxNode): string | undefined => {
@@ -780,11 +778,12 @@ const pressScale = (node: BoxNode): string | undefined => {
 const keepRing = (node: Node): void => {
   if (node.type === 'box' || node.type === 'widget') { const f = (node as BoxNode).focus; if (f && f.outline === undefined) (node as BoxNode).focus = { ...f, outline: 'auto' }; }
 };
-const ownHover = (node: Node): void => {
+// Per press node: compiled's ring and press scale (an authored hover already replaces the
+// platform hover wash; the pressed look still applies).
+const compiledControl = (node: Node): void => {
   keepRing(node);
-  if ('press' in node && node.press && node.hover && node.controlStates === undefined) node.controlStates = false;
   if (node.type === 'box' && node.press && !node.active) { const scale = pressScale(node); if (scale) node.active = { scale }; }
-  if ('children' in node) node.children?.forEach(ownHover);
-  if (node.type === 'repeat') ownHover(node.item);
+  if ('children' in node) node.children?.forEach(compiledControl);
+  if (node.type === 'repeat') compiledControl(node.item);
 };
-[...Object.values(cinematicDoc.slots ?? {}), ...Object.values(cinematicDoc.routes ?? {}), ...Object.values(cinematicDoc.templates ?? {})].forEach(n => n && ownHover(n as Node));
+[...Object.values(cinematicDoc.slots ?? {}), ...Object.values(cinematicDoc.routes ?? {}), ...Object.values(cinematicDoc.templates ?? {})].forEach(n => n && compiledControl(n as Node));
