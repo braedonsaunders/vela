@@ -306,7 +306,22 @@ Without `routes.library` the foundation's library page shows.
 - A group's `groupHover`/`groupFocus` style its descendants, never the group node itself (use
   `hover`/`focus` there).
 
-## Next (renderer 12, names final)
+## Renderer 12
+
+- Sign-in: `signin.ready` (a username and a password typed, not busy) for the Sign in's
+  `disabled`; the secure-origin offer `signin.secureOrigin`, `signin.secureBusy`,
+  `signin.secureError` and action `goSecure`; collection `quick.chars` (`char.text`, `{index}`)
+  for a code drawn one tile per character; `env.authBackdrop`, `env.authWordmark` (a server
+  pack's stage art).
+- `textInput` sits within 7 levels of its route and takes its node's `height`, `min-height`,
+  `box-sizing`, `box-shadow`, `transition` and its `hover`/`focus` overlays (a field's focus look;
+  `outline: none` in the focus overlay drops the platform ring).
+- `active`: an overlay while pressed, over the hover style (e.g. `{ scale: '0.97' }`, a compiled
+  control's press scale).
+- `a11y.hidden`: decorative, hidden from assistive technology.
+- A press button takes its node's `border-radius`, so the platform focus ring follows the corners.
+
+## Next (renderer 13, names final)
 
 - Per-document `traits`: `page`, `ink`, `splashOnPaper`. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 

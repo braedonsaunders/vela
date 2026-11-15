@@ -17,6 +17,8 @@ export const WIDGET_DEPTH = 3;
 export const searchLevel = (d: number) => d <= 3 || (d >= SHELL_FROM && d < SHELL_FROM + 3);
 /** A pager (a row's scroller) sits within this many levels of its slot. */
 export const PAGER_DEPTH = 6;
+/** The sign-in fields (textInput) sit within this many levels of their route (a framed card nests them deep). */
+export const FIELD_DEPTH = 7;
 /** The shell's tree enters the levels at this depth: it needs 6, so its copy of the renderer is 6 levels, not 10. */
 export const SHELL_FROM = 5;
 /** Style rows: Contract field name and the row it writes. Inherited ones default to "inherit" (src/skin). */
@@ -90,6 +92,8 @@ ${elementProps}
     lt: string
     exitAnim: string
     wash: string
+    // Decorative: hidden from assistive technology (a11y.hidden).
+    ahid: bool
     // Pressed without a ground of its own: Exact dims a pressed control's content to .65.
     dim: bool
     hovering: action
@@ -98,17 +102,17 @@ ${elementProps}
     keying: action
   slot
   view
-    box id=domId hover=hovering pointerdown=pointing pointerup=releasing key=keying tabindex=-1 testId=test role=role aria-label=label -exact-layout-transition=lt -exact-exit-animation=exitAnim ${rows()}
+    box id=domId hover=hovering pointerdown=pointing pointerup=releasing key=keying tabindex=-1 testId=test role=role aria-label=label aria-hidden=ahid -exact-layout-transition=lt -exact-exit-animation=exitAnim ${rows()}
       children
 
 `;
 }
 /** The props every element call passes: the node's style for its state, motion and bound rows. */
-const pass = () => `s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}`;
+const pass = () => `s=st, ahid=n.ahid, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}`;
 
 function shape(d: number): string {
   const fields = ['t: string', 'base: StateRef', 'sts: StateRef[]', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gf: bool', 'fade: bool', 'dis: Cond[]', 'aexp: Cond[]', 'asel: Cond[]', 'acur: Cond[]', 'aprs: Cond[]', 'ahp: string', 'atitle: Part[]', 'brole: string', 'pfocus: Part[]', 'esc: string', 'escTo: Part[]', 'lt: string', 'ex: string', 'exs: string', 'ivb: string', 'ipaths: string[]', 'fr: string', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
-    'sym: string', 'act: string', 'cs: bool', 'rn: bool', 'achk: Cond[]', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
+    'sym: string', 'act: string', 'cs: bool', 'rn: bool', 'ha: bool', 'ahid: bool', 'achk: Cond[]', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
     'mk: string', 'md: number', 'mdl: number', 'me: string', 'mf: string', 'mit: string', 'mdir: string', 'msk: string', 'msd: number', 'step: number', 'cap: number',
     ...BINDABLE.map(([, f]) => `${f}: Part[]`)];
   if (d < DEPTH) fields.push(`kids: N${d + 1}[]`);
@@ -144,15 +148,15 @@ function level(d: number): string {
     e: Env
     act: action
     obs: action
-${d <= PAGER_DEPTH || searchLevel(d) ? '  inject\n' : ''}${d <= PAGER_DEPTH ? `    loadMoreHome: action
-    loadMoreRow: action
-    moreLibrary: action
-` : ''}${d <= WIDGET_DEPTH ? `    username: string
+${d <= FIELD_DEPTH || searchLevel(d) ? '  inject\n' : ''}${d <= FIELD_DEPTH ? `    username: string
     password: string
     editUsername: action
     editPassword: action
     submitSignIn: action
-    tileMessage: action
+` : ''}${d <= PAGER_DEPTH ? `    loadMoreHome: action
+    loadMoreRow: action
+    moreLibrary: action
+` : ''}${d <= WIDGET_DEPTH ? `    tileMessage: action
     mediaAuthJson: string
     tileNativeMedia: string
 ` : ''}${searchLevel(d) ? `    edit: action
@@ -191,12 +195,15 @@ ${d <= PAGER_DEPTH || searchLevel(d) ? '  inject\n' : ''}${d <= PAGER_DEPTH ? ` 
         focus(to)
   action loaded
     ready = true
-${d <= PAGER_DEPTH ? `${d <= WIDGET_DEPTH ? `  // A sign-in field: Enter signs in.
+${d <= FIELD_DEPTH ? `  // A sign-in field shows its focus overlay whenever it has focus (a field is focus-visible on click too).
+  action fieldFocusing
+    focused = true
+  // A sign-in field: Enter signs in.
   action fieldKey(k: string)
     if k == "Enter"
       preventDefault()
       submitSignIn()
-` : ''}  // A sentinel asks the foundation for the next page of home or of its row.
+` : ''}${d <= PAGER_DEPTH ? `  // A sentinel asks the foundation for the next page of home or of its row.
   action hitHome(entry: IntersectionObserverEntry)
     loadMoreHome(entry)
   action hitRow(entry: IntersectionObserverEntry)
@@ -230,22 +237,32 @@ ${d <= PAGER_DEPTH ? `${d <= WIDGET_DEPTH ? `  // A sign-in field: Enter signs i
         if shows(n.cond, vals, e)
           for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
             for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
-              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+              for st in [styleAt(e, dis ? sr.ds : held and n.ha ? (e.still ? sr.as2 : sr.as) : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
                 if n.t == "install"
                   vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
 ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                   for t in e.tile key=t.channelId
                     if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
                       vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
-                else if n.t == "textInput"
+` : ''}${d <= FIELD_DEPTH ? `                else if n.t == "textInput"
                   if n.sym == "password"
-                    input id="vela-password" type="password" autocomplete="current-password" value=password input=editPassword key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="password" width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
-                      ::placeholder
-                        color=n.ivb
+                    if n.rn
+                      input id="vela-password" type="password" autocomplete="current-password" value=password input=editPassword key=fieldKey hover=hovering focus=fieldFocusing blur=blurring placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="password" width="100%" height=(st.height != "" ? st.height : "100%") min-height=st.minHeight box-sizing=(st.boxSizing != "" ? st.boxSizing : "border-box") padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing box-shadow=st.boxShadow transition=st.transition outline-style="none"
+                        ::placeholder
+                          color=n.ivb
+                    else
+                      input id="vela-password" type="password" autocomplete="current-password" value=password input=editPassword key=fieldKey hover=hovering focus=fieldFocusing blur=blurring placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="password" width="100%" height=(st.height != "" ? st.height : "100%") min-height=st.minHeight box-sizing=(st.boxSizing != "" ? st.boxSizing : "border-box") padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing box-shadow=st.boxShadow transition=st.transition
+                        ::placeholder
+                          color=n.ivb
                   else
-                    input id="vela-username" type="text" autocomplete="username" value=username input=editUsername key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="username" width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
-                      ::placeholder
-                        color=n.ivb
+                    if n.rn
+                      input id="vela-username" type="text" autocomplete="username" value=username input=editUsername key=fieldKey hover=hovering focus=fieldFocusing blur=blurring placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="username" width="100%" height=(st.height != "" ? st.height : "100%") min-height=st.minHeight box-sizing=(st.boxSizing != "" ? st.boxSizing : "border-box") padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing box-shadow=st.boxShadow transition=st.transition outline-style="none"
+                        ::placeholder
+                          color=n.ivb
+                    else
+                      input id="vela-username" type="text" autocomplete="username" value=username input=editUsername key=fieldKey hover=hovering focus=fieldFocusing blur=blurring placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="username" width="100%" height=(st.height != "" ? st.height : "100%") min-height=st.minHeight box-sizing=(st.boxSizing != "" ? st.boxSizing : "border-box") padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing box-shadow=st.boxShadow transition=st.transition
+                        ::placeholder
+                          color=n.ivb
 ` : ''}${searchLevel(d) ? `                else if n.t == "searchInput"
                   if n.rn
                     input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign outline-style="none"
@@ -257,7 +274,7 @@ ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                         color=n.sym
 ` : ''}${d <= PAGER_DEPTH ? `                else if n.t == "yearInput"
                   for l in e.library key=l.id
-                    input type="number" inputmode="numeric" value=(l.yearFilter > 0 ? l.yearFilter.toString() : "") change=yearChanged placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                    input type="number" inputmode="numeric" value=(l.yearFilter > 0 ? l.yearFilter.toString() : "") change=yearChanged placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) width="100%" height=(st.height != "" ? st.height : "100%") min-height=st.minHeight box-sizing=(st.boxSizing != "" ? st.boxSizing : "border-box") padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
                       ::placeholder
                         color=n.sym
                 else if n.t == "select"
@@ -300,14 +317,14 @@ ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                               // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
                               if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
                                 if n.rn
-                                  button id=fill(n.dom, vals, e) press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                  button id=fill(n.dom, vals, e) press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" border-radius=st.borderRadius background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
                                 else
-                                  button id=fill(n.dom, vals, e) press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                  button id=fill(n.dom, vals, e) press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" border-radius=st.borderRadius background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
                                 if n.rn
-                                  button id=fill(n.dom, vals, e) press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                  button id=fill(n.dom, vals, e) press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" border-radius=st.borderRadius background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
                                 else
-                                  button id=fill(n.dom, vals, e) press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                  button id=fill(n.dom, vals, e) press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" border-radius=st.borderRadius background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 `;
 }
 
@@ -412,6 +429,8 @@ const vocabulary: [string, string][] = [
   ['opt.on', m('c.opt', yes('match first(e.library) { case some(l) => (c.optOf == "kind" ? l.kindFilter == x.id : c.optOf == "genre" ? l.genreFilter == x.id : l.sort == x.id), case none => false }'))],
   // Signed out (route "auth").
   ['env.auth', 'e.authState'], ['signin.error', 'e.authError'], ['signin.busy', yes('e.authBusy')], ['signin.canPassword', yes('e.canPassword')], ['signin.canQuick', yes('e.canQuick')],
+  ['signin.ready', yes('e.authReady')], ['signin.secureOrigin', 'e.secureOrigin'], ['signin.secureBusy', yes('e.secureBusy')], ['signin.secureError', 'e.secureError'],
+  ['env.authBackdrop', 'e.authBackdrop'], ['env.authWordmark', 'e.authWordmark'], ['char.text', m('c.fact', 'x')],
   ['quick.code', 'e.quickCode'], ['quick.expires', 'e.quickExpires'], ['quick.error', 'e.quickError'],
   ['env.searchFocused', yes('e.flags.includes("search-focused")')],
   ['pager.overflows', m('c.row', yes('pagerField(e.pagers, x.id, 1) == "0" or pagerField(e.pagers, x.id, 2) == "0"'))], ['pager.atStart', m('c.row', yes('pagerField(e.pagers, x.id, 1) != "0"'))], ['pager.atEnd', m('c.row', yes('pagerField(e.pagers, x.id, 2) != "0"'))],
@@ -455,6 +474,9 @@ shape StateRef
   cond: Cond[]
   s: number
   pos: number
+  // While pressed (the node's active overlay over its hover).
+  as: number
+  as2: number
   // The press button's name in this state (empty: the node's label).
   lbl: Part[]
   hs: number
@@ -532,6 +554,12 @@ shape Env
   quickCode: string
   quickExpires: string
   quickError: string
+  authReady: bool
+  secureOrigin: string
+  secureBusy: bool
+  secureError: string
+  authBackdrop: string
+  authWordmark: string
   // Exact's control hover wash (a background image the document's data carries).
   wash: string
   // Exact's pressed wash (tertiary fill).
@@ -586,6 +614,12 @@ shape RouteProps
   quickCode: string
   quickExpires: string
   quickError: string
+  authReady: bool
+  secureOrigin: string
+  secureBusy: bool
+  secureError: string
+  authBackdrop: string
+  authWordmark: string
 
 // A route's tree (the route view draws the one named after the current stack entry).
 shape RouteTree
@@ -665,10 +699,10 @@ ${Array.from({ length: DEPTH }, (_, i) => i + 1).map(d => `fn detailCtxs${d}(n: 
 }
 // The detail collections, split out to keep expressions within Exact's depth limit.
 const detailCtxsBody = `match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }`;
-const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs${d}(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : n.rep.startsWith("library.") ? libraryCtxs(n.rep, n.lim, c, e) : [])`;
+const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs${d}(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : n.rep.startsWith("library.") ? libraryCtxs(n.rep, n.lim, c, e) : n.rep == "quick.chars" ? e.quickCode.split("").slice(0, n.lim).map(x => Ctx(c, fact=[x])) : [])`;
 
 const noStyleBody = () => `Style(${STYLE.map(([f]) => `${f}=${NUMERIC.has(f) ? ({ opacity: 1, flexShrink: 1, fontWeight: 400, scale: 1 } as Record<string, number>)[f] ?? 0 : '""'}`).join(', ')})`;
-const EMPTY_DOC = `fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, lbl=[], hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)\nfn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=true, nodes=[holderNode${SHELL_FROM}()]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none", detailScrim="transparent", detailBlur="none", detailFlat=true, barMask="", panSections="", pageColor="", inkColor="", splashOnPaper="", drawsStatus=false, wash="", washPressed="")\n`;
+const EMPTY_DOC = `fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, as=0, as2=0, lbl=[], hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)\nfn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=true, nodes=[holderNode${SHELL_FROM}()]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none", detailScrim="transparent", detailBlur="none", detailFlat=true, barMask="", panSections="", pageColor="", inkColor="", splashOnPaper="", drawsStatus=false, wash="", washPressed="")\n`;
 
 /**
  * The renderer's compatibility version: a document names the version it needs
@@ -704,7 +738,7 @@ export async function generate(out = resolve(import.meta.dir, '../client/rendere
   const leak = vocabulary.find(([, expr]) => /mediaAuth|planJson|commandJson|headers/.test(expr));
   if (leak) throw new Error(`Vocabulary ${leak[0]} reads player plumbing`);
   const renderer = await rendererVersion(out, bump);
-  await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order, and the renderer's compatibility version.\nexport const RENDERER_VERSION = ${renderer.version};\nexport const RENDERER_DIGEST = ${JSON.stringify(renderer.digest)};\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\nexport const STYLE: [string, string][] = ${JSON.stringify(STYLE)};\n// Theme tokens with one value (client/app.tamber): Tamber folds them, so the page declares no property for them.\nexport const FIXED_TOKENS: Record<string, string> = ${JSON.stringify(await fixedTokens())};\n// The renderer's shape: its levels, the shell's first level, and how deep widgets and pagers may sit.\nexport const DEPTH = ${DEPTH};\nexport const SHELL_FROM = ${SHELL_FROM};\nexport const WIDGET_DEPTH = ${WIDGET_DEPTH};\nexport const PAGER_DEPTH = ${PAGER_DEPTH};\n`);
+  await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order, and the renderer's compatibility version.\nexport const RENDERER_VERSION = ${renderer.version};\nexport const RENDERER_DIGEST = ${JSON.stringify(renderer.digest)};\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\nexport const STYLE: [string, string][] = ${JSON.stringify(STYLE)};\n// Theme tokens with one value (client/app.tamber): Tamber folds them, so the page declares no property for them.\nexport const FIXED_TOKENS: Record<string, string> = ${JSON.stringify(await fixedTokens())};\n// The renderer's shape: its levels, the shell's first level, and how deep widgets and pagers may sit.\nexport const DEPTH = ${DEPTH};\nexport const SHELL_FROM = ${SHELL_FROM};\nexport const WIDGET_DEPTH = ${WIDGET_DEPTH};\nexport const PAGER_DEPTH = ${PAGER_DEPTH};\nexport const FIELD_DEPTH = ${FIELD_DEPTH};\n`);
   let levels = '';
   for (let d = 1; d <= DEPTH; d++) levels += level(d) + '\n';
   // Shapes (and the empty document) live apart from the renderer: the foundation imports

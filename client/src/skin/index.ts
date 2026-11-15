@@ -2,7 +2,7 @@
 // inlined, viewport variants and document tokens applied, motion presets expanded,
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
-import { DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
+import { DEPTH, FIELD_DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
 
 const KEY = new Map(VOCAB.map((key, i) => [key, i]));
 /** A vocabulary key's index, a flag, or a refusal: documents name only known keys. */
@@ -47,13 +47,13 @@ function keyframesCss(doc: SkinDocument): string {
     return `@keyframes dk-${docId}-${name}{${body}}`;
   }).join('');
 }
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'librarySort', 'librarySortFlip', 'libraryFilter', 'libraryMore', 'signIn', 'startQuick', 'cancelQuick', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
-const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites', 'library.items', 'library.kinds', 'library.genres', 'library.sorts']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'librarySort', 'librarySortFlip', 'libraryFilter', 'libraryMore', 'signIn', 'startQuick', 'cancelQuick', 'goSecure', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
+const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites', 'library.items', 'library.kinds', 'library.genres', 'library.sorts', 'quick.chars']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
 type Part = { l: string; k: number; f: string };
 /** Renderer 3 node fields (protocol/v0/skin.ts). */
-interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; label?: string }[]; groupFocus?: Style;
+interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; label?: string }[]; groupFocus?: Style; active?: Style;
   disabled?: Condition[]; disabledStyle?: Style; a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; haspopup?: string; title?: string; role?: string };
   escape?: string; returnFocus?: string; layoutTransition?: string; sharedElement?: string; exit?: string }
 type Level = Record<string, unknown>;
@@ -205,7 +205,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     const when = [...(from > 0 ? [{ ...widthKey, is: 'lt', v: String(from), not: true }] : []), ...(to < Infinity ? [{ ...widthKey, is: 'lt', v: String(to), not: false }] : [])];
     return { applied, when };
   }) : [];
-  const level: Level = { t: 'box', parts: [], src: [], label: parts(node.label, r), arg: [], sym: '', act: '', cs: false, rn: false, achk: [], role: node.role ?? '', level: node.level ?? 0, test: parts(node.testId, r), dom: parts(node.id, r), rep: '', lim: 1000,
+  const level: Level = { t: 'box', parts: [], src: [], label: parts(node.label, r), arg: [], sym: '', act: '', cs: false, rn: false, ha: false, ahid: false, achk: [], role: node.role ?? '', level: node.level ?? 0, test: parts(node.testId, r), dom: parts(node.id, r), rep: '', lim: 1000,
     mk: '', md: 0, mdl: 0, me: '', mf: '', mit: '', mdir: '', msk: '', msd: 0, step: node.stagger?.step ?? 0, cap: node.stagger?.cap ?? 0, cond: conds(node.when) };
   for (const f of Object.values(BINDABLE)) level[f] = [];
   const base = style(variant, r, level, weight);
@@ -213,29 +213,29 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   // Under reduced motion the overlays drop what moves: scale, translate, rotate, transitions, animations.
   const still = (o: Style | undefined) => o && Object.fromEntries(Object.entries(o).filter(([k]) => !['scale', 'translate', 'rotate', 'transition', 'animation'].includes(k))) as Style;
   const n = node as Node & NodeExtra;
-  level.hh = !!node.hover; level.hf = !!node.focus; level.grp = node.group === true; level.hg = !!node.groupHover; level.gf = !!n.groupFocus; level.fade = false;
+  level.ha = !!n.active; level.hh = !!node.hover; level.hf = !!node.focus; level.grp = node.group === true; level.hg = !!node.groupHover; level.gf = !!n.groupFocus; level.fade = false;
   /** A state's style indices: its base, each overlay, and the reduced-motion overlays. */
-  const stateRef = (layers: (Style | undefined)[], s: { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style }, cond: Condition[]) => {
+  const stateRef = (layers: (Style | undefined)[], s: { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; active?: Style }, cond: Condition[]) => {
     const at = (extra?: Style) => intern(style([...layers, extra], r, undefined, weight), r);
     const plain = style(layers, r, undefined, weight), sIdx = intern(plain, r);
     const overlay = (o?: Style) => o ? at(o) : sIdx, calm = (o?: Style) => o ? at(still(o)) : sIdx;
     // Position is a choice the renderer binds per state (a viewport variant may move a node into flow).
-    return { cond: conds(cond), lbl: [], s: sIdx, pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
+    return { cond: conds(cond), lbl: [], s: sIdx, as: s.active ? at({ ...s.hover, ...s.active }) : overlay(s.hover), as2: s.active ? at(still({ ...s.hover, ...s.active })) : calm(s.hover), pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
       hs2: calm(s.hover), fs2: calm(s.focus), gs2: calm(s.groupHover), gfs2: calm(s.groupFocus) };
   };
-  const overlays = { hover: node.hover, focus: node.focus, groupHover: node.groupHover, groupFocus: n.groupFocus };
+  const overlays = { hover: node.hover, focus: node.focus, groupHover: node.groupHover, groupFocus: n.groupFocus, active: n.active };
   level.base = { ...stateRef(variant, overlays, []), s: intern(base, r), pos: base.position === 'absolute' ? 1 : base.position === 'sticky' ? 2 : 0 };
   // Each document state, then the plain node, at each width interval (first match wins).
   const userStates = (n.states ?? []).slice(0, 8);
   if (userStates.length * Math.max(1, intervals.length) + intervals.length > 48) throw new Error('Too many states x breakpoints on one node');
   const within = intervals.length ? intervals : [{ applied: [] as Style[], when: [] as { k: number; f: string; is: string; v: string; not: boolean }[] }];
   level.sts = [
-    ...userStates.flatMap(x => within.map(w => ({ ...stateRef([...variant, x.style, ...w.applied], { hover: x.hover ?? node.hover, focus: x.focus ?? node.focus, groupHover: x.groupHover ?? node.groupHover, groupFocus: x.groupFocus ?? n.groupFocus }, x.when), cond: [...conds(x.when), ...w.when], lbl: parts(x.label, r) }))),
+    ...userStates.flatMap(x => within.map(w => ({ ...stateRef([...variant, x.style, ...w.applied], { hover: x.hover ?? node.hover, focus: x.focus ?? node.focus, groupHover: x.groupHover ?? node.groupHover, groupFocus: x.groupFocus ?? n.groupFocus, active: n.active }, x.when), cond: [...conds(x.when), ...w.when], lbl: parts(x.label, r) }))),
     ...intervals.map(w => ({ ...stateRef([...variant, ...w.applied], overlays, []), cond: w.when })),
   ];
   level.dis = conds(n.disabled);
   const a = n.a11y ?? {};
-  Object.assign(level, { achk: conds(a.checked), aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
+  Object.assign(level, { ahid: a.hidden === true, achk: conds(a.checked), aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
     pfocus: parts(node.type === 'box' ? node.press?.focus : undefined, r), esc: n.escape ?? '', escTo: parts(n.returnFocus, r), lt: n.layoutTransition ?? '', ex: '', exs: '', ivb: '', ipaths: [], fr: 'nonzero' });
   if (n.exit) {
     const m = r.doc.motion?.[n.exit];
@@ -278,9 +278,10 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
       }
       // A sign-in field (route auth): params.field username | password, placeholder, label, placeholderColor.
       else if (node.widget === 'textInput') {
-        if (depth > WIDGET_DEPTH) throw new Error(`A textInput must sit within ${WIDGET_DEPTH} levels of its route`);
+        if (depth > FIELD_DEPTH) throw new Error(`A textInput must sit within ${FIELD_DEPTH} levels of its route`);
         const field = node.params?.field;
         if (field !== 'username' && field !== 'password') throw new Error('textInput params.field: username or password');
+        level.rn = ((node.style as Record<string, string> | undefined)?.outline ?? (node.style as Record<string, string> | undefined)?.['outline-style']) === 'none' || (!!node.focus && ((node.focus as Record<string, string>).outline ?? 'none') !== 'auto');
         level.t = 'textInput'; level.sym = field; level.parts = parts(node.params?.placeholder, r); level.label = parts(node.params?.label ?? node.params?.placeholder, r);
         level.ivb = value(node.params?.placeholderColor ?? 'inherit', r);
       }
