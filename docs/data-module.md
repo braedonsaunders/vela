@@ -80,6 +80,11 @@ skin binding, log, observation or diagnostic. Error text crossing back to
 Contract strips media URL queries and credential fields. A missing, expired or
 stale response fails closed. Ether broker-grant behavior remains unchanged.
 
+Renderer documents have no vocabulary binding to player props. Renderer 4 also
+rejects vocabulary expressions mentioning `mediaAuth`, `planJson`, `commandJson`
+or `headers`. Live preview receives authorization through a foundation inject,
+not a `LiveTile` or any other renderer-readable model field.
+
 Session updates use the adapter's stream when supported, including cursor resume and
 snapshot fallback. A server without an event stream uses bounded, cancellable snapshot
 polling while the session is active; it must not invent cursors or event semantics.
