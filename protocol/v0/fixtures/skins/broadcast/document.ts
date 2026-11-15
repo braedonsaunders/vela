@@ -16,13 +16,15 @@ const clip = { 'overflow-x': 'hidden', 'overflow-y': 'hidden' } as Style;
 const row = (gap: string, extra: Style = {}): Style => ({ display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap, ...extra } as Style);
 const col = (gap: string, extra: Style = {}): Style => ({ display: 'flex', 'flex-direction': 'column', gap, ...extra } as Style);
 /** Condensed caps, the package's label voice. */
+/** The package's selection: an amber ring, for keyboards and remotes (focus-visible only). */
+const ring: Style = { 'box-shadow': '0px 0px 0px 2px $cue' } as Style;
 const caps = (size: string, extra: Style = {}): Style => ({ 'font-family': display, 'font-size': size, 'font-weight': '650', 'letter-spacing': '0.08em', 'text-transform': 'uppercase', 'line-height': '1', ...extra } as Style);
 
 // ---------------------------------------------------------------- shell
 
 const tab = (label: string, press: Press, on: Node['when']): Node => ({
   type: 'box', group: true, press, label, style: { position: 'relative', ...row('8px'), height: '64px', padding: '0px 14px', color: '$ink2', ...caps('16px', { 'letter-spacing': '0.06em' }), 'white-space': 'nowrap', transition: 'color 160ms linear' },
-  hover: { color: '$ink' }, small: { height: '44px', padding: '0px 12px', 'font-size': '15px' },
+  hover: { color: '$ink' }, focus: { color: '$ink', 'background-color': '$panel' }, small: { height: '44px', padding: '0px 12px', 'font-size': '15px' },
   children: [
     { type: 'text', text: label },
     { type: 'box', when: on, style: { position: 'absolute', left: '14px', right: '14px', bottom: '0px', height: '3px', 'background-color': '$signal' }, small: { left: '12px', right: '12px' } },
@@ -40,9 +42,9 @@ const clock: Node = { type: 'box', when: [{ test: 'env.clock' }], role: 'timer',
   ] };
 
 const iconButton = (action: 'search', label: string, symbol: string): Node => ({ type: 'box', press: { action }, label, style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '11px', 'border-radius': '3px', 'background-color': '$panel', color: '$ink', 'flex-shrink': '0' },
-  hover: { 'background-color': '$panel-hi' }, children: [{ type: 'icon', symbol, style: { width: '18px', height: '18px' } }] });
+  hover: { 'background-color': '$panel-hi' }, focus: ring, children: [{ type: 'icon', symbol, style: { width: '18px', height: '18px' } }] });
 
-const menuItem = (press: Press, label: string, kids: Node[]): Node => ({ type: 'box', press, label, style: { position: 'relative', ...row('12px'), padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', 'font-size': '14px', color: '$ink' }, hover: { 'background-color': '$panel-hi' }, children: kids });
+const menuItem = (press: Press, label: string, kids: Node[]): Node => ({ type: 'box', press, label, style: { position: 'relative', ...row('12px'), padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', 'font-size': '14px', color: '$ink' }, hover: { 'background-color': '$panel-hi' }, focus: { 'background-color': '$panel-hi', ...ring }, children: kids });
 
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'background-color': '$ground', color: '$ink', 'font-family': sans }, children: [
   { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], style: { position: 'relative', 'z-index': '20', ...col('0px'), 'background-color': '$ground', 'box-shadow': '0px 1px 0px $line' }, children: [
@@ -55,7 +57,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       clock,
       iconButton('search', '{s:search}', 'search'),
       { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', width: '40px', height: '40px', 'border-radius': '3px', 'background-color': '$panel', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'flex-shrink': '0' },
-        hover: { 'background-color': '$panel-hi' }, children: [
+        hover: { 'background-color': '$panel-hi' }, focus: ring, children: [
           { type: 'text', text: '{env.viewerInitial}', style: { 'font-family': display, 'font-size': '18px', 'font-weight': '700', color: '$ink' } },
         ] },
     ] },
@@ -127,11 +129,11 @@ const lowerThird: Node = { type: 'box', when: [{ test: 'tile.channelId' }, { tes
 
 /** Honest tile states over the standby card: waiting for the viewer, tuning, or no picture. */
 const tuneIn: Node = { type: 'box', when: [{ test: 'tile.state', is: 'eq', value: 'tune-in' }], press: { action: 'tuneIn' }, label: '{s:tuneInTo}', testId: 'broadcast-tune-in',
-  style: { position: 'absolute', inset: '0px', ...col('14px'), 'align-items': 'center', 'justify-content': 'center', color: '$ink' }, children: [
+  style: { position: 'absolute', inset: '0px', ...col('14px'), 'align-items': 'center', 'justify-content': 'center', color: '$ink' }, small: { 'justify-content': 'flex-start', 'padding-top': '44px' }, focus: { 'box-shadow': 'inset 0px 0px 0px 3px $cue' }, children: [
     { type: 'box', style: { width: '72px', height: '72px', 'border-radius': '36px', 'background-color': '$signal', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-shadow': '0px 12px 40px rgba(255, 61, 46, 0.35)' }, small: { width: '56px', height: '56px' }, children: [
       { type: 'icon', symbol: 'play-fill', style: { width: '26px', height: '26px', color: '$ink', 'margin-left': '4px' } },
     ] },
-    { type: 'text', text: '{s:tuneInTo}', style: caps('20px'), small: { 'font-size': '16px' } },
+    { type: 'text', text: '{s:tuneInTo}', style: caps('20px'), small: { display: 'none' } },
   ] };
 const tuning: Node = { type: 'box', when: [{ test: 'tile.state', is: 'eq', value: 'connecting' }], role: 'status', label: '{s:tuning}', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', ...col('12px'), 'align-items': 'center', 'justify-content': 'center', 'pointer-events': 'none' }, children: [
   { type: 'box', style: { width: '160px', height: '3px', 'background-color': 'rgba(255, 255, 255, 0.12)', ...clip }, children: [
@@ -150,7 +152,7 @@ const monitor: Node = { type: 'box', role: 'region', label: '{s:monitor}', testI
     { type: 'image', when: [{ test: 'tile.state', is: 'ne', value: 'playing' }, { test: 'tile.nowArt' }], src: '{tile.nowArt}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover', opacity: '0.35', filter: 'saturate(0.6)' } },
     { type: 'image', when: [{ test: 'tile.state', is: 'ne', value: 'playing' }, { test: 'tile.nowArt', not: true }], src: `${ASSETS}/standby.svg`, alt: '', style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
     // Over the picture: the whole frame opens full-screen watch once there is a picture.
-    { type: 'box', when: [{ test: 'tile.state', is: 'eq', value: 'playing' }], press: { action: 'watch', arg: '{tile.channelId}' }, label: '{s:watchTuned}', testId: 'broadcast-monitor-watch', style: { position: 'absolute', inset: '0px', cursor: 'pointer' } },
+    { type: 'box', when: [{ test: 'tile.state', is: 'eq', value: 'playing' }], press: { action: 'watch', arg: '{tile.channelId}' }, label: '{s:watchTuned}', testId: 'broadcast-monitor-watch', style: { position: 'absolute', inset: '0px', cursor: 'pointer' }, focus: { 'box-shadow': 'inset 0px 0px 0px 3px $cue' } },
     { type: 'box', style: { position: 'absolute', left: '0px', right: '0px', bottom: '0px', height: '42%', 'pointer-events': 'none', 'background-image': 'linear-gradient(0deg, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0) 100%)' } },
     tuneIn, tuning, noPicture,
     { type: 'box', when: [{ test: 'tile.channelId' }], style: { position: 'absolute', top: '18px', left: '18px', right: '18px', ...row('12px'), 'justify-content': 'space-between', 'pointer-events': 'none' }, small: { top: '10px', left: '10px', right: '10px' }, children: [
@@ -165,7 +167,7 @@ const monitor: Node = { type: 'box', role: 'region', label: '{s:monitor}', testI
 
 const control = (press: Press, label: string, kids: Node[], primary = false, when?: Node['when']): Node => ({ type: 'box', press, label, when,
   style: { position: 'relative', ...row('9px'), height: '44px', 'box-sizing': 'border-box', padding: '0px 16px', 'border-radius': '3px', 'flex-shrink': '0', 'background-color': primary ? '$ink' : '$panel', color: primary ? '$ground' : '$ink', ...caps('16px', { 'letter-spacing': '0.06em' }), transition: 'background-color 140ms linear' },
-  hover: { 'background-color': primary ? '#ffffff' : '$panel-hi' }, small: { height: '40px', padding: '0px 12px', 'font-size': '14px' }, children: kids });
+  hover: { 'background-color': primary ? '#ffffff' : '$panel-hi' }, focus: ring, small: { height: '40px', padding: '0px 12px', 'font-size': '14px' }, children: kids });
 const chButton = (step: string, label: string, glyph: string): Node => control({ action: 'zap', arg: step }, label, [
   { type: 'text', text: '{s:ch}', style: { color: '$ink3' } },
   { type: 'text', text: glyph, style: { 'font-size': '13px', 'line-height': '1' } },
@@ -192,7 +194,7 @@ const controls: Node = { type: 'box', role: 'toolbar', label: '{s:monitorControl
 /** One channel in the favourites stack: pressing it puts it on the monitor. */
 const stackRow: Node = { type: 'box', group: true, press: { action: 'preview', arg: '{ch.id}' }, label: '{s:previewChannel}', testId: 'broadcast-fav-{ch.id}',
   style: { position: 'relative', ...row('12px'), padding: '10px 16px 10px 14px', 'box-shadow': 'inset 0px -1px 0px $line', 'flex-shrink': '0', transition: 'background-color 120ms linear' },
-  hover: { 'background-color': '$panel-hi' },
+  hover: { 'background-color': '$panel-hi' }, focus: { 'background-color': '$panel-hi', 'box-shadow': 'inset 0px 0px 0px 2px $cue' },
   small: { width: '232px', 'border-radius': '3px', 'background-color': '$panel', 'box-shadow': 'none', padding: '10px 12px' }, children: [
     { type: 'box', when: [{ test: 'ch.tuned' }], style: { position: 'absolute', top: '0px', bottom: '0px', left: '0px', width: '3px', 'background-color': '$signal' } },
     { type: 'text', text: '{ch.number}', style: { width: '42px', 'flex-shrink': '0', 'font-family': display, 'font-size': '22px', 'font-weight': '700', 'font-variant-numeric': 'tabular-nums', color: '$ink2' }, small: { width: '34px', 'font-size': '19px' } },
@@ -255,7 +257,8 @@ const sectionHead = (title: string, kids: Node[], lead?: Node): Node => ({ type:
 const nowCard: Node = { type: 'box', group: true, press: { action: 'watch', arg: '{ch.id}' }, label: '{s:watchChannel}', testId: 'broadcast-now-{ch.id}',
   style: { position: 'relative', ...col('10px'), width: 'clamp(248px, 18vw, 340px)', 'flex-shrink': '0' }, small: { width: '236px' }, children: [
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'border-radius': '3px', 'background-color': '$panel', ...clip, 'box-shadow': '0px 0px 0px 1px $line', translate: '0px 0px', transition: 'translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 200ms linear' },
-      groupHover: { translate: '0px -4px', 'box-shadow': '0px 0px 0px 2px $ink, 0px 18px 40px -16px rgba(0, 0, 0, 0.9)' }, children: [
+      groupHover: { translate: '0px -4px', 'box-shadow': '0px 0px 0px 2px $ink, 0px 18px 40px -16px rgba(0, 0, 0, 0.9)' },
+      groupFocus: { translate: '0px -4px', 'box-shadow': '0px 0px 0px 3px $cue, 0px 18px 40px -16px rgba(0, 0, 0, 0.9)' }, children: [
         { type: 'image', when: [{ test: 'ch.nowArt' }], src: '{ch.nowArt}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
         { type: 'box', when: [{ test: 'ch.nowArt', not: true }], style: { position: 'absolute', inset: '0px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-image': 'radial-gradient(ellipse 80% 90% at 50% 40%, #1a2230 0%, #0c1016 100%)' }, children: [
           { type: 'image', when: [{ test: 'ch.logo' }], src: '{ch.logo}', alt: '', style: { width: '46%', height: '42%', 'object-fit': 'contain', opacity: '0.9' } },
@@ -280,7 +283,7 @@ const nowCard: Node = { type: 'box', group: true, press: { action: 'watch', arg:
   ] };
 
 const guideCard: Node = { type: 'box', group: true, press: { action: 'guide' }, label: '{s:fullGuide}', style: { position: 'relative', width: 'clamp(200px, 13vw, 260px)', 'flex-shrink': '0', 'aspect-ratio': '4 / 3', 'align-self': 'flex-start', ...col('8px'), 'justify-content': 'center', 'align-items': 'center', 'border-radius': '3px', 'background-color': '$panel', color: '$ink', 'box-shadow': 'inset 0px 0px 0px 1px $line2' },
-  hover: { 'background-color': '$panel-hi' }, small: { width: '160px' }, children: [
+  hover: { 'background-color': '$panel-hi' }, focus: { 'background-color': '$panel-hi', ...ring }, small: { width: '160px' }, children: [
     { type: 'icon', symbol: 'calendar', style: { width: '26px', height: '26px', color: '$cue' } },
     { type: 'text', text: '{s:fullGuide}', style: caps('18px') },
     { type: 'text', text: '{s:allChannels}', style: { 'font-size': '13px', color: '$ink3' } },
@@ -290,7 +293,7 @@ const onNow: Node = { type: 'box', when: [{ test: 'env.searching', not: true }, 
   sectionHead('{s:onNow}', [
     { type: 'text', text: '{s:acrossChannels}', style: { 'font-size': '14px', color: '$ink3', 'font-variant-numeric': 'tabular-nums' }, small: { display: 'none' } },
     { type: 'box', style: { flex: '1' } },
-    { type: 'box', press: { action: 'guide' }, label: '{s:fullGuide}', style: { position: 'relative', ...row('6px'), ...caps('15px'), color: '$ink2', padding: '6px 0px' }, hover: { color: '$ink' }, children: [
+    { type: 'box', press: { action: 'guide' }, label: '{s:fullGuide}', style: { position: 'relative', ...row('6px'), ...caps('15px'), color: '$ink2', padding: '6px 0px' }, hover: { color: '$ink' }, focus: { color: '$cue' }, children: [
       { type: 'text', text: '{s:fullGuide}' },
       { type: 'icon', symbol: 'forward-chevron', style: { width: '11px', height: '11px' } },
     ] },
@@ -309,7 +312,8 @@ const titleCard: Node = { type: 'box', group: true, press: { action: 'select', a
   style: { position: 'relative', ...col('9px'), width: 'clamp(132px, 9.6vw, 190px)', 'flex-shrink': '0' }, small: { width: '112px' }, children: [
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '2 / 3', 'border-radius': '3px', 'background-color': '$panel', ...clip, 'box-shadow': '0px 0px 0px 1px $line', translate: '0px 0px', transition: 'translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 200ms linear' },
-      groupHover: { translate: '0px -4px', 'box-shadow': '0px 0px 0px 2px $ink, 0px 18px 40px -16px rgba(0, 0, 0, 0.9)' }, children: [
+      groupHover: { translate: '0px -4px', 'box-shadow': '0px 0px 0px 2px $ink, 0px 18px 40px -16px rgba(0, 0, 0, 0.9)' },
+      groupFocus: { translate: '0px -4px', 'box-shadow': '0px 0px 0px 3px $cue, 0px 18px 40px -16px rgba(0, 0, 0, 0.9)' }, children: [
         { type: 'image', when: [{ test: 'card.poster' }], src: '{card.poster}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
         { type: 'box', when: [{ test: 'card.poster', not: true }], style: { position: 'absolute', inset: '0px', padding: '12px', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'background-image': 'linear-gradient(160deg, #1a2230 0%, #0c1016 100%)' }, children: [
           { type: 'text', text: '{card.name}', style: { ...caps('20px', { 'letter-spacing': '0.02em' }), 'line-clamp': '4', 'line-height': '1.02' } },
@@ -358,7 +362,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 const broadcastDoc: SkinDocument = {
-  schema: 1, renderer: 3, id: 'broadcast', name: 'Broadcast', version: '1.0.0', tagline: 'Live TV first: on now, your channels and the guide, with films below.',
+  schema: 1, renderer: 4, id: 'broadcast', name: 'Broadcast', version: '1.0.0', tagline: 'Live TV first: on now, your channels and the guide, with films below.',
   preview: `${ASSETS}/preview.jpg`, swatches: ['#07090d', '#f2f4f7', '#ff3d2e', '#ffc23d', '#141b24'],
   live: { home: true },
   fonts: { display: { family: 'Barlow Condensed', files: [500, 600, 700].map(weight => ({ url: `${ASSETS}/barlow-condensed-${weight}.ttf`, weight, style: 'normal' as const })) } },
