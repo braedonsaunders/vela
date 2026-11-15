@@ -82,6 +82,8 @@ export interface BoxNode extends NodeBase {
   /** A row's pager (inside a home row): this box scrolls sideways; `pageNext`/`pagePrev {row.id}` move it by
    *  max(200, width - 2 x inset - peek) px, and `pager.*` say whether it overflows and is at an end. */
   pager?: { inset?: number; peek?: number };
+  /** A pressable box shows Exact's hover wash under its content (as a compiled button does) unless false. */
+  controlStates?: boolean;
   children?: Node[];
 }
 export interface TextNode extends NodeBase { type: 'text'; text: Template }
@@ -135,5 +137,8 @@ export interface SkinDocument {
   live?: { home?: boolean };
   /** Detail route presentation per viewport class. */
   /** The title page's presentation below and from `from` px (default 640), and the home pane width in px it splits beside it from there. */
-  detail?: { from?: number; small?: 'fullscreen' | 'modal' | 'stack'; wide?: 'fullscreen' | 'modal' | 'stack'; split?: string };
+  detail?: { from?: number; small?: 'fullscreen' | 'modal' | 'stack'; wide?: 'fullscreen' | 'modal' | 'stack'; split?: string;
+    /** A framed title page's surround, drawn behind the document's frame over home: scrim colour (default media.overlay),
+     *  backdrop blur (default 'blur(18px) saturate(1.1)'), or flat: no scrim (a full-page title). */
+    frame?: { scrim?: string; blur?: string; flat?: boolean } };
 }

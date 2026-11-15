@@ -32,6 +32,7 @@ export const STYLE: [string, string][] = [
   ['textAlign', 'text-align'], ['textShadow', 'text-shadow'], ['textStroke', '-webkit-text-stroke'], ['textOverflow', 'text-overflow'], ['lineClamp', 'line-clamp'], ['whiteSpace', 'white-space'], ['fontVariantNumeric', 'font-variant-numeric'],
   ['objectFit', 'object-fit'], ['transformOrigin', 'transform-origin'], ['translate', 'translate'], ['scale', 'scale'], ['rotate', 'rotate'], ['perspective', 'perspective'],
   ['transition', 'transition'], ['animation', 'animation'], ['pointerEvents', 'pointer-events'], ['cursor', 'cursor'],
+  ['outlineStyle', 'outline-style'],
 ];
 /** The motion preset library documents name (docs/skin-schema.md): compiled once, prefixed `vr-`. */
 export const KEYFRAMES: Record<string, string> = {
@@ -54,12 +55,17 @@ export const BINDABLE: [string, string][] = [['width', 'dw'], ['backgroundColor'
 /** An element's rows, read off its `s: Style` prop (a prop is evaluated once at the call
  * site; a derive or fn is expanded at every use, which made each row carry the whole style
  * lookup), with the bound overrides (`d*` props, already filled) and the motion. */
-const CONTENT_ONLY = new Set(['lineClamp', 'objectFit']);
+// Rows the box itself never takes: a text's clamp, an image's fit, and the focus ring (Exact's own,
+// which only `outline: none` suppresses) of a press button or the search input.
+const CONTENT_ONLY = new Set(['lineClamp', 'objectFit', 'outlineStyle']);
 const rows = () => STYLE.filter(([field]) => !CONTENT_ONLY.has(field)).map(([field, row]) => {
   const bind = BINDABLE.find(([f]) => f === field);
   // A box that clips or scrolls takes only relative/absolute/sticky (lower-attr-value); the checker reads the choice off a prop.
   if (field === 'position') return 'position=pos';
   if (field === 'animation') return 'animation=(anim != "" ? anim : s.animation)';
+  // Exact's hover wash for controls (host/web/neutral.css --exact-quaternary-fill, the app is always dark),
+  // under the content, when the box has no image of its own.
+  if (field === 'backgroundImage') return 'background-image=(dbi != "" ? dbi : wash ? "linear-gradient(#ffffff0f 0 0)" : s.backgroundImage)';
   if (field === 'opacity') return 'opacity=(fade ? 0 : dop != "" ? num(dop) : s.opacity)';
   return bind ? `${row}=(${bind[1]} != "" ? ${bind[1]} : s.${field})` : `${row}=s.${field}`;
 }).join(' ');
@@ -84,6 +90,7 @@ ${elementProps}
     lt: string
     se: string
     exitAnim: string
+    wash: bool
     hovering: action
     pointing: action
     keying: action
@@ -94,15 +101,22 @@ ${elementProps}
 `;
 }
 /** The props every element call passes: the node's style for its state, motion and bound rows. */
-const pass = () => `s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}`;
+const pass = () => `s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}`;
 
 function shape(d: number): string {
   const fields = ['t: string', 'base: StateRef', 'sts: StateRef[]', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gf: bool', 'fade: bool', 'dis: Cond[]', 'aexp: Cond[]', 'asel: Cond[]', 'acur: Cond[]', 'aprs: Cond[]', 'ahp: string', 'atitle: Part[]', 'brole: string', 'pfocus: Part[]', 'esc: string', 'escTo: Part[]', 'lt: string', 'se: string', 'ex: string', 'exs: string', 'ivb: string', 'ipaths: string[]', 'fr: string', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
-    'sym: string', 'act: string', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
+    'sym: string', 'act: string', 'cs: bool', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
     'mk: string', 'md: number', 'mdl: number', 'me: string', 'mf: string', 'mit: string', 'mdir: string', 'msk: string', 'msd: number', 'step: number', 'cap: number',
     ...BINDABLE.map(([, f]) => `${f}: Part[]`)];
   if (d < DEPTH) fields.push(`kids: N${d + 1}[]`);
   return `shape N${d}\n${fields.map(f => `  ${f}`).join('\n')}\n`;
+}
+/** The placeholder for a slot's holder among its top-level nodes (n.t == "holder"): the slot box
+ *  is drawn at its document position, so Tab follows the document's order. */
+function holderNode(d: number): string {
+  const value = (type: string) => type.endsWith('[]') ? '[]' : type === 'bool' ? 'false' : type === 'number' ? '0' : type === 'StateRef' ? 'noRef()' : '""';
+  const fields = shape(d).split('\n').slice(1).filter(Boolean).map(l => l.trim().split(': ')).map(([f, t]) => `${f}=${f === 't' ? '"holder"' : value(t)}`);
+  return `fn holderNode${d}(): N${d} = N${d}(${fields.join(', ')})\n`;
 }
 
 function level(d: number): string {
@@ -193,7 +207,7 @@ ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                     if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
                       vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
 ` : ''}${searchLevel(d) ? `                else if n.t == "searchInput"
-                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline="none" flex-grow=1 min-width=0 height="100%" padding=0 margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline-style=(st.outlineStyle == "auto" ? "" : st.outlineStyle) flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
                     ::placeholder
                       color=n.sym
 ` : ''}${d <= PAGER_DEPTH ? `                else if n.t == "sentinel"
@@ -222,9 +236,9 @@ ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                           else${next}
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "auto" ? "" : st.outlineStyle != "" ? st.outlineStyle : n.hf or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "auto" ? "" : st.outlineStyle != "" ? st.outlineStyle : n.hf or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 `;
 }
 
@@ -482,6 +496,10 @@ shape SkinDoc
   detailSmall: string
   detailFrom: number
   detailSplit: string
+  // A framed title page's surround (detail.frame): its scrim colour and backdrop blur, or flat (none).
+  detailScrim: string
+  detailBlur: string
+  detailFlat: bool
 
 ${Object.entries(KEYFRAMES).map(([k, v]) => `keyframes vr-${k}\n  ${v}\n`).join('\n')}
 fn noStyle(): Style = ${noStyleBody()}
@@ -519,7 +537,7 @@ const detailCtxsBody = `match first(e.detail) { case some(d) => (n.rep == "detai
 const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs${d}(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])`;
 
 const noStyleBody = () => `Style(${STYLE.map(([f]) => `${f}=${NUMERIC.has(f) ? ({ opacity: 1, flexShrink: 1, fontWeight: 400, scale: 1 } as Record<string, number>)[f] ?? 0 : '""'}`).join(', ')})`;
-const EMPTY_DOC = `fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)\nfn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=false, nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none")\n`;
+const EMPTY_DOC = `fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)\nfn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=true, nodes=[holderNode${SHELL_FROM}()]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none", detailScrim="transparent", detailBlur="none", detailFlat=true)\n`;
 
 /**
  * The renderer's compatibility version: a document names the version it needs
@@ -564,7 +582,7 @@ export async function generate(out = resolve(import.meta.dir, '../client/rendere
   const all = core();
   const cut = all.indexOf('keyframes vr-');
   const header = all.slice(0, all.indexOf('\nshape Style'));
-  const shapes = all.slice(0, cut) + `fn noStyle(): Style = ${noStyleBody()}\n` + EMPTY_DOC;
+  const shapes = all.slice(0, cut) + `fn noStyle(): Style = ${noStyleBody()}\n` + EMPTY_DOC + holderNode(SHELL_FROM);
   await writeFile(join(out, 'shapes.contract'), shapes.replace('do not edit. The skin document renderer', 'do not edit. The skin document shapes'));
   const shapeNames = [...shapes.matchAll(/^(?:shape|fn) (\w+)/gm)].map(m => m[1]);
   const body = all.slice(cut).replace(/^fn noStyle\(\): Style = [^\n]*\n/m, '');
