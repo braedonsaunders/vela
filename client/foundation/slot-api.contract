@@ -1,0 +1,166 @@
+use Card, HomeModel, SearchModel, DetailModel, Viewport, LibraryNav, LibraryModel, QuickModel, CardPreview, SkinManifest from "./models.contract"
+use PlayerView from "./player-models.contract"
+use GuideModel, LiveTile, GuideFocus from "../live/models.contract"
+
+// The slot ABI (version 2), the same for every skin, official or third-party. Each slot
+// takes ONE record prop `p` with the values it shows; the actions it may call come by
+// injection, under the names listed for each slot in tools/skin-registry.ts (SLOTS),
+// so a skin declares `inject` with the ones it uses (`selectTitle: action`). The
+// foundation builds each record once; skins read the fields they need.
+
+// The frame around every signed-in screen: navigation, the profile menu and the picker.
+shape ShellProps
+  // The active skin's id and picker entry; skins is what the appearance picker offers.
+  skin: string
+  current: SkinManifest
+  skins: SkinManifest[]
+  viewer: string
+  viewport: Viewport
+  canLive: bool
+  canLibrary: bool
+  libraries: LibraryNav[]
+  // "home", "live" or a library id.
+  section: string
+  secureOrigin: string
+  secureBusy: bool
+  secureError: string
+
+shape HomeProps
+  model: HomeModel
+  active: bool
+  query: string
+  small: bool
+  still: bool
+  heroIndex: number
+  homeMoreLoading: bool
+  rowMoreLoading: string[]
+  libraries: LibraryNav[]
+  canLive: bool
+  cardPreview: CardPreview
+
+shape SearchProps
+  query: string
+  model: SearchModel
+  descriptive: SearchModel
+  ai: SearchModel
+  generation: number
+  loading: bool
+  error: bool
+  aiAvailable: bool
+  // Each optional lane's state for this query: "off", "loading", "failed" or "ready".
+  descriptiveState: string
+  aiState: string
+  small: bool
+  still: bool
+
+shape SearchFieldProps
+  query: string
+
+shape DetailProps
+  model: DetailModel
+  small: bool
+  still: bool
+  // The visit's ?season= (empty: the title's default season); season tabs highlight it.
+  season: string
+
+shape StatusProps
+  // "home", "library", "detail", "loading" or "failure".
+  kind: string
+  message: string
+  small: bool
+  still: bool
+
+shape CollectionProps
+  id: string
+  name: string
+  items: Card[]
+  small: bool
+  still: bool
+
+shape LibraryProps
+  model: LibraryModel
+  loading: bool
+  moreLoading: bool
+  small: bool
+  still: bool
+
+shape GuideProps
+  model: GuideModel
+  small: bool
+  still: bool
+  zoom: number
+  tile: LiveTile
+  focus: GuideFocus
+
+shape LiveControlsProps
+  lowDelay: bool
+  reconnecting: bool
+  delivery: string
+  drift: number
+  driftLabel: string
+  canCatchUp: bool
+
+shape MiniGuideProps
+  model: GuideModel
+  playing: string
+  target: string
+  small: bool
+  still: bool
+
+shape PlayerProps
+  model: PlayerView
+  title: string
+  visible: bool
+  small: bool
+  still: bool
+  busy: bool
+  serverError: string
+
+shape AuthStageProps
+  still: bool
+  backdrop: string
+  wordmark: string
+
+shape AuthNoticeProps
+  // "offline", "connecting" or "redeeming".
+  kind: string
+  still: bool
+
+shape SignInProps
+  username: string
+  password: string
+  passwordAvailable: bool
+  quickAvailable: bool
+  error: string
+  busy: bool
+  still: bool
+  secureOrigin: string
+  secureBusy: bool
+  secureError: string
+
+shape QuickConnectProps
+  model: QuickModel
+  error: string
+  still: bool
+
+// What the root reads about the active skin instead of naming it (skin.json "traits";
+// a value a skin leaves out is the default skin's).
+shape SkinTraits
+  // Page and ink colour tokens behind every screen.
+  page: string
+  ink: string
+  // The title page is a plain page, not a framed overlay.
+  flatDetail: bool
+  // Home, libraries and Live TV slide sideways between sections.
+  panSections: bool
+  // Home content fades out under a floating navigation bar.
+  barMask: bool
+  // The launch splash stands on paper (a light ground).
+  splashOnPaper: bool
+  // The framed title page: its scrim, frame shadow and close button.
+  detailScrim: string
+  detailShadow: string
+  closeBorderWidth: number
+  closeBorderColor: string
+  closeBackground: string
+  closeInk: string

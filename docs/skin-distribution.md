@@ -187,22 +187,23 @@ viewers: the client takes the new release and switches skin with the dissolve
 ```
 marquee-night/
   skin.json          {"schema":1,"id":"marquee-night","name":"Marquee Night","version":"1.0.0",
-                      "tagline":"…","slotApi":1,"vela":">=0.1.0 <0.2.0",
+                      "tagline":"…","slotApi":2,"vela":">=0.1.0 <0.2.0",
                       "preview":"assets/preview.jpg","swatches":["#101010","#f5f1e9","#e8b33b"]}
-  slots.contract     the extension slot ABI (below)
+  slots.contract     the slots it implements (below)
   *.contract         more components, imported as ./name.contract
   strings/en.json    optional, keys "skin.<id>.*" only
   assets/            png, jpg, webp, avif, svg, ttf, otf, woff, woff2
 ```
 
-**Extension slot ABI v1** (`slotApi: 1`): `slots.contract` exports components `Shell`, `Home`,
-`SearchSurface`, `Row`, `Detail`, `SearchField`, `PlayerChrome`, `Guide`, `LiveControls` and
-functions `detailPresentation(width)`, `detailSplit(width)`, with the props documented in
-`docs/skins.md`. Slots it does not take over (auth, status, library, collection) use
-cinematic's. It may import the shared models (`foundation/models`, `player-models`,
-`skin-picker`, `live/models`) and any built-in engine's components (`../index/player.contract`)
-as a base. This is exactly what `client/skins/example` implements, which is why the builder
-installs a package into that slot.
+**Slot ABI 2** (`slotApi: 2`): a package implements any of the slots in
+`docs/skins.md` (`Shell`, `Home`, `SearchSurface`, `Detail`, `PlayerChrome`, `Guide`, ...)
+as components that each take one record prop `p` (`foundation/slot-api.contract`) and
+`inject` the actions they call, plus optional `detailPresentation(width)` and
+`detailSplit(width)`. Slots it leaves out are the default skin's. It may import the shared
+models (`foundation/models`, `player-models`, `skin-picker`, `slot-api`, `live/models`) and
+any official skin's components (`../index/player.contract`) as a base, as
+`client/skins/example` does. Official skins are packages of exactly this shape, installed
+by the same generator.
 
 ### 5.2 Rules (`tools/skin.ts check`)
 
@@ -212,7 +213,7 @@ installs a package into that slot.
   handlers or external `href`.
 - Imports only from the package and the allowlist above.
 - Only package file types; no links. Limits: 200 files, 512 KiB Contract, 1 MiB per asset,
-  4 MiB total. All declared slots present; `slotApi` and the id checked.
+  4 MiB total. At least one slot, each taking its record; `slotApi` and the id checked.
 
 The static rules are the first line. The binding guarantees are structural: Contract cannot
 perform I/O, the data module holds credentials, and the page's CSP (section 7) refuses any
@@ -224,10 +225,11 @@ foreign image, font, media or connection a hostile skin might build at runtime f
 1. `check` the package.
 2. Stage the **committed** Vela client (`git archive HEAD client protocol`), never the
    working tree; require `vendor/exact` at `EXACT_REVISION`.
-3. Install the package into the extension slot: Contract into `client/skins/example/`
-   (asset paths rewritten to `assets/skins/<id>/`), a generated `manifest.contract` from
-   `skin.json`, assets and strings merged, and the slot's id `"example"` renamed to the
-   package id across the five foundation files that dispatch it.
+3. Install the package as `client/skins/<id>/` (asset paths rewritten to
+   `assets/skins/<id>/`, assets and strings merged), then generate the build's registry
+   with `--only <id>` (`tools/skin-registry.ts`, the generator every build runs): the
+   dispatch holds the package and the default skin's fallback slots; the skin list and
+   manifests cover every installed skin.
 4. `player/build.ts`, then Exact's production `web-build --out dist --render none`.
 5. Write `~/.scratch/tmp/vela/skins/<id>-<version>/webroot.tar.gz` and `skin-build.json`:
    id, version, slot API, Vela version and revision, Exact revision, the source digest per
@@ -259,10 +261,8 @@ new official release, Ether rebuilds every installed package against it in the b
 release; a package whose `slotApi` or `vela` range no longer matches stays on its last build
 (and its client release) or is disabled, with the reason shown to the owner.
 
-**Today's limits.** One package per build (one extension slot). Several custom skins at once
-need either N generated slots or the per-engine builds (one build per engine behind a small
-loader), which the packager measured and paused pending the icon-size fixes. Bundle cost: a
-package adds its own plan nodes to the all-skins bundle; keep icons as `symbol:` assets.
+**Engines.** Each package is its own single-engine build, served beside the official
+engines; several custom skins are several builds. Keep icons as `symbol:` assets.
 
 ### 5.4 Agent quickstart (paste into a coding agent)
 

@@ -1,31 +1,27 @@
 use PlayerView, PlayerOption from "../../foundation/player-models.contract"
 use Glyph, Solid, SkipGlyph, Spinner, Primary, Secondary, Round, mqFade from "./look.contract"
+use PlayerProps from "../../foundation/slot-api.contract"
 
 // The player: a back button and title on top, a centred amber spinner while the
 // engine waits, and a bottom control bar with an amber timeline, transport in the
 // middle and volume, tracks, picture-in-picture and fullscreen on the right.
 component PlayerChrome
   props
-    model: PlayerView
-    title: string
-    visible: bool
-    small: bool
-    still: bool
-    busy: bool
-    serverError: string
+    p: PlayerProps
+  inject
     command: action
     seek: action
     editing: action
     close: action
   state scrubbing = false
-  derive blocked = busy or model.state == "ended"
-  derive hasSettings = model.audio.length > 1 or model.subtitles.length > 0 or model.qualities.length > 1 or model.paths.length > 1 or model.chapters.length > 0
-  derive failure = (serverError != "" ? serverError : model.reason)
-  derive failed = model.state == "failed" or serverError != ""
-  derive waiting = not failed and (model.waiting or model.state == "loading" or model.state == "buffering" or model.state == "recovering")
-  derive shown = (visible or model.state != "playing")
-  derive level = (model.muted ? 0 : max(0, min(1, model.volume)))
-  derive fade = (still ? "none" : "opacity 220ms linear")
+  derive blocked = p.busy or p.model.state == "ended"
+  derive hasSettings = p.model.audio.length > 1 or p.model.subtitles.length > 0 or p.model.qualities.length > 1 or p.model.paths.length > 1 or p.model.chapters.length > 0
+  derive failure = (p.serverError != "" ? p.serverError : p.model.reason)
+  derive failed = p.model.state == "failed" or p.serverError != ""
+  derive waiting = not failed and (p.model.waiting or p.model.state == "loading" or p.model.state == "buffering" or p.model.state == "recovering")
+  derive shown = (p.visible or p.model.state != "playing")
+  derive level = (p.model.muted ? 0 : max(0, min(1, p.model.volume)))
+  derive fade = (p.still ? "none" : "opacity 220ms linear")
   action menuChanged(e: ToggleEvent)
     editing(e.newState == "open")
   action scrubFocus(on: bool)
@@ -37,14 +33,14 @@ component PlayerChrome
     command("volume", `${v}`)
   view
     column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="marquee.ink" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
-      row padding=(small ? "8px 8px 56px" : "14px 20px 90px") gap=(small ? 6 : 12) align-items="center" background-image="linear-gradient(180deg, var(--marquee.scrim) 0%, var(--marquee.scrim-clear) 100%)" opacity=(shown ? 1 : 0) transition=fade
+      row padding=(p.small ? "8px 8px 56px" : "14px 20px 90px") gap=(p.small ? 6 : 12) align-items="center" background-image="linear-gradient(180deg, var(--marquee.scrim) 0%, var(--marquee.scrim-clear) 100%)" opacity=(shown ? 1 : 0) transition=fade
         button press=close pointer-events=(shown ? "auto" : "none") aria-label=t("ui.closePlayer") class=Round width=44 height=44 color="marquee.ink"
           Glyph(name="back", size=24)
-        text title font-size=(small ? 16 : 18) font-weight=600 flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis" text-shadow="0px 1px 8px var(--marquee.shadow)"
-        if not small and (model.quality != "" or model.path != "")
-          text (model.quality != "" ? model.quality : model.path) testId="player-quality" font-size=12 font-weight=700 letter-spacing="0.04em" padding="3px 8px" border-radius=3 background-color="marquee.scrim-soft" color="marquee.ink-dim" white-space="nowrap"
+        text p.title font-size=(p.small ? 16 : 18) font-weight=600 flex=1 min-width=0 white-space="nowrap" overflow="hidden" text-overflow="ellipsis" text-shadow="0px 1px 8px var(--marquee.shadow)"
+        if not p.small and (p.model.quality != "" or p.model.path != "")
+          text (p.model.quality != "" ? p.model.quality : p.model.path) testId="player-quality" font-size=12 font-weight=700 letter-spacing="0.04em" padding="3px 8px" border-radius=3 background-color="marquee.scrim-soft" color="marquee.ink-dim" white-space="nowrap"
       if failed
-        column pointer-events="auto" align-self="center" align-items="center" text-align="center" gap=12 margin="0px 16px" padding=(small ? "24px 20px" : "30px 36px") max-width=440 box-sizing="border-box" border-radius=8 background-color="marquee.menu" box-shadow="0px 20px 60px var(--marquee.shadow)" role="alert" testId="player-status" animation="mqFade 200ms linear both"
+        column pointer-events="auto" align-self="center" align-items="center" text-align="center" gap=12 margin="0px 16px" padding=(p.small ? "24px 20px" : "30px 36px") max-width=440 box-sizing="border-box" border-radius=8 background-color="marquee.menu" box-shadow="0px 20px 60px var(--marquee.shadow)" role="alert" testId="player-status" animation="mqFade 200ms linear both"
           column color="marquee.amber"
             Glyph(name="alert", size=30)
           text t("ui.playbackInterrupted") font-size=20 font-weight=700
@@ -57,40 +53,40 @@ component PlayerChrome
               text t("ui.closePlayer") font-size=14
       else
         if waiting
-          column align-self="center" align-items="center" gap=14 role="status" aria-label=(model.state == "recovering" ? t("ui.recoveringPlayback") : model.state == "loading" ? t("ui.preparingPlayback") : t("ui.buffering")) testId="player-status" animation=(still ? "none" : "mqFade 300ms linear 150ms both")
-            Spinner(size=(small ? 48 : 64), still=still)
-            if model.state == "loading" or model.state == "recovering"
-              text (model.state == "recovering" ? t("ui.recoveringPlayback") : model.preparation != "" ? model.preparation : t("ui.preparingPlayback")) font-size=14 color="marquee.ink-dim" text-shadow="0px 1px 8px var(--marquee.shadow)"
-      column padding=(small ? "56px 12px 10px" : "96px 24px 16px") gap=(small ? 4 : 6) background-image="linear-gradient(0deg, var(--marquee.scrim) 0%, var(--marquee.scrim-soft) 55%, var(--marquee.scrim-clear) 100%)" opacity=(shown ? 1 : 0) transition=fade pointer-events=(shown ? "auto" : "none")
-        if model.actionError != "" and failure == ""
-          text model.actionError color="marquee.amber" font-size=13 role="status"
+          column align-self="center" align-items="center" gap=14 role="status" aria-label=(p.model.state == "recovering" ? t("ui.recoveringPlayback") : p.model.state == "loading" ? t("ui.preparingPlayback") : t("ui.buffering")) testId="player-status" animation=(p.still ? "none" : "mqFade 300ms linear 150ms both")
+            Spinner(size=(p.small ? 48 : 64), still=p.still)
+            if p.model.state == "loading" or p.model.state == "recovering"
+              text (p.model.state == "recovering" ? t("ui.recoveringPlayback") : p.model.preparation != "" ? p.model.preparation : t("ui.preparingPlayback")) font-size=14 color="marquee.ink-dim" text-shadow="0px 1px 8px var(--marquee.shadow)"
+      column padding=(p.small ? "56px 12px 10px" : "96px 24px 16px") gap=(p.small ? 4 : 6) background-image="linear-gradient(0deg, var(--marquee.scrim) 0%, var(--marquee.scrim-soft) 55%, var(--marquee.scrim-clear) 100%)" opacity=(shown ? 1 : 0) transition=fade pointer-events=(shown ? "auto" : "none")
+        if p.model.actionError != "" and failure == ""
+          text p.model.actionError color="marquee.amber" font-size=13 role="status"
         // The timeline: buffered ranges, the amber played fill, chapter marks and a thumb over a transparent native range.
         column position="relative" height=22 justify-content="center"
-          column position="absolute" left=0 right=0 height=(scrubbing ? 6 : 4) border-radius=3 background-color="marquee.track" overflow="hidden" transition=(still ? "none" : "height 120ms linear")
-            for range in model.buffered key=range.id
+          column position="absolute" left=0 right=0 height=(scrubbing ? 6 : 4) border-radius=3 background-color="marquee.track" overflow="hidden" transition=(p.still ? "none" : "height 120ms linear")
+            for range in p.model.buffered key=range.id
               column position="absolute" top=0 bottom=0 left=`${range.left}%` width=`${range.width}%` background-color="marquee.buffer"
-            column position="absolute" left=0 top=0 bottom=0 width=`${model.progress}%` background-color="marquee.amber"
-          for chapter in model.chapters key=chapter.id
+            column position="absolute" left=0 top=0 bottom=0 width=`${p.model.progress}%` background-color="marquee.amber"
+          for chapter in p.model.chapters key=chapter.id
             column position="absolute" left=`${chapter.percent}%` width=2 height=(scrubbing ? 6 : 4) background-color="marquee.scrim" aria-hidden=true
-          column position="absolute" left=`calc(${model.progress}% - 7px)` width=14 height=14 border-radius=7 background-color="marquee.amber" box-shadow="0px 1px 6px var(--marquee.shadow)" scale=(scrubbing or still ? 1 : 0.8) transition=(still ? "none" : "scale 120ms linear") aria-hidden=true
-          input focus=scrubFocus(true) blur=scrubFocus(false) type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub aria-label=t("ui.playbackPosition") testId="player-scrub" disabled=(model.duration <= 0 or blocked) position="absolute" left=0 right=0 width="100%" height=22 margin=0 opacity=0 cursor="pointer"
-        row align-items="center" gap=(small ? 2 : 8)
+          column position="absolute" left=`calc(${p.model.progress}% - 7px)` width=14 height=14 border-radius=7 background-color="marquee.amber" box-shadow="0px 1px 6px var(--marquee.shadow)" scale=(scrubbing or p.still ? 1 : 0.8) transition=(p.still ? "none" : "scale 120ms linear") aria-hidden=true
+          input focus=scrubFocus(true) blur=scrubFocus(false) type="range" min=0 max=max(1, p.model.duration) step=0.1 value=p.model.position change=scrub aria-label=t("ui.playbackPosition") testId="player-scrub" disabled=(p.model.duration <= 0 or blocked) position="absolute" left=0 right=0 width="100%" height=22 margin=0 opacity=0 cursor="pointer"
+        row align-items="center" gap=(p.small ? 2 : 8)
           row flex=1 min-width=0 gap=6 align-items="baseline"
-            text model.elapsed font-size=(small ? 12 : 13) font-variant-numeric="tabular-nums" color="marquee.ink"
-            if not small
+            text p.model.elapsed font-size=(p.small ? 12 : 13) font-variant-numeric="tabular-nums" color="marquee.ink"
+            if not p.small
               text "/" font-size=13 color="marquee.ink-faint" aria-hidden=true
-              text (model.duration > 0 ? t("marquee.remaining", time=model.remaining) : model.remaining) font-size=13 font-variant-numeric="tabular-nums" color="marquee.ink-dim"
-          row gap=(small ? 2 : 10) align-items="center" justify-content="center" flex-shrink=0
-            button disabled=blocked press=command("seekBy", "-10") aria-label=t("ui.back10Seconds") class=Round width=(small ? 40 : 46) height=(small ? 40 : 46) color="marquee.ink"
-              SkipGlyph(forward=false, size=(small ? 26 : 30))
-            button disabled=(model.state == "ended") press=command(model.playing ? "pause" : "play", "") aria-label=(model.state == "ended" ? t("ui.finished") : model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" class=Round width=(small ? 50 : 58) height=(small ? 50 : 58) color="marquee.ink"
-              Solid(name=(model.playing ? "pause" : "play"), size=(small ? 30 : 36))
-            button disabled=(model.duration <= 0 or blocked) press=command("seekBy", "10") aria-label=t("ui.forward10Seconds") class=Round width=(small ? 40 : 46) height=(small ? 40 : 46) color="marquee.ink"
-              SkipGlyph(forward=true, size=(small ? 26 : 30))
-          row flex=1 min-width=0 gap=(small ? 0 : 4) align-items="center" justify-content="flex-end"
-            button press=command("mute", "") aria-label=(model.muted ? t("ui.unmute") : t("ui.mute")) aria-pressed=model.muted testId="player-mute" class=Round width=40 height=40 color="marquee.ink"
-              Glyph(name=(model.muted or model.volume <= 0 ? "mute" : model.volume < 0.5 ? "volume-low" : "volume"), size=22)
-            if not small
+              text (p.model.duration > 0 ? t("marquee.remaining", time=p.model.remaining) : p.model.remaining) font-size=13 font-variant-numeric="tabular-nums" color="marquee.ink-dim"
+          row gap=(p.small ? 2 : 10) align-items="center" justify-content="center" flex-shrink=0
+            button disabled=blocked press=command("seekBy", "-10") aria-label=t("ui.back10Seconds") class=Round width=(p.small ? 40 : 46) height=(p.small ? 40 : 46) color="marquee.ink"
+              SkipGlyph(forward=false, size=(p.small ? 26 : 30))
+            button disabled=(p.model.state == "ended") press=command(p.model.playing ? "pause" : "play", "") aria-label=(p.model.state == "ended" ? t("ui.finished") : p.model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" class=Round width=(p.small ? 50 : 58) height=(p.small ? 50 : 58) color="marquee.ink"
+              Solid(name=(p.model.playing ? "pause" : "play"), size=(p.small ? 30 : 36))
+            button disabled=(p.model.duration <= 0 or blocked) press=command("seekBy", "10") aria-label=t("ui.forward10Seconds") class=Round width=(p.small ? 40 : 46) height=(p.small ? 40 : 46) color="marquee.ink"
+              SkipGlyph(forward=true, size=(p.small ? 26 : 30))
+          row flex=1 min-width=0 gap=(p.small ? 0 : 4) align-items="center" justify-content="flex-end"
+            button press=command("mute", "") aria-label=(p.model.muted ? t("ui.unmute") : t("ui.mute")) aria-pressed=p.model.muted testId="player-mute" class=Round width=40 height=40 color="marquee.ink"
+              Glyph(name=(p.model.muted or p.model.volume <= 0 ? "mute" : p.model.volume < 0.5 ? "volume-low" : "volume"), size=22)
+            if not p.small
               column position="relative" width=90 height=22 justify-content="center" flex-shrink=0 margin-right=6
                 column position="absolute" left=0 right=0 height=4 border-radius=2 background-color="marquee.track" overflow="hidden"
                   column height=4 width=`${level * 100}%` background-color="marquee.ink"
@@ -99,45 +95,45 @@ component PlayerChrome
             if hasSettings
               button popovertarget="marquee-player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" class=Round width=40 height=40 color="marquee.ink"
                 Glyph(name="sliders", size=22)
-            if model.pip and not small
+            if p.model.pip and not p.small
               button press=command("pip", "") aria-label=t("ui.pictureInPicture") class=Round width=40 height=40 color="marquee.ink"
                 Glyph(name="pip", size=22)
-            if model.fullscreen
+            if p.model.fullscreen
               button press=command("fullscreen", "") aria-label=t("ui.fullscreen") class=Round width=40 height=40 color="marquee.ink"
                 Glyph(name="expand", size=20)
       if hasSettings
-        column id="marquee-player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=10 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 24px)" : 320) max-height="62vh" overflow-y="auto" box-sizing="border-box" padding="8px 0px" border="none" border-radius=8 background-color="marquee.menu" color="marquee.ink" box-shadow="0px 16px 50px var(--marquee.shadow)" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
-          if model.audio.length > 1
+        column id="marquee-player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=10 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(p.small ? "calc(100vw - 24px)" : 320) max-height="62vh" overflow-y="auto" box-sizing="border-box" padding="8px 0px" border="none" border-radius=8 background-color="marquee.menu" color="marquee.ink" box-shadow="0px 16px 50px var(--marquee.shadow)" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
+          if p.model.audio.length > 1
             MenuHead(label=t("ui.audio"))
-            for track in model.audio key=track.id
-              Choice(label=track.label, on=((model.pendingAudioId != "" ? model.pendingAudioId : model.audioId) == track.id), disabled=blocked, press=command("audio", track.id))
-            if model.pendingAudioId != ""
+            for track in p.model.audio key=track.id
+              Choice(label=track.label, on=((p.model.pendingAudioId != "" ? p.model.pendingAudioId : p.model.audioId) == track.id), disabled=blocked, press=command("audio", track.id))
+            if p.model.pendingAudioId != ""
               row gap=8 align-items="center" padding="4px 16px 8px" role="status"
-                Spinner(size=14, still=still)
+                Spinner(size=14, still=p.still)
                 text t("ui.switchingAudioSoon") font-size=12 color="marquee.ink-dim"
           else
-            if model.audioLabel != ""
+            if p.model.audioLabel != ""
               MenuHead(label=t("ui.audio"))
-              text model.audioLabel font-size=14 color="marquee.ink-dim" padding="4px 16px 10px"
-          if model.subtitles.length > 0
+              text p.model.audioLabel font-size=14 color="marquee.ink-dim" padding="4px 16px 10px"
+          if p.model.subtitles.length > 0
             MenuHead(label=t("ui.subtitles"))
-            Choice(label=t("ui.off"), on=(model.subtitleId == ""), disabled=blocked, press=command("subtitle", ""))
-            for track in model.subtitles key=track.id
-              Choice(label=track.label, on=(model.subtitleId == track.id), disabled=blocked, press=command("subtitle", track.id))
-          if model.qualities.length > 1
+            Choice(label=t("ui.off"), on=(p.model.subtitleId == ""), disabled=blocked, press=command("subtitle", ""))
+            for track in p.model.subtitles key=track.id
+              Choice(label=track.label, on=(p.model.subtitleId == track.id), disabled=blocked, press=command("subtitle", track.id))
+          if p.model.qualities.length > 1
             MenuHead(label=t("ui.quality"))
-            Choice(label=t("ui.autoAdaptToYourConnection"), on=(model.lockedQuality == ""), disabled=blocked, press=command("quality", ""))
-            for quality in model.qualities key=quality.id
-              Choice(label=quality.label, on=(model.lockedQuality == quality.id), disabled=blocked, press=command("quality", quality.id))
-          if model.paths.length > 1
+            Choice(label=t("ui.autoAdaptToYourConnection"), on=(p.model.lockedQuality == ""), disabled=blocked, press=command("quality", ""))
+            for quality in p.model.qualities key=quality.id
+              Choice(label=quality.label, on=(p.model.lockedQuality == quality.id), disabled=blocked, press=command("quality", quality.id))
+          if p.model.paths.length > 1
             MenuHead(label=t("ui.playbackPath"))
-            for path in model.paths key=path.id
-              Choice(label=path.label, on=(model.pathId == path.id), disabled=blocked, press=command("switchPath", path.id))
-          if model.chapters.length > 0
+            for path in p.model.paths key=path.id
+              Choice(label=path.label, on=(p.model.pathId == path.id), disabled=blocked, press=command("switchPath", path.id))
+          if p.model.chapters.length > 0
             MenuHead(label=t("ui.chapters"))
-            for chapter in model.chapters key=chapter.id
+            for chapter in p.model.chapters key=chapter.id
               Choice(label=chapter.label, on=false, disabled=blocked, press=seek(chapter.seconds))
-          text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 color="marquee.ink-faint" padding="10px 16px 6px" border-top="1px solid var(--marquee.line)" margin-top=6
+          text t("ui.pathQuality", path=p.model.path, quality=p.model.quality) font-size=12 color="marquee.ink-faint" padding="10px 16px 6px" border-top="1px solid var(--marquee.line)" margin-top=6
 
 component MenuHead
   props

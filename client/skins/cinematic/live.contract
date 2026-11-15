@@ -1,5 +1,6 @@
 use GuideModel, GuideChannel from "../../live/models.contract"
 use Eyebrow, glide, quick from "./look.contract"
+use LiveControlsProps, MiniGuideProps from "../../foundation/slot-api.contract"
 
 keyframes zapIn
   from opacity=0 translate="-18px 0px"
@@ -11,12 +12,8 @@ keyframes zapOut
 // delay and catch-up, and channel up/down for pointers and touch.
 component LiveControls
   props
-    lowDelay: bool
-    reconnecting: bool
-    delivery: string
-    drift: number
-    driftLabel: string
-    canCatchUp: bool
+    p: LiveControlsProps
+  inject
     toggleLowDelay: action
     catchUp: action
     zap: action
@@ -26,26 +23,26 @@ component LiveControls
         row gap=6 align-items="center" padding="3px 8px" border-radius=6 background-color="cinematic.guide-now"
           column width=6 height=6 border-radius=3 background-color="ink.primary" aria-hidden=true
           text t("live.liveBadge") font-size=10 font-weight=750 letter-spacing="0.14em"
-        text (lowDelay ? t("live.lowDelay") : t("live.adaptive")) font-size=13 font-weight=600 color="ink.secondary" flex=1
+        text (p.lowDelay ? t("live.lowDelay") : t("live.adaptive")) font-size=13 font-weight=600 color="ink.secondary" flex=1
         row gap=4
           button press=zap(-1) aria-label=t("live.channelUp") class=ZapButton
             image "symbol:back" width=13 height=13 rotate="90deg" aria-hidden=true
           button press=zap(1) aria-label=t("live.channelDown") class=ZapButton
             image "symbol:back" width=13 height=13 rotate="-90deg" aria-hidden=true
-      if reconnecting
+      if p.reconnecting
         text t("live.reconnecting") role="status" font-size=13 color="ink.secondary"
-      if delivery == "upstream-gap"
+      if p.delivery == "upstream-gap"
         text t("live.gap") role="status" font-size=13 color="ink.secondary"
-      if delivery == "segment-delayed"
+      if p.delivery == "segment-delayed"
         text t("live.delayed") role="status" font-size=13 color="ink.secondary"
-      if delivery == "waiting-for-publication"
+      if p.delivery == "waiting-for-publication"
         text t("live.publication") role="status" font-size=13 color="ink.secondary"
-      if drift > 0
-        text t("live.behind", seconds=driftLabel) role="status" font-size=13 color="ink.secondary" font-variant-numeric="tabular-nums"
+      if p.drift > 0
+        text t("live.behind", seconds=p.driftLabel) role="status" font-size=13 color="ink.secondary" font-variant-numeric="tabular-nums"
       row gap=8
-        button press=toggleLowDelay aria-label=t("ui.toggleLowDelay") aria-pressed=lowDelay class=LivePill background-color=(lowDelay ? "ink.primary" : "cinematic.control") color=(lowDelay ? "ink.inverse" : "ink.primary")
-          text (lowDelay ? t("ui.lowDelayOn") : t("ui.useLowDelay")) font-size=13 font-weight=600
-        if canCatchUp and drift > 0
+        button press=toggleLowDelay aria-label=t("ui.toggleLowDelay") aria-pressed=p.lowDelay class=LivePill background-color=(p.lowDelay ? "ink.primary" : "cinematic.control") color=(p.lowDelay ? "ink.inverse" : "ink.primary")
+          text (p.lowDelay ? t("ui.lowDelayOn") : t("ui.useLowDelay")) font-size=13 font-weight=600
+        if p.canCatchUp and p.drift > 0
           button press=catchUp class=LivePill background-color="cinematic.control" color="ink.primary"
             text t("live.catchUp") font-size=13 font-weight=600
 
@@ -53,21 +50,18 @@ component LiveControls
 // with what is on now and next. It appears while the viewer flicks channels.
 component MiniGuide
   props
-    model: GuideModel
-    playing: string
-    target: string
-    small: bool
-    still: bool
+    p: MiniGuideProps
+  inject
     tune: action
-  derive ids = model.channels.map(c => c.id)
-  derive at = max(0, ids.indexOf(target != "" ? target : playing))
-  derive n = model.channels.length
-  derive around = (n < 3 ? model.channels : model.channels.slice((at - 1 + n) % n, (at - 1 + n) % n + 1).concat(model.channels.slice(at, at + 1)).concat(model.channels.slice((at + 1) % n, (at + 1) % n + 1)))
+  derive ids = p.model.channels.map(c => c.id)
+  derive at = max(0, ids.indexOf(p.target != "" ? p.target : p.playing))
+  derive n = p.model.channels.length
+  derive around = (n < 3 ? p.model.channels : p.model.channels.slice((at - 1 + n) % n, (at - 1 + n) % n + 1).concat(p.model.channels.slice(at, at + 1)).concat(p.model.channels.slice((at + 1) % n, (at + 1) % n + 1)))
   view
-    column gap=8 width=(small ? "calc(100% - 32px)" : 400) role="region" aria-label=t("live.channels") aria-live="polite" animation=(still ? "none" : `zapIn 260ms ${glide()} both`) -exact-exit-animation="zapOut 160ms ease-in both"
+    column gap=8 width=(p.small ? "calc(100% - 32px)" : 400) role="region" aria-label=t("live.channels") aria-live="polite" animation=(p.still ? "none" : `zapIn 260ms ${glide()} both`) -exact-exit-animation="zapOut 160ms ease-in both"
       for c, i in around key=c.id
-        if (n < 3 ? c.id == (target != "" ? target : playing) : i == 1)
-          MiniGuideCard(channel=c, playing=(c.id == playing), still=still, tune=tune)
+        if (n < 3 ? c.id == (p.target != "" ? p.target : p.playing) : i == 1)
+          MiniGuideCard(channel=c, playing=(c.id == p.playing), still=p.still, tune=tune)
         else
           row gap=12 align-items="center" padding="9px 14px" border-radius=14 background-color="cinematic.glass-deep" backdrop-filter="blur(24px) saturate(1.3)" border="1px solid var(--cinematic.hairline)" opacity=0.9 aria-hidden=true
             text c.number font-size=12 color="ink.quiet" font-variant-numeric="tabular-nums" width=40

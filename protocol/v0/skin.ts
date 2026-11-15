@@ -83,6 +83,8 @@ export interface SkinFont { family: string; files: { url: string; weight: number
 
 export interface SkinDocument {
   schema: 1;
+  /** The renderer version the document needs (the client's RENDERER_VERSION must be at least this). */
+  renderer: number;
   id: string; name: string; version: string; tagline?: string;
   /** Same-origin `/vela/v0/appearance/` URLs. */
   preview?: string; swatches: string[];

@@ -4,7 +4,7 @@
 members Client
   state launched = false
   derive launching = (not launched and not failed(auth) and (not current(auth) or (auth.authenticated and not failed(home) and not current(home))))
-  derive splashOnPaper = (indexSkin or activeSkin == "mochi")
+  derive splashOnPaper = traits.splashOnPaper
   task endLaunchOnce when not launched and not launching
     after(1, endLaunch)
   action endLaunch

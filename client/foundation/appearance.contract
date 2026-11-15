@@ -1,5 +1,5 @@
 use SkinManifest from "./models.contract"
-use engineOf from "./engine.contract"
+use resolveSkin from "./skins.generated.contract"
 use SkinDoc, emptyDoc from "../renderer/shapes.contract"
 
 // One runtime skin pack the server installed: data only, validated by the data
@@ -58,8 +58,8 @@ members Client
   // What the engine loader and vela-engine keep: the engine of the viewer's own pick
   // (none while following the server or while the owner forces the default) and the
   // server default's engine. Hand-off waits for the server's answer and for playback to end.
-  derive pickEngine = (skin == "" or appearance.force ? "" : match first(appearance.packs.filter(p => p.id == skin)) { case some(p) => p.engine, case none => engineOf(skin) })
-  derive serverEngine = (appearance.defaultEngineId != "" ? engineOf(appearance.defaultEngineId) : engineOf(serverSkin))
+  derive pickEngine = (skin == "" or appearance.force ? "" : match first(appearance.packs.filter(p => p.id == skin)) { case some(p) => p.engine, case none => resolveSkin(skin) })
+  derive serverEngine = (appearance.defaultEngineId != "" ? resolveSkin(appearance.defaultEngineId) : resolveSkin(serverSkin))
   derive engineSettled = (current(appearanceBase) or current(home)) and playingId == ""
   // A skin document the viewer or server wants, drawn by the doc engine once it has loaded.
   derive activeDocUrl = match first(appearance.docs.filter(d => d.id == requestedSkin)) { case some(d) => d.url, case none => "" }

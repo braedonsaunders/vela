@@ -35,37 +35,76 @@ deduplication. Empty receipts mean the server supplied no reportable attribution
 
 ## Layout
 
+Every skin, official or third-party, is a package in its own directory. Nothing about a
+specific skin is written by hand in `client/foundation/` or the root: a generator reads
+the installed packages and writes the registry and dispatch.
+
 ```text
 client/skins/my-skin/
-  slots.contract      # Shell, Home, SearchField, SearchSurface, Row, TitleCard, Detail
-  player.contract     # PlayerChrome, if not composed from another skin
+  skin.json           # id, name, tagline, preview, swatches, traits (below)
+  slots.contract      # the slots it implements: Shell, Home, SearchField, SearchSurface, Detail, Status, ...
+  player.contract     # PlayerChrome, if it draws its own
   guide.contract      # Guide
-  live.contract       # LiveControls
+  live.contract       # LiveControls, MiniGuide
 client/foundation/
+  slot-api.contract   # the slot ABI: one record shape per slot, and SkinTraits
+  skins.generated.contract  # GENERATED: skin list, picker manifests, traits, per-slot dispatch
   models.contract     # shared discovery/detail records and accessible labels
   player-models.contract
-  skin.contract       # explicit compile-time dispatch, never requests
 client/strings/en.json # English copy, including accessibility labels
 client/app.tamber     # shared and namespaced appearance tokens
 ```
 
-All props are required; Exact action props are declared `action`, with argument types
-inferred from their calls. The definitive declarations and wiring are in
-[foundation/skin.contract](../client/foundation/skin.contract). Keep a replacement's
-names and prop types identical. No route state belongs in a skin.
+A package implements any slots it likes, in any of its `.contract` files: a slot is a
+top-level `component <Slot>` (or a `use` that re-exports one from another skin, as the
+example re-exports Index's player). Every slot it leaves out is drawn by the default
+skin (Cinematic). The generator finds the slots by name; there is nothing to register.
 
-| Slot | Inputs and content |
-| --- | --- |
-| Shell | viewer, skin, installed skins, viewport; canLive/canLibrary; chooseSkin/signOut/home/search/live/library actions; one children slot |
-| Home | HomeModel, active, query, small, still, selectTitle, observe; one children slot for SearchField |
-| SearchField | query and edit(string) |
-| SearchSurface | fast, descriptive and AI SearchModel values; query, generation, loading/error, aiAvailable, small/still, selectTitle and observe |
-| Row | FeedRow, small/still, selectTitle and observe |
-| TitleCard | Card, small/still, selectTitle and observe; normally composed by the skin's own Row |
-| Detail | DetailModel, small/still, play, playExtra, selectTitle and observe |
-| PlayerChrome | PlayerView, title, visible, small/still, busy, serverError; command(kind,value), seek(seconds), editing(bool), close |
-| Guide | GuideModel, small; watch(channelId), previous and next |
-| LiveControls | lowDelay, reconnecting, delivery, drift, driftLabel, canCatchUp; toggleLowDelay and catchUp |
+**Slot ABI 2.** Each slot takes ONE prop, `p`, a record the foundation builds once, and
+reads the fields it needs (`p.model.rows`, `p.small`). The actions a slot may call
+arrive by injection: declare `inject` with the ones you use, by the names below. The
+definitive records are in [foundation/slot-api.contract](../client/foundation/slot-api.contract);
+the action names are the `SLOTS` table in [tools/skin-registry.ts](../tools/skin-registry.ts).
+No route state belongs in a skin.
+
+```contract
+use HomeProps from "../../foundation/slot-api.contract"
+
+component Home
+  props
+    p: HomeProps
+  inject
+    selectTitle: action
+    observe: action
+  slot
+  view
+    column gap=(p.small ? 18 : 28)
+      children
+      for row in p.model.rows key=row.id
+        MyRow(row=row, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+```
+
+| Slot | Record `p` | Injected actions | Children |
+| --- | --- | --- | --- |
+| Shell | ShellProps: skin, current (manifest), skins (picker manifests), viewer, viewport, canLive, canLibrary, libraries, section, secure* | chooseSkin, signOut, home, search, live, library, openLibrary, goSecure | the route |
+| Home | HomeProps: model, active, query, small, still, heroIndex, homeMoreLoading, rowMoreLoading, libraries, canLive, cardPreview | selectTitle, observe, pickHero, reachEnd, reachRowEnd, previewIntent, playHero, openLibrary, live | the SearchField |
+| SearchField | SearchFieldProps: query | edit | |
+| SearchSurface | SearchProps: query, model, descriptive, ai, generation, loading, error, aiAvailable, descriptiveState, aiState, small, still | selectTitle, observe, openLiveProgramme | |
+| Detail | DetailProps: model, small, still, season | play, playExtra, selectTitle, observe | |
+| Status | StatusProps: kind, message, small, still | | |
+| Collection | CollectionProps: id, name, items, small, still | close, selectTitle, observe | |
+| Library | LibraryProps: model, loading, moreLoading, small, still | close, setSort, setFilter, more, selectTitle, observe | |
+| PlayerChrome | PlayerProps: model, title, visible, small, still, busy, serverError | command, seek, editing, close | |
+| Guide | GuideProps: model, small, still, zoom, tile, focus | watch, previous, next, chooseDay, setZoom, tileMessage, tileUnmute, tileTuneIn, retune | |
+| LiveControls | LiveControlsProps: lowDelay, reconnecting, delivery, drift, driftLabel, canCatchUp | toggleLowDelay, catchUp, zap | |
+| MiniGuide | MiniGuideProps: model, playing, target, small, still | tune | |
+| AuthStage | AuthStageProps: still, backdrop, wordmark | | the sign-in step |
+| AuthNotice, SignIn, QuickConnect | their records | SignIn: editUsername, editPassword, submit, quick, goSecure; QuickConnect: cancel | |
+
+An injected action keeps its meaning inside the slot's whole tree, so a skin's own
+row inside Detail reports with Detail's `observe`. The Guide slot is laid out in a
+`flex=1 min-height=0` column; a skin that scrolls the guide as a page draws its own
+`scroll` inside it.
 
 `HomeModel.rows` and each row's `items` are already ordered. Optional hero/detail
 records use zero-or-one arrays. Blank image URLs and zero optional numeric metadata
@@ -78,11 +117,12 @@ An AI lane is independent: it must never block fast matches or show another quer
 results. Related recommendations load independently of title details; a slow or
 failed related request cannot hide metadata or playback actions.
 
-A skin exports `detailPresentation(width)` (`fullscreen`, `modal` or empty) and
-`detailSplit(width)` (`none` or a split list width). Foundation binds them to Exact
-navigation attributes and retains stack entries. Preserve navigation keys, semantic
-focusable controls and accessible names so Back restores browsing state and focus.
-Cinematic's frame is an artwork overlay; Index uses a split pane on wide screens.
+A skin may export `fn detailPresentation(width: number)` (`fullscreen`, `modal` or
+empty) and `fn detailSplit(width: number)` (`none` or a split list width); the
+document engine's take `doc: SkinDoc` too. Foundation binds them to Exact navigation
+attributes and retains stack entries. Preserve navigation keys, semantic focusable
+controls and accessible names so Back restores browsing state and focus. Cinematic's
+frame is an artwork overlay; Index uses a split pane on wide screens.
 
 ## A minimal card
 
@@ -113,33 +153,37 @@ adds no animation or artwork effects; it is a functional starting point, not a m
 
 ## Appearance manifest
 
-Every skin supplies a manifest so the shared appearance picker
-(`foundation/skin-picker.contract`, presented by every skin's profile or settings menu)
-can show it as a large preview card. Create `client/skins/<id>/manifest.contract`:
+Each package's `skin.json` is its manifest. The generator turns it into the picker
+entry (`skinManifest(id)`), the list the picker offers (`pickerSkins`) and the traits
+the root reads:
 
-```contract
-use SkinManifest from "../../foundation/models.contract"
-
-fn manifest(): SkinManifest = SkinManifest(id="my-skin", name=t("skin.my-skin.name"), tagline=t("skin.my-skin.tagline"), preview="assets/skins/my-skin.jpg", swatches=["#101418", "#f4efe6", "#d0a46c"])
+```json
+{
+  "schema": 1, "id": "my-skin", "name": "My Skin", "tagline": "One line about the look.",
+  "nameKey": "skin.my-skin.name", "taglineKey": "skin.my-skin.tagline",
+  "preview": "assets/skins/my-skin.jpg", "swatches": ["#101418", "#f4efe6", "#d0a46c"],
+  "order": 60, "offer": "always",
+  "traits": { "page": "my-skin.page", "ink": "my-skin.ink", "flatDetail": true, "panSections": false, "barMask": false }
+}
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `id` | The compiled skin id, as accepted by the foundation and advertised by the server. |
-| `name` | Translated display name (the same text `skinLabel` returns for the id). |
-| `tagline` | One translated line, under about 70 characters, saying what the look is. |
-| `preview` | App-relative asset path of a real miniature of the skin's home: a 1440x900 capture of the home on the mock (real-looking mock art, no error overlays, reduced motion so no trailer frame), scaled to 720x450, JPEG quality ~82, saved as `client/assets/skins/<id>.jpg`. |
-| `swatches` | 3 to 5 CSS colours from the skin's palette, its page ground first (the card shows the ground until the preview loads). |
+| `id` | The skin id, the package's directory name, as advertised by the server. |
+| `name`, `tagline` | Display name and one line under about 70 characters; `nameKey`/`taglineKey` translate them through `strings/`. |
+| `preview` | App-relative asset path of a real miniature of the skin's home: a 1440x900 capture on the mock (real-looking art, no error overlays, reduced motion), scaled to 720x450, JPEG quality ~82, at `client/assets/skins/<id>.jpg`. |
+| `swatches` | 3 to 5 CSS colours from the palette, page ground first (the card shows it until the preview loads). |
+| `offer` | `always` in the picker, `server` only when the server lists the id, or `never` (the document engine). |
+| `order`, `aliases` | Picker order (packages default to 100); older ids that mean this skin (Index: `editorial`). |
+| `default`, `documents` | Exactly one installed skin is the default (every slot, the fallback); at most one draws server skin documents. |
+| `traits` | What the root reads instead of the skin's name: `page`/`ink` colour tokens, `flatDetail` (a plain title page, not a framed overlay), `panSections` (home/libraries/Live TV slide), `barMask` (content fades under a floating bar), `splashOnPaper`, and the framed title page's `detailScrim`, `detailShadow`, `closeBorderWidth`, `closeBorderColor`, `closeBackground`, `closeInk`. A trait left out is the default skin's. |
 
-Register the manifest with one branch in `skinManifest` in
-`foundation/skin-picker.contract` (`use manifest as MySkinManifest from "../skins/my-skin/manifest.contract"`).
-The picker lists the ids the root offers the viewer, marks the current one, and is a
-radio group: arrow keys move between looks, Enter or Space chooses, Escape closes. A
-skin presents it by keeping a `pickerOpen` state and rendering
-`SkinPicker(skins, current, small, still, choose, dismiss)` as the last child of a
-viewport-sized, `position="relative"` Shell root (it covers its positioned ancestor);
-`choose` is the Shell's `chooseSkin`. The root dissolves the app into the newly chosen
-skin from that skin's page ground; reduced motion shortens it to a quick fade.
+The picker is a radio group: arrow keys move between looks, Enter or Space chooses,
+Escape closes. A Shell presents it by keeping a `pickerOpen` state and rendering
+`SkinPicker(skins=p.skins, current=p.skin, small, still, choose, dismiss)` as the last
+child of a viewport-sized, `position="relative"` root; `choose` is the injected
+`chooseSkin`. The Shell's own menu shows `p.current.name` and `p.current.swatches`.
+The root dissolves the app into the newly chosen skin from that skin's page ground.
 
 ## Size: assets, not components
 
@@ -188,27 +232,30 @@ So:
   3.27 MB gzip for its engine (compiled cinematic: 2.3 MB / 307 KB) until its per-node
   style, bindings and contexts were bound once this way.
 
-## Register and build
+## Install and build
 
-1. Add the Contract files under `client/skins/<id>/`. Use Tamber tokens for appearance;
-   add namespaced tokens to app.tamber where a shared role does not fit.
-2. Import the components and presentation functions in foundation/skin.contract with a
-   distinct prefix. Add the ID branch to every relevant wrapper. Reusing an existing
-   slot is supported; make that choice explicit, as the example does.
-3. Add the compiled ID to foundation/behavior.contract's accepted IDs and app.contract's
-   installed-picker filter. Add its translated label to skinLabel in models.contract.
-   Unknown IDs fall back to Cinematic; never advertise an uncompiled package.
-4. Have the server advertise the installed ID in capabilities.skins. Its bootstrap
-   defaultSkinId selects the initial package; the viewer's persisted picker overrides
-   that default. Do not change server ranking when switching skins.
-5. If the package needs a distinct root surface palette, add its page/ink token mapping
-   in foundation alongside the existing Index mapping. Keep the navigation host intact.
-6. Compile once from client: `bun exact.mjs contract build app.contract --json --errors-only`.
-   Use `bun tools/dev.ts` from the repository root for one desktop/mobile look. Stop the
-   owned supervisor with `bun tools/dev.ts stop`. Never start a second app web loop.
+Official and third-party skins are installed by exactly the same mechanism:
+
+1. Put the package in `client/skins/<id>/` (Contract files, `skin.json`, optional
+   `strings/<locale>.json` and assets). Use Tamber tokens for appearance; add
+   namespaced tokens to app.tamber where a shared role does not fit.
+2. Run `bun tools/skin.ts generate`. It rewrites `client/foundation/skins.generated.contract`
+   (committed, marked generated) from every installed package: there are no foundation
+   edits. `bun tools/dev.ts` runs the same generator when it starts.
+3. Compile once from client: `bun exact.mjs contract build app.contract --json --errors-only`.
+   Use `bun tools/dev.ts` from the repository root for one desktop/mobile look; stop it
+   with `bun tools/dev.ts stop`. Never start a second app web loop.
+4. Have the server advertise the id in capabilities.skins (or set `"offer": "always"`).
+   Its bootstrap defaultSkinId selects the initial skin; the viewer's persisted choice
+   overrides it. Unknown ids fall back to the default skin.
+
+Release builds (`tools/release`, one build per engine through `tools/engine.ts`) and
+the package builder (`bun tools/skin.ts build <dir>`) call the same generator with
+`--only <id>`: the dispatch keeps that one engine and the default skin's slots it falls
+back to, while the skin list and manifests still cover every installed skin.
 
 Do not edit vendor/exact, add CI, test harnesses or lint configurations, or run Exact
-maintainer checks. Coordinate shared root and foundation changes with the orchestrator.
+maintainer checks.
 
 ## Copy and formatting
 

@@ -1,6 +1,7 @@
 use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, cardName from "../../foundation/models.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use Icon, PlayedBadge, Wordmark, Spinner, IconBtn, Raised, Submit, Tab, MenuRow, Sheet, side, tileColor, kindIcon, fadeIn, riseIn, jtFade, jtGone, jtDrawer, jtDrawerOut, jtPop, jtRise, jtSpin from "./look.contract"
+use CollectionProps, HomeProps, SearchFieldProps, SearchProps, ShellProps, StatusProps from "../../foundation/slot-api.contract"
 
 fn detailPresentation(width: number): string = "fullscreen"
 fn detailSplit(width: number): string = "none"
@@ -18,28 +19,22 @@ fn subline(card: Card): string = (card.kind == "episode" and card.seasonNumber >
 
 component Shell
   props
-    viewer: string
-    skin: string
-    skins: string[]
+    p: ShellProps
+  inject
     chooseSkin: action
     signOut: action
-    viewport: Viewport
-    canLive: bool
-    canLibrary: bool
     home: action
     search: action
     live: action
     library: action
-    libraries: LibraryNav[]
-    section: string
     openLibrary: action
   slot
   state drawer = false
   state userMenu = false
   state pickerOpen = false
-  derive compact = viewport.width < 800
-  derive still = viewport.prefersReducedMotion
-  derive hasLiveLibrary = libraries.filter(l => l.kind == "live").length > 0
+  derive compact = p.viewport.width < 800
+  derive still = p.viewport.prefersReducedMotion
+  derive hasLiveLibrary = p.libraries.filter(l => l.kind == "live").length > 0
   action openDrawer
     userMenu = false
     drawer = true
@@ -90,7 +85,7 @@ component Shell
       focus("jt-user")
   view
     column position="relative" key=shellKey height="100%" min-height=0 background-color="jellytwin.page" color="jellytwin.ink" color-scheme="dark" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif"
-      if viewer != ""
+      if p.viewer != ""
         column role="navigation" aria-label=t("ui.mainNavigation") flex-shrink=0 z-index=20 background-color="jellytwin.header" backdrop-filter="blur(12px)" box-shadow="0px 2px 6px var(--jellytwin.shadow)"
           row height=(compact ? 52 : 58) box-sizing="border-box" padding-left=(compact ? 4 : 10) padding-right=(compact ? 6 : 14) align-items="center" gap=(compact ? 2 : 6)
             button id="jt-menu" press=openDrawer aria-label=t("jellytwin.openMenu") aria-expanded=drawer testId="jt-menu" class=IconBtn width=44 height=44
@@ -102,28 +97,28 @@ component Shell
             else
               row flex=1 min-width=0 justify-content="center"
                 scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" min-width=0
-                  Sections(libraries=libraries, section=section, canLive=canLive, hasLiveLibrary=hasLiveLibrary, still=still, go=go)
+                  Sections(libraries=p.libraries, section=p.section, canLive=p.canLive, hasLiveLibrary=hasLiveLibrary, still=still, go=go)
             button press=findSomething aria-label=t("ui.search") testId="jt-search-button" class=IconBtn width=44 height=44
               Icon(name="symbol:search", size=23)
             button id="jt-user" press=toggleUser aria-label=t("ui.profileAndAppearance") aria-expanded=userMenu testId="profile-menu" class=IconBtn width=44 height=44
-              text viewer.slice(0, 1).toUpperCase() width=30 height=30 border-radius=15 display="flex" align-items="center" justify-content="center" font-size=14 font-weight=600 color="jellytwin.ink-strong" background-image="linear-gradient(90deg, var(--jellytwin.violet) 0%, var(--jellytwin.accent) 100%)" aria-hidden=true
+              text p.viewer.slice(0, 1).toUpperCase() width=30 height=30 border-radius=15 display="flex" align-items="center" justify-content="center" font-size=14 font-weight=600 color="jellytwin.ink-strong" background-image="linear-gradient(90deg, var(--jellytwin.violet) 0%, var(--jellytwin.accent) 100%)" aria-hidden=true
           if compact
             scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
               row padding-left=6 padding-right=6 min-width="100%" box-sizing="border-box"
                 column flex=1
-                Sections(libraries=libraries, section=section, canLive=canLive, hasLiveLibrary=hasLiveLibrary, still=still, go=go)
+                Sections(libraries=p.libraries, section=p.section, canLive=p.canLive, hasLiveLibrary=hasLiveLibrary, still=still, go=go)
                 column flex=1
       column flex=1 min-height=0 position="relative"
         children
-      if viewer != "" and userMenu
+      if p.viewer != "" and userMenu
         column position="absolute" inset=0 z-index=29 aria-hidden=true
           button press=toggleUser tabindex=-1 aria-label=t("ui.close") position="absolute" inset=0 border="none" background-color="transparent"
         column id="jt-user-menu" role="dialog" aria-label=t("ui.profileAndAppearance") position="absolute" top=(compact ? 50 : 56) right=(compact ? 8 : 14) z-index=30 width=260 class=Sheet padding=8 gap=4 transform-origin="top right" animation=(still ? "jtFade 160ms linear both" : "jtPop 200ms ease-out both") -exact-exit-animation=(still ? "jtGone 100ms linear both" : "jtGone 140ms ease-in both")
           row gap=12 align-items="center" padding="10px 12px 12px"
-            text viewer.slice(0, 1).toUpperCase() width=40 height=40 border-radius=20 display="flex" align-items="center" justify-content="center" font-size=17 font-weight=600 color="jellytwin.ink-strong" background-image="linear-gradient(90deg, var(--jellytwin.violet) 0%, var(--jellytwin.accent) 100%)" aria-hidden=true
-            text viewer font-size=16 font-weight=600 flex=1 min-width=0 line-clamp=1
+            text p.viewer.slice(0, 1).toUpperCase() width=40 height=40 border-radius=20 display="flex" align-items="center" justify-content="center" font-size=17 font-weight=600 color="jellytwin.ink-strong" background-image="linear-gradient(90deg, var(--jellytwin.violet) 0%, var(--jellytwin.accent) 100%)" aria-hidden=true
+            text p.viewer font-size=16 font-weight=600 flex=1 min-width=0 line-clamp=1
           column height=1 background-color="jellytwin.line" margin="0px 8px 6px"
-          if skins.length > 1
+          if p.skins.length > 1
             button press=openPicker aria-haspopup="dialog" testId="skin-picker" class=MenuRow
               Icon(name="symbol:sparkles", size=20)
               text t("skin.picker.choose")
@@ -132,33 +127,33 @@ component Shell
           button press=leave class=MenuRow
             Icon(name="symbol:sign-out", size=20)
             text t("ui.signOut")
-      if viewer != "" and drawer
+      if p.viewer != "" and drawer
         column position="absolute" inset=0 z-index=40
           button press=closeDrawer tabindex=-1 aria-label=t("jellytwin.closeMenu") position="absolute" inset=0 border="none" background-color="jellytwin.overlay" animation=(still ? "none" : "jtFade 220ms ease-out both") -exact-exit-animation=(still ? "jtGone 100ms linear both" : "jtGone 200ms ease-in both")
           scroll role="dialog" aria-label=t("jellytwin.menu") position="absolute" top=0 left=0 bottom=0 width=(compact ? "min(300px, 84vw)" : 300) background-color="jellytwin.drawer" box-shadow="4px 0px 24px var(--jellytwin.shadow)" animation=(still ? "jtFade 160ms linear both" : "jtDrawer 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both") -exact-exit-animation=(still ? "jtGone 100ms linear both" : "jtDrawerOut 200ms ease-in both")
             column padding-bottom=24
               row height=(compact ? 52 : 58) align-items="center" padding-left=18 gap=10 border-bottom="1px solid var(--jellytwin.line)" margin-bottom=8
                 Wordmark(size=28)
-              DrawerItem(id="jt-drawer-home", icon="symbol:home", label=t("ui.home"), on=(section == "home"), press=go("home"))
-              if libraries.length > 0 or canLive
+              DrawerItem(id="jt-drawer-home", icon="symbol:home", label=t("ui.home"), on=(p.section == "home"), press=go("home"))
+              if p.libraries.length > 0 or p.canLive
                 text t("jellytwin.media") font-size=13 font-weight=600 color="jellytwin.secondary" padding="16px 20px 6px"
-              for lib in libraries key=lib.id
+              for lib in p.libraries key=lib.id
                 if lib.kind == "live"
-                  if canLive
-                    DrawerItem(id=`jt-drawer-${lib.id}`, icon="symbol:icon.jelly-live", label=lib.name, on=(section == "live"), press=go("live"))
+                  if p.canLive
+                    DrawerItem(id=`jt-drawer-${lib.id}`, icon="symbol:icon.jelly-live", label=lib.name, on=(p.section == "live"), press=go("live"))
                 else
-                  DrawerItem(id=`jt-drawer-${lib.id}`, icon=kindIcon(lib.kind), label=lib.name, on=(section == lib.id), press=go(lib.id))
-              if canLive and not hasLiveLibrary
-                DrawerItem(id="jt-drawer-live", icon="symbol:icon.jelly-live", label=t("jellytwin.liveTv"), on=(section == "live"), press=go("live"))
+                  DrawerItem(id=`jt-drawer-${lib.id}`, icon=kindIcon(lib.kind), label=lib.name, on=(p.section == lib.id), press=go(lib.id))
+              if p.canLive and not hasLiveLibrary
+                DrawerItem(id="jt-drawer-live", icon="symbol:icon.jelly-live", label=t("jellytwin.liveTv"), on=(p.section == "live"), press=go("live"))
               text t("jellytwin.user") font-size=13 font-weight=600 color="jellytwin.secondary" padding="16px 20px 6px"
               row gap=12 align-items="center" padding="6px 20px 10px"
                 Icon(name="symbol:person", size=22)
-                text viewer font-size=15 line-clamp=1
-              if skins.length > 1
+                text p.viewer font-size=15 line-clamp=1
+              if p.skins.length > 1
                 DrawerItem(id="jt-drawer-appearance", icon="symbol:sparkles", label=t("skin.picker.choose"), on=false, press=openPicker)
               DrawerItem(id="jt-drawer-signout", icon="symbol:sign-out", label=t("ui.signOut"), on=false, press=leave)
       if pickerOpen
-        SkinPicker(skins=skins, current=skin, small=compact, still=still, choose=pickSkin, dismiss=closePicker)
+        SkinPicker(skins=p.skins, current=p.skin, small=compact, still=still, choose=pickSkin, dismiss=closePicker)
 
 // The header's sections: Home, the server's libraries in order, and live television.
 component Sections
@@ -208,10 +203,11 @@ component DrawerItem
 // Search: a field that stays folded away until the header's search opens it or it holds a query.
 component SearchField
   props
-    query: string
+    p: SearchFieldProps
+  inject
     edit: action
   state focused = false
-  derive open = focused or query != ""
+  derive open = focused or p.query != ""
   action focusField
     focused = true
   action blurField
@@ -220,10 +216,10 @@ component SearchField
     column overflow="hidden" max-height=(open ? 96 : 0) opacity=(open ? 1 : 0) transition="opacity 160ms linear" -exact-layout-transition="220ms ease-out"
       row class=SearchBox border-color=(focused ? "jellytwin.accent" : "jellytwin.field")
         image "symbol:search" width=20 height=20 color=(focused ? "jellytwin.accent" : "jellytwin.secondary") aria-hidden=true
-        input id="jt-search" value=query input=edit focus=focusField blur=blurField placeholder=t("ui.search") aria-label=t("ui.searchYourLibrary") testId="search" class=SearchInput
+        input id="jt-search" value=p.query input=edit focus=focusField blur=blurField placeholder=t("ui.search") aria-label=t("ui.searchYourLibrary") testId="search" class=SearchInput
           ::placeholder
             color="jellytwin.quiet"
-        if query != ""
+        if p.query != ""
           button press=edit("") aria-label=t("ui.clearSearch") class=IconBtn width=36 height=36
             Icon(name="symbol:close", size=18)
 
@@ -474,46 +470,38 @@ component LibraryTile
 
 component Home
   props
-    model: HomeModel
-    active: bool
-    query: string
-    small: bool
-    still: bool
+    p: HomeProps
+  inject
     selectTitle: action
     observe: action
-    heroIndex: number
     pickHero: action
     reachEnd: action
     reachRowEnd: action
-    homeMoreLoading: bool
-    rowMoreLoading: string[]
-    libraries: LibraryNav[]
     openLibrary: action
     live: action
-    canLive: bool
   slot
   view
     column padding-bottom=40 color="jellytwin.ink" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif"
       children
-      if query == ""
-        if model.hero.length > 0
-          MediaBar(model=model, heroIndex=heroIndex, small=small, still=still, selectTitle=selectTitle, pickHero=pickHero, observe=observe)
+      if p.query == ""
+        if p.model.hero.length > 0
+          MediaBar(model=p.model, heroIndex=p.heroIndex, small=p.small, still=p.still, selectTitle=selectTitle, pickHero=pickHero, observe=observe)
         else
-          column height=(small ? 14 : 22)
-        if libraries.length > 0
-          MyMedia(libraries=libraries, small=small, still=still, openLibrary=openLibrary, live=live, canLive=canLive)
-        for row in model.rows key=row.id
-          Section(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+          column height=(p.small ? 14 : 22)
+        if p.libraries.length > 0
+          MyMedia(libraries=p.libraries, small=p.small, still=p.still, openLibrary=openLibrary, live=live, canLive=p.canLive)
+        for row in p.model.rows key=row.id
+          Section(row=row, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
             if row.nextCursor != ""
-              column width=(small ? 48 : 80) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
-                if rowMoreLoading.includes(row.id)
-                  Spinner(size=28, still=still)
-        if model.nextCursor != ""
+              column width=(p.small ? 48 : 80) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not p.rowMoreLoading.includes(row.id))
+                if p.rowMoreLoading.includes(row.id)
+                  Spinner(size=28, still=p.still)
+        if p.model.nextCursor != ""
           column height=100 align-items="center" justify-content="center" intersect=reachEnd
-            if homeMoreLoading
+            if p.homeMoreLoading
               row role="status" aria-label=t("ui.loadingMore")
-                Spinner(size=36, still=still)
-        if model.rows.length == 0 and model.hero.length == 0
+                Spinner(size=36, still=p.still)
+        if p.model.rows.length == 0 and p.model.hero.length == 0
           EmptyState(icon="symbol:icon.jelly-folder", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"))
 
 // A centred message with an icon: empty results and failures.
@@ -542,68 +530,55 @@ style EmptyMessage
 
 component SearchSurface
   props
-    query: string
-    model: SearchModel
-    descriptive: SearchModel
-    ai: SearchModel
-    generation: number
-    loading: bool
-    error: bool
-    aiAvailable: bool
-    small: bool
-    still: bool
+    p: SearchProps
+  inject
     selectTitle: action
     observe: action
-  derive aiShown = ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
-  derive lanes = (error or loading or model.items.length == 0 ? [] : [lane("search-fast", t("ui.titleMatches"), model.items)]).concat(descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0 ? [lane("search-vibe", t("ui.theFeelingYouReLookingFor"), descriptive.items)] : []).concat(aiShown and ai.items.length > 0 ? [lane("search-ai", t("ui.discoveredForYou"), ai.items)] : [])
+  derive aiShown = p.ai.query == p.query and p.ai.generation == p.generation and p.aiAvailable and p.ai.aiStatus != ""
+  derive lanes = (p.error or p.loading or p.model.items.length == 0 ? [] : [lane("search-fast", t("ui.titleMatches"), p.model.items)]).concat(p.descriptive.query == p.query and p.descriptive.generation == p.generation and p.descriptive.items.length > 0 ? [lane("search-vibe", t("ui.theFeelingYouReLookingFor"), p.descriptive.items)] : []).concat(aiShown and p.ai.items.length > 0 ? [lane("search-ai", t("ui.discoveredForYou"), p.ai.items)] : [])
   view
-    column gap=4 padding-top=14 padding-bottom=48 color="jellytwin.ink" animation=fadeIn(still)
-      if error or (not loading and model.items.length == 0)
-        EmptyState(icon=(error ? "symbol:alert" : "symbol:search"), title=(error ? t("ui.searchUnavailable") : t("ui.noMatches")), message=(error ? t("ui.searchIsUnavailableTryAnotherQuery") : t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription")))
-      if loading and not error
+    column gap=4 padding-top=14 padding-bottom=48 color="jellytwin.ink" animation=fadeIn(p.still)
+      if p.error or (not p.loading and p.model.items.length == 0)
+        EmptyState(icon=(p.error ? "symbol:alert" : "symbol:search"), title=(p.error ? t("ui.searchUnavailable") : t("ui.noMatches")), message=(p.error ? t("ui.searchIsUnavailableTryAnotherQuery") : t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription")))
+      if p.loading and not p.error
         row justify-content="center" padding=48 role="status" aria-label=t("ui.findingTitles")
-          Spinner(size=44, still=still)
+          Spinner(size=44, still=p.still)
       for row in lanes key=row.id
-        Section(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
-      if aiShown and (ai.aiStatus == "queued" or ai.aiStatus == "running" or ai.aiStatus == "failed")
-        row gap=12 align-items="center" padding-left=side(small) padding-right=side(small) padding-bottom=16 role="status"
-          if ai.aiStatus != "failed"
-            Spinner(size=22, still=still)
-          text (ai.aiStatus == "failed" ? t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") : t("ui.exploringYourDescription")) font-size=14 color="jellytwin.secondary"
+        Section(row=row, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+      if aiShown and (p.ai.aiStatus == "queued" or p.ai.aiStatus == "running" or p.ai.aiStatus == "failed")
+        row gap=12 align-items="center" padding-left=side(p.small) padding-right=side(p.small) padding-bottom=16 role="status"
+          if p.ai.aiStatus != "failed"
+            Spinner(size=22, still=p.still)
+          text (p.ai.aiStatus == "failed" ? t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") : t("ui.exploringYourDescription")) font-size=14 color="jellytwin.secondary"
 
 // Waiting is the accent spinner centred on the page; failures are a centred message.
 component Status
   props
-    kind: string
-    message: string
-    small: bool
-    still: bool
+    p: StatusProps
   view
-    if kind == "failure"
+    if p.kind == "failure"
       column font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif"
-        EmptyState(icon="symbol:alert", title=t("ui.somethingWentQuiet"), message=message)
+        EmptyState(icon="symbol:alert", title=t("ui.somethingWentQuiet"), message=p.message)
     else
-      column role="status" aria-label=message align-items="center" justify-content="center" gap=16 padding-top=(kind == "detail" ? 220 : 140) padding-bottom=80 font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" animation=(still ? "none" : "jtFade 300ms ease-out 200ms both")
-        Spinner(size=(small ? 44 : 54), still=still)
+      column role="status" aria-label=p.message align-items="center" justify-content="center" gap=16 padding-top=(p.kind == "detail" ? 220 : 140) padding-bottom=80 font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" animation=(p.still ? "none" : "jtFade 300ms ease-out 200ms both")
+        Spinner(size=(p.small ? 44 : 54), still=p.still)
 
 // A collection: a header with a way back, then its titles in server order.
 component Collection
   props
-    name: string
-    items: Card[]
-    small: bool
-    still: bool
+    p: CollectionProps
+  inject
     close: action
     selectTitle: action
     observe: action
   view
     column min-height="100%" background-color="jellytwin.page" color="jellytwin.ink" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" padding-bottom=48
-      row position="sticky" top=0 z-index=5 height=(small ? 52 : 58) align-items="center" gap=8 padding-left=(small ? 4 : 10) padding-right=14 background-color="jellytwin.header" backdrop-filter="blur(12px)" box-shadow="0px 2px 6px var(--jellytwin.shadow)"
+      row position="sticky" top=0 z-index=5 height=(p.small ? 52 : 58) align-items="center" gap=8 padding-left=(p.small ? 4 : 10) padding-right=14 background-color="jellytwin.header" backdrop-filter="blur(12px)" box-shadow="0px 2px 6px var(--jellytwin.shadow)"
         button press=close aria-label=t("ui.back") class=IconBtn width=44 height=44
           Icon(name="symbol:back", size=24)
-        text name role="heading" aria-level=1 font-size=(small ? 18 : 20) font-weight=600 color="jellytwin.ink-strong" line-clamp=1
-      column padding-top=(small ? 16 : 24)
-        if items.length == 0
+        text p.name role="heading" aria-level=1 font-size=(p.small ? 18 : 20) font-weight=600 color="jellytwin.ink-strong" line-clamp=1
+      column padding-top=(p.small ? 16 : 24)
+        if p.items.length == 0
           EmptyState(icon="symbol:icon.jelly-folder", title=t("ui.nothingHereYet"), message="")
         else
-          Grid(items=items, small=small, still=still, selectTitle=selectTitle, observe=observe)
+          Grid(items=p.items, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)

@@ -4,7 +4,7 @@ import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node
 import { join, relative, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { stageUniversalAssets } from './universal-assets';
-import { ENGINES } from '../engine';
+import { engines as installedEngines } from '../engine';
 import { finalizeEngineRoot } from './engine-root';
 import { writePwaAssets, pwaIcons } from './pwa-assets';
 const root = resolve(import.meta.dir, '../..'), output = join(root, '.artifacts/release');
@@ -22,7 +22,7 @@ try {
   const dist = join(work,'dist'); await mkdir(dist);
   const universalAssets = await stageUniversalAssets(assetArgument.slice('--universal-assets='.length), dist);
   const engines: Record<string,{base:string;appBytes:number;appGzipBytes:number}> = {};
-  for (const engine of ENGINES) {
+  for (const engine of await installedEngines(join(root, 'client'))) {
     const stem = `vela-${version}-${engine}`, childManifest = join(output,`${stem}.manifest.json`);
     if (!await Bun.file(childManifest).exists()) await run([process.execPath,join(import.meta.dir,'engine-build.ts'),'--committed','--engine',engine,...process.argv.includes('--map-report')?['--map-report']:[]]);
     const metadata = await Bun.file(childManifest).json();
@@ -56,7 +56,9 @@ try {
   await writeFile(join(dist,'sw.js'),sw);const swBytes=await readFile(join(dist,'sw.js'));files.push({path:'sw.js',bytes:swBytes.length,sha256:hash(swBytes)});
   await run(['tar','--format=ustar','-czf',join(output,archiveName),'-C',dist,'.']);
   const archive=await readFile(join(output,archiveName));
-  const manifest={schemaVersion:1,version,protocolVersions:[0],exactRevision:(await readFile(join(root,'EXACT_REVISION'),'utf8')).trim(),buildTime:new Date().toISOString(),sourceRevision:revision,sourceDirty:false,apiOrigin:'same-origin',basePath:'/vela/',serviceWorker:{path:'/vela/sw.js',scope:'/vela',headers:{'Service-Worker-Allowed':'/vela','Cache-Control':'no-cache'}},engines,universalAssets,archive:{file:archiveName,bytes:archive.length,sha256:hash(archive)},files};
+  // What skin documents this release draws (docs/distribution.md, "Skin document compatibility").
+  const skinRenderer={schema:1,...JSON.parse(await readFile(join(root,'client/renderer/version.json'),'utf8'))};
+  const manifest={schemaVersion:1,version,protocolVersions:[0],skinRenderer,exactRevision:(await readFile(join(root,'EXACT_REVISION'),'utf8')).trim(),buildTime:new Date().toISOString(),sourceRevision:revision,sourceDirty:false,apiOrigin:'same-origin',basePath:'/vela/',serviceWorker:{path:'/vela/sw.js',scope:'/vela',headers:{'Service-Worker-Allowed':'/vela','Cache-Control':'no-cache'}},engines,universalAssets,archive:{file:archiveName,bytes:archive.length,sha256:hash(archive)},files};
   const json=JSON.stringify(manifest,null,2)+'\n';await writeFile(join(output,manifestName),json);
   await writeFile(join(output,`${archiveName}.sha256`),`${hash(archive)}  ${archiveName}\n`);await writeFile(join(output,`${manifestName}.sha256`),`${hash(json)}  ${manifestName}\n`);
   console.log(JSON.stringify({archive:join(output,archiveName),sha256:hash(archive),manifest:join(output,manifestName),manifestSha256:hash(json),engines},null,2));

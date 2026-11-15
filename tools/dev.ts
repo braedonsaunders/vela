@@ -1,5 +1,6 @@
 /** One foreground owner for the mock and Exact dev loop. `bun tools/dev.ts stop` shuts down only this owner. */
 import { generateLocales } from './locales';
+import { generateRegistry } from './skin-registry';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { open, mkdir, readFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -73,6 +74,8 @@ try {
     throw new Error(`Port ${port} is already owned by PID ${pids.join(', ') || 'unknown'}. Stop its existing owner before starting Vela; this command will not adopt or kill it.`);
   }
   await generateLocales(join(root, 'client'));
+  // Every installed skin package, official or not, is dispatched by the same generated registry.
+  await generateRegistry(join(root, 'client'));
   controller = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(req) {
     if (req.headers.get('authorization') !== `Bearer ${owner.token}`) return new Response(null, { status: 403 });
     if (req.method === 'POST' && new URL(req.url).pathname === '/stop') { setTimeout(() => void shutdown(0), 25); return Response.json({ stopping: true, pid: owner.pid }); }
