@@ -22,9 +22,25 @@ const isnt = (test: string, value: string): Condition => ({ test, is: 'ne', valu
 const set = (test: string): Condition => ({ test });
 const unset = (test: string): Condition => ({ test, not: true });
 
-// Icons: a platform symbol where one fits, else Marquee's own one-colour line glyph.
-const builtIn: Record<string, string> = { home: 'home', search: 'search', menu: 'menu', close: 'close', check: 'checkmark', info: 'info', signout: 'sign-out', alert: 'alert', live: 'radio', play: 'play-fill' };
-const glyph = (name: string, size: number, extra: Partial<Node> = {}): Node => ({ type: 'icon', symbol: builtIn[name] ?? `icon.marquee-${name}`, ...extra, style: { width: px(size), height: px(size), 'flex-shrink': '0', ...(extra.style ?? {}) } } as Node);
+// Icons: a platform symbol where one fits, else Marquee's own one-colour line glyph (path
+// data in a 24-unit box, even-odd), painted in the current colour like a symbol.
+const builtIn: Record<string, string> = { home: 'home', search: 'search', menu: 'menu', close: 'close', check: 'checkmark', info: 'info', signout: 'sign-out', alert: 'alert', live: 'radio', play: 'play-fill', heart: 'heart', sort: 'sort', filter: 'filter', sliders: 'adjust', volume: 'speaker', mute: 'speaker-mute', phone: 'smartphone', star: 'star', rows: 'list', person: 'person', back: 'back', pause: 'pause-fill' };
+const glyphs: Record<string, string[]> = {
+  'down': ['M4.6 8.6 6 7.2l6 6 6-6 1.4 1.4L12 16z'],
+  'expand': ['M3 3h7v2H5v5H3z M14 3h7v7h-2V5h-5z M21 14v7h-7v-2h5v-5z M10 21H3v-7h2v5h5z'],
+  'film': ['M3 4h18v16H3z M8 5.6h8v12.8H8z M4.5 6h2v2h-2z M4.5 11h2v2h-2z M4.5 16h2v2h-2z M17.5 6h2v2h-2z M17.5 11h2v2h-2z M17.5 16h2v2h-2z'],
+  'grid': ['M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z'],
+  'left': ['M15.4 4.6 16.8 6l-6 6 6 6-1.4 1.4L8 12z'],
+  'pip': ['M2 4h20v16H2z M3.8 5.8h16.4v12.4H3.8z M11 11h7.2v5.2H11z'],
+  'right': ['M8.6 4.6 7.2 6l6 6-6 6 1.4 1.4L16 12z'],
+  'skip-back': ['M7.55 5.88A8.4 8.4 0 1 0 16.82 6.12L15.79 7.59A6.6 6.6 0 1 1 8.50 7.40ZM12.00 2.50L8.60 5.50L12.00 8.50Z M8.2 10.2h1.6v5.8H8.2z M11.4 10.2h1.5v5.8h-1.5z M14.4 10.2h1.5v5.8h-1.5z M12.9 10.2h1.5v1.4h-1.5z M12.9 14.6h1.5v1.4h-1.5z'],
+  'skip-forward': ['M16.45 5.88A8.4 8.4 0 1 1 7.18 6.12L8.21 7.59A6.6 6.6 0 1 0 15.50 7.40Z M12.00 2.50L15.40 5.50L12.00 8.50Z M8.2 10.2h1.6v5.8H8.2z M11.4 10.2h1.5v5.8h-1.5z M14.4 10.2h1.5v5.8h-1.5z M12.9 10.2h1.5v1.4h-1.5z M12.9 14.6h1.5v1.4h-1.5z'],
+  'stack': ['M3.5 9h17v11.5h-17z M5.3 10.8h13.4v7.9H5.3z M6 5.8h12v1.7H6z M8.5 2.8h7v1.7h-7z'],
+  'tv': ['M2.5 6.5h19v13h-19z M4.3 8.3h15.4v9.4H4.3z M7.3 3.3l1.2-1.2 4.1 4.1-1.2 1.2z M16.7 3.3l-1.2-1.2-4.1 4.1 1.2 1.2z M8 20.5h8v1.6H8z'],
+  'up': ['M4.6 15.4 6 16.8l6-6 6 6 1.4-1.4L12 8z'],
+
+};
+const glyph = (name: string, size: number, extra: Partial<Node> = {}): Node => ({ type: 'icon', ...(builtIn[name] ? { symbol: builtIn[name] } : { symbol: `icon.marquee-${name}`, paths: glyphs[name], viewBox: '0 0 24 24', fillRule: 'evenodd' }), ...extra, style: { width: px(size), height: px(size), 'flex-shrink': '0', ...(extra.style ?? {}) } } as Node);
 
 // The Vela lockup for dark grounds, 2.629:1.
 const wordmark = (h: number): Node => ({ type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: `${h * 2.629}px`, height: px(h), 'flex-shrink': '0' } });
@@ -347,7 +363,9 @@ const extraCard: Node = { type: 'box', press: { action: 'playExtra', arg: '{extr
     ] },
     { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '2px', 'padding-top': '8px' }, children: [
       { type: 'text', text: '{extra.name}', style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1' } },
-      { type: 'text', when: [set('extra.ready')], text: '{s:collection}', style: { 'font-size': '13px', color: '$ink-faint' } },
+      // The extra's kind. (The compiled original fell through to "Collection" here; this is the intended label.)
+      ...([['trailer', '{s:trailer}'], ['clip', '{s:clip}'], ['featurette', '{s:featurette}'], ['other', '{s:extra}']] as const).map(([kind, text]): Node =>
+        ({ type: 'text', when: [set('extra.ready'), is('extra.kind', kind)], text, style: { 'font-size': '13px', color: '$ink-faint' } })),
       { type: 'text', when: [unset('extra.ready')], text: '{s:notAvailableYet}', style: { 'font-size': '13px', color: '$ink-faint' } },
     ] },
   ] };
@@ -449,7 +467,7 @@ export default {
     featured: 'FEATURED', featuredTitles: 'Featured titles', featuredNumber: 'Featured title {index.label} of {env.heroCount}', moreInfo: 'More info',
     episodeNumber: 'Episode {card.episodeNumberLabel}', nothingHereYet: 'Nothing here yet', noRowsYet: "Your library hasn't offered any rows yet. Titles appear here as your server adds them.",
     closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', titleFailed: "This title couldn't be opened. It may no longer be available.",
-    seasons: 'Seasons', episodes: 'Episodes', extras: 'Extras', cast: 'Cast', media: 'Media', play: 'Play', collection: 'Collection', notAvailableYet: 'Not available yet',
+    seasons: 'Seasons', episodes: 'Episodes', extras: 'Extras', cast: 'Cast', media: 'Media', play: 'Play', trailer: 'Trailer', clip: 'Clip', featurette: 'Featurette', extra: 'Extra', notAvailableYet: 'Not available yet',
   } },
   motion: {
     arrive: rise,

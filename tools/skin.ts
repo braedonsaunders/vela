@@ -227,6 +227,7 @@ try {
     await generateRegistry(client, only);
     console.log(`${relative(root, join(client, 'foundation/skins.generated.contract'))}: ${(await installed(client)).map(f => f.skin.id).join(', ')}${only ? ` (dispatching ${only})` : ''}`);
   }
+  else if (command === 'documents' && target) console.log(JSON.stringify(await (await import('./skin-documents')).writeDocuments(resolve(target)), null, 2));
   else if (command === 'init' && target) await init(resolve(target), flag('--id', basename(resolve(target))));
   else if (command === 'check' && target) { const { skin, list } = await check(resolve(target)); console.log(`${skin.id} ${skin.version}: valid (${list.length} files)`); }
   else if (command === 'build' && target) await build(resolve(target), flag('--key', 'local'));

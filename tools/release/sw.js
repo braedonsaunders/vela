@@ -28,7 +28,7 @@ self.addEventListener('fetch', event => {
     event.respondWith(fetch(request).catch(async () => await (await caches.open(cacheName)).match(shell.offlineUrl) || new Response('<h1>You’re offline</h1><p>Reconnect to browse and play.</p>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } })));
     return;
   }
-  // Exact immutable allowlist only. Engine assets are cached only on request; no other engine is prefetched.
+  // Exact immutable allowlist only. Engine/skin assets are cached on request; the mutable skin catalog stays network-only.
   if (!assets.has(url.href)) return;
   event.respondWith((async () => {
     const cache = await caches.open(cacheName), cached = await cache.match(request);
