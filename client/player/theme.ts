@@ -134,7 +134,23 @@ function apply(handle: ThemeHandle, json: string) {
   handle.sheet.textContent = lines.length ? `${SELECTOR}{${lines.join(';')}}` : '';
 }
 
+/**
+ * Exact runs commits that move a shared element or a layout transition inside a view
+ * transition, hover updates included; its ::view-transition overlay sits on <html> and takes
+ * every pointer event while it runs, so a press landed on <html> instead of the control. The
+ * overlay lets input through to the live page beneath.
+ */
+let transitionInput: HTMLStyleElement | undefined;
+function letInputThroughTransitions() {
+  if (transitionInput) return;
+  transitionInput = document.createElement('style');
+  transitionInput.setAttribute('data-vela-transitions', '');
+  transitionInput.textContent = '::view-transition { pointer-events: none; }';
+  document.head.append(transitionInput);
+}
+
 export function createTheme(json: string): ThemeHandle {
+  letInputThroughTransitions();
   const sheet = document.createElement('style');
   sheet.setAttribute('data-vela-pack', '');
   document.head.append(sheet);

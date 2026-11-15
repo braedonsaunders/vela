@@ -88,7 +88,6 @@ ${elementProps}
     role: string
     label: string
     lt: string
-    se: string
     exitAnim: string
     wash: string
     hovering: action
@@ -96,15 +95,16 @@ ${elementProps}
     keying: action
   slot
   view
-    box id=domId hover=hovering pointerdown=pointing key=keying tabindex=-1 testId=test role=role aria-label=label -exact-layout-transition=lt sharedElement=se -exact-exit-animation=exitAnim ${rows()}
+    box id=domId hover=hovering pointerdown=pointing key=keying tabindex=-1 testId=test role=role aria-label=label -exact-layout-transition=lt -exact-exit-animation=exitAnim ${rows()}
       children
+
 `;
 }
 /** The props every element call passes: the node's style for its state, motion and bound rows. */
 const pass = () => `s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}`;
 
 function shape(d: number): string {
-  const fields = ['t: string', 'base: StateRef', 'sts: StateRef[]', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gf: bool', 'fade: bool', 'dis: Cond[]', 'aexp: Cond[]', 'asel: Cond[]', 'acur: Cond[]', 'aprs: Cond[]', 'ahp: string', 'atitle: Part[]', 'brole: string', 'pfocus: Part[]', 'esc: string', 'escTo: Part[]', 'lt: string', 'se: string', 'ex: string', 'exs: string', 'ivb: string', 'ipaths: string[]', 'fr: string', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
+  const fields = ['t: string', 'base: StateRef', 'sts: StateRef[]', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gf: bool', 'fade: bool', 'dis: Cond[]', 'aexp: Cond[]', 'asel: Cond[]', 'acur: Cond[]', 'aprs: Cond[]', 'ahp: string', 'atitle: Part[]', 'brole: string', 'pfocus: Part[]', 'esc: string', 'escTo: Part[]', 'lt: string', 'ex: string', 'exs: string', 'ivb: string', 'ipaths: string[]', 'fr: string', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
     'sym: string', 'act: string', 'cs: bool', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
     'mk: string', 'md: number', 'mdl: number', 'me: string', 'mf: string', 'mit: string', 'mdir: string', 'msk: string', 'msd: number', 'step: number', 'cap: number',
     ...BINDABLE.map(([, f]) => `${f}: Part[]`)];
@@ -238,7 +238,7 @@ ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    BoxEl(${pass()}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(${pass()}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else

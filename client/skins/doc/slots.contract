@@ -30,7 +30,7 @@ component Root
   slot
   view
     // The tree's root takes every style row, as a document node does.
-    BoxEl(s=s, pos=pos, anim=(e.still ? "none" : s.animation), fade=false, wash=e.wash.slice(0, 0), dw="", dbg="", dbi=s.backgroundImage, dc="", dop="", dtr="", test="", domId="", role="", label="", lt="", se="", exitAnim="", hovering=idle, pointing=still, keying=unkeyed)
+    BoxEl(s=s, pos=pos, anim=(e.still ? "none" : s.animation), fade=false, wash=e.wash.slice(0, 0), dw="", dbg="", dbi=s.backgroundImage, dc="", dop="", dtr="", test="", domId="", role="", label="", lt="", exitAnim="", hovering=idle, pointing=still, keying=unkeyed)
       children
 
 // Where the foundation's content sits among a slot's nodes: its flex order, an outer
@@ -52,7 +52,7 @@ component SlotBox
   slot
   view
     // The outer box takes every style row (sticky strips, z-index, glass), as a document node does.
-    BoxEl(s=s, pos=pos, anim=(e.still ? "none" : s.animation), fade=false, wash=e.wash.slice(0, 0), dw="", dbg="", dbi=s.backgroundImage, dc="", dop="", dtr="", test="", domId="", role="", label="", lt="", se="", exitAnim="", hovering=idle, pointing=still, keying=unkeyed)
+    BoxEl(s=s, pos=pos, anim=(e.still ? "none" : s.animation), fade=false, wash=e.wash.slice(0, 0), dw="", dbg="", dbi=s.backgroundImage, dc="", dop="", dtr="", test="", domId="", role="", label="", lt="", exitAnim="", hovering=idle, pointing=still, keying=unkeyed)
       column position="relative" width=inner.width max-width=inner.maxWidth height=inner.height min-height=inner.minHeight flex-grow=inner.flexGrow flex-shrink=inner.flexShrink display=inner.display flex-direction=inner.flexDirection animation=(e.still ? "none" : inner.animation)
         children
 

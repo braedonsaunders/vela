@@ -67,7 +67,7 @@ interface NodeBase extends Breakpoints {
   a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; haspopup?: string; title?: Template; role?: string };
   /** Escape clears this flag and moves focus to `returnFocus` (an element id). */
   escape?: string; returnFocus?: Template;
-  layoutTransition?: string; sharedElement?: string;
+  layoutTransition?: string; /** Accepted and ignored for now (docs/skin-schema.md). */ sharedElement?: string;
   /** A motion preset played as the node leaves. */
   exit?: string;
   when?: Condition[];
