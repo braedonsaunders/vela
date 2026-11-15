@@ -332,7 +332,7 @@ members Client
   // Each optional search lane's honest state for this query: "off" when the server does
   // not advertise it, "loading" until its answer for this exact query arrives, then
   // "failed" or "ready" (the lane's items may still be empty).
-  derive descriptiveState = (not home.descriptiveAvailable ? "off" : failed(descriptive) and not pending(descriptive) ? "failed" : pending(descriptive) or not current(descriptive) or descriptive.query != query or descriptive.generation != generation ? "loading" : "ready")
+  derive descriptiveState = (not home.descriptiveAvailable ? "off" : failed(descriptive) and not pending(descriptive) ? "failed" : pending(descriptive) or not current(descriptive) or descriptive.query != query or descriptive.generation != generation ? "loading" : descriptive.descriptiveStatus == "failed" or ((descriptive.descriptiveStatus == "pending" or descriptive.descriptiveStatus == "busy") and not descriptive.descriptiveRetryAllowed) ? "failed" : descriptive.descriptiveStatus == "pending" or descriptive.descriptiveStatus == "busy" ? "loading" : "ready")
   derive aiState = (not home.aiAvailable ? "off" : failed(ai) and not pending(ai) ? "failed" : pending(ai) or not current(ai) or ai.query != query or ai.generation != generation ? "loading" : "ready")
   resource libraries = uiLibraries() when auth.authenticated as shape LibraryNav[] else empty()
   // Home and the server's libraries are one surface: the active library and its
@@ -439,6 +439,32 @@ members Client
   derive wantedSkin = match activePack { case some(p) => p.engine, case none => (["cinematic", "index", "editorial", "example", "jellytwin", "mochi", "marquee"].includes(requestedSkin) ? requestedSkin : "cinematic") }
   // A single-engine build always presents its own engine; vela-engine hands off to the wanted one.
   derive activeSkin = (buildEngine() == "" ? wantedSkin : buildEngine())
+
+  state descriptiveRetryAt = 0
+  state descriptiveRetryKey = ""
+  state descriptiveRetryReady = false
+  derive descriptiveCanRetry = descriptiveState == "failed" and descriptive.descriptiveRetryAllowed and descriptiveRetryReady and descriptiveRetryKey == `${query}:${generation}:${descriptive.descriptiveStatus}:${descriptive.descriptiveRetryAfter}` and not pending(descriptive)
+  task descriptivePolling when auth.authenticated and query.trim() != "" and home.descriptiveAvailable
+    every(1000, tickDescriptive)
+  action tickDescriptive
+    if current(descriptive) and descriptive.query == query and descriptive.generation == generation and not pending(descriptive) and descriptive.descriptiveRetryAllowed and (descriptive.descriptiveStatus == "pending" or descriptive.descriptiveStatus == "busy" or descriptive.descriptiveStatus == "failed")
+      let currentKey = `${query}:${generation}:${descriptive.descriptiveStatus}:${descriptive.descriptiveRetryAfter}`
+      let now = time.epochAtZero + performanceNow()
+      if descriptiveRetryKey != currentKey or descriptiveRetryAt == 0
+        descriptiveRetryKey = currentKey
+        descriptiveRetryAt = now + max(1, descriptive.descriptiveRetryAfter) * 1000
+        descriptiveRetryReady = false
+      else if now >= descriptiveRetryAt
+        if descriptive.descriptiveStatus == "failed"
+          descriptiveRetryReady = true
+        else
+          descriptiveRetryAt = 0
+          refresh descriptive
+  action retryDescriptive
+    if descriptiveCanRetry and descriptive.query == query and descriptive.generation == generation
+      descriptiveRetryAt = 0
+      descriptiveRetryReady = false
+      refresh descriptive
 
   task searchUpdates when auth.authenticated and query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running")
     every(1500, updateSearch)

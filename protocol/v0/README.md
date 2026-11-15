@@ -430,3 +430,13 @@ looking up channel labels/artwork by ID, **not** channel search matches. Keep
 metadata leaves unknown labels/logos empty; clients do not infer names or make
 per-hit network lookups. The neutral source can supply parents in the same
 bounded policy query.
+
+### Descriptive search state
+
+Descriptive search can return `descriptive.state` as `ready`, `pending`, `busy`,
+or `failed`; an absent field means ready. Items contain candidates obtained so
+far, including on failure. Pending and busy may be retried when `retry.allowed`
+is true after `retry.afterSeconds` (whole seconds, minimum one). Failed results
+may be retried only when allowed. Every retry uses a fresh idempotency key.
+The descriptive lane uses Collections AI; it has no lexicon or popular-picks
+fallback.
