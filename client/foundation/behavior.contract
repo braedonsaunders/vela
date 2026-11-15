@@ -1,4 +1,5 @@
 use buildEngine from "./engine.contract"
+use skinTraits, skinDetailSplit, resolveSkin, documentsSkin, defaultSkin from "./skins.generated.contract"
 use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, SecureSwitchReply, libraryQuery from "./models.contract"
 
 shape Time
@@ -419,15 +420,18 @@ members Client
   mutation receipt as shape ReceiptReply queue
   derive small = viewport.width < 640
   derive still = viewport.prefersReducedMotion
-  derive indexSkin = (activeSkin == "index" or activeSkin == "editorial")
-  // Skins whose title page is a plain page rather than cinematic's framed overlay.
-  derive flatDetail = (indexSkin or activeSkin == "jellytwin" or activeSkin == "marquee")
-  derive homeSmall = (small or (indexSkin and top(nav).name == "title" and viewport.width >= 900))
+  // What the root reads about the active skin, from its skin.json (never its name).
+  derive traits = skinTraits(activeSkin)
+  // A plain title page rather than a framed overlay.
+  derive flatDetail = traits.flatDetail
+  // A skin that splits the title page beside home narrows home to the split's column.
+  derive homeSmall = (small or (top(nav).name == "title" and skinDetailSplit(activeSkin, viewport.width, activeDoc) != "none"))
   derive shellViewport = Viewport(viewport, width=(homeSmall and not small ? 360 : viewport.width))
-  derive pageColor = (activeSkin == "mochi" ? "mochi.page" : indexSkin ? "index.page" : activeSkin == "jellytwin" ? "jellytwin.page" : activeSkin == "marquee" ? "marquee.page" : "surface.page")
-  derive inkColor = (activeSkin == "mochi" ? "mochi.ink" : indexSkin ? "index.ink" : activeSkin == "jellytwin" ? "jellytwin.ink" : activeSkin == "marquee" ? "marquee.ink" : "ink.primary")
+  derive pageColor = traits.page
+  derive inkColor = traits.ink
   // requestedSkin and activePack come from the server appearance (appearance.contract).
-  derive wantedSkin = match activePack { case some(p) => p.engine, case none => (docReady ? "doc" : ["cinematic", "index", "editorial", "example", "jellytwin", "mochi", "marquee"].includes(requestedSkin) ? requestedSkin : "cinematic") }
+  // A server document draws through the documents engine; a requested id (or alias) through its skin.
+  derive wantedSkin = match activePack { case some(p) => p.engine, case none => (docReady ? documentsSkin() : resolveSkin(requestedSkin) == documentsSkin() ? defaultSkin() : resolveSkin(requestedSkin)) }
   // A single-engine build always presents its own engine; vela-engine hands off to the wanted one.
   derive activeSkin = (buildEngine() == "" ? wantedSkin : buildEngine())
 

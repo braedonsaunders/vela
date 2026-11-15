@@ -1,6 +1,7 @@
 use GuideModel, GuideChannel, GuideProgramme, LiveTile from "../../live/models.contract"
 use LibraryOption from "../../foundation/models.contract"
 use Glyph, Solid, Spinner, Art, Pick, Primary, Secondary, Round, barH, gutter from "./look.contract"
+use GuideProps from "../../foundation/slot-api.contract"
 
 // The live guide as a grid: the focused programme's details and the live preview
 // tile on top, a toolbar of days and filters, then channels down the left against
@@ -15,14 +16,12 @@ fn keep(c: GuideChannel, filter: string): bool = (filter == "all" ? true : filte
 
 // The programme under `at` minutes in a row, else the next one, else the last; a row without
 // listings focuses its channel. Cell ids match the data module's left/right neighbour ids.
-fn cellAt(c: GuideChannel, at: number): string = match first(c.programmes.filter(p => p.at + p.span > at)) { case some(p) => `guide-${p.id}`, case none => match first(c.programmes.slice(-1)) { case some(p) => `guide-${p.id}`, case none => `mq-rail-${c.id}` } }
+fn cellAt(c: GuideChannel, at: number): string = match first(c.programmes.filter(entry => entry.at + entry.span > at)) { case some(entry) => `guide-${entry.id}`, case none => match first(c.programmes.slice(-1)) { case some(entry) => `guide-${entry.id}`, case none => `mq-rail-${c.id}` } }
 
 component Guide
   props
-    model: GuideModel
-    small: bool
-    still: bool
-    tile: LiveTile
+    p: GuideProps
+  inject
     watch: action
     chooseDay: action
     tileMessage: action
@@ -38,21 +37,21 @@ component Guide
   state portH = 600
   state focusMin = -1
   state landed = -1
-  derive rows = model.channels.filter(c => keep(c, filter))
-  derive scale = ppm(small)
-  derive row = rowH(small)
-  derive rail = railW(small)
-  derive width = model.minutes * scale
+  derive rows = p.model.channels.filter(c => keep(c, filter))
+  derive scale = ppm(p.small)
+  derive row = rowH(p.small)
+  derive rail = railW(p.small)
+  derive width = p.model.minutes * scale
   // Open with the landing time (now, on today) a quarter of the way across, so a little of the past shows.
-  derive anchorMin = (model.nowMinute >= 0 ? model.nowMinute : model.landing)
-  derive landingMin = max(0, min(model.minutes - (portW - rail) / scale, anchorMin - (portW - rail) / scale / 4))
+  derive anchorMin = (p.model.nowMinute >= 0 ? p.model.nowMinute : p.model.landing)
+  derive landingMin = max(0, min(p.model.minutes - (portW - rail) / scale, anchorMin - (portW - rail) / scale / 4))
   derive col = (colBase < 0 ? floor(landingMin / 30) : colBase)
   derive firstRow = max(0, rowBase - 6)
   derive lastRow = min(rows.length, rowBase + ceil(portH / row) + 8)
   derive winFrom = col * 30 - 120
   derive winTo = col * 30 + portW / scale + 120
-  derive focusChannels = (selChannel != "" ? model.channels.filter(c => c.id == selChannel) : model.channels.filter(c => c.nowId != "").slice(0, 1))
-  derive filterChoices = [LibraryOption(id="all", label=t("live.allChannels")), LibraryOption(id="favourites", label=t("live.favourites")), LibraryOption(id="listed", label=t("live.withListings"))].concat(model.groups.map(g => LibraryOption(id=g, label=g)))
+  derive focusChannels = (selChannel != "" ? p.model.channels.filter(c => c.id == selChannel) : p.model.channels.filter(c => c.nowId != "").slice(0, 1))
+  derive filterChoices = [LibraryOption(id="all", label=t("live.allChannels")), LibraryOption(id="favourites", label=t("live.favourites")), LibraryOption(id="listed", label=t("live.withListings"))].concat(p.model.groups.map(g => LibraryOption(id=g, label=g)))
   action scrolled(x: number, y: number)
     if landed < 0
       landed = landingMin
@@ -77,25 +76,25 @@ component Guide
     filter = value
     rowBase = 0
   action jumpNow
-    if model.day != 0
+    if p.model.day != 0
       pickDay(0)
     else
       selChannel = ""
       selProgramme = ""
-      if still
+      if p.still
         scrollIntoView("mq-guide-now", block="nearest", inline="start")
       else
         scrollIntoView("mq-guide-now", block="nearest", inline="start", behavior="smooth")
   action shift(hours: number)
     let target = col * 30 + hours * 60
-    if target < 0 and model.day > 0
-      pickDay(model.day - 1)
+    if target < 0 and p.model.day > 0
+      pickDay(p.model.day - 1)
     else
-      if target > model.minutes - 60 and model.day < model.days.length - 1
-        pickDay(model.day + 1)
+      if target > p.model.minutes - 60 and p.model.day < p.model.days.length - 1
+        pickDay(p.model.day + 1)
       else
-        let id = `mq-tick-${max(0, min(model.minutes - 30, target))}`
-        if still
+        let id = `mq-tick-${max(0, min(p.model.minutes - 30, target))}`
+        if p.still
           scrollIntoView(id, block="nearest", inline="start")
         else
           scrollIntoView(id, block="nearest", inline="start", behavior="smooth")
@@ -135,29 +134,29 @@ component Guide
       focus(match first(rows.slice(target, target + 1)) { case some(c) => `mq-rail-${c.id}`, case none => "" })
     if k == "ArrowRight"
       preventDefault()
-      focus(match first(rows.slice(index, index + 1)) { case some(c) => cellAt(c, max(col * 30, model.nowMinute)), case none => "" })
+      focus(match first(rows.slice(index, index + 1)) { case some(c) => cellAt(c, max(col * 30, p.model.nowMinute)), case none => "" })
   view
-    column height="100%" min-height=0 box-sizing="border-box" padding-top=barH(small) background-color="marquee.page" color="marquee.ink" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
+    column height="100%" min-height=0 box-sizing="border-box" padding-top=barH(p.small) background-color="marquee.page" color="marquee.ink" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
       text t("ui.channelGuide") role="heading" aria-level=1 position="absolute" width=1 height=1 overflow="hidden" opacity=0
-      row flex-shrink=0 gap=(small ? 12 : 24) align-items="stretch" padding=(small ? "12px 14px 8px" : "20px 40px 14px")
+      row flex-shrink=0 gap=(p.small ? 12 : 24) align-items="stretch" padding=(p.small ? "12px 14px 8px" : "20px 40px 14px")
         column flex=1 min-width=0
           for c in focusChannels key=`focus-${c.id}`
-            Focus(channel=c, programmeId=(selChannel == c.id and selProgramme != "" ? selProgramme : c.nowId), small=small, still=still, watch=watch)
-        if tile.state != "off"
-          GuideTile(tile=tile, small=small, still=still, watch=watch, message=tileMessage, unmute=tileUnmute, tuneIn=tileTuneIn)
-      row flex-shrink=0 align-items="center" gap=(small ? 4 : 8) padding-left=(small ? "8px" : "34px") padding-right=gutter(small) padding-bottom=8 border-bottom="1px solid var(--marquee.line)" role="toolbar" aria-label=t("live.guideControls")
+            Focus(channel=c, programmeId=(selChannel == c.id and selProgramme != "" ? selProgramme : c.nowId), small=p.small, still=p.still, watch=watch)
+        if p.tile.state != "off"
+          GuideTile(tile=p.tile, small=p.small, still=p.still, watch=watch, message=tileMessage, unmute=tileUnmute, tuneIn=tileTuneIn)
+      row flex-shrink=0 align-items="center" gap=(p.small ? 4 : 8) padding-left=(p.small ? "8px" : "34px") padding-right=gutter(p.small) padding-bottom=8 border-bottom="1px solid var(--marquee.line)" role="toolbar" aria-label=t("live.guideControls")
         scroll flex=1 min-width=0 overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
           row gap=2 align-items="center" role="group" aria-label=t("live.day")
-            for d in model.days key=d.offset
-              button press=pickDay(d.offset) aria-pressed=(d.offset == model.day) class=DayTab color=(d.offset == model.day ? "marquee.ink" : "marquee.ink-dim") border-bottom=(d.offset == model.day ? "2px solid var(--marquee.amber)" : "2px solid transparent")
-                text (d.offset > 1 and not small ? `${d.label} ${d.date}` : d.label) font-size=14 font-weight=(d.offset == model.day ? 700 : 600) white-space="nowrap"
+            for d in p.model.days key=d.offset
+              button press=pickDay(d.offset) aria-pressed=(d.offset == p.model.day) class=DayTab color=(d.offset == p.model.day ? "marquee.ink" : "marquee.ink-dim") border-bottom=(d.offset == p.model.day ? "2px solid var(--marquee.amber)" : "2px solid transparent")
+                text (d.offset > 1 and not p.small ? `${d.label} ${d.date}` : d.label) font-size=14 font-weight=(d.offset == p.model.day ? 700 : 600) white-space="nowrap"
         button press=shift(-2) aria-label=t("ui.earlierProgrammes") class=Round width=34 height=34
           Glyph(name="left", size=18)
         button press=jumpNow aria-label=t("live.jumpToNow") class=NowButton
           text t("live.now") font-size=13 font-weight=700
         button press=shift(2) aria-label=t("ui.laterProgrammes") class=Round width=34 height=34
           Glyph(name="right", size=18)
-        if not small
+        if not p.small
           Pick(label=t("live.filter"), value=filter, choices=filterChoices, change=pickFilter)
         else
           button press=pickFilter(filter == "favourites" ? "all" : "favourites") aria-pressed=(filter == "favourites") aria-label=t("live.favourites") class=Round width=34 height=34 color=(filter == "favourites" ? "marquee.amber" : "marquee.ink-dim")
@@ -165,7 +164,7 @@ component Guide
               Solid(name="star", size=18)
             else
               Glyph(name="star", size=18)
-      if model.channels.length == 0
+      if p.model.channels.length == 0
         column flex=1 align-items="center" justify-content="center" padding=32
           text t("live.noChannels") role="status" font-size=16 color="marquee.ink-dim"
       else
@@ -175,33 +174,33 @@ component Guide
             button press=pickFilter("all") class=Secondary height=38 padding="0px 18px"
               text t("live.allChannels") font-size=14
         else
-          for day in [model.day] key=day
+          for day in [p.model.day] key=day
             scroll id="mq-guide-grid" testId="guide-grid" scroll=scrolled resize=measured scrollLeft=((landed < 0 ? landingMin : landed) * scale) flex=1 min-height=0 overflow="auto" overscroll-behavior="contain" scroll-padding-left=rail scroll-padding-top=rulerH() role="grid" aria-label=t("ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch")
               column position="relative" width=(rail + width) height=(rulerH() + rows.length * row) flex-shrink=0
-                if model.nowMinute >= 0
-                  column position="absolute" left=rail top=rulerH() width=(model.nowMinute * scale) height=(rows.length * row) background-color="marquee.guide-past" aria-hidden=true pointer-events="none"
+                if p.model.nowMinute >= 0
+                  column position="absolute" left=rail top=rulerH() width=(p.model.nowMinute * scale) height=(rows.length * row) background-color="marquee.guide-past" aria-hidden=true pointer-events="none"
                 row position="sticky" top=0 z-index=6 height=rulerH() width=(rail + width) background-color="marquee.chrome" border-bottom="1px solid var(--marquee.line)"
-                  row position="sticky" left=0 z-index=7 width=rail height=rulerH() flex-shrink=0 box-sizing="border-box" padding-left=(small ? 10 : 16) align-items="center" background-color="marquee.chrome"
-                    text (small ? model.days.filter(d => d.offset == model.day).map(d => d.label).join("") : model.dayLabel) font-size=12 font-weight=700 color="marquee.ink-dim" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+                  row position="sticky" left=0 z-index=7 width=rail height=rulerH() flex-shrink=0 box-sizing="border-box" padding-left=(p.small ? 10 : 16) align-items="center" background-color="marquee.chrome"
+                    text (p.small ? p.model.days.filter(d => d.offset == p.model.day).map(d => d.label).join("") : p.model.dayLabel) font-size=12 font-weight=700 color="marquee.ink-dim" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
                   column position="relative" width=width height=rulerH() flex-shrink=0
-                    for tick in model.ticks key=tick.id
+                    for tick in p.model.ticks key=tick.id
                       column id=`mq-tick-${tick.minute}` position="absolute" left=(tick.minute * scale) top=0 bottom=0 width=(30 * scale) justify-content="center" border-left="1px solid var(--marquee.line)" box-sizing="border-box" aria-hidden=true
-                        text tick.label padding-left=8 font-size=12 font-weight=(tick.hour ? 700 : 500) color=(tick.hour ? "marquee.ink" : "marquee.ink-faint") font-variant-numeric="tabular-nums" white-space="nowrap" opacity=(model.nowMinute >= 0 and tick.minute * scale > model.nowMinute * scale - 90 and tick.minute * scale < model.nowMinute * scale + 24 ? 0 : 1)
-                    if model.nowMinute >= 0
-                      column id="mq-guide-now" position="absolute" left=(max(0, model.nowMinute - (portW - rail) / scale / 4) * scale) top=0 width=1 height=1 aria-hidden=true
-                      text model.nowLabel position="absolute" left=(model.nowMinute * scale) top=8 translate="-50% 0px" z-index=2 padding="2px 7px" border-radius=3 background-color="marquee.amber" color="marquee.on-amber" font-size=11 font-weight=800 font-variant-numeric="tabular-nums" white-space="nowrap" aria-hidden=true
+                        text tick.label padding-left=8 font-size=12 font-weight=(tick.hour ? 700 : 500) color=(tick.hour ? "marquee.ink" : "marquee.ink-faint") font-variant-numeric="tabular-nums" white-space="nowrap" opacity=(p.model.nowMinute >= 0 and tick.minute * scale > p.model.nowMinute * scale - 90 and tick.minute * scale < p.model.nowMinute * scale + 24 ? 0 : 1)
+                    if p.model.nowMinute >= 0
+                      column id="mq-guide-now" position="absolute" left=(max(0, p.model.nowMinute - (portW - rail) / scale / 4) * scale) top=0 width=1 height=1 aria-hidden=true
+                      text p.model.nowLabel position="absolute" left=(p.model.nowMinute * scale) top=8 translate="-50% 0px" z-index=2 padding="2px 7px" border-radius=3 background-color="marquee.amber" color="marquee.on-amber" font-size=11 font-weight=800 font-variant-numeric="tabular-nums" white-space="nowrap" aria-hidden=true
                 for c, i in rows.slice(firstRow, lastRow) key=c.id
                   row position="absolute" left=0 top=(rulerH() + (firstRow + i) * row) width=(rail + width) height=row role="row"
-                    RailCell(channel=c, index=(firstRow + i), small=small, rail=rail, row=row, selected=(c.id == selChannel), watch=watch, select=select, railKey=railKey)
+                    RailCell(channel=c, index=(firstRow + i), small=p.small, rail=rail, row=row, selected=(c.id == selChannel), watch=watch, select=select, railKey=railKey)
                     if not c.listed
                       button press=watch(c.id) aria-label=t("ui.watchChannel", channel=c.name) position="sticky" left=(rail + 1) margin-left=1 margin-top=1 height=(row - 2) width=max(120, min(width, portW - rail - 4)) box-sizing="border-box" class=EmptyCell
                         row gap=8 align-items="center" padding-left=14
                           text t("live.noListings") font-size=13 color="marquee.ink-faint"
                           text t("live.watch") font-size=13 font-weight=700 color="marquee.amber"
-                    for p in c.programmes.filter(p => p.at + p.span > winFrom and p.at < winTo) key=p.id
-                      Cell(programme=p, channel=c, index=(firstRow + i), scale=scale, rail=rail, row=row, small=small, nowMinute=model.nowMinute, selected=(c.id == selChannel and p.id == selProgramme), select=select, press=press, move=move)
-                if model.nowMinute >= 0
-                  column position="absolute" left=(rail + model.nowMinute * scale - 1) top=rulerH() width=2 height=(rows.length * row) z-index=2 background-color="marquee.amber" pointer-events="none" aria-hidden=true
+                    for entry in c.programmes.filter(entry => entry.at + entry.span > winFrom and entry.at < winTo) key=entry.id
+                      Cell(programme=entry, channel=c, index=(firstRow + i), scale=scale, rail=rail, row=row, small=p.small, nowMinute=p.model.nowMinute, selected=(c.id == selChannel and entry.id == selProgramme), select=select, press=press, move=move)
+                if p.model.nowMinute >= 0
+                  column position="absolute" left=(rail + p.model.nowMinute * scale - 1) top=rulerH() width=2 height=(rows.length * row) z-index=2 background-color="marquee.amber" pointer-events="none" aria-hidden=true
 
 style DayTab
   box-sizing = "border-box"
@@ -238,36 +237,36 @@ component Focus
     small: bool
     still: bool
     watch: action
-  derive picked = channel.programmes.filter(p => p.id == programmeId)
+  derive picked = channel.programmes.filter(entry => entry.id == programmeId)
   view
     row gap=(small ? 12 : 20) align-items="center" min-width=0 height=(small ? 84 : 132) role="region" aria-label=t("live.selectedProgramme") aria-live="polite"
-      for p in picked key=p.id
-        if p.art != "" and not small
+      for entry in picked key=entry.id
+        if entry.art != "" and not small
           column position="relative" height="100%" aspect-ratio="16 / 9" flex-shrink=0 border-radius=4 overflow="hidden" background-color="marquee.raised"
-            Art(src=p.art, still=still)
+            Art(src=entry.art, still=still)
         column flex=1 min-width=0 gap=(small ? 3 : 6)
           row gap=8 align-items="center" min-width=0
-            if p.airing
+            if entry.airing
               text t("live.liveBadge") font-size=10 font-weight=800 letter-spacing="0.1em" padding="2px 6px" border-radius=3 background-color="marquee.live" color="marquee.ink" flex-shrink=0
             text `${channel.number} · ${channel.name}` font-size=13 font-weight=600 color="marquee.ink-dim" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
-          text p.name font-size=(small ? 17 : 22) font-weight=700 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+          text entry.name font-size=(small ? 17 : 22) font-weight=700 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
           row gap=10 align-items="center" min-width=0
-            text t("ui.startEnd", start=p.startLabel, end=p.endLabel) font-size=13 color="marquee.ink-dim" font-variant-numeric="tabular-nums" white-space="nowrap"
-            if p.airing
-              column width=(small ? 50 : 100) height=4 flex-shrink=0 border-radius=2 background-color="marquee.track" overflow="hidden" role="progressbar" aria-label=t("live.progress") aria-valuemin=0 aria-valuemax=100 aria-valuenow=p.progress
-                column height=4 width=`${p.progress}%` background-color="marquee.amber"
-              text p.remainingLabel font-size=13 color="marquee.amber" font-variant-numeric="tabular-nums" white-space="nowrap"
+            text t("ui.startEnd", start=entry.startLabel, end=entry.endLabel) font-size=13 color="marquee.ink-dim" font-variant-numeric="tabular-nums" white-space="nowrap"
+            if entry.airing
+              column width=(small ? 50 : 100) height=4 flex-shrink=0 border-radius=2 background-color="marquee.track" overflow="hidden" role="progressbar" aria-label=t("live.progress") aria-valuemin=0 aria-valuemax=100 aria-valuenow=entry.progress
+                column height=4 width=`${entry.progress}%` background-color="marquee.amber"
+              text entry.remainingLabel font-size=13 color="marquee.amber" font-variant-numeric="tabular-nums" white-space="nowrap"
             else
-              text (p.ended ? t("live.ended") : t("live.startsIn", minutes=p.startsInLabel)) font-size=13 color="marquee.ink-faint" white-space="nowrap"
-            if p.episode != "" and not small
-              text p.episode font-size=13 color="marquee.ink-faint" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
-          if p.summary != "" and not small
-            text p.summary font-size=13 color="marquee.ink-dim" line-height=1.45 line-clamp=1
+              text (entry.ended ? t("live.ended") : t("live.startsIn", minutes=entry.startsInLabel)) font-size=13 color="marquee.ink-faint" white-space="nowrap"
+            if entry.episode != "" and not small
+              text entry.episode font-size=13 color="marquee.ink-faint" white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0
+          if entry.summary != "" and not small
+            text entry.summary font-size=13 color="marquee.ink-dim" line-height=1.45 line-clamp=1
         if not small
           button press=watch(channel.id) class=Primary height=40 padding="0px 20px" flex-shrink=0 testId="guide-watch"
             row gap=8 align-items="center"
               Solid(name="play", size=16)
-              text (p.airing ? t("live.watch") : t("ui.watchChannel", channel=channel.name)) font-size=14 white-space="nowrap"
+              text (entry.airing ? t("live.watch") : t("ui.watchChannel", channel=channel.name)) font-size=14 white-space="nowrap"
       if picked.length == 0
         column flex=1 min-width=0 gap=4
           text `${channel.number} · ${channel.name}` font-size=13 font-weight=600 color="marquee.ink-dim"

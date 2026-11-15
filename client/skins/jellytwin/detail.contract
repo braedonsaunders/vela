@@ -1,6 +1,7 @@
 use Card, FeedRow, DetailModel, ExtraModel, cardName from "../../foundation/models.contract"
 use Section, Poster, EmptyState from "./slots.contract"
 use Icon, IconBtn, PlayedBadge, Tab, side, tileColor, kindIcon, fadeIn from "./look.contract"
+use DetailProps from "../../foundation/slot-api.contract"
 
 fn kindLabel(kind: string): string = (kind == "movie" ? t("ui.film") : kind == "show" ? t("ui.series") : kind == "season" ? t("ui.season") : t("ui.episode"))
 fn episodeTitle(e: Card): string = (e.episodeNumber > 0 ? t("ui.numberTitle", number=e.episodeNumberLabel, title=e.name) : e.name)
@@ -9,38 +10,37 @@ fn episodeTitle(e: Card): string = (e.episodeNumber > 0 ? t("ui.numberTitle", nu
 // action buttons, overview and people; then seasons, episodes, extras, cast and related rows.
 component Detail
   props
-    model: DetailModel
-    small: bool
-    still: bool
+    p: DetailProps
+  inject
     play: action
     playExtra: action
     selectTitle: action
     observe: action
-  derive upNext = match first(model.episodes.filter(e => not e.played)) { case some(e) => [e], case none => [] }
-  derive trailers = model.extras.filter(e => e.kind == "trailer" and e.ready)
+  derive upNext = match first(p.model.episodes.filter(e => not e.played)) { case some(e) => [e], case none => [] }
+  derive trailers = p.model.extras.filter(e => e.kind == "trailer" and e.ready)
   // The foundation swaps a show's episodes in place for the chosen season; the shown episodes name it.
-  derive selectedSeason = match first(model.episodes) { case some(e) => e.seasonId, case none => match first(model.title.filter(t => t.kind == "season")) { case some(t) => t.id, case none => "" } }
+  derive selectedSeason = match first(p.model.episodes) { case some(e) => e.seasonId, case none => match first(p.model.title.filter(t => t.kind == "season")) { case some(t) => t.id, case none => "" } }
   view
-    column color="jellytwin.ink" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" padding-bottom=56 animation=fadeIn(still)
-      for title in model.title key=title.id
+    column color="jellytwin.ink" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" padding-bottom=56 animation=fadeIn(p.still)
+      for title in p.model.title key=title.id
         column position="relative"
-          column position="relative" height=(small ? 230 : "min(56vh, 520px)") overflow="hidden" aria-hidden=true background-color=(title.backdrop == "" ? tileColor(title.id) : "jellytwin.card")
+          column position="relative" height=(p.small ? 230 : "min(56vh, 520px)") overflow="hidden" aria-hidden=true background-color=(title.backdrop == "" ? tileColor(title.id) : "jellytwin.card")
             if title.backdrop != ""
               image title.backdrop alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="cover"
             column position="absolute" inset=0 background-image="linear-gradient(0deg, var(--jellytwin.page) 0%, var(--jellytwin.scrim-page) 18%, var(--jellytwin.scrim-clear) 60%), linear-gradient(180deg, var(--jellytwin.scrim) 0%, var(--jellytwin.scrim-clear) 30%)"
-          row position="relative" gap=(small ? 0 : 36) align-items="flex-start" padding-left=side(small) padding-right=side(small) margin-top=(small ? -60 : -190)
-            if not small
+          row position="relative" gap=(p.small ? 0 : 36) align-items="flex-start" padding-left=side(p.small) padding-right=side(p.small) margin-top=(p.small ? -60 : -190)
+            if not p.small
               column width="clamp(180px, 17vw, 300px)" flex-shrink=0 aspect-ratio="2 / 3" border-radius=6 overflow="hidden" background-color=(title.poster == "" ? tileColor(title.id) : "jellytwin.card") box-shadow="0px 8px 30px var(--jellytwin.shadow)" align-items="center" justify-content="center" color="jellytwin.secondary"
                 if title.poster != ""
                   image title.poster alt="" width="100%" height="100%" object-fit="cover"
                 else
                   Icon(name=kindIcon(title.kind), size=56)
-            column flex=1 min-width=0 gap=(small ? 12 : 16) padding-top=(small ? 0 : 60) align-items=(small ? "center" : "flex-start") text-align=(small ? "center" : "left")
+            column flex=1 min-width=0 gap=(p.small ? 12 : 16) padding-top=(p.small ? 0 : 60) align-items=(p.small ? "center" : "flex-start") text-align=(p.small ? "center" : "left")
               if title.logo != ""
-                image title.logo alt=title.name role="heading" aria-level=1 height=(small ? 70 : 110) width="auto" max-width=(small ? "80%" : "min(480px, 90%)") object-fit="contain"
+                image title.logo alt=title.name role="heading" aria-level=1 height=(p.small ? 70 : 110) width="auto" max-width=(p.small ? "80%" : "min(480px, 90%)") object-fit="contain"
               else
-                text title.name role="heading" aria-level=1 font-size=(small ? 28 : 40) font-weight=700 color="jellytwin.ink-strong" line-height=1.15 text-shadow="0px 2px 10px var(--jellytwin.shadow)"
-              row gap=14 align-items="center" flex-wrap="wrap" justify-content=(small ? "center" : "flex-start") font-size=15
+                text title.name role="heading" aria-level=1 font-size=(p.small ? 28 : 40) font-weight=700 color="jellytwin.ink-strong" line-height=1.15 text-shadow="0px 2px 10px var(--jellytwin.shadow)"
+              row gap=14 align-items="center" flex-wrap="wrap" justify-content=(p.small ? "center" : "flex-start") font-size=15
                 text kindLabel(title.kind) color="jellytwin.secondary"
                 if title.year > 0
                   text title.yearLabel color="jellytwin.ink-strong"
@@ -52,72 +52,72 @@ component Detail
                   row gap=4 align-items="center" color="jellytwin.accent"
                     Icon(name="symbol:checkmark", size=16)
                     text t("jellytwin.played") font-size=14
-              row gap=(small ? 14 : 12) align-items="flex-start" flex-wrap="wrap" justify-content=(small ? "center" : "flex-start") margin-top=4
-                if model.canPlay
-                  RoundAction(icon="symbol:play-fill", label=(model.resumeSeconds > 0 ? t("jellytwin.resume") : t("ui.play")), primary=true, small=small, testId="detail-play", press=play(title.id))
+              row gap=(p.small ? 14 : 12) align-items="flex-start" flex-wrap="wrap" justify-content=(p.small ? "center" : "flex-start") margin-top=4
+                if p.model.canPlay
+                  RoundAction(icon="symbol:play-fill", label=(p.model.resumeSeconds > 0 ? t("jellytwin.resume") : t("ui.play")), primary=true, small=p.small, testId="detail-play", press=play(title.id))
                 for trailer in trailers key=trailer.id
-                  RoundAction(icon="symbol:icon.jelly-film", label=t("jellytwin.trailer"), primary=false, small=small, testId=`detail-trailer-${trailer.id}`, press=playExtra(trailer.id))
-              if model.canPlay and model.resumeSeconds > 0 and title.durationSeconds > 0
-                column gap=6 width=(small ? "70%" : 320)
-                  column height=5 border-radius=3 background-color="jellytwin.track" overflow="hidden" role="progressbar" aria-label=t("ui.watchProgress") aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=min(title.durationSeconds, max(0, model.resumeSeconds))
-                    column height=5 width=`${min(100, model.resumeSeconds / title.durationSeconds * 100)}%` background-color="jellytwin.accent"
-                  text t("jellytwin.resumeFrom", position=model.resumePosition) font-size=13 color="jellytwin.secondary"
+                  RoundAction(icon="symbol:icon.jelly-film", label=t("jellytwin.trailer"), primary=false, small=p.small, testId=`detail-trailer-${trailer.id}`, press=playExtra(trailer.id))
+              if p.model.canPlay and p.model.resumeSeconds > 0 and title.durationSeconds > 0
+                column gap=6 width=(p.small ? "70%" : 320)
+                  column height=5 border-radius=3 background-color="jellytwin.track" overflow="hidden" role="progressbar" aria-label=t("ui.watchProgress") aria-valuemin=0 aria-valuemax=title.durationSeconds aria-valuenow=min(title.durationSeconds, max(0, p.model.resumeSeconds))
+                    column height=5 width=`${min(100, p.model.resumeSeconds / title.durationSeconds * 100)}%` background-color="jellytwin.accent"
+                  text t("jellytwin.resumeFrom", position=p.model.resumePosition) font-size=13 color="jellytwin.secondary"
               if title.summary != ""
-                text title.summary font-size=(small ? 15 : 16) line-height=1.6 color="jellytwin.ink" max-width="52rem" text-align="left"
+                text title.summary font-size=(p.small ? 15 : 16) line-height=1.6 color="jellytwin.ink" max-width="52rem" text-align="left"
               column gap=6 font-size=14 max-width="52rem" align-self="stretch" text-align="left"
                 if title.genres.length > 0
                   InfoLine(label=t("jellytwin.genres"), value=title.genres.join(", "))
-                if model.crew.length > 0
-                  InfoLine(label=t("jellytwin.crew"), value=model.crew.join(", "))
-                if model.mediaFacts.length > 0
+                if p.model.crew.length > 0
+                  InfoLine(label=t("jellytwin.crew"), value=p.model.crew.join(", "))
+                if p.model.mediaFacts.length > 0
                   row gap=8 flex-wrap="wrap" margin-top=6
-                    for fact in model.mediaFacts key=fact
+                    for fact in p.model.mediaFacts key=fact
                       text fact font-size=12 font-weight=600 padding="4px 8px" border-radius=4 background-color="jellytwin.raised" color="jellytwin.ink"
-      column gap=0 padding-top=(small ? 26 : 40)
+      column gap=0 padding-top=(p.small ? 26 : 40)
         for episode in upNext key=episode.id
-          column gap=10 padding-left=side(small) padding-right=side(small) padding-bottom=(small ? 18 : 26)
-            text t("jellytwin.nextUp") role="heading" aria-level=2 font-size=(small ? 17 : 21) font-weight=600 color="jellytwin.ink-strong"
+          column gap=10 padding-left=side(p.small) padding-right=side(p.small) padding-bottom=(p.small ? 18 : 26)
+            text t("jellytwin.nextUp") role="heading" aria-level=2 font-size=(p.small ? 17 : 21) font-weight=600 color="jellytwin.ink-strong"
             row gap=14 align-items="center"
-              Poster(card=episode, wide=true, width=(small ? "58vw" : "clamp(240px, 21.5vw, 400px)"), domId="", small=small, still=still, selectTitle=selectTitle, observe=observe)
-              if not small
+              Poster(card=episode, wide=true, width=(p.small ? "58vw" : "clamp(240px, 21.5vw, 400px)"), domId="", small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+              if not p.small
                 button press=play(episode.id) aria-label=(episode.progressSeconds > 0 ? t("ui.resumeTitle", title=episode.name) : t("ui.playTitle", title=episode.name)) class=IconBtn width=56 height=56 background-color="jellytwin.raised"
                   Icon(name="symbol:play-fill", size=28)
-        if model.seasons.length > 0 and model.episodes.length == 0
-          Section(row=FeedRow(id="detail-seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-        if model.episodes.length > 0
-          column gap=4 padding-left=side(small) padding-right=side(small) padding-bottom=(small ? 18 : 26)
+        if p.model.seasons.length > 0 and p.model.episodes.length == 0
+          Section(row=FeedRow(id="detail-seasons", name=t("ui.seasons"), receipt="", items=p.model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+        if p.model.episodes.length > 0
+          column gap=4 padding-left=side(p.small) padding-right=side(p.small) padding-bottom=(p.small ? 18 : 26)
             text t("ui.episodes") role="heading" aria-level=2 class=DetailHeading padding-bottom=4
-            if model.seasons.length > 1
+            if p.model.seasons.length > 1
               scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" margin-bottom=8 border-bottom="1px solid var(--jellytwin.line)"
                 row role="tablist" aria-label=t("ui.seasons") testId="season-picker"
-                  for season in model.seasons key=season.id
-                    SeasonTab(label=season.name, on=(season.id == selectedSeason), still=still, press=selectTitle(season.id, "season", season.receipt))
-            for episode in model.episodes key=episode.id
-              EpisodeRow(episode=episode, small=small, still=still, play=play, selectTitle=selectTitle)
-        if model.extras.length > 0
-          column gap=10 padding-bottom=(small ? 18 : 26)
-            text t("jellytwin.specialFeatures") role="heading" aria-level=2 font-size=(small ? 17 : 21) font-weight=600 color="jellytwin.ink-strong" padding-left=side(small) padding-right=side(small)
+                  for season in p.model.seasons key=season.id
+                    SeasonTab(label=season.name, on=(season.id == selectedSeason), still=p.still, press=selectTitle(season.id, "season", season.receipt))
+            for episode in p.model.episodes key=episode.id
+              EpisodeRow(episode=episode, small=p.small, still=p.still, play=play, selectTitle=selectTitle)
+        if p.model.extras.length > 0
+          column gap=10 padding-bottom=(p.small ? 18 : 26)
+            text t("jellytwin.specialFeatures") role="heading" aria-level=2 font-size=(p.small ? 17 : 21) font-weight=600 color="jellytwin.ink-strong" padding-left=side(p.small) padding-right=side(p.small)
             scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
-              row gap=(small ? 10 : 16) padding-left=side(small) padding-right=side(small) padding-bottom=6
-                for extra in model.extras key=extra.id
-                  ExtraCard(extra=extra, small=small, playExtra=playExtra)
-        if model.castPeople.length > 0
-          column gap=10 padding-bottom=(small ? 18 : 26)
-            text t("jellytwin.castAndCrew") role="heading" aria-level=2 class=DetailHeading padding-left=side(small) padding-right=side(small)
+              row gap=(p.small ? 10 : 16) padding-left=side(p.small) padding-right=side(p.small) padding-bottom=6
+                for extra in p.model.extras key=extra.id
+                  ExtraCard(extra=extra, small=p.small, playExtra=playExtra)
+        if p.model.castPeople.length > 0
+          column gap=10 padding-bottom=(p.small ? 18 : 26)
+            text t("jellytwin.castAndCrew") role="heading" aria-level=2 class=DetailHeading padding-left=side(p.small) padding-right=side(p.small)
             scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
-              row gap=(small ? 10 : 16) padding-left=side(small) padding-right=side(small) padding-bottom=6 role="list"
-                for person, i in model.castPeople key=`${i}`
-                  column role="listitem" width=(small ? "26vw" : "clamp(110px, 8.6vw, 160px)") flex-shrink=0 gap=2 align-items="center" text-align="center"
+              row gap=(p.small ? 10 : 16) padding-left=side(p.small) padding-right=side(p.small) padding-bottom=6 role="list"
+                for person, i in p.model.castPeople key=`${i}`
+                  column role="listitem" width=(p.small ? "26vw" : "clamp(110px, 8.6vw, 160px)") flex-shrink=0 gap=2 align-items="center" text-align="center"
                     if person.portrait != ""
                       image person.portrait alt="" width="100%" aspect-ratio="2 / 3" border-radius=6 object-fit="cover" margin-bottom=4
                     else
                       column width="100%" aspect-ratio="2 / 3" border-radius=6 margin-bottom=4 align-items="center" justify-content="center" background-color=tileColor(person.name) color="jellytwin.secondary" aria-hidden=true
-                        Icon(name="symbol:person", size=(small ? 34 : 46))
+                        Icon(name="symbol:person", size=(p.small ? 34 : 46))
                     text person.name class=PersonName
                     if person.role != ""
                       text person.role class=PersonRole
-        for related in model.related key=related.id
-          Section(row=FeedRow(related, name=(related.name != "" ? related.name : t("jellytwin.moreLikeThis"))), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        for related in p.model.related key=related.id
+          Section(row=FeedRow(related, name=(related.name != "" ? related.name : t("jellytwin.moreLikeThis"))), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
 
 // A round action under the title: the play circle carries the accent.
 component RoundAction

@@ -1,6 +1,7 @@
 use Card, LibraryModel, LibraryOption, cardName from "../../foundation/models.contract"
 use TitleCard, Empty, noPreview, unwatched, progressPct, subLine from "./slots.contract"
 use Glyph, Solid, Spinner, Block, Art, Pick, Primary, Secondary, Round, barH, gutter, arrive, kindLabel from "./look.contract"
+use CollectionProps, LibraryProps from "../../foundation/slot-api.contract"
 
 // Poster sizes the toolbar's slider steps through.
 fn posterMin(size: number, small: bool): number = (small ? 96 + size * 8 : 110 + size * 18)
@@ -9,11 +10,8 @@ fn posterMin(size: number, small: bool): number = (small ? 96 + size * 8 : 110 +
 // switch and a poster-size slider, then the titles in server order.
 component Library
   props
-    model: LibraryModel
-    loading: bool
-    moreLoading: bool
-    small: bool
-    still: bool
+    p: LibraryProps
+  inject
     close: action
     setSort: action
     setFilter: action
@@ -23,19 +21,19 @@ component Library
   state list = false
   state asked = false
   state size = 1
-  derive directions = match first(model.sorts.filter(s => s.id == model.sort)) { case some(s) => s.directions, case none => [] }
-  derive kindChoices = [LibraryOption(id="", label=t("marquee.allTypes"))].concat(model.kinds)
-  derive sortChoices = model.sorts.map(s => LibraryOption(id=s.id, label=s.label))
-  derive genreChoices = [LibraryOption(id="", label=t("library.anyGenre"))].concat(model.genres)
+  derive directions = match first(p.model.sorts.filter(s => s.id == p.model.sort)) { case some(s) => s.directions, case none => [] }
+  derive kindChoices = [LibraryOption(id="", label=t("marquee.allTypes"))].concat(p.model.kinds)
+  derive sortChoices = p.model.sorts.map(s => LibraryOption(id=s.id, label=s.label))
+  derive genreChoices = [LibraryOption(id="", label=t("library.anyGenre"))].concat(p.model.genres)
   derive playedChoices = [LibraryOption(id="", label=t("marquee.anyStatus")), LibraryOption(id="false", label=t("library.filter.unwatched")), LibraryOption(id="true", label=t("library.filter.watched"))]
   action pickSort(id: string)
-    match first(model.sorts.filter(s => s.id == id))
+    match first(p.model.sorts.filter(s => s.id == id))
       case some(s)
-        setSort(id, (s.directions.includes(model.direction) ? model.direction : match first(s.directions) { case some(d) => d, case none => "" }))
+        setSort(id, (s.directions.includes(p.model.direction) ? p.model.direction : match first(s.directions) { case some(d) => d, case none => "" }))
       case none
         setSort(id, "")
   action flip
-    setSort(model.sort, (model.direction == "asc" ? "desc" : "asc"))
+    setSort(p.model.sort, (p.model.direction == "asc" ? "desc" : "asc"))
   action pickKind(v: string)
     setFilter("kind", v)
   action pickGenre(v: string)
@@ -52,14 +50,14 @@ component Library
   action showList
     list = true
   view
-    column position="relative" padding-top=barH(small) padding-bottom=60
-      column position="sticky" top=barH(small) z-index=5 background-color="marquee.page" border-bottom="1px solid var(--marquee.line)"
-        row align-items="center" gap=(small ? 8 : 14) min-height=(small ? 48 : 56) padding-left=gutter(small) padding-right=gutter(small)
-          text model.name role="heading" aria-level=1 font-size=(small ? 18 : 20) font-weight=700 white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0 flex-shrink=(small ? 1 : 0)
-          if loading and model.items.length > 0
-            Spinner(size=18, still=still)
+    column position="relative" padding-top=barH(p.small) padding-bottom=60
+      column position="sticky" top=barH(p.small) z-index=5 background-color="marquee.page" border-bottom="1px solid var(--marquee.line)"
+        row align-items="center" gap=(p.small ? 8 : 14) min-height=(p.small ? 48 : 56) padding-left=gutter(p.small) padding-right=gutter(p.small)
+          text p.model.name role="heading" aria-level=1 font-size=(p.small ? 18 : 20) font-weight=700 white-space="nowrap" overflow="hidden" text-overflow="ellipsis" min-width=0 flex-shrink=(p.small ? 1 : 0)
+          if p.loading and p.model.items.length > 0
+            Spinner(size=18, still=p.still)
           column flex=1
-          if not small
+          if not p.small
             row gap=8 align-items="center" color="marquee.ink-faint"
               Glyph(name="grid", size=14)
               input type="range" min=0 max=5 step=1 value=size change=resize aria-label=t("marquee.posterSize") width=96 accent-color="var(--marquee.amber)" disabled=list
@@ -70,48 +68,48 @@ component Library
             button press=showList aria-pressed=list aria-label=t("marquee.listView") class=Round width=36 height=36 color=(list ? "marquee.amber" : "marquee.ink-dim")
               Glyph(name="rows", size=20)
         scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
-          row gap=4 align-items="center" padding-left=(small ? "4px" : "28px") padding-right=gutter(small) padding-bottom=8 role="toolbar" aria-label=t("marquee.libraryControls")
-            if model.kinds.length > 1
-              Pick(label=t("marquee.type"), value=model.kindFilter, choices=kindChoices, change=pickKind)
-            if model.sorts.length > 1
-              Pick(label=t("library.sortBy"), value=model.sort, choices=sortChoices, change=pickSort)
+          row gap=4 align-items="center" padding-left=(p.small ? "4px" : "28px") padding-right=gutter(p.small) padding-bottom=8 role="toolbar" aria-label=t("marquee.libraryControls")
+            if p.model.kinds.length > 1
+              Pick(label=t("marquee.type"), value=p.model.kindFilter, choices=kindChoices, change=pickKind)
+            if p.model.sorts.length > 1
+              Pick(label=t("library.sortBy"), value=p.model.sort, choices=sortChoices, change=pickSort)
             if directions.length > 1
-              button press=flip aria-label=(model.direction == "asc" ? t("library.direction.asc") : t("library.direction.desc")) class=Round width=34 height=34
-                column rotate=(model.direction == "asc" ? "0deg" : "180deg") transition=(still ? "none" : "rotate 160ms linear")
+              button press=flip aria-label=(p.model.direction == "asc" ? t("library.direction.asc") : t("library.direction.desc")) class=Round width=34 height=34
+                column rotate=(p.model.direction == "asc" ? "0deg" : "180deg") transition=(p.still ? "none" : "rotate 160ms linear")
                   Glyph(name="up", size=18)
-            if model.genres.length > 0
-              Pick(label=t("library.genre"), value=model.genreFilter, choices=genreChoices, change=pickGenre)
-            if model.canPlayed
-              Pick(label=t("marquee.watchStatus"), value=model.playedFilter, choices=playedChoices, change=pickPlayed)
-            if model.canFavorite
-              button press=setFilter("favorite", (model.favoriteFilter ? "" : "true")) aria-pressed=model.favoriteFilter class=FilterToggle color=(model.favoriteFilter ? "marquee.amber" : "marquee.ink")
+            if p.model.genres.length > 0
+              Pick(label=t("library.genre"), value=p.model.genreFilter, choices=genreChoices, change=pickGenre)
+            if p.model.canPlayed
+              Pick(label=t("marquee.watchStatus"), value=p.model.playedFilter, choices=playedChoices, change=pickPlayed)
+            if p.model.canFavorite
+              button press=setFilter("favorite", (p.model.favoriteFilter ? "" : "true")) aria-pressed=p.model.favoriteFilter class=FilterToggle color=(p.model.favoriteFilter ? "marquee.amber" : "marquee.ink")
                 row gap=6 align-items="center"
-                  if model.favoriteFilter
+                  if p.model.favoriteFilter
                     Solid(name="heart", size=16)
                   else
                     Glyph(name="heart", size=16)
                   text t("library.filter.favorites") font-size=14 font-weight=600
-      if loading and model.items.length == 0
-        column role="status" aria-label=t("ui.findingTitles") display="grid" grid-template-columns=`repeat(auto-fill, minmax(${posterMin(size, small)}px, 1fr))` gap=(small ? 12 : 20) padding=(small ? "16px 14px" : "24px 40px")
+      if p.loading and p.model.items.length == 0
+        column role="status" aria-label=t("ui.findingTitles") display="grid" grid-template-columns=`repeat(auto-fill, minmax(${posterMin(size, p.small)}px, 1fr))` gap=(p.small ? 12 : 20) padding=(p.small ? "16px 14px" : "24px 40px")
           for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] key=`b-${i}`
             column aspect-ratio="2 / 3"
-              Block(width="100%", height="100%", radius=4, still=still)
+              Block(width="100%", height="100%", radius=4, still=p.still)
       else
-        if model.items.length == 0
+        if p.model.items.length == 0
           column gap=14 align-items="center"
             Empty(glyph="filter", title=t("library.empty"), message=t("library.emptyHint"))
         else
-          column aria-busy=loading opacity=(loading ? 0.6 : 1) transition=(still ? "none" : "opacity 160ms linear")
+          column aria-busy=p.loading opacity=(p.loading ? 0.6 : 1) transition=(p.still ? "none" : "opacity 160ms linear")
             if list
-              TitleList(items=model.items, small=small, still=still, selectTitle=selectTitle, observe=observe)
+              TitleList(items=p.model.items, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
             else
-              column display="grid" grid-template-columns=`repeat(auto-fill, minmax(${posterMin(size, small)}px, 1fr))` column-gap=(small ? 12 : 20) row-gap=(small ? 18 : 28) padding=(small ? "16px 14px" : "24px 40px")
-                for card in model.items key=card.id
-                  TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=true, preview=noPreview(), intent=quiet)
-          if model.more
+              column display="grid" grid-template-columns=`repeat(auto-fill, minmax(${posterMin(size, p.small)}px, 1fr))` column-gap=(p.small ? 12 : 20) row-gap=(p.small ? 18 : 28) padding=(p.small ? "16px 14px" : "24px 40px")
+                for card in p.model.items key=card.id
+                  TitleCard(card=card, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe, fill=true, preview=noPreview(), intent=quiet)
+          if p.model.more
             row justify-content="center" padding-top=16
-              if moreLoading
-                Spinner(size=28, still=still)
+              if p.moreLoading
+                Spinner(size=28, still=p.still)
               else
                 button press=more class=Secondary height=40 padding="0px 22px"
                   text t("library.loadMore") font-size=14
@@ -182,12 +180,10 @@ style ListRow
     box-shadow = "inset 0px 0px 0px 2px var(--marquee.amber)"
 
 // A collection: a way back, its name and its titles in server order.
-component CollectionPage
+component Collection
   props
-    name: string
-    items: Card[]
-    small: bool
-    still: bool
+    p: CollectionProps
+  inject
     close: action
     selectTitle: action
     observe: action
@@ -196,15 +192,15 @@ component CollectionPage
     asked = on
   view
     column min-height="100%" background-color="marquee.page" color="marquee.ink" padding-bottom=60
-      row position="sticky" top=0 z-index=5 align-items="center" gap=10 height=(small ? 52 : 60) padding-left=(small ? "4px" : "24px") padding-right=gutter(small) background-color="marquee.chrome-glass" backdrop-filter="blur(18px)"
+      row position="sticky" top=0 z-index=5 align-items="center" gap=10 height=(p.small ? 52 : 60) padding-left=(p.small ? "4px" : "24px") padding-right=gutter(p.small) background-color="marquee.chrome-glass" backdrop-filter="blur(18px)"
         button press=close aria-label=t("ui.back") class=Round width=44 height=44
           Glyph(name="back", size=22)
         column min-width=0 gap=1
           text t("library.collection") font-size=11 font-weight=700 letter-spacing="0.06em" text-transform="uppercase" color="marquee.amber"
-          text name role="heading" aria-level=1 font-size=(small ? 17 : 20) font-weight=700 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
-      if items.length == 0
+          text p.name role="heading" aria-level=1 font-size=(p.small ? 17 : 20) font-weight=700 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+      if p.items.length == 0
         Empty(glyph="stack", title=t("marquee.emptyCollection"), message="")
       else
-        column display="grid" grid-template-columns=`repeat(auto-fill, minmax(${small ? 104 : 150}px, 1fr))` column-gap=(small ? 12 : 20) row-gap=(small ? 18 : 28) padding=(small ? "16px 14px" : "24px 40px")
-          for card in items key=card.id
-            TitleCard(card=card, small=small, still=still, selectTitle=selectTitle, observe=observe, fill=true, preview=noPreview(), intent=quiet)
+        column display="grid" grid-template-columns=`repeat(auto-fill, minmax(${p.small ? 104 : 150}px, 1fr))` column-gap=(p.small ? 12 : 20) row-gap=(p.small ? 18 : 28) padding=(p.small ? "16px 14px" : "24px 40px")
+          for card in p.items key=card.id
+            TitleCard(card=card, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe, fill=true, preview=noPreview(), intent=quiet)

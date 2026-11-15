@@ -1,6 +1,7 @@
 use Card, CardPreview from "../../foundation/models.contract"
 use TitleCard, gutter from "./slots.contract"
 use Display, Eyebrow, IconButton, enter, expose, drift, stagger, dissolve, rise, open, drift from "./look.contract"
+use CollectionProps from "../../foundation/slot-api.contract"
 
 // Posters in a wrapping grid, in the order given, entering with a short stagger.
 component TitleGrid
@@ -56,3 +57,14 @@ component BrowsePage
     column gap=(small ? 22 : 32) padding-bottom=80
       BrowseHeader(eyebrow=eyebrow, name=name, backdrop="", small=small, still=still, close=close)
       TitleGrid(items=items, small=small, still=still, selectTitle=selectTitle, observe=observe)
+
+// A collection's titles in server order: the browse page under a collection eyebrow.
+component Collection
+  props
+    p: CollectionProps
+  inject
+    close: action
+    selectTitle: action
+    observe: action
+  view
+    BrowsePage(eyebrow=t("library.collection"), name=p.name, items=p.items, small=p.small, still=p.still, close=close, selectTitle=selectTitle, observe=observe)

@@ -1,6 +1,7 @@
 use Card, CardPreview, HeroPreview, FeedRow, HomeModel, HeroAction, SearchModel, Viewport, LibraryNav, cardName from "../../foundation/models.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use Glyph, Solid, Wordmark, Spinner, Block, Art, Primary, Secondary, Round, barH, gutter, gutterPx, quick, arrive, kindLabel, mqFade, mqGone, mqRise, mqDrop, mqSlide, mqSpin, mqPulse, mqSheen from "./look.contract"
+use HomeProps, SearchFieldProps, SearchProps, ShellProps, StatusProps from "../../foundation/slot-api.contract"
 
 fn detailPresentation(width: number): string = "fullscreen"
 fn detailSplit(width: number): string = "none"
@@ -30,34 +31,28 @@ fn progressPct(card: Card): number = (card.durationSeconds > 0 ? min(100, max(0,
 // Phones fold the sidebar into a drawer behind the menu button.
 component Shell
   props
-    viewer: string
-    skin: string
-    skins: string[]
+    p: ShellProps
+  inject
     chooseSkin: action
     signOut: action
-    viewport: Viewport
-    canLive: bool
-    canLibrary: bool
     home: action
     search: action
     live: action
     library: action
-    libraries: LibraryNav[]
-    section: string
     openLibrary: action
   slot
   state flipped = false
   state drawer = false
   state menuOpen = false
   state pickerOpen = false
-  derive phone = viewport.width < 640
-  derive narrow = viewport.width < 1100
+  derive phone = p.viewport.width < 640
+  derive narrow = p.viewport.width < 1100
   derive slim = (narrow != flipped)
   derive rail = (phone ? 0 : slim ? railSlim() : railWide())
-  derive still = viewport.prefersReducedMotion
+  derive still = p.viewport.prefersReducedMotion
   derive bar = barH(phone)
   // On a wide home the page draws the bar's middle itself, around the live search field.
-  derive clearBar = section == "home" and not phone
+  derive clearBar = p.section == "home" and not phone
   action toggleRail
     if phone
       drawer = not drawer
@@ -104,12 +99,12 @@ component Shell
       closeDrawer()
   view
     row position="relative" key=keys height="100%" min-height=0 background-color="marquee.page" color="marquee.ink" color-scheme="dark" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
-      if viewer != "" and not phone
+      if p.viewer != "" and not phone
         column role="navigation" aria-label=t("ui.mainNavigation") width=rail flex-shrink=0 box-sizing="border-box" padding-top=bar background-color="marquee.chrome" overflow-x="hidden" overflow-y="auto" scrollbar-width="none" -exact-layout-transition=(still ? "none" : "200ms ease-out")
-          Destinations(libraries=libraries, section=section, canLive=canLive, slim=slim, still=still, home=goHome, live=goLive, openLibrary=goLibrary)
+          Destinations(libraries=p.libraries, section=p.section, canLive=p.canLive, slim=slim, still=still, home=goHome, live=goLive, openLibrary=goLibrary)
       column flex=1 min-width=0 min-height=0 position="relative"
         children
-      if viewer != ""
+      if p.viewer != ""
         row position="absolute" top=0 left=0 right=0 height=bar z-index=20 align-items="center" box-sizing="border-box" padding-right=(phone ? 6 : 14) gap=(phone ? 2 : 12) pointer-events="none" background-color=(clearBar ? "marquee.scrim-clear" : "marquee.chrome-glass") backdrop-filter=(clearBar ? "none" : "blur(18px)")
           row width=(phone ? "auto" : `${rail}px`) min-width=(phone ? 0 : 200) flex-shrink=0 box-sizing="border-box" padding-left=(phone ? 4 : 12) gap=(phone ? 4 : 10) align-items="center" pointer-events="auto" -exact-layout-transition=(still ? "none" : "200ms ease-out")
             button id="marquee-menu-button" testId="marquee-menu" press=toggleRail aria-label=(phone ? t("marquee.openNavigation") : t("marquee.toggleSidebar")) aria-expanded=(phone ? drawer : not slim) class=Round width=44 height=44
@@ -128,14 +123,14 @@ component Shell
                     Glyph(name="search", size=18)
                     text t("ui.search") font-size=15
           button id="marquee-account" press=toggleMenu aria-expanded=menuOpen aria-controls="marquee-account-menu" aria-label=t("ui.profileAndAppearance") testId="profile-menu" pointer-events="auto" class=Round width=44 height=44
-            text viewer.slice(0, 1).toUpperCase() width=32 height=32 border-radius=16 display="flex" align-items="center" justify-content="center" font-size=14 font-weight=700 color="marquee.on-amber" background-color="marquee.amber" aria-hidden=true
-      if viewer != "" and menuOpen
+            text p.viewer.slice(0, 1).toUpperCase() width=32 height=32 border-radius=16 display="flex" align-items="center" justify-content="center" font-size=14 font-weight=700 color="marquee.on-amber" background-color="marquee.amber" aria-hidden=true
+      if p.viewer != "" and menuOpen
         column id="marquee-account-menu" position="absolute" top=(bar - 4) right=(phone ? 8 : 14) z-index=30 width=260 box-sizing="border-box" padding="8px 0px" border-radius=6 background-color="marquee.menu" box-shadow="0px 12px 40px var(--marquee.shadow), 0px 0px 0px 1px var(--marquee.line)" animation=(still ? "mqFade 120ms linear both" : "mqDrop 180ms cubic-bezier(0.2, 0, 0, 1) both") -exact-exit-animation="mqGone 100ms linear both"
           row gap=12 align-items="center" padding="10px 16px 14px"
-            text viewer.slice(0, 1).toUpperCase() width=36 height=36 border-radius=18 display="flex" align-items="center" justify-content="center" font-size=16 font-weight=700 color="marquee.on-amber" background-color="marquee.amber" aria-hidden=true
-            text viewer font-size=15 font-weight=700 flex=1 min-width=0 line-clamp=1
+            text p.viewer.slice(0, 1).toUpperCase() width=36 height=36 border-radius=18 display="flex" align-items="center" justify-content="center" font-size=16 font-weight=700 color="marquee.on-amber" background-color="marquee.amber" aria-hidden=true
+            text p.viewer font-size=15 font-weight=700 flex=1 min-width=0 line-clamp=1
           column height=1 background-color="marquee.line"
-          if skins.length > 1
+          if p.skins.length > 1
             button press=openPicker testId="skin-picker" aria-haspopup="dialog" class=MenuRow
               row gap=12 align-items="center"
                 Glyph(name="grid", size=18)
@@ -148,7 +143,7 @@ component Shell
             row gap=12 align-items="center"
               Glyph(name="signout", size=18)
               text t("ui.signOut") font-size=14
-      if viewer != "" and phone and drawer
+      if p.viewer != "" and phone and drawer
         button press=closeDrawer tabindex=-1 aria-label=t("marquee.closeNavigation") position="absolute" inset=0 z-index=40 border="none" padding=0 background-color="marquee.scrim" animation="mqFade 160ms linear both" -exact-exit-animation="mqGone 120ms linear both"
         column role="navigation" aria-label=t("ui.mainNavigation") position="absolute" top=0 left=0 bottom=0 z-index=41 width="min(300px, 84vw)" box-sizing="border-box" background-color="marquee.chrome" box-shadow="12px 0px 40px var(--marquee.shadow)" animation=(still ? "mqFade 120ms linear both" : "mqSlide 220ms cubic-bezier(0.2, 0, 0, 1) both") -exact-exit-animation="mqGone 120ms linear both"
           row height=bar align-items="center" gap=4 padding-left=4 padding-right=4 flex-shrink=0
@@ -156,9 +151,9 @@ component Shell
               Glyph(name="close", size=22)
             Wordmark(size=28)
           scroll flex=1 min-height=0
-            Destinations(libraries=libraries, section=section, canLive=canLive, slim=false, still=still, home=goHome, live=goLive, openLibrary=goLibrary)
+            Destinations(libraries=p.libraries, section=p.section, canLive=p.canLive, slim=false, still=still, home=goHome, live=goLive, openLibrary=goLibrary)
       if pickerOpen
-        SkinPicker(skins=skins, current=skin, small=phone, still=still, choose=pickSkin, dismiss=closePicker)
+        SkinPicker(skins=p.skins, current=p.skin, small=phone, still=still, choose=pickSkin, dismiss=closePicker)
 
 // Home, then the server's libraries in order (a live library opens the guide), then
 // Live when the server offers it without a live library.
@@ -268,7 +263,8 @@ component TopStrip
 // The search field: in the top bar on wide screens, under it on phones.
 component SearchField
   props
-    query: string
+    p: SearchFieldProps
+  inject
     edit: action
   state focused = false
   action focusField
@@ -276,17 +272,17 @@ component SearchField
   action blurField
     focused = false
   action fieldKey(k: string)
-    if k == "Escape" and query != ""
+    if k == "Escape" and p.query != ""
       preventDefault()
       edit("")
   view
     row width="100%" max-width=560 align-items="center" gap=10 height=38 box-sizing="border-box" padding="0px 4px 0px 12px" border-radius=6 background-color=(focused ? "marquee.field-focus" : "marquee.field") box-shadow=(focused ? "0px 0px 0px 1px var(--marquee.line-strong)" : "none") transition="background-color 120ms linear, box-shadow 120ms linear"
       column color=(focused ? "marquee.ink" : "marquee.ink-faint") flex-shrink=0
         Glyph(name="search", size=18)
-      input id="vela-search" value=query input=edit focus=focusField blur=blurField key=fieldKey outline="none" placeholder=t("ui.search") aria-label=t("ui.searchYourLibrary") testId="search" flex=1 min-width=0 height="100%" padding=0 border="none" background-color="transparent" color="marquee.ink" font-size=15 font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
+      input id="vela-search" value=p.query input=edit focus=focusField blur=blurField key=fieldKey outline="none" placeholder=t("ui.search") aria-label=t("ui.searchYourLibrary") testId="search" flex=1 min-width=0 height="100%" padding=0 border="none" background-color="transparent" color="marquee.ink" font-size=15 font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif"
         ::placeholder
           color="marquee.ink-faint"
-      if query != ""
+      if p.query != ""
         button press=edit("") aria-label=t("ui.clearSearch") class=Round width=30 height=30
           Glyph(name="close", size=16)
 
@@ -517,8 +513,8 @@ component Spotlight
             Art(src=b, still=still)
         // A server-granted trailer plays muted over the art; the artwork shows until it plays.
         if not still
-          for p in previews.filter(p => p.id == hero.id) key=p.id
-            vela-preview url=p.url active=(active ? "true" : "false") still="false" expiresAt=p.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+          for entry in previews.filter(entry => entry.id == hero.id) key=entry.id
+            vela-preview url=entry.url active=(active ? "true" : "false") still="false" expiresAt=entry.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
         column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--marquee.scrim) 0%, var(--marquee.scrim) 30%, var(--marquee.scrim-soft) 55%, var(--marquee.scrim-clear) 78%), linear-gradient(0deg, var(--marquee.scrim) 0%, var(--marquee.scrim-clear) 55%)" aria-hidden=true
       column position=(small ? "relative" : "absolute") left=0 bottom=0 box-sizing="border-box" width=(small ? "100%" : "min(620px, 62%)") padding=(small ? "0px 16px 16px" : "0px 36px 32px") gap=(small ? 8 : 10)
         text (match first(mine) { case some(a) => (a.reasonLabel != "" ? a.reasonLabel : t("ui.featured")), case none => t("ui.featured") }) font-size=12 font-weight=700 letter-spacing="0.08em" text-transform="uppercase" color="marquee.amber"
@@ -554,49 +550,42 @@ component Spotlight
 
 component Home
   props
-    model: HomeModel
-    active: bool
-    query: string
-    small: bool
-    still: bool
+    p: HomeProps
+  inject
     selectTitle: action
     observe: action
-    heroIndex: number
     pickHero: action
     reachEnd: action
     reachRowEnd: action
-    homeMoreLoading: bool
-    rowMoreLoading: string[]
     playHero: action
-    cardPreview: CardPreview
     previewIntent: action
   slot
-  derive searching = query != ""
+  derive searching = p.query != ""
   view
     column
-      if small
+      if p.small
         column height=barH(true) flex-shrink=0
         row padding="10px 14px 16px"
           children
       else
         TopStrip(small=false, raised=true)
           children
-      column padding-top=(small or searching ? 0 : 24) padding-bottom=(searching ? 0 : 48)
+      column padding-top=(p.small or searching ? 0 : 24) padding-bottom=(searching ? 0 : 48)
         if not searching
-          for hero in model.hero.slice(heroIndex, heroIndex + 1) key=hero.id
-            Spotlight(hero=hero, heroes=model.hero, actions=model.heroActions, count=model.hero.length, index=heroIndex, small=small, still=still, selectTitle=selectTitle, observe=observe, pickHero=pickHero, playHero=playHero, previews=model.previews, active=active)
-          for row, i in model.rows key=row.id
-            column animation=arrive(still, min(i, 5) * 40)
-              Shelf(row=row, place="home", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=cardPreview, intent=previewIntent)
+          for hero in p.model.hero.slice(p.heroIndex, p.heroIndex + 1) key=hero.id
+            Spotlight(hero=hero, heroes=p.model.hero, actions=p.model.heroActions, count=p.model.hero.length, index=p.heroIndex, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe, pickHero=pickHero, playHero=playHero, previews=p.model.previews, active=p.active)
+          for row, i in p.model.rows key=row.id
+            column animation=arrive(p.still, min(i, 5) * 40)
+              Shelf(row=row, place="home", small=p.small, still=p.still, selectTitle=selectTitle, observe=observe, preview=p.cardPreview, intent=previewIntent)
                 if row.nextCursor != ""
-                  column width=(small ? 48 : 72) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not rowMoreLoading.includes(row.id))
-                    if rowMoreLoading.includes(row.id)
-                      Spinner(size=24, still=still)
-          if model.nextCursor != ""
+                  column width=(p.small ? 48 : 72) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) aria-hidden=(not p.rowMoreLoading.includes(row.id))
+                    if p.rowMoreLoading.includes(row.id)
+                      Spinner(size=24, still=p.still)
+          if p.model.nextCursor != ""
             column min-height=120 intersect=reachEnd
-              if homeMoreLoading
-                ShelfBlocks(small=small, still=still)
-          if model.rows.length == 0 and model.hero.length == 0
+              if p.homeMoreLoading
+                ShelfBlocks(small=p.small, still=p.still)
+          if p.model.rows.length == 0 and p.model.hero.length == 0
             Empty(glyph="stack", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"))
 
 // A centred empty or failed moment, with what to do next when there is something.
@@ -615,16 +604,8 @@ component Empty
 
 component SearchSurface
   props
-    query: string
-    model: SearchModel
-    descriptive: SearchModel
-    ai: SearchModel
-    generation: number
-    loading: bool
-    error: bool
-    aiAvailable: bool
-    small: bool
-    still: bool
+    p: SearchProps
+  inject
     selectTitle: action
     observe: action
   state asked = false
@@ -634,81 +615,78 @@ component SearchSurface
     scrollIntoView("vela-search", block="center")
     focus("vela-search")
   view
-    column gap=6 padding-bottom=60 animation=(still ? "mqFade 160ms linear both" : "mqFade 220ms linear both")
+    column gap=6 padding-bottom=60 animation=(p.still ? "mqFade 160ms linear both" : "mqFade 220ms linear both")
       // Long results scroll the home's field away; this strip takes the bar's middle and leads back to it.
-      if not small
+      if not p.small
         TopStrip(small=false, raised=false)
           button press=backToField aria-label=t("ui.searchYourLibrary") class=SearchLaunch width="100%" max-width=560
             row gap=10 align-items="center" min-width=0
               Glyph(name="search", size=18)
-              text query font-size=15 color="marquee.ink" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
-      text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 font-size=(small ? 20 : 24) font-weight=700 padding-left=gutter(small) padding-right=gutter(small) padding-top=(small ? 0 : 20) padding-bottom=12 line-clamp=2
-      if error
+              text p.query font-size=15 color="marquee.ink" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+      text t("ui.resultsForQuery", query=p.query) role="heading" aria-level=1 font-size=(p.small ? 20 : 24) font-weight=700 padding-left=gutter(p.small) padding-right=gutter(p.small) padding-top=(p.small ? 0 : 20) padding-bottom=12 line-clamp=2
+      if p.error
         Empty(glyph="alert", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"))
       else
-        if loading
+        if p.loading
           column role="status" aria-label=t("ui.findingTitles")
-            ShelfBlocks(small=small, still=still)
+            ShelfBlocks(small=p.small, still=p.still)
         else
-          if model.items.length == 0
+          if p.model.items.length == 0
             Empty(glyph="search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"))
           else
-            Shelf(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
-        if descriptive.query == query and descriptive.generation == generation and descriptive.items.length > 0
-          Shelf(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
-        if ai.query == query and ai.generation == generation and aiAvailable and ai.aiStatus != ""
+            Shelf(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=p.model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=p.small, still=p.still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
+        if p.descriptive.query == p.query and p.descriptive.generation == p.generation and p.descriptive.items.length > 0
+          Shelf(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=p.descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=p.small, still=p.still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
+        if p.ai.query == p.query and p.ai.generation == p.generation and p.aiAvailable and p.ai.aiStatus != ""
           column gap=8
-            if ai.aiStatus == "queued" or ai.aiStatus == "running"
-              row gap=10 align-items="center" padding-left=gutter(small) padding-right=gutter(small) padding-bottom=12 role="status"
-                Spinner(size=18, still=still)
+            if p.ai.aiStatus == "queued" or p.ai.aiStatus == "running"
+              row gap=10 align-items="center" padding-left=gutter(p.small) padding-right=gutter(p.small) padding-bottom=12 role="status"
+                Spinner(size=18, still=p.still)
                 text t("ui.exploringYourDescription") color="marquee.ink-dim" font-size=14
-            if ai.items.length > 0
-              Shelf(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
-            if ai.aiStatus == "failed"
-              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="marquee.ink-dim" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
+            if p.ai.items.length > 0
+              Shelf(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=p.ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), place="search", small=p.small, still=p.still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
+            if p.ai.aiStatus == "failed"
+              text t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") color="marquee.ink-dim" font-size=14 padding-left=gutter(p.small) padding-right=gutter(p.small)
 
 // Waiting and failure moments the foundation reports, shaped like what is coming.
 component Status
   props
-    kind: string
-    message: string
-    small: bool
-    still: bool
+    p: StatusProps
   view
-    column padding-top=(small or kind != "home" ? barH(small) : 0) animation="mqFade 200ms linear both"
-      if kind == "home"
-        if not small
+    column padding-top=(p.small or p.kind != "home" ? barH(p.small) : 0) animation="mqFade 200ms linear both"
+      if p.kind == "home"
+        if not p.small
           TopStrip(small=false, raised=true)
-        column role="status" aria-label=message gap=0 padding-top=24
-          column margin-left=gutter(small) margin-right=gutter(small) margin-bottom=30
-            Block(width="100%", height=(small ? "200px" : "clamp(280px, 30vw, 380px)"), radius=6, still=still)
-          ShelfBlocks(small=small, still=still)
-          ShelfBlocks(small=small, still=still)
+        column role="status" aria-label=p.message gap=0 padding-top=24
+          column margin-left=gutter(p.small) margin-right=gutter(p.small) margin-bottom=30
+            Block(width="100%", height=(p.small ? "200px" : "clamp(280px, 30vw, 380px)"), radius=6, still=p.still)
+          ShelfBlocks(small=p.small, still=p.still)
+          ShelfBlocks(small=p.small, still=p.still)
       else
-        if kind == "library"
-          column role="status" aria-label=message gap=20 padding-top=16
-            row gap=12 padding-left=gutter(small) padding-right=gutter(small)
-              Block(width="160px", height="28px", radius=4, still=still)
-              Block(width="110px", height="28px", radius=4, still=still)
-              Block(width="110px", height="28px", radius=4, still=still)
-            column display="grid" grid-template-columns=`repeat(auto-fill, minmax(${small ? 104 : 150}px, 1fr))` gap=(small ? 12 : 20) padding-left=gutter(small) padding-right=gutter(small)
+        if p.kind == "library"
+          column role="status" aria-label=p.message gap=20 padding-top=16
+            row gap=12 padding-left=gutter(p.small) padding-right=gutter(p.small)
+              Block(width="160px", height="28px", radius=4, still=p.still)
+              Block(width="110px", height="28px", radius=4, still=p.still)
+              Block(width="110px", height="28px", radius=4, still=p.still)
+            column display="grid" grid-template-columns=`repeat(auto-fill, minmax(${p.small ? 104 : 150}px, 1fr))` gap=(p.small ? 12 : 20) padding-left=gutter(p.small) padding-right=gutter(p.small)
               for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17] key=`b-${i}`
                 column aspect-ratio="2 / 3"
-                  Block(width="100%", height="100%", radius=4, still=still)
+                  Block(width="100%", height="100%", radius=4, still=p.still)
         else
-          if kind == "detail"
-            row role="status" aria-label=message gap=36 padding=(small ? "24px 16px" : "48px 48px") align-items="flex-start"
-              if not small
-                Block(width="260px", height="390px", radius=4, still=still)
+          if p.kind == "detail"
+            row role="status" aria-label=p.message gap=36 padding=(p.small ? "24px 16px" : "48px 48px") align-items="flex-start"
+              if not p.small
+                Block(width="260px", height="390px", radius=4, still=p.still)
               column flex=1 gap=16
-                Block(width="60%", height="34px", radius=4, still=still)
-                Block(width="30%", height="16px", radius=3, still=still)
-                Block(width="200px", height="44px", radius=6, still=still)
-                Block(width="100%", height="72px", radius=4, still=still)
+                Block(width="60%", height="34px", radius=4, still=p.still)
+                Block(width="30%", height="16px", radius=3, still=p.still)
+                Block(width="200px", height="44px", radius=6, still=p.still)
+                Block(width="100%", height="72px", radius=4, still=p.still)
           else
-            if kind == "loading"
+            if p.kind == "loading"
               column role="status" align-items="center" gap=16 padding="96px 24px"
-                Spinner(size=40, still=still)
-                text message color="marquee.ink-dim" font-size=15
+                Spinner(size=40, still=p.still)
+                text p.message color="marquee.ink-dim" font-size=15
             else
-              Empty(glyph="alert", title=t("ui.somethingWentQuiet"), message=message)
+              Empty(glyph="alert", title=t("ui.somethingWentQuiet"), message=p.message)

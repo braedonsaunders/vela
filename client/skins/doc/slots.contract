@@ -1,9 +1,9 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
-use HomeModel, Viewport, LibraryNav from "../../foundation/models.contract"
 use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, noStyle from "../../renderer/shapes.contract"
 use V1, V5, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, rootCtx from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
+use HomeProps, ShellProps from "../../foundation/slot-api.contract"
 
 fn part(s: string, i: number): string = match s.split("|").at(i) { case some(x) => x, case none => "" }
 fn toggled(flags: string[], f: string): string[] = (flags.includes(f) ? flags.filter(x => x != f) : flags.concat([f]))
@@ -34,19 +34,14 @@ component SlotBox
 
 component Shell
   props
+    p: ShellProps
+  inject
     doc: SkinDoc
-    viewer: string
-    skin: string
-    skins: string[]
     chooseSkin: action
     signOut: action
-    viewport: Viewport
-    canLive: bool
     home: action
     search: action
     live: action
-    libraries: LibraryNav[]
-    section: string
     openLibrary: action
   slot
   state flags: string[] = []
@@ -85,7 +80,7 @@ component Shell
     pickerOpen = false
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), home=[], libraries=libraries, viewer=viewer, section=section, query="", heroIndex=0, small=viewport.width < 640, still=viewport.prefersReducedMotion, canLive=canLive, flags=flags)] key="env"
+    for env in [Env(styles=doc.styles, dflt=noStyle(), home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query="", heroIndex=0, small=p.viewport.width < 640, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags)] key="env"
       Root(s=styleAt(env, doc.shell.root))
         SlotBox(order=doc.shell.slotOrder, s=styleAt(env, doc.shell.slotStyle), inner=styleAt(env, doc.shell.slotInner), e=env)
           children
@@ -93,18 +88,15 @@ component Shell
           for cc, j in ctxs5(n, rootCtx(), env) key=ctxKey(cc, j)
             V5(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=seen)
         if pickerOpen
-          SkinPicker(skins=skins, current=skin, small=env.small, still=env.still, choose=pick, dismiss=dismiss)
+          SkinPicker(skins=p.skins, current=p.skin, small=env.small, still=env.still, choose=pick, dismiss=dismiss)
 
 component Home
   props
+    p: HomeProps
+  inject
     doc: SkinDoc
-    model: HomeModel
-    query: string
-    small: bool
-    still: bool
     selectTitle: action
     observe: action
-    heroIndex: number
     pickHero: action
     playHero: action
   slot
@@ -113,14 +105,14 @@ component Home
     if name == "select"
       selectTitle(part(arg, 0), part(arg, 1), part(arg, 2))
     if name == "play"
-      playHero(heroActFor(model, arg).map(a => a.targetId).join(""), num(heroActFor(model, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(model, arg).map(a => a.hasPosition).includes(true))
+      playHero(heroActFor(p.model, arg).map(a => a.targetId).join(""), num(heroActFor(p.model, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(p.model, arg).map(a => a.hasPosition).includes(true))
     if name == "pickHero"
       pickHero(match parseNumber(arg) { case some(x) => x, case none => 0 })
     if name == "toggle"
       flags = toggled(flags, arg)
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), home=[model], libraries=[], viewer=model.viewer, section="home", query=query, heroIndex=heroIndex, small=small, still=still, canLive=model.liveAvailable, flags=flags)] key="env"
+    for env in [Env(styles=doc.styles, dflt=noStyle(), home=[p.model], libraries=[], viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, still=p.still, canLive=p.model.liveAvailable, flags=flags)] key="env"
       Root(s=styleAt(env, doc.home.root))
         SlotBox(order=doc.home.slotOrder, s=styleAt(env, doc.home.slotStyle), inner=styleAt(env, doc.home.slotInner), e=env)
           children

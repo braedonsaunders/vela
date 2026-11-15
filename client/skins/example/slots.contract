@@ -1,31 +1,24 @@
+use CollectionProps, DetailProps, HomeProps, LibraryProps, SearchFieldProps, SearchProps, ShellProps, StatusProps from "../../foundation/slot-api.contract"
 // Minimal complete example: plain lists, no requests, ordering or playback engine.
-use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, cardName, skinLabel, LibraryNav from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, DetailModel, Viewport, cardName, LibraryNav from "../../foundation/models.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
-use PlayerView from "../../foundation/player-models.contract"
-use GuideModel from "../../live/models.contract"
-use PlayerChrome as BasePlayer from "../index/player.contract"
-use Guide as BaseGuide from "../index/guide.contract"
-use LiveControls as BaseLive from "../index/live.contract"
+use PlayerChrome from "../index/player.contract"
+use Guide from "../index/guide.contract"
+use LiveControls from "../index/live.contract"
 
 fn detailPresentation(width: number): string = "fullscreen"
 fn detailSplit(width: number): string = "none"
 
 component Shell
   props
-    viewer: string
-    skin: string
-    skins: string[]
+    p: ShellProps
+  inject
     chooseSkin: action
     signOut: action
-    viewport: Viewport
-    canLive: bool
-    canLibrary: bool
     home: action
     search: action
     live: action
     library: action
-    libraries: LibraryNav[]
-    section: string
     openLibrary: action
   slot
   state pickerOpen = false
@@ -41,12 +34,12 @@ component Shell
     column position="relative" height="100%" color="ink.primary" background-color="surface.page" gap=12
       row role="navigation" aria-label=t("ui.mainNavigation") gap=12 padding=16 flex-wrap="wrap"
         text t("example.name") role="heading" aria-level=1
-        if viewer != ""
+        if p.viewer != ""
           button press=home
             text t("ui.home")
           button press=search
             text t("ui.search")
-          if canLive
+          if p.canLive
             button press=live
               text t("ui.live")
           button press=openPicker testId="skin-picker" aria-haspopup="dialog"
@@ -55,7 +48,7 @@ component Shell
             text t("ui.signOut")
       children
       if pickerOpen
-        SkinPicker(skins=skins, current=skin, small=viewport.width < 640, still=viewport.prefersReducedMotion, choose=pickSkin, dismiss=closePicker)
+        SkinPicker(skins=p.skins, current=p.skin, small=p.viewport.width < 640, still=p.viewport.prefersReducedMotion, choose=pickSkin, dismiss=closePicker)
 
 component TitleCard
   props
@@ -85,138 +78,124 @@ component Row
 
 component Home
   props
-    model: HomeModel
-    active: bool
-    query: string
-    small: bool
-    still: bool
+    p: HomeProps
+  inject
     selectTitle: action
     observe: action
-    heroIndex: number
     pickHero: action
     reachEnd: action
     reachRowEnd: action
-    homeMoreLoading: bool
-    rowMoreLoading: string[]
   slot
   view
     column padding=16 gap=16
       text t("example.heading") role="heading" aria-level=1
       children
-      if query == ""
-        for row in model.rows key=row.id
-          Row(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+      if p.query == ""
+        for row in p.model.rows key=row.id
+          Row(row=row, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
           if row.nextCursor != ""
             column height=1 intersect=reachRowEnd(row.id) intersect-margin="0px 0px 100% 0px" aria-hidden=true
-            if rowMoreLoading.includes(row.id)
+            if p.rowMoreLoading.includes(row.id)
               text t("ui.loadingMore") role="status" color="ink.secondary" padding="8px 4%"
-        if model.nextCursor != ""
+        if p.model.nextCursor != ""
           column height=1 intersect=reachEnd intersect-margin="0px 0px 100% 0px" aria-hidden=true
-          if homeMoreLoading
+          if p.homeMoreLoading
             text t("ui.loadingMore") role="status" color="ink.secondary" padding="8px 4%"
 
 component SearchField
   props
-    query: string
+    p: SearchFieldProps
+  inject
     edit: action
   view
-    input value=query input=edit aria-label=t("ui.searchYourLibrary") placeholder=t("ui.titlePersonOrDescription") testId="search"
+    input value=p.query input=edit aria-label=t("ui.searchYourLibrary") placeholder=t("ui.titlePersonOrDescription") testId="search"
 
 component SearchSurface
   props
-    query: string
-    model: SearchModel
-    descriptive: SearchModel
-    ai: SearchModel
-    generation: number
-    loading: bool
-    error: bool
-    aiAvailable: bool
-    small: bool
-    still: bool
+    p: SearchProps
+  inject
     selectTitle: action
     observe: action
   view
     column padding=16 gap=12
-      text t("ui.resultsForQuery", query=query) role="heading" aria-level=1
-      if error
+      text t("ui.resultsForQuery", query=p.query) role="heading" aria-level=1
+      if p.error
         text t("ui.searchIsUnavailableTryAnotherQuery") role="status"
       else
-        if loading
+        if p.loading
           text t("ui.findingTitles") role="status"
         else
-          Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-      if descriptive.query == query and descriptive.generation == generation
-        Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-      if aiAvailable and ai.query == query and ai.generation == generation
-        if ai.aiStatus == "running" or ai.aiStatus == "queued"
+          Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=p.model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+      if p.descriptive.query == p.query and p.descriptive.generation == p.generation
+        Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=p.descriptive.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+      if p.aiAvailable and p.ai.query == p.query and p.ai.generation == p.generation
+        if p.ai.aiStatus == "running" or p.ai.aiStatus == "queued"
           text t("ui.exploringYourDescription") role="status"
-        if ai.items.length > 0
-          Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
+        if p.ai.items.length > 0
+          Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=p.ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
 
 component Detail
   props
-    model: DetailModel
-    small: bool
-    still: bool
+    p: DetailProps
+  inject
     play: action
     playExtra: action
     selectTitle: action
     observe: action
   view
     column padding=24 gap=16
-      for title in model.title key=title.id
+      for title in p.model.title key=title.id
         text title.name role="heading" aria-level=1
         text title.facts
         text title.summary
-        if model.canPlay
+        if p.model.canPlay
           button press=play(title.id)
-            text (model.resumeSeconds > 0 ? t("ui.resumeWatching") : t("ui.play"))
-      if model.seasons.length > 0
-        Row(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-      if model.episodes.length > 0
-        Row(row=FeedRow(id="episodes", name=t("ui.episodes"), receipt="", items=model.episodes, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-      for extra in model.extras key=extra.id
+            text (p.model.resumeSeconds > 0 ? t("ui.resumeWatching") : t("ui.play"))
+      if p.model.seasons.length > 0
+        Row(row=FeedRow(id="seasons", name=t("ui.seasons"), receipt="", items=p.model.seasons, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+      if p.model.episodes.length > 0
+        Row(row=FeedRow(id="episodes", name=t("ui.episodes"), receipt="", items=p.model.episodes, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+      for extra in p.model.extras key=extra.id
         button press=playExtra(extra.id) disabled=(not extra.ready)
           text extra.name
-      for row in model.related key=row.id
-        Row(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe)
+      for row in p.model.related key=row.id
+        Row(row=row, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
 
-component PlayerChrome
+// Loading, empty and failure moments: the message, plainly.
+component Status
   props
-    model: PlayerView
-    title: string
-    visible: bool
-    small: bool
-    still: bool
-    busy: bool
-    serverError: string
-    command: action
-    seek: action
-    editing: action
+    p: StatusProps
+  view
+    text p.message padding=32 role="status"
+
+// A collection's titles in server order, under a way back.
+component Collection
+  props
+    p: CollectionProps
+  inject
     close: action
+    selectTitle: action
+    observe: action
   view
-    BasePlayer(model=model, title=title, visible=visible, small=small, still=still, busy=busy, serverError=serverError, command=command, seek=seek, editing=editing, close=close)
+    column
+      button press=close aria-label=t("ui.back") padding=16
+        text t("ui.back")
+      Row(row=FeedRow(id=p.id, name=p.name, receipt="", items=p.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
 
-component Guide
+// A library's titles in the server's order, a way back and a way to load more.
+component Library
   props
-    model: GuideModel
-    small: bool
-    watch: action
-    previous: action
-    next: action
+    p: LibraryProps
+  inject
+    close: action
+    more: action
+    selectTitle: action
+    observe: action
   view
-    BaseGuide(model=model, small=small, watch=watch, previous=previous, next=next)
-
-component LiveControls
-  props
-    lowDelay: bool
-    reconnecting: bool
-    delivery: string
-    drift: number
-    driftLabel: string
-    canCatchUp: bool
-    toggleLowDelay: action
-    catchUp: action
-  view
-    BaseLive(lowDelay=lowDelay, reconnecting=reconnecting, delivery=delivery, drift=drift, driftLabel=driftLabel, canCatchUp=canCatchUp, toggleLowDelay=toggleLowDelay, catchUp=catchUp)
+    column
+      button press=close aria-label=t("ui.back") padding=16
+        text t("ui.back")
+      Row(row=FeedRow(id=p.model.id, name=p.model.name, receipt="", items=p.model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+      if p.model.more
+        button press=more() disabled=p.moreLoading padding=16
+          text t("library.loadMore")

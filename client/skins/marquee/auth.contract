@@ -1,42 +1,37 @@
 use QuickModel from "../../foundation/models.contract"
 use Glyph, Wordmark, Spinner, Primary, Secondary, TextField, Label, arrive, mqFade, mqGone from "./look.contract"
+use AuthNoticeProps, AuthStageProps, QuickConnectProps, SignInProps from "../../foundation/slot-api.contract"
 
 // Every signed-out state stands on a dark page: the wordmark over one plain card.
 component AuthStage
   props
-    still: bool
+    p: AuthStageProps
   slot
   view
     column position="relative" min-height="100dvh" width="100%" box-sizing="border-box" align-items="center" justify-content="center" padding="max(32px, 8vh) 16px" gap=28 background-color="marquee.chrome" background-image="radial-gradient(ellipse 80% 60% at 50% 0%, var(--marquee.raised) 0%, var(--marquee.chrome) 70%)" color="marquee.ink" color-scheme="dark" -exact-exit-animation="mqGone 200ms linear both"
       Wordmark(size=44)
-      column width="100%" max-width=420 box-sizing="border-box" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif" padding="clamp(24px, 5vw, 36px)" border-radius=8 background-color="marquee.page" box-shadow="0px 24px 60px var(--marquee.shadow), 0px 0px 0px 1px var(--marquee.line)" animation=arrive(still, 0)
+      column width="100%" max-width=420 box-sizing="border-box" font-family="\"Open Sans\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, -apple-system, Roboto, \"Helvetica Neue\", sans-serif" padding="clamp(24px, 5vw, 36px)" border-radius=8 background-color="marquee.page" box-shadow="0px 24px 60px var(--marquee.shadow), 0px 0px 0px 1px var(--marquee.line)" animation=arrive(p.still, 0)
         children
 
 // Connecting, redeeming a web code, or offline: nothing to fill in.
 component AuthNotice
   props
-    kind: string
-    still: bool
+    p: AuthNoticeProps
   view
-    column gap=14 align-items="center" text-align="center" padding="8px 0px" role=(kind == "offline" ? "alert" : "status")
-      if kind == "offline"
+    column gap=14 align-items="center" text-align="center" padding="8px 0px" role=(p.kind == "offline" ? "alert" : "status")
+      if p.kind == "offline"
         column color="marquee.amber"
           Glyph(name="alert", size=32)
         text t("ui.serverUnreachable") role="heading" aria-level=1 font-size=22 font-weight=700
         text t("ui.yourServerCouldNotBeReachedReopenVelaWhenTheConnectionIsRestored") color="marquee.ink-dim" font-size=15 line-height=1.5
       else
-        Spinner(size=36, still=still)
-        text (kind == "redeeming" ? t("ui.signingYouIn") : t("ui.connectingToYourLibrary")) color="marquee.ink-dim" font-size=15
+        Spinner(size=36, still=p.still)
+        text (p.kind == "redeeming" ? t("ui.signingYouIn") : t("ui.connectingToYourLibrary")) color="marquee.ink-dim" font-size=15
 
 component SignIn
   props
-    username: string
-    password: string
-    passwordAvailable: bool
-    quickAvailable: bool
-    error: string
-    busy: bool
-    still: bool
+    p: SignInProps
+  inject
     editUsername: action
     editPassword: action
     submit: action
@@ -46,55 +41,54 @@ component SignIn
       column gap=6
         text t("ui.signIn") role="heading" aria-level=1 font-size=24 font-weight=700
         text t("ui.signInToYourLibrary") color="marquee.ink-dim" font-size=15
-      if error != ""
+      if p.error != ""
         row role="alert" gap=10 align-items="flex-start" padding="10px 12px" border-radius=4 background-color="marquee.amber-soft" box-shadow="inset 3px 0px 0px var(--marquee.amber)"
           column color="marquee.amber" flex-shrink=0
             Glyph(name="alert", size=18)
-          text error font-size=14 line-height=1.45
-      if passwordAvailable
+          text p.error font-size=14 line-height=1.45
+      if p.passwordAvailable
         column gap=14
           column gap=6
             text t("ui.username") class=Label
-            input value=username input=editUsername autocomplete="username" autocapitalize="none" spellcheck=false aria-label=t("ui.username") testId="username" class=TextField
+            input value=p.username input=editUsername autocomplete="username" autocapitalize="none" spellcheck=false aria-label=t("ui.username") testId="username" class=TextField
           column gap=6
             text t("ui.password") class=Label
-            input type="password" value=password input=editPassword submit=submit autocomplete="current-password" aria-label=t("ui.password") testId="password" class=TextField
-          button press=submit disabled=(busy or username.trim() == "" or password == "") class=Primary height=46 margin-top=6 testId="sign-in"
+            input type="password" value=p.password input=editPassword submit=submit autocomplete="current-password" aria-label=t("ui.password") testId="password" class=TextField
+          button press=submit disabled=(p.busy or p.username.trim() == "" or p.password == "") class=Primary height=46 margin-top=6 testId="sign-in"
             row gap=10 align-items="center" justify-content="center"
-              if busy
-                Spinner(size=18, still=still)
-              text (busy ? t("ui.signingIn") : t("ui.signIn")) font-size=16
-      if passwordAvailable and quickAvailable
+              if p.busy
+                Spinner(size=18, still=p.still)
+              text (p.busy ? t("ui.signingIn") : t("ui.signIn")) font-size=16
+      if p.passwordAvailable and p.quickAvailable
         row gap=12 align-items="center" aria-hidden=true
           column flex=1 height=1 background-color="marquee.line-strong"
           text t("ui.or") font-size=13 color="marquee.ink-faint"
           column flex=1 height=1 background-color="marquee.line-strong"
-      if quickAvailable
-        button press=quick disabled=busy class=Secondary height=46 testId="quick-connect"
+      if p.quickAvailable
+        button press=quick disabled=p.busy class=Secondary height=46 testId="quick-connect"
           row gap=10 align-items="center" justify-content="center"
             Glyph(name="phone", size=18)
             text t("ui.connectWithACode") font-size=15
-      if not passwordAvailable and not quickAvailable
+      if not p.passwordAvailable and not p.quickAvailable
         text t("ui.noSignInMethodsOffered") role="status" color="marquee.ink-dim" font-size=14 line-height=1.55
 
 // Quick connect: the code to approve from a signed-in device, in large amber type.
 component QuickConnect
   props
-    model: QuickModel
-    error: string
-    still: bool
+    p: QuickConnectProps
+  inject
     cancel: action
   view
     column gap=20 align-items="center" text-align="center"
       column gap=6 align-items="center"
         text t("ui.connectWithACode") role="heading" aria-level=1 font-size=24 font-weight=700
         text t("ui.approveThisCodeFromASignedInEtherDevice") color="marquee.ink-dim" font-size=15 line-height=1.5 max-width=320
-      text model.code testId="connect-code" aria-label=model.code font-family="ui-monospace, \"SF Mono\", Menlo, Consolas, monospace" font-size=38 font-weight=700 letter-spacing="0.18em" color="marquee.amber" padding="14px 20px" border-radius=6 background-color="marquee.chrome" box-shadow="inset 0px 0px 0px 1px var(--marquee.line)"
+      text p.model.code testId="connect-code" aria-label=p.model.code font-family="ui-monospace, \"SF Mono\", Menlo, Consolas, monospace" font-size=38 font-weight=700 letter-spacing="0.18em" color="marquee.amber" padding="14px 20px" border-radius=6 background-color="marquee.chrome" box-shadow="inset 0px 0px 0px 1px var(--marquee.line)"
       column gap=8 align-items="center"
         row gap=10 align-items="center" role="status"
-          if error == ""
-            Spinner(size=16, still=still)
-          text (error == "" ? t("ui.waitingForApproval") : error) color=(error == "" ? "marquee.ink-dim" : "marquee.amber") font-size=14
-        text t("ui.codeExpires", expiry=model.expiresLabel) color="marquee.ink-faint" font-size=13
+          if p.error == ""
+            Spinner(size=16, still=p.still)
+          text (p.error == "" ? t("ui.waitingForApproval") : p.error) color=(p.error == "" ? "marquee.ink-dim" : "marquee.amber") font-size=14
+        text t("ui.codeExpires", expiry=p.model.expiresLabel) color="marquee.ink-faint" font-size=13
       button press=cancel class=Secondary height=42 padding="0px 26px"
         text t("ui.cancel") font-size=14
