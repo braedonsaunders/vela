@@ -2,7 +2,7 @@
 
 Vela is built separately from Ether. Ether installs a pinned static artifact and
 serves it on its own origin under `/vela/`. No separate API hostname is part of
-the production deployment. Nothing in the release tool publishes or uploads.
+the production deployment. Build and signing commands never publish. Publishing is a separate owner-approved command, first shipping with Ether 0.3.13; Ether 0.3.12 did not ship Vela.
 
 ## Local packaging
 
@@ -43,11 +43,68 @@ outputs are local scratch and must be copied to durable hosting before publishin
 
 ## Installer inputs and verification
 
-An owner-approved release descriptor supplies the archive HTTPS URL, its trusted
-SHA-256, manifest HTTPS URL and trusted manifest SHA-256. These are installer
-inputs, not a mutable `latest` lookup. A hash fetched beside an untrusted download
-is not an independent trust anchor. Distribution URL selection and release
-publication belong to the orchestrator; this repository does not publish them.
+The installer trusts two dedicated Vela Ed25519 public keys (current and next),
+pinned in the Ether binary through build ldflags, independently of Ether's own
+updater key. Verify the detached signature over the **exact downloaded UTF-8 JSON
+bytes**, including their final newline, before parsing or following any URLs.
+The signature file is base64 of the 64-byte Ed25519 signature, plus a newline;
+public pins are base64 of the raw 32-byte public key. No JSON canonicalization.
+
+The stable URLs are:
+
+- `https://github.com/braedonsaunders/vela/releases/download/vela-stable/channel.json`
+- the same URL with `.sig` appended.
+
+Both contain the same bytes as a versioned `vela-V.release.json` and `.sig`
+under GitHub Release tag `vV`. Stable is mutable; versioned assets never change.
+Fetches spanning a channel replacement can see mismatched bytes/signature and must
+fail closed. Never fall back to unsigned metadata. No eager viewer-path work:
+check only on owner Apps › Vela or an already-running updater cadence; install
+only after an owner action. Reject expired descriptors, future publication times,
+dirty sources, unsupported protocol ranges and an insufficient Ether version.
+Refuse downgrade except explicit rollback. Retain the highest observed version
+and publishedAt to reject older channel replays. Thirty-day descriptor expiry
+bounds replay even on first check; renewing an expired channel requires a newly
+signed descriptor, never changing archive bytes.
+
+Descriptor schema (all these fields required; per-engine entries repeat):
+
+```json
+{
+  "schemaVersion": 1,
+  "kind": "vela-release",
+  "channel": "stable",
+  "version": "0.1.42",
+  "publishedAt": "2026-11-15T16:00:00.000Z",
+  "expiresAt": "2026-12-15T16:00:00.000Z",
+  "sourceRevision": "dc943581511d95881acca986346129bf556baa6f",
+  "sourceDirty": false,
+  "protocol": {"minInclusive": 0, "maxInclusive": 0},
+  "minimumEtherVersion": "0.3.13",
+  "archive": {"url": "https://github.com/braedonsaunders/vela/releases/download/v0.1.42/vela-0.1.42.tar.gz", "bytes": 123, "sha256": "<64 lowercase hex>"},
+  "manifest": {"url": "https://github.com/braedonsaunders/vela/releases/download/v0.1.42/vela-0.1.42.manifest.json", "bytes": 123, "sha256": "<64 lowercase hex>"},
+  "engines": {"cinematic": {"manifest": {"url": "https://github.com/braedonsaunders/vela/releases/download/v0.1.42/vela-0.1.42-cinematic.manifest.json", "bytes": 123, "sha256": "<64 lowercase hex>"}}},
+  "universalRuntimeKey": "3c579f70de6e1cfe"
+}
+```
+
+The example sizes/hashes are schematic; `sign.ts` emits actual values. The signed
+archive ref must agree with the complete existing build inventory. Each engine's
+signed manifest ref is downloaded and checked as well, with matching version,
+source, protocol and clean flag. The signing step derives finalized per-engine manifests from the complete archive
+inventory: `{schemaVersion:1, version, engine, basePath, sourceRevision,
+sourceDirty:false, protocolVersions, exactRevision, files:[{path,bytes,sha256}]}`.
+Paths are relative to `engines/<id>/<version>/`. These describe the **shipped,
+post-mount** bytes; verify every entry against that engine's extracted subtree,
+and require exact agreement with the corresponding complete-release entries.
+Pre-mount compiler child manifests remain local build provenance, not installer
+inputs.
+
+Use bounded, cancellable downloads, no request-path retries, and HTTPS only
+(including redirects; allow GitHub's release asset host). An explicit owner-only
+`vela.channelURL` override may permit `file://` for the lab; never accept it from a
+viewer or an unsigned remote descriptor. Even a local descriptor needs a pinned
+signature. Local tests use a separate test key pinned only in the lab binary.
 
 Verify both downloads before extraction. Check manifest schema, pinned version,
 protocol overlap, `/vela/` base path and archive hash/size. Reject absolute paths,
@@ -60,19 +117,22 @@ served static root.
 
 ## Installation and serving
 
-The proposed installer layout is:
+Installer staging is `data/clients/.vela-staging-V`. The layout is:
 
 ```
 <EtherDataDir>/clients/vela/
-  releases/<version>/      # verified static tree
-  manifests/<version>.json
-  current                 # atomic pointer to active release
-  previous                # last known working release
+  # verified active static tree
+<EtherDataDir>/clients/.vela-rollback-<timestamp>/
+<EtherDataDir>/clients/.vela-staging-<version>/
 ```
 
 This describes what the Ether installer should implement; the Vela packager does
-not modify Ether's data directory. Install new versions side by side, then switch
-`current` atomically. Keep active media/API sessions independent of this switch.
+not modify Ether's data directory. Verify staging completely, then rename the active directory to a timestamped
+rollback and staging to `vela`, recovering the previous directory if activation
+fails. Serialize installations and rollback; retain two verified rollbacks. Keep
+installation metadata outside the served tree. Preserve owner-staged diagnostic
+core/bootstrap directories and extra universal keys without overwriting new
+release files. Keep active media/API sessions independent of this switch.
 Redirect `/vela/` to `/vela` with status 308, preserving query; browsers retain the fragment. The console handoff targets `/vela#code=...`. Serve static files from `current`, including correct
 JavaScript, CSS, JSON and WASM MIME types. For declared client routes such as
 `/vela/title/:id`, `/vela/watch/:id` and `/vela/collection/:id`, return the release's
@@ -99,7 +159,7 @@ unsupported versions stop with an honest unsupported-version/build response;
 capability absence disables only the corresponding optional operation. Capability
 negotiation never bypasses authenticated viewer or device policy.
 
-On failed startup, compatibility rejection or owner rollback, atomically select
+On failed startup, compatibility rejection or owner rollback, atomically restore
 the previous verified release and retain the failed release/manifest for diagnosis.
 Do not rewrite a version's bytes. Restore previous releases through their original
 manifest/hash; do not downgrade protocol or bypass authorization to force startup.
@@ -325,10 +385,9 @@ prefetched. Installed codec families still undergo per-stream admission; payload
 presence is not a promise of HDR, Dolby Vision or every format's support. Release
 qualification and stream clearance remain separate from payload preparation.
 
-Release output and temporary engine builds now live under `.artifacts/release/`
-in the current internal checkout. This directory is ignored. Worktrees and build
-outputs must not use the disconnected external Scratch drive; only regenerable
-media fixtures may remain under `~/.scratch/tmp/vela/media/`.
+Release output and temporary engine builds live through `.artifacts/release/`,
+a symlink into `~/.scratch/vela-build/<worktree>/`. `client/.exact` and
+`client/target` use the same scratch-backed layout. Source worktrees stay internal.
 
 To retain an already-qualified runtime without its original diagnostic input, use
 `bun tools/release/build.ts --committed --universal-from-release <previous-release.tar.gz>`.
@@ -338,3 +397,42 @@ file against the release inventory before copying only its shipped universal tre
 The payload manifest, upstream pin and runtime asset key are verified again. No
 runtime is rebuilt, and the unshipped diagnostic host is neither needed nor copied.
 Use exactly one universal input option per build.
+
+
+## Signing and deliberate publication (Ether 0.3.13)
+
+`bun tools/release/signing.ts init production-v1` creates a **dedicated Vela**
+Ed25519 identity in the macOS login keychain, service
+`app.vela.release-signing.ed25519`. `public production-v1` prints only its public
+pin. The helper has no private-key export operation; private bytes never enter
+command arguments, files, repo, logs or chat. Keychain access failures stop signing.
+Back up/rotate through an approved secure-store procedure; losing this key requires
+shipping a new Ether public pin. Pin current and next before switching signing keys.
+The independent `lab-test-v1` identity is never accepted by production builds.
+
+After an approved clean build:
+
+```
+bun tools/release/sign.ts 0.1.42
+bun tools/release/publish.ts 0.1.42 --dry-run
+# Only after the owner explicitly approves this public version:
+bun tools/release/publish.ts 0.1.42 --approved=0.1.42
+```
+
+Signing verifies the entire existing archive before signing. Signed assets are
+staged in `.artifacts/release/signed-V/`: archive, complete build inventory,
+per-engine manifests, release descriptor/signature and identical stable-channel
+copies. Publishing re-verifies the signature and asset hashes with the production
+key, creates a draft versioned GitHub Release, uploads all assets, publishes it,
+then changes stable **last**. It never runs automatically or from a build. A failed
+upload leaves a draft/versioned release for deliberate recovery; do not rewrite
+published version assets. No public command has been authorized for this work.
+
+For the local end-to-end dry run, initialize `lab-test-v1`, then run
+`sign.ts V --test-key --base-url=file:///absolute/signed-V-test/` and
+`publish.ts V --dry-run --test-key`. Ether pins only that test public key in its
+lab binary and sets its explicit owner-only channelURL to the local channel.json.
+The owner console shows installed version, available version, Install/Update and
+Roll back; an installer bundle may pin a specific signed descriptor and version
+instead of following stable. Check expiry/signature/compatibility even when pinned.
+All public publishing waits for the owner's approval after the lab result.
