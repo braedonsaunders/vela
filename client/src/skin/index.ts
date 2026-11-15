@@ -235,13 +235,8 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   ];
   level.dis = conds(n.disabled);
   const a = n.a11y ?? {};
-<<<<<<< HEAD
   Object.assign(level, { achk: conds((a as { checked?: Condition[] }).checked), aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
-    pfocus: parts(node.type === 'box' ? node.press?.focus : undefined, r), esc: n.escape ?? '', escTo: parts(n.returnFocus, r), lt: n.layoutTransition ?? '', se: n.sharedElement ?? '', ex: '', exs: '', ivb: '', ipaths: [], fr: 'nonzero' });
-=======
-  Object.assign(level, { aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
     pfocus: parts(node.type === 'box' ? node.press?.focus : undefined, r), esc: n.escape ?? '', escTo: parts(n.returnFocus, r), lt: n.layoutTransition ?? '', ex: '', exs: '', ivb: '', ipaths: [], fr: 'nonzero' });
->>>>>>> origin/main
   if (n.exit) {
     const m = r.doc.motion?.[n.exit];
     if (!m) throw new Error(`Unknown motion ${n.exit}`);
@@ -324,8 +319,6 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
         const rings = [node.style, node.focus, (node as NodeExtra).groupFocus].map(o => (o as Record<string, string> | undefined)?.outline ?? (o as Record<string, string> | undefined)?.['outline-style']);
         level.rn = rings.includes('none') || (!rings.includes('auto') && (!!node.focus || !!(node as NodeExtra).groupFocus)); }
       kids = node.children ?? [];
-      // A shared element is a leaf indicator box (drawn by the renderer's light SharedEl).
-      if ((node as NodeExtra).sharedElement && (kids.length || node.press)) throw new Error('sharedElement belongs on a box with no children and no press');
       // A row's pager: this box is the row's sideways scroller (its style sets overflow-x); pageNext/pagePrev {row.id} move it.
       if (node.pager) {
         if (depth > PAGER_DEPTH) throw new Error(`A pager must sit within ${PAGER_DEPTH} levels of its slot`);

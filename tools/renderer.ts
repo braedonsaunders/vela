@@ -98,40 +98,17 @@ ${elementProps}
     keying: action
   slot
   view
-<<<<<<< HEAD
     box id=domId hover=hovering pointerdown=pointing pointerup=releasing key=keying tabindex=-1 testId=test role=role aria-label=label -exact-layout-transition=lt -exact-exit-animation=exitAnim ${rows()}
       children
 
-// A shared element (sharedElement): a leaf box that morphs between routes. Exact starts a view
-// transition for any element bound with sharedElement, even an empty one, and a press during
-// one lands on <html>; so only the nodes that name one draw through this light element.
-component SharedEl
-  props
-    s: Style
-    pos: string
-    lt: string
-    se: string
-    anim: string
-  view
-    box sharedElement=se -exact-layout-transition=lt position=pos top=s.top right=s.right bottom=s.bottom left=s.left z-index=s.zIndex width=s.width height=s.height border-radius=s.borderRadius background-color=s.backgroundColor background-image=s.backgroundImage box-shadow=s.boxShadow opacity=s.opacity translate=s.translate scale=s.scale transition=s.transition animation=(anim != "" ? anim : s.animation) pointer-events="none" aria-hidden=true
-=======
-    box id=domId hover=hovering pointerdown=pointing key=keying tabindex=-1 testId=test role=role aria-label=label -exact-layout-transition=lt -exact-exit-animation=exitAnim ${rows()}
-      children
-
->>>>>>> origin/main
 `;
 }
 /** The props every element call passes: the node's style for its state, motion and bound rows. */
 const pass = () => `s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}`;
 
 function shape(d: number): string {
-<<<<<<< HEAD
-  const fields = ['t: string', 'base: StateRef', 'sts: StateRef[]', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gf: bool', 'fade: bool', 'dis: Cond[]', 'aexp: Cond[]', 'asel: Cond[]', 'acur: Cond[]', 'aprs: Cond[]', 'ahp: string', 'atitle: Part[]', 'brole: string', 'pfocus: Part[]', 'esc: string', 'escTo: Part[]', 'lt: string', 'se: string', 'ex: string', 'exs: string', 'ivb: string', 'ipaths: string[]', 'fr: string', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
-    'sym: string', 'act: string', 'cs: bool', 'rn: bool', 'achk: Cond[]', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
-=======
   const fields = ['t: string', 'base: StateRef', 'sts: StateRef[]', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gf: bool', 'fade: bool', 'dis: Cond[]', 'aexp: Cond[]', 'asel: Cond[]', 'acur: Cond[]', 'aprs: Cond[]', 'ahp: string', 'atitle: Part[]', 'brole: string', 'pfocus: Part[]', 'esc: string', 'escTo: Part[]', 'lt: string', 'ex: string', 'exs: string', 'ivb: string', 'ipaths: string[]', 'fr: string', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
-    'sym: string', 'act: string', 'cs: bool', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
->>>>>>> origin/main
+    'sym: string', 'act: string', 'cs: bool', 'rn: bool', 'achk: Cond[]', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
     'mk: string', 'md: number', 'mdl: number', 'me: string', 'mf: string', 'mit: string', 'mdir: string', 'msk: string', 'msd: number', 'step: number', 'cap: number',
     ...BINDABLE.map(([, f]) => `${f}: Part[]`)];
   if (d < DEPTH) fields.push(`kids: N${d + 1}[]`);
@@ -302,14 +279,8 @@ ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
 ` : ''}                else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-                  else if n.se != ""
-                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-<<<<<<< HEAD
                     BoxEl(${pass()}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
-=======
-                    BoxEl(${pass()}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
->>>>>>> origin/main
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
