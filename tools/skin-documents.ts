@@ -63,10 +63,15 @@ export async function writeDocuments(out: string): Promise<{ id: string; version
       }
       text = text.replaceAll(literal, JSON.stringify(url));
     }
+    const packaged = JSON.parse(text) as SkinDocument;
+    if (packaged.preview?.startsWith('/vela/skins/') && !existsSync(join(out, packaged.preview.slice('/vela/skins/'.length)))) {
+      console.warn(`Omitting missing built-in preview for ${doc.id}`);
+      delete packaged.preview;
+      text = JSON.stringify(packaged);
+    }
     await writeFile(join(dir, 'document.json'), text);
-    const rebase = (url?: string) => url ? sharedAssets.get(url) ?? url.replace(from, `/vela/skins/${doc.id}/${doc.version}/`) : undefined;
     refs.push({ id: doc.id, name: doc.name, version: doc.version, tagline: doc.tagline, renderer: doc.renderer, url: `/vela/skins/${doc.id}/${doc.version}/document.json`,
-      preview: rebase(doc.preview), swatches: doc.swatches, sha256: sha(text) });
+      preview: packaged.preview, swatches: doc.swatches, sha256: sha(text) });
   }
   await writeFile(join(out, 'catalog.json'), JSON.stringify({ schema: 1, documents: refs }, null, 2) + '\n');
   return refs.map(r => ({ id: r.id, version: r.version, renderer: r.renderer }));
