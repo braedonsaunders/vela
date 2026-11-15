@@ -32,7 +32,7 @@ const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'c
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
 const pending = (fields: Record<string, unknown>) => fields as object;
-const active = (style: Style) => r6({ active: style });
+const active = (style: Style) => pending({ active: style });
 const candy = { hover: { 'background-color': '$pink-hover' }, focus: { 'box-shadow': ring }, active: press94 };
 const puffy = { hover: { 'background-color': '$lavender-soft' }, focus: { 'box-shadow': ring }, active: press94 };
 const bubble = { hover: { 'background-color': '$pink-wash' }, focus: { 'box-shadow': ring }, active: { scale: '0.9' } };
@@ -197,7 +197,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
   style: { ...col, position: 'relative', 'z-index': '20', 'flex-shrink': '0', 'padding-top': '14px', ...gutter, 'padding-bottom': '8px' }, below: { [COMPACT]: { 'padding-top': '10px', ...gutterSmall, 'padding-bottom': '4px' } }, children: [
     { type: 'box', style: { ...row, height: '66px', 'box-sizing': 'border-box', 'padding-left': '22px', 'padding-right': '10px', 'align-items': 'center', gap: '10px', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$card', 'box-shadow': '0px 5px 0px $ink' },
       below: { [COMPACT]: { height: '56px', 'padding-left': '14px', 'padding-right': '8px', gap: '6px' } }, children: [
-        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', ...r6({ controlStates: false }), style: { ...row, position: 'relative', 'align-items': 'center', gap: `${26 * 0.24}px`, 'margin-right': '18px', 'flex-shrink': '0', color: '$ink' },
+        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', ...pending({ controlStates: false }), style: { ...row, position: 'relative', 'align-items': 'center', gap: `${26 * 0.24}px`, 'margin-right': '18px', 'flex-shrink': '0', color: '$ink' },
           below: { [COMPACT]: { gap: `${22 * 0.24}px`, 'margin-right': '0px' } }, children: [
             { type: 'box', style: { ...row, 'align-items': 'center', gap: `${26 * 0.24}px` }, below: { [COMPACT]: { display: 'none' } }, children: wordmark(26) },
             { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { ...row, 'align-items': 'center', gap: `${22 * 0.24}px` } }, children: wordmark(22) },
@@ -211,7 +211,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
           searchTip,
         ] },
         // The profile button, washed pink while its menu is open.
-        { type: 'box', id: 'profile-menu-trigger', press: { action: 'toggle', arg: 'menu' }, label: '{s:profileAndAppearance}', testId: 'profile-menu', a11y: { expanded: [set('flag:menu')], ...r6({ controls: 'viewer-settings' }) },
+        { type: 'box', id: 'profile-menu-trigger', press: { action: 'toggle', arg: 'menu' }, label: '{s:profileAndAppearance}', testId: 'profile-menu', a11y: { expanded: [set('flag:menu')], ...pending({ controls: 'viewer-settings' }) },
           style: profileButton, states: [{ when: [set('flag:menu')], style: { ...profileButton, 'background-color': '$pink-wash' } }], below: { [COMPACT]: { 'padding-right': '4px' } }, ...bubble, children: [
             { type: 'text', text: '{env.viewerInitial}', style: { ...sz(32), 'border-radius': '16px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-family': pixelFace, 'font-size': '16px', 'font-weight': '700', color: '$ink', 'background-color': '$pink-soft', border: '2px solid $ink', 'box-sizing': 'border-box' } },
             { type: 'text', text: '{env.viewer}', style: { 'font-size': '15px', 'font-weight': '600', 'max-width': '140px', 'white-space': 'nowrap', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis' }, below: { [COMPACT]: { display: 'none' } } },
@@ -568,7 +568,7 @@ const episodesBody: Node[] = [
     ] },
   ] },
   upNext,
-  { type: 'box', style: episodeList, small: { gap: '12px' }, states: [{ when: [set('detail.seasonPending')], style: { ...episodeList, opacity: '0.5' } }], ...r6({ a11y: { busy: [set('detail.seasonPending')] } }), children: [
+  { type: 'box', style: episodeList, small: { gap: '12px' }, states: [{ when: [set('detail.seasonPending')], style: { ...episodeList, opacity: '0.5' } }], ...pending({ a11y: { busy: [set('detail.seasonPending')] } }), children: [
     { type: 'repeat', over: 'detail.episodes', item: episodeCard },
   ] },
 ];
