@@ -1738,3 +1738,154 @@ keyframes and its raw packet timestamps were checked before the single drive.
 No lab media or credentials were used. The native view, named Chrome and owned
 local server were disposed/closed. Lab.21 requalification remains pending the
 packager's first slot.
+
+### Lab.21 1917 HLS seek identity passes
+
+Core `9e1e4578186740d8`, H.264-copy/AAC fMP4 through the real native view,
+with Ether's generation-unique media names installed:
+
+| Measurement | Result |
+| --- | --- |
+| Play → first frame | **1,446.8 ms**, including **61.1 ms** plan |
+| First segment | 4.2 MB; **780 ms** first-byte wait |
+| Seek intent | Immediate target 60 s and buffering |
+| Authorized seek command | HTTP 200 in **168.9 ms** |
+| Seek → target frame/playing | **1,081.5 ms**, at **60.010 s** |
+| Seek segment acquisition | 10.9 MB; **795 ms** first-byte wait |
+| Continued play | **62.946 s**, 71 presented frames, **0 drops / 0 audio underruns** |
+| Maximum physical-clock frame age | **12.10 ms**; not a speaker/display lipsync measurement |
+| Recovery | None; no invalid-segment read or return to the beginning |
+
+The plan advanced source/seek `(1,1)` → `(1,2)` and reported origin 60. The HLS
+runtime was replaced with a new reader/demux; frame counters therefore restart
+per generation. The driver now correctly recognizes a replacement runtime plus
+an actual presented target frame, rather than comparing local epoch numbers
+between different instances. HLS has no original-file `byteReader`; an equality
+of two absent byteReader values is not retained-cache evidence.
+
+This fixes the lab.20 cached-byte failure. The historical native-TS wrapper
+startup was 13.96 s, but it has no equivalent measured seek baseline. A paired
+wrapper seek win is **not established**. The seek is close to the 1 s LAN target
+and most time is command/producer readiness, not the 5 ms decoder configure.
+
+The copy-keyframe-origin fix is **not installed** in this run. A reported target
+position proves transport/control progress, not exact picture mapping when a
+copy seek retains preceding-keyframe preroll. Ether's worker is making the actual
+source/keyframe origin truthful while retaining the requested `positionSeconds`.
+Raw output PTS may also include a common mux/B-frame shift; it must not be
+confused with the source/title keyframe origin. That separate clock gate, the
+refreshed 4K/HDR set and track/subtitle/live/recovery parity remain before a core
+production-default claim.
+
+Public session `V25AYLG4TOJABFC5JN4QKQCTGY`, test device
+`3425a4e1-279b-4cb5-a358-fcdf05b90d17`: Stop returned `ended`, auth revoke was
+accepted, all native-view video/canvas nodes were removed, and dedicated Chrome
+was closed before the slot was returned to packaging. Screenshot:
+`client/.exact/lab-core-1917-hls-lab21.png`; numeric-only record:
+`client/.exact/core-lab21-result.json`. No media bytes or private headers captured.
+
+### Lab.22 correction: published origin still blocks content-seek proof
+
+The next bounded 1917 run measured 1,223.5 ms Play → first frame (717.3 ms
+plan), and a target-labelled frame at 60 s after 639.3 ms (95.6 ms command,
+390 KB opening segment with 490 ms first-byte wait). It continued to label
+62.961 s, zero dropped frames/audio underruns and 9.32 ms maximum clock-frame
+age. Stop returned ended, auth revoke succeeded, and Chrome was closed before
+returning the slot. Session `XHUAT4I64W3TN2645VHBEPBV3P`, test device
+`90866c52-a0b5-446f-807a-597d2a86275a`.
+
+**This is not a correct-content seek pass.** Ether's read-only log established
+that the copied source actually restarted at preceding keyframe **50.05 s**.
+The seek reply revision 5 and subsequent SSE revisions 6, 7 and 8 all published
+origin **60 s**. The core therefore labelled an earlier picture as 60 s. The
+numeric presentation latency and zero-drop counters remain measured, but cannot
+prove that the requested picture was shown. The publication fix is Ether branch
+`w0312/vela-origin-publish`, commit `444b07e3a`: resolve the public session binding,
+publish the known origin in the seek reply, retain it in following revisions,
+or publish the first later-known value on the next changed revision.
+
+The host now treats a changed URL, source revision, timeline or measured origin
+in a same-generation plan as a material source update: reopen at the pending
+seek/current intended title position. It does not relabel an already-running
+native/demux clock in place. One generated local Chrome check published a
+corrected origin 4 → 0 with source/seek generations unchanged at (2,2). The
+backend was replaced, kept intended position 4 s, discarded **96 preroll frames**
+and presented the corrected target in **78 ms**, zero drops/failure. This checks
+the late-publication mechanism; sustained audio-clock progress was not measured
+in that short correction sample.
+
+The core-only overlap candidate also moved source/index acquisition and exact
+native decoder configuration ahead of the exclusive GPU-ready barrier. In the
+same local trace metadata started at 199 ms and was ready at 218 ms, before the
+claimed idle warmup yielded at 372 ms. GPU presentation/package creation still
+waits for device ownership and surface binding. First frame was 638 ms in that
+run; no speed improvement or 4K sustained-play claim is inferred from it. The
+named Chrome and local server were closed. Real 4K/HDR and correctly published
+copy-origin qualification remain required before changing the production default.
+
+### lab.23: off-grid copy seek and refreshed HEVC qualification
+
+Core candidate `7f4a1f394fe50290` (implementation `79f11c9`, full payload manifest
+`5823df3c…6e29`) ran through the native view on lab.23, which includes Ether
+`444b07e3a`. Production remained on the qualified wrapper. Each title had one
+session, an acknowledged Stop (`ended`), accepted auth revoke, and no remaining
+video/canvas nodes. The dedicated Chrome was closed and the shared slot released.
+
+| Actual source | Historical wrapper Play / post-plan / seek | Current core Play / plan / post-plan / seek |
+| --- | --- | --- |
+| 1917 H.264-copy fMP4 HLS + AAC | 13,960 ms old native TS start; no equivalent seek baseline | 1,736 / 1,051 / 686 / **817 ms** to 61.370 s |
+| Mummy (1959), HEVC Main10 SDR 1776×1080 + EAC3 mono | 4,364 / 692 / 6,458 ms | **243 / 91 / 153 / 206 ms** to 60 s |
+| Mummy (1999), HEVC Main10 SDR 3840×2160 + EAC3 5.1 | No same-source baseline; historical HDR+DTS run was a wrong-film pack member | **173 / 46 / 128 / 270 ms** to 120 s |
+| Model Citizen, HEVC Main10 3840×2160 PQ, DV8 compatibility 1 + EAC3 5.1 | 958 / 878 / 1,022 ms | **334 / 145 / 189 / 261 ms** to 120 s |
+
+Times are milliseconds. These are short sequential LAN/HTTPS measurements, not
+controlled cold-cache paired benchmarks: browser assets/shaders and server source
+resolution can already be cached. Each page starts its normal idle warmup before
+Play, approximately 75–150 ms before the click in these traces. The historical
+wrapper's plan costs and sometimes source releases differ. No same-source HLS
+wrapper seek win is claimed. All current samples had **zero dropped frames and
+zero AudioWorklet underruns**, including continued playing after seek. Counters
+following seek were respectively 107/69 decoded/presented for 1917, 248/144 for
+1959, 203/146 for 1999, and 202/146 for Model Citizen. Preroll is discarded rather
+than counted as a presentation drop.
+
+The off-grid 1917 seek now proves the source/title mapping rather than just a
+label: requested **61.370 s**, HTTP seek reply revision 7 **origin 60.018 s**,
+retained through revision 13. Ether's independent producer log confirms restart
+**60.018 s**. The first presented title timestamp was **61.354 s** at clock
+**61.370 s**; this is the frame spanning the target, 16 ms before it at 24 fps.
+**32 earlier preroll frames were discarded.** The reply took 240 ms, followed by
+approximately 574 ms to the target frame. Initial segment acquisition was
+527 ms (518 ms first-byte wait); seek metadata acquisition was 518 ms; exact
+native decoder configure was 5.7/3.6 ms on start/seek. Authoritative seek-generation changes
+replaced the HLS runtime and index; immutable original sources retained the same
+runtime and byte reader across their seeks.
+
+Maximum absolute physical-audio-clock/frame age was 16 ms for 1917, 23 ms for
+1959, 7.4 ms for 1999, and 47 ms for Model Citizen (includes the initial seek
+preview; final playing sample 4.5 ms). These are scheduler measurements, **not a
+physical lip-sync measurement**. Original HEVC decoder configuration took
+14.2/8.8/12.4 ms on the three starts and approximately 0.9/1.2/1.0 ms on seeks.
+All used native video decode and software EAC3 output. Model Citizen rendered
+real programme pictures from the HDR10-compatible base layer; RPU enhancement,
+Dolby Vision certification and physical HDR output are not established.
+
+Ether independently confirmed **no FFmpeg or transcode session** for any of the
+three originals. The selected 1999 source was the genuine PandaQT SDR cut, not
+The Mummy Returns. Thus this set proves 4K SDR and DV8/PQ base-layer playback,
+but does not establish a genuine HDR10+DTS source. Session identifiers for
+correlation: 1917 `OCSOP5NXX6VHFG6ADDTQIHFKHU`; original public sessions
+`SYH7LWCQL2PJTR6ZECGOWV6IWE`, `T2FFG2UR3C4JSKKGAV5ME4LYRT`,
+`JRSTDCIE4CGIBABW6LG5DASWV7`. Broker original session prefixes from the server
+were `384205bf`, `bf27b325`, `4cf5389e` respectively.
+
+Direct H.264/HEVC and finite muxed HLS startup/seek now have measured core passes;
+the prior origin-publication blocker is closed. Before replacing the production
+wrapper entirely, remaining migration coverage is the real-app `/watch` with
+this candidate, audio/subtitle selection and original↔converted quality changes
+through the core, and moving live HLS/TS (the current core segment reader is
+finite VOD only). Real native-server header-auth integration is also pending
+installed foundation wiring. The current production wrapper and narrow internal
+native/MSE fallback remain available while those paths migrate. DV7 enhancement,
+a genuine HDR10+DTS sample, long-run/physical lip-sync and network-interruption
+qualification are not claimed by this run.

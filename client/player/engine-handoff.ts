@@ -45,10 +45,22 @@ function veil(still: boolean, from: number, to: number): HTMLElement {
   return el;
 }
 
+/** Hand-offs this tab made within the last minute; a third one is a loop, and the page stays put. */
+const HOPS = 'vela.handoff.hops', HOP_WINDOW_MS = 60_000, MAX_HOPS = 2;
+function recentHops(): number[] {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(HOPS) ?? '[]') as unknown;
+    return Array.isArray(value) ? value.filter((t): t is number => typeof t === 'number' && Date.now() - t < HOP_WINDOW_MS) : [];
+  } catch { return []; }
+}
+
 function leave(handle: EngineHandle, from: string, to: string, still: boolean) {
   const earlier = readHandoff();
   // Never bounce straight back to the engine that just handed this page over.
   if (earlier && earlier.from === to && earlier.to === from) return;
+  const hops = recentHops();
+  if (hops.length >= MAX_HOPS) return;
+  try { sessionStorage.setItem(HOPS, JSON.stringify([...hops, Date.now()])); } catch { /* Without session storage the bounce guard above still holds. */ }
   handle.leaving = true;
   const record: Handoff = { from, to, at: Date.now(), url: location.href, scroll: scrollPositions(), window: Math.round(scrollY) };
   try { sessionStorage.setItem(HANDOFF, JSON.stringify(record)); } catch { /* The new engine opens at the top. */ }

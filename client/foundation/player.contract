@@ -1,5 +1,6 @@
 use DetailModel from "./models.contract"
 use PlayerView, PlayerCommandReply, loadingPlayerView from "./player-models.contract"
+use MediaAuthReply from "./models.contract"
 
 members Client
   state watchEvent = ""
@@ -8,6 +9,21 @@ members Client
   state watchTouched = 0
   state watchEditing = false
   mutation watchAuthorized as shape PlayerCommandReply
+  // A native server's media authorization, straight to vela-player and vela-preview as private
+  // props: never in a plan, a skin-readable model, an observation or a log. The handle rotates
+  // with the server, principal and credential (auth.revision), retiring the host's old readers.
+  resource mediaAuthorization = uiMediaAuth(auth.serverId, auth.revision) when current(auth) and auth.authenticated and auth.serverKind != "ether" as shape MediaAuthReply transient
+  derive mediaAuthJson = (current(auth) and auth.authenticated and auth.serverKind != "ether" and current(mediaAuthorization) ? mediaAuthorization.json : "")
+  // An empty authorization admits only same-origin Ether reads, so a native plan waits for its own.
+  derive mediaReady = (auth.serverKind == "ether" or mediaAuthJson != "")
+  mutation watchNativeReply as shape MediaAuthReply
+  derive watchNativeMedia = match watchNativeReply { case some(r) => r.json, case none => "" }
+  // Previews are Ether broker grants today; a native preview's attachment would be answered here.
+  mutation previewNativeReply as shape MediaAuthReply
+  derive previewNativeMedia = match previewNativeReply { case some(r) => r.json, case none => "" }
+  action previewMessage(json: string)
+    if json.startsWith("{\"type\":\"native-media-request\"")
+      send previewNativeReply = uiNativeMedia(json, time.epochAtZero + performanceNow())
   mutation watchClosed as shape PlayerCommandReply queue
   action closeWatch
     if watchModel.stopCommandJson != ""
@@ -36,6 +52,7 @@ members Client
     watchEvent = ""
     watchCommandJson = ""
     watchAuthorized = none
+    watchNativeReply = none
     watchHidden = false
     watchEditing = false
   task hideWatch when playingId != "" and watchModel.playing and not watchEditing key=watchTouched
@@ -60,6 +77,8 @@ members Client
     else
       if json.startsWith("{\"type\":\"session-refresh\"")
         streamAttempt = streamAttempt + 1
+      else if json.startsWith("{\"type\":\"native-media-request\"")
+        send watchNativeReply = uiNativeMedia(json, time.epochAtZero + performanceNow())
       else
         if json.startsWith("{\"type\":\"observation\"")
           playerMessage(json)

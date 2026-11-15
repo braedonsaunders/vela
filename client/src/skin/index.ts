@@ -63,7 +63,7 @@ function keyframesCss(doc: SkinDocument): string {
     return `@keyframes dk-${docId}-${name}{${body}}`;
   }).join('');
 }
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'retry', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
 const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
@@ -75,7 +75,7 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
 type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; root: number; rootPos: number; slotStyle: number; slotPos: number; slotInner: number; slotOrder: string; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
-export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string }
+export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string }
 interface Resolve { doc: SkinDocument; small: boolean; wide: boolean; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
@@ -159,6 +159,11 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
     if (dyn && BINDABLE[row] && raw.includes('{')) { dyn[BINDABLE[row]] = parts(value(raw, r), undefined, row === 'background-image'); continue; }
     merged[row] = value(raw, r);
   }
+  // The renderer binds gap, row-gap and column-gap: an empty bound longhand resets to normal,
+  // so a one-value gap is both longhands.
+  if (merged.gap !== undefined) { merged['row-gap'] ??= merged.gap; merged['column-gap'] ??= merged.gap; }
+  // A colour may name a theme token bare (`cinematic.glass-edge`), as font-family may.
+  for (const [row, v] of Object.entries(merged)) if (row.endsWith('color') && /^[a-z][\w-]*(\.[\w-]+)+$/.test(v.trim())) merged[row] = `var(--x-${v.trim().replace(/[^A-Za-z0-9_-]/g, '-')})`;
   // Per-side border rows follow the shorthand's width and colour unless set: an empty bound
   // longhand would reset a side to the CSS default (3px currentColor).
   for (const side of ['top', 'bottom', 'left']) {
@@ -211,7 +216,6 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   for (const f of Object.values(BINDABLE)) level[f] = [];
   const base = style(variant, r, level, weight);
   const own = base as Record<string, number>;
-  level.pos = base.position === 'absolute' ? 1 : base.position === 'sticky' ? 2 : 0;
   // Under reduced motion the overlays drop what moves: scale, translate, rotate, transitions, animations.
   const still = (o: Style | undefined) => o && Object.fromEntries(Object.entries(o).filter(([k]) => !['scale', 'translate', 'rotate', 'transition', 'animation'].includes(k))) as Style;
   const n = node as Node & NodeExtra;
@@ -219,19 +223,20 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   /** A state's style indices: its base, each overlay, and the reduced-motion overlays. */
   const stateRef = (layers: (Style | undefined)[], s: { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style }, cond: Condition[]) => {
     const at = (extra?: Style) => intern(style([...layers, extra], r, undefined, weight), r);
-    const sIdx = intern(style(layers, r, undefined, weight), r);
+    const plain = style(layers, r, undefined, weight), sIdx = intern(plain, r);
     const overlay = (o?: Style) => o ? at(o) : sIdx, calm = (o?: Style) => o ? at(still(o)) : sIdx;
-    return { cond: conds(cond), s: sIdx, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
+    // Position is a choice the renderer binds per state (a viewport variant may move a node into flow).
+    return { cond: conds(cond), s: sIdx, pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
       hs2: calm(s.hover), fs2: calm(s.focus), gs2: calm(s.groupHover), gfs2: calm(s.groupFocus) };
   };
   const overlays = { hover: node.hover, focus: node.focus, groupHover: node.groupHover, groupFocus: n.groupFocus };
-  level.base = { ...stateRef(variant, overlays, []), s: intern(base, r) };
+  level.base = { ...stateRef(variant, overlays, []), s: intern(base, r), pos: base.position === 'absolute' ? 1 : base.position === 'sticky' ? 2 : 0 };
   // Each document state, then the plain node, at each width interval (first match wins).
   const userStates = (n.states ?? []).slice(0, 8);
   if (userStates.length * Math.max(1, intervals.length) + intervals.length > 48) throw new Error('Too many states x breakpoints on one node');
   const within = intervals.length ? intervals : [{ applied: [] as Style[], when: [] as { k: number; f: string; is: string; v: string; not: boolean }[] }];
   level.sts = [
-    ...userStates.flatMap(x => within.map(w => ({ ...stateRef([...variant, ...w.applied, x.style], { hover: x.hover ?? node.hover, focus: x.focus ?? node.focus, groupHover: x.groupHover ?? node.groupHover, groupFocus: x.groupFocus ?? n.groupFocus }, x.when), cond: [...conds(x.when), ...w.when] }))),
+    ...userStates.flatMap(x => within.map(w => ({ ...stateRef([...variant, x.style, ...w.applied], { hover: x.hover ?? node.hover, focus: x.focus ?? node.focus, groupHover: x.groupHover ?? node.groupHover, groupFocus: x.groupFocus ?? n.groupFocus }, x.when), cond: [...conds(x.when), ...w.when] }))),
     ...intervals.map(w => ({ ...stateRef([...variant, ...w.applied], overlays, []), cond: w.when })),
   ];
   level.dis = conds(n.disabled);
@@ -255,7 +260,6 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     case 'image': level.t = 'image'; level.src = parts(asset(node.src, r), undefined, true); level.label = parts(node.alt, r); level.fade = node.fade === true; break;
     case 'icon': {
       level.t = 'icon';
-      // A platform symbol, or a document SVG painted as a mask in the current colour.
       // A platform symbol, or the document's own glyph: SVG path data painted in the current colour.
       const glyph = node as { paths?: string[]; viewBox?: string };
       if (glyph.paths?.length) {
@@ -328,5 +332,7 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
     return url && /^\d{3}( \d{3})?$/.test(w) ? [{ family: f.family, url, weight: w, style: file.style === 'italic' ? 'italic' : 'normal', sizeAdjust: Number(f.sizeAdjust) || 100 }] : [];
   }) : []);
   return { id: doc.id, fontsJson: fonts.length ? JSON.stringify(fonts) : '', keyframesCss: kfCss, styles: r.styles, shell, home, routes, liveHome: doc.live?.home === true,
-    detailWide: doc.detail?.wide === 'stack' ? '' : doc.detail?.wide ?? 'fullscreen', detailSmall: doc.detail?.small === 'stack' ? '' : doc.detail?.small ?? 'fullscreen' };
+    detailWide: doc.detail?.wide === 'stack' ? '' : doc.detail?.wide ?? 'fullscreen', detailSmall: doc.detail?.small === 'stack' ? '' : doc.detail?.small ?? 'fullscreen',
+    // From this viewport width the detail takes its wide presentation and splits home beside it (a pane width in px).
+    detailFrom: Math.max(0, Math.min(4000, Math.round(Number(doc.detail?.from ?? 640)) || 0)), detailSplit: /^(\d{2,4})(px)?$/.exec(String(doc.detail?.split ?? ''))?.[1] ?? 'none' };
 }

@@ -919,10 +919,27 @@ function veil(still, from, to) {
     el.style.opacity = String(to);
   return el;
 }
+var HOPS = "vela.handoff.hops";
+var HOP_WINDOW_MS = 60000;
+var MAX_HOPS = 2;
+function recentHops() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(HOPS) ?? "[]");
+    return Array.isArray(value) ? value.filter((t) => typeof t === "number" && Date.now() - t < HOP_WINDOW_MS) : [];
+  } catch {
+    return [];
+  }
+}
 function leave(handle, from, to, still) {
   const earlier = readHandoff();
   if (earlier && earlier.from === to && earlier.to === from)
     return;
+  const hops = recentHops();
+  if (hops.length >= MAX_HOPS)
+    return;
+  try {
+    sessionStorage.setItem(HOPS, JSON.stringify([...hops, Date.now()]));
+  } catch {}
   handle.leaving = true;
   const record = { from, to, at: Date.now(), url: location.href, scroll: scrollPositions(), window: Math.round(scrollY) };
   try {
@@ -2469,6 +2486,15 @@ class PlaybackEngine {
   updateSession(session) {
     if (session.id !== this.session?.id)
       throw new Error("Cannot update a different session");
+    const next = session.sources.find((source) => source.id === this.source?.id), current = this.source;
+    if (next && current && (next.url !== current.url || next.delivery !== current.delivery || next.sourceRevision !== current.sourceRevision || next.timeline !== current.timeline || next.timelineOriginSeconds !== current.timelineOriginSeconds)) {
+      const replacement = { ...session, position: this.pendingSeek?.position ?? this.position() };
+      this.load(replacement).catch((error) => {
+        if (!this.disposed && this.session === replacement)
+          this.fail({ kind: "source", message: error instanceof Error ? error.message : "Updated media source could not be opened", recoverable: true });
+      });
+      return;
+    }
     const previousState = this.session?.serverState;
     this.session = session;
     if (this.pendingTracks && (this.pendingTracks.audio === undefined || this.pendingTracks.audio === session.audioTrackId) && (this.pendingTracks.subtitle === undefined || this.pendingTracks.subtitle === (session.subtitleTrackId ?? null)))
