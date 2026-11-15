@@ -56,14 +56,34 @@ rules. Universal and MSE playback send native-server credentials in request head
 in media URLs. Only native-element fallback may use a URL credential: Plex uses a
 short-lived delegation token; Jellyfin may use its api_key in memory only. Such URLs
 are never persisted, logged, sent in diagnostics or observations, or exposed to skins,
-and errors must redact them. On the web, the data module supplies a foundation-owned
-`mediaAuth` player prop as in-memory JSON `{handle, origin, pathPrefix, headers}`,
-just in time from secret storage. It is not part of a plan, renderer or skin model,
-observation, diagnostic, telemetry, or DOM attribute. The player holds it only on its
-element handle, enforces the origin and path scope on every request and redirect,
-and drops it on disposal or server switch. Native fallback URLs are minted only at
-attachment and redacted before any error crosses into Contract. The bridge is designed
-but not yet implemented; renderer isolation must be confirmed before integration.
+and errors must redact them.
+
+Foundation passes `mediaAuth` directly to the native view as an in-memory JSON
+prop: `{handle, origin, pathPrefix, headers}`. Exact web props are not DOM
+attributes; `vela-player` has `snapshot: false`. This object is outside plans,
+observations, renderer models and skin bindings. The data module constructs it
+from secret storage just in time and rotates the opaque handle on server,
+principal or credential change. The host retires old readers on rotation and
+clears authorization on disposal. Media requests attach headers only to the
+validated exact origin and base-path boundary; redirects are refused. Runtime
+assets and decoder packages never use those credentials. A private copy crosses
+only to a dedicated demux worker, never through decoder telemetry.
+
+When a native element needs a URL, the host emits `native-media-request` with
+`{requestId, handle, url}` using the token-free source URL. Foundation asks the
+adapter to mint its native fallback and returns a private `nativeMedia` prop
+`{requestId, handle, url, expiresAt}`. The host accepts only the pending request,
+current handle, matching origin/path and bounded future attachment deadline.
+The deadline is not a claim that a Jellyfin token expires. The URL exists only
+in memory and at native element attachment; it never enters a playback plan,
+skin binding, log, observation or diagnostic. Error text crossing back to
+Contract strips media URL queries and credential fields. A missing, expired or
+stale response fails closed. Ether broker-grant behavior remains unchanged.
+
+Renderer documents have no vocabulary binding to player props. Renderer 4 also
+rejects vocabulary expressions mentioning `mediaAuth`, `planJson`, `commandJson`
+or `headers`. Live preview receives authorization through a foundation inject,
+not a `LiveTile` or any other renderer-readable model field.
 
 Session updates use the adapter's stream when supported, including cursor resume and
 snapshot fallback. A server without an event stream uses bounded, cancellable snapshot
