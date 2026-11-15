@@ -2024,3 +2024,23 @@ unmounted player and closed dedicated Chrome. The coordinator removed the pin
 Production remained on the wrapper. Scalar evidence is in
 `client/.exact/core-lab25-{direct-output,hls-output,all-failures,cleanup-output}.txt`;
 no provider media bytes or private headers were captured.
+
+The padded-fragment repair subsequently passed the broad player TypeScript check
+(including PGS `02f841e` and its final annotation) and produced core payload
+`8758a83c20733c08`. In local headed Chrome, the padded single/multi-fragment
+fixture remained on `vela-core`/WebGPU, sought to 3.25 s in **14.1 ms** with warm
+local bytes, and reached 6.5 s EOS with **zero video drops, zero sampled audio
+underruns and no fallback/error**. Player destruction left zero video/canvas
+nodes; its dedicated browser and fixture server were closed. This is a generated
+local reproduction, not a lab throughput result.
+
+A separately reported ambient freeze did not reproduce in the native module:
+normal-motion headed Chrome advanced ambient core frames 77→91 and native preview
+frames 75→89 while RAF advanced 365→435; HeadlessChrome 157 with a real clock
+advanced 75→89 / 71→85 and RAF 181→215. Both screenshots and a button click
+succeeded, followed by zero-node cleanup and browser closure. This clears the
+module-level comparison only. The reported Exact document/Broadcast drive with
+its virtual clock is a different boundary; cinematic's normal-motion headless
+Home drive also rendered/tapped successfully but never mounted a preview because
+its deferred timer awaited another clock commit. No user-agent or GPU-disable
+workaround was added to playback.
