@@ -311,3 +311,32 @@ impression receipt).
 
 **Proposed fix.** Allow a qualified call (`Client.close()`), or resolve a call inside an action
 to the app's own action and reach the host command through a namespace.
+
+## 13. Tamber token references are rewritten only in literal rows
+
+**What.** Contract rewrites a token reference such as `var(--media.ground)` to the page's
+property (`var(--x-media-ground)`) or to the folded value, but only in view literals. A value
+computed at run time and bound to a row reaches CSS as written. The dotted name is then an invalid
+custom property, and the declaration silently computes to its initial value.
+
+**Repro.**
+
+```contract
+component App
+  state shadow = "0 0 0 3px var(--media.ground)"
+  view
+    box box-shadow=shadow width=40 height=40
+```
+
+The computed `box-shadow` is `none`. Written as a literal, the same value draws.
+
+**Impact.** Compiled Cinematic and Mochi never drew their framed title's shadow, because
+`skinTraits(...).detailShadow` is runtime data. The doc resolver had already worked around the
+same problem for documents.
+
+**Workaround (Vela).** The skin registry maps `var(--a.b)` in trait values to `--x-a-b` or the
+folded value (7c4971a). The doc resolver does the same for document values (`cssVar`).
+
+**Proposed fix.** Rewrite token references in bound values at run time, as the colour rows
+already resolve a bare token name. Or refuse a dotted `var()` name in a bound value with a
+diagnostic.

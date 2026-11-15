@@ -334,7 +334,9 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
       if (node.press) { if (!ACTIONS.has(node.press.action)) throw new Error(`Unknown action ${node.press.action}`); level.act = node.press.action; level.arg = parts(node.press.arg, r); level.cs = node.controlStates !== false;
         // The platform focus ring stays unless the node says outline: none, or a focus overlay suppresses it (not outline: auto).
         const rings = [node.style, node.focus, (node as NodeExtra).groupFocus].map(o => (o as Record<string, string> | undefined)?.outline ?? (o as Record<string, string> | undefined)?.['outline-style']);
-        level.rn = rings.includes('none') || (!rings.includes('auto') && (!!node.focus || !!(node as NodeExtra).groupFocus)); }
+        // A group's descendants' group looks are its focus look too (a focused group lights them).
+        const groupLook = node.group === true && JSON.stringify(node.children ?? []).search(/"group(Hover|Focus)":/) >= 0;
+        level.rn = rings.includes('none') || (!rings.includes('auto') && (!!node.focus || !!(node as NodeExtra).groupFocus || groupLook)); }
       kids = node.children ?? [];
       // A row's pager: this box is the row's sideways scroller (its style sets overflow-x); pageNext/pagePrev {row.id} move it.
       if (node.pager) {
@@ -354,8 +356,8 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
   // A pager's edge markers are its first and last children (renderer node "edge", sym "s|inset|peek"):
   // 1 px wide, taken out of the row's spacing by a margin of -1 px less the row's gap.
   if (node.type === 'box' && node.pager) {
-    const gap = String(own.columnGap || own.gap || '0px');
-    const edge = (which: string) => ({ ...convert({ type: 'box' } as Node, depth + 1, r)!, t: 'edge', sym: `${which}|${level.sym}`, ivb: `calc(-1px - ${gap})` });
+    // The gap in force is the pager's own --vg (every style rule declares its row gap there).
+    const edge = (which: string) => ({ ...convert({ type: 'box' } as Node, depth + 1, r)!, t: 'edge', sym: `${which}|${level.sym}`, ivb: 'calc(-1px - var(--vg, 0px))' });
     level.kids = [edge('s'), ...(level.kids as Level[]), edge('e')];
   }
   return level;
@@ -367,7 +369,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
 // look the renderer drew (it outranks a group's hover). Every rule is !important over the
 // node's bound (inline) rows and of zero specificity, so their order is their precedence:
 // group hover, then hover, then press, as the renderer's state order had them.
-const WASH = 'linear-gradient(var(--exact-quaternary-fill) 0 0)', WASH_PRESSED = 'linear-gradient(var(--exact-tertiary-fill) 0 0)';
+const WASH = 'linear-gradient(var(--exact-quaternary-fill) 0 0)';
 const CSS_ROWS = STYLE.filter(([field]) => !['lineClamp', 'objectFit', 'outlineStyle', 'colorScheme'].includes(field));
 const cssValue = (field: string, v: string | number) => v === '' ? 'unset' : field === 'rotate' ? `${v}deg` : String(v);
 /** The rows where `to` differs from any of `from`, as `to` has them. */
@@ -384,7 +386,9 @@ function baseCss(r: Resolve): string {
   return reset + r.styles.map((st, i) => {
     // A box is relative unless absolute or sticky (fixed and static are not offered).
     const rows = SHEET_ROWS.filter(([field]) => st[field] !== '' && !(field === 'position' && st[field] !== 'absolute' && st[field] !== 'sticky') && !(field === 'flexShrink' && st[field] === 1) && !(field === 'scale' && st[field] === 1) && !(field === 'rotate' && st[field] === 0) && !(field === 'order' && st[field] === 0) && !(field === 'flexGrow' && st[field] === 0));
-    return rows.length ? `#exact-root#exact-root [data-st="${i}"][data-st]{${rows.map(([field, row]) => `${row}:${cssValue(field, st[field])}`).join(';')}}` : '';
+    // --vg: the row gap a pager's edge markers take back out (renderer node "edge").
+    const decls = [...rows.map(([field, row]) => `${row}:${cssValue(field, st[field])}`), `--vg:${st.columnGap || st.gap || '0px'}`];
+    return `#exact-root#exact-root [data-st="${i}"][data-st]{${decls.join(';')}}`;
   }).join('');
 }
 /** The state rules, those with one body sharing it: group hover, then hover (only where a pointer
@@ -411,10 +415,10 @@ function cssStates(level: Level, r: Resolve) {
       // an authored hover replaces it (author over platform, per state), while the pressed look below stays.
       if (pressable && !hover && !(level.dbi as Part[]).length && ground(base)) over.push(`background-image:${WASH}!important`);
       const held = active ? declarations(active, [...inline, ...(hover ? [hover] : [])]) : [];
-      const pressedLook = active ?? hover ?? base;
-      if (pressable && !(level.dbi as Part[]).length && ground(pressedLook)) held.push(`background-image:${WASH_PRESSED}!important`);
-      // Pressed without a ground of its own: Exact dims a pressed control's content to .65 (unless its opacity is bound).
-      if (pressable && !(level.dop as Part[]).length && (pressedLook.backgroundColor === '' || pressedLook.backgroundColor === 'transparent') && ground(pressedLook)) held.push('opacity:0.65!important');
+      // Exact's pressed state, as compiled controls show it: the whole control at .65 while held
+      // (ground, ring and content; a hover ground stays), whether or not it has a ground. An authored
+      // \`active\` look replaces it (author over platform, per state), as a bound opacity does.
+      if (pressable && !active && !(level.dop as Part[]).length) held.push('opacity:0.65!important');
       const id = !group.length && !over.length && !held.length ? '' : `${r.ids++}`;
       ref[still ? 'v2' : 'v'] = id;
       if (!id) continue;
@@ -435,8 +439,9 @@ function asset(src: string, r: Resolve): string {
 }
 
 /** A slot's root box or holder: its style with states and viewport variants, as any node's (it follows the slot's width). */
-function boxStates(node: { style?: Style; small?: Style; wide?: Style; below?: Record<string, Style>; above?: Record<string, Style>; states?: unknown } | undefined, r: Resolve, extra?: Style, root = false): { base: unknown; sts: unknown[] } {
-  const level = convert({ type: 'box', style: { ...node?.style, ...extra }, small: node?.small, wide: node?.wide, below: node?.below, above: node?.above, states: node?.states } as Node, 1, r, 400, root)!;
+function boxStates(node: { style?: Style; small?: Style; wide?: Style; below?: Record<string, Style>; above?: Record<string, Style>; states?: unknown; escape?: string; returnFocus?: string } | undefined, r: Resolve, extra?: Style, root = false): { base: unknown; sts: unknown[] } {
+  // A root's escape closes its flags too (a shell root may hold the menu's escape).
+  const level = convert({ type: 'box', style: { ...node?.style, ...extra }, small: node?.small, wide: node?.wide, below: node?.below, above: node?.above, states: node?.states, ...(root ? { escape: (node as NodeExtra | undefined)?.escape, returnFocus: (node as NodeExtra | undefined)?.returnFocus } : {}) } as Node, 1, r, 400, root)!;
   return { base: level.base, sts: level.sts as unknown[] };
 }
 function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchField', from = 1): DocSlot {

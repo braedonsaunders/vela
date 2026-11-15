@@ -83,7 +83,7 @@ component Shell
                     SlotBox(order=(p.bare ? "0" : doc.shell.slotOrder), pos=(not p.bare and ss.pos == 1 ? "absolute" : not p.bare and ss.pos == 2 ? "sticky" : "relative"), s=(p.bare ? bareStyle() : styleAt(env, ss.s)), inner=(p.bare ? bareStyle() : styleAt(env, doc.shell.slotInner)), e=env)
                       children
                   else
-                    for kid in kids5([n], rootCtx(), env, false) key=kid.key
+                    for kid in kids5([n], rootCtx(), env, false, rv) key=kid.key
                       V5(n=kid.n, c=kid.c, vals=kid.vals, sr=kid.sr, dis=kid.dis, e=env, scope="shell")
                 if docPickerOpen and not p.bare
                   SkinPicker(skins=p.skins, current=p.skin, small=env.small, still=env.still, choose=docPickSkin, dismiss=docDismissPicker)
@@ -132,5 +132,5 @@ component Route
                       SlotBox(order=tree.slotOrder, pos=(ss.pos == 1 ? "absolute" : ss.pos == 2 ? "sticky" : "relative"), s=styleAt(env, ss.s), inner=styleAt(env, tree.slotInner), e=env)
                         children
                     else
-                      for kid in kids1([n], rootCtx(), env, false) key=kid.key
+                      for kid in kids1([n], rootCtx(), env, false, rv) key=kid.key
                         V1(n=kid.n, c=kid.c, vals=kid.vals, sr=kid.sr, dis=kid.dis, e=env, scope=scope)
