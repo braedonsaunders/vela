@@ -120,6 +120,8 @@ function level(d: number): string {
     obs: action
 ${d <= WIDGET_DEPTH ? `  inject
     tileMessage: action
+    mediaAuthJson: string
+    tileNativeMedia: string
 ` : ''}  state over = false
   state focused = false
   state ready = false
@@ -158,7 +160,7 @@ ${d <= WIDGET_DEPTH ? `  inject
 ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                   for t in e.tile key=t.channelId
                     if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
-                      vela-player plan=t.planJson playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                      vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
 ` : ''}                else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
@@ -197,7 +199,7 @@ const vocabulary: [string, string][] = [
   ['card.played', m('c.card', yes('x.played'))], ['card.episodeNumberLabel', m('c.card', 'x.episodeNumberLabel')], ['card.durationLabel', m('c.card', 'x.durationLabel')], ['card.progressPct', m('c.card', 'pct(x.progressSeconds, x.durationSeconds)')],
   ['card.hasProgress', m('c.card', yes('x.progressSeconds > 0 and x.durationSeconds > 0 and not x.played'))],
   ['card.label', m('c.card', 'cardName(x)')], ['card.kindId', m('c.card', '`${x.id}|${x.kind}|${x.receipt}`')], ['hero.kindId', m('c.hero', '`${x.id}|${x.kind}|${x.receipt}`')],
-  ['card.factsLine', m('c.card', '[x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · ")')], ['hero.factsLine', m('c.hero', '[x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · ")')],
+  ['card.factsLine', m('c.card', '[x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · ")')], ['card.genresComma', m('c.card', 'x.genres.join(", ")')], ['hero.factsLine', m('c.hero', '[x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · ")')],
   ['row.id', m('c.row', 'x.id')], ['row.name', m('c.row', 'x.name')], ['row.presentation', m('c.row', 'x.presentation')], ['row.hasMore', m('c.row', yes('x.nextCursor != ""'))],
   ...['reasonLabel', 'actionLabel', 'actionDetail', 'action', 'targetId'].map(f => [`heroAct.${f}`, m('c.heroAct', `x.${f}`)] as [string, string]),
   ['heroAct.progressPct', m('c.heroAct', '(x.progress * 100).toString()')], ['heroAct.hasProgress', m('c.heroAct', yes('x.progress > 0'))],
@@ -237,6 +239,8 @@ const vocabulary: [string, string][] = [
   ['detail.seasonPending', `match first(e.detail) { case some(d) => ${yes('e.season != "" and d.episodes.length > 0 and not d.episodes.map(x => x.seasonId == e.season).includes(true)')}, case none => "false" }`],
   ['detail.genresLine', `match first(e.detail) { case some(d) => ${m('d.title', 'x.genres.join(", ")')}, case none => "" }`],
   ['detail.crewLineComma', 'match first(e.detail) { case some(d) => d.crew.join(", "), case none => "" }'],
+  ['detail.trailerId', 'match first(e.detail) { case some(d) => d.trailerId, case none => "" }'],
+  ['detail.trailerReady', `match first(e.detail) { case some(d) => ${yes('d.trailerId != "" and d.trailerReady')}, case none => "false" }`],
   ['detail.castLine', 'match first(e.detail) { case some(d) => d.cast.join(" · "), case none => "" }'],
   ['detail.nameLength', `match first(e.detail) { case some(d) => ${m('d.title', 'x.name.length.toString()')}, case none => "" }`],
   ['detail.seed', `match first(e.detail) { case some(d) => ${m('d.title', 'x.id.length.toString()')}, case none => "" }`],
@@ -422,6 +426,8 @@ shape SkinDoc
   liveHome: bool
   detailWide: string
   detailSmall: string
+  detailFrom: number
+  detailSplit: string
 
 ${Object.entries(KEYFRAMES).map(([k, v]) => `keyframes vr-${k}\n  ${v}\n`).join('\n')}
 fn noStyle(): Style = ${noStyleBody()}
@@ -456,7 +462,7 @@ const detailCtxsBody = `match first(e.detail) { case some(d) => (n.rep == "detai
 const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs${d}(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])`;
 
 const noStyleBody = () => `Style(${STYLE.map(([f]) => `${f}=${NUMERIC.has(f) ? ({ opacity: 1, flexShrink: 1, fontWeight: 400, scale: 1 } as Record<string, number>)[f] ?? 0 : '""'}`).join(', ')})`;
-const EMPTY_DOC = `fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen")\n`;
+const EMPTY_DOC = `fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none")\n`;
 
 /**
  * The renderer's compatibility version: a document names the version it needs

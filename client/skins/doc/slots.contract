@@ -8,7 +8,8 @@ use GuideModel, GuideChannel, LiveTile from "../../live/models.contract"
 
 fn part(s: string, i: number): string = match s.split("|").at(i) { case some(x) => x, case none => "" }
 fn toggled(flags: string[], f: string): string[] = (flags.includes(f) ? flags.filter(x => x != f) : flags.concat([f]))
-fn detailPresentation(doc: SkinDoc, width: number): string = (width < 640 ? doc.detailSmall : doc.detailWide)
+fn detailPresentation(doc: SkinDoc, width: number): string = (width < doc.detailFrom ? doc.detailSmall : doc.detailWide)
+fn detailSplit(doc: SkinDoc, width: number): string = (width < doc.detailFrom ? "none" : doc.detailSplit)
 
 // The root container a slot's tree hangs from.
 component Root

@@ -919,10 +919,27 @@ function veil(still, from, to) {
     el.style.opacity = String(to);
   return el;
 }
+var HOPS = "vela.handoff.hops";
+var HOP_WINDOW_MS = 60000;
+var MAX_HOPS = 2;
+function recentHops() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(HOPS) ?? "[]");
+    return Array.isArray(value) ? value.filter((t) => typeof t === "number" && Date.now() - t < HOP_WINDOW_MS) : [];
+  } catch {
+    return [];
+  }
+}
 function leave(handle, from, to, still) {
   const earlier = readHandoff();
   if (earlier && earlier.from === to && earlier.to === from)
     return;
+  const hops = recentHops();
+  if (hops.length >= MAX_HOPS)
+    return;
+  try {
+    sessionStorage.setItem(HOPS, JSON.stringify([...hops, Date.now()]));
+  } catch {}
   handle.leaving = true;
   const record = { from, to, at: Date.now(), url: location.href, scroll: scrollPositions(), window: Math.round(scrollY) };
   try {

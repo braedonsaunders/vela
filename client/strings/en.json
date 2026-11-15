@@ -439,5 +439,20 @@
   "player.info.delivery": "Delivery",
   "player.info.dropped": "Dropped frames",
   "detail.themeMusic": "Theme music",
-  "live.previewStuck": "The preview didn't end."
+  "live.previewStuck": "The preview didn't end.",
+  "server.signIn": "Sign in to {name}",
+  "server.signedOut": "Signed out",
+  "server.unreachable": "This server isn't answering right now.",
+  "server.rejected": "The server didn't accept those details.",
+  "server.codeExpired": "The code expired.",
+  "server.probe.invalid": "Enter a server address, like 192.168.1.20:8096.",
+  "server.probe.unreachable": "Nothing answered at that address.",
+  "server.probe.unsupported": "That address isn't a Jellyfin, Emby or Plex server.",
+  "server.probe.vela": "That's a Vela server. Open Vela from its own address.",
+  "server.plex.again": "Link with Plex again to choose a server.",
+  "server.plex.relay": "Relay",
+  "server.plex.secure-direct": "Secure · plex.direct",
+  "server.plex.secure": "Secure",
+  "server.plex.local": "Local · http",
+  "server.plex.remote": "Remote · http"
 }

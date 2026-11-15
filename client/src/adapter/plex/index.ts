@@ -2,6 +2,7 @@ import type * as V from '../../../wire/v0/types';
 import type { ServerAdapter } from '../index';
 import { VelaError, type Credentials } from '../ether';
 import { createPlexPin, pollPlexPin, plexHeaders, discoverPlexServers, plexAccount } from './auth';
+import { randomId } from '../../protocol/id';
 export * from './auth';
 
 // Plex JSON uses the same metadata envelope for videos, directories and hubs.
@@ -84,9 +85,17 @@ export class PlexAdapter implements ServerAdapter {
     const body = JSON.parse(text);
     return body.MediaContainer ?? body;
   }
+  /** PMS tokens do not expire; a rejected one ends only this server's session. */
   async validateSession(): Promise<V.Tokens | null> {
     const tokens = await this.config.credentials.get();
-    if (tokens) await this.request('/library/sections');
+    if (!tokens) return null;
+    try { await this.request('/library/sections'); }
+    catch (error) {
+      if (!(error instanceof VelaError) || error.status !== 401) throw error;
+      const latest = await this.config.credentials.get();
+      if (latest?.accessToken === tokens.accessToken) { this.sessions.clear(); this.pins.clear(); await this.config.credentials.set(null); }
+      return null;
+    }
     return tokens;
   }
   async capabilities(): Promise<V.ServerCapabilities> {
@@ -119,7 +128,7 @@ export class PlexAdapter implements ServerAdapter {
   }
   async pollDevice(r: V.DevicePollRequest): Promise<V.GrantPoll> {
     const pin = this.pins.get(r.deviceCode);
-    if (!pin || Date.parse(pin.expiresAt) <= Date.now()) return { status: 'expired' };
+    if (!pin) return { status: 'expired' };
     const result = await pollPlexPin(this.config.clientIdentifier, pin);
     if (result.authToken) {
       const servers = await discoverPlexServers(this.config.clientIdentifier, result.authToken);
@@ -203,12 +212,14 @@ export class PlexAdapter implements ServerAdapter {
       'X-Plex-Container-Start': offset(q.cursor), 'X-Plex-Container-Size': q.limit || 100 });
     return { library, sort, direction, ...page(this.nodes(c).map(n => this.entry(n)), offset(q.cursor), c.totalSize ?? c.size) };
   }
-  async collection(id: string): Promise<V.CollectionContents> {
+  async collection(id: string, cursor?: string, limit = 100): Promise<V.CollectionContents> {
     const [kind, key] = id.includes(':') ? id.split(':') : ['collection', id];
     const base = kind === 'playlist' ? `/playlists/${enc(key)}` : `/library/collections/${enc(key)}`;
+    const start = offset(cursor);
     const c = await this.request(base); const n = this.nodes(c)[0] || c;
-    const children = await this.request(`${base}/${kind === 'playlist' ? 'items' : 'children'}`);
-    return { collection: { id, kind: kind === 'playlist' ? 'playlist' : 'collection', name: n.title || '', summary: n.summary, artwork: this.artwork(n) }, ...page(this.nodes(children).map(n => this.entry(n)), 0, children.totalSize ?? children.size) };
+    const children = await this.request(`${base}/${kind === 'playlist' ? 'items' : 'children'}`, { 'X-Plex-Container-Start': start, 'X-Plex-Container-Size': limit });
+    // PMS reports the whole collection's totalSize; size alone is only this page.
+    return { collection: { id, kind: kind === 'playlist' ? 'playlist' : 'collection', name: n.title || '', summary: n.summary, artwork: this.artwork(n) }, ...page(this.nodes(children).map(n => this.entry(n)), start, children.totalSize) };
   }
   private async metadata(id: string): Promise<Node> {
     const c = await this.request(`/library/metadata/${enc(id)}`, { includeExtras: 1, includeChapters: 1 });
@@ -242,7 +253,7 @@ export class PlexAdapter implements ServerAdapter {
     const id = r.titleId || r.extraId!; const n = await this.metadata(id);
     const media = n.Media?.[0]; const part = media?.Part?.[0];
     if (!part || media.Part.length !== 1) fail('Plex title has no supported single-part media', 'playback');
-    const sessionId = `vela-${crypto.randomUUID()}`;
+    const sessionId = `vela-${randomId()}`;
     const streams: Node[] = part.Stream || [];
     const tracks = (type: number): V.Track[] => streams.filter(s => Number(s.streamType) === type).map(s => ({ id: String(s.id), streamIndex: s.index,
       kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
@@ -373,7 +384,7 @@ export class PlexAdapter implements ServerAdapter {
     const n = this.nodes(c)[0] || operation?.Metadata || operation?.[0]?.Metadata;
     const part = n?.Media?.[0]?.Part?.[0];
     if (!sub || !part?.key) fail('Plex returned an unsupported DVR tuning response', 'playback');
-    const sessionId = `vela-live-${crypto.randomUUID()}`;
+    const sessionId = `vela-live-${randomId()}`;
     const plan: V.PlaybackPlan = { sessionId, channelId: r.channelId, revision: 1, sourceGeneration: 0, seekGeneration: 0, state: 'ready', positionSeconds: 0,
       paths: [{ id: 'live-hls', kind: 'direct', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: this.mediaURL(part.key), qualities: [], boundaries: [] }],
       selectedPathId: 'live-hls', audioTracks: [], subtitleTracks: [], selectedSubtitleTrackId: null, chapters: [], fallback: { state: 'unsupported' }, live: { mode: 'adaptive' } };

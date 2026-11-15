@@ -1,6 +1,6 @@
 use buildEngine from "./engine.contract"
 use skinTraits, skinDetailSplit, resolveSkin, documentsSkin, defaultSkin from "./skins.generated.contract"
-use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, SecureSwitchReply, HomeRetryPolicy, libraryQuery from "./models.contract"
+use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, SecureSwitchReply, HomeRetryPolicy, ServerList, ServerProbe, ServerReply, PlexLink, PlexServer, libraryQuery from "./models.contract"
 
 shape Time
   epochAtZero: number
@@ -168,7 +168,7 @@ members Client
       heroIndex = (heroAt + 1) % max(1, home.hero.length)
   action pickHero(i: number)
     heroIndex = i
-  task captureHomeTime when auth.authenticated key=localeJSON
+  task captureHomeTime when auth.authenticated key=`${localeJSON}:${auth.serverId}:${auth.revision}`
     after(1, stampHomeTime)
   action stampHomeTime
     homeAt = time.epochAtZero + performanceNow()
@@ -214,7 +214,7 @@ members Client
   derive homeMoreCursor = (homeRowsLoaded ? homeRowsCursor : home.nextCursor)
   // Home has been answered at least once (a failed or revalidating request keeps its last
   // answer): the page stays drawn from it; only a home never answered shows a failure.
-  derive homeKnown = current(home) or home.viewer != ""
+  derive homeKnown = current(home) or (home.viewer != "" and not serverSwitching)
   // The viewer's Try again on a failure: ask again for whatever failed.
   action retryFailed
     if failed(home)
@@ -370,7 +370,7 @@ members Client
   // "failed" or "ready" (the lane's items may still be empty).
   derive descriptiveState = (not home.descriptiveAvailable ? "off" : failed(descriptive) and not pending(descriptive) ? "failed" : pending(descriptive) or not current(descriptive) or descriptive.query != query or descriptive.generation != generation ? "loading" : descriptive.descriptiveStatus == "failed" or ((descriptive.descriptiveStatus == "pending" or descriptive.descriptiveStatus == "busy") and not descriptive.descriptiveRetryAllowed) ? "failed" : descriptive.descriptiveStatus == "pending" or descriptive.descriptiveStatus == "busy" ? "loading" : "ready")
   derive aiState = (not home.aiAvailable ? "off" : failed(ai) and not pending(ai) ? "failed" : pending(ai) or not current(ai) or ai.query != query or ai.generation != generation ? "loading" : "ready")
-  resource libraries = uiLibraries() when auth.authenticated as shape LibraryNav[] else empty()
+  resource libraries = uiLibraries(serverRevision) when auth.authenticated as shape LibraryNav[] else empty()
   // Home and the server's libraries are one surface: the active library and its
   // browse query live on the root home visit, so opening a title over a library
   // never deactivates it and switching sections never remounts the surface.
@@ -435,7 +435,7 @@ members Client
     if top(nav).name == "live"
       nav = open(nav, path("home") + librarySection("@live", ""))
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
-  resource collection = uiCollection(collectionId) with localeJSON, artWidth when auth.authenticated and collectionId != "" as shape CollectionModel
+  resource collection = uiCollection(collectionId, activeCollectionPages) with localeJSON, artWidth when auth.authenticated and collectionId != "" as shape CollectionModel
   resource detail = uiDetail(detailId, `${top(nav).id}`) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape DetailModel
   resource related = uiRelated(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape FeedRow[] else empty()
   // A show's seasons stay on the show's own visit: the chosen season is a query on it, and only
@@ -521,8 +521,10 @@ members Client
   derive pageColor = traits.page
   derive inkColor = traits.ink
   // requestedSkin and activePack come from the server appearance (appearance.contract).
-  // A server document draws through the documents engine; a requested id (or alias) through its skin.
-  derive wantedSkin = match activePack { case some(p) => p.engine, case none => (docReady ? documentsSkin() : resolveSkin(requestedSkin) == documentsSkin() ? defaultSkin() : resolveSkin(requestedSkin)) }
+  // A requested document draws through the documents engine from the moment it is requested, not
+  // once it has loaded: the documents engine must keep wanting itself while its document loads, or
+  // it hands the page straight back and the two builds bounce. A document that fails falls back.
+  derive wantedSkin = match activePack { case some(p) => p.engine, case none => (activeDocUrl != "" and not failed(skinDocument) ? documentsSkin() : resolveSkin(requestedSkin) == documentsSkin() ? defaultSkin() : resolveSkin(requestedSkin)) }
   // A single-engine build always presents its own engine; vela-engine hands off to the wanted one.
   derive activeSkin = (buildEngine() == "" ? wantedSkin : buildEngine())
 
@@ -626,3 +628,203 @@ members Client
     streamAttempt = 0
     nav = push(nav, path("extra", id))
 
+  // Servers. Foundation-owned: skins receive only public server facts (ServerList, ServerProbe,
+  // PlexLink, PlexServer). Credentials and media authorization never enter these records.
+  state serverRevision = 0
+  state serverSwitching = false
+  state switchedAt = 0
+  resource servers = uiServers(serverRevision) with localeJSON when current(auth) as shape ServerList else empty()
+  // Detection before adding: generation-fenced, credential-free, bounded.
+  state serverProbeUrl = ""
+  state serverProbeGeneration = 0
+  resource serverProbe = detectServer(serverProbeUrl, serverProbeGeneration) with localeJSON when serverProbeUrl.trim() != "" as shape ServerProbe transient
+  derive probe = (serverProbeUrl.trim() != "" and current(serverProbe) and serverProbe.generation == serverProbeGeneration ? serverProbe : ServerProbe(url=serverProbeUrl, generation=serverProbeGeneration, state=(serverProbeUrl.trim() == "" ? "" : "checking"), kind="", kindLabel="", name="", version="", normalizedUrl="", message=""))
+  action probeServer(url: string)
+    serverProbeUrl = url
+    serverProbeGeneration = serverProbeGeneration + 1
+  mutation serverChange as shape ServerReply then afterServerChange
+  mutation serverAdded as shape ServerReply then afterServerAdded
+  mutation serverRemoved as shape ServerReply then afterServerRemoved
+  mutation serverSignedOut as shape ServerReply then afterServerSignOut
+  derive serverError = match serverChange { case some(r) => r.error, case none => "" }
+  derive addedServerId = match serverAdded { case some(r) => r.id, case none => "" }
+  derive addServerError = match serverAdded { case some(r) => r.error, case none => "" }
+  action selectServer(id: string)
+    if id != auth.serverId and not pending(serverChange)
+      send serverChange = setSelectedServer(id)
+  action addServer(kind: string, name: string, url: string)
+    send serverAdded = addServerRecord(kind, name, url)
+  action removeServer(id: string)
+    send serverRemoved = removeServerRecord(id)
+  action signOutServer(id: string)
+    send serverSignedOut = signOutServerRecord(id)
+  action afterServerChange
+    match serverChange
+      case some(r)
+        if r.id != ""
+          switchedServer()
+      case none
+        serverRevision = serverRevision
+  action afterServerAdded
+    serverRevision = serverRevision + 1
+  action afterServerRemoved
+    match serverRemoved
+      case some(r)
+        if r.id == auth.serverId
+          switchedServer()
+        else
+          serverRevision = serverRevision + 1
+      case none
+        serverRevision = serverRevision
+  action afterServerSignOut
+    match serverSignedOut
+      case some(r)
+        if r.id == auth.serverId
+          switchedServer()
+        else
+          serverRevision = serverRevision + 1
+      case none
+        serverRevision = serverRevision
+  // A new server (or a new session on one): every cached answer, cursor and preview of the
+  // previous one is dropped, and the page dissolves to Home until the new home answers.
+  action switchedServer
+    serverRevision = serverRevision + 1
+    serverSwitching = true
+    switchedAt = time.epochAtZero + performanceNow()
+    refresh auth
+    refresh appearanceBase
+    homeAuthChecked = false
+    clearHomePaging()
+    clearPreview()
+    observed = []
+    quickSecret = ""
+    username = ""
+    password = ""
+    returnTo = ""
+    generation = generation + 1
+    liveVisited = false
+    libraryPages = 1
+    collectionPages = 1
+    snapshotVersion = snapshotVersion + 1
+    streamAttempt = 0
+    nav = open(nav, path("home"))
+  task finishServerSwitch when serverSwitching and homeAt > switchedAt and (current(home) or failed(home))
+    after(1, endServerSwitch)
+  action endServerSwitch
+    serverSwitching = false
+
+  // Plex: a plex.tv/link PIN, then the viewer picks one of the account's servers, whose
+  // origin the data module proves by its own /identity before keeping it.
+  state plexCode = ""
+  state plexState = ""
+  state plexExpiresAt = ""
+  mutation plexStarted as shape PlexLink then afterPlexStart
+  mutation plexPolled as shape PlexLink queue then afterPlexPoll
+  mutation plexCancelled as shape ReceiptReply
+  mutation plexChoice as shape ServerReply then afterPlexChoice
+  derive plexLink = PlexLink(code=plexCode, linkUrl="https://plex.tv/link", state=plexState, expiresAt=plexExpiresAt)
+  resource plexServers = uiPlexServers(plexCode) with localeJSON when plexState == "linked" and plexCode != "" as shape PlexServer[] else empty() transient
+  derive plexError = match plexChoice { case some(r) => r.error, case none => "" }
+  action startPlexLink
+    plexState = "starting"
+    send plexStarted = beginPlexLink(time.epochAtZero + performanceNow())
+  action afterPlexStart
+    match plexStarted
+      case some(r)
+        plexCode = r.code
+        plexState = r.state
+        plexExpiresAt = r.expiresAt
+      case none
+        plexState = "failed"
+  task plexPolling when plexState == "waiting" and plexCode != ""
+    every(2000, pollPlex)
+  action pollPlex
+    if not pending(plexPolled)
+      send plexPolled = pollPlexLink(plexCode, time.epochAtZero + performanceNow())
+  action afterPlexPoll
+    match plexPolled
+      case some(r)
+        if r.code == plexCode and plexState == "waiting"
+          plexState = r.state
+      case none
+        plexState = plexState
+  action cancelPlexLink
+    plexCode = ""
+    plexState = ""
+    plexExpiresAt = ""
+    send plexCancelled = stopPlexLink()
+  action choosePlexServer(id: string)
+    if plexState == "linked" and not pending(plexChoice)
+      send plexChoice = selectPlexServer(id)
+  action afterPlexChoice
+    match plexChoice
+      case some(r)
+        if r.id != ""
+          plexCode = ""
+          plexState = ""
+          plexExpiresAt = ""
+          switchedServer()
+      case none
+        plexState = plexState
+
+  // Jellyfin and Emby: password or Quick Connect against a known server record.
+  mutation jellySignIn as shape ServerReply then afterJellySignIn
+  mutation jellyQuick as shape QuickModel then afterJellyQuickStart
+  mutation jellyQuickPolled as shape ServerReply queue then afterJellyQuickPoll
+  mutation jellyQuickCancelled as shape ReceiptReply
+  state jellyQuickHandle = ""
+  state jellyQuickNext = 0
+  derive jellySignInError = match jellySignIn { case some(r) => r.error, case none => "" }
+  derive jellyQuickModel = match jellyQuick { case some(r) => r, case none => QuickModel(secret="", code="", expiresAt="", expiresLabel="", status="", pollIntervalSeconds=5) }
+  derive jellyQuickError = match jellyQuickPolled { case some(r) => r.error, case none => "" }
+  action signInJellyfin(id: string, username: string, password: string)
+    if username.trim() != "" and not pending(jellySignIn)
+      send jellySignIn = connectJellyfin(id, username.trim(), password)
+  action afterJellySignIn
+    match jellySignIn
+      case some(r)
+        if r.id != ""
+          switchedServer()
+      case none
+        jellyQuickHandle = jellyQuickHandle
+  action startJellyfinQuick(id: string)
+    send jellyQuick = beginJellyfinQuick(id, time.epochAtZero + performanceNow(), localeJSON)
+  action afterJellyQuickStart
+    jellyQuickHandle = jellyQuickModel.secret
+    jellyQuickNext = performanceNow() + max(1, jellyQuickModel.pollIntervalSeconds) * 1000
+  task jellyQuickPolling when jellyQuickHandle != ""
+    every(1000, pollJellyQuick)
+  action pollJellyQuick
+    if not pending(jellyQuickPolled) and performanceNow() >= jellyQuickNext
+      jellyQuickNext = performanceNow() + max(1, jellyQuickModel.pollIntervalSeconds) * 1000
+      send jellyQuickPolled = pollJellyfinQuick(jellyQuickHandle, time.epochAtZero + performanceNow())
+  action afterJellyQuickPoll
+    match jellyQuickPolled
+      case some(r)
+        if r.id != "" or r.error != ""
+          jellyQuickHandle = ""
+        if r.id != ""
+          switchedServer()
+      case none
+        jellyQuickHandle = jellyQuickHandle
+  action cancelJellyfinQuick
+    jellyQuickHandle = ""
+    send jellyQuickCancelled = stopJellyfinQuick()
+
+  // A server without an event stream (auth.pollSeconds > 0, always 5): its session snapshot is
+  // read every 5 s while the watch view is visible and the session lives. No cursor or event is invented.
+  task pollSessionSnapshot when auth.pollSeconds > 0 and playingId != "" and playback.sessionId != "" and current(sessionUpdate) and watchModel.state != "ended" and page.visibilityState == "visible"
+    every(5000, readSessionSnapshot)
+  action readSessionSnapshot
+    if not pending(sessionUpdate)
+      refresh sessionUpdate
+
+  // A collection's further pages, continued from the server's own cursor.
+  state collectionPages = 1
+  state collectionPagingEntry = ""
+  derive activeCollectionPages = (collectionPagingEntry == `${top(nav).id}` ? collectionPages : 1)
+  derive collectionMoreLoading = (activeCollectionPages > 1 and pending(collection))
+  action moreCollection
+    if current(collection) and collection.more and not pending(collection)
+      collectionPages = activeCollectionPages + 1
+      collectionPagingEntry = `${top(nav).id}`
