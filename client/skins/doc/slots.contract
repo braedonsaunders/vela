@@ -1,22 +1,33 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
 use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, RouteProps, noStyle from "../../renderer/shapes.contract"
-use V1, V5, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, rootCtx, selectedSeason from "../../renderer/levels.contract"
+use V1, V5, BoxEl, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, rootCtx, selectedSeason from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use HomeProps, ShellProps from "../../foundation/slot-api.contract"
 use GuideModel, GuideChannel, LiveTile from "../../live/models.contract"
 
 fn part(s: string, i: number): string = match s.split("|").at(i) { case some(x) => x, case none => "" }
 fn toggled(flags: string[], f: string): string[] = (flags.includes(f) ? flags.filter(x => x != f) : flags.concat([f]))
-fn detailPresentation(doc: SkinDoc, width: number): string = (width < 640 ? doc.detailSmall : doc.detailWide)
+fn detailPresentation(doc: SkinDoc, width: number): string = (width < doc.detailFrom ? doc.detailSmall : doc.detailWide)
+fn detailSplit(doc: SkinDoc, width: number): string = (width < doc.detailFrom ? "none" : doc.detailSplit)
 
 // The root container a slot's tree hangs from.
 component Root
   props
     s: Style
+    pos: string
+    e: Env
+  state quiet = 0
+  action idle(v: bool)
+    quiet = quiet
+  action still
+    quiet = quiet
+  action unkeyed(k: string)
+    quiet = quiet
   slot
   view
-    box display=s.display position="relative" width=s.width height=s.height min-height=s.minHeight flex-direction=s.flexDirection gap=s.gap padding-top=s.paddingTop padding-right=s.paddingRight padding-bottom=s.paddingBottom padding-left=s.paddingLeft overflow-x=s.overflowX overflow-y=s.overflowY color=s.color background-color=s.backgroundColor background-image=s.backgroundImage font-family=s.fontFamily font-size=s.fontSize
+    // The tree's root takes every style row, as a document node does.
+    BoxEl(s=s, pos=pos, anim=(e.still ? "none" : s.animation), fade=false, dw="", dbg="", dbi=s.backgroundImage, dc="", dop="", dtr="", test="", domId="", role="", label="", lt="", se="", exitAnim="", hovering=idle, pointing=still, keying=unkeyed)
       children
 
 // Where the foundation's content sits among a slot's nodes: its flex order, an outer
@@ -24,12 +35,21 @@ component Root
 component SlotBox
   props
     order: string
+    pos: string
     s: Style
     inner: Style
     e: Env
+  state quiet = 0
+  action idle(v: bool)
+    quiet = quiet
+  action still
+    quiet = quiet
+  action unkeyed(k: string)
+    quiet = quiet
   slot
   view
-    column order=num(order) position="relative" display=s.display flex-direction=s.flexDirection flex-grow=s.flexGrow flex-shrink=s.flexShrink flex-basis=s.flexBasis min-height=s.minHeight height=s.height width=s.width padding-top=s.paddingTop padding-right=s.paddingRight padding-bottom=s.paddingBottom padding-left=s.paddingLeft margin-top=s.marginTop margin-bottom=s.marginBottom align-items=s.alignItems justify-content=s.justifyContent box-sizing=s.boxSizing
+    // The outer box takes every style row (sticky strips, z-index, glass), as a document node does.
+    BoxEl(s=s, pos=pos, anim=(e.still ? "none" : s.animation), fade=false, dw="", dbg="", dbi=s.backgroundImage, dc="", dop="", dtr="", test="", domId="", role="", label="", lt="", se="", exitAnim="", hovering=idle, pointing=still, keying=unkeyed)
       column position="relative" width=inner.width max-width=inner.maxWidth height=inner.height min-height=inner.minHeight flex-grow=inner.flexGrow flex-shrink=inner.flexShrink display=inner.display flex-direction=inner.flexDirection animation=(e.still ? "none" : inner.animation)
         children
 
@@ -50,17 +70,17 @@ component Shell
   state pickerOpen = false
   action act(name: string, arg: string)
     if name == "home"
-      flags = []
+      flags = flags.filter(f => f.startsWith("keep-"))
       home()
     if name == "search"
-      flags = []
+      flags = flags.filter(f => f.startsWith("keep-"))
       search()
     if name == "live"
-      flags = []
+      flags = flags.filter(f => f.startsWith("keep-"))
       live()
     // A live library is the Live TV section, not a browse library: its id is no section id.
     if name == "library"
-      flags = []
+      flags = flags.filter(f => f.startsWith("keep-"))
       if p.libraries.filter(l => l.id == arg and l.kind == "live").length > 0
         live()
       else
@@ -68,16 +88,16 @@ component Shell
     if name == "toggle"
       flags = toggled(flags, arg)
     if name == "reset"
-      flags = []
+      flags = flags.filter(f => f.startsWith("keep-"))
     if name == "open"
       flags = (flags.includes(arg) ? flags : flags.concat([arg]))
     if name == "close"
       flags = flags.filter(x => x != arg)
     if name == "openPicker"
-      flags = []
+      flags = flags.filter(f => f.startsWith("keep-"))
       pickerOpen = true
     if name == "signOut"
-      flags = []
+      flags = flags.filter(f => f.startsWith("keep-"))
       signOut()
   action seen(token: string)
     flags = flags
@@ -88,9 +108,9 @@ component Shell
     pickerOpen = false
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route="shell", entry="", load="ready", detail=[], season="", home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query="", heroIndex=0, small=p.viewport.width < 640, tv=p.viewport.width >= 1600, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags, guide=homeGuide, tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0)] key="env"
-      Root(s=styleAt(env, doc.shell.root))
-        SlotBox(order=doc.shell.slotOrder, s=styleAt(env, doc.shell.slotStyle), inner=styleAt(env, doc.shell.slotInner), e=env)
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route="shell", entry="", load="ready", detail=[], season="", home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query="", heroIndex=0, small=p.viewport.width < 640, tv=p.viewport.width >= 1600, width=p.viewport.width, skinCount=p.skins.length, rowLoading=[], homeLoading=false, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags, guide=homeGuide, tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0)] key="env"
+      Root(s=styleAt(env, doc.shell.root), pos=(doc.shell.rootPos == 1 ? "absolute" : doc.shell.rootPos == 2 ? "sticky" : "relative"), e=env)
+        SlotBox(order=doc.shell.slotOrder, pos=(doc.shell.slotPos == 1 ? "absolute" : doc.shell.slotPos == 2 ? "sticky" : "relative"), s=styleAt(env, doc.shell.slotStyle), inner=styleAt(env, doc.shell.slotInner), e=env)
           children
         for n, i in doc.shell.nodes key=`${i}`
           for cc, j in ctxs5(n, rootCtx(), env) key=ctxKey(cc, j)
@@ -102,6 +122,7 @@ component Home
   props
     p: HomeProps
   inject
+    homeWidth: number
     doc: SkinDoc
     selectTitle: action
     observe: action
@@ -142,9 +163,9 @@ component Home
       flags = toggled(flags, arg)
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route="home", entry="", load="ready", detail=[], season="", home=[p.model], libraries=[], viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, tv=false, still=p.still, canLive=p.model.liveAvailable, flags=flags, guide=homeGuide, tile=homeTile, tuned=homeTuned, tunedId=homeTuned.map(c => c.id).join(""), zapping=homeZapping, favoriteCount=match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 })] key="env"
-      Root(s=styleAt(env, doc.home.root))
-        SlotBox(order=doc.home.slotOrder, s=styleAt(env, doc.home.slotStyle), inner=styleAt(env, doc.home.slotInner), e=env)
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route="home", entry="", load="ready", detail=[], season="", home=[p.model], libraries=[], viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, tv=homeWidth >= 1600, width=homeWidth, skinCount=0, rowLoading=p.rowMoreLoading, homeLoading=p.homeMoreLoading, still=p.still, canLive=p.model.liveAvailable, flags=flags, guide=homeGuide, tile=homeTile, tuned=homeTuned, tunedId=homeTuned.map(c => c.id).join(""), zapping=homeZapping, favoriteCount=match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 })] key="env"
+      Root(s=styleAt(env, doc.home.root), pos=(doc.home.rootPos == 1 ? "absolute" : doc.home.rootPos == 2 ? "sticky" : "relative"), e=env)
+        SlotBox(order=doc.home.slotOrder, pos=(doc.home.slotPos == 1 ? "absolute" : doc.home.slotPos == 2 ? "sticky" : "relative"), s=styleAt(env, doc.home.slotStyle), inner=styleAt(env, doc.home.slotInner), e=env)
           children
         for n, i in doc.home.nodes key=`${i}`
           for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
@@ -163,6 +184,7 @@ component Route
     play: action
     playExtra: action
     leave: action
+    retryFailed: action
   state flags: string[] = []
   action act(name: string, arg: string)
     if name == "select"
@@ -173,12 +195,14 @@ component Route
       playExtra(arg)
     if name == "back"
       leave()
+    if name == "retry"
+      retryFailed()
     if name == "toggle"
       flags = toggled(flags, arg)
   view
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=[], libraries=[], viewer="", section=p.route, query="", heroIndex=0, small=p.small, tv=p.tv, still=p.still, canLive=false, flags=flags, guide=[], tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0)] key="env"
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=[], libraries=[], viewer="", section=p.route, query="", heroIndex=0, small=p.small, tv=p.tv, width=p.width, skinCount=0, rowLoading=[], homeLoading=false, still=p.still, canLive=false, flags=flags, guide=[], tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0)] key="env"
       for tree in doc.routes.filter(t => t.name == p.route) key=tree.name
-        Root(s=styleAt(env, tree.root))
+        Root(s=styleAt(env, tree.root), pos=(tree.rootPos == 1 ? "absolute" : tree.rootPos == 2 ? "sticky" : "relative"), e=env)
           for n, i in tree.nodes key=`${i}`
             for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
               V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observeDetail)

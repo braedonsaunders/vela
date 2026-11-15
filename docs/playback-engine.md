@@ -1718,3 +1718,68 @@ headers. Immutable original-file readers still validate ranges/revisions and
 retain their same-source cache for direct seeks. This is client containment;
 it cannot turn a reused server resource into the correct seek-generation bytes.
 A new 1917 seek qualification waits for Ether's generation-unique producer fix.
+
+### Local offset-HLS generation check
+
+Candidate `9e1e4578186740d8` passed one generated local native-view transition
+from the old wrapped-AAC HLS fixture to a new source/seek generation whose
+`timelineOriginSeconds` is 4. Real FFmpeg output had first video PTS/DTS 4.000 s
+and two 2 s fMP4 segments with distinct generation-prefixed names. The new core
+runtime presented the target at title time 4.000 s in **86 ms**, zero drops and
+no failure. The initial wrapped-AAC source started in 288 ms, zero drops, and
+reported its exact priming correction. Seek intent immediately showed target 4
+and buffering. This establishes local offset mapping with a genuinely replaced
+HLS source; the earlier same-source cached seek was a different case.
+
+The first fixture construction was discarded before playback because its only
+video keyframe preceded the requested offset: stream copy kept the whole 8 s
+video while audio started at 4 s. The corrected fixture explicitly has 2 s video
+keyframes and its raw packet timestamps were checked before the single drive.
+No lab media or credentials were used. The native view, named Chrome and owned
+local server were disposed/closed. Lab.21 requalification remains pending the
+packager's first slot.
+
+### Lab.21 1917 HLS seek identity passes
+
+Core `9e1e4578186740d8`, H.264-copy/AAC fMP4 through the real native view,
+with Ether's generation-unique media names installed:
+
+| Measurement | Result |
+| --- | --- |
+| Play → first frame | **1,446.8 ms**, including **61.1 ms** plan |
+| First segment | 4.2 MB; **780 ms** first-byte wait |
+| Seek intent | Immediate target 60 s and buffering |
+| Authorized seek command | HTTP 200 in **168.9 ms** |
+| Seek → target frame/playing | **1,081.5 ms**, at **60.010 s** |
+| Seek segment acquisition | 10.9 MB; **795 ms** first-byte wait |
+| Continued play | **62.946 s**, 71 presented frames, **0 drops / 0 audio underruns** |
+| Maximum physical-clock frame age | **12.10 ms**; not a speaker/display lipsync measurement |
+| Recovery | None; no invalid-segment read or return to the beginning |
+
+The plan advanced source/seek `(1,1)` → `(1,2)` and reported origin 60. The HLS
+runtime was replaced with a new reader/demux; frame counters therefore restart
+per generation. The driver now correctly recognizes a replacement runtime plus
+an actual presented target frame, rather than comparing local epoch numbers
+between different instances. HLS has no original-file `byteReader`; an equality
+of two absent byteReader values is not retained-cache evidence.
+
+This fixes the lab.20 cached-byte failure. The historical native-TS wrapper
+startup was 13.96 s, but it has no equivalent measured seek baseline. A paired
+wrapper seek win is **not established**. The seek is close to the 1 s LAN target
+and most time is command/producer readiness, not the 5 ms decoder configure.
+
+The copy-keyframe-origin fix is **not installed** in this run. A reported target
+position proves transport/control progress, not exact picture mapping when a
+copy seek retains preceding-keyframe preroll. Ether's worker is making the actual
+source/keyframe origin truthful while retaining the requested `positionSeconds`.
+Raw output PTS may also include a common mux/B-frame shift; it must not be
+confused with the source/title keyframe origin. That separate clock gate, the
+refreshed 4K/HDR set and track/subtitle/live/recovery parity remain before a core
+production-default claim.
+
+Public session `V25AYLG4TOJABFC5JN4QKQCTGY`, test device
+`3425a4e1-279b-4cb5-a358-fcdf05b90d17`: Stop returned `ended`, auth revoke was
+accepted, all native-view video/canvas nodes were removed, and dedicated Chrome
+was closed before the slot was returned to packaging. Screenshot:
+`client/.exact/lab-core-1917-hls-lab21.png`; numeric-only record:
+`client/.exact/core-lab21-result.json`. No media bytes or private headers captured.

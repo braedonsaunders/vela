@@ -27,6 +27,8 @@ shape Style
   alignSelf: string
   justifyContent: string
   gap: string
+  columnGap: string
+  rowGap: string
   order: number
   gridTemplateColumns: string
   gridTemplateRows: string
@@ -45,6 +47,9 @@ shape Style
   scrollSnapType: string
   scrollSnapAlign: string
   scrollbarWidth: string
+  scrollBehavior: string
+  scrollPaddingLeft: string
+  colorScheme: string
   color: string
   backgroundColor: string
   backgroundImage: string
@@ -57,6 +62,8 @@ shape Style
   borderTopColor: string
   borderBottomWidth: string
   borderBottomColor: string
+  borderLeftWidth: string
+  borderLeftColor: string
   boxShadow: string
   filter: string
   backdropFilter: string
@@ -99,9 +106,25 @@ shape Cond
   v: string
   not: bool
 
+// A node's styles (indices into the document's table) in one state: base, hover, focus,
+// group hover, group focus, disabled, and the reduced-motion overlays (*2).
+shape StateRef
+  cond: Cond[]
+  s: number
+  hs: number
+  fs: number
+  gs: number
+  gfs: number
+  ds: number
+  hs2: number
+  fs2: number
+  gs2: number
+  gfs2: number
+
 // Where a node is drawn: the records repeat nodes stepped into, and the item's index.
 shape Ctx
   hot: bool
+  fhot: bool
   card: Card[]
   row: FeedRow[]
   hero: Card[]
@@ -130,6 +153,10 @@ shape Env
   heroIndex: number
   small: bool
   tv: bool
+  width: number
+  skinCount: number
+  rowLoading: string[]
+  homeLoading: bool
   still: bool
   canLive: bool
   flags: string[]
@@ -144,19 +171,33 @@ shape Env
 
 shape N10
   t: string
-  s: number
-  hs: number
-  fs: number
+  base: StateRef
+  sts: StateRef[]
   hh: bool
   hf: bool
   grp: bool
   hg: bool
-  gs: number
-  hs2: number
-  fs2: number
-  gs2: number
+  gf: bool
   fade: bool
   pos: number
+  dis: Cond[]
+  aexp: Cond[]
+  asel: Cond[]
+  acur: Cond[]
+  aprs: Cond[]
+  ahp: string
+  atitle: Part[]
+  brole: string
+  pfocus: Part[]
+  esc: string
+  escTo: Part[]
+  lt: string
+  se: string
+  ex: string
+  exs: string
+  ivb: string
+  ipaths: string[]
+  fr: string
   cond: Cond[]
   parts: Part[]
   src: Part[]
@@ -190,19 +231,33 @@ shape N10
 
 shape N9
   t: string
-  s: number
-  hs: number
-  fs: number
+  base: StateRef
+  sts: StateRef[]
   hh: bool
   hf: bool
   grp: bool
   hg: bool
-  gs: number
-  hs2: number
-  fs2: number
-  gs2: number
+  gf: bool
   fade: bool
   pos: number
+  dis: Cond[]
+  aexp: Cond[]
+  asel: Cond[]
+  acur: Cond[]
+  aprs: Cond[]
+  ahp: string
+  atitle: Part[]
+  brole: string
+  pfocus: Part[]
+  esc: string
+  escTo: Part[]
+  lt: string
+  se: string
+  ex: string
+  exs: string
+  ivb: string
+  ipaths: string[]
+  fr: string
   cond: Cond[]
   parts: Part[]
   src: Part[]
@@ -237,19 +292,33 @@ shape N9
 
 shape N8
   t: string
-  s: number
-  hs: number
-  fs: number
+  base: StateRef
+  sts: StateRef[]
   hh: bool
   hf: bool
   grp: bool
   hg: bool
-  gs: number
-  hs2: number
-  fs2: number
-  gs2: number
+  gf: bool
   fade: bool
   pos: number
+  dis: Cond[]
+  aexp: Cond[]
+  asel: Cond[]
+  acur: Cond[]
+  aprs: Cond[]
+  ahp: string
+  atitle: Part[]
+  brole: string
+  pfocus: Part[]
+  esc: string
+  escTo: Part[]
+  lt: string
+  se: string
+  ex: string
+  exs: string
+  ivb: string
+  ipaths: string[]
+  fr: string
   cond: Cond[]
   parts: Part[]
   src: Part[]
@@ -284,19 +353,33 @@ shape N8
 
 shape N7
   t: string
-  s: number
-  hs: number
-  fs: number
+  base: StateRef
+  sts: StateRef[]
   hh: bool
   hf: bool
   grp: bool
   hg: bool
-  gs: number
-  hs2: number
-  fs2: number
-  gs2: number
+  gf: bool
   fade: bool
   pos: number
+  dis: Cond[]
+  aexp: Cond[]
+  asel: Cond[]
+  acur: Cond[]
+  aprs: Cond[]
+  ahp: string
+  atitle: Part[]
+  brole: string
+  pfocus: Part[]
+  esc: string
+  escTo: Part[]
+  lt: string
+  se: string
+  ex: string
+  exs: string
+  ivb: string
+  ipaths: string[]
+  fr: string
   cond: Cond[]
   parts: Part[]
   src: Part[]
@@ -331,19 +414,33 @@ shape N7
 
 shape N6
   t: string
-  s: number
-  hs: number
-  fs: number
+  base: StateRef
+  sts: StateRef[]
   hh: bool
   hf: bool
   grp: bool
   hg: bool
-  gs: number
-  hs2: number
-  fs2: number
-  gs2: number
+  gf: bool
   fade: bool
   pos: number
+  dis: Cond[]
+  aexp: Cond[]
+  asel: Cond[]
+  acur: Cond[]
+  aprs: Cond[]
+  ahp: string
+  atitle: Part[]
+  brole: string
+  pfocus: Part[]
+  esc: string
+  escTo: Part[]
+  lt: string
+  se: string
+  ex: string
+  exs: string
+  ivb: string
+  ipaths: string[]
+  fr: string
   cond: Cond[]
   parts: Part[]
   src: Part[]
@@ -378,19 +475,33 @@ shape N6
 
 shape N5
   t: string
-  s: number
-  hs: number
-  fs: number
+  base: StateRef
+  sts: StateRef[]
   hh: bool
   hf: bool
   grp: bool
   hg: bool
-  gs: number
-  hs2: number
-  fs2: number
-  gs2: number
+  gf: bool
   fade: bool
   pos: number
+  dis: Cond[]
+  aexp: Cond[]
+  asel: Cond[]
+  acur: Cond[]
+  aprs: Cond[]
+  ahp: string
+  atitle: Part[]
+  brole: string
+  pfocus: Part[]
+  esc: string
+  escTo: Part[]
+  lt: string
+  se: string
+  ex: string
+  exs: string
+  ivb: string
+  ipaths: string[]
+  fr: string
   cond: Cond[]
   parts: Part[]
   src: Part[]
@@ -425,19 +536,33 @@ shape N5
 
 shape N4
   t: string
-  s: number
-  hs: number
-  fs: number
+  base: StateRef
+  sts: StateRef[]
   hh: bool
   hf: bool
   grp: bool
   hg: bool
-  gs: number
-  hs2: number
-  fs2: number
-  gs2: number
+  gf: bool
   fade: bool
   pos: number
+  dis: Cond[]
+  aexp: Cond[]
+  asel: Cond[]
+  acur: Cond[]
+  aprs: Cond[]
+  ahp: string
+  atitle: Part[]
+  brole: string
+  pfocus: Part[]
+  esc: string
+  escTo: Part[]
+  lt: string
+  se: string
+  ex: string
+  exs: string
+  ivb: string
+  ipaths: string[]
+  fr: string
   cond: Cond[]
   parts: Part[]
   src: Part[]
@@ -472,19 +597,33 @@ shape N4
 
 shape N3
   t: string
-  s: number
-  hs: number
-  fs: number
+  base: StateRef
+  sts: StateRef[]
   hh: bool
   hf: bool
   grp: bool
   hg: bool
-  gs: number
-  hs2: number
-  fs2: number
-  gs2: number
+  gf: bool
   fade: bool
   pos: number
+  dis: Cond[]
+  aexp: Cond[]
+  asel: Cond[]
+  acur: Cond[]
+  aprs: Cond[]
+  ahp: string
+  atitle: Part[]
+  brole: string
+  pfocus: Part[]
+  esc: string
+  escTo: Part[]
+  lt: string
+  se: string
+  ex: string
+  exs: string
+  ivb: string
+  ipaths: string[]
+  fr: string
   cond: Cond[]
   parts: Part[]
   src: Part[]
@@ -519,19 +658,33 @@ shape N3
 
 shape N2
   t: string
-  s: number
-  hs: number
-  fs: number
+  base: StateRef
+  sts: StateRef[]
   hh: bool
   hf: bool
   grp: bool
   hg: bool
-  gs: number
-  hs2: number
-  fs2: number
-  gs2: number
+  gf: bool
   fade: bool
   pos: number
+  dis: Cond[]
+  aexp: Cond[]
+  asel: Cond[]
+  acur: Cond[]
+  aprs: Cond[]
+  ahp: string
+  atitle: Part[]
+  brole: string
+  pfocus: Part[]
+  esc: string
+  escTo: Part[]
+  lt: string
+  se: string
+  ex: string
+  exs: string
+  ivb: string
+  ipaths: string[]
+  fr: string
   cond: Cond[]
   parts: Part[]
   src: Part[]
@@ -566,19 +719,33 @@ shape N2
 
 shape N1
   t: string
-  s: number
-  hs: number
-  fs: number
+  base: StateRef
+  sts: StateRef[]
   hh: bool
   hf: bool
   grp: bool
   hg: bool
-  gs: number
-  hs2: number
-  fs2: number
-  gs2: number
+  gf: bool
   fade: bool
   pos: number
+  dis: Cond[]
+  aexp: Cond[]
+  asel: Cond[]
+  acur: Cond[]
+  aprs: Cond[]
+  ahp: string
+  atitle: Part[]
+  brole: string
+  pfocus: Part[]
+  esc: string
+  escTo: Part[]
+  lt: string
+  se: string
+  ex: string
+  exs: string
+  ivb: string
+  ipaths: string[]
+  fr: string
   cond: Cond[]
   parts: Part[]
   src: Part[]
@@ -617,7 +784,9 @@ shape N1
 shape DocSlot
   present: bool
   root: number
+  rootPos: number
   slotStyle: number
+  slotPos: number
   slotInner: number
   slotOrder: string
   nodes: N1[]
@@ -625,7 +794,9 @@ shape DocSlot
 shape ShellSlot
   present: bool
   root: number
+  rootPos: number
   slotStyle: number
+  slotPos: number
   slotInner: number
   slotOrder: string
   nodes: N5[]
@@ -639,13 +810,16 @@ shape RouteProps
   season: string
   small: bool
   tv: bool
+  width: number
   still: bool
 
 // A route's tree (the route view draws the one named after the current stack entry).
 shape RouteTree
   name: string
   root: number
+  rootPos: number
   slotStyle: number
+  slotPos: number
   slotInner: number
   slotOrder: string
   nodes: N1[]
@@ -654,6 +828,7 @@ shape RouteTree
 shape SkinDoc
   id: string
   fontsJson: string
+  keyframesCss: string
   styles: Style[]
   shell: ShellSlot
   home: DocSlot
@@ -661,6 +836,8 @@ shape SkinDoc
   liveHome: bool
   detailWide: string
   detailSmall: string
+  detailFrom: number
+  detailSplit: string
 
-fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", borderTopWidth="", borderTopColor="", borderBottomWidth="", borderBottomColor="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", textOverflow="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, rotate=0, perspective="", transition="", animation="", pointerEvents="", cursor="")
-fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", styles=[], shell=ShellSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen")
+fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", columnGap="", rowGap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", scrollBehavior="", scrollPaddingLeft="", colorScheme="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", borderTopWidth="", borderTopColor="", borderBottomWidth="", borderBottomColor="", borderLeftWidth="", borderLeftColor="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", textOverflow="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, rotate=0, perspective="", transition="", animation="", pointerEvents="", cursor="")
+fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none")

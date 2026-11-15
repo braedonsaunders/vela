@@ -1,5 +1,5 @@
 use SkinManifest from "./models.contract"
-use resolveSkin from "./skins.generated.contract"
+use resolveSkin, documentsSkin from "./skins.generated.contract"
 use SkinDoc, emptyDoc from "../renderer/shapes.contract"
 
 // One runtime skin pack the server installed: data only, validated by the data
@@ -58,9 +58,11 @@ members Client
   // What the engine loader and vela-engine keep: the engine of the viewer's own pick
   // (none while following the server or while the owner forces the default) and the
   // server default's engine. Hand-off waits for the server's answer and for playback to end.
-  derive pickEngine = (skin == "" or appearance.force ? "" : match first(appearance.packs.filter(p => p.id == skin)) { case some(p) => p.engine, case none => resolveSkin(skin) })
-  derive serverEngine = (appearance.defaultEngineId != "" ? resolveSkin(appearance.defaultEngineId) : resolveSkin(serverSkin))
-  derive engineSettled = (current(appearanceBase) or current(home)) and playingId == ""
+  // A skin document (built-in or the server's) runs on the documents engine.
+  derive pickEngine = (skin == "" or appearance.force ? "" : match first(appearance.packs.filter(p => p.id == skin)) { case some(p) => p.engine, case none => (appearance.docs.filter(d => d.id == skin).length > 0 ? documentsSkin() : resolveSkin(skin)) })
+  derive serverEngine = (appearance.defaultEngineId != "" ? resolveSkin(appearance.defaultEngineId) : appearance.docs.filter(d => d.id == serverSkin).length > 0 ? documentsSkin() : resolveSkin(serverSkin))
+  // Hand-off waits for the appearance answer (or its failure): before it, a document pick is unknown.
+  derive engineSettled = (current(appearanceBase) or failed(appearanceBase)) and playingId == ""
   // A skin document the viewer or server wants, drawn by the doc engine once it has loaded.
   derive activeDocUrl = match first(appearance.docs.filter(d => d.id == requestedSkin)) { case some(d) => d.url, case none => "" }
   derive docWidth = (viewport.width < 640 ? 400 : viewport.width >= 1200 ? 1300 : 900)

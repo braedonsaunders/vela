@@ -521,8 +521,10 @@ members Client
   derive pageColor = traits.page
   derive inkColor = traits.ink
   // requestedSkin and activePack come from the server appearance (appearance.contract).
-  // A server document draws through the documents engine; a requested id (or alias) through its skin.
-  derive wantedSkin = match activePack { case some(p) => p.engine, case none => (docReady ? documentsSkin() : resolveSkin(requestedSkin) == documentsSkin() ? defaultSkin() : resolveSkin(requestedSkin)) }
+  // A requested document draws through the documents engine from the moment it is requested, not
+  // once it has loaded: the documents engine must keep wanting itself while its document loads, or
+  // it hands the page straight back and the two builds bounce. A document that fails falls back.
+  derive wantedSkin = match activePack { case some(p) => p.engine, case none => (activeDocUrl != "" and not failed(skinDocument) ? documentsSkin() : resolveSkin(requestedSkin) == documentsSkin() ? defaultSkin() : resolveSkin(requestedSkin)) }
   // A single-engine build always presents its own engine; vela-engine hands off to the wanted one.
   derive activeSkin = (buildEngine() == "" ? wantedSkin : buildEngine())
 

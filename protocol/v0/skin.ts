@@ -20,7 +20,7 @@ export type StyleProperty =
   | 'grid-template-columns' | 'grid-template-rows' | 'grid-column' | 'grid-row'
   | 'margin' | 'padding' | 'padding-top' | 'padding-right' | 'padding-bottom' | 'padding-left' | 'margin-top' | 'margin-right' | 'margin-bottom' | 'margin-left' | 'overflow' | 'overflow-x' | 'overflow-y' | 'scroll-snap-type' | 'scroll-snap-align' | 'scrollbar-width'
   | 'color' | 'background-color' | 'background-image' | 'opacity'
-  | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'border-top-width' | 'border-top-color' | 'border-bottom-width' | 'border-bottom-color' | 'outline' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
+  | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'border-left-width' | 'border-left-color' | 'column-gap' | 'row-gap' | 'scroll-behavior' | 'scroll-padding-left' | 'color-scheme' | 'border-top-width' | 'border-top-color' | 'border-bottom-width' | 'border-bottom-color' | 'outline' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
   | 'font-family' | 'font-size' | 'font-weight' | 'font-style' | 'line-height' | 'letter-spacing' | 'text-transform'
   | 'text-align' | 'text-shadow' | '-webkit-text-stroke' | 'text-overflow' | 'line-clamp' | 'white-space' | 'font-variant-numeric'
   | 'object-fit' | 'transform-origin' | 'translate' | 'scale' | 'rotate' | 'perspective'
@@ -39,16 +39,29 @@ export interface Condition {
 export type Action =
   | 'select' | 'play' | 'pickHero' | 'home' | 'search' | 'live' | 'library'
   | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
+  /** A failed route asks again for what failed (`env.canRetry`). */
+  | 'retry'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
 
-interface NodeBase {
+interface NodeBase extends Breakpoints {
   /** Overrides by viewport: `small` under 640 px, `wide` from 1200 px. */
   style?: Style; small?: Style; wide?: Style;
   /** Pointer hover and keyboard focus overlays (the renderer tracks both). */
   hover?: Style; focus?: Style;
-  /** A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here. */
-  group?: boolean; groupHover?: Style;
+  /** A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`. */
+  group?: boolean; groupHover?: Style; groupFocus?: Style;
+  /** The first state whose conditions hold replaces `style` on the same element (transitions run). */
+  states?: { when: Condition[]; style: Style; hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style }[];
+  /** A pressable box: disabled while these hold, drawn with `disabledStyle`. */
+  disabled?: Condition[]; disabledStyle?: Style;
+  /** The press button's accessibility state and role. */
+  a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; haspopup?: string; title?: Template; role?: string };
+  /** Escape clears this flag and moves focus to `returnFocus` (an element id). */
+  escape?: string; returnFocus?: Template;
+  layoutTransition?: string; sharedElement?: string;
+  /** A motion preset played as the node leaves. */
+  exit?: string;
   when?: Condition[];
   /** A motion preset by name (`motion` table), its delay staggered by the item index. */
   motion?: string; stagger?: { step: number; cap: number };
@@ -59,12 +72,14 @@ interface NodeBase {
 export interface BoxNode extends NodeBase {
   type: 'box';
   /** Pressing it: `press` with an optional Template argument (`toggle` and `open`/`close` take a flag name). */
-  press?: { action: Action; arg?: Template };
+  press?: { action: Action; arg?: Template; /** Focus this element id after the action. */ focus?: Template };
   children?: Node[];
 }
 export interface TextNode extends NodeBase { type: 'text'; text: Template }
+/** Breakpoints at the document's own widths, evaluated against the slot's width. */
+export interface Breakpoints { below?: Record<string, Style>; above?: Record<string, Style> }
 export interface ImageNode extends NodeBase { type: 'image'; src: Template; alt?: Template; /** Fade in once loaded. */ fade?: boolean }
-export interface IconNode extends NodeBase { type: 'icon'; symbol: string }
+export interface IconNode extends NodeBase { type: 'icon'; /** A platform symbol, */ symbol?: string; /** or the document's own glyph: SVG path data (up to 8) painted in currentColor. */ paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
 /** Repeat a template over a collection from the vocabulary (`home.rows`, `row.items`, `home.heroes`, `nav.destinations`). */
 export interface RepeatNode extends NodeBase { type: 'repeat'; over: string; limit?: number; item: Node }
 /** A template from the document's `templates`, inlined where it is used. */
@@ -83,7 +98,7 @@ export interface MotionPreset {
   still?: { keyframes: string; duration: number };
 }
 
-export interface SkinFont { family: string; files: { url: string; weight: number; style: 'normal' | 'italic' }[]; sizeAdjust?: number }
+export interface SkinFont { family: string; /** weight: a number, or a range "300 700" for a variable face. */ files: { url: string; weight: number | string; style: 'normal' | 'italic' }[]; sizeAdjust?: number }
 
 export interface SkinDocument {
   schema: 1;
@@ -98,6 +113,8 @@ export interface SkinDocument {
   strings?: Record<string, Record<string, string>>;
   fonts?: Record<string, SkinFont>;
   motion?: Record<string, MotionPreset>;
+  /** The document's own keyframes (`keyframes: "doc:<name>"` in a preset): opacity, translate (px/%), scale, rotate (deg). */
+  keyframes?: Record<string, Record<string, { opacity?: number; translate?: string; scale?: number; rotate?: number }>>;
   templates?: Record<string, Node>;
   /** One tree per foundation slot; a slot left out uses cinematic's compiled one. */
   slots: Partial<Record<'shell' | 'home' | 'row' | 'card' | 'status', Node>>;
@@ -106,5 +123,6 @@ export interface SkinDocument {
   /** `home: true` makes home a live surface: the guide's listings, clock and one preview tile run there (docs/skin-schema.md, "Live home"). */
   live?: { home?: boolean };
   /** Detail route presentation per viewport class. */
-  detail?: { small?: 'fullscreen' | 'modal' | 'stack'; wide?: 'fullscreen' | 'modal' | 'stack'; split?: string };
+  /** The title page's presentation below and from `from` px (default 640), and the home pane width in px it splits beside it from there. */
+  detail?: { from?: number; small?: 'fullscreen' | 'modal' | 'stack'; wide?: 'fullscreen' | 'modal' | 'stack'; split?: string };
 }
