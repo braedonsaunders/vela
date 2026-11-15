@@ -253,42 +253,46 @@ members Client
     previewTarget = ""
     previewRow = ""
     previewRetryAt = 0
-    previewGeneration = previewGeneration + 1
+    let next = previewGeneration + 1
+    previewGeneration = next
     previewAttempts = 0
     // A slide's trailer starts only after it has been on screen for three seconds.
     previewDwellAt = time.epochAtZero + performanceNow() + 3000
-    cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
-    send previewCancelled = uiPreviewCancel(previewGeneration)
+    cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=next)
+    send previewCancelled = uiPreviewCancel(next)
   action previewIntent(cardId: string, rowId: string, on: bool)
     if on and previewAllowed and cardId != "" and allHomeRows.filter(r => r.id == rowId and r.previewOnFocus and r.items.filter(c => c.id == cardId).length > 0).length > 0
       if previewTarget != cardId or previewRow != rowId
         previewTarget = cardId
         previewRow = rowId
         previewRetryAt = 0
-        previewGeneration = previewGeneration + 1
+        let next = previewGeneration + 1
+        previewGeneration = next
         previewAttempts = 0
         previewDwellAt = time.epochAtZero + performanceNow() + 700
-        cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
-        send previewCancelled = uiPreviewCancel(previewGeneration)
+        cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=next)
+        send previewCancelled = uiPreviewCancel(next)
     else if not on and ((previewTarget != "" and (rowId == "" or rowId == previewRow) and (cardId == "" or cardId == previewTarget)) or (rowId == "" and cardId == "" and previewRow == "@hero"))
       previewTarget = ""
       previewRow = ""
       previewRetryAt = 0
-      previewGeneration = previewGeneration + 1
+      let next = previewGeneration + 1
+      previewGeneration = next
       previewAttempts = 0
       previewDwellAt = time.epochAtZero + performanceNow() + 700
-      cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
-      send previewCancelled = uiPreviewCancel(previewGeneration)
+      cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=next)
+      send previewCancelled = uiPreviewCancel(next)
   action cancelPreviewOnScroll(x: number, y: number)
     if previewTarget != "" or previewRow == "@hero"
       previewTarget = ""
       previewRow = ""
       previewRetryAt = 0
-      previewGeneration = previewGeneration + 1
+      let next = previewGeneration + 1
+      previewGeneration = next
       previewAttempts = 0
       previewDwellAt = time.epochAtZero + performanceNow() + 700
-      cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
-      send previewCancelled = uiPreviewCancel(previewGeneration)
+      cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=next)
+      send previewCancelled = uiPreviewCancel(next)
   task previewDwell when previewDesired != "" key=`${previewDesired}:${previewGeneration}`
     after(700, requestPreview)
   action requestPreview

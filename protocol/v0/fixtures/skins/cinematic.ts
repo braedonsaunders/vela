@@ -20,7 +20,7 @@ const pill = (primary: boolean): Style => ({
 const wordmark = (size: number): Node => ({ type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: `${Math.round(size * 2.629)}px`, height: `${size}px` } });
 
 const navItem: Node = { type: 'box', group: true, press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}',
-  style: { position: 'relative', display: 'flex', 'align-items': 'center', height: '40px', padding: '0px 14px', 'border-radius': '999px', color: 'ink.secondary', 'font-weight': '550', 'font-size': '15px', 'white-space': 'nowrap' },
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '40px', padding: '0px 14px', 'border-radius': '999px', color: 'ink.secondary', 'font-weight': '550', 'font-size': '15px', 'white-space': 'nowrap' },
   hover: { 'background-color': 'cinematic.control', color: 'ink.primary' },
   children: [
     { type: 'text', text: '{dest.name}' },
@@ -111,7 +111,8 @@ const heroMore = (primary: boolean): Node => ({ type: 'box', press: { action: 's
 const heroCopy: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.searching', not: true }], item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', ...gutter, gap: '16px', 'max-width': '46rem' }, small: { ...gutterSmall, gap: '12px', 'max-width': 'none' }, children: [
   { type: 'widget', widget: 'observe', params: { receipt: '{hero.receipt}' } },
   { type: 'box', motion: enter(220), style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', 'align-self': 'flex-start', padding: '6px 12px 6px 10px', 'border-radius': '999px', 'background-color': 'cinematic.glass', 'backdrop-filter': 'blur(14px)', border: '1px solid var(--cinematic.glass-edge)' }, children: [
-    { type: 'box', style: { width: '6px', height: '6px', 'border-radius': '3px', 'background-color': 'brand.warm' } },
+    { type: 'box', when: [{ test: 'hero.accent' }], style: { width: '6px', height: '6px', 'border-radius': '3px', 'background-color': '{hero.accent}' } },
+    { type: 'box', when: [{ test: 'hero.accent', not: true }], style: { width: '6px', height: '6px', 'border-radius': '3px', 'background-color': 'brand.warm' } },
     { type: 'text', text: '{heroAct.reasonLabel}', style: { 'font-size': '11px', 'font-weight': '650', 'letter-spacing': '0.08em', 'text-transform': 'uppercase', color: 'ink.primary' } },
   ] },
   { type: 'image', when: [{ test: 'hero.logo' }], src: '{hero.logo}', alt: '{hero.name}', role: 'heading', level: 1, motion: enter(300), style: { height: '150px', width: 'auto', 'max-width': 'min(520px, 70%)', 'object-fit': 'contain', 'align-self': 'flex-start' }, small: { height: '96px', 'max-width': '78%' } },
@@ -125,7 +126,11 @@ const heroCopy: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.
 const dot = (current: boolean): Node => ({ type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', when: [{ test: 'index.current', not: !current }],
   style: { position: 'relative', width: current ? '34px' : '8px', height: '8px', 'border-radius': '4px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': current ? 'cinematic.track-strong' : 'cinematic.glass-edge-strong' },
   hover: { 'background-color': 'cinematic.control-hover' },
-  children: current ? [{ type: 'box', when: [{ test: 'env.rotating' }], motion: 'heroFill', style: { position: 'absolute', inset: '0px', 'border-radius': '4px', 'background-color': 'ink.primary' } }] : [] });
+  // The current dot is filled; while the carousel rotates the fill grows over the interval.
+  children: current ? [
+    { type: 'box', when: [{ test: 'env.rotating' }], motion: 'heroFill', style: { position: 'absolute', inset: '0px', 'border-radius': '4px', 'background-color': 'ink.primary' } },
+    { type: 'box', when: [{ test: 'env.rotating', not: true }], style: { position: 'absolute', inset: '0px', 'border-radius': '4px', 'background-color': 'ink.primary' } },
+  ] : [] });
 const dots: Node = { type: 'box', role: 'group', label: '{s:featured}', motion: enter(560), when: [{ test: 'env.searching', not: true }, { test: 'env.heroCount', is: 'gt', value: '1' }],
   style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', ...gutter, 'padding-top': '22px' } as Style, small: { ...gutterSmall, 'padding-top': '16px' } as Style, children: [
     { type: 'repeat', over: 'home.heroes', item: { type: 'box', style: { display: 'flex' }, children: [dot(true), dot(false)] } },

@@ -4,6 +4,7 @@
  *
  *   bun tools/check.ts <engine>                       contract build, errors only (under the build lock)
  *   bun tools/check.ts <engine> --agent "<op>" …      then drive it: bun exact.mjs agent web <ops>
+ *                                                     (under reduced motion; --motion drives with motion)
  *
  * The client (tracked and untracked files of this checkout) is staged under
  * .artifacts/check/<engine>/ and profiled with prepareEngine; the checkout is never touched.
@@ -49,4 +50,13 @@ if (agent < 0) {
   process.exit(run([lock, process.execPath, 'exact.mjs', 'contract', 'build', 'app.contract', '--json', '--errors-only'], fast) ?? 1);
 }
 // A drive builds and serves the profile; it is not wrapped in the lock (it would hold it for the whole session).
-process.exit(run([process.execPath, 'exact.mjs', 'agent', 'web', ...rest.slice(agent + 1)], fast) ?? 1);
+// A drive runs under reduced motion unless --motion asks for motion: on the agent's virtual
+// clock an ambient player's frames stall, and still pages compare frame for frame.
+const args = rest.slice(agent + 1);
+const motion = args.includes('--motion');
+const drive = args.filter(a => a !== '--motion');
+const VALUED = new Set(['--port', '--size', '--storage', '--epoch', '--sim', '--chrome', '--url', '--browser', '--backend']);
+let first = 0;
+while (first < drive.length && drive[first].startsWith('--')) first += VALUED.has(drive[first]) ? 2 : 1;
+if (!motion) drive.splice(first, 0, 'prefer prefers-reduced-motion reduce');
+process.exit(run([process.execPath, 'exact.mjs', 'agent', 'web', ...drive], fast) ?? 1);
