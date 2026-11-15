@@ -56,8 +56,14 @@ rules. Universal and MSE playback send native-server credentials in request head
 in media URLs. Only native-element fallback may use a URL credential: Plex uses a
 short-lived delegation token; Jellyfin may use its api_key in memory only. Such URLs
 are never persisted, logged, sent in diagnostics or observations, or exposed to skins,
-and errors must redact them. The private data-to-host transfer needed for header
-authorization remains to be confirmed with Exact; it is not yet implemented.
+and errors must redact them. On the web, the data module supplies a foundation-owned
+`mediaAuth` player prop as in-memory JSON `{handle, origin, pathPrefix, headers}`,
+just in time from secret storage. It is not part of a plan, renderer or skin model,
+observation, diagnostic, telemetry, or DOM attribute. The player holds it only on its
+element handle, enforces the origin and path scope on every request and redirect,
+and drops it on disposal or server switch. Native fallback URLs are minted only at
+attachment and redacted before any error crosses into Contract. The bridge is designed
+but not yet implemented; renderer isolation must be confirmed before integration.
 
 Session updates use the adapter's stream when supported, including cursor resume and
 snapshot fallback. A server without an event stream uses bounded, cancellable snapshot
