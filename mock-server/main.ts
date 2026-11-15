@@ -30,7 +30,7 @@ function authenticate(req: Request): Grant {
   return g;
 }
 function fail(cls: V.ProtocolError['class'], code: string, message: string, extra: Partial<V.ProtocolError> = {}): never {
-  const status = { auth: 401, policy: 403, 'not-found': 404, source: 502, decoder: 422, capacity: 503, transient: 503, request: 400, conflict: 409 }[cls];
+  const status = { auth: 401, policy: 403, 'not-found': 404, source: 502, decoder: 422, playback: 422, capacity: 503, transient: 503, request: 400, conflict: 409 }[cls];
   throw Response.json({ error: { class: cls, code, message, retry: { allowed: ['capacity', 'transient'].includes(cls), ...(cls === 'capacity' ? { afterSeconds: 3, maxAttempts: 3 } : {}) }, ...extra } } satisfies V.ErrorResponse, { status, headers: { 'Cache-Control': 'no-store', ...(cls === 'capacity' ? { 'Retry-After': '3' } : {}) } });
 }
 const mac = (value: string) => createHmac('sha256', secret).update(value).digest('base64url');

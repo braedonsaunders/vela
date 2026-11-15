@@ -38,6 +38,9 @@ shape GuideChannel
   nowProgress: number
   nowRemaining: string
   nextLabel: string
+  nowArt: string
+  nowEpisode: string
+  nowGenre: string
   programmes: GuideProgramme[]
 
 shape GuideTab

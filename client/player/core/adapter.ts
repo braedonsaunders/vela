@@ -77,7 +77,7 @@ export class UniversalRuntime implements OriginalBackend {
     const track=state.tracks.find(track=>track.kind==='video');
     return {video:track?videoInfo({...track,colorTransfer:track.color.transfer??undefined}):null,bufferAheadSeconds:state.bufferAheadSeconds,throughputBps:state.throughputBps,throughputHistory:state.throughputHistory,state:state.state==='idle'?'loading':state.state,position:state.positionUs/1e6,duration:state.durationUs===null?null:state.durationUs/1e6,
       frames:state.decoded,dropped:state.dropped,presentedFrames:state.presented,decoderReady:state.tracks.some(track=>track.kind==='video'),
-      audioTrackId,metadataDiscrepancies:this.notes.slice(0,32)};
+      audioTrackId,metadataDiscrepancies:[...this.notes,...state.diagnostics].slice(0,32)};
   }
   get presentationTelemetry(){return {presentedFrameCount:this.core.snapshot().presented,...this.core.presentationTelemetry};}
   async open(media:OriginalMedia){

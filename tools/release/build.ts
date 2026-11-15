@@ -21,6 +21,7 @@ const work = await mkdtemp(join(output,'.multi-'));
 try {
   const dist = join(work,'dist'); await mkdir(dist);
   const universalAssets = await stageUniversalAssets(assetArgument.slice('--universal-assets='.length), dist);
+  await run([process.execPath, join(root, 'tools/skin.ts'), 'documents', join(dist, 'skins')]);
   const engines: Record<string,{base:string;appBytes:number;appGzipBytes:number}> = {};
   for (const engine of await installedEngines(join(root, 'client'))) {
     const stem = `vela-${version}-${engine}`, childManifest = join(output,`${stem}.manifest.json`);
@@ -50,7 +51,7 @@ try {
   async function inventory(dir:string) {for(const e of (await readdir(dir,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))) {const path=join(dir,e.name);if(e.isDirectory())await inventory(path);else {const b=await readFile(path);files.push({path:relative(dist,path).split('\\').join('/'),bytes:b.length,sha256:hash(b)});}}}
   await inventory(dist);
   const rootFiles=[{url:`/vela/${loaderName}`,sha256:hash(loader)},{url:pwaUrl,sha256:pwaHash},...files.filter(f=>f.path==='offline.html').map(f=>({url:`/vela/${f.path}`,sha256:f.sha256}))];
-  const engineFiles=files.filter(f=>f.path.startsWith('engines/') || f.path.startsWith('universal/')).flatMap(f=>[{url:`/vela/${f.path}`,sha256:f.sha256}, ...(f.path.startsWith('universal/') ? [{url:`/vela/${f.path}?v=${universalAssets.assetKey}`,sha256:f.sha256}] : [])]);
+  const engineFiles=files.filter(f=>f.path.startsWith('engines/') || f.path.startsWith('universal/') || (f.path.startsWith('skins/') && f.path !== 'skins/catalog.json')).flatMap(f=>[{url:`/vela/${f.path}`,sha256:f.sha256}, ...(f.path.startsWith('universal/') ? [{url:`/vela/${f.path}?v=${universalAssets.assetKey}`,sha256:f.sha256}] : [])]);
   const shell={version,digest:hash(JSON.stringify(files)).slice(0,16),offlineUrl:'/vela/offline.html',files:rootFiles,engineFiles};
   const sw=(await readFile(join(import.meta.dir,'sw.js'),'utf8')).replace('const shell = __VELA_SHELL__;',`const shell = ${JSON.stringify(shell)};`);
   await writeFile(join(dist,'sw.js'),sw);const swBytes=await readFile(join(dist,'sw.js'));files.push({path:'sw.js',bytes:swBytes.length,sha256:hash(swBytes)});

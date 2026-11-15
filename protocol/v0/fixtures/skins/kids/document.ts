@@ -3,7 +3,7 @@
 // (Watch, Shows, Movies), very little text, gentle bouncy motion that goes calm under
 // reduced motion, and a grown-ups corner behind a two-question gate so settings and
 // sign-out stay out of small hands. Assets are this document's own, served beside it
-// from kids/assets/ (all drawn for Vela; no third-party art, so no licences to record).
+// from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
 const version = '1.0.0';
