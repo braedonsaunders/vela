@@ -147,6 +147,7 @@ export class EtherAdapter implements ServerAdapter {
   }
   trailerPreview(id: string, request: V.TrailerPreviewRequest) { return this.request<V.TrailerPreviewResponse>('POST', `/titles/${encodeURIComponent(id)}/trailer-preview`, request); }
   bootstrap() { return this.request<V.Bootstrap>('GET', '/bootstrap', undefined, true, true); }
+  bootstrapFresh() { return this.request<V.Bootstrap>('GET', '/bootstrap'); }
   rows(q: V.RowsQuery) { return this.request<V.Page<V.Row>>('GET', `/rows${query(q)}`, undefined, true, true); }
   row(id: string, cursor?: string, limit?: number) { return this.request<V.Row>('GET', `/rows/${encodeURIComponent(id)}${query({ cursor, limit })}`, undefined, true, true); }
   libraries(q: V.LibrariesQuery) { return this.request<V.Page<V.Library>>('GET', `/libraries${query(q)}`, undefined, true, true); }
@@ -158,7 +159,7 @@ export class EtherAdapter implements ServerAdapter {
   aiJob(id: string) { return this.request<V.AISearchJob>('GET', `/search/ai/${encodeURIComponent(id)}`); }
   cancelAI(id: string, r: V.CancelRequest) { return this.request<V.AISearchJob>('POST', `/search/ai/${encodeURIComponent(id)}/cancel`, r); }
   interactions(r: V.InteractionsRequest) { return this.request<V.Ack>('POST', '/interactions', r); }
-  playback(r: V.PlaybackRequest) { return this.request<V.PlaybackPlan>('POST', '/playback', r); }
+  playback(r: V.PlaybackRequest) { return this.request<V.PlaybackPlan | V.PlaybackPreparing>('POST', '/playback', r); }
   createAudioFallback(id: string, r: V.AudioFallbackRequest, signal?: AbortSignal) { return this.request<V.AudioFallbackResponse>('POST', `/sessions/${encodeURIComponent(id)}/audio-fallback`, r, true, false, true, signal); }
   cancelAudioFallback(id: string, audioId: string, r: V.Mutation, signal?: AbortSignal) { return this.request<V.Ack>('DELETE', `/sessions/${encodeURIComponent(id)}/audio-fallback/${encodeURIComponent(audioId)}`, r, true, false, true, signal); }
   observe(id: string, r: V.PlayerObservation) { return this.request<V.Ack>('POST', `/sessions/${encodeURIComponent(id)}/observations`, r); }

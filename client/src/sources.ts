@@ -1,5 +1,5 @@
 import type { Answer, Sources } from '../app.contract.d.ts';
-import type { AISearchJob, ClientCapabilities, Device, ServerCapabilities, Tokens, LibraryBrowseQuery, LibrarySort, SortDirection, TitleKind } from '../wire/v0/types';
+import type { AISearchJob, ClientCapabilities, Device, ServerCapabilities, Tokens, Bootstrap, LibraryBrowseQuery, LibrarySort, SortDirection, TitleKind } from '../wire/v0/types';
 import { EtherAdapter, VelaError } from './adapter/ether';
 import { SessionCredentials } from './session';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
@@ -64,6 +64,11 @@ let interactions: InteractionQueue | undefined;
 let ready: Promise<void> | undefined;
 let activeQuick = "";
 let authVersion = 0;
+const homeReads = new Map<string, Promise<Bootstrap>>();
+const homeFailures = new Map<string, { at: number; attempt: number; allowed: boolean; delaySeconds: number; retryLimit: number }>();
+const detailReads = new Map<string, Promise<[Awaited<ReturnType<EtherAdapter['detail']>>, Awaited<ReturnType<EtherAdapter['capabilities']>>]>>();
+const playbackDeclarations = new Map<string, ClientCapabilities>();
+const playbackReads = new Map<string, Promise<{ planJson: string; sessionId: string; preparing: boolean; errorCode: string; errorMessage: string; retryAllowed: boolean; retryAfterSeconds: number; retryLimit: number }>>();
 let previewEpoch = 0;
 let previews: PreviewCoordinator | undefined;
 // Successful panel answers are kept only for this authentication session and display context.
@@ -71,6 +76,11 @@ const librarySnapshots = new Map<string, { version: number; locale: string; widt
 const libraryRequests = new Map<string, number>();
 function resetSessionSnapshots(): void {
   authVersion++;
+  homeReads.clear();
+  homeFailures.clear();
+  detailReads.clear();
+  playbackReads.clear();
+  playbackDeclarations.clear();
   previewEpoch++;
   if (previews) void previews.cancel(previewEpoch).catch(() => {});
   previews = undefined;
@@ -269,15 +279,41 @@ const sources: Sources = {
       return { url: '', error: error instanceof Error ? error.message : 'Secure connection unavailable' };
     }
   },
-  uiBootstrap: async ([at, localeJSON, artWidth], store) => {
+  uiBootstrap: async ([at, attempt, localeJSON, artWidth], store) => {
     const api = await session(store);
     const version = authVersion;
     await ensureNegotiated(api, store);
-    const bootstrap = await api.bootstrap();
+    const failureKey = JSON.stringify([version, at, attempt]);
+    const readKey = JSON.stringify([version, at, attempt, client]);
+    let read = homeReads.get(readKey);
+    if (!read) {
+      read = (async () => {
+        try {
+          try { return await api.bootstrap(); }
+          catch (error) {
+            if (!(error instanceof VelaError) || error.status !== 409) throw error;
+            return await api.bootstrapFresh();
+          }
+        } catch (error) {
+          const retry = error instanceof VelaError ? error.detail.retry : undefined;
+          const rawHeader = error instanceof VelaError ? Number(error.retryAfter) : 0;
+          const hint = Number.isFinite(retry?.afterSeconds) ? Math.max(0, retry!.afterSeconds!) : 0;
+          const delaySeconds = Math.max(1, 2 ** Math.min(attempt, 5), hint, Number.isFinite(rawHeader) ? rawHeader : 0);
+          const retryLimit = Math.max(0, Math.min(2, (Number.isFinite(retry?.maxAttempts) ? Math.floor(retry!.maxAttempts!) : 3) - 1));
+          homeFailures.set(failureKey, { at, attempt, allowed: retry?.allowed === true && delaySeconds <= 60, delaySeconds, retryLimit });
+          throw error;
+        }
+      })();
+      homeReads.set(readKey, read);
+      if (homeReads.size > 16) homeReads.delete(homeReads.keys().next().value!);
+      if (homeFailures.size > 16) homeFailures.delete(homeFailures.keys().next().value!);
+    }
+    const bootstrap = await read;
     if (authVersion !== version) throw new Error('Session changed during bootstrap');
     features = bootstrap.capabilities.features;
     return withLocale(localeJSON, () => homeModel(bootstrap, API, at, artWidth));
   },
+  uiHomeRetryPolicy: ([at, attempt]) => homeFailures.get(JSON.stringify([authVersion, at, attempt])) ?? { at, attempt, allowed: false, delaySeconds: 0, retryLimit: 0 },
   uiPreviewCancel: async ([generation]) => {
     previewEpoch = Math.max(previewEpoch, generation);
     if (previews) await previews.cancel(generation);
@@ -384,7 +420,21 @@ const sources: Sources = {
     const data = await (await session(store)).rows({ placement: 'detail', titleId: id });
     return withLocale(localeJSON, () => data.items.map(row => feedRow(row, API, artWidth)));
   },
-  uiDetail: async ([id, localeJSON, artWidth], store) => { const detail = await (await session(store)).detail(id); return withLocale(localeJSON, () => detailModel(detail, API, artWidth)); },
+  uiDetail: async ([id, entryId, localeJSON, artWidth], store) => {
+    const api = await session(store);
+    const version = authVersion;
+    const tokens = JSON.parse(store.get('vela.session') || 'null') as Tokens | null;
+    const cacheKey = JSON.stringify([version, tokens?.viewer.id, tokens?.viewer.policyRevision, id, entryId]);
+    let read = detailReads.get(cacheKey);
+    if (!read) {
+      read = Promise.all([api.detail(id), api.capabilities()]);
+      detailReads.set(cacheKey, read);
+      if (detailReads.size > 64) detailReads.delete(detailReads.keys().next().value!);
+    }
+    const [detail, capabilities] = await read;
+    if (version !== authVersion) throw new Error('Session changed during detail read');
+    return withLocale(localeJSON, () => detailModel(detail, API, artWidth, capabilities.features.extraPlayback?.available === true, capabilities.features.themeMusic?.available === true));
+  },
   uiSearch: async ([query, generation, epoch, at, localeJSON, artWidth], store) => {
     const api = await session(store);
     const result = await api.search({ query, generation, mode: 'fast', idempotencyKey: `search-${epoch}-${generation}` });
@@ -432,14 +482,47 @@ const sources: Sources = {
     if (kind !== 'visible' || interactions.size >= 16) await interactions.flush(key(store), at);
     return { accepted: !interactions.disabled };
   },
-  uiPlayback: async ([id, kind, epoch, entryId, positionText], store) => {
+  uiPlayback: async ([id, kind, epoch, entryId, positionText, manual, attempt], store) => {
     const api = await session(store);
     await ensureNegotiated(api, store);
     if (kind !== 'title' && kind !== 'extra' && kind !== 'channel') throw new Error('Unsupported playback target');
     const position = positionText === '' ? undefined : Number(positionText);
     if (position !== undefined && (!Number.isFinite(position) || position < 0)) throw new Error('Invalid playback position');
-    const plan = await api.playback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}` });
-    return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId };
+    const version = authVersion;
+    const declarationKey = JSON.stringify([version, entryId, kind, id, manual]);
+    let declared = playbackDeclarations.get(declarationKey);
+    if (!declared) {
+      declared = client;
+      playbackDeclarations.set(declarationKey, declared);
+      if (playbackDeclarations.size > 64) playbackDeclarations.delete(playbackDeclarations.keys().next().value!);
+    }
+    const cacheKey = JSON.stringify([version, entryId, kind, id, positionText, manual, attempt]);
+    let read = playbackReads.get(cacheKey);
+    if (!read) {
+      read = (async () => {
+        try {
+          const plan = await api.playback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client: declared!, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}-${manual}` });
+          if (version !== authVersion) throw new Error('Session changed during playback');
+          if (plan.state === 'preparing') {
+            if (kind !== 'extra' || !Number.isFinite(plan.retryAfterSeconds) || plan.retryAfterSeconds < 1) throw new Error('Invalid playback preparation response');
+            return { planJson: '', sessionId: '', preparing: true, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: Math.ceil(plan.retryAfterSeconds), retryLimit: 0 };
+          }
+          detailReads.clear();
+          return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId, preparing: false, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: 0, retryLimit: 0 };
+        } catch (error) {
+          if (!(error instanceof VelaError)) throw error;
+          const retry = error.detail.retry;
+          const header = Number(error.retryAfter);
+          const hint = Number.isFinite(retry.afterSeconds) ? Math.max(0, retry.afterSeconds!) : 0;
+          const seconds = Math.max(2 ** Math.min(attempt, 5), hint, Number.isFinite(header) ? header : 0, 1);
+          const limit = Math.max(0, Math.min(2, (Number.isFinite(retry.maxAttempts) ? Math.floor(retry.maxAttempts!) : 3) - 1));
+          return { planJson: '', sessionId: '', preparing: false, errorCode: error.detail.code, errorMessage: error.message, retryAllowed: retry.allowed === true && seconds <= 60, retryAfterSeconds: seconds, retryLimit: limit };
+        }
+      })();
+      playbackReads.set(cacheKey, read);
+      if (playbackReads.size > 64) playbackReads.delete(playbackReads.keys().next().value!);
+    }
+    return read;
   },
   uiSkinDoc: async ([url, width, localeJSON], store) => {
     const path = new URL(url).pathname;
