@@ -39,6 +39,10 @@ export async function writeDocuments(out: string): Promise<{ id: string; version
     if (assets && existsSync(assets)) await cp(assets, dir, { recursive: true });
     // The legacy cinematic fixture has no assets folder: its preview is the client's.
     else if (source.id === 'cinematic-doc') await cp(join(root, 'client/assets/skins/cinematic.jpg'), join(dir, 'preview.jpg'));
+    if (assets) {
+      const licences = join(assets, '..', 'licences');
+      if (existsSync(licences)) await cp(licences, join(dir, 'licences'), { recursive: true });
+    }
     // Assets the mock serves under the appearance tree are static files beside the document here.
     const text = JSON.stringify(doc).replaceAll(from, `/vela/skins/${doc.id}/${doc.version}/`);
     await writeFile(join(dir, 'document.json'), text);
