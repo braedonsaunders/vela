@@ -39,7 +39,7 @@ export class UniversalRuntime implements OriginalBackend {
     this.core=new PlaybackCore({present:(frame,position)=>presenter.present(frame,position),dispose:()=>resources.release()},audio=>createCoreAudioOutput({...audio,libraryBaseURL:options.assets.baseURL,
       assetKey:options.assets.assetKey,forceSoftware:options.retry?.audio}),state=>this.publish(state),(error,position)=>{
       if(!this.disposed)options.onFailure(error.message,position/1e6);
-    },callbacks=>new VideoDecoderRouter(presenter,packages,callbacks,options.retry?.video));
+    },callbacks=>new VideoDecoderRouter(presenter,packages,callbacks,options.retry?.video),options.mediaRequests);
     this.core.setVolume(this.volume,this.muted);
     options.signal.addEventListener('abort',this.abort,{once:true});
   }
@@ -87,7 +87,7 @@ export class UniversalRuntime implements OriginalBackend {
     const ordered=[...media.audio].sort((a,b)=>a.streamIndex-b.streamIndex);
     const ordinal=ordered.findIndex(track=>track.id===media.selectedAudioId);
     this.notes=['audio-selection:audio-ordinal'];
-    if(media.hls)await this.core.openHls(media.url,media.position*1e6,Math.round(media.hls.originSeconds*1e6),Math.max(0,ordinal));
+    if(media.hls)await this.core.openHls(media.url,media.position*1e6,Math.round(media.hls.originSeconds*1e6),Math.max(0,ordinal),media.authority);
     else await this.core.open(media.url,media.position*1e6,Math.max(0,ordinal));
     this.core.setVolume(this.volume,this.muted);
   }

@@ -8,6 +8,7 @@ import type { OriginalMedia } from './source';
 import type { ByteReader } from '../core/types';
 import type { SubtitleSession,SubtitleSessionOptions } from './subtitles/session';
 import type {Track} from '../model';
+import type {MediaRequestPolicy} from '../media-auth';
 export interface UniversalReadout {
   state: 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'failed';
   video?:VideoInfo|null;bufferAheadSeconds?:number|null;throughputBps?:number|null;throughputHistory?:number[];
@@ -31,6 +32,7 @@ export interface OriginalBackend {
   seek(position: number): Promise<void>; dispose(): Promise<void>;
 }
 export interface OriginalRuntimeOptions {
+  mediaRequests?:MediaRequestPolicy;
   surface: {container: HTMLDivElement; video: HTMLVideoElement};
   assets: {baseURL: string; assetKey: string; audioDecoderURL: string; videoDecoderURL: string; subtitleBaseURL?:string};
   retry?: DecoderRetry;
