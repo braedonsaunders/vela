@@ -7,7 +7,7 @@ const gutter: Style = { 'padding-left': 'max(28px, 4vw)', 'padding-right': 'max(
 const gutterSmall = { 'padding-left': '18px', 'padding-right': '18px' } as Style;
 const sans = 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif';
 const enter = (delay: number) => `enter${delay}`;
-const enterPresets = Object.fromEntries([0, 80, 140, 200, 220, 260, 280, 300, 340, 380, 400, 420, 440, 480, 500, 520, 560, 580, 600].map(d => [enter(d), { keyframes: 'rise', duration: 640, delay: d, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' as const, still: { keyframes: 'dissolve', duration: 240 } }]));
+const enterPresets = Object.fromEntries([0, 60, 80, 120, 140, 200, 220, 260, 280, 300, 340, 380, 400, 420, 440, 480, 500, 520, 560, 580, 600].map(d => [enter(d), { keyframes: 'rise', duration: 640, delay: d, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' as const, still: { keyframes: 'dissolve', duration: 240 } }]));
 
 // Compiled's GhostPill keeps the browser's content-box, so its border sits outside the height.
 const pill = (primary: boolean): Style => ({
@@ -376,7 +376,7 @@ const episodes: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value
 ] };
 
 // An extra (trailer, featurette): a glass tile that plays, or says it is unavailable.
-const extraTile = (ready: boolean): Node => ({ type: 'box', when: [{ test: 'extra.ready', not: !ready }], ...(ready ? { press: { action: 'playExtra', arg: '{extra.id}' } } : {}), label: '{extra.name}',
+const extraTile = (ready: boolean): Node => ({ type: 'box', ...(ready ? { active: { scale: '0.97' } } : {}), when: [{ test: 'extra.ready', not: !ready }], ...(ready ? { press: { action: 'playExtra', arg: '{extra.id}' } } : {}), label: '{extra.name}',
   style: { ...ghost, position: 'relative', 'border-radius': '16px', width: '280px', height: '110px', padding: '18px', 'box-sizing': 'content-box', 'flex-shrink': '0', ...(ready ? {} : { opacity: '0.42' }) },
   small: { width: '220px', height: '96px' }, ...(ready ? { hover: { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing } } : {}), children: [
     { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'align-items': 'center', height: '100%' }, children: [
@@ -573,6 +573,119 @@ const library: Node = { type: 'box', style: { position: 'relative', display: 'fl
   ] },
 ] };
 
+// The signed-out page (compiled cinematic's AuthStage with its notices, SignIn and
+// QuickConnect): drifting light behind a centred glass card that resizes with its content.
+const authIs = (v: string): Condition => is('env.auth', v);
+const aurora = (name: string, style: Style): Node => ({ type: 'box', motion: name, style: { position: 'absolute', 'border-radius': '50%', ...style } as Style });
+const authLeave = 'authOut';
+const authNotice: Node[] = [
+  { type: 'box', when: [authIs('offline')], role: 'alert', motion: enter(0), exit: authLeave, style: { display: 'flex', 'flex-direction': 'column', gap: '18px', 'align-items': 'center', 'text-align': 'center', padding: '12px 0px' }, children: [
+    { type: 'icon', symbol: 'alert', style: { width: '28px', height: '28px', color: 'brand.warm' } },
+    { type: 'text', text: '{s:serverUnreachable}', role: 'heading', level: 1, style: { ...display, 'font-size': '34px' } },
+    { type: 'text', text: '{s:serverUnreachableBody}', style: { color: 'ink.secondary', 'font-size': '15px', 'line-height': '1.55' } },
+  ] },
+  ...(['connecting', 'redeeming'] as const).map((kind): Node => ({ type: 'box', when: [authIs(kind)], role: 'status', motion: enter(0), exit: authLeave, style: { display: 'flex', 'flex-direction': 'column', gap: '18px', 'align-items': 'center', 'text-align': 'center', padding: '12px 0px' }, children: [
+    pulse,
+    { type: 'text', text: kind === 'redeeming' ? '{s:signingYouIn}' : '{s:connectingToYourLibrary}', style: { color: 'ink.secondary', 'font-size': '15px' } },
+  ] })),
+];
+const field: Style = { 'box-sizing': 'border-box', height: '52px', padding: '0px 18px', 'border-radius': '14px', border: '1px solid var(--cinematic.glass-edge)', 'background-color': 'cinematic.field', color: 'ink.primary', 'font-size': '16px', outline: 'none', transition: 'border-color 180ms linear, box-shadow 360ms cubic-bezier(0.16, 1, 0.3, 1)' } as Style;
+const fieldBlock = (name: 'username' | 'password', label: string): Node => ({ type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px' }, children: [
+  { type: 'text', text: label, style: { ...eyebrow, 'font-size': '10px', color: 'ink.quiet' } as Style },
+  { type: 'widget', widget: 'textInput', params: { field: name, label }, style: field, hover: { 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'border-color': 'brand.warm', 'box-shadow': '0px 0px 0px 4px var(--cinematic.focus-halo)', outline: 'none' } },
+] });
+const signIn: Node = { type: 'box', when: [authIs('signin')], motion: enter(60), exit: authLeave, style: { display: 'flex', 'flex-direction': 'column', gap: '26px' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '10px' }, children: [
+    { type: 'text', text: '{s:welcome}', role: 'heading', level: 1, style: { ...display, 'font-size': '42px' } },
+    { type: 'text', text: '{s:signInToYourLibrary}', style: { color: 'ink.secondary', 'font-size': '15px', 'line-height': '1.5' } },
+  ] },
+  // The server also answers at an HTTPS address: offer it before a password is typed here.
+  { type: 'box', when: [{ test: 'signin.secureOrigin' }], motion: enter(120), style: { display: 'flex', 'flex-direction': 'column', gap: '12px', padding: '16px', 'border-radius': '16px', 'background-color': 'cinematic.secure', border: '1px solid var(--cinematic.secure-edge)' }, children: [
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
+      { type: 'icon', symbol: 'lock', style: { width: '16px', height: '16px', color: 'brand.warm' } },
+      { type: 'text', text: '{s:secureTitle}', style: { 'font-size': '14px', 'font-weight': '650' } },
+    ] },
+    { type: 'text', text: '{s:secureBodyA}{signin.secureOrigin}{s:secureBodyB}', style: { 'font-size': '13px', 'line-height': '1.5', color: 'ink.secondary' } },
+    { type: 'box', press: { action: 'goSecure' }, label: '{s:secureAction}', testId: 'secure-switch', disabled: [{ test: 'signin.secureBusy' }], disabledStyle: { opacity: '0.42' },
+      style: { ...pill(false), position: 'relative', height: '42px', 'padding-left': '18px', 'padding-right': '18px', 'align-self': 'flex-start' } as Style,
+      hover: { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing }, children: [
+        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
+          { ...pulse, when: [{ test: 'signin.secureBusy' }] } as Node,
+          { type: 'text', text: '{s:secureAction}', style: { 'font-size': '14px' } },
+        ] },
+      ] },
+    { type: 'text', when: [{ test: 'signin.secureError' }], role: 'alert', text: '{signin.secureError}', style: { 'font-size': '12px', color: 'brand.warm' } },
+  ] },
+  { type: 'box', when: [{ test: 'signin.error' }], role: 'alert', motion: enter(0), style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'flex-start', padding: '12px 14px', 'border-radius': '14px', 'background-color': 'cinematic.alert', border: '1px solid var(--cinematic.alert-edge)' }, children: [
+    { type: 'icon', symbol: 'alert', style: { width: '18px', height: '18px', color: 'brand.warm', 'flex-shrink': '0' } },
+    { type: 'text', text: '{signin.error}', style: { color: 'ink.primary', 'font-size': '14px', 'line-height': '1.45' } },
+  ] },
+  { type: 'box', when: [{ test: 'signin.canPassword' }], style: { display: 'flex', 'flex-direction': 'column', gap: '16px' }, children: [
+    fieldBlock('username', '{s:username}'),
+    fieldBlock('password', '{s:password}'),
+    { type: 'box', press: { action: 'signIn' }, label: '{s:signIn}', testId: 'sign-in', disabled: [{ test: 'signin.ready', not: true }], disabledStyle: { 'background-color': 'cinematic.control-hover', color: 'ink.quiet' },
+      style: { ...pill(true), position: 'relative', height: '52px', 'padding-left': '0px', 'padding-right': '0px', 'margin-top': '6px', transition: 'background-color 180ms linear, opacity 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)' } as Style,
+      hover: { 'background-color': 'cinematic.primary-hover' }, focus: { 'box-shadow': focusRing }, children: [
+        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', 'justify-content': 'center' }, children: [
+          { ...pulse, when: [{ test: 'signin.busy' }] } as Node,
+          { type: 'text', when: [{ test: 'signin.busy' }], text: '{s:signingIn}', style: { 'font-size': '15px', 'font-weight': '650', color: 'ink.quiet' } },
+          // The label takes the disabled ink itself (text resolves its own colour).
+          { type: 'text', when: [{ test: 'signin.busy', not: true }], text: '{s:signIn}', style: { 'font-size': '15px', 'font-weight': '650' }, states: [{ when: [{ test: 'signin.ready', not: true }], style: { 'font-size': '15px', 'font-weight': '650', color: 'ink.quiet' } }] },
+        ] },
+      ] },
+  ] },
+  { type: 'box', when: [{ test: 'signin.canPassword' }, { test: 'signin.canQuick' }], a11y: { hidden: true }, style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'align-items': 'center' }, children: [
+    { type: 'box', style: { flex: '1', height: '1px', 'background-color': 'cinematic.glass-edge' } },
+    { type: 'text', text: '{s:or}', style: { 'font-size': '12px', color: 'ink.quiet' } },
+    { type: 'box', style: { flex: '1', height: '1px', 'background-color': 'cinematic.glass-edge' } },
+  ] },
+  { type: 'box', when: [{ test: 'signin.canQuick' }], press: { action: 'startQuick' }, label: '{s:connectWithACode}', testId: 'quick-connect', disabled: [{ test: 'signin.busy' }], disabledStyle: { opacity: '0.42' },
+    style: { ...pill(false), position: 'relative', height: '52px', 'padding-left': '0px', 'padding-right': '0px', transition: 'background-color 180ms linear, border-color 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)' } as Style,
+    hover: { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing }, children: [
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', 'justify-content': 'center' }, children: [
+        { type: 'icon', symbol: 'smartphone', style: { width: '18px', height: '18px' } },
+        { type: 'text', text: '{s:connectWithACode}', style: { 'font-size': '15px' } },
+      ] },
+    ] },
+  { type: 'text', when: [{ test: 'signin.canPassword', not: true }, { test: 'signin.canQuick', not: true }], role: 'status', text: '{s:noSignInMethods}', style: { color: 'ink.secondary', 'font-size': '14px', 'line-height': '1.55' } },
+] };
+const quickConnect: Node = { type: 'box', when: [authIs('quick')], motion: enter(60), exit: authLeave, style: { display: 'flex', 'flex-direction': 'column', gap: '26px', 'align-items': 'center', 'text-align': 'center' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '10px', 'align-items': 'center' }, children: [
+    { type: 'text', text: '{s:anEasierWayIn}', role: 'heading', level: 1, style: { ...display, 'font-size': '42px' } },
+    { type: 'text', text: '{s:approveThisCode}', style: { color: 'ink.secondary', 'font-size': '15px', 'line-height': '1.5', 'max-width': '300px' } },
+  ] },
+  { type: 'box', label: '{quick.code}', role: 'text', testId: 'connect-code', style: { display: 'flex', 'flex-direction': 'row', width: '100%', gap: '6px', 'justify-content': 'center' }, children: [
+    { type: 'repeat', over: 'quick.chars', item: { type: 'text', text: '{char.text}', a11y: { hidden: true }, motion: 'codeIn', stagger: { step: 45, cap: 12 }, style: { flex: '1', 'max-width': '44px', height: '54px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'border-radius': '12px', 'background-color': 'cinematic.glass-deep', border: '1px solid var(--cinematic.glass-edge)', 'box-shadow': 'inset 0px 1px 0px var(--cinematic.ring)', 'font-family': 'ui-monospace, "SF Mono", Menlo, monospace', 'font-size': '24px', 'font-weight': '600', color: 'brand.warm' } as Style } },
+  ] },
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '10px', 'align-items': 'center' }, children: [
+    { type: 'box', role: 'status', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
+      { ...pulse, when: [{ test: 'quick.error', not: true }] } as Node,
+      { type: 'text', when: [{ test: 'quick.error', not: true }], text: '{s:waitingForApproval}', style: { color: 'ink.secondary', 'font-size': '14px' } },
+      { type: 'text', when: [{ test: 'quick.error' }], text: '{quick.error}', style: { color: 'brand.warm', 'font-size': '14px' } },
+    ] },
+    { type: 'text', text: '{s:codeExpiresAt} {quick.expires}.', style: { color: 'ink.quiet', 'font-size': '12px' } },
+  ] },
+  { type: 'box', press: { action: 'cancelQuick' }, label: '{s:cancel}', style: { ...pill(false), position: 'relative', height: '46px', 'padding-left': '28px', 'padding-right': '28px', transition: 'background-color 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)' } as Style,
+    hover: { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{s:cancel}', style: { 'font-size': '14px' } }] },
+] };
+const auth: Node = { type: 'box', exit: authLeave, style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'justify-content': 'center', 'min-height': '100dvh', width: '100%', 'box-sizing': 'border-box', 'overflow-x': 'hidden', 'overflow-y': 'hidden', padding: 'max(28px, 7vh) 16px', 'background-color': 'surface.page', color: 'ink.primary' } as Style, children: [
+  { type: 'box', a11y: { hidden: true }, style: { position: 'absolute', inset: '0px', 'pointer-events': 'none' }, children: [
+    { type: 'image', when: [{ test: 'env.authBackdrop' }], src: '{env.authBackdrop}', alt: '', style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
+    aurora('auroraA', { width: '72vmax', height: '72vmax', left: '-22vmax', top: '-30vmax', opacity: '0.5', 'background-image': 'radial-gradient(circle, var(--cinematic.ember) 0%, var(--cinematic.scrim-clear) 68%)' }),
+    aurora('auroraB', { width: '80vmax', height: '80vmax', right: '-30vmax', bottom: '-42vmax', opacity: '0.55', 'background-image': 'radial-gradient(circle, var(--cinematic.tide) 0%, var(--cinematic.scrim-clear) 66%)' }),
+    aurora('auroraC', { width: '54vmax', height: '54vmax', left: '34%', top: '18%', opacity: '0.35', 'background-image': 'radial-gradient(circle, var(--cinematic.dusk) 0%, var(--cinematic.scrim-clear) 70%)' }),
+    { type: 'box', style: { position: 'absolute', inset: '0px', 'background-image': 'radial-gradient(ellipse 110% 85% at 50% 42%, var(--cinematic.scrim-clear) 35%, var(--cinematic.vignette) 100%)' } },
+    { type: 'image', src: 'assets/grain.svg', alt: '', style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'fill', opacity: '0.06' } },
+  ] },
+  { type: 'box', motion: enter(0), style: { position: 'relative', display: 'flex', 'flex-direction': 'column', width: '100%', 'max-width': '448px', gap: '32px', 'align-items': 'center' }, children: [
+    { type: 'image', when: [{ test: 'env.authWordmark' }], src: '{env.authWordmark}', alt: '', a11y: { hidden: true }, style: { height: '56px', width: 'auto', 'max-width': '100%' } },
+    { type: 'image', when: [{ test: 'env.authWordmark', not: true }], src: 'assets/brand/vela-stacked.svg', alt: '', a11y: { hidden: true }, style: { width: '60px', height: '104px' } },
+    { type: 'box', layoutTransition: '560ms ease-out', style: { display: 'flex', 'flex-direction': 'column', width: '100%', 'box-sizing': 'border-box', padding: 'clamp(28px, 5vw, 44px) clamp(22px, 4.5vw, 40px)', 'border-radius': '28px', 'background-color': 'cinematic.glass', 'backdrop-filter': 'blur(28px) saturate(1.4)', border: '1px solid var(--cinematic.glass-edge)', 'box-shadow': '0px 40px 120px var(--cinematic.card-shadow), inset 0px 1px 0px var(--cinematic.ring)' }, children: [
+      ...authNotice, signIn, quickConnect,
+    ] },
+  ] },
+] };
+
 // The page frame; the scrim, blur and dissolve behind it are the route column's (the foundation's).
 const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', padding: '4vh 4vw', 'box-sizing': 'border-box' },
   small: { padding: '0px' }, children: [
@@ -589,9 +702,9 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
   ] };
 
 export const cinematicDoc: SkinDocument = {
-  schema: 1, renderer: 11, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
+  schema: 1, renderer: 12, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg', swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
-  strings: { en: { all: 'All', unwatched: 'Unwatched', watched: 'Watched', favorites: 'Favourites', genre: 'Genre', anyGenre: 'Any genre', sortBy: 'Sort by', ascending: 'Ascending', descending: 'Descending', loadMore: 'Show more', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.', findingTitles: 'Finding titles…', libraryFailed: "This library couldn't be opened. Check your connection and try again.", findingYourEvening: 'Finding your evening…', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', homeFailed: "Your library couldn't be reached. Check your server connection.", titleFailed: "This title couldn't be opened. It may no longer be available.", velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
+  strings: { en: { secureTitle: 'A secure address is available', secureBodyA: 'Your server also answers at ', secureBodyB: '. Continue there so your password and viewing stay private.', secureAction: 'Switch to the secure address', serverUnreachable: "Can't reach your server", serverUnreachableBody: 'Your server could not be reached. Reopen Vela when the connection is restored.', signingYouIn: 'Signing you in…', connectingToYourLibrary: 'Connecting to your library…', welcome: 'Welcome to your evening.', signInToYourLibrary: 'Sign in to your library.', username: 'Username', password: 'Password', signingIn: 'Signing in…', signIn: 'Sign in', or: 'or', connectWithACode: 'Connect with a code', noSignInMethods: "This server doesn't offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.", anEasierWayIn: 'An easier way in.', approveThisCode: 'Approve this code from a signed-in Ether device.', waitingForApproval: 'Waiting for approval…', codeExpiresAt: 'This code expires at', cancel: 'Cancel', all: 'All', unwatched: 'Unwatched', watched: 'Watched', favorites: 'Favourites', genre: 'Genre', anyGenre: 'Any genre', sortBy: 'Sort by', ascending: 'Ascending', descending: 'Descending', loadMore: 'Show more', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.', findingTitles: 'Finding titles…', libraryFailed: "This library couldn't be opened. Check your connection and try again.", findingYourEvening: 'Finding your evening…', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', homeFailed: "Your library couldn't be reached. Check your server connection.", titleFailed: "This title couldn't be opened. It may no longer be available.", velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
   motion: {
     ...enterPresets,
     pulse0: { keyframes: 'breathe', duration: 1400, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
@@ -608,11 +721,16 @@ export const cinematicDoc: SkinDocument = {
     card: { keyframes: 'rise', duration: 640, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 240 } },
     statusIn: { keyframes: 'dissolve', duration: 500, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 240 } },
     statusOpen: { keyframes: 'dissolve', duration: 400, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 240 } },
+    auroraA: { keyframes: 'auroraA', duration: 34000, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', direction: 'alternate', fill: 'none', still: { keyframes: 'none', duration: 0 } },
+    auroraB: { keyframes: 'auroraB', duration: 41000, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', direction: 'alternate', fill: 'none', still: { keyframes: 'none', duration: 0 } },
+    auroraC: { keyframes: 'auroraC', duration: 47000, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', direction: 'alternate', fill: 'none', still: { keyframes: 'none', duration: 0 } },
+    authOut: { keyframes: 'vanish', duration: 320, easing: 'ease-in', fill: 'both', still: { keyframes: 'vanish', duration: 160 } },
+    codeIn: { keyframes: 'rise', duration: 640, delay: 120, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both', still: { keyframes: 'dissolve', duration: 240 } },
     rowIn: { keyframes: 'rise', duration: 640, delay: 520, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 240 } },
   },
   templates: { card, row, relatedRow },
   slots: { shell, home },
-  routes: { title, library },
+  routes: { title, library, auth },
   // Home and the title page draw their own loading and failure; home fades under the floating bar.
   status: true,
   traits: { barMask: true },
@@ -621,8 +739,17 @@ export const cinematicDoc: SkinDocument = {
 
 // A compiled control with its own hover style draws no platform hover wash, so a press that
 // carries a hover overlay here opts out of the document's control states.
+// Compiled's pill buttons (PrimaryPill, GhostPill) shrink to .97 while pressed and its round
+// icon buttons (IconButton) to .94; links, chips, tabs and dots keep their size.
+const pressScale = (node: BoxNode): string | undefined => {
+  const st = node.style ?? {};
+  if (st['border-radius'] !== '999px') return undefined;
+  if (st.width && st.width === st.height) return '0.94';
+  return parseFloat(st.height ?? '0') >= 42 ? '0.97' : undefined;
+};
 const ownHover = (node: Node): void => {
   if ('press' in node && node.press && node.hover && node.controlStates === undefined) node.controlStates = false;
+  if (node.type === 'box' && node.press && !node.active) { const scale = pressScale(node); if (scale) node.active = { scale }; }
   if ('children' in node) node.children?.forEach(ownHover);
   if (node.type === 'repeat') ownHover(node.item);
 };
