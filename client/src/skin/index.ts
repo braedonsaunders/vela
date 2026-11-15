@@ -418,7 +418,9 @@ function cssStates(level: Level, r: Resolve) {
       // Exact's pressed state, as compiled controls show it: the whole control at .65 while held
       // (ground, ring and content; a hover ground stays), whether or not it has a ground. An authored
       // \`active\` look replaces it (author over platform, per state), as a bound opacity does.
-      if (pressable && !active && !(level.dop as Part[]).length) held.push('opacity:0.65!important');
+      // An authored hover opacity wins over it too (the same property), so a filled control that
+      // fades on hover does not dim further.
+      if (pressable && !active && !(level.dop as Part[]).length && !(hover && hover.opacity !== base.opacity)) held.push('opacity:0.65!important');
       const id = !group.length && !over.length && !held.length ? '' : `${r.ids++}`;
       ref[still ? 'v2' : 'v'] = id;
       if (!id) continue;
