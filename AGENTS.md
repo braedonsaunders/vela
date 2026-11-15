@@ -16,7 +16,9 @@ Vela is a greenfield client. Speed of high-quality code is the priority. Read
 - **While compiled skins exist, check one engine, not the all-skins app** (its lowering takes
   15+ minutes): `bun tools/check.ts <engine>` stages your checkout, profiles it to that engine
   and runs the errors-only contract build under the shared build lock; `bun tools/check.ts doc
-  --agent "<op>" …` drives the profile with `exact.mjs agent web`. Document skins use `doc`.
+  --agent "<op>" …` drives the profile with `exact.mjs agent web`, under reduced motion
+  (ambient players stall on the agent's virtual clock); add `--motion` to drive with motion.
+  Document skins use `doc`.
 - **Look at the result** when you change UI or playback: one `bun exact.mjs agent web
   "screenshot .exact/x.png"` drive or a short manual run. One look, not a loop. If a fix
   takes three tries, stop and report the blocker.
