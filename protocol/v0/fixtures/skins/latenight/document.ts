@@ -39,8 +39,8 @@ const wordmark = (h: number): Node => ({ type: 'image', src: 'assets/brand/vela-
 
 // A channel on the dial: number, then name. The current one is lit like a VCR menu row.
 const channel = (num: string, name: string, on: Node['when'], press: { action: 'home' | 'library'; arg?: string }, testId?: string): Node => ({
-  type: 'box', group: true, press, label: name, testId,
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '7px', height: '36px', 'box-sizing': 'border-box', padding: '9px 12px 0px 10px', 'border-radius': '3px', color: '$ink-dim', 'white-space': 'nowrap', 'flex-shrink': '0', transition: 'background-color 120ms linear, color 120ms linear' },
+  type: 'box', group: true, press, label: name, testId, a11y: { current: on },
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '7px 7px', height: '36px', 'box-sizing': 'border-box', padding: '9px 12px 0px 10px', 'border-radius': '3px', color: '$ink-dim', 'white-space': 'nowrap', 'flex-shrink': '0', transition: 'background-color 120ms linear, color 120ms linear' },
   hover: { color: '$ink', 'background-color': '$glass' }, focus: { color: '$ink', 'background-color': '$vcr-blue' },
   children: [
     { type: 'text', text: num, style: { ...osdText('17px', 'inherit'), 'text-shadow': 'none', opacity: '0.6', 'font-variant-numeric': 'tabular-nums' } },
@@ -48,63 +48,65 @@ const channel = (num: string, name: string, on: Node['when'], press: { action: '
     { type: 'box', when: on, style: { position: 'absolute', left: '10px', right: '12px', bottom: '3px', height: '2px', 'background-color': '$osd', 'box-shadow': '0px 0px 8px $osd-glow' } },
   ] });
 
-const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], motion: 'navIn',
+const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], motion: 'navIn', escape: 'menu', returnFocus: 'latenight-profile',
   style: { position: 'absolute', ...inset(bezel.normal), bottom: 'auto', 'z-index': '20', 'pointer-events': 'none' },
   wide: { ...inset(bezel.wide), bottom: 'auto' }, small: { ...inset(bezel.small), bottom: 'auto' }, children: [
     { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', height: '150px', 'pointer-events': 'none', 'border-radius': `${radius.normal} ${radius.normal} 0px 0px`, 'background-image': 'linear-gradient(180deg, $scrim-solid 0%, $scrim-top 52%, $scrim-clear 100%)', 'backdrop-filter': 'blur(6px)', 'mask-image': 'linear-gradient(180deg, black 0%, black 55%, transparent 100%)' },
       wide: { 'border-radius': `${radius.wide} ${radius.wide} 0px 0px` }, small: { height: '120px', 'border-radius': '0px' } },
-    { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '8px', height: '78px', 'box-sizing': 'border-box', ...gutter, 'pointer-events': 'auto' },
-      small: { height: '58px', ...gutterSmall, gap: '6px', 'padding-top': 'env(safe-area-inset-top)' } as Style, children: [
+    { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '8px 8px', height: '78px', 'box-sizing': 'border-box', ...gutter, 'pointer-events': 'auto' },
+      small: { height: '58px', ...gutterSmall, gap: '6px 6px', 'padding-top': 'env(safe-area-inset-top)' } as Style, children: [
         { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', 'margin-right': '18px', 'flex-shrink': '0' }, small: { 'margin-right': '6px' }, children: [wordmark(26)] },
-        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '2px', flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 92%, transparent 100%)' },
+        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '2px 2px', flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 92%, transparent 100%)' },
           small: { display: 'none' }, children: [
             channel('03', '{s:home}', [{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }, 'channel-home'),
             { type: 'repeat', over: 'nav.destinations', item: channel('1{index.label}', '{dest.name}', [{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }) },
           ] },
         { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1' } },
         // The channel bug: always on, the way a set shows what it is tuned to.
-        { type: 'box', role: 'status', label: '{s:tunedTo}', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '6px', 'margin-right': '10px', 'flex-shrink': '0' }, small: { 'margin-right': '2px' }, children: [
+        { type: 'box', role: 'status', label: '{s:tunedTo}', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '6px 6px', 'margin-right': '10px', 'flex-shrink': '0' }, small: { 'margin-right': '2px' }, children: [
           { type: 'text', text: 'CH', style: osdText('18px') },
           { type: 'text', when: [{ test: 'env.section', is: 'eq', value: 'home' }], text: '03', style: { ...osdText('32px'), 'font-variant-numeric': 'tabular-nums' } },
           { type: 'text', when: [{ test: 'env.section', is: 'eq', value: 'live' }], text: '{s:live}', style: osdText('32px', '$rec') },
           { type: 'repeat', over: 'nav.destinations', item: { type: 'text', when: [{ test: 'dest.on' }, { test: 'dest.kind', is: 'ne', value: 'live' }], text: '1{index.label}', style: { ...osdText('32px'), 'font-variant-numeric': 'tabular-nums' } } },
+          // The set's clock, when the server's guide gives one.
+          { type: 'text', when: [{ test: 'env.clock' }], text: '{env.clock}', role: 'timer', label: '{env.clock}', style: { ...osdText('22px', '$ink-dim'), 'margin-left': '10px', 'font-variant-numeric': 'tabular-nums' }, small: { display: 'none' } },
         ] },
         { type: 'box', press: { action: 'search' }, label: '{s:search}', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '40px', height: '40px', 'box-sizing': 'border-box', 'border-radius': '4px', border: '1px solid $edge', 'background-color': '$glass', color: '$ink', 'flex-shrink': '0' },
           hover: { 'background-color': '$glass-hi' }, focus: { 'background-color': '$vcr-blue', 'border-color': '$ink' },
           children: [{ type: 'icon', symbol: 'search', style: { width: '18px', height: '18px' } }] },
-        { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '9px', height: '40px', 'box-sizing': 'border-box', padding: '0px 12px 0px 4px', 'border-radius': '4px', border: '1px solid $edge', 'background-color': '$glass', color: '$ink-dim', 'flex-shrink': '0' },
+        { type: 'box', id: 'latenight-profile', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', a11y: { expanded: [{ test: 'flag:menu' }], haspopup: 'dialog' }, style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '9px 9px', height: '40px', 'box-sizing': 'border-box', padding: '0px 12px 0px 4px', 'border-radius': '4px', border: '1px solid $edge', 'background-color': '$glass', color: '$ink-dim', 'flex-shrink': '0' },
           hover: { 'background-color': '$glass-hi', color: '$ink' }, focus: { 'background-color': '$vcr-blue', color: '$ink' }, small: { padding: '0px 4px' }, children: [
             { type: 'text', text: '{env.viewerInitial}', style: { width: '30px', height: '30px', 'border-radius': '2px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', ...osdText('22px', '$ink-on-label'), 'text-shadow': 'none', 'background-image': 'linear-gradient(180deg, $tape-red 0%, $tape-red 33%, $tape-orange 33%, $tape-orange 66%, $tape-yellow 66%, $tape-yellow 100%)' } },
             { type: 'text', text: '{env.viewer}', style: { 'font-family': print, 'font-size': '11px', 'letter-spacing': '0.12em', 'text-transform': 'uppercase' }, small: { display: 'none' } },
           ] },
       ] },
     // Phones: the dial is a strip of channel buttons under the bar.
-    { type: 'box', style: { display: 'none' }, small: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '2px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', ...gutterSmall, 'padding-left': '8px', 'pointer-events': 'auto', 'mask-image': 'linear-gradient(90deg, black 0%, black 88%, transparent 100%)' } as Style, children: [
+    { type: 'box', style: { display: 'none' }, small: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '2px 2px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', ...gutterSmall, 'padding-left': '8px', 'pointer-events': 'auto', 'mask-image': 'linear-gradient(90deg, black 0%, black 88%, transparent 100%)' } as Style, children: [
       channel('03', '{s:home}', [{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }),
       { type: 'repeat', over: 'nav.destinations', item: channel('1{index.label}', '{dest.name}', [{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }) },
     ] },
   ] };
 
 const menuRow = (label: string, icon: string, press: { action: 'openPicker' | 'signOut' }, testId?: string): Node & { type: 'box' } => ({ type: 'box', press, label, testId,
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center', padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', color: '$ink', ...osdText('22px', '$ink'), 'text-shadow': 'none' },
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '12px 12px', 'align-items': 'center', padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', color: '$ink', ...osdText('22px', '$ink'), 'text-shadow': 'none' },
   hover: { 'background-color': '$glass-hi' }, focus: { 'background-color': '$vcr-blue' }, children: [
     { type: 'icon', symbol: icon, style: { width: '16px', height: '16px', color: '$osd' } },
     { type: 'text', text: label, style: { flex: '1' } },
   ] });
 
 // The profile menu, drawn as a VCR setup menu on the classic blue.
-const menu: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'pop', role: 'dialog', label: '{s:menu}',
-  style: { position: 'absolute', top: 'calc(12px + 74px)', right: 'calc(12px + max(30px, 3.6vw))', 'z-index': '30', width: '290px', 'box-sizing': 'border-box', padding: '18px 22px 16px', display: 'flex', 'flex-direction': 'column', gap: '10px', 'border-radius': '4px', border: '2px solid $ink', 'background-color': '$vcr-menu', 'box-shadow': '8px 8px 0px $shadow, 0px 30px 80px $shadow' },
+const menu: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'pop', role: 'dialog', label: '{s:menu}', escape: 'menu', returnFocus: 'latenight-profile',
+  style: { position: 'absolute', top: 'calc(12px + 74px)', right: 'calc(12px + max(30px, 3.6vw))', 'z-index': '30', width: '290px', 'box-sizing': 'border-box', padding: '18px 22px 16px', display: 'flex', 'flex-direction': 'column', gap: '10px 10px', 'border-radius': '4px', border: '2px solid $ink', 'background-color': '$vcr-menu', 'box-shadow': '8px 8px 0px $shadow, 0px 30px 80px $shadow' },
   wide: { top: 'calc(18px + 74px)', right: 'calc(18px + max(30px, 3.6vw))' }, small: { top: '62px', right: '10px', width: 'calc(100% - 20px)', 'max-width': '320px' }, children: [
     { type: 'text', text: '{s:menuTitle}', style: { ...osdText('20px', '$ink'), 'text-shadow': 'none', 'letter-spacing': '0.16em', opacity: '0.75' } },
-    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center' }, children: [
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '12px 12px', 'align-items': 'center' }, children: [
       { type: 'text', text: '{env.viewerInitial}', style: { width: '40px', height: '40px', 'border-radius': '3px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', ...osdText('28px', '$ink-on-label'), 'text-shadow': 'none', 'background-image': 'linear-gradient(180deg, $tape-red 0%, $tape-red 33%, $tape-orange 33%, $tape-orange 66%, $tape-yellow 66%, $tape-yellow 100%)' } },
       { type: 'text', text: '{env.viewer}', style: { 'font-family': print, 'font-size': '13px', 'letter-spacing': '0.1em', 'text-transform': 'uppercase', flex: '1', 'line-clamp': '1' } },
     ] },
     { type: 'box', style: { height: '0px', border: '1px dashed $edge', 'margin-top': '4px' } },
     { ...menuRow('{s:appearance}', 'forward-chevron', { action: 'openPicker' }, 'skin-picker'), children: [
       { type: 'icon', symbol: 'play-fill', style: { width: '12px', height: '12px', color: '$osd' } },
-      { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px', flex: '1' }, children: [
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px 3px', flex: '1' }, children: [
         { type: 'text', text: '{s:appearance}' },
         { type: 'text', text: '{s:skinName}', style: { 'font-family': print, 'font-size': '10px', 'letter-spacing': '0.14em', opacity: '0.7' } },
       ] },
@@ -144,7 +146,7 @@ const glass: Node = { type: 'box', style: { position: 'absolute', ...inset('0px'
 const flipLayer = (when: Node['when'], extra: Node[] = []): Node => ({ type: 'box', when, style: { position: 'absolute', ...inset(bezel.normal), 'z-index': '35', 'pointer-events': 'none', 'border-radius': radius.normal, 'overflow-x': 'hidden', 'overflow-y': 'hidden' },
   wide: { ...inset(bezel.wide), 'border-radius': radius.wide }, small: { ...inset(bezel.small), 'border-radius': radius.small }, children: [snow('flip'), ...extra] });
 const bigBug = (text: string, name: string): Node => ({ type: 'box', when: [{ test: 'env.still', not: true }], motion: 'bugOut',
-  style: { position: 'absolute', top: '108px', right: 'max(34px, 4vw)', display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-end', gap: '4px' }, small: { top: '112px', right: '18px' }, children: [
+  style: { position: 'absolute', top: '108px', right: 'max(34px, 4vw)', display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-end', gap: '4px 4px' }, small: { top: '112px', right: '18px' }, children: [
     { type: 'text', text, style: { ...osdText('84px'), 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '60px' } },
     { type: 'text', text: name, style: osdText('26px') },
   ] });
@@ -180,14 +182,14 @@ const stage: Node = { type: 'repeat', over: 'home.hero', item: { type: 'box', mo
     snow('tune'),
   ] } };
 
-const vcrButton = (primary: boolean): Style => ({ position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '12px', height: '54px', 'box-sizing': 'border-box', padding: primary ? '0px 26px 0px 20px' : '0px 22px 0px 18px', 'border-radius': '4px',
+const vcrButton = (primary: boolean): Style => ({ position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '12px 12px', height: '54px', 'box-sizing': 'border-box', padding: primary ? '0px 26px 0px 20px' : '0px 22px 0px 18px', 'border-radius': '4px',
   border: primary ? '2px solid $ink' : '2px solid $edge-strong', 'background-color': primary ? '$ink' : '$osd-plate', color: primary ? '$ink-on-label' : '$ink', 'box-shadow': '4px 4px 0px $shadow', transition: 'translate 120ms steps(2), box-shadow 120ms steps(2), background-color 120ms linear' });
 const pressed: Style = { translate: '2px 2px', 'box-shadow': `2px 2px 0px $shadow, ${split(2)}` };
 
 const heroPlay: Node = { type: 'box', press: { action: 'play', arg: '{hero.id}' }, label: '{heroAct.actionLabel}', testId: 'hero-primary', when: [{ test: 'heroAct.playable' }],
   style: vcrButton(true), hover: { ...pressed, 'background-color': '$ink-bright' }, focus: { ...pressed, 'background-color': '$ink-bright' }, small: { height: '50px' }, children: [
     { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' } },
-    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '2px' }, children: [
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '2px 2px' }, children: [
       { type: 'text', text: '{heroAct.actionLabel}', style: { ...osdText('28px', 'inherit'), 'text-shadow': 'none' } },
       { type: 'text', when: [{ test: 'heroAct.actionDetail' }], text: '{heroAct.actionDetail}', style: { 'font-family': print, 'font-size': '9.5px', 'letter-spacing': '0.12em', 'text-transform': 'uppercase', opacity: '0.7' } },
     ] },
@@ -202,9 +204,9 @@ const heroInfo = (primary: boolean): Node => ({ type: 'box', press: { action: 's
     { type: 'text', text: '{s:moreInfo}', style: { ...osdText('26px', 'inherit'), 'text-shadow': 'none' } },
   ] });
 
-const heroCopy: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.searching', not: true }], item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', ...gutter, gap: '14px', 'max-width': '50rem' }, small: { ...gutterSmall, gap: '12px', 'max-width': 'none' }, children: [
+const heroCopy: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.searching', not: true }], item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', ...gutter, gap: '14px 14px', 'max-width': '50rem' }, small: { ...gutterSmall, gap: '12px 12px', 'max-width': 'none' }, children: [
   { type: 'widget', widget: 'observe', params: { receipt: '{hero.receipt}' } },
-  { type: 'box', motion: 'osd1', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
+  { type: 'box', motion: 'osd1', style: { display: 'flex', 'flex-direction': 'row', gap: '10px 10px', 'align-items': 'center' }, children: [
     { type: 'text', text: '▶ {s:play}', style: { ...osdText('22px'), padding: '3px 8px 1px', 'background-color': '$osd-plate', 'text-shadow': 'none', 'white-space': 'nowrap', 'flex-shrink': '0' }, small: { 'font-size': '18px' } },
     { type: 'text', text: '{heroAct.reasonLabel}', style: { ...osdText('22px', '$ink'), padding: '3px 8px 1px', 'background-color': '$osd-plate', 'text-shadow': 'none', 'white-space': 'nowrap', 'line-clamp': '1', 'min-width': '0px' }, small: { 'font-size': '18px' } },
   ] },
@@ -212,13 +214,13 @@ const heroCopy: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.
   { type: 'text', when: [{ test: 'hero.logo', not: true }], text: '{hero.name}', role: 'heading', level: 1, motion: 'osd2', style: { 'font-family': print, 'font-size': '58px', 'line-height': '1.04', 'letter-spacing': '0.01em', 'text-transform': 'uppercase', 'line-clamp': '3', 'text-shadow': `${split(2)}, 0px 6px 40px $shadow` }, wide: { 'font-size': '66px' }, small: { 'font-size': '32px' } },
   { type: 'text', text: '{hero.factsLine}', motion: 'osd3', style: { ...osdText('24px', '$ink-dim'), 'text-transform': 'none', 'letter-spacing': '0.02em', 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '20px' } },
   { type: 'text', when: [{ test: 'hero.summary' }], text: '{hero.summary}', motion: 'osd3', style: { 'font-size': '16px', color: '$ink-dim', 'line-height': '1.55', 'line-clamp': '3', 'max-width': '36rem', 'text-shadow': '0px 1px 14px $shadow' }, small: { 'font-size': '14px', 'line-clamp': '2' } },
-  { type: 'box', motion: 'osd4', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'align-items': 'center', 'flex-wrap': 'wrap', 'margin-top': '10px' } as Style, small: { 'margin-top': '4px', gap: '10px' } as Style, children: [heroPlay, heroInfo(false), heroInfo(true)] },
+  { type: 'box', motion: 'osd4', style: { display: 'flex', 'flex-direction': 'row', gap: '14px 14px', 'align-items': 'center', 'flex-wrap': 'wrap', 'margin-top': '10px' } as Style, small: { 'margin-top': '4px', gap: '10px 10px' } as Style, children: [heroPlay, heroInfo(false), heroInfo(true)] },
 ] } };
 
 // The featured titles are preset buttons: 01, 02, 03... The tuned one is lit, and its
 // timer fills while the set rotates to the next.
 const preset = (current: boolean): Node => ({ type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', when: [{ test: 'index.current', not: !current }],
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '4px', width: '44px', 'box-sizing': 'border-box', 'padding-top': '5px', 'padding-bottom': '6px', 'border-radius': '3px', border: current ? '2px solid $osd' : '2px solid $edge',
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '4px 4px', width: '44px', 'box-sizing': 'border-box', 'padding-top': '5px', 'padding-bottom': '6px', 'border-radius': '3px', border: current ? '2px solid $osd' : '2px solid $edge',
     'background-color': current ? '$osd-plate' : '$glass', color: current ? '$osd' : '$ink-dim', transition: 'background-color 120ms linear, color 120ms linear' },
   hover: { color: '$ink', 'border-color': '$ink' }, focus: { color: '$ink', 'border-color': '$ink', 'background-color': '$vcr-blue' }, children: [
     { type: 'text', text: '0{index.label}', style: { ...osdText('22px', 'inherit'), 'text-shadow': 'none', 'font-variant-numeric': 'tabular-nums' } },
@@ -228,7 +230,7 @@ const preset = (current: boolean): Node => ({ type: 'box', press: { action: 'pic
     ] : [] },
   ] });
 const presets: Node = { type: 'box', role: 'group', label: '{s:featured}', motion: 'osd4', when: [{ test: 'env.searching', not: true }, { test: 'env.heroCount', is: 'gt', value: '1' }],
-  style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', ...gutter, 'padding-top': '26px' } as Style, small: { ...gutterSmall, 'padding-top': '18px', gap: '6px' } as Style, children: [
+  style: { display: 'flex', 'flex-direction': 'row', gap: '8px 8px', 'align-items': 'center', ...gutter, 'padding-top': '26px' } as Style, small: { ...gutterSmall, 'padding-top': '18px', gap: '6px 6px' } as Style, children: [
     { type: 'text', text: '{s:presets}', style: { ...osdText('18px', '$ink-quiet'), 'text-shadow': 'none', 'margin-right': '6px' }, small: { display: 'none' } },
     { type: 'repeat', over: 'home.heroes', item: { type: 'box', style: { display: 'flex' }, children: [preset(true), preset(false)] } },
   ] };
@@ -239,11 +241,12 @@ const copyColumn: Node = { type: 'box', style: { position: 'relative', display: 
 // A title on the shelf: the poster, crisp. Hover or focus lights an OSD frame with a hint
 // of RGB misregistration; progress is a segmented tape counter.
 const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}',
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'column', width: 'clamp(148px, 12vw, 224px)', 'flex-shrink': '0', gap: '10px' }, small: { width: '128px' }, children: [
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'column', width: 'clamp(148px, 12vw, 224px)', 'flex-shrink': '0', gap: '10px 10px' }, small: { width: '128px' }, children: [
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '2 / 3', 'background-color': '$raised', 'border-radius': '4px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', translate: '0px 0px',
         'box-shadow': '0px 0px 0px 1px $hairline, 0px 14px 28px -16px $shadow', transition: 'translate 160ms steps(3), box-shadow 160ms steps(3)' },
-      groupHover: { translate: '0px -5px', 'box-shadow': `0px 0px 0px 2px $ink, ${split(4)}, 0px 22px 40px -14px $shadow` }, children: [
+      groupHover: { translate: '0px -5px', 'box-shadow': `0px 0px 0px 2px $ink, ${split(4)}, 0px 22px 40px -14px $shadow` },
+      groupFocus: { translate: '0px -5px', 'box-shadow': `0px 0px 0px 3px $osd, ${split(4)}, 0px 22px 40px -14px $shadow` }, children: [
         { type: 'image', when: [{ test: 'card.poster' }], src: '{card.poster}', alt: '', fade: true, style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover', transition: 'opacity 260ms linear' } },
         // No poster: a hand-labelled tape.
         { type: 'box', when: [{ test: 'card.poster', not: true }], style: { position: 'absolute', ...inset('0px'), display: 'flex', 'flex-direction': 'column', 'justify-content': 'center', padding: '12px', 'background-image': 'linear-gradient(180deg, $tape-shell 0%, $tape-shell-deep 100%)' }, children: [
@@ -257,21 +260,21 @@ const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '
           { type: 'box', style: { height: '3px', width: '{card.progressPct}%', 'min-width': '4px', 'background-image': 'repeating-linear-gradient(90deg, $osd 0px, $osd 4px, transparent 4px, transparent 6px)' } },
         ] },
       ] },
-    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px', padding: '0px 1px' }, children: [
-      { type: 'text', text: '{card.name}', style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1', color: '$ink' }, groupHover: { color: '$ink-bright' }, small: { 'font-size': '13px' } },
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px 3px', padding: '0px 1px' }, children: [
+      { type: 'text', text: '{card.name}', style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1', color: '$ink' }, groupHover: { color: '$ink-bright' }, groupFocus: { color: '$osd' }, small: { 'font-size': '13px' } },
       { type: 'text', text: '{card.facts}', style: { ...osdText('17px', '$ink-quiet'), 'text-transform': 'none', 'text-shadow': 'none', 'letter-spacing': '0.02em', 'line-clamp': '1', 'font-variant-numeric': 'tabular-nums' } },
     ] },
   ] };
 
 // Ranked rows get a big outlined OSD number beside each poster.
-const rankedCard: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end', gap: '2px' }, children: [
+const rankedCard: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end', gap: '2px 2px' }, children: [
   { type: 'text', text: '{index.label}', style: { 'font-family': osd, 'font-size': '150px', 'line-height': '0.74', color: '$osd', opacity: '0.92', 'text-shadow': '4px 4px 0px $shadow, 0px 0px 18px $osd-glow', 'margin-right': '4px', 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '100px' } },
   { type: 'use', template: 'card' },
 ] };
 
 // A row is a tape on the shelf: its label, hand-written, with the tape's stripes.
-const row: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '2px', 'padding-bottom': '22px' }, small: { 'padding-bottom': '14px' }, children: [
-  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '12px', ...gutter }, small: gutterSmall, children: [
+const row: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '2px 2px', 'padding-bottom': '22px' }, small: { 'padding-bottom': '14px' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '12px 12px', ...gutter }, small: gutterSmall, children: [
     { type: 'text', text: 'CH {index.label}', style: { ...osdText('22px'), 'font-variant-numeric': 'tabular-nums', 'flex-shrink': '0' }, small: { 'font-size': '19px' } },
     { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'min-width': '0px', 'max-width': '100%', height: '38px', 'box-sizing': 'border-box', 'padding-left': '22px', 'padding-right': '16px', 'background-color': '$label', 'border-radius': '2px',
         'background-image': 'linear-gradient(90deg, $tape-red 0px, $tape-red 5px, $tape-orange 5px, $tape-orange 10px, $tape-yellow 10px, $tape-yellow 15px, transparent 15px)', 'box-shadow': '3px 3px 0px $shadow', rotate: '-0.6' } as Style,
@@ -280,7 +283,7 @@ const row: Node = { type: 'box', style: { position: 'relative', display: 'flex',
       ] },
   ] },
   { type: 'box', style: { position: 'relative', display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
-    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'align-items': 'flex-start', 'padding-top': '16px', 'padding-bottom': '18px', ...gutter }, small: { gap: '12px', 'padding-top': '12px', 'padding-bottom': '14px', ...gutterSmall }, children: [
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px 16px', 'align-items': 'flex-start', 'padding-top': '16px', 'padding-bottom': '18px', ...gutter }, small: { gap: '12px 12px', 'padding-top': '12px', 'padding-bottom': '14px', ...gutterSmall }, children: [
       { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'ne', value: 'ranked' }], item: { type: 'use', template: 'card' } },
       { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'eq', value: 'ranked' }], limit: 10, item: { type: 'use', template: 'rankedCard' } },
     ] },
@@ -303,7 +306,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 // ---------------------------------------------------------------- title
 // A title is a tape pulled off the shelf: its sleeve beside the picture, the details in
 // the on-screen display, episodes as the tape's index, the cast as hand-labelled photos.
-const sectionHead = (text: string): Node => ({ type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '10px', 'margin-bottom': '14px' }, children: [
+const sectionHead = (text: string): Node => ({ type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '10px 10px', 'margin-bottom': '14px' }, children: [
   { type: 'text', text: '▶', style: osdText('20px') },
   { type: 'text', text, role: 'heading', level: 2, style: { ...osdText('26px', '$ink'), 'text-shadow': 'none', 'letter-spacing': '0.08em' } },
 ] });
@@ -326,10 +329,10 @@ const sleeve: Node = { type: 'box', when: [{ test: 'detail.poster' }], style: { 
   ] };
 
 const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}', testId: 'episode-{card.id}',
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '18px', 'align-items': 'center', padding: '10px', margin: '0px -10px', 'border-radius': '4px', transition: 'background-color 120ms linear' },
-  hover: { 'background-color': '$glass' }, focus: { 'background-color': '$vcr-blue' }, small: { gap: '12px' }, children: [
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '18px 18px', 'align-items': 'center', padding: '10px', margin: '0px -10px', 'border-radius': '4px', transition: 'background-color 120ms linear' },
+  hover: { 'background-color': '$glass' }, focus: { 'background-color': '$vcr-blue' }, small: { gap: '12px 12px' }, children: [
     { type: 'box', style: { position: 'relative', width: '200px', 'aspect-ratio': '16 / 9', 'flex-shrink': '0', 'border-radius': '3px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised', 'box-shadow': '0px 0px 0px 1px $hairline' },
-      groupHover: { 'box-shadow': `0px 0px 0px 2px $ink, ${split(3)}` }, small: { width: '128px' }, children: [
+      groupHover: { 'box-shadow': `0px 0px 0px 2px $ink, ${split(3)}` }, groupFocus: { 'box-shadow': `0px 0px 0px 3px $osd, ${split(3)}` }, small: { width: '128px' }, children: [
         { type: 'image', when: [{ test: 'card.backdrop' }], src: '{card.backdrop}', alt: '', fade: true, style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover' } },
         { type: 'image', when: [{ test: 'card.backdrop', not: true }, { test: 'card.poster' }], src: '{card.poster}', alt: '', fade: true, style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover' } },
         { type: 'text', when: [{ test: 'card.durationLabel' }], text: '{card.durationLabel}', style: { position: 'absolute', right: '6px', top: '6px', padding: '2px 5px 0px', 'background-color': '$osd-plate', ...osdText('16px', '$ink'), 'text-shadow': 'none', 'text-transform': 'none' } },
@@ -338,7 +341,7 @@ const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: 
         ] },
         { type: 'text', when: [{ test: 'card.played' }], text: '✓', style: { position: 'absolute', top: '5px', left: '5px', padding: '1px 5px 0px', 'background-color': '$osd-plate', ...osdText('16px'), 'text-shadow': 'none' } },
       ] },
-    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '5px', flex: '1', 'min-width': '0px' }, children: [
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '5px 5px', flex: '1', 'min-width': '0px' }, children: [
       { type: 'text', when: [{ test: 'episode.upNextLabel' }, { test: 'card.hasProgress' }], text: '▶ {episode.upNextLabel}', style: { ...osdText('17px'), 'text-shadow': 'none' } },
       { type: 'text', text: '{episode.numberTitle}', style: { 'font-size': '16px', 'font-weight': '600', 'line-clamp': '1' }, small: { 'font-size': '14px' } },
       { type: 'text', when: [{ test: 'card.summary' }], text: '{card.summary}', style: { 'font-size': '13.5px', 'line-height': '1.45', color: '$ink-dim', 'line-clamp': '2' }, small: { display: 'none' } },
@@ -351,13 +354,16 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
   wide: { height: `calc(100% - 2 * ${bezel.wide})`, padding: bezel.wide }, small: { height: '100%', padding: bezel.small }, children: [
   { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{detail.name}', style: { position: 'relative', flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden' }, children: [
     // Seeking, and the blue screen when nothing comes in.
-    { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], style: { display: 'flex', 'flex-direction': 'row', gap: '12px', padding: '140px max(30px, 3.6vw)' }, children: [
+    { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], style: { display: 'flex', 'flex-direction': 'row', gap: '12px 12px', padding: '140px max(30px, 3.6vw)' }, children: [
       { type: 'text', text: '▶▶', motion: 'blink', style: osdText('34px') },
       { type: 'text', text: '{s:opening}', style: osdText('34px') },
     ] },
-    { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], role: 'alert', style: { position: 'absolute', ...inset('0px'), display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'justify-content': 'center', gap: '16px', 'background-color': '$vcr-blue' }, children: [
+    { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], role: 'alert', style: { position: 'absolute', ...inset('0px'), display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'justify-content': 'center', gap: '16px 16px', 'background-color': '$vcr-blue' }, children: [
       { type: 'text', text: '{s:noSignal}', style: { ...osdText('56px', '$ink'), 'text-shadow': '3px 3px 0px $shadow' } },
       { type: 'text', text: '{s:failed}', style: { ...osdText('24px', '$ink'), 'text-shadow': 'none', 'text-transform': 'none', 'text-align': 'center', 'max-width': '30rem' } },
+      { type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, label: '{s:retry}', testId: 'detail-retry', style: { ...vcrButton(true), 'margin-top': '10px' }, hover: pressed, focus: pressed, children: [
+        { type: 'text', text: '▶ {s:retry}', style: { ...osdText('26px', 'inherit'), 'text-shadow': 'none' } },
+      ] },
     ] },
     { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'min-height': '100%' }, children: [
       { type: 'widget', widget: 'observe', params: { receipt: '{detail.receipt}' } },
@@ -367,10 +373,10 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
         { type: 'box', style: { position: 'absolute', ...inset('0px'), 'background-image': 'linear-gradient(90deg, $scrim-deep 0%, $scrim-mid 45%, $scrim-clear 80%), linear-gradient(0deg, $page 0%, $scrim-strong 30%, $scrim-clear 70%), linear-gradient(180deg, $scrim-top 0%, $scrim-clear 30%)' } },
         snow('tune'),
       ] },
-      { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end', gap: '44px', ...gutter, 'padding-top': 'max(150px, 24vh)', 'padding-bottom': '44px' }, small: { ...gutterSmall, 'padding-top': '40vh', gap: '0px', 'padding-bottom': '28px' }, children: [
+      { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end', gap: '44px 44px', ...gutter, 'padding-top': 'max(150px, 24vh)', 'padding-bottom': '44px' }, small: { ...gutterSmall, 'padding-top': '40vh', gap: '0px 0px', 'padding-bottom': '28px' }, children: [
         sleeve,
-        { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '14px', 'max-width': '44rem', 'min-width': '0px' }, small: { gap: '12px' }, children: [
-          { type: 'box', motion: 'osd1', style: { display: 'flex', 'flex-direction': 'row', gap: '10px' }, children: [
+        { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '14px 14px', 'max-width': '44rem', 'min-width': '0px' }, small: { gap: '12px 12px' }, children: [
+          { type: 'box', motion: 'osd1', style: { display: 'flex', 'flex-direction': 'row', gap: '10px 10px' }, children: [
             { type: 'text', text: '▶ {detail.kindLabel}', style: { ...osdText('22px'), padding: '3px 8px 1px', 'background-color': '$osd-plate', 'text-shadow': 'none', 'white-space': 'nowrap' }, small: { 'font-size': '18px' } },
           ] },
           { type: 'image', when: [{ test: 'detail.logo' }], src: '{detail.logo}', alt: '{detail.name}', role: 'heading', level: 1, motion: 'osd2', style: { height: '130px', width: 'auto', 'max-width': 'min(500px, 90%)', 'object-fit': 'contain', 'align-self': 'flex-start', filter: 'drop-shadow(-2px 0px 0px $chroma-red) drop-shadow(2px 0px 0px $chroma-cyan)' }, small: { height: '84px' } },
@@ -378,12 +384,12 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
           { type: 'text', text: '{detail.factsLine}', motion: 'osd3', style: { ...osdText('24px', '$ink-dim'), 'text-transform': 'none', 'letter-spacing': '0.02em' }, small: { 'font-size': '20px' } },
           { type: 'text', when: [{ test: 'detail.summary' }], text: '{detail.summary}', motion: 'osd3', style: { 'font-size': '16px', 'line-height': '1.6', color: '$ink-dim', 'max-width': '40rem', 'text-shadow': '0px 1px 14px $shadow' }, small: { 'font-size': '14.5px' } },
           { type: 'text', when: [{ test: 'detail.crewLine' }], text: '{detail.crewLine}', motion: 'osd3', style: { 'font-family': print, 'font-size': '10.5px', 'letter-spacing': '0.12em', 'text-transform': 'uppercase', 'line-height': '1.7', color: '$ink-quiet' } },
-          { type: 'box', motion: 'osd4', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'flex-wrap': 'wrap', 'margin-top': '8px' } as Style, children: [titlePlay] },
+          { type: 'box', motion: 'osd4', style: { display: 'flex', 'flex-direction': 'row', gap: '14px 14px', 'flex-wrap': 'wrap', 'margin-top': '8px' } as Style, children: [titlePlay] },
         ] },
       ] },
       // Seasons are channel buttons; the selected one is lit.
-      { type: 'box', when: [{ test: 'detail.hasSeasons' }], role: 'tablist', label: '{s:seasons}', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '6px', 'flex-wrap': 'wrap', ...gutter, 'padding-bottom': '22px' } as Style, small: gutterSmall, children: [
-        { type: 'repeat', over: 'detail.seasons', item: { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', role: 'tab',
+      { type: 'box', when: [{ test: 'detail.hasSeasons' }], role: 'tablist', label: '{s:seasons}', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '6px 6px', 'flex-wrap': 'wrap', ...gutter, 'padding-bottom': '22px' } as Style, small: gutterSmall, children: [
+        { type: 'repeat', over: 'detail.seasons', item: { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', a11y: { role: 'tab', selected: [{ test: 'season.on' }] },
           style: { position: 'relative', display: 'flex', 'align-items': 'center', height: '38px', 'box-sizing': 'border-box', padding: '4px 14px 0px', 'border-radius': '3px', border: '2px solid $edge', 'background-color': '$glass', color: '$ink-dim', ...osdText('22px', '$ink-dim'), 'text-shadow': 'none', 'white-space': 'nowrap' },
           hover: { color: '$ink', 'border-color': '$ink' }, focus: { color: '$ink', 'border-color': '$ink', 'background-color': '$vcr-blue' }, children: [
             { type: 'text', text: '{card.name}' },
@@ -396,9 +402,9 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       ] },
       { type: 'box', when: [{ test: 'detail.hasExtras' }], style: block, small: gutterSmall, children: [
         sectionHead('{s:extras}'),
-        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'flex-wrap': 'wrap' } as Style, children: [
+        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px 10px', 'flex-wrap': 'wrap' } as Style, children: [
           { type: 'repeat', over: 'detail.extras', item: { type: 'box', when: [{ test: 'extra.ready' }], press: { action: 'playExtra', arg: '{extra.id}' }, label: '{extra.name}',
-            style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', padding: '8px 14px 8px 10px', 'border-radius': '3px', 'background-color': '$label', color: '$ink-on-label', 'box-shadow': 'inset 6px 0px 0px $tape-red, 3px 3px 0px $shadow' },
+            style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px 10px', 'align-items': 'center', padding: '8px 14px 8px 10px', 'border-radius': '3px', 'background-color': '$label', color: '$ink-on-label', 'box-shadow': 'inset 6px 0px 0px $tape-red, 3px 3px 0px $shadow' },
             hover: { translate: '0px -2px' }, focus: { 'box-shadow': `inset 6px 0px 0px $tape-red, 0px 0px 0px 2px $ink, ${split(3)}` }, children: [
               { type: 'icon', symbol: 'play-fill', style: { width: '12px', height: '12px', 'margin-left': '6px' } },
               { type: 'text', text: '{extra.name}', style: { 'font-family': marker, 'font-size': '17px', 'line-height': '1.1' } },
@@ -407,8 +413,8 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       ] },
       { type: 'box', when: [{ test: 'detail.hasCast' }], style: block, small: gutterSmall, children: [
         sectionHead('{s:cast}'),
-        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '18px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'padding-bottom': '6px' }, children: [
-          { type: 'repeat', over: 'detail.cast', limit: 24, item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', width: '112px', 'flex-shrink': '0', padding: '6px 6px 10px', 'background-color': '$label', 'border-radius': '2px', rotate: '-1', 'box-shadow': '3px 4px 0px $shadow' }, children: [
+        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '18px 18px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'padding-bottom': '6px' }, children: [
+          { type: 'repeat', over: 'detail.cast', limit: 24, item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px 8px', width: '112px', 'flex-shrink': '0', padding: '6px 6px 10px', 'background-color': '$label', 'border-radius': '2px', rotate: '-1', 'box-shadow': '3px 4px 0px $shadow' }, children: [
             { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '1 / 1', 'background-color': '$tape-shell', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
               { type: 'image', when: [{ test: 'person.portrait' }], src: '{person.portrait}', alt: '', fade: true, style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover' } },
               { type: 'text', when: [{ test: 'person.portrait', not: true }], text: '{person.initials}', style: { position: 'absolute', ...inset('0px'), display: 'flex', 'align-items': 'center', 'justify-content': 'center', ...osdText('34px', '$ink-dim'), 'text-shadow': 'none' } },
@@ -419,7 +425,7 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
         ] },
       ] },
       { type: 'repeat', over: 'detail.related', item: { type: 'use', template: 'row' } },
-      { type: 'box', when: [{ test: 'detail.kind' }], style: { ...block, 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '8px', 'padding-top': '10px', 'padding-bottom': '60px' } as Style, small: { ...gutterSmall, 'padding-bottom': '40px' }, children: [
+      { type: 'box', when: [{ test: 'detail.kind' }], style: { ...block, 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '8px 8px', 'padding-top': '10px', 'padding-bottom': '60px' } as Style, small: { ...gutterSmall, 'padding-bottom': '40px' }, children: [
         { type: 'repeat', over: 'detail.mediaFacts', item: { type: 'text', text: '{fact.text}', style: { ...osdText('17px', '$ink-quiet'), 'text-shadow': 'none', padding: '3px 8px 1px', border: '1px solid $edge', 'border-radius': '2px' } } },
       ] },
     ] },
@@ -430,7 +436,7 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
   // The same glass as the shell: the title is on the same set.
   glass,
   // Back: rewind out of the tape.
-  { type: 'box', press: { action: 'back' }, label: '{s:back}', testId: 'detail-close', style: { position: 'absolute', top: 'calc(30px + env(safe-area-inset-top))', left: 'calc(12px + max(30px, 3.6vw))', 'z-index': '10', display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', height: '42px', 'box-sizing': 'border-box', padding: '4px 14px 0px 12px', 'border-radius': '4px', border: '2px solid $edge-strong', 'background-color': '$osd-plate', ...osdText('24px', '$ink'), 'text-shadow': 'none', 'box-shadow': '3px 3px 0px $shadow' },
+  { type: 'box', press: { action: 'back' }, label: '{s:back}', testId: 'detail-close', style: { position: 'absolute', top: 'calc(30px + env(safe-area-inset-top))', left: 'calc(12px + max(30px, 3.6vw))', 'z-index': '10', display: 'flex', 'flex-direction': 'row', gap: '8px 8px', 'align-items': 'center', height: '42px', 'box-sizing': 'border-box', padding: '4px 14px 0px 12px', 'border-radius': '4px', border: '2px solid $edge-strong', 'background-color': '$osd-plate', ...osdText('24px', '$ink'), 'text-shadow': 'none', 'box-shadow': '3px 3px 0px $shadow' },
     hover: { 'border-color': '$ink' }, focus: { 'border-color': '$ink', 'background-color': '$vcr-blue' }, wide: { top: 'calc(36px + env(safe-area-inset-top))', left: 'calc(18px + max(30px, 3.6vw))' }, small: { left: '14px', top: 'calc(12px + env(safe-area-inset-top))' }, children: [
       { type: 'text', text: '◀◀', style: { color: '$osd' } },
       { type: 'text', text: '{s:back}' },
@@ -441,28 +447,8 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
 const fadeStill = { keyframes: 'dissolve', duration: 200 };
 const osdIn = (delay: number) => ({ keyframes: 'dissolve', duration: 240, delay, easing: 'steps(3, jump-end)', fill: 'both' as const, still: fadeStill });
 
-// Renderer 2 binds border-top/bottom longhands after border-width/colour, so an unset side
-// resets to medium currentColor. Until the resolver fills them from the shorthand, every
-// border here names its top and bottom sides too.
-type Layer = Record<string, string>;
-function sides(node: Node): Node {
-  const fix = (l?: Style) => {
-    if (!l) return l;
-    const out: Layer = { ...(l as Layer) };
-    const m = out.border ? /^(\S+)\s+(?:solid|dashed|dotted|double)\s+(.+)$/.exec(out.border) : null;
-    const width = m?.[1] ?? out['border-width'], colour = m?.[2] ?? out['border-color'];
-    if (width) { out['border-top-width'] ??= width; out['border-bottom-width'] ??= width; }
-    if (colour) { out['border-top-color'] ??= colour; out['border-bottom-color'] ??= colour; }
-    return out as Style;
-  };
-  const n = { ...node, style: fix(node.style), small: fix(node.small), wide: fix(node.wide), hover: fix(node.hover), focus: fix(node.focus), groupHover: fix(node.groupHover) } as Node;
-  if (n.type === 'box' && n.children) n.children = n.children.map(sides);
-  if (n.type === 'repeat') n.item = sides(n.item);
-  return n;
-}
-
 export default {
-  schema: 1, renderer: 2, id, name: 'Late Night', version,
+  schema: 1, renderer: 4, id, name: 'Late Night', version,
   tagline: 'Your library on an old TV set: channel flips, tape labels and a glowing on-screen display.',
   preview: asset('preview.svg'), swatches: ['#07080b', '#f3eee0', '#7dffa1', '#e8452c', '#f4cf3a'],
   tokens: {
@@ -481,7 +467,7 @@ export default {
     velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', menu: 'Profile menu', menuTitle: 'Setup menu',
     appearance: 'Appearance', skinName: 'Late Night', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out',
     moreInfo: 'Info', play: 'Play', featured: 'Featured titles', presets: 'Preset', watched: 'Watched', live: 'Live', liveTv: 'Live TV', tunedTo: 'Tuned channel',
-    back: 'Back', opening: 'Searching', noSignal: 'No signal', failed: 'This title could not be opened. Try again in a moment.', seasons: 'Seasons', extras: 'Extras', cast: 'Cast',
+    back: 'Back', opening: 'Searching', noSignal: 'No signal', failed: 'This title could not be opened. Try again in a moment.', seasons: 'Seasons', extras: 'Extras', cast: 'Cast', retry: 'Try again',
   } },
   fonts: {
     osd: { family: 'Late Night OSD', sizeAdjust: 112, files: [{ url: asset('vt323.ttf'), weight: 400, style: 'normal' }] },
@@ -509,8 +495,8 @@ export default {
     // A tracking band rolls down about every 19 s, for under two seconds.
     tracking: { keyframes: 'scan', duration: 19000, delay: 6000, easing: 'linear(0, 0 91%, 1)', iterations: 'infinite', fill: 'both' },
   },
-  templates: { card: sides(card), rankedCard: sides(rankedCard), row: sides(row) },
-  slots: { shell: sides(shell), home: sides(home) },
-  routes: { title: sides(title) },
+  templates: { card, rankedCard, row },
+  slots: { shell, home },
+  routes: { title },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
 } satisfies SkinDocument;
