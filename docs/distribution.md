@@ -230,6 +230,10 @@ and the legacy `fixtures/skins/cinematic.ts`:
     <out>/<id>/<version>/document.json    the document; asset URLs point at /vela/skins/<id>/<version>/
     <out>/<id>/<version>/<asset>          preview and assets
 
+An owner-held conversion may be omitted from a release catalog with
+`--exclude-document=<id>` (repeatable). The manifest records these exclusions;
+the compiled engine remains installed.
+
 The release serves `<out>` at `/vela/skins/` beside the app (immutable apart from
 `catalog.json`). The client fetches `/vela/skins/catalog.json` from its own origin,
 drops entries whose `renderer` exceeds its `RENDERER_VERSION`, and lists the rest in

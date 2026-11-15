@@ -1,3 +1,4 @@
+import type * as V from '../../wire/v0/types';
 import type { ClientCapabilities, PreviewGrant } from '../../wire/v0/types';
 import type { ServerAdapter } from '../adapter';
 import { VelaError } from '../adapter/ether';
@@ -13,6 +14,8 @@ export class PreviewCoordinator {
   private requested?: { id: string; generation: number };
   /** False once the server answered the status read 405 (an Ether older than the GET). */
   private statusRead = true;
+  /** Titles the server called unavailable this session: final, never asked again. */
+  private unavailable = new Map<string, V.TrailerPreviewResponse>();
   private tail: Promise<void> = Promise.resolve();
   constructor(private api: ServerAdapter, private origin: string, private client: ClientCapabilities, private key: () => string) {}
   setClient(client: ClientCapabilities): void { this.client = client; }
@@ -29,14 +32,23 @@ export class PreviewCoordinator {
     this.tail = operation.catch(() => {});
     return operation;
   }
-  /** One POST per intent, then GET polls. An Ether without the GET (405), or one that no longer
-   * holds the request (404), is asked again by POST with a fresh key. */
-  private async ask(id: string, generation: number) {
+  /** One POST per intent, then GET polls. An Ether without the GET (405, or 404 for the intent just
+   * requested) is asked again by POST with a fresh key, and for the rest of this session. */
+  private async ask(id: string, generation: number): Promise<V.TrailerPreviewResponse> {
+    const known = this.unavailable.get(id);
+    if (known) return known;
+    const result = await this.read(id, generation);
+    if (result.state === 'unavailable') this.unavailable.set(id, result);
+    return result;
+  }
+  private async read(id: string, generation: number): Promise<V.TrailerPreviewResponse> {
     if (this.statusRead && this.requested?.id === id && this.requested.generation === generation) {
       try { return await this.api.trailerPreviewStatus(id); }
       catch (error) {
         if (!(error instanceof VelaError) || (error.status !== 404 && error.status !== 405)) throw error;
-        if (error.status === 405) this.statusRead = false;
+        // 405, or 404 for an intent this client just requested (the server keeps one for minutes):
+        // this server has no status read, so later intents go straight to the re-POST.
+        this.statusRead = false;
       }
     }
     const result = await this.api.trailerPreview(id, { idempotencyKey: this.key(), client: this.client });
