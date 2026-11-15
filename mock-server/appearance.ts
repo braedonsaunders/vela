@@ -3,6 +3,7 @@
 // Ether's equivalent is the Vela Apps card (docs/skin-distribution.md, "Ether side").
 import type * as V from '../protocol/v0/types';
 import { cinematicDoc } from '../protocol/v0/fixtures/skins/cinematic';
+import { loungeDoc } from '../protocol/v0/fixtures/skins/lounge';
 
 const harbor: V.SkinPack = {
   schema: 1, id: 'harbor', version: '1.0.0', name: 'Harbor', tagline: 'Sea-glass light over a night harbour.', engine: 'cinematic',
@@ -16,8 +17,11 @@ const harbor: V.SkinPack = {
 const packs = [harbor];
 const engines = ['cinematic', 'index', 'jellytwin', 'mochi', 'marquee', 'example'];
 // Skin documents (protocol/v0/skin.ts): whole skins as data, drawn by the client's doc engine.
-const documents: V.SkinDocumentRef[] = [{ id: cinematicDoc.id, name: cinematicDoc.name, version: cinematicDoc.version, tagline: cinematicDoc.tagline,
-  url: `/vela/v0/appearance/skins/${cinematicDoc.id}/${cinematicDoc.version}.json`, preview: cinematicDoc.preview, swatches: cinematicDoc.swatches }];
+const skinDocs = [cinematicDoc, loungeDoc];
+const documents: V.SkinDocumentRef[] = skinDocs.map(d => ({ id: d.id, name: d.name, version: d.version, tagline: d.tagline,
+  url: `/vela/v0/appearance/skins/${d.id}/${d.version}.json`, preview: d.preview, swatches: d.swatches }));
+// Each document's preview: a capture of its home (client/assets/skins/<id>.jpg).
+const previews: Record<string, string> = { [cinematicDoc.id]: 'cinematic', [loungeDoc.id]: 'lounge' };
 let state: V.Appearance = { revision: 1, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs, documents };
 const listeners = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const encode = (a: V.Appearance) => new TextEncoder().encode(`id: ${a.revision}\ndata: ${JSON.stringify({ type: 'appearance', cursor: String(a.revision), appearance: a } satisfies V.ServerEvent)}\n\n`);
@@ -54,8 +58,10 @@ const sea = `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offs
 
 /** Pack and skin-document assets: immutable per version, public like the appearance itself. */
 export async function packAsset(path: string): Promise<Response | undefined> {
-  if (path === documents[0].url) return new Response(JSON.stringify(cinematicDoc), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=31536000, immutable' } });
-  if (path === cinematicDoc.preview) return new Response(Bun.file(new URL('../client/assets/skins/cinematic.jpg', import.meta.url)), { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable' } });
+  const doc = skinDocs.find(d => path === `/vela/v0/appearance/skins/${d.id}/${d.version}.json`);
+  if (doc) return new Response(JSON.stringify(doc), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=31536000, immutable' } });
+  const shown = skinDocs.find(d => path === d.preview);
+  if (shown) return new Response(Bun.file(new URL(`../client/assets/skins/${previews[shown.id]}.jpg`, import.meta.url)), { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable' } });
   const m = /^\/vela\/v0\/appearance\/packs\/([a-z0-9-]+)\/([0-9.]+)\/([a-z]+\.(?:svg|ttf))$/.exec(path);
   const pack = m && packs.find(p => p.id === m[1] && p.version === m[2]);
   if (!m || !pack) return undefined;
