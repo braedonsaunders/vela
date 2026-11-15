@@ -1578,3 +1578,66 @@ synthetic declared target1Mbps projected as1Mbps / needs~1.3Mbps (1.25Mbps befor
 rounding), distinct from that transfer-rate measurement. Only one Original choice
 was produced. Chrome and the owned asset server were closed. This validates the
 pipeline/labels locally, not the lab's current throughput or available ladder.
+
+## Vela-owned core: lab.18 qualification, 14 November 2026
+
+Candidate `2b2928f8077c298f`, source `0b9b3d2`, ran behind the real native-view
+module over lab HTTPS. It uses Vela's reader/demux/decode scheduler and physical
+AudioWorklet clock, with library components instead of the upstream controller.
+Production remains the qualified wrapper: **the parity gate has not passed**.
+Each drive used one stream, real broker plans/commands/observations/SSE, Stop
+returning `ended`, auth revocation, and a completely closed dedicated Chrome.
+The wrapper baselines below are historical measurements, not simultaneous runs.
+
+| Actual source family | Wrapper plan → frame / seek | Core plan → frame / seek | Core Play → frame (plan portion) | Drops, wrapper → core |
+| --- | --- | --- | --- | --- |
+| Street Fighter, H.264 1920×1012 / AAC | 964 / 176 ms | **386 / 97 ms** | 1,853 ms (1,467 ms) | 0 → **0** |
+| Mummy 1959, HEVC Main10 SDR 1776×1080 / E-AC-3 | 692 / 6,458 ms | **362 / 296 ms** | 7,212 ms (6,850 ms) | 0 → **1** |
+| Mummy 1999, 4K HDR10 / DTS | 1,217 / 3,155 ms | **Coverage unavailable** | Constrained profile returned non-retryable plan 503; no media opened | — |
+| Model Citizen, 4K DV8 compatibility-1 / E-AC-3 | 878 / 1,022 ms | **1,535 / 1,355 ms** | 3,638 ms (2,103 ms) | 0 → **0** |
+| 1917, H.264-copy / AAC fMP4 HLS | Old native TS: 13,960 ms including plan; not equivalent | **Failed before frame** | 219 ms plan; first segment ready in about 0.8 s | — |
+
+Seeks were authorized at 60 s (Street Fighter, Mummy 1959, 1917) or 120 s
+(Model Citizen, Mummy 1999). Successful direct seeks retained the same core and
+byte reader. All measured successful drives reported **zero audio underruns**.
+Street Fighter's maximum frame age against the physical audio clock was 8.18 ms;
+HEVC SDR was 23 ms. DV8's raw maximum was 47 ms at the paused seek preview,
+while the final playing sample was 4.76 ms. These are presentation-clock metrics,
+not a physical speaker/display lipsync measurement. DV8 used HDR10 base-layer
+SDR tone mapping; RPU enhancement reconstruction is not claimed.
+
+Source selection changed. The default profile selected H.264 for Mummy 1959 and
+Model Citizen; their actual H.264 drives also played and were not misreported as
+HEVC/DV coverage. The HEVC rows use the same conservative HEVC-only test subset
+as the earlier wrapper qualification. The default 4K Mummy 1999 source was SDR
+with E-AC-3, not HDR/DTS: 298 ms after plan, 2,497 ms seek, one drop. Ether
+confirmed the historical HDR/DTS result was **The Mummy Returns from a wrongly
+matched pack**, stored under Mummy 1999. The corrected resolver rejects that
+wrong film. No genuine current HDR/DTS candidate has been established for either
+title; that row cannot pass by relabelling a different source.
+
+The separate default-profile Mummy 1959 drive spent 9.56 s in plan and 5 s on
+seek. Ether correlated this with blocking Usenet health sampling, a missing
+article, and source failover/probing; it is not attributed to decoder configure.
+Street Fighter's cold plan walked four candidates, including an 810 ms probe.
+The actual DV8 core startup spent **1,102 ms in decoder/pipeline configure**.
+Its seek spent only 1.1 ms in metadata and 10.1 ms in configure; the remaining
+~1.32 s is acquisition/preroll/presentation, not a cold configure.
+
+### Blockers and corrective work
+
+- HLS AAC packet timestamp was `384307168202282300000` µs, with 21,333 µs
+  duration and 401 bytes. A generated local FFmpeg reproduction proves raw AAC
+  `tfdt = 18446744073709550592 = 2^64 − 1024`. Negative priming was encoded as
+  unsigned time. Ether's producer correction is `020048997`; the core also needs
+  a source-scoped, exact-word repair before floating-point conversion, followed
+  by normal decoder preroll trimming. Other garbage timestamps stay rejected.
+- One native HEVC startup drop needs its bounded scheduler trace resolved.
+- Cold GPU decoder/colour pipeline compilation must move to idle/preparation;
+  seek work must target indexed reads and preroll. Retaining an already-hot
+  decoder alone does not address the measured 1.32 s seek phase.
+
+Screenshots are `client/.exact/lab-core-*.png`; content-free numeric drive records
+are `client/.exact/core-lab18-results.json`. No original source bytes, credentials,
+grants or private request headers were captured. The corrected priming build and
+further lab qualification are paused for the owner-facing 0.1.33 build priority.

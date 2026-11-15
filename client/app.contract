@@ -23,6 +23,7 @@ component Client
   members "./foundation/live.contract"
   members "./foundation/appearance.contract"
   members "./foundation/launch.contract"
+  members "./foundation/theme.contract"
   // What every skin slot reads besides its record: the active skin, the server's skin
   // document, and the app's actions by their own names. Each slot's generated dispatch
   // (foundation/skins.generated.contract) offers these to its skin under the slot ABI's names.
@@ -48,6 +49,7 @@ component Client
     playHero
     openLiveProgramme
     retryDescriptive
+    retryFailed
     edit
     play
     playExtra
@@ -78,6 +80,8 @@ component Client
     watchSeek
     editWatch
     closeWatch
+    toggleWatchInfo
+    toggleThemeMusic
     editUsername
     editPassword
     submitSignIn
@@ -129,10 +133,10 @@ component Client
                             for slotProps in [SearchProps(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(searchTimeQuery != query or searchTimeGeneration != generation or pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results) and searchTimeQuery == query and searchTimeGeneration == generation), aiAvailable=home.aiAvailable, descriptiveState=descriptiveState, descriptiveCanRetry=descriptiveCanRetry, aiState=aiState, small=homeSmall, still=still)] key="searchSurface"
                               SearchSurface(p=slotProps)
                         else if failed(home)
-                          for slotProps in [StatusProps(kind="failure", message=t("ui.yourLibraryCouldnTBeReachedCheckYourServerConnection"), small=homeSmall, still=still)] key="status"
+                          for slotProps in [StatusProps(kind="failure", message=t("ui.yourLibraryCouldnTBeReachedCheckYourServerConnection"), canRetry=true, small=homeSmall, still=still)] key="status"
                             Status(p=slotProps)
                         else
-                          for slotProps in [StatusProps(kind="home", message=t("ui.findingYourEvening"), small=homeSmall, still=still)] key="status"
+                          for slotProps in [StatusProps(kind="home", canRetry=false, message=t("ui.findingYourEvening"), small=homeSmall, still=still)] key="status"
                             Status(p=slotProps)
                       for sid in sectionIds.slice(1) key=sid
                         if sid == "@live"
@@ -157,14 +161,14 @@ component Client
                                   Library(p=slotProps)
                               if lib.id == libraryId and libraryModel.id != lib.id and librarySnapshots.filter(m => m.id == lib.id).length == 0
                                 if failed(libraryModel)
-                                  for slotProps in [StatusProps(kind="failure", message=t("library.couldNotOpen"), small=small, still=still)] key="status"
+                                  for slotProps in [StatusProps(kind="failure", message=t("library.couldNotOpen"), canRetry=true, small=small, still=still)] key="status"
                                     Status(p=slotProps)
                                 else
-                                  for slotProps in [StatusProps(kind="library", message=t("ui.findingTitles"), small=small, still=still)] key="status"
+                                  for slotProps in [StatusProps(kind="library", canRetry=false, message=t("ui.findingTitles"), small=small, still=still)] key="status"
                                     Status(p=slotProps)
                               // Panels not yet visited show their shape (still) so a long pan passes over content.
                               if lib.id != libraryId and libraryModel.id != lib.id and librarySnapshots.filter(m => m.id == lib.id).length == 0
-                                for slotProps in [StatusProps(kind="library", message=t("ui.findingTitles"), small=small, still=true)] key="status"
+                                for slotProps in [StatusProps(kind="library", canRetry=false, message=t("ui.findingTitles"), small=small, still=true)] key="status"
                                   Status(p=slotProps)
         if e.name == "live"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor
@@ -180,24 +184,24 @@ component Client
                 image "symbol:close"
               scroll id=`detail-scroll-${e.id}` role="region" aria-label=t("ui.titleDetails") flex=1 min-height=0
                 if failed(detail)
-                  for slotProps in [StatusProps(kind="failure", message=t("ui.thisTitleCouldnTBeOpenedItMayNoLongerBeAvailable"), small=small, still=still)] key="status"
+                  for slotProps in [StatusProps(kind="failure", message=t("ui.thisTitleCouldnTBeOpenedItMayNoLongerBeAvailable"), canRetry=true, small=small, still=still)] key="status"
                     Status(p=slotProps)
                 else
                   if not current(detail)
-                    for slotProps in [StatusProps(kind="detail", message=t("ui.openingTitle"), small=small, still=still)] key="status"
+                    for slotProps in [StatusProps(kind="detail", canRetry=false, message=t("ui.openingTitle"), small=small, still=still)] key="status"
                       Status(p=slotProps)
                   else
-                    for slotProps in [DetailProps(model=detailSurface, small=small, still=still, season=detailSeason)] key="detail"
+                    for slotProps in [DetailProps(model=detailSurface, themeMusic=themeMusicOn, small=small, still=still, season=detailSeason)] key="detail"
                       Detail(p=slotProps)
         if e.name == "collection"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor color=inkColor
             scroll flex=1 min-height=0
               if failed(collection)
-                for slotProps in [StatusProps(kind="failure", message=t("ui.thisCollectionCouldnTBeOpened"), small=small, still=still)] key="status"
+                for slotProps in [StatusProps(kind="failure", message=t("ui.thisCollectionCouldnTBeOpened"), canRetry=true, small=small, still=still)] key="status"
                   Status(p=slotProps)
               else
                 if not current(collection)
-                  for slotProps in [StatusProps(kind="loading", message=t("ui.openingCollection"), small=small, still=still)] key="status"
+                  for slotProps in [StatusProps(kind="loading", canRetry=false, message=t("ui.openingCollection"), small=small, still=still)] key="status"
                     Status(p=slotProps)
                 else
                   for slotProps in [CollectionProps(id=e.params.id, name=collection.name, items=collection.items, small=small, still=still)] key="collection"
@@ -206,31 +210,28 @@ component Client
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor
         if e.name == "watch" or e.name == "extra" or e.name == "liveWatch"
           column navigationKey=`${e.id}` navigationPresentation="fullscreen" id="watch-stage" testId="watch-stage" key=stageKey pointermove=touchWatch pointerdown=touchWatch position="absolute" inset=0 background-color="media.ground" color="ink.primary" tabindex=0
-            if failed(playback)
-              column margin="auto" padding=32 gap=16
-                text t("ui.playbackCouldnTBeStarted") role="alert"
-                button press=close
-                  text t("ui.backToTitle")
-            else
-              // The chrome stands from the moment Play is pressed (a loading view until the session
-              // and its plan exist, however long the server prepares), so its spinner runs on
-              // without a swap; the picture joins beneath it.
-              if current(playback) and watchPlan != ""
-                vela-player plan=(watchModel.planJson != "" ? watchModel.planJson : currentPlan) playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%" z-index=0
-              // The chrome is its own layer above the picture: whatever the engine composites
-              // (a video element or a GPU canvas) stays under it, and pointer events bubble to the stage.
-              column position="absolute" inset=0 z-index=1
-                for slotProps in [PlayerProps(model=watchView, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : t("ui.liveTelevisionTitle")) : watchTitle), busy=(pending(watchAuthorized) or not current(playback) or watchPlan == ""), visible=watchChromeVisible, small=small, still=still, serverError=watchReply.error)] key="playerChrome"
-                  PlayerChrome(p=slotProps)
-              if current(playback)
-                if e.name == "liveWatch"
-                  column position="absolute" top=88 right=(small ? 12 : 36) z-index=2 max-width=(small ? "calc(100% - 24px)" : "none") opacity=(liveControlsVisible ? 1 : 0) pointer-events=(liveControlsVisible ? "auto" : "none") inert=(not liveControlsVisible) transition=(still ? "none" : "opacity 180ms ease")
-                    for slotProps in [LiveControlsProps(lowDelay=lowDelay, reconnecting=(liveView.sessionId == playback.sessionId and liveView.reconnecting), delivery=(liveView.sessionId == playback.sessionId ? liveView.delivery : "unknown"), drift=(liveView.sessionId == playback.sessionId ? liveView.drift : -1), driftLabel=(liveView.sessionId == playback.sessionId ? liveView.driftLabel : ""), canCatchUp=(liveView.sessionId == playback.sessionId and liveView.canCatchUp))] key="liveControls"
-                      LiveControls(p=slotProps)
-                  if zapTarget != "" and guide.channels.length > 0
-                    column position="absolute" left=(small ? 16 : 40) top="50%" translate="0px -50%" z-index=3
-                      for slotProps in [MiniGuideProps(model=guide, playing=playingId, target=zapTarget, small=small, still=still)] key="miniGuide"
-                        MiniGuide(p=slotProps)
+            // The chrome stands from the moment Play is pressed (a loading view until the session
+            // and its plan exist, however long the server prepares), so its spinner runs on
+            // without a swap; the picture joins beneath it.
+            if current(playback) and watchPlan != ""
+              vela-player plan=(watchModel.planJson != "" ? watchModel.planJson : currentPlan) playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%" z-index=0
+            // The chrome is its own layer above the picture: whatever the engine composites
+            // (a video element or a GPU canvas) stays under it, and pointer events bubble to the stage.
+            column position="absolute" inset=0 z-index=1
+              for slotProps in [PlayerProps(model=watchView, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : t("ui.liveTelevisionTitle")) : watchTitle), busy=(pending(watchAuthorized) or not current(playback) or watchPlan == ""), visible=watchChromeVisible, small=small, still=still, serverError=watchReply.error, info=watchInfo)] key="playerChrome"
+                PlayerChrome(p=slotProps)
+            if current(playback)
+              if e.name == "liveWatch"
+                column position="absolute" top=88 right=(small ? 12 : 36) z-index=2 max-width=(small ? "calc(100% - 24px)" : "none") opacity=(liveControlsVisible ? 1 : 0) pointer-events=(liveControlsVisible ? "auto" : "none") inert=(not liveControlsVisible) transition=(still ? "none" : "opacity 180ms ease")
+                  for slotProps in [LiveControlsProps(lowDelay=lowDelay, reconnecting=(liveView.sessionId == playback.sessionId and liveView.reconnecting), delivery=(liveView.sessionId == playback.sessionId ? liveView.delivery : "unknown"), drift=(liveView.sessionId == playback.sessionId ? liveView.drift : -1), driftLabel=(liveView.sessionId == playback.sessionId ? liveView.driftLabel : ""), canCatchUp=(liveView.sessionId == playback.sessionId and liveView.canCatchUp))] key="liveControls"
+                    LiveControls(p=slotProps)
+                if zapTarget != "" and guide.channels.length > 0
+                  column position="absolute" left=(small ? 16 : 40) top="50%" translate="0px -50%" z-index=3
+                    for slotProps in [MiniGuideProps(model=guide, playing=playingId, target=zapTarget, small=small, still=still)] key="miniGuide"
+                      MiniGuide(p=slotProps)
+      // The show's theme, while its title page is the visible screen (foundation/theme.contract).
+      if themePlaying
+        audio themeUrl autoplay=true volume=themeVolume width=0 height=0 aria-hidden=true
       // The launch splash, over everything while boot and sign-in are pending; it leaves as the first screen is ready.
       if launching
         VelaSplash(still=still, ground=pageColor, paper=splashOnPaper, label=t("ui.connectingToYourLibrary"))

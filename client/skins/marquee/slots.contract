@@ -652,6 +652,8 @@ component SearchSurface
 component Status
   props
     p: StatusProps
+  inject
+    retry: action
   view
     column padding-top=(p.small or p.kind != "home" ? barH(p.small) : 0) animation="mqFade 200ms linear both"
       if p.kind == "home"
@@ -689,4 +691,9 @@ component Status
                 Spinner(size=40, still=p.still)
                 text p.message color="marquee.ink-dim" font-size=15
             else
-              Empty(glyph="alert", title=t("ui.somethingWentQuiet"), message=p.message)
+              column gap=4
+                Empty(glyph="alert", title=t("ui.somethingWentQuiet"), message=p.message)
+                if p.canRetry
+                  row justify-content="center"
+                    button press=retry() class=Primary height=40 padding="0px 22px"
+                      text t("ui.tryAgain")

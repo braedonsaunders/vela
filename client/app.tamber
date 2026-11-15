@@ -186,6 +186,13 @@ theme
   cinematic.secure-edge = #dcb99840  scheme=fixed
   cinematic.rank-fill = #0e1116  scheme=fixed
   cinematic.rank-stroke = #d9d3c7  scheme=fixed
+  cinematic.rating-fresh = #e2462f  scheme=fixed
+  cinematic.rating-rotten = #7da13f  scheme=fixed
+  cinematic.rating-certified = #f2c14e  scheme=fixed
+  cinematic.rating-leaf = #4f8a2b  scheme=fixed
+  cinematic.rating-high = #57b45a  scheme=fixed
+  cinematic.rating-mid = #e8c13f  scheme=fixed
+  cinematic.rating-low = #df4f3b  scheme=fixed
     when pack=installed: #090b0ed0
   cinematic.ink-track = #11141933  scheme=fixed
     when pack=installed: #11141932
