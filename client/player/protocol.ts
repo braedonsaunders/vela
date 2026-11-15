@@ -9,6 +9,7 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
     id: plan.sessionId, serverState: plan.state, serverControlled: true, selectedSourceId: plan.selectedPathId, mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? '', edition,
     position: plan.positionSeconds, duration: plan.durationSeconds, live: !!plan.channelId, liveWindowStart: plan.live?.windowStartSeconds, liveEdge: plan.live?.liveEdgeSeconds, liveMaxDrift: plan.live?.maxDriftSeconds, lowDelay: plan.live?.mode === 'low-delay', sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
     audioTrackId: plan.selectedAudioTrackId, subtitleTrackId: plan.selectedSubtitleTrackId ?? undefined,
+    chapters: plan.chapters,
     audioTracks: plan.audioTracks.map(t => ({ id: t.id, label: t.name, language: t.language, codec: t.codec, channels: t.channels, streamIndex: t.streamIndex })),
     subtitleTracks: plan.subtitleTracks.map(t => ({ id: t.id, label: t.name, language: t.language, codec: t.codec, streamIndex: t.streamIndex,
       url: t.delivery?.kind === 'external' ? t.delivery.url : t.url, delivery: t.delivery, forced: t.forced, hearingImpaired: t.hearingImpaired })),

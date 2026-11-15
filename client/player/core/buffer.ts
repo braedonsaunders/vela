@@ -22,7 +22,7 @@ export class VideoBuffer<T extends DecodedVideoFrame> {
     let frame: T | null = null, dropped = 0;
     while (this.frames.length && this.frames[0].timestampUs <= positionUs) {
       const next = this.frames.shift()!;
-      if (next.epoch !== epoch || next.timestampUs + next.durationUs <= minimumUs) { next.release(); continue; }
+      if (next.epoch !== epoch || next.timestampUs < minimumUs && next.timestampUs + next.durationUs <= minimumUs) { next.release(); continue; }
       if (frame) { frame.release(); dropped++; }
       frame = next;
     }
