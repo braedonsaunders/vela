@@ -60,7 +60,8 @@ if (agent < 0) {
 const args = rest.slice(agent + 1);
 const motion = args.includes('--motion');
 const drive = args.filter(a => a !== '--motion');
-const VALUED = new Set(['--port', '--size', '--storage', '--epoch', '--sim', '--chrome', '--url', '--browser', '--backend']);
+// Drive flags that take a value (exact.mjs agent --help all): the prefer op goes after them.
+const VALUED = new Set(['--backend', '--bind', '--browser', '--chrome', '--configuration', '--epoch', '--fail-fetch', '--family', '--format-locale', '--home', '--locale', '--login', '--notification', '--open', '--permission', '--phone', '--placement', '--plan', '--port', '--process', '--props', '--scale', '--seed', '--sim', '--size', '--state', '--storage', '--time-zone', '--url', '--wake', '--world']);
 let first = 0;
 while (first < drive.length && drive[first].startsWith('--')) first += VALUED.has(drive[first]) ? 2 : 1;
 if (!motion) drive.splice(first, 0, 'prefer prefers-reduced-motion reduce');
