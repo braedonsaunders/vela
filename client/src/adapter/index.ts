@@ -23,6 +23,8 @@ export interface ServerAdapter {
   collection(id: string, cursor?: string, limit?: number): Promise<V.CollectionContents>;
   detail(id: string): Promise<V.TitleDetail>;
   trailerPreview(id: string, request: V.TrailerPreviewRequest): Promise<V.TrailerPreviewResponse>;
+  /** The state of a preview already requested by trailerPreview; never starts preparation. */
+  trailerPreviewStatus(id: string): Promise<V.TrailerPreviewResponse>;
   search(request: V.SearchRequest): Promise<V.SearchResponse>;
   startAI(request: V.AISearchRequest): Promise<V.AISearchJob>;
   aiJob(id: string): Promise<V.AISearchJob>;

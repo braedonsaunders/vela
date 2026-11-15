@@ -1,0 +1,185 @@
+use ConnectProps from "../../foundation/slot-api.contract"
+use ServerOption from "../../foundation/models.contract"
+use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, Field, enter, base, glide, vanish from "./look.contract"
+use Pulse from "./auth.contract"
+
+// Connecting a server, on the sign-in stage: an address checked as it is typed, the
+// server it found, then that kind's own sign-in (Plex links with a code at plex.tv/link;
+// Jellyfin and Emby take a password or Quick Connect). Your servers are listed to switch.
+component Connect
+  props
+    p: ConnectProps
+  inject
+    probe: action
+    add: action
+    select: action
+    remove: action
+    startPlex: action
+    choosePlex: action
+    cancelPlex: action
+    signInJelly: action
+    startQuick: action
+    cancelQuick: action
+    close: action
+  state address = ""
+  state username = ""
+  state password = ""
+  // Only a server added on this visit moves the screen on to its sign-in.
+  state addedHere = false
+  derive target = (p.serverId != "" ? p.serverId : addedHere and not p.busy and p.addServerError == "" ? p.addedServerId : "")
+  derive targetServer = p.servers.filter(s => s.id == target)
+  derive kind = match first(targetServer) { case some(s) => s.kind, case none => (target != "" ? p.probe.kind : "") }
+  // A Plex server has no name until it is linked; its kind stands in.
+  derive foundName = (p.probe.name != "" ? p.probe.name : p.probe.kindLabel)
+  derive serverName = match first(targetServer) { case some(s) => s.name, case none => foundName }
+  action edit(v: string)
+    address = v
+    probe(v)
+  action editUser(v: string)
+    username = v
+  action editPassword(v: string)
+    password = v
+  action addFound
+    if p.probe.state == "found" and not p.busy
+      addedHere = true
+      add(p.probe.kind, foundName, p.probe.normalizedUrl)
+  action submitJelly
+    if username.trim() != "" and password != "" and not p.busy
+      signInJelly(target, username.trim(), password)
+  view
+    column gap=26 animation=enter(p.still, 60) -exact-exit-animation=(p.still ? "vanish 160ms linear both" : "vanish 320ms ease-in both")
+      if target == ""
+        column gap=10
+          text t("connect.eyebrow") class=Eyebrow font-size=10 color="brand.warm"
+          text t("connect.title") role="heading" aria-level=1 class=Display font-size=42
+        column gap=8
+          text t("connect.address") class=Eyebrow font-size=10 color="ink.quiet"
+          input value=address input=edit submit=addFound autocomplete="url" autocapitalize="none" spellcheck=false inputmode="url" placeholder=t("connect.addressHint") aria-label=t("connect.address") testId="connect-address" class=Field transition=`border-color 180ms linear, box-shadow ${base()}ms ${glide()}`
+        if p.probe.state == "checking"
+          row gap=10 align-items="center" role="status"
+            Pulse(still=p.still)
+            text t("connect.checking") font-size=14 color="ink.secondary"
+        if p.probe.state == "found"
+          column gap=14 padding=18 border-radius=18 background-color="cinematic.glass-deep" border="1px solid var(--cinematic.glass-edge)" role="status" animation=enter(p.still, 0)
+            column gap=4
+              text p.probe.kindLabel class=Eyebrow font-size=10 color="brand.warm"
+              text foundName class=Display font-size=28 line-clamp=2
+              if p.probe.version != ""
+                text p.probe.version font-size=12 color="ink.quiet"
+            button press=addFound disabled=p.busy class=PrimaryPill height=50 testId="connect-continue" transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
+              text t("connect.continue") font-size=15
+        if p.probe.state == "invalid" or p.probe.state == "unreachable" or p.probe.state == "unsupported" or p.probe.state == "insecure"
+          text p.probe.message role="alert" font-size=14 color="brand.warm" line-height=1.5
+        if p.addServerError != ""
+          text p.addServerError role="alert" font-size=14 color="brand.warm" line-height=1.5
+        if p.servers.length > 0
+          column gap=8
+            text t("connect.yours") class=Eyebrow font-size=10 color="ink.quiet"
+            for server in p.servers key=server.id
+              ServerRow(server=server, busy=p.busy, select=select, remove=remove)
+        if p.canClose
+          button press=close class=GhostPill height=46 padding="0px 24px" align-self="flex-start"
+            text t("ui.cancel") font-size=14
+      else
+        column gap=10
+          text (kind == "plex" ? t("connect.plex.eyebrow") : t("connect.signIn.eyebrow")) class=Eyebrow font-size=10 color="brand.warm"
+          text (kind == "plex" ? t("connect.plex.title") : serverName) role="heading" aria-level=1 class=Display font-size=42 line-clamp=2
+        if kind == "plex"
+          if p.plexLink.state == "waiting" or p.plexLink.state == "starting"
+            column gap=18 align-items="center" text-align="center"
+              if p.plexLink.code != ""
+                row width="100%" gap=6 justify-content="center" testId="plex-code" aria-label=p.plexLink.code role="text"
+                  for ch, i in p.plexLink.code.split("") key=`${i}`
+                    text ch aria-hidden=true flex=1 max-width=44 height=54 display="flex" align-items="center" justify-content="center" border-radius=12 background-color="cinematic.glass-deep" border="1px solid var(--cinematic.glass-edge)" box-shadow="inset 0px 1px 0px var(--cinematic.ring)" font-family="ui-monospace, \"SF Mono\", Menlo, monospace" font-size=24 font-weight=600 color="brand.warm" animation=enter(p.still, 120 + i * 45)
+              row gap=6 align-items="baseline" justify-content="center" flex-wrap="wrap"
+                text t("connect.plex.enterAt") font-size=15 color="ink.secondary"
+                link href=p.plexLink.linkUrl target="_blank" font-size=15 font-weight=650 color="ink.primary" text-decoration="underline" testId="plex-link"
+                  text t("connect.plex.linkLabel")
+              row gap=10 align-items="center" role="status"
+                Pulse(still=p.still)
+                text t("connect.plex.waiting") font-size=14 color="ink.secondary"
+              button press=cancelPlex class=GhostPill height=46 padding="0px 28px"
+                text t("ui.cancel") font-size=14
+          else if p.plexLink.state == "linked"
+            column gap=8
+              text t("connect.plex.choose") class=Eyebrow font-size=10 color="ink.quiet"
+              if p.plexServers.length == 0
+                row gap=10 align-items="center" role="status"
+                  Pulse(still=p.still)
+                  text t("connect.plex.finding") font-size=14 color="ink.secondary"
+              for server in p.plexServers key=server.id
+                button press=choosePlex(server.id) disabled=p.busy display="flex" align-items="center" gap=12 min-height=60 padding="10px 16px" border-radius=16 border="1px solid var(--cinematic.glass-edge)" background-color="cinematic.control" color="ink.primary" text-align="left" cursor="pointer" transition="background-color 180ms linear"
+                  :hover
+                    background-color = "cinematic.control-hover"
+                  :focus-visible
+                    box-shadow = "0px 0px 0px 2px var(--brand.warm)"
+                  column flex=1 min-width=0 gap=3
+                    text server.name font-size=16 font-weight=600 line-clamp=1
+                    text server.connectionLabel font-size=12 color="ink.quiet" line-clamp=1
+                  if server.recommended
+                    text t("connect.plex.recommended") font-size=11 font-weight=650 letter-spacing="0.06em" padding="4px 8px" border-radius=6 background-color="brand.warm" color="ink.inverse"
+          else
+            column gap=12
+              if p.plexLink.state == "expired" or p.plexLink.state == "failed"
+                text (p.plexLink.state == "expired" ? t("connect.plex.expired") : t("connect.plex.failed")) role="alert" font-size=14 color="brand.warm"
+              button press=startPlex disabled=p.busy class=PrimaryPill height=52 testId="plex-start" transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
+                text t("connect.plex.start") font-size=15
+          if p.plexError != ""
+            text p.plexError role="alert" font-size=14 color="brand.warm" line-height=1.5
+        else
+          if p.jellyQuick.code != ""
+            column gap=18 align-items="center" text-align="center"
+              row width="100%" gap=6 justify-content="center" testId="jelly-code" aria-label=p.jellyQuick.code role="text"
+                for ch, i in p.jellyQuick.code.split("") key=`${i}`
+                  text ch aria-hidden=true flex=1 max-width=44 height=54 display="flex" align-items="center" justify-content="center" border-radius=12 background-color="cinematic.glass-deep" border="1px solid var(--cinematic.glass-edge)" box-shadow="inset 0px 1px 0px var(--cinematic.ring)" font-family="ui-monospace, \"SF Mono\", Menlo, monospace" font-size=24 font-weight=600 color="brand.warm" animation=enter(p.still, 120 + i * 45)
+              row gap=10 align-items="center" role="status"
+                if p.jellyQuickError == ""
+                  Pulse(still=p.still)
+                text (p.jellyQuickError == "" ? t("connect.quick.waiting") : p.jellyQuickError) font-size=14 color=(p.jellyQuickError == "" ? "ink.secondary" : "brand.warm")
+              button press=cancelQuick class=GhostPill height=46 padding="0px 28px"
+                text t("ui.cancel") font-size=14
+          else
+            column gap=14
+              column gap=8
+                text t("ui.username") class=Eyebrow font-size=10 color="ink.quiet"
+                input value=username input=editUser autocomplete="username" autocapitalize="none" spellcheck=false aria-label=t("ui.username") testId="connect-username" class=Field transition=`border-color 180ms linear, box-shadow ${base()}ms ${glide()}`
+              column gap=8
+                text t("ui.password") class=Eyebrow font-size=10 color="ink.quiet"
+                input type="password" value=password input=editPassword submit=submitJelly autocomplete="current-password" aria-label=t("ui.password") testId="connect-password" class=Field transition=`border-color 180ms linear, box-shadow ${base()}ms ${glide()}`
+              button press=submitJelly disabled=(p.busy or username.trim() == "" or password == "") class=PrimaryPill height=52 margin-top=6 testId="connect-sign-in" transition=`background-color 180ms linear, opacity 180ms linear, scale ${base()}ms ${glide()}`
+                text t("ui.signIn") font-size=15
+              if p.jellySignInError != ""
+                text p.jellySignInError role="alert" font-size=14 color="brand.warm" line-height=1.5
+              button press=startQuick(target) disabled=p.busy class=GhostPill height=52 testId="connect-quick" transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
+                text t("connect.quick.start") font-size=15
+        if p.serverError != ""
+          text p.serverError role="alert" font-size=14 color="brand.warm" line-height=1.5
+        if p.canClose
+          button press=close class=GhostPill height=46 padding="0px 24px" align-self="flex-start"
+            text t("ui.cancel") font-size=14
+
+// One of your servers: its name, kind and state; choosing it switches to it.
+component ServerRow
+  props
+    server: ServerOption
+    busy: bool
+    select: action
+    remove: action
+  action pick
+    if not server.selected
+      select(server.id)
+  view
+    row gap=8 align-items="center"
+      button press=pick disabled=(busy and not server.selected) aria-current=server.selected display="flex" flex=1 min-width=0 align-items="center" gap=12 min-height=56 padding="8px 14px" border-radius=14 border="1px solid var(--cinematic.glass-edge)" background-color=(server.selected ? "cinematic.control-hover" : "cinematic.control") color="ink.primary" text-align="left" cursor=(server.selected ? "default" : "pointer") transition="background-color 180ms linear"
+        :hover
+          background-color = "cinematic.control-hover"
+        :focus-visible
+          box-shadow = "0px 0px 0px 2px var(--brand.warm)"
+        column flex=1 min-width=0 gap=3
+          text server.name font-size=15 font-weight=600 line-clamp=1
+          text (server.status == "ready" ? (server.viewer != "" ? `${server.kindLabel} · ${server.viewer}` : server.kindLabel) : server.message != "" ? `${server.kindLabel} · ${server.message}` : server.kindLabel) font-size=12 color=(server.status == "ready" ? "ink.quiet" : "brand.warm") line-clamp=1
+        if server.selected
+          image "symbol:checkmark" width=14 height=14 color="brand.warm" aria-hidden=true
+      if not server.selected
+        button press=remove(server.id) disabled=busy aria-label=t("connect.remove", name=server.name) class=IconButton width=40 height=40 padding=12 flex-shrink=0
+          image "symbol:close" width=14 height=14
