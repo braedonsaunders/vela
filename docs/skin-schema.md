@@ -154,7 +154,7 @@ Renderer 3 is the live home above; a document using anything here names `rendere
   (numbers and px/% only); a motion preset names one as `keyframes: "doc:<name>"`.
 - Focus: `focus` is keyboard focus (focus-visible); `groupFocus` beside `groupHover`; a group's
   focus includes focus inside it.
-- Press: `press: { action, arg?, hold?: ms, focus?: "<id>" }`; `disabled: Condition[]` with a
+- Press: `press: { action, arg?, focus?: "<id>" }`; `disabled: Condition[]` with a
   `disabled` style overlay; `a11y: { expanded?, selected?, current?, pressed?: Condition[],
   haspopup?, controls?, title?: Template, role? }` on the press button.
 - `escape: "<flag>"` on a node: Escape clears the flag and returns focus to `returnFocus`.
@@ -191,7 +191,7 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
 ## Next (renderer 6, names final)
 
 - Per-document `traits`: `page`, `ink`, `flatDetail`, `panSections`, `barMask`, `splashOnPaper`,
-  detail frame tokens. `env.searchFocused`, `env.clock12`, `rotate-axis`.
+  detail frame tokens. `env.searchFocused`, `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 
 **Widgets** (leaf nodes drawn only in the first levels): `searchInput` (the bare input with
 `params` for type and ink; the document draws the field around it; `env.searchFocused`,
