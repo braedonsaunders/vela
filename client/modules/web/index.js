@@ -2278,6 +2278,8 @@ class PlaybackEngine {
     const now = performance.now();
     if (this.recordPlaybackProgress(now))
       return;
+    if (this.original?.implementation === "vela-core" && this.original.startupPending)
+      return;
     const expired = !this.everPlayed ? now - this.waitSince > this.startupDeadlineMs : now - this.lastAdvance > 30000;
     if (expired)
       this.recover(new PlaybackFault(this.everPlayed ? "Playback stalled for 30 seconds" : `Playback did not start within ${this.startupDeadlineMs / 1000} seconds`, "network"), this.controller.token());
@@ -2825,6 +2827,8 @@ class PlaybackEngine {
       this.originalStartTimer = setTimeout(() => {
         this.originalStartTimer = undefined;
         if (!this.controller.current(token))
+          return;
+        if (this.original?.implementation === "vela-core" && this.original.startupPending)
           return;
         this.recordPlaybackProgress();
         if (!this.everPlayed)
