@@ -29,7 +29,10 @@ All new orchestration lives in `client/player/core/` (playback lead).
   bounds, backpressure and frame deadlines. Audio-rendered timestamps are master;
   monotonic time is used only for silent/video-only playback. Pause/seek/rate
   changes reset anchors atomically. Present the newest due frame and release
-  superseded/preroll frames. A seek keeps the same source cache/device/pipelines.
+  superseded/preroll frames. Prime the target video frame before starting audio;
+  loading-time Play/Pause changes intent without reviving a retired epoch. A seek
+  keeps the same source cache/device/pipelines. Presentation counters record frame
+  age against the physical audio clock; they do not claim human lipsync accuracy.
 - `session.ts`, `recovery.ts`, `quality.ts`, `live.ts`: Vela owns Ether authority,
   generations, plans/SSE/observations, retries, rendition/source switches and live
   edge policy. URL/timeline/edition/source revision must remain compatible across
@@ -187,3 +190,14 @@ listener initially crashed because URL is absent from its outer sandbox; after
 correcting that drive script, both media paths passed. No test suite was added.
 Chrome and the local asset server were closed. These640×360 loopback measurements
 exclude broker planning and do not establish4K or lab parity.
+
+The explicit core payload now enables finite HLS in the same `vela-player` view
+via its verified manifest, without changing the production wrapper's admission.
+A local native-view remux plan at4s selected WebGPU, first GPU frame255.9ms,
+active audio IDa2, and both server-offered audio choices. An authorized seek to6s
+immediately exposed target6/buffering, then resumed in68.5ms including40ms
+simulated authority latency. The exact runtime/cache survived, no earlier segment
+was fetched, and presentation drops stayed0. Selecting audioa1 emitted the normal
+server tracks command rather than attempting a nonexistent local HLS track.
+Chrome and the local server were closed. Finite HLS remains a migration candidate;
+live-window, alternate-group and cross-rendition continuity gates are outstanding.

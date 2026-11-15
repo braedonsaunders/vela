@@ -50,7 +50,7 @@ export function homeModel(data: Bootstrap, origin?: string, _now?: number, artWi
     rows: data.rows.map(row => feedRow(row, origin, artWidth)), nextCursor: data.nextCursor ?? '',
     liveAvailable: data.capabilities.features.liveTV.available, aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available, trailerPreviewAvailable: data.capabilities.features.trailerPreview?.available ?? false };
 }
-export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560, extraPlayback = false) {
+export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560, extraPlayback = false, themeAvailable = false) {
   const facts: string[] = [];
   const video = (data.mediaSummary?.video ?? []).filter(v => (v.width ?? 0) > 0 && (v.height ?? 0) > 0)
     .sort((a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0] ?? data.mediaSummary?.video[0];
@@ -68,6 +68,17 @@ export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560,
     }
     return { name: value.name, role: value.role ?? '', portrait };
   };
+  let themeMusicUrl = '', themeMusicExpiresAt = 0;
+  if (themeAvailable && origin && data.title.themeMusic && ['show', 'season', 'episode'].includes(data.title.kind)) {
+    try {
+      const url = new URL(data.title.themeMusic.url, `${origin}/`);
+      const expires = Date.parse(data.title.themeMusic.expiresAt);
+      if (url.origin === origin && !url.username && !url.password && !url.search && !url.hash && /^\/vela\/v0\/themes\/[a-f0-9]{64}\/theme\.m4a$/.test(url.pathname) && Number.isFinite(expires) && expires > 0) {
+        themeMusicUrl = url.href;
+        themeMusicExpiresAt = expires;
+      }
+    } catch { /* Invalid optional theme grant is unavailable. */ }
+  }
   const trailers = data.extras.filter(extra => extra.kind === 'trailer');
   const trailer = trailers.find(extra => extra.availability !== 'unavailable') ?? trailers[0];
   const labels: Record<string, string> = { tomatoes: 'ratings.tomatoes', popcorn: 'ratings.popcorn', imdb: 'ratings.imdb', metacritic: 'ratings.metacritic', tmdb: 'ratings.tmdb', letterboxd: 'ratings.letterboxd' };
@@ -77,7 +88,7 @@ export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560,
     value: r.source === 'tomatoes' || r.source === 'popcorn' ? number(r.value / r.scale, { style: 'percent', maximumFractionDigits: 20 }) : number(r.value, { maximumFractionDigits: 20 }),
     score: r.value / r.scale * 100, state: r.state ?? '',
   }));
-  return { title: [card(data.title, '', origin, artWidth)], ratings, trailerId: trailer?.id ?? '', trailerReady: !!trailer && extraPlayback && trailer.availability !== 'unavailable', related: [], mediaFacts: facts, resumePosition: clock(data.title.watch?.positionSeconds ?? 0), crew: (data.crew ?? []).map(c => c.role ? `${c.name} · ${c.role}` : c.name), crewPeople: (data.crew ?? []).map(person), canPlay: data.canPlay ?? false, resumeSeconds: data.title.watch?.positionSeconds ?? 0,
+  return { title: [card(data.title, '', origin, artWidth)], ratings, trailerId: trailer?.id ?? '', trailerReady: !!trailer && extraPlayback && trailer.availability !== 'unavailable', themeMusicUrl, themeMusicExpiresAt, related: [], mediaFacts: facts, resumePosition: clock(data.title.watch?.positionSeconds ?? 0), crew: (data.crew ?? []).map(c => c.role ? `${c.name} · ${c.role}` : c.name), crewPeople: (data.crew ?? []).map(person), canPlay: data.canPlay ?? false, resumeSeconds: data.title.watch?.positionSeconds ?? 0,
     seasons: (data.seasons ?? []).map(t => card(t, '', origin, artWidth)), episodes: (data.episodes ?? []).map(t => card(t, '', origin, artWidth)),
     extras: data.extras.map(e => ({ id: e.id, name: e.name, kind: e.kind, ready: extraPlayback && e.kind === 'trailer' && e.availability !== 'unavailable' })),
     cast: data.cast.map(c => c.role ? `${c.name} · ${c.role}` : c.name),

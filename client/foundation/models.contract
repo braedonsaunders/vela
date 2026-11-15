@@ -61,6 +61,13 @@ shape HeroAction
   actionDetail: string
   progress: number
 
+shape HomeRetryPolicy
+  at: number
+  attempt: number
+  allowed: bool
+  delaySeconds: number
+  retryLimit: number
+
 shape HomeModel
   viewer: string
   defaultSkinId: string
@@ -140,6 +147,8 @@ shape DetailModel
   ratings: Rating[]
   trailerId: string
   trailerReady: bool
+  themeMusicUrl: string
+  themeMusicExpiresAt: number
   canPlay: bool
   resumePosition: string
   resumeSeconds: number
@@ -166,7 +175,11 @@ shape PlaybackModel
   planJson: string
   sessionId: string
   preparing: bool
+  errorCode: string
+  errorMessage: string
+  retryAllowed: bool
   retryAfterSeconds: number
+  retryLimit: number
 
 shape AuthModel
   authenticated: bool

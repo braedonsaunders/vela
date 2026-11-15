@@ -10,7 +10,22 @@ shape PlayerBuffer
   id: string
   left: number
   width: number
+shape PlayerStats
+  bitrateLabel: string
+  throughputLabel: string
+  requiredLabel: string
+  headroom: number
+  throughputHistory: number[]
+  bufferAhead: number
+  bufferLabel: string
+  resolutionLabel: string
+  videoLabel: string
+  deliveryLabel: string
+  dropped: number
+  droppedLabel: string
+fn emptyPlayerStats(): PlayerStats = PlayerStats(bitrateLabel="", throughputLabel="", requiredLabel="", headroom=0, throughputHistory=[], bufferAhead=-1, bufferLabel="", resolutionLabel="", videoLabel="", deliveryLabel="", dropped=-1, droppedLabel="")
 shape PlayerView
+  stats: PlayerStats
   planJson: string
   stopCommandJson: string
   waiting: bool
@@ -56,7 +71,7 @@ shape PlayerView
   fullscreen: bool
 // The player before the engine reports: loading, nothing to choose yet. The chrome draws
 // it from the moment Play is pressed, so its spinner runs on into the engine's own phases.
-fn loadingPlayerView(): PlayerView = PlayerView(planJson="", stopCommandJson="", waiting=true, volume=1, muted=false, speed=1, speeds=[], preparation="", ready=false, state="loading", playing=false, position=0, duration=0, elapsed="", remaining="", progress=0, reason="", actionError="", path="", backend="", quality="", lockedQuality="", qualityAuto=false, pendingAudioId="", pendingSubtitleId="", subtitleError="", subtitleStyleAvailable=false, subtitleSize="medium", subtitleBackground="shadow", subtitleColor="white", subtitlePosition="bottom", audioId="", audioLabel="", subtitleId="", audio=[], subtitles=[], qualities=[], paths=[], pathId="", chapters=[], buffered=[], pip=false, fullscreen=false)
+fn loadingPlayerView(): PlayerView = PlayerView(stats=emptyPlayerStats(), planJson="", stopCommandJson="", waiting=true, volume=1, muted=false, speed=1, speeds=[], preparation="", ready=false, state="loading", playing=false, position=0, duration=0, elapsed="", remaining="", progress=0, reason="", actionError="", path="", backend="", quality="", lockedQuality="", qualityAuto=false, pendingAudioId="", pendingSubtitleId="", subtitleError="", subtitleStyleAvailable=false, subtitleSize="medium", subtitleBackground="shadow", subtitleColor="white", subtitlePosition="bottom", audioId="", audioLabel="", subtitleId="", audio=[], subtitles=[], qualities=[], paths=[], pathId="", chapters=[], buffered=[], pip=false, fullscreen=false)
 
 shape PlayerCommandReply
   planJson: string

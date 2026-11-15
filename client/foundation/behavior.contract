@@ -1,6 +1,6 @@
 use buildEngine from "./engine.contract"
 use skinTraits, skinDetailSplit, resolveSkin, documentsSkin, defaultSkin from "./skins.generated.contract"
-use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, SecureSwitchReply, libraryQuery from "./models.contract"
+use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, SecureSwitchReply, HomeRetryPolicy, libraryQuery from "./models.contract"
 
 shape Time
   epochAtZero: number
@@ -173,7 +173,38 @@ members Client
   action stampHomeTime
     homeAt = time.epochAtZero + performanceNow()
     homeLocale = localeJSON
-  resource home = uiBootstrap(homeAt) with localeJSON, artWidth when auth.authenticated and homeAt > 0 and homeLocale == localeJSON as shape HomeModel
+    homeAttempt = 0
+    homeAutoAttempts = 0
+    homeRetryReady = false
+  state homeAttempt = 0
+  state homeAutoAttempts = 0
+  state homeRetryAt = 0
+  state homeRetryReady = false
+  mutation homeRetryPolicy as shape HomeRetryPolicy then receiveHomeRetryPolicy
+  resource home = uiBootstrap(homeAt, homeAttempt) with localeJSON, artWidth when auth.authenticated and homeAt > 0 and homeLocale == localeJSON as shape HomeModel
+  task readHomeRetryPolicy when failed(home) and auth.authenticated key=`${homeAt}:${homeAttempt}`
+    after(1, requestHomeRetryPolicy)
+  action requestHomeRetryPolicy
+    send homeRetryPolicy = uiHomeRetryPolicy(homeAt, homeAttempt)
+  action receiveHomeRetryPolicy
+    match homeRetryPolicy
+      case some(policy)
+        if policy.at == homeAt and policy.attempt == homeAttempt and policy.allowed and homeAutoAttempts < policy.retryLimit
+          homeRetryAt = time.epochAtZero + performanceNow() + max(1, policy.delaySeconds) * 1000
+          homeRetryReady = true
+      case none
+        homeRetryReady = false
+  task homeRetryClock when auth.authenticated
+    every(1000, tickHomeRetry)
+  action tickHomeRetry
+    if homeRetryReady and failed(home) and not pending(home) and time.epochAtZero + performanceNow() >= homeRetryAt
+      homeRetryReady = false
+      homeAutoAttempts = homeAutoAttempts + 1
+      homeAttempt = homeAttempt + 1
+  action retryHome
+    homeRetryReady = false
+    homeAutoAttempts = 0
+    homeAttempt = homeAttempt + 1
   state homeExtraRows: FeedRow[] = []
   state homeUpdatedRows: FeedRow[] = []
   state homeRowsCursor = ""
@@ -181,6 +212,9 @@ members Client
   state rowMoreLoading: string[] = []
   derive allHomeRows = home.rows.concat(homeExtraRows).map(r => match first(homeUpdatedRows.filter(u => u.id == r.id)) { case some(u) => u, case none => r })
   derive homeMoreCursor = (homeRowsLoaded ? homeRowsCursor : home.nextCursor)
+  // Home has been answered at least once (a failed or revalidating request keeps its last
+  // answer): the page stays drawn from it; only a home never answered shows a failure.
+  derive homeKnown = current(home) or home.viewer != ""
   derive homeSurface = HomeModel(home, rows=allHomeRows, nextCursor=homeMoreCursor, previews=(previewRow == "@hero" and cardPreview.cardId != "" ? [HeroPreview(id=cardPreview.cardId, url=cardPreview.url, expiresAt=cardPreview.expiresAt)] : []))
   state previewTarget = ""
   state previewRow = ""
@@ -392,16 +426,43 @@ members Client
       nav = open(nav, path("home") + librarySection("@live", ""))
   derive collectionId = (top(nav).name == "collection" ? top(nav).params.id : "")
   resource collection = uiCollection(collectionId) with localeJSON, artWidth when auth.authenticated and collectionId != "" as shape CollectionModel
-  resource detail = uiDetail(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape DetailModel
+  resource detail = uiDetail(detailId, `${top(nav).id}`) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape DetailModel
   resource related = uiRelated(detailId) with localeJSON, artWidth when auth.authenticated and detailId != "" as shape FeedRow[] else empty()
   // A show's seasons stay on the show's own visit: the chosen season is a query on it, and only
   // its episodes are read, so picking a season never remounts the page or drops the tabs.
   derive detailSeason = (top(nav).name == "title" ? searchParam(top(nav), "season") : "")
-  resource seasonDetail = uiDetail(detailSeason) with localeJSON, artWidth when auth.authenticated and detailSeason != "" as shape DetailModel else empty()
+  resource seasonDetail = uiDetail(detailSeason, `${top(nav).id}`) with localeJSON, artWidth when auth.authenticated and detailSeason != "" as shape DetailModel else empty()
   derive seasonReady = match first(seasonDetail.title) { case some(t) => t.id == detailSeason, case none => false }
   derive detailSurface = DetailModel(detail, related=(current(related) ? related : []), episodes=(detailSeason != "" and seasonReady ? seasonDetail.episodes : detail.episodes))
   derive playingId = (top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" ? top(nav).params.id : "")
-  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero, `${top(nav).id}`, searchParam(top(nav), "position")) when auth.authenticated and playingId != "" as shape PlaybackModel transient
+  state playbackManual = 0
+  state playbackRetry = 0
+  state playbackRetryAt = 0
+  state playbackRetryEntry = ""
+  state playbackRetryOwner = ""
+  derive activePlaybackManual = (playbackRetryOwner == `${top(nav).id}` ? playbackManual : 0)
+  derive activePlaybackRetry = (playbackRetryOwner == `${top(nav).id}` ? playbackRetry : 0)
+  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero, `${top(nav).id}`, searchParam(top(nav), "position"), activePlaybackManual, activePlaybackRetry) when auth.authenticated and playingId != "" as shape PlaybackModel transient
+  task playbackBackoff when playingId != ""
+    every(1000, tickPlaybackBackoff)
+  action tickPlaybackBackoff
+    if current(playback) and playback.errorCode != "" and playback.retryAllowed and activePlaybackRetry < playback.retryLimit and not pending(playback)
+      let entry = `${top(nav).id}:${activePlaybackManual}:${activePlaybackRetry}`
+      let now = time.epochAtZero + performanceNow()
+      if playbackRetryEntry != entry or playbackRetryAt == 0
+        playbackRetryEntry = entry
+        playbackRetryAt = now + max(1, playback.retryAfterSeconds) * 1000
+      else if now >= playbackRetryAt
+        playbackRetryAt = 0
+        playbackRetry = activePlaybackRetry + 1
+        playbackManual = activePlaybackManual
+        playbackRetryOwner = `${top(nav).id}`
+  action retryPlayback
+    if current(playback) and playback.errorCode != "" and not pending(playback)
+      playbackManual = activePlaybackManual + 1
+      playbackRetryOwner = `${top(nav).id}`
+      playbackRetry = 0
+      playbackRetryAt = 0
   state extraRetryAt = 0
   state extraRetryEntry = ""
   task pollExtraPreparation when top(nav).name == "extra" and playingId != ""
@@ -415,7 +476,9 @@ members Client
         extraRetryAt = now + max(1, playback.retryAfterSeconds) * 1000
       else if now >= extraRetryAt
         extraRetryAt = 0
-        refresh playback
+        playbackRetry = activePlaybackRetry + 1
+        playbackManual = activePlaybackManual
+        playbackRetryOwner = `${top(nav).id}`
   state streamAttempt = 0
   resource sessionUpdate = sessionEvents(playback.sessionId, streamAttempt) when auth.authenticated and playingId != "" and playback.sessionId != "" as shape PlaybackModel
   derive currentPlan = (current(sessionUpdate) and sessionUpdate.sessionId == playback.sessionId and sessionUpdate.planJson != "" ? sessionUpdate.planJson : playback.planJson)
