@@ -218,6 +218,19 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
   `pageNext` / `pagePrev` with arg `{row.id}` scroll it by max(200, home width - 2 x inset - peek);
   `pager.overflows`, `pager.atStart`, `pager.atEnd` for the arrows.
 
+## Renderer 8
+
+- **Keyboard order follows the document**: a slot's holder (the shell's route, home's search
+  field) is drawn at its node's position, so Tab reaches nodes in document order.
+- **Focus ring**: a press button and the search input show Exact's (the platform's) focus ring
+  unless the style in force says `outline: none` (a node with a `focus`/`groupFocus` overlay
+  suppresses it, as before). Only `none` is accepted: the platform draws the ring itself.
+- **Control states**: a pressable box shows Exact's hover wash under its content (as a compiled
+  button does), unless its style has a background image or it sets `controlStates: false`.
+- **searchInput** takes its node's padding (the input is the padded box, so the ring hugs it).
+- **detail.frame**: a framed title page's surround, drawn by the route frame over home:
+  `{ scrim?: colour (media.overlay), blur?: 'blur(18px) saturate(1.1)', flat?: true }`.
+
 **The page call site.** Home and every route a document draws are drawn by one route view
 (Exact copies a component per call site): home is the `home` route (`slots.home`, or
 `routes.home`), its `searchField` slot node the holder for the foundation's search field. A
@@ -225,7 +238,7 @@ framed title page's scrim and blur belong to the route frame (the doc engine's t
 to the document's title root: a route is its own backdrop root, so a blur inside it cannot see
 home beneath.
 
-## Next (renderer 8, names final)
+## Next (renderer 9, names final)
 
 - Per-document `traits`: `page`, `ink`, `flatDetail`, `panSections`, `barMask`, `splashOnPaper`,
   detail frame tokens. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).

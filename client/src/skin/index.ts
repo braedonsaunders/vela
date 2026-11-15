@@ -71,7 +71,7 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
 type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; holds: boolean; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
-export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string }
+export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean }
 interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
@@ -145,6 +145,12 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
       Object.assign(merged, { 'flex-grow': f[0], 'flex-shrink': f[1], 'flex-basis': f[2] });
       continue;
     }
+    // The focus ring is Exact's own (the platform's): a document may only suppress it.
+    if (name === 'outline' || name === 'outline-style') {
+      if (String(raw).trim() !== 'none') throw new Error(`Only outline: none (the platform draws the focus ring): ${raw}`);
+      merged['outline-style'] = 'none';
+      continue;
+    }
     // A border shorthand becomes its longhands: Contract binds only literal shorthands.
     if (name === 'border' && typeof raw === 'string') {
       const m = /^(\S+)\s+(solid|dashed|dotted|double|none)\s*(.*)$/.exec(raw.trim());
@@ -209,7 +215,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     const when = [...(from > 0 ? [{ ...widthKey, is: 'lt', v: String(from), not: true }] : []), ...(to < Infinity ? [{ ...widthKey, is: 'lt', v: String(to), not: false }] : [])];
     return { applied, when };
   }) : [];
-  const level: Level = { t: 'box', parts: [], src: [], label: parts(node.label, r), arg: [], sym: '', act: '', role: node.role ?? '', level: node.level ?? 0, test: parts(node.testId, r), dom: parts(node.id, r), rep: '', lim: 1000,
+  const level: Level = { t: 'box', parts: [], src: [], label: parts(node.label, r), arg: [], sym: '', act: '', cs: false, role: node.role ?? '', level: node.level ?? 0, test: parts(node.testId, r), dom: parts(node.id, r), rep: '', lim: 1000,
     mk: '', md: 0, mdl: 0, me: '', mf: '', mit: '', mdir: '', msk: '', msd: 0, step: node.stagger?.step ?? 0, cap: node.stagger?.cap ?? 0, cond: conds(node.when) };
   for (const f of Object.values(BINDABLE)) level[f] = [];
   const base = style(variant, r, level, weight);
@@ -291,7 +297,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
       return { ...item, rep: node.over, lim: node.limit ?? 1000 };
     }
     case 'box':
-      if (node.press) { if (!ACTIONS.has(node.press.action)) throw new Error(`Unknown action ${node.press.action}`); level.act = node.press.action; level.arg = parts(node.press.arg, r); }
+      if (node.press) { if (!ACTIONS.has(node.press.action)) throw new Error(`Unknown action ${node.press.action}`); level.act = node.press.action; level.arg = parts(node.press.arg, r); level.cs = node.controlStates !== false; }
       kids = node.children ?? [];
       // A row's pager: this box is the row's sideways scroller (its style sets overflow-x); pageNext/pagePrev {row.id} move it.
       if (node.pager) {
@@ -328,11 +334,22 @@ function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchFi
   // Every top-level node gets its flex order; the foundation's content takes the slot's.
   // (A repeat draws no box: its item takes the order.)
   const ordered = (k: Node, i: number): Node => k.type === 'repeat' ? { ...k, item: ordered(k.item, i) } as Node : { ...k, style: { ...k.style, order: String(i) } } as Node;
-  const nodes = kids.flatMap((k, i) => k.type === 'slot' ? [] : [convert(ordered(k, i), from, r)!]);
+  // The holder keeps its place among the nodes (a placeholder the slot draws its box at); the
+  // shell's route goes last when its tree has no slot node.
+  const holderAt = at >= 0 ? at : holder === 'children' && from === SHELL_FROM ? kids.length : -1;
+  const nodes = [...kids, ...(at < 0 && holderAt >= 0 ? [undefined] : [])].flatMap((k, i) => i === holderAt ? [{ ...convert({ type: 'box' } as Node, from, r)!, t: 'holder' }] : !k || k.type === 'slot' ? [] : [convert(ordered(k, i), from, r)!]);
   // The slot box's own flex order rides in its style (the box takes every row).
   const rootStates = boxStates(root as Parameters<typeof boxStates>[0], r);
   const holderStates = boxStates(holderNode, r, { order: String(at < 0 ? kids.length : at) } as Style);
-  return { present: true, rootBase: rootStates.base, rootSts: rootStates.sts, slotBase: holderStates.base, slotSts: holderStates.sts, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), holds: at >= 0, nodes };
+  return { present: true, rootBase: rootStates.base, rootSts: rootStates.sts, slotBase: holderStates.base, slotSts: holderStates.sts, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), holds: holderAt >= 0, nodes };
+}
+
+function detailFrame(doc: SkinDocument, r: Resolve): { detailScrim: string; detailBlur: string; detailFlat: boolean } {
+  const frame = (doc.detail as { frame?: { scrim?: string; blur?: string; flat?: boolean } } | undefined)?.frame;
+  if (frame?.flat) return { detailScrim: 'transparent', detailBlur: 'none', detailFlat: true };
+  const blur = frame?.blur ?? 'blur(18px) saturate(1.1)';
+  if (!/^(none|(blur|saturate|brightness)\([\d.]+(px|%)?\)( |$))+$/.test(blur.trim() + (blur.trim() === 'none' ? '' : ' '))) throw new Error(`detail.frame.blur takes blur()/saturate()/brightness(): ${blur}`);
+  return { detailScrim: style([{ 'background-color': frame?.scrim ?? 'media.overlay' } as Style], r)['backgroundColor'] as string, detailBlur: blur.trim(), detailFlat: false };
 }
 
 export function skinDoc(doc: SkinDocument, width: number, origin: string, locale = 'en'): SkinDocModel {
@@ -357,5 +374,7 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
   return { id: doc.id, fontsJson: fonts.length ? JSON.stringify(fonts) : '', keyframesCss: kfCss, styles: r.styles, shell, routes, liveHome: doc.live?.home === true,
     detailWide: doc.detail?.wide === 'stack' ? '' : doc.detail?.wide ?? 'fullscreen', detailSmall: doc.detail?.small === 'stack' ? '' : doc.detail?.small ?? 'fullscreen',
     // From this viewport width the detail takes its wide presentation and splits home beside it (a pane width in px).
-    detailFrom: Math.max(0, Math.min(4000, Math.round(Number(doc.detail?.from ?? 640)) || 0)), detailSplit: /^(\d{2,4})(px)?$/.exec(String(doc.detail?.split ?? ''))?.[1] ?? 'none' };
+    detailFrom: Math.max(0, Math.min(4000, Math.round(Number(doc.detail?.from ?? 640)) || 0)), detailSplit: /^(\d{2,4})(px)?$/.exec(String(doc.detail?.split ?? ''))?.[1] ?? 'none',
+    // The framed title's surround, drawn by the route frame: scrim (colour or token), blur, or flat.
+    ...detailFrame(doc, r) };
 }
