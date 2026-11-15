@@ -50,7 +50,20 @@ scroll), driven by intersections and image-loading policy. So scrolling ran at 4
 
 Comments went from 48,820 to 4,444, and the per-commit walk from 50 ms to 4.3 ms.
 
-**Proposed fix.**
+**Fix, on a branch (not upstream).** Branch `vela/perf-modes-presence` in
+`~/.scratch/vela-build/exact-patched`, based on the pinned revision, changes `modes.js` only:
+- A MutationObserver's records, taken at each pass, give the elements added and those whose `class` or `data-x-b`
+  changed. The class fix-up and the boundary set look only at those.
+- The first pass and a page rendered ahead keep the whole-document path.
+
+Results:
+- Compiled Cinematic is pixel-identical, and the related web-js tests pass.
+- On Vela's current doc engine, where the walk is already ~7 ms after the anchor cut, scroll script falls
+  1.71/1.64 s → 1.55/1.50 s and scroll goes 80/83 → 84/88 fps.
+- On a page as the doc engine was before (50 ms per walk), this pass is most of the commit cost.
+- The PR text is in `~/.scratch/vela-build/exact-pr-modes.md` and waits for the owner's go.
+
+**Proposed fix (as first written).**
 - Track which elements gained or lost a token class or `data-x-b` from the commit's own
   mutations (the runtime already observes them for presence), and touch only those.
 - Or keep a registry: elements register when their class or boundary row is written, so no
@@ -163,6 +176,19 @@ and a button that increments an unrelated state: each press runs 2,000 probe eva
 
 **Impact.** `dc.$presence`, `getPropertyValue` and the probe scopes cost about 0.6 s per scroll
 run, and they allocate on every commit. Still open: Vela cannot avoid these probes without the per-call-site code doubling of issue 6.
+
+**Fix, on the same branch (not upstream), commit 1bf8223ce.** `tree.js` `S` tells the probes its
+effect and whether its last write was empty. A probe is skipped when three things hold:
+- that effect is clean;
+- the last write was empty;
+- no region around the element took a new value for this commit. A first version checked only the effect, and
+  failed 12 of 28 `layout-transition` tests: `present()` writes a moved row's item or index, or an arm's value,
+  without staling effects. This version tracks those writes.
+
+All related web-js tests pass. On top of the modes fix, Vela's scroll script falls 1.55/1.50 s → 1.34/1.22 s,
+scroll goes 84/88 → 90/94 fps, and the longest task 123/119 → 92/91 ms. The PR text is in
+`~/.scratch/vela-build/exact-pr-presence.md`. Vela meanwhile binds motion only on route levels 1-6 and in the
+shell (MOTION_DEPTH).
 
 **Proposed fix.**
 - Register a probe only while its binding's value is non-empty: an empty value cannot animate.
