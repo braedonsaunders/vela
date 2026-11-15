@@ -455,3 +455,27 @@ cold/prewarm conditions. The completed evidence/driver files were preserved.
 Only syntax checks ran for these new guards; no new browser, stream or reset
 was started. A future controlled run still needs the server's low-water fix and
 a fresh authorized reset.
+
+## Controlled short capture with read-ahead low-water admission
+
+Ether integration `50da5db16` adds the read-ahead low-water exception and removes
+embedded positions from hero resume actions. Client signed 0.1.43 and runtime
+`b76cabc0b114bf77` remained unchanged. In `paired43h-core.json`, the guard observed
+`requestHasPosition=false` and HTTP plan `positionSeconds=1390.5`. The exact
+requested reset now reaches playback end to end.
+
+The bounded direct capture (`GZY32AQEPGGN3SAJL5NIK4XFVI`) reached first image at
+7.213 seconds, playable at 7.315 seconds, and seek-900 playing at 4.072 seconds.
+Startup plus five playing seconds and 20.007 post-seek seconds had zero
+underruns, drops, buffering, recovery and repeated pages. Stop/revoke returned
+200, mounted players were zero, and the own Chrome/context/profile closed.
+The operator unpinned (204), independently read an empty pin list and confirmed
+zero sessions.
+
+This time the producer mechanism is actually confirmed: no open dial/cap waits,
+and two early closes caused no staircase. The seek had isolated 0.31/0.32-second
+waits, rather than the old 0.25/0.50/0.75 sequence. The one slow response had
+only 4.6 ms connection wait and was CDN TTFB. Goodput was 80.6–82.8 Mbps. This
+short clean capture is still not a paired or eight-minute qualification.
+The architect cleared a fresh alternating-pair window; the same new server,
+client and runtime will stay fixed, with resume guards and identical resets.
