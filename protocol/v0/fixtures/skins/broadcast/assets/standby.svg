@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900">
+  <!-- Broadcast standby card: an original, muted signal-bar field for channels with no programme art. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#10161f"/><stop offset="1" stop-color="#07090d"/></linearGradient>
+    <radialGradient id="v" cx=".5" cy=".42" r=".75"><stop offset=".55" stop-color="#07090d" stop-opacity="0"/><stop offset="1" stop-color="#07090d" stop-opacity=".85"/></radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#ffffff" stroke-opacity=".035" stroke-width="1"/></pattern>
+  </defs>
+  <rect width="1600" height="900" fill="url(#g)"/>
+  <rect width="1600" height="900" fill="url(#grid)"/>
+  <g opacity=".22">
+    <rect x="0" y="560" width="229" height="340" fill="#c9ccd2"/>
+    <rect x="229" y="560" width="229" height="340" fill="#c9b54a"/>
+    <rect x="458" y="560" width="228" height="340" fill="#3fa7b0"/>
+    <rect x="686" y="560" width="228" height="340" fill="#4f9a4c"/>
+    <rect x="914" y="560" width="229" height="340" fill="#a04a9c"/>
+    <rect x="1143" y="560" width="228" height="340" fill="#b8473c"/>
+    <rect x="1371" y="560" width="229" height="340" fill="#3a4fa6"/>
+  </g>
+  <rect x="0" y="556" width="1600" height="4" fill="#ff3d2e" opacity=".55"/>
+  <circle cx="800" cy="330" r="150" fill="none" stroke="#ffffff" stroke-opacity=".08" stroke-width="2"/>
+  <circle cx="800" cy="330" r="96" fill="none" stroke="#ffffff" stroke-opacity=".06" stroke-width="2"/>
+  <path d="M650 330H950M800 180V480" stroke="#ffffff" stroke-opacity=".06" stroke-width="2"/>
+  <rect width="1600" height="900" fill="url(#v)"/>
+</svg>
