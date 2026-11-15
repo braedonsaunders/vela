@@ -863,7 +863,17 @@ function apply2(handle, json) {
   const lines = declarations({ ...pack, tokens: pack.tokens ?? {}, radius: pack.radius ?? {}, fonts: pack.fonts ?? {} }, houseValues(handle.sheet), handle.fonts.length ? fontName : "");
   handle.sheet.textContent = lines.length ? `${SELECTOR}{${lines.join(";")}}` : "";
 }
+var transitionInput;
+function letInputThroughTransitions() {
+  if (transitionInput)
+    return;
+  transitionInput = document.createElement("style");
+  transitionInput.setAttribute("data-vela-transitions", "");
+  transitionInput.textContent = "::view-transition { pointer-events: none; }";
+  document.head.append(transitionInput);
+}
 function createTheme(json) {
+  letInputThroughTransitions();
   const sheet = document.createElement("style");
   sheet.setAttribute("data-vela-pack", "");
   document.head.append(sheet);
@@ -2262,7 +2272,7 @@ class PlaybackEngine {
     if (!this.session || !this.source || !this.wantsPlay || ["failed", "ended", "recovering"].includes(this.status))
       return;
     const now = performance.now();
-    if (this.position() > this.lastPosition + 0.02 && (this.original ? this.status === "playing" : !this.video.paused)) {
+    if (!this.pendingSeek && this.position() > this.lastPosition + 0.02 && (this.original ? this.status === "playing" : !this.video.paused)) {
       this.everPlayed = true;
       this.lastAdvance = now;
       this.lastPosition = this.position();
@@ -2271,6 +2281,12 @@ class PlaybackEngine {
     const expired = !this.everPlayed ? now - this.waitSince > this.startupDeadlineMs : now - this.lastAdvance > 30000;
     if (expired)
       this.recover(new PlaybackFault(this.everPlayed ? "Playback stalled for 30 seconds" : `Playback did not start within ${this.startupDeadlineMs / 1000} seconds`, "network"), this.controller.token());
+  }
+  resetProgress(position) {
+    this.waitSince = performance.now();
+    this.lastAdvance = this.waitSince;
+    this.lastPosition = position;
+    this.everPlayed = false;
   }
   detachMedia() {
     for (const remove of this.listeners)
@@ -2603,6 +2619,7 @@ class PlaybackEngine {
     this.pendingTracks = undefined;
     this.pendingSwitch = undefined;
     this.pendingSeek = { position: session.position ?? 0, startedAt: performance.now(), authorized: true };
+    this.resetProgress(session.position ?? 0);
     this.status = "buffering";
     this.failure = null;
     this.lastObservation = -Infinity;
@@ -2619,6 +2636,7 @@ class PlaybackEngine {
       await seeking;
       if (!this.controller.current(token) || this.original !== original)
         return;
+      this.resetProgress(original.position);
       this.pendingSeek = undefined;
       this.status = original.readout.state;
       this.lastObservation = -Infinity;
@@ -2763,10 +2781,7 @@ class PlaybackEngine {
   async activate(source, position, recovery = false, initial = false, retry) {
     this.startupDeadlineMs = source.renditions?.some((r) => !codecKnown(r)) ? 60000 : 45000;
     this.resumePosition = position;
-    this.waitSince = performance.now();
-    this.lastAdvance = this.waitSince;
-    this.lastPosition = position;
-    this.everPlayed = false;
+    this.resetProgress(position);
     const token = this.controller.changeSource(!initial);
     this.resetMedia();
     this.source = source;
@@ -3415,10 +3430,12 @@ class PlaybackEngine {
             this.pendingSeek = { position: command.seconds, startedAt: performance.now(), authorized: true };
             this.status = "buffering";
             this.publish(true);
+            this.resetProgress(command.seconds);
             if (this.overlay)
               this.overlay.seek(command.seconds, ++this.overlayEpoch).catch(() => {});
             await original.seek(command.seconds);
             if (this.controller.current(token) && this.original === original) {
+              this.resetProgress(original.position);
               this.pendingSeek = undefined;
               this.status = original.readout.state;
             }
@@ -3429,6 +3446,7 @@ class PlaybackEngine {
             break;
           }
           const token = this.controller.changeSeek();
+          this.resetProgress(command.seconds);
           if (this.original) {
             const original = this.original;
             this.originalGeneration = token;
@@ -3438,6 +3456,7 @@ class PlaybackEngine {
               this.overlay.seek(command.seconds, ++this.overlayEpoch).catch(() => {});
             await original.seek(command.seconds);
             if (this.controller.current(token) && this.original === original) {
+              this.resetProgress(original.position);
               this.pendingSeek = undefined;
               this.status = original.readout.state;
             }

@@ -131,3 +131,64 @@ unresolved. The extra internal EOF state was not retained before disposal, so
 no EOF cause is claimed. This DTS-core fixture is not a DTS-HD MA/HEVC proof or
 a reproduction of the lost UHD exception. The dedicated local browser, runtime
 and server were closed.
+
+## Corrected reserve audit and cold lab.31 attempts
+
+The corrected 25-second wrapper audit (5f7ca210a23dfd9a) measured 6.23–11.32 s
+of index-proven continuous source reserve, 41.1–43.1 MB raw forward cache and
+128–129 MB retained. Decoded AV remained about 0.4 s. It had zero measured drops
+or underruns; this was a warm audit, not a cold parity baseline.
+
+The subsequent cold comparison used installed 0.1.39 host/data bytes in both
+contexts. The wrapper kept the production 3c579 descriptor; only the core
+context selected verified 1f3f784d02664c0c. Both used identical export-only
+scalar instrumentation, disabled browser HTTP cache and blocked service workers.
+Before each run Ether set resume to 1390.5 s, purged only the pinned Inception
+525f3640 release cache and restarted the unchanged lab.31 binary. CDN warmth
+cannot be controlled. No detail page was opened.
+
+| Metric | Installed wrapper | Repaired core |
+| --- | --- | --- |
+| POST playback | 1,857 ms | 1,868 ms |
+| First universal frame | Unavailable: direct retired | 6,430 ms |
+| Playable audio | Unavailable for direct | 9,329 ms |
+| Cold seek to 900 s | Not reached | 4,208 ms |
+| Direct sample | Not started | 26.1 s before false recovery |
+| Measured drops / underruns after seek | Unavailable | 0 / 0 |
+| Eight-minute direct parity | Not established | Not established |
+
+Wrapper session AQCWPXNDWMBI2HGSDG2XJO6A3W switched to fallback-hls about 8.3 s
+after the plan, before a universal presented frame. Ether observed a 1.79-second
+cold probe and an early 1.32-second range including a 0.98-second cap wait. The
+universal-only frame waiter expired at 25 s; that does **not** establish absent
+HLS pixels. HLS watch position advanced to 1401.36 s. A previous discarded
+attempt stopped before seek on an overly strict driver implementation-label
+check; it is not a baseline either.
+
+Core session MJZTX3U6LXOSBFGHEZ6PJBVAHD retained direct HEVC through the cold
+seek. It counted three underruns and two drops before the measured window.
+All 26.1 seconds subsequently sampled were playing, advancing 900 to 926.15 s,
+with zero additional drops/underruns. At the final direct sample, epoch 2 had
+912 unique physical page acquisitions and zero repeated page acquisitions.
+Those are network acquisitions, separate from 3,516 parsed-cluster cache hits.
+
+At 27.1 s after seek, durable recovery history recorded `Playback stalled for
+30 seconds` at position 926.29 s and retired the direct route. Ether was still
+delivering data and had accumulated 58 MB ahead. This was a host watchdog defect:
+`seekRetainedOriginal` retained the pre-seek progress high-water mark near 1395 s.
+The moving post-seek clock could not exceed it, so its last-advance timer expired.
+The same mechanism can affect either runtime when it retains a source on a
+backward seek; the original lost exception cannot be identified retroactively.
+
+The host now resets its progress position/timers at the accepted seek epoch and
+again on completion. Pending seeks cannot credit the old clock as new progress.
+Local retained original/live seeks use the same reset. The stall limit remains
+30 seconds. A private in-process proof exercised the actual engine: old clock
+ignored while pending; 40 s of backward-seek progress without false recovery;
+a true stationary clock still recovered at 30,001 ms; forward seek also advanced.
+Scoped TypeScript and the host bundle passed. This is not yet a lab rerun.
+
+Both cold attempts ended with Stop 200, revoke 200, zero mounted players and
+closed dedicated Chrome. Ether independently confirmed no sessions or encoders
+and removed the pin. The core stays gated; no eight-minute or default-switch
+claim follows from these interrupted samples.
