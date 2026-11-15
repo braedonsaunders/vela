@@ -1,7 +1,7 @@
 import type {ByteReader} from '../../core/types';
 import {MatroskaSubtitles} from './matroska';
 import {MP4Subtitles} from './mp4';
-import {readSubtitleDocument,SubtitleHTTPError} from './external';
+import {readSubtitleDocument,readSubtitleDocumentResponse,SubtitleHTTPError} from './external';
 import {assEvent,decodeSubtitleText,tx3gCue,utf8Cue,wvttCues} from './cues';
 import {SubtitleCueIndex,parseTextSubtitles,type SubtitleTextCue} from './text';
 import {paintPGS,paintText,type SubtitleViewport} from './canvas';
@@ -150,20 +150,21 @@ export class SubtitleSession {
   private progressive(track:SubtitleTrack,time:number,signal:AbortSignal):Prepared{
     if(track.delivery.kind!=='external')throw new Error('Invalid progressive subtitle track');
     const url=track.delivery.url,surface=this.canvas(false),context=surface.canvas.getContext('2d');if(!context)throw new Error('Subtitle overlay canvas unavailable');
-    const controller=new AbortController(),live=AbortSignal.any([signal,controller.signal]);let base=Math.max(0,Math.floor(time*1000)),nextPoll=0,inflight=false,revision=0,lastRevision=-1,last=NaN;
+    const controller=new AbortController(),live=AbortSignal.any([signal,controller.signal]);let base=Math.max(0,Math.floor(time*1000)),nextPoll=0,inflight=false,complete=false,revision=0,lastRevision=-1,last=NaN;
     const cues=new Map<string,SubtitleTextCue>();let index=new SubtitleCueIndex([]);
     const fetchWindow=async(from:number)=>{
       const target=new URL(url,location.href);target.searchParams.set('ether_window','1');target.searchParams.set('from_ms',String(from));
-      try{const bytes=await readSubtitleDocument(target.href,live);live.throwIfAborted();
-        for(const cue of parseTextSubtitles(decodeSubtitleText(bytes),'webvtt')){const key=JSON.stringify([cue.start,cue.end,cue.runs]);cues.set(key,cue)}
+      try{const response=await readSubtitleDocumentResponse(target.href,live);live.throwIfAborted();
+        const parsed=parseTextSubtitles(decodeSubtitleText(response.bytes),'webvtt');if(response.complete===true)cues.clear();
+        for(const cue of parsed){const key=JSON.stringify([cue.start,cue.end,cue.runs]);cues.set(key,cue)}
         let size=0;for(const [key,cue] of cues){if(cue.end<base/1000)cues.delete(key);else size+=key.length}
         if(cues.size>10000||size>8*1024*1024)throw new Error('Progressive subtitle window exceeds bound');
-        index=new SubtitleCueIndex([...cues.values()].sort((a,b)=>a.start-b.start||a.end-b.end));revision++;
+        index=new SubtitleCueIndex([...cues.values()].sort((a,b)=>a.start-b.start||a.end-b.end));complete=response.complete===true;revision++;
       }catch(error){if(error instanceof SubtitleHTTPError&&error.status===503)return;throw error}
     };
-    const poll=(stamp:number)=>{if(inflight||performance.now()<nextPoll)return;if(stamp*1000>=base+120000)base=Math.floor(stamp*1000);
+    const poll=(stamp:number)=>{if(complete||inflight||performance.now()<nextPoll)return;if(stamp*1000>=base+120000)base=Math.floor(stamp*1000);
       inflight=true;nextPoll=performance.now()+1000;
-      (async()=>{await fetchWindow(base);if(stamp*1000>=base+100000)await fetchWindow(base+120000)})().catch(error=>{if(!live.aborted)this.fail(track.id,error)}).finally(()=>{inflight=false});
+      (async()=>{await fetchWindow(base);if(!complete&&stamp*1000>=base+100000)await fetchWindow(base+120000)})().catch(error=>{if(!live.aborted)this.fail(track.id,error)}).finally(()=>{inflight=false});
     };
     return {canvas:surface.canvas,end:Infinity,render:stamp=>{poll(stamp);const resized=surface.resize();if(last!==stamp||resized||lastRevision!==revision){context.clearRect(0,0,surface.canvas.width,surface.canvas.height);paintText(context,index.active(stamp),this.preferences,surface.viewport());last=stamp;lastRevision=revision}},dispose:()=>{controller.abort(aborted());surface.canvas.remove();cues.clear()}};
   }
