@@ -10,9 +10,9 @@
  * The release serves <out> at /vela/skins/. Run: bun tools/skin.ts documents <out>
  */
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { extname, join, resolve } from 'node:path';
 import type { SkinDocument } from '../protocol/v0/skin';
 
 const root = resolve(import.meta.dir, '..');
@@ -27,6 +27,7 @@ export async function writeDocuments(out: string): Promise<{ id: string; version
     if (existsSync(file)) found.push({ doc: (await import(file)).default as SkinDocument, assets: join(fixtures, entry.name, 'assets') });
   }
   const refs = [];
+  const sharedAssets = new Map<string, string>();
   await mkdir(out, { recursive: true });
   for (const { doc: source, assets } of found) {
     // A conversion of a compiled skin ships beside it as its "(data)" variant until the compiled one is deleted.
@@ -44,9 +45,26 @@ export async function writeDocuments(out: string): Promise<{ id: string; version
       if (existsSync(licences)) await cp(licences, join(dir, 'licences'), { recursive: true });
     }
     // Assets the mock serves under the appearance tree are static files beside the document here.
-    const text = JSON.stringify(doc).replaceAll(from, `/vela/skins/${doc.id}/${doc.version}/`);
+    let text = JSON.stringify(doc).replaceAll(from, `/vela/skins/${doc.id}/${doc.version}/`);
+    // App assets are renamed independently in each compiled engine. Documents
+    // use their own shared immutable copies, so they work in every engine base.
+    for (const [literal] of [...text.matchAll(/"assets\/[a-z0-9/._-]+"/g)]) {
+      const source = JSON.parse(literal) as string;
+      let url = sharedAssets.get(source);
+      if (!url) {
+        const file = resolve(root, 'client', source);
+        if (!file.startsWith(join(root, 'client/assets') + '/')) throw new Error(`App asset escapes assets: ${source}`);
+        const bytes = await readFile(file);
+        const name = createHash('sha256').update(bytes).digest('hex') + extname(file);
+        await mkdir(join(out, 'assets'), { recursive: true });
+        await writeFile(join(out, 'assets', name), bytes);
+        url = `/vela/skins/assets/${name}`;
+        sharedAssets.set(source, url);
+      }
+      text = text.replaceAll(literal, JSON.stringify(url));
+    }
     await writeFile(join(dir, 'document.json'), text);
-    const rebase = (url?: string) => url?.replace(from, `/vela/skins/${doc.id}/${doc.version}/`);
+    const rebase = (url?: string) => url ? sharedAssets.get(url) ?? url.replace(from, `/vela/skins/${doc.id}/${doc.version}/`) : undefined;
     refs.push({ id: doc.id, name: doc.name, version: doc.version, tagline: doc.tagline, renderer: doc.renderer, url: `/vela/skins/${doc.id}/${doc.version}/document.json`,
       preview: rebase(doc.preview), swatches: doc.swatches, sha256: sha(text) });
   }
