@@ -291,6 +291,41 @@ bytes outside the replacement window can be discarded; active epoch future
 pages cannot. Packet sequence numbers are treated as byte offsets only for the
 explicit streaming Matroska adapter that defines them that way.
 
-Scoped TypeScript and matching asset assembly passed (`973a2fa0aef90a31`). The
-requested eight-minute generated 4K/65-Mbps run with seeks is pending. This
-candidate is not staged or qualified, and production remains the wrapper.
+Scoped TypeScript and matching asset assembly passed (`973a2fa0aef90a31`).
+The generated 608.76-second 3840×2160 HEVC Main10/PQ + DTS 5.1 MKV was served
+with 400-ms first byte per HTTP range and a 65-Mbps aggregate body cap. Four
+120-second playing intervals, with seeks to 240.38, 120.23 and 360.53 seconds,
+completed 480.52 seconds of playback in 493.23 seconds wall time.
+
+| Sustained local metric | Result |
+| --- | ---: |
+| Reacquired completed pages within each of four epochs | 0 |
+| Validated unique acquisition bytes | 2,936,131,286 |
+| Browser HTTP body bytes | 2,958,413,526 |
+| HTTP / validated unique bytes | 1.00759 (+0.76%) |
+| HTTP requests | 72 |
+| Maximum cached bytes / bound | 71,159,510 / 71,262,751 |
+| Dropped frames / audio underruns | 0 / 0 |
+| First presented image / playable | 1.621 s / 3.286 s |
+| Three seek-to-playable times | 3.170 s / 3.149 s / 3.095 s |
+
+The PCM reserve remained at least 1.833 seconds at initial release and 1.875
+seconds after each seek. This is a generated DTS-core fixture (44.1 kHz,
+resampled to 48 kHz output), not DTS-HD MA or a human lip-sync qualification.
+Private scalar evidence is `range-stream/pinned-long.json` beside its playing
+screenshot; the owned browser/profile and fixture server are closed.
+
+Review then found a separate full-cache seek admission cycle: clearing the
+retired byte cursor before a new Cues read prevented reclamation until the first
+media prefetch, which itself needed that metadata. The cursor now stays solely
+for reclamation until the first new-epoch media prefetch binds the replacement
+window. Matching TypeScript/asset assembly passed (`b76cabc0b114bf77`). A narrow
+reader-only proof filled the 71.26-MB cache to within one page, retired the epoch,
+read a new distant metadata page in 412 ms (400-ms simulated first byte), then
+rebound the media window at 300 MiB. Repeated pages remained zero and capacity
+stayed bounded. This final rollover adjustment has that targeted proof; the
+full eight-minute AV proof above used `973a2fa0aef90a31`.
+
+Neither local proof qualifies the real cold debrid pairs. The matching runtime
+must be staged and both alternating pairs rerun before any default proposal.
+Production remains the wrapper.

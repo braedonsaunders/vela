@@ -61,7 +61,10 @@ export class RangeReader implements ByteReader {
   beginEpoch(id:number){
     for(const run of this.forwardRuns)this.cancelForward(run);
     this.forward=undefined;this.forwardSignal=undefined;this.forwardDemand=0;
-    this.playhead=null;this.packets.clear();
+    // Keep the retired cursor for cache reclamation during metadata admission.
+    // The first media prefetch binds the new seek window. Clearing it here can
+    // strand a new Cues page behind a full old cache before that bind happens.
+    this.packets.clear();
     this.demands.length=0;
     this.readEpoch={id,seen:undefined,unique:0,repeated:0};
     this.metrics.sourceEpoch=id;this.metrics.uniquePageRequests=0;this.metrics.repeatedPageRequests=0;
