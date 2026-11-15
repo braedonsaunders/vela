@@ -1427,3 +1427,27 @@ qualities start their selected init and wait for exact codec verification before
 SourceBuffer creation. New speed support is advertised only when the installed
 runtime/backend implements it. No PGS rendering or nonexistent quality is implied
 by listing an actually offered server track/path.
+
+### Lab.15 quality-everywhere verification
+
+One installed0.1.30 session of1917 offered primary H.264 remux plus source-capped
+480p/1.8Mbps and360p/0.96Mbps lazy conversion paths. Here Original means the
+primary starting quality; the delivery readout correctly remains remux. An
+untouched original file is separately identified by the wire's original flag.
+
+| Check | Measured result |
+| --- | --- |
+| Original plus lower choices | Pass: primary,480p,360p;720p absent and unqualified |
+| Lower path at nonzero position | Switch200, generations2/2;480p playing170.441s,562frames,0drops |
+| Return to Original | Switch200, generations3/3; final primary playing229.872s,1419frames,0drops |
+| Prepare≤2Mbps without switching |200, ready480p in1112.7ms; primary remained playing209.005→210.119s |
+| Encoder bound | Ether independently observed one h264_videotoolbox encoder; separate Matroska helper was not an encoder |
+| Cleanup | Stop200/ended, own-family revoke200/accepted; Chrome closed |
+
+The matching controls payload2da664809bbc2c82 also passed one local AVC/AAC
+native-view drive at1.25×:0.984571s of media advanced over803ms,34frames,
+0drops and no failure. Local canonical audio and PGS burn-in commands carried the
+offered track IDs and current generations. That command check does not claim PGS
+glyph rendering. Core TypeScript and host builds passed; the redundant full
+Contract build was stopped after10minutes without a result, with UI integration
+compile delegated to the UI owner. No new core code is in this shipping payload.

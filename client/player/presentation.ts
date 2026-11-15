@@ -48,8 +48,8 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
     progress: duration > 0 ? Math.min(100, position / duration * 100) : 0,
     reason: snapshot?.failure?.message ?? '', actionError: plan ? errors.get(errorKey) ?? '' : '',
     path: snapshot?.strategy || path?.kind ? msg(`data.${snapshot?.strategy ?? path?.kind}`) : '', backend: snapshot?.backend ?? '',
-    quality: quality ? `${number(quality.height, {useGrouping:false})}p` : path?.kind === 'direct' ? msg('data.original') : snapshot?.backend === 'native-hls' ? msg('data.fixedQuality') : msg('data.starting'),
-    lockedQuality: path?.original ? `path:${path.id}` : snapshot?.lockedQuality ?? '',
+    quality: quality || path?.quality ? `${number((quality ?? path!.quality!).height, {useGrouping:false})}p` : path?.id === 'primary' || path?.kind === 'direct' ? msg('data.original') : snapshot?.backend === 'native-hls' ? msg('data.fixedQuality') : msg('data.starting'),
+    lockedQuality: path?.original || path && !path.qualities.length && (path.id === 'primary' || path.quality) ? `path:${path.id}` : snapshot?.lockedQuality ?? '',
     qualityAuto: snapshot?.backend === 'mse' && (path?.qualities.length ?? 0) > 1,
     pendingAudioId: snapshot?.pendingAudioTrackId ?? '',
     pendingSubtitleId: snapshot?.pendingSubtitleTrackId ?? '',
@@ -58,9 +58,9 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
     audio: (plan?.audioTracks ?? []).map(t => ({ id: t.id, label: trackLabel(t) })),
     subtitles: subtitles.map(t => ({ id: t.id, label: trackLabel(t) })),
     qualities: [
-      ...(path?.original ? [{id:`path:${path.id}`,label:msg('data.original')}] : []),
+      ...(plan?.paths ?? []).filter(p => p.original || p.id === 'primary').map(p => ({id:`path:${p.id}`,label:msg('data.original')})),
       ...(path?.qualities ?? []).map(q => ({id:q.id,label:`${number(q.height,{useGrouping:false})}p${q.codecStatus === 'pending' ? ` · ${msg('data.starting')}` : ''}`})),
-      ...(plan?.paths ?? []).filter(p => p.id !== path?.id && (p.readiness === 'on-demand' || p.readiness === 'ready') && p.quality &&
+      ...(plan?.paths ?? []).filter(p => (p.id !== path?.id || !p.qualities.length) && (p.readiness === 'on-demand' || p.readiness === 'ready') && p.quality &&
         !!path?.sourceId && p.sourceId === path.sourceId && !!path?.timelineId && p.timelineId === path.timelineId && (p.edition ?? '') === (path.edition ?? ''))
         .map(p => ({id:`path:${p.id}`,label:`${number(p.quality!.height,{useGrouping:false})}p`})),
     ],
