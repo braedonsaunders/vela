@@ -479,3 +479,92 @@ only 4.6 ms connection wait and was CDN TTFB. Goodput was 80.6–82.8 Mbps. This
 short clean capture is still not a paired or eight-minute qualification.
 The architect cleared a fresh alternating-pair window; the same new server,
 client and runtime will stay fixed, with resume guards and identical resets.
+
+## Alternating cold pairs on the fixed low-water server
+
+Both pairs then ran on fixed Ether `50da5db16`, signed Vela 0.1.43/host
+`70623c5d…a567`, core `b76cabc0b114bf77` and production wrapper `3c579f70de6e1cfe`.
+Every half used the same source-only purge, RAM reset, live resume 1390.5 and
+independently verified `525f3640…` pin. All four requests omitted the position;
+all four opening HTTP plans passed the exact 1390.5-second guard. There was no
+detail visit, client tuning, release install or server change between halves.
+The architect kept performance traces paused until final browser cleanup.
+
+| Half | Plan | First image (post-plan) | Playable | Seek 900 | Startup five-second window | Post-seek window |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| A1 core first | 1.972 s | 10.963 s (8.992 s) | 11.182 s | 4.111 s | 0 underruns / 0 drops | 480 s, all zero |
+| A2 wrapper second | 1.827 s | 6.693 s (4.866 s) | 6.709 s | 3.223 s | 0 underruns / 0 drops | 480 s, all zero |
+| B1 wrapper first | 1.871 s | 6.794 s (4.922 s) | 6.800 s | 3.219 s | 1 underrun (157 ms) / 3 drops | 480 s, all zero |
+| B2 core second | 1.888 s | 8.106 s (6.219 s) | 8.162 s | 2.915 s | 0 underruns / 0 drops | 480 s, all zero |
+
+"All zero" means zero added underruns, drops, buffering intervals, recovery and
+fallback. Every half remained direct with zero retries. Both core runs also had
+zero repeated completed pages throughout, including startup, seek and the full
+480-second samples. A1 validated 4,081,102,320 bytes with 4,082,675,184 received;
+B2 validated 4,098,665,968 with 4,101,287,408 received. Each final epoch had
+15,251 unique pages and zero repeats. Both delivered 11,508 presented frames in
+the post-seek sample. The cache-thrash correction and sustained parity hold.
+
+The B1 startup event is taken from its complete saved `beforeSeek` snapshot,
+not the zero counters at its first frame. A message that initially missed that
+five-second interval was corrected. B1 had 7,552 missing 48-kHz output frames
+(157 ms) and three drops before the seek; its post-seek sample was clean. No
+claim is made about unobserved subsecond buffering during that initial interval.
+
+Producer post-seek buffer minimum/median was 16.3/98.6 MB for A1 core,
+45.6/93.8 MB for A2 wrapper, 37.2/94.4 MB for B1 wrapper, and 76.0/99.1 MB for
+B2 core. All runs kept four RD runs where demand required them. Steady-state
+pacing above the low-water mark remains intentional; it must not be confused
+with the removed open/seek staircase. CDN TTFB remained variable. A1's metadata
+critical path included a 1.41-second RD response with only 1.4 ms connection
+wait. B2's first-media path included a 1.38-second response with 2 ms wait.
+
+### What the range trace establishes
+
+The reversed pair added identical passive request timing to both private
+drivers. Records contain only numeric byte ranges, status, content length and
+network timing, plus timestamps. They contain no URLs, credentials, payloads or
+other headers. No playback request or runtime behavior was changed.
+
+The phase labels have different scopes: wrapper `metadata` is `probeOriginal`
+(header/config and initial packet statistics), while core `metadata` includes
+track discovery and deferred cue preparation. Their phase durations therefore
+cannot alone establish which engine performs more serialized work.
+
+In B2, the core read one 256-KiB header page, then eleven ranges covering the
+2,665,968-byte deferred cue region. Cue requests started at 2.034 seconds and
+finished around 3.878 seconds; several page groups waited on previous groups.
+The first media page and adjacent 64-MiB streamed range started at 3.946 seconds,
+with about 916-ms first byte. First presentation followed at 8.106 seconds.
+
+In B1, the wrapper probed the file head, reopened cached header pages, made an
+open-ended tail request at 4.219 seconds, then opened two media ranges at
+4.274 seconds, about 9.57 MB apart. Their first bytes were about 920/923 ms.
+First presentation followed at 6.794 seconds. These open-ended requests are
+normally cancelled when the consumer has enough; their failure flags are not
+playback faults. Requested range lengths and Content-Length do not prove actual
+transferred body bytes for such cancelled requests.
+
+Importantly, B2's first media request started **earlier** than the wrapper's,
+so the cue phase alone cannot explain its 1.313-second later presentation.
+The producer's 1.38-second body-block TTFB is on that core critical path. An
+opportunity remains to overlap useful first-media acquisition with cue-tail
+preparation, or make initial independent demands concurrent, while preserving
+bounded memory and zero duplicated completed pages. That is a lead for a local
+reproduction and measurement, not a proven fix or a reason to loosen reserve.
+No change was made during these pairs.
+
+Private evidence: `paired43i-{core,wrapper}.json` and
+`paired43j-{wrapper,core}.json`, with final playing screenshots. All four stop
+commands returned 200/ended, all four exact grants were revoked with 200,
+mounted players were zero, and every owned Chrome/context/profile closed.
+The operator unpinned with 204, independently confirmed an empty pin list,
+zero sessions and zero Ether FFmpeg, and released the client/server hold. The
+architect's performance window was explicitly released. No reset or further
+playback was requested after B2.
+
+**The production-default condition is still not met.** The core starts slower
+in both new pairs, and its seek is slower in A and faster in B. Sustained playback
+is clean, and the core avoids B1's startup underrun, but those facts do not make
+it equal or faster on every requested metric. No default switch is proposed;
+prior failed or differently versioned pairs are not relabelled as qualification.
