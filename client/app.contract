@@ -45,6 +45,7 @@ component Client
     previewIntent
     playHero
     openLiveProgramme
+    retryDescriptive
     edit
     play
     playExtra
@@ -123,7 +124,7 @@ component Client
                                 for slotProps in [SearchFieldProps(query=query)] key="searchField"
                                   SearchField(p=slotProps)
                             if query != ""
-                              for slotProps in [SearchProps(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(searchTimeQuery != query or searchTimeGeneration != generation or pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results) and searchTimeQuery == query and searchTimeGeneration == generation), aiAvailable=home.aiAvailable, descriptiveState=descriptiveState, aiState=aiState, small=homeSmall, still=still)] key="searchSurface"
+                              for slotProps in [SearchProps(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(searchTimeQuery != query or searchTimeGeneration != generation or pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results) and searchTimeQuery == query and searchTimeGeneration == generation), aiAvailable=home.aiAvailable, descriptiveState=descriptiveState, descriptiveCanRetry=descriptiveCanRetry, aiState=aiState, small=homeSmall, still=still)] key="searchSurface"
                                 SearchSurface(p=slotProps)
                       for sid in sectionIds.slice(1) key=sid
                         if sid == "@live"
@@ -199,13 +200,14 @@ component Client
                   text t("ui.backToTitle")
             else
               // The chrome stands from the moment Play is pressed (a loading view until the session
-              // exists), so its spinner runs on without a swap; the picture joins beneath it.
-              if current(playback)
+              // and its plan exist, however long the server prepares), so its spinner runs on
+              // without a swap; the picture joins beneath it.
+              if current(playback) and watchPlan != ""
                 vela-player plan=(watchModel.planJson != "" ? watchModel.planJson : currentPlan) playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%" z-index=0
               // The chrome is its own layer above the picture: whatever the engine composites
               // (a video element or a GPU canvas) stays under it, and pointer events bubble to the stage.
               column position="absolute" inset=0 z-index=1
-                for slotProps in [PlayerProps(model=watchView, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : t("ui.liveTelevisionTitle")) : watchTitle), busy=(pending(watchAuthorized) or not current(playback)), visible=watchChromeVisible, small=small, still=still, serverError=watchReply.error)] key="playerChrome"
+                for slotProps in [PlayerProps(model=watchView, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : t("ui.liveTelevisionTitle")) : watchTitle), busy=(pending(watchAuthorized) or not current(playback) or watchPlan == ""), visible=watchChromeVisible, small=small, still=still, serverError=watchReply.error)] key="playerChrome"
                   PlayerChrome(p=slotProps)
               if current(playback)
                 if e.name == "liveWatch"

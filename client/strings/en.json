@@ -424,5 +424,12 @@
   "player.color.white": "White",
   "player.color.yellow": "Yellow",
   "player.position.bottom": "Bottom",
-  "player.position.raised": "Raised"
+  "player.position.raised": "Raised",
+  "search.moodPartial": "Mood search couldn't finish; these are what it found so far.",
+  "ratings.tomatoes": "Tomatometer",
+  "ratings.popcorn": "Audience",
+  "ratings.imdb": "IMDb",
+  "ratings.metacritic": "Metacritic",
+  "ratings.tmdb": "TMDB",
+  "ratings.letterboxd": "Letterboxd"
 }
