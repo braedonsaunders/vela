@@ -5,6 +5,7 @@
  *   bun tools/check.ts <engine>                       contract build, errors only (under the build lock)
  *   bun tools/check.ts <engine> --agent "<op>" …      then drive it: bun exact.mjs agent web <ops>
  *                                                     (under reduced motion; --motion drives with motion)
+ *   bun tools/check.ts <engine> --serve [--port <n>]   serve the profile (exact.mjs web) for repeated drives
  *
  * The client (tracked and untracked files of this checkout) is staged under
  * .artifacts/check/<engine>/ and profiled with prepareEngine; the checkout is never touched.
@@ -44,6 +45,10 @@ if (run([process.execPath, 'player/build.ts'])) process.exit(1);
 // past the contract build's 10-minute bound for its nested type check.
 const compiler = join(root, 'vendor/exact/target/host-dev/exact-web-js');
 const fast: Record<string, string> = existsSync(compiler) ? { EXACT_WEB_COMPILER: compiler } : {};
+// --serve: build once with the optimised compiler and keep serving the profile (exact.mjs web),
+// for repeated drives with `bun exact.mjs agent web --url http://127.0.0.1:<port>/ …`.
+const serve = rest.indexOf('--serve');
+if (serve >= 0) process.exit(run([process.execPath, 'exact.mjs', 'web', ...rest.slice(serve + 1)], fast) ?? 1);
 const agent = rest.indexOf('--agent');
 if (agent < 0) {
   // Compile only, one at a time across the machine.
