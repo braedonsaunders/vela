@@ -2,6 +2,7 @@
 // inlined, viewport variants and document tokens applied, motion presets expanded,
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
+import { perfReport } from './budget';
 import { BOUND_ROWS, DEPTH, FIELD_DEPTH, MOTION_DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
 
 const KEY = new Map(VOCAB.map((key, i) => [key, i]));
@@ -480,6 +481,14 @@ function detailFrame(doc: SkinDocument, r: Resolve): { detailScrim: string; deta
 }
 
 export function skinDoc(doc: SkinDocument, width: number, origin: string, locale = 'en'): SkinDocModel {
+  const model = resolveDoc(doc, width, origin, locale);
+  // Over a performance limit (src/skin/budget.ts), the document is refused, as any invalid one.
+  const over = perfReport(model).findings.filter(f => f.level === 'error');
+  if (over.length) throw new Error(`Skin document over its performance budget: ${over.map(f => `${f.route}: ${f.message}`).join('; ')}`);
+  return model;
+}
+
+function resolveDoc(doc: SkinDocument, width: number, origin: string, locale: string): SkinDocModel {
   if (!doc || doc.schema !== 1 || typeof doc.id !== 'string' || !/^[a-z][a-z0-9-]{0,31}$/.test(doc.id)) throw new Error('Not a schema 1 skin document');
   if (JSON.stringify(doc).length > 512 * 1024) throw new Error('Skin document over 512 KiB');
   if (!Number.isInteger(doc.renderer) || doc.renderer < 1 || doc.renderer > RENDERER_VERSION) throw new Error(`Skin document needs renderer ${doc.renderer}; this client has ${RENDERER_VERSION}`);

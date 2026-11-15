@@ -5,6 +5,7 @@
  *                                                from the installed packages (client/skins/<id>/)
  *   bun tools/skin.ts init <dir> [--id <id>]     scaffold a package from the reference (example) skin
  *   bun tools/skin.ts check <dir>                validate a package without building
+ *   bun tools/skin.ts check <document.ts|.json>  a skin document's performance report (tools/skin-check.ts)
  *   bun tools/skin.ts keygen <key-id>            make an Ed25519 signing key (~/.config/vela/keys)
  *   bun tools/skin.ts build <dir> [--key <id>]   compile the package with the committed Vela source and the
  *                                                pinned Exact into a signed single-engine build (/vela/engines/<id>/<version>/)
@@ -229,6 +230,8 @@ try {
   }
   else if (command === 'documents' && target) console.log(JSON.stringify(await (await import('./skin-documents')).writeDocuments(resolve(target)), null, 2));
   else if (command === 'init' && target) await init(resolve(target), flag('--id', basename(resolve(target))));
+  // A skin document (a .ts or .json file): its performance report (tools/skin-check.ts).
+  else if (command === 'check' && target && /\.(ts|json)$/.test(target)) { if (!await (await import('./skin-check')).checkDocument(target)) process.exitCode = 1; }
   else if (command === 'check' && target) { const { skin, list } = await check(resolve(target)); console.log(`${skin.id} ${skin.version}: valid (${list.length} files)`); }
   else if (command === 'build' && target) await build(resolve(target), flag('--key', 'local'));
   else if (command === 'keygen' && target) await keygen(target);
