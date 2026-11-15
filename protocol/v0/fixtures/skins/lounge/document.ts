@@ -507,6 +507,40 @@ const library: Node = { type: 'box', style: { position: 'relative', display: 'fl
   ] },
 ] };
 
+// ---------------------------------------------------------------- a collection
+
+const gridStyle: Style = { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(176px, 1fr))', 'column-gap': 'clamp(20px, 1.9vw, 40px)', 'row-gap': 'clamp(28px, 2.6vw, 52px)', ...gutter } as Style;
+const gridWide: Style = { 'grid-template-columns': 'repeat(auto-fill, minmax(220px, 1fr))' } as Style;
+const gridSmall: Style = { 'grid-template-columns': 'repeat(auto-fill, minmax(104px, 1fr))', 'column-gap': '12px', 'row-gap': '20px', ...gutterSmall } as Style;
+
+// A box set, folder or playlist: pushed over home, with its own Back.
+const collection: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', 'background-color': '$ground', color: '$ink', 'font-family': sans }, children: [
+  { type: 'box', a11y: { hidden: true }, style: { position: 'absolute', left: '-10%', top: '-30%', width: '80%', height: '80%', 'background-color': '#dcb998', opacity: '0.1', 'mask-image': 'radial-gradient(closest-side, black 0%, transparent 100%)', 'pointer-events': 'none' } },
+  { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{collection.name}', style: { position: 'relative', flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'padding-bottom': 'max(64px, 8vh)' }, children: [
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-start', gap: 'clamp(14px, 1.3vw, 24px)', 'padding-top': 'max(36px, 5vh)', 'padding-bottom': 'clamp(24px, 2vw, 40px)', ...gutter }, small: { 'padding-top': '24px', ...gutterSmall }, children: [
+      { type: 'box', press: { action: 'back' }, controlStates: false, label: '{s:back}', testId: 'collection-back', style: capsule('clamp(50px, 3.8vw, 72px)'), focus: capsuleFocus, active: { scale: '0.97' }, hover: { 'background-color': 'rgba(255, 255, 255, 0.24)' }, children: [
+        { type: 'icon', symbol: 'back', style: { width: 'clamp(16px, 1.2vw, 24px)', height: 'clamp(16px, 1.2vw, 24px)' } },
+        { type: 'text', text: '{s:back}' },
+      ] },
+      { type: 'text', text: '{s:collectionKind}', motion: 'copy0', style: { 'margin-top': 'clamp(18px, 2vw, 40px)', 'font-size': 'clamp(13px, 0.95vw, 18px)', 'font-weight': '700', 'letter-spacing': '0.16em', 'text-transform': 'uppercase', color: '$amber' } as Style },
+      { type: 'text', text: '{collection.name}', role: 'heading', level: 1, motion: 'copy1', style: { 'font-size': 'clamp(44px, 4.4vw, 92px)', 'font-weight': '800', 'letter-spacing': '-0.025em', 'line-height': '1', 'max-width': '24ch' }, small: { 'font-size': '34px' } },
+      { type: 'text', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], text: '{s:collectionCount}', motion: 'copy2', style: { 'font-size': 'clamp(16px, 1.2vw, 23px)', 'font-weight': '600', color: '$ink-dim', 'font-variant-numeric': 'tabular-nums' } },
+    ] },
+    { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], style: { ...gridStyle, 'padding-top': 'clamp(12px, 1vw, 20px)' } as Style, wide: gridWide, small: gridSmall, children: [
+      { type: 'repeat', over: 'collection.items', item: { type: 'use', template: 'gridPoster', motion: 'cardIn', stagger: { step: 30, cap: 12 } } },
+      { type: 'box', when: [{ test: 'collection.more' }], style: { position: 'relative', 'grid-column': '1 / -1', height: '2px' }, children: [{ type: 'widget', widget: 'sentinel', params: { on: 'collection' } }] },
+      { type: 'text', when: [{ test: 'env.collectionMoreLoading' }], text: '{s:loadingMore}', role: 'status', motion: 'pulse', style: { 'grid-column': '1 / -1', 'font-size': 'clamp(15px, 1.1vw, 21px)', color: '$ink-quiet' } },
+      { type: 'text', when: [{ test: 'collection.itemCount', is: 'eq', value: '0' }, { test: 'collection.complete' }], text: '{s:collectionEmpty}', role: 'status', style: { 'grid-column': '1 / -1', 'font-size': 'clamp(20px, 1.6vw, 32px)', 'font-weight': '700' } },
+    ] },
+    { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], role: 'status', label: '{s:loadingCollection}', style: { ...gridStyle, 'padding-top': 'clamp(12px, 1vw, 20px)', 'max-height': '70vh', 'overflow-y': 'hidden' } as Style, wide: gridWide, small: gridSmall,
+      children: Array.from({ length: 12 }, () => ({ ...posterBone, style: { ...posterBone.style, width: '100%' } as Style, small: {} })) },
+    { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], role: 'alert', style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-start', gap: '20px', ...gutter }, small: { ...gutterSmall }, children: [
+      { type: 'text', text: '{s:collectionFailed}', style: { 'font-size': 'clamp(24px, 2vw, 40px)', 'font-weight': '700' } },
+      { type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, controlStates: false, label: '{s:tryAgain}', style: capsule('clamp(58px, 4.4vw, 84px)'), focus: capsuleFocus, active: { scale: '0.97' }, children: [{ type: 'text', text: '{s:tryAgain}' }] },
+    ] },
+  ] },
+] };
+
 // ---------------------------------------------------------------- signing in
 
 // A field sized for a remote's on-screen keyboard: tall, with a white ring while focused.
@@ -586,10 +620,10 @@ const auth: Node = { type: 'box', style: { position: 'absolute', inset: '0px', d
 const rise = (delay: number) => ({ keyframes: 'rise', duration: 760, delay, easing: ease, fill: 'both' as const, still: { keyframes: 'dissolve', duration: 220 } });
 
 const lounge: SkinDocument = {
-  schema: 1, renderer: 12, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
+  schema: 1, renderer: 13, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.0/preview.jpg', swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
   tokens: { ground: '#05060a', raised: '#1a1d24', ink: '#f5f1e9', 'ink-dim': 'rgba(245, 241, 233, 0.78)', 'ink-quiet': 'rgba(245, 241, 233, 0.52)', amber: '#f2c27e' },
-  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew', loadingHome: 'Getting your library ready', homeFailed: 'Your library couldn’t be reached', homeFailedDetail: 'Vela couldn’t connect to your server. Check that it’s on and connected, then try again.', tryAgain: 'Try again', vela: 'Vela', welcome: 'Welcome to the lounge', welcomeDetail: 'Sign in once on this screen and everything you watch picks up where you left it.', connecting: 'Connecting to your server…', redeeming: 'Signing you in…', offline: 'Can’t reach your server', offlineDetail: 'Check that it’s on and connected to the network; Vela will connect again as soon as it can.', useCode: 'Sign in with a code', or: 'or', username: 'Username', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…', quickHow: 'On your phone or computer, open Vela, choose Quick Connect and enter this code.', quickCode: 'Your sign-in code', quickWaiting: 'Getting a code…', quickExpires: 'The code works until {quick.expires}', secureNote: 'This server also has a secure address. Sign in there to keep your password private.', goSecure: 'Use the secure address', cancel: 'Cancel', libraryCount: '{library.itemCount} titles · {library.sortLabel}', sortBy: 'Sort by', reverse: 'Reverse order', filters: 'Filters', unwatched: 'Unwatched', favorites: 'Favourites', libraryEmpty: 'Nothing here with these filters', libraryEmptyDetail: 'Clear a filter or choose another to see more.', loadingLibrary: 'Loading this library', libraryFailed: 'This library couldn’t be opened.', searchPlaceholder: 'Search films, shows, people and channels', clear: 'Clear', loadingMore: 'Loading more…' } },
+  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew', loadingHome: 'Getting your library ready', homeFailed: 'Your library couldn’t be reached', homeFailedDetail: 'Vela couldn’t connect to your server. Check that it’s on and connected, then try again.', tryAgain: 'Try again', collectionKind: 'Collection', collectionCount: '{collection.itemCount} titles', collectionEmpty: 'This collection is empty.', loadingCollection: 'Loading this collection', collectionFailed: 'This collection couldn’t be opened.', vela: 'Vela', welcome: 'Welcome to the lounge', welcomeDetail: 'Sign in once on this screen and everything you watch picks up where you left it.', connecting: 'Connecting to your server…', redeeming: 'Signing you in…', offline: 'Can’t reach your server', offlineDetail: 'Check that it’s on and connected to the network; Vela will connect again as soon as it can.', useCode: 'Sign in with a code', or: 'or', username: 'Username', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…', quickHow: 'On your phone or computer, open Vela, choose Quick Connect and enter this code.', quickCode: 'Your sign-in code', quickWaiting: 'Getting a code…', quickExpires: 'The code works until {quick.expires}', secureNote: 'This server also has a secure address. Sign in there to keep your password private.', goSecure: 'Use the secure address', cancel: 'Cancel', libraryCount: '{library.itemCount} titles · {library.sortLabel}', sortBy: 'Sort by', reverse: 'Reverse order', filters: 'Filters', unwatched: 'Unwatched', favorites: 'Favourites', libraryEmpty: 'Nothing here with these filters', libraryEmptyDetail: 'Clear a filter or choose another to see more.', loadingLibrary: 'Loading this library', libraryFailed: 'This library couldn’t be opened.', searchPlaceholder: 'Search films, shows, people and channels', clear: 'Clear', loadingMore: 'Loading more…' } },
   motion: {
     navIn: { keyframes: 'dissolve', duration: 700, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 200 } },
     sheet: { keyframes: 'pop', duration: 380, easing: ease, still: { keyframes: 'dissolve', duration: 160 } },
@@ -605,7 +639,7 @@ const lounge: SkinDocument = {
   },
   templates: { poster, gridPoster, wide, ranked, row, relatedRow },
   slots: { shell, home },
-  routes: { title, library, auth },
+  routes: { title, library, collection, auth },
   // Lounge's ground and ink behind every screen, the launch splash included.
   traits: { page: '#05060a', ink: '#f5f1e9' },
   // The title page is a full screen of its own: no frame drawn over home behind it.

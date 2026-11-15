@@ -72,7 +72,7 @@ const spinner = (size: number, extra: Partial<Node> = {}): Node => ({ type: 'box
 const emptyState = (icon: Node, title: string, message: string, when: Condition[]): Node => ({ type: 'box', when, role: 'status', style: col({ 'align-items': 'center', 'text-align': 'center', gap: '10px', padding: '64px 24px', color: '$secondary' }), children: [
   icon,
   { type: 'text', text: title, style: { 'margin-top': '6px', 'font-size': '20px', 'font-weight': '600', color: '$ink-strong' } },
-  { type: 'text', text: message, style: { 'max-width': '30rem', 'font-size': '15px', 'line-height': '1.5' } },
+  ...(message ? [{ type: 'text', text: message, style: { 'max-width': '30rem', 'font-size': '15px', 'line-height': '1.5' } } as Node] : []),
 ] });
 
 // ---------------------------------------------------------------- Shell
@@ -435,6 +435,30 @@ const library: Node = { type: 'box', style: col({ 'min-height': '100%', color: '
   ] as Node[]).map(n => ({ ...n, when: [ready, ...(n.when ?? [])] } as Node)),
 ] };
 
+// ---------------------------------------------------------------- Collection
+
+// A collection: a header with a way back, then its titles in server order.
+const collection: Node = { type: 'box', style: col({ 'min-height': '100%', 'background-color': '$page', color: '$ink', 'font-family': sans, 'padding-bottom': '48px' }), children: [
+  waiting(140, '{s:openingCollection}'),
+  failure('{s:collectionFailed}'),
+  ...([
+    { type: 'box', style: row({ position: 'sticky', top: '0px', 'z-index': '5', height: '58px', 'align-items': 'center', gap: '8px', 'padding-left': '10px', 'padding-right': '14px', 'background-color': '$header', 'backdrop-filter': 'blur(12px)', 'box-shadow': '0px 2px 6px $shadow', 'flex-shrink': '0' }),
+      small: { height: '52px', 'padding-left': '4px' }, children: [
+        { type: 'box', press: { action: 'back' }, label: '{s:back}', style: iconBtn(44), hover: iconBtnHover, focus: iconBtnFocus, children: [glyph('back', 24)] },
+        { type: 'text', text: '{collection.name}', role: 'heading', level: 1, style: { 'font-size': '20px', 'font-weight': '600', color: '$ink-strong', 'line-clamp': '1' }, small: { 'font-size': '18px' } },
+      ] },
+    { type: 'box', style: col({ 'padding-top': '24px' }), small: { 'padding-top': '16px' }, children: [
+      emptyState(jelly('folder', 44), '{s:nothingHere}', '', [{ test: 'collection.itemCount', is: 'eq', value: '0' }]),
+      { type: 'box', when: [{ test: 'collection.itemCount', is: 'gt', value: '0' }], style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(160px, 1fr))', 'column-gap': '18px', 'row-gap': '26px', ...side },
+        small: { 'grid-template-columns': 'repeat(3, minmax(0, 1fr))', 'column-gap': '10px', 'row-gap': '16px', ...sideSmall }, children: [
+          { type: 'repeat', over: 'collection.items', item: { type: 'use', template: 'gridPoster' } },
+        ] },
+      // A longer collection loads its next page as its end comes into view.
+      { type: 'box', when: [{ test: 'collection.more' }], style: { position: 'relative', height: '1px' }, children: [{ type: 'widget', widget: 'sentinel', params: { on: 'collection' }, style: fill }] },
+    ] },
+  ] as Node[]).map(n => ({ ...n, when: [ready, ...(n.when ?? [])] } as Node)),
+] };
+
 // ---------------------------------------------------------------- Signed out
 
 // The signed-out page: the mark above a plain dark form, with a faint gradient wash.
@@ -466,7 +490,7 @@ const signIn: Node = { type: 'box', when: [authIs('signin')], motion: 'fadeIn', 
   { ...textField('username', '{s:username}', 10), when: [{ test: 'signin.canPassword' }] } as Node,
   { ...fieldLabel('{s:password}'), when: [{ test: 'signin.canPassword' }] } as Node,
   { ...textField('password', '{s:password}', 18), when: [{ test: 'signin.canPassword' }] } as Node,
-  { type: 'box', when: [{ test: 'signin.canPassword' }], press: { action: 'signIn' }, label: '{s:signIn}', testId: 'sign-in', disabled: [{ test: 'signin.busy' }], disabledStyle: { opacity: '0.45' },
+  { type: 'box', when: [{ test: 'signin.canPassword' }], press: { action: 'signIn' }, label: '{s:signIn}', testId: 'sign-in', disabled: [{ test: 'signin.ready', not: true }], disabledStyle: { opacity: '0.45' },
     style: submit, hover: { opacity: '0.9' }, focus: submitFocus, children: [
       { type: 'text', when: [{ test: 'signin.busy', not: true }], text: '{s:signIn}' },
       { type: 'text', when: [{ test: 'signin.busy' }], text: '{s:signingIn}' },
@@ -654,7 +678,7 @@ const title: Node = { type: 'box', style: col({ position: 'relative', height: '1
 ] };
 
 export default {
-  schema: 1, renderer: 11, id, name: 'Jelly Twin', version,
+  schema: 1, renderer: 13, id, name: 'Jelly Twin', version,
   tagline: 'A familiar home-media client: near-black, cyan accents, card rows.',
   preview: asset('preview.jpg'), swatches: ['#101010', '#ffffff', '#00a4dc', '#aa5cc3', '#292929'],
   tokens: {
@@ -675,7 +699,7 @@ export default {
     play: 'Play', resume: 'Resume', resumeFrom: 'Resume from {detail.resumePosition}', trailer: 'Trailer', watchProgress: 'Watch progress', crew: 'Crew', genres: 'Genres', played: 'Played',
     nextUp: 'Next Up', episodes: 'Episodes', seasons: 'Seasons', specialFeatures: 'Special Features', cast: 'Cast', moreLikeThis: 'More Like This', notYet: 'Not available yet',
     playExtra: 'Play {extra.name}', extraNotAvailable: '{extra.name} · Not available',
-    tryAgain: 'Try again', year: 'Year', anyYear: 'Any year',
+    tryAgain: 'Try again', back: 'Back', openingCollection: 'Opening collection…', collectionFailed: 'This collection couldn\'t be opened.', year: 'Year', anyYear: 'Any year',
     unreachable: 'Can\'t reach your server', unreachableHint: 'Your server could not be reached. Reopen Vela when the connection is restored.', signingYouIn: 'Signing you in…', connecting: 'Connecting to your library…',
     pleaseSignIn: 'Please sign in', username: 'Username', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…', quickConnect: 'Quick Connect',
     noSignIn: 'This server doesn\'t offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.',
@@ -705,6 +729,6 @@ export default {
   status: true,
   traits: { barMask: false, panSections: true, page: '#101010', ink: '#ffffffde' },
   slots: { shell, home },
-  routes: { title, library, auth },
+  routes: { title, library, auth, collection },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },
 } satisfies SkinDocument;
