@@ -23,9 +23,9 @@ const wide: Condition = { test: 'env.small', not: true };
 /** A style that changes when the slot is small: the small state replaces the style whole. */
 const responsive = (style: Style, smallStyle: Style) => ({ style, states: [{ when: [small], style: { ...style, ...smallStyle } as Style }] });
 
-// A button with a ground of its own: compiled Exact washes it with 12% of its ink on hover
-// (they draw that wash themselves and opt out of the renderer's control states).
-const inkWash = { hover: { 'background-image': 'linear-gradient(color-mix(in srgb, currentColor 12%, transparent) 0 0)' } as Style, controlStates: false };
+// A button with a ground of its own: compiled Exact washes it with 12% of its ink on hover and
+// dims the whole control while pressed (drawn here, so they opt out of the renderer's states).
+const inkWash = { hover: { 'background-image': 'linear-gradient(color-mix(in srgb, currentColor 12%, transparent) 0 0)' } as Style, active: { opacity: '0.65' }, controlStates: false };
 
 // A plain text button as Exact draws one: unset, a block, 4 px of padding, centred text.
 const plain = (text: string, press: { action: 'home' | 'search' | 'live' | 'signOut' }, when: Condition[]): Node => ({
@@ -95,13 +95,16 @@ const row: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'co
 // A plain Contract button with no ground of its own, as Exact draws it ("bordered"): a hairline
 // in the label colour at 45%, the control radius (8px x Exact's curve reach, 1.52 where corner-shape
 // is supported: a var() radius is not bound) and curve, the label colour at weight 500, centred.
+// Exact's bordered button washes its ground on hover (quaternary) and while pressed (tertiary)
+// and does not dim; it opts out of the renderer's pressed dim.
+const borderedStates = { hover: { 'background-image': 'linear-gradient(var(--exact-quaternary-fill) 0 0)' } as Style, active: { 'background-image': 'linear-gradient(var(--exact-tertiary-fill) 0 0)' } as Style, controlStates: false };
 const bordered: Style = { display: 'grid', 'justify-content': 'center', 'align-items': 'center', padding: '16px', border: '1px solid var(--exact-line)', 'border-radius': '12.16px', 'corner-shape': 'var(--exact-control-curve, var(--exact-curve))',
   color: 'var(--exact-label)', 'font-weight': '500', 'line-height': '20px', 'text-align': 'center' };
 
 // A loading or failure moment: the message, 32 px in, and after a failure Try again.
 const status = (text: string, when: Condition[], retry = false): Node => ({ type: 'box', when, style: { display: 'flex', 'flex-direction': 'column', gap: '12px', padding: '32px', 'align-items': 'flex-start' }, children: [
   { type: 'text', text, role: 'status' },
-  ...(retry ? [{ type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, label: '{s:tryAgain}', style: { ...bordered, padding: '8px 16px' }, children: [{ type: 'text', text: '{s:tryAgain}' }] } as Node] : []),
+  ...(retry ? [{ type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, label: '{s:tryAgain}', style: { ...bordered, padding: '8px 16px' }, ...borderedStates, children: [{ type: 'text', text: '{s:tryAgain}' }] } as Node] : []),
 ] });
 
 // Compiled, the heading, the search field and the featured title share one column
@@ -144,17 +147,17 @@ const home: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'c
 const library: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: [
   status('{s:findingTitles}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
   status('{s:libraryFailed}', [{ test: 'env.load', is: 'eq', value: 'failed' }], true),
-  { type: 'box', when: [ready], press: { action: 'home' }, label: '{s:back}', style: bordered, children: [{ type: 'text', text: '{s:back}' }] },
+  { type: 'box', when: [ready], press: { action: 'home' }, label: '{s:back}', style: bordered, ...borderedStates, children: [{ type: 'text', text: '{s:back}' }] },
   catalogue('{library.name}', 'library.items', [ready]),
   { type: 'box', when: [ready, { test: 'library.more' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{s:showMore}',
-    style: bordered, children: [{ type: 'text', text: '{s:showMore}' }] },
+    style: bordered, ...borderedStates, children: [{ type: 'text', text: '{s:showMore}' }] },
 ] };
 
 // A collection's titles in server order, under a way back.
 const collection: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: [
   status('{s:openingCollection}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
   status('{s:collectionFailed}', [{ test: 'env.load', is: 'eq', value: 'failed' }], true),
-  { type: 'box', when: [ready], press: { action: 'back' }, label: '{s:back}', style: bordered, children: [{ type: 'text', text: '{s:back}' }] },
+  { type: 'box', when: [ready], press: { action: 'back' }, label: '{s:back}', style: bordered, ...borderedStates, children: [{ type: 'text', text: '{s:back}' }] },
   catalogue('{collection.name}', 'collection.items', [ready]),
 ] };
 
