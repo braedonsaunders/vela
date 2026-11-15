@@ -121,6 +121,8 @@ export class PacketDemux {
     if (!Number.isFinite(positionUs) || positionUs < 0) throw new Error('Invalid demux seek position');
     const reader = new PacketReader(track);
     const parallel=hasStreamingMatroskaBacking(track);
+    if(this.originalReader){const note=`${track instanceof InputVideoTrack?'Video':'Audio'} packet acquisition: ${parallel?'streaming':'library'}`;
+      if(!this.diagnostics.includes(note)&&this.diagnostics.length<16)this.diagnostics.push(note);}
     const read=<T>(run:()=>PromiseLike<T>|T)=>this.operation(run,signal,track instanceof InputVideoTrack?'video-packet':'audio-packet',parallel);
     const querySeconds=Math.max(0,positionUs-this.originUs)/1e6;
     // Container cues/sample tables locate a preceding random-access packet.

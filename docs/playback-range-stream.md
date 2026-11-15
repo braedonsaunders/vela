@@ -139,3 +139,55 @@ on the same track, retain one-block lookahead, and timestamp laces correctly.
 Dropping the guard without that work would produce zero-duration laces. No
 additional lab capture is justified before that local proof succeeds. Production
 remains the wrapper; the unqualified partial repair is committed for review.
+
+## Missing-DefaultDuration audio admission
+
+The pinned codec parsers are now passed through the existing source-complete
+build adaptation. Vela does not modify the vendor checkout or import its entire
+implementation into the standalone type-check. DTS (including its core/HD
+frame parser), AC3, EAC3 and AAC can use streaming acquisition without
+`DefaultDuration`. Other missing-duration codecs retain the library path until
+their final-frame timing can be established; this is not universal audio parity.
+
+A compressed block is retained until the next same-track block header supplies
+its duration. Only that header is read ahead. Codec frame sizes/sample rates
+cross-check the span; laces split evenly across it on the container tick grid.
+A gap is not stretched into sound: the preceding block and the EOF block use
+the codec frame duration. Overlapping or contradictory timing fails explicitly.
+Audio target lookup scans timestamps and materializes only its selected block.
+Independent audio may start at the next complete frame in the shared video
+cluster; its real timestamp is preserved. A larger gap, codec preroll or a
+dependent packet still requests earlier indexed history.
+
+Generated DTS lace proof: 44.1 kHz, 512 samples/frame, `DefaultDuration=null`,
+three blocks with 3 / 3 / 2 fixed-size laces and a deliberate gap before the last.
+All eight packets used `Audio packet acquisition: streaming`. Their timestamps
+were exactly `[0,11610,23220,34830,46440,58050,100000,111610]` microseconds, each
+11,610 microseconds long (the one-microsecond container grid). Thus the second
+block stops at 69,660 microseconds rather than stretching to the 100,000-
+microsecond next block, and the final block has its codec-derived duration.
+One 18,056-byte source acquisition, zero repeated completed pages.
+
+The same 72.09-second 4K fixture, cold resume at 48.08 s, 400-ms first byte for
+every request and 65-Mbps aggregate body limit:
+
+| Outcome | Before admission | With frame-span admission |
+| --- | ---: | ---: |
+| First image | Eight-second deadline | 2.154 s |
+| Playable | Failed | 4.275 s |
+| PCM reserve at release | Zero in the intermediate library path | 1.916672 s / 92,000 frames |
+| Added drops / underruns in one playing second | No playable interval | 0 / 0 |
+| Repeated completed pages | 0 | 0 |
+
+First presentation acquired 1,729,015 validated bytes. The actual GPU picture
+was inspected before disposal. The PCM reserve held the clock for 2.121 s;
+existing startup bounds and output credit limits were unchanged. Eleven HTTP
+requests include split/cancelled forward bodies. Completed pages are reused,
+but cancelled transport bytes can be retransmitted; this remains distinct from
+zero duplicate wire bytes. These are local correctness and short-start results,
+not eight-minute real-title qualification or a lip-sync claim.
+
+Standalone TypeScript and matching core asset assembly passed, key
+`cfa2b02dbd43a214`. Every own local Chrome/profile and fixture server closed.
+Next is one bounded real-app capture under 25 seconds; the alternating lab
+pairs remain uncompleted and production remains the wrapper.

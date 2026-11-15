@@ -5,12 +5,19 @@ import type {MatroskaSubtitleStream} from './subtitle-stream';
 const CLUSTER=0x1f43b675, SIMPLE=0xa3, GROUP=0xa0, TIMESTAMP=0xe7;
 const LEVEL_ONE=new Set([CLUSTER,0x114d9b74,0x1549a966,0x1654ae6b,0x1c53bb6b,0x1941a469,0x1254c367,0x1043a770]);
 const MAX_PACKET=16*1024*1024;
+/** Supplied by the pinned demux library at the existing build-time seam. */
+interface AudioFrameParsers {
+ dts(data:Uint8Array):{sampleCount:number;sampleRate:number}|null;
+ ac3(data:Uint8Array):{fscod:number}|null;
+ eac3(data:Uint8Array):unknown;
+ aac(data:Uint8Array|null):{frameLength:number;coreSampleRate:number|null};
+}
 interface Element {id:number;start:number;data:number;end:number;unknown:boolean}
 interface RawBlock {timestamp:number;duration:number;isKeyFrame:boolean;data:Uint8Array;lacing:number;decoded:boolean;postProcessed:boolean;mainAdditional:Uint8Array|null;otherAdditionals:{addId:number;data:Uint8Array}[]}
 interface Segment {timestampFactor:number;codecDelay?:number;clusterSeekStartPos:number;dataStartPos:number;elementEndPos:number|null;deferredCuesPosition:number|null;idToTrack:Map<number,Track>}
 /** Version-pinned bridge to metadata and codec/lacing components, never a controller. */
-interface Track {id:number;codecDelay:number;defaultDuration:number|null;codecId:string|null;decodingInstructions:{scope:number;data:{type:string;algorithm?:number|null;settings?:Uint8Array|null}|null}[];
- info:{type:string;codec?:string|null;alphaMode?:boolean}|null;segment:Segment;cuePoints:{time:number;trackId:number;clusterPosition:number}[];
+interface Track {id:number;codecDelay:number;defaultDuration:number|null;codecId:string|null;codecPrivate?:Uint8Array|null;decodingInstructions:{scope:number;data:{type:string;algorithm?:number|null;settings?:Uint8Array|null}|null}[];
+ info:{type:string;codec?:string|null;alphaMode?:boolean;sampleRate?:number;codecDescription?:Uint8Array|null}|null;segment:Segment;cuePoints:{time:number;trackId:number;clusterPosition:number}[];
  demuxer:{segments:unknown[];input:{_rootSource:object};loadDeferredCues(segment:Segment):Promise<void>|null;expandLacedBlocks(blocks:RawBlock[],track:Track):RawBlock[];decodeBlockData(track:Track,data:Uint8Array):Uint8Array}}
 interface Scope {metadata:boolean;prefetch:WeakMap<object,Promise<void>>;reader:ByteReader;signal:AbortSignal;startSeconds:number;videoStart?:{cluster:number;time:number};subtitles?:MatroskaSubtitleStream;tracks:WeakMap<object,StreamingMatroskaTrack>;cues:WeakMap<object,Promise<void>>}
 const scopes=new WeakMap<object,Scope>();
@@ -30,15 +37,30 @@ export function preloadMatroskaStreaming(demuxer:Track['demuxer'],segment:Segmen
   for(let at=element.data;at<element.end;at+=1024*1024)await step.read(at,Math.min(1024*1024,element.end-at));
  })();scope.prefetch.set(segment,work);void work.catch(()=>{});
 }
-export function streamingMatroskaTrack(value:unknown,packetType?:(codec:string,data:Uint8Array)=>string|null):StreamingMatroskaTrack|null{
+export function streamingMatroskaTrack(value:unknown,packetType?:(codec:string,data:Uint8Array)=>string|null,parsers?:AudioFrameParsers):StreamingMatroskaTrack|null{
  const track=value as Track,scope=track?.demuxer&&scopes.get(track.demuxer.input._rootSource);
  if(!scope||track.demuxer.segments.length!==1||!track.info||!['video','audio'].includes(track.info.type))return null;
  // Preserve the library path for formats whose packet postprocessing is not this bridge's job.
  if(track.info.type==='video'&&(!['avc','hevc'].includes(track.info.codec??'')||track.info.alphaMode||!(track.defaultDuration!==null&&track.defaultDuration>0)))return null;
  if(track.decodingInstructions.some(i=>i.data?.type!=='decompress'||i.data.algorithm!==3||i.scope&4))return null;
- let stream=scope.tracks.get(track as object);if(!stream){stream=new StreamingMatroskaTrack(scope,track);scope.tracks.set(track as object,stream);}if(packetType)stream.packetType=packetType;return stream;
+ let stream=scope.tracks.get(track as object);if(!stream){stream=new StreamingMatroskaTrack(scope,track);scope.tracks.set(track as object,stream);}if(packetType)stream.packetType=packetType;if(parsers)stream.frameParsers=parsers;return stream;
 }
 function unsigned(bytes:Uint8Array){let value=0;for(const byte of bytes)value=value*256+byte;if(!Number.isSafeInteger(value))throw new Error('Matroska integer exceeds precision');return value;}
+function fixedAudio(track:Track){return /^(A_DTS(?:\/.*)?|A_AC3|A_EAC3|A_AAC(?:\/.*)?)$/.test(track.codecId??'');}
+/** Frame information comes from the pinned codec parsers, not average bitrate. */
+function audioFrameSeconds(track:Track,data:Uint8Array,parsers:AudioFrameParsers|undefined):number|null{
+ if(!parsers)throw new Error('Missing pinned audio frame parsers');
+ const codec=track.codecId??'';
+ if(codec.startsWith('A_DTS')){const frame=parsers.dts(data);return frame?frame.sampleCount/frame.sampleRate:null;}
+ if(codec==='A_AC3'){const frame=parsers.ac3(data),rate=frame?[48000,44100,32000][frame.fscod]:null;return rate?1536/rate:null;}
+ if(codec==='A_EAC3'){
+  if(!parsers.eac3(data))return null;
+  const code=data[4]>>>6,rate=code===3?[24000,22050,16000][data[4]>>>4&3]:[48000,44100,32000][code];
+  const blocks=code===3?6:[1,2,3,6][data[4]>>>4&3];return rate?blocks*256/rate:null;
+ }
+ if(codec.startsWith('A_AAC')){const config=parsers.aac(track.codecPrivate??track.info?.codecDescription??null);return config.coreSampleRate?config.frameLength/config.coreSampleRate:null;}
+ return null;
+}
 function vint(bytes:Uint8Array,at=0,id=false){
  const first=bytes[at];if(!first)throw new Error('Invalid Matroska integer');let length=1,marker=128;while(!(first&marker)){length++;marker>>=1;}
  if(length>8||at+length>bytes.length)throw new Error('Truncated Matroska integer');let value=id?first:first&(marker-1),unknown=!id&&value===marker-1;
@@ -68,8 +90,9 @@ interface BlockSearch {done:boolean;visit(element:Element,cursor:Cursor,timestam
 export class StreamingMatroskaTrack {
  private cursors=new WeakMap<EncodedPacket,Cursor>();
  packetType?: (codec:string,data:Uint8Array)=>string|null;
+ frameParsers?:AudioFrameParsers;
  constructor(private scope:Scope,private track:Track){}
- get sequential(){return this.track.info?.type==='video'||this.track.defaultDuration!==null&&this.track.defaultDuration>0;}
+ get sequential(){return this.track.info?.type==='video'||this.track.defaultDuration!==null&&this.track.defaultDuration>0||fixedAudio(this.track);}
  get firstEnabled(){return this.scope.metadata||this.sequential;}
  private async step(){this.scope.signal.throwIfAborted();return new Step(this.scope,await this.scope.reader.size(this.scope.signal));}
  private async cursor(at:number,step:Step):Promise<Cursor>{
@@ -132,6 +155,25 @@ export class StreamingMatroskaTrack {
   }
   const lacing=(flags>>1)&3;
   const raw:RawBlock={timestamp:clusterTime+relative,duration:duration||(lacing===0?Math.round(this.track.defaultDuration??0):0),isKeyFrame:key,data:await step.read(payload,block.end-payload),lacing,decoded:this.track.decodingInstructions.length===0,postProcessed:false,mainAdditional:null,otherAdditionals:additions};
+  if(this.track.info?.type==='audio'&&!(this.track.defaultDuration!==null&&this.track.defaultDuration>0)){
+   // Retain this block until the following same-track header supplies its span.
+   // Payloads in between (including large video frames) are never materialized.
+   let following:number|null=null;
+   const peek:BlockSearch={done:false,visit:(_element,_cursor,timestamp)=>{following=timestamp*factor+this.track.codecDelay;peek.done=true;}};
+   await this.next({...cursor,remaining:[]},new Step(this.scope,step.size,false),undefined,peek);
+   const frames=this.track.demuxer.expandLacedBlocks([{...raw,duration:0}],this.track);
+   const lengths=frames.map(frame=>audioFrameSeconds(this.track,frame.decoded?frame.data:this.track.demuxer.decodeBlockData(this.track,frame.data),this.frameParsers));
+   if(lengths.some(value=>value===null||!Number.isFinite(value)||value<=0))throw new Error('Missing audio frame timing for Matroska block');
+   const expected=lengths.reduce<number>((sum,value)=>sum+value!,0)*factor;
+   const perFrame=expected/frames.length,tolerance=Math.max(1,2*factor/(this.track.info.sampleRate??48000));
+   if(lengths.some(value=>Math.abs(value!*factor-perFrame)>tolerance))throw new Error('Variable frame durations in Matroska audio lace');
+   const span=following===null?null:following-raw.timestamp;
+   if(span!==null&&span<expected-tolerance)throw new Error('Matroska audio block overlaps its successor');
+   if(duration&&Math.abs(duration-expected)>tolerance)throw new Error('Matroska audio duration disagrees with codec frames');
+   // A large positive difference is a real gap, not permission to stretch a
+   // frame across it. At EOF use the same codec-derived duration.
+   raw.duration=Math.round(span!==null&&Math.abs(span-expected)<=tolerance?span:expected);
+  }
   return this.track.demuxer.expandLacedBlocks([raw],this.track);
  }
  private fromBlocks(blocks:RawBlock[],element:Element,cursor:Cursor){
@@ -183,9 +225,10 @@ export class StreamingMatroskaTrack {
    const blocks=await this.block(candidate.element,candidate.cursor,step);
    const packets=this.fromBlocks(blocks??[],candidate.element,candidate.cursor);
    const packet=packets.filter(value=>value.packet.timestamp<=target).at(-1)?.packet??packets[0]?.packet??null;
-   // A real gap/dependent packet needs earlier history. The fallback scans
-   // headers only and never turns the previous GOP into a media forward run.
-   if(common&&'shared'in start&&start.shared&&packet&&(packet.timestamp>this.scope.startSeconds||packet.type!=='key'))continue;
+   // Independent audio can begin at its next complete frame in this cluster;
+   // its real timestamp is retained (never relabelled as the requested time).
+   // A larger hole or a dependent packet needs the earlier indexed history.
+   if(common&&'shared'in start&&start.shared&&packet&&(packet.timestamp>this.scope.startSeconds+packet.duration||packet.type!=='key'))continue;
    this.scope.reader.prefetch?.(candidate.element.start,this.scope.signal);
    return result.set({packet,provisional:false});
   }
