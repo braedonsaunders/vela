@@ -10,6 +10,7 @@ export const FIXED_TOKENS: Record<string, string> = {"brand.warm":"#dcb998","bra
 // The renderer's shape: its levels, the shell's first level, and how deep widgets and pagers may sit.
 export const DEPTH = 10;
 export const SHELL_FROM = 5;
+export const MOTION_DEPTH = 6;
 export const WIDGET_DEPTH = 3;
 export const PAGER_DEPTH = 6;
 export const FIELD_DEPTH = 7;
