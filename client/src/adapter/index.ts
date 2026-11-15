@@ -2,6 +2,8 @@ import type * as V from '../../wire/v0/types';
 
 /** Server-independent operations used by Vela's data layer. */
 export interface ServerAdapter {
+  /** The stored session's current form, or null once the server rejected it. A transient failure throws. */
+  validateSession(): Promise<V.Tokens | null>;
   capabilities(): Promise<V.ServerCapabilities>;
   negotiate(request: V.NegotiateRequest): Promise<V.NegotiateResponse>;
   issueWebCode(request: V.WebCodeIssueRequest): Promise<V.WebCodeIssueResponse>;
@@ -18,7 +20,7 @@ export interface ServerAdapter {
   row(id: string, cursor?: string, limit?: number): Promise<V.Row>;
   libraries(query: V.LibrariesQuery): Promise<V.Page<V.Library>>;
   library(id: string, query: V.LibraryBrowseQuery): Promise<V.LibraryContents>;
-  collection(id: string): Promise<V.CollectionContents>;
+  collection(id: string, cursor?: string, limit?: number): Promise<V.CollectionContents>;
   detail(id: string): Promise<V.TitleDetail>;
   trailerPreview(id: string, request: V.TrailerPreviewRequest): Promise<V.TrailerPreviewResponse>;
   search(request: V.SearchRequest): Promise<V.SearchResponse>;
@@ -34,4 +36,14 @@ export interface ServerAdapter {
   channels(cursor?: string, limit?: number): Promise<V.Page<V.Channel>>;
   guide(query: V.GuideQuery): Promise<V.GuideResponse>;
   snapshot(id: string): Promise<V.SessionSnapshot>;
+}
+
+/** A native server's media credentials, attached only by the trusted player host to requests
+ * inside origin + pathPrefix. Ether has none: its broker grants carry their own authority. */
+export interface MediaAccess {
+  origin: string;
+  pathPrefix: string;
+  headers(): Promise<Record<string, string>>;
+  /** A credentialed URL for one native-element attachment, minted on request and never stored. */
+  nativeURL(url: string): Promise<string>;
 }

@@ -120,6 +120,8 @@ function level(d: number): string {
     obs: action
 ${d <= WIDGET_DEPTH ? `  inject
     tileMessage: action
+    mediaAuthJson: string
+    tileNativeMedia: string
 ` : ''}  state over = false
   state focused = false
   state ready = false
@@ -158,7 +160,7 @@ ${d <= WIDGET_DEPTH ? `  inject
 ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                   for t in e.tile key=t.channelId
                     if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
-                      vela-player plan=t.planJson playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                      vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
 ` : ''}                else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))

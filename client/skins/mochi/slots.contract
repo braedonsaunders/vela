@@ -361,6 +361,10 @@ component Banner
     previewing: bool
     selectTitle: action
     observe: action
+  inject
+    mediaAuthJson: string
+    previewNativeMedia: string
+    previewMessage: action
   view
     column position="relative" intersect=observe(hero.receipt) animation=popIn(still, 0)
       column position="relative" height=(small ? 440 : "clamp(380px, 54vh, 560px)") border="3px solid var(--mochi.ink)" border-radius=(small ? 26 : 34) overflow="hidden" background-color="mochi.lavender-soft" box-shadow=(small ? "6px 7px 0px var(--mochi.lavender)" : "10px 11px 0px var(--mochi.lavender)")
@@ -371,7 +375,7 @@ component Banner
             image hero.poster alt="" aria-hidden=true position="absolute" top="-20%" left="-20%" width="140%" height="140%" object-fit="cover" filter="blur(60px) saturate(1.4)" opacity=0.9
         if not still
           for preview in model.previews.filter(entry => entry.id == hero.id) key=preview.id
-            vela-preview url=preview.url active=(active ? "true" : "false") still="false" expiresAt=preview.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+            vela-preview mediaAuth=mediaAuthJson nativeMedia=previewNativeMedia message=previewMessage url=preview.url active=(active ? "true" : "false") still="false" expiresAt=preview.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
         column position="absolute" inset=0 pointer-events="none" aria-hidden=true background-image=(small ? "linear-gradient(0deg, var(--mochi.scrim) 0%, var(--mochi.scrim) 30%, var(--mochi.scrim-clear) 75%)" : "linear-gradient(90deg, var(--mochi.scrim) 0%, var(--mochi.scrim-soft) 48%, var(--mochi.scrim-clear) 72%), linear-gradient(0deg, var(--mochi.scrim) 0%, var(--mochi.scrim-clear) 50%)")
         column position="absolute" left=0 right=0 bottom=0 animation=hop(still, 160) box-sizing="border-box" padding=(small ? "0px 20px 22px" : "0px 44px 40px") max-width=(small ? "none" : "46rem") gap=(small ? 10 : 14) color="mochi.night-ink"
           row align-self="flex-start" gap=7 align-items="center" padding="5px 12px 5px 10px" border-radius=999 background-color="mochi.butter" color="mochi.ink" border="2.5px solid var(--mochi.ink)"
