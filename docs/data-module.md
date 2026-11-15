@@ -92,3 +92,14 @@ Appearance and distributed skins are optional server features; absence uses the 
 built-in appearance rather than an invented remote endpoint. The concrete registry,
 source signatures and polling cadence will be defined with the UI and adapter owners
 before integration; these are intended boundaries, not implemented capabilities.
+
+Host qualification with dummy credentials and a local strict-range fixture:
+core direct and the current wrapper's dedicated-worker direct path both played
+through Authorization-header-only reads; native fallback requested one private
+attachment reply and played. Nine header requests, one native URL request, zero
+unauthorized requests, zero credential query parameters on fetch requests, zero
+credential strings in public events; all three reported zero frame drops. The
+owned server and named Chrome were closed. In-process scope checks also refused
+another origin, a sibling prefix, and an encoded traversal; redaction removed a
+credential query. This proves the host seam, not a real Plex/Jellyfin end-to-end
+foundation integration. Those adapter flows require their own installed check.

@@ -39,7 +39,7 @@ export class UniversalRuntime implements OriginalBackend {
     this.core=new PlaybackCore({present:(frame,position)=>presenter.present(frame,position),dispose:()=>resources.release()},audio=>createCoreAudioOutput({...audio,libraryBaseURL:options.assets.baseURL,
       assetKey:options.assets.assetKey,forceSoftware:options.retry?.audio}),state=>this.publish(state),(error,position)=>{
       if(!this.disposed)options.onFailure(error.message,position/1e6);
-    },callbacks=>new VideoDecoderRouter(presenter,packages,callbacks,options.retry?.video));
+    },callbacks=>new VideoDecoderRouter(presenter,packages,callbacks,options.retry?.video),options.mediaRequests);
     this.core.setVolume(this.volume,this.muted);
     options.signal.addEventListener('abort',this.abort,{once:true});
   }

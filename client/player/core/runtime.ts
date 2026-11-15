@@ -64,7 +64,8 @@ export class PlaybackCore {
     private readonly onState:(state:CoreState)=>void,
     /** The host owns authorized decoder/conversion recovery after this route. */
     private readonly onFailure:(error:Error,positionUs:number)=>void,
-    private readonly createVideo:(callbacks:VideoCallbacks)=>VideoBackend) {
+    private readonly createVideo:(callbacks:VideoCallbacks)=>VideoBackend,
+    private readonly mediaRequests?:import('../media-auth').MediaRequestPolicy) {
     this.scheduler=new VideoScheduler(this.clock,(frame,position)=>presenter.present(frame,position),error=>this.fail(error),()=>{
       const run=this.epoch;if(!run)return;
       run.resolveFirst();
@@ -105,7 +106,8 @@ export class PlaybackCore {
         this.checkEnded();
       }
     },onFailure:failure=>{if(this.epoch?.id===failure.epoch)this.fail(new Error(`Audio ${failure.stage}: ${failure.message}`));}});
-    const source:SourceState=input.kind==='file'?{kind:'file',abort,audio,reader:new RangeReader(input.url)}:{kind:'hls',abort,audio,segments:new SegmentReader(input.url),originUs:input.originUs};
+    const allowed=this.mediaRequests?.allows.bind(this.mediaRequests);
+    const source:SourceState=input.kind==='file'?{kind:'file',abort,audio,reader:new RangeReader(input.url,this.mediaRequests?.fetch,allowed)}:{kind:'hls',abort,audio,segments:new SegmentReader(input.url,this.mediaRequests?.fetch,allowed),originUs:input.originUs};
     this.source=source;this.failure=null;this.tracks=[];this.video=undefined;this.audio=undefined;this.requestedAudioId=undefined;this.durationUs=null;
     this.initialAudioOrdinal=Number.isSafeInteger(audioOrdinal)&&audioOrdinal>=0?audioOrdinal:0;
     try{

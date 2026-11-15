@@ -10,6 +10,7 @@ import {createAssOutput,type AssOutput} from './ass';
 import {readSubtitlePreferences,validateSubtitlePreferences,updateSubtitlePreference} from './preferences';
 import type {SubtitleContainer,SubtitleDescription,SubtitleFailure,SubtitlePacket,SubtitlePreferences,SubtitleSource,SubtitleTrack} from './types';
 export interface SubtitleSessionOptions {
+  mediaRequests?:import('../../media-auth').MediaRequestPolicy;
   surface:HTMLDivElement;reader?:ByteReader;source:SubtitleSource;epoch:number;clock:()=>number;
   assetBaseURL:string;describedTracks?:readonly SubtitleDescription[];signal:AbortSignal;
   getViewport?:()=>SubtitleViewport;onTracks?:(tracks:readonly SubtitleTrack[])=>void;
@@ -104,7 +105,7 @@ export class SubtitleSession {
     resize();return {canvas,resize,viewport:()=>viewport};
   }
   private async document(url:string,signal:AbortSignal,max=8*1024*1024){const cached=this.documents.get(url);if(cached)return cached;
-    const bytes=await readSubtitleDocument(url,signal,max);signal.throwIfAborted();if([...this.documents.values()].reduce((n,item)=>n+item.length,0)+bytes.length>32*1024*1024)throw new Error('Subtitle document cache exceeds bound');this.documents.set(url,bytes);return bytes}
+    const bytes=await readSubtitleDocument(url,signal,max,this.options.mediaRequests);signal.throwIfAborted();if([...this.documents.values()].reduce((n,item)=>n+item.length,0)+bytes.length>32*1024*1024)throw new Error('Subtitle document cache exceeds bound');this.documents.set(url,bytes);return bytes}
   private async attachedFonts(signal:AbortSignal){if(this.fonts)return this.fonts;const fonts:Uint8Array[]=[];let bytes=0;
     for(const font of this.container?.fonts??[]){if(!/\.(?:ttf|otf|ttc)$/i.test(font.name)&&!/(?:font|truetype|opentype)/i.test(font.mime))continue;bytes+=font.size;if(bytes>32*1024*1024)throw new Error('Subtitle attached fonts exceed bound');fonts.push(await font.read(signal))}
     signal.throwIfAborted();this.fonts=fonts;return fonts;
@@ -154,7 +155,7 @@ export class SubtitleSession {
     const cues=new Map<string,SubtitleTextCue>();let index=new SubtitleCueIndex([]);
     const fetchWindow=async(from:number)=>{
       const target=new URL(url,location.href);target.searchParams.set('ether_window','1');target.searchParams.set('from_ms',String(from));
-      try{const response=await readSubtitleDocumentResponse(target.href,live);live.throwIfAborted();
+      try{const response=await readSubtitleDocumentResponse(target.href,live,8*1024*1024,this.options.mediaRequests);live.throwIfAborted();
         const parsed=parseTextSubtitles(decodeSubtitleText(response.bytes),'webvtt');if(response.complete===true)cues.clear();
         for(const cue of parsed){const key=JSON.stringify([cue.start,cue.end,cue.runs]);cues.set(key,cue)}
         let size=0;for(const [key,cue] of cues){if(cue.end<base/1000)cues.delete(key);else size+=key.length}

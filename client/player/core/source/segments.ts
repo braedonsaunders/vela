@@ -17,12 +17,12 @@ export class SegmentReader {
   private root:string;
   readonly bandwidth=new BandwidthEstimator();
   readonly metrics={requests:0,bytes:0,cacheHits:0,milliseconds:0};
-  constructor(url:string,private readonly fetcher:typeof fetch=(...args)=>fetch(...args)){
+  constructor(url:string,private readonly fetcher:typeof fetch=(...args)=>fetch(...args),private readonly allowed?:(url:URL)=>boolean){
     this.root=this.scoped(url);
   }
   private scoped(path:string):string{
     const url=new URL(path,location.href);
-    if(!['http:','https:'].includes(url.protocol)||url.origin!==location.origin||url.username||url.password||url.hash)
+    if(!['http:','https:'].includes(url.protocol)||(this.allowed?!this.allowed(url):url.origin!==location.origin)||url.username||url.password||url.hash)
       throw new SegmentFailure('Segment input must use same-origin scoped HTTP URLs');
     return url.href;
   }
