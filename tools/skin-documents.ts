@@ -11,7 +11,7 @@
  */
 import { createHash } from 'node:crypto';
 import { cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import type { SkinDocument } from '../protocol/v0/skin';
 
@@ -69,6 +69,15 @@ export async function writeDocuments(out: string): Promise<{ id: string; version
       delete packaged.preview;
       text = JSON.stringify(packaged);
     }
+    const checkAssets = (value: unknown): void => {
+      if (typeof value === 'string' && value.startsWith('/vela/skins/')) {
+        const file = resolve(out, value.slice('/vela/skins/'.length));
+        if (!file.startsWith(resolve(out) + '/') || !existsSync(file) || !statSync(file).isFile()) throw new Error(`Skin ${doc.id} references missing asset: ${value}`);
+      } else if (value && typeof value === 'object') {
+        for (const child of Object.values(value)) checkAssets(child);
+      }
+    };
+    checkAssets(packaged);
     await writeFile(join(dir, 'document.json'), text);
     refs.push({ id: doc.id, name: doc.name, version: doc.version, tagline: doc.tagline, renderer: doc.renderer, url: `/vela/skins/${doc.id}/${doc.version}/document.json`,
       preview: packaged.preview, swatches: doc.swatches, sha256: sha(text) });
