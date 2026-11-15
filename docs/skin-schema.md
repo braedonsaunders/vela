@@ -56,7 +56,7 @@ Every node takes `style` (CSS name to value), `small` (under 640 px) and `wide` 
 | `text` | `text` (template) | Text. |
 | `image` | `src` (template), `alt`, `fade` | An image: a vocabulary URL (`{card.poster}`), an app asset (`assets/grain.svg`) or the document's own assets under `/vela/v0/appearance/`. `fade` reveals it once loaded. |
 | `icon` | `symbol` | A platform symbol (`search`, `play-fill`, `checkmark`). |
-| `repeat` | `over`, `limit`, `item` | `item` once per element of `home.rows`, `row.items`, `home.heroes`, `home.hero` (the current one) or `nav.destinations`; the element becomes the binding context and its position `{index}`. |
+| `repeat` | `over`, `limit`, `item` | `item` once per element of `home.rows`, `row.items`, `home.heroes`, `home.hero` (the current one) or `nav.destinations`; the element becomes the binding context and its position `{index}`. A repeat draws no box of its own: its `when` applies to each item, its `style` and variants do not (style the `item`). |
 | `use` | `template` | A template, inlined; the use node's style, conditions and motion wrap it. |
 | `slot` | `slot`, `style`, `inner` | Where the foundation's content goes among a slot's top-level nodes: `children` (the route a shell wraps), `searchField` (home). |
 | `widget` | `widget`, `params` | A compiled interactive part: `install` (`params.action` install/update), `observe` (`params.receipt`: the visibility receipt). |
@@ -143,7 +143,7 @@ Renderer 3 is the live home above; a document using anything here names `rendere
 
 **Node features**
 - `states: [{ when: Condition[], style: Style, hover?, focus?, groupHover? }]`: the first
-  state whose conditions hold replaces `style` (variants still apply), on the same element,
+  state whose conditions hold replaces `style` (viewport variants still apply over it), on the same element,
   so transitions run (dot widths, padding while searching, on/off pills).
 - `layoutTransition: "300ms ease-out"`, `sharedElement: "<name>"`, `exit: "<motion>"`.
 - `below: { "<px>": Style }` and `above: { "<px>": Style }`: viewport overrides at the
