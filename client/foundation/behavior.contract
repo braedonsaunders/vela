@@ -17,7 +17,7 @@ shape PageState
   hasFocus: bool
 
 // The home visit's query for a library section and its browse query.
-fn docTraits(base: SkinTraits, isDoc: bool, d: SkinDoc): SkinTraits = (isDoc ? SkinTraits(base, barMask=(d.barMask == "" ? base.barMask : d.barMask == "true"), panSections=(d.panSections == "" ? base.panSections : d.panSections == "true")) : base)
+fn docTraits(base: SkinTraits, isDoc: bool, d: SkinDoc): SkinTraits = (isDoc ? SkinTraits(base, barMask=(d.barMask == "" ? base.barMask : d.barMask == "true"), panSections=(d.panSections == "" ? base.panSections : d.panSections == "true"), splashOnPaper=(d.splashOnPaper == "" ? base.splashOnPaper : d.splashOnPaper == "true"), page=(d.pageColor == "" ? base.page : d.pageColor), ink=(d.inkColor == "" ? base.ink : d.inkColor)) : base)
 fn librarySection(id: string, query: string): string = (query == "" ? `?lib=${encodeURIComponent(id)}` : `${query}&lib=${encodeURIComponent(id)}`)
 
 members Client

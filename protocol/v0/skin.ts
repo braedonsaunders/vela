@@ -144,7 +144,7 @@ export interface SkinDocument {
   /** Detail route presentation per viewport class. */
   /** The title page's presentation below and from `from` px (default 640), and the home pane width in px it splits beside it from there. */
   /** How the foundation frames the document's pages: home fades under a floating bar; home, libraries and Live TV pan sideways. */
-  traits?: { barMask?: boolean; panSections?: boolean };
+  traits?: { barMask?: boolean; panSections?: boolean; /** The page and ink colours behind every screen (cold start and splash included). */ page?: string; ink?: string; /** The launch splash stands on paper (a light ground). */ splashOnPaper?: boolean };
   /** The document draws its pages' loading and failure states itself (home and routes, from env.load, env.canRetry and
    *  the retry action); without it the foundation's status screen shows while home loads or fails. */
   status?: boolean;

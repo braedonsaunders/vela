@@ -171,16 +171,31 @@ component BoxEl
     role: string
     label: string
     lt: string
-    se: string
     exitAnim: string
     wash: string
+    // Pressed without a ground of its own: Exact dims a pressed control's content to .65.
+    dim: bool
     hovering: action
     pointing: action
+    releasing: action
     keying: action
   slot
   view
-    box id=domId hover=hovering pointerdown=pointing key=keying tabindex=-1 testId=test role=role aria-label=label -exact-layout-transition=lt sharedElement=se -exact-exit-animation=exitAnim display=s.display position=pos top=s.top right=s.right bottom=s.bottom left=s.left z-index=s.zIndex width=(dw != "" ? dw : s.width) height=s.height min-width=s.minWidth min-height=s.minHeight max-width=s.maxWidth max-height=s.maxHeight aspect-ratio=s.aspectRatio box-sizing=s.boxSizing flex-grow=s.flexGrow flex-basis=s.flexBasis flex-direction=s.flexDirection flex-wrap=s.flexWrap flex-shrink=s.flexShrink align-items=s.alignItems align-self=s.alignSelf justify-content=s.justifyContent gap=s.gap column-gap=s.columnGap row-gap=s.rowGap order=s.order grid-template-columns=s.gridTemplateColumns grid-template-rows=s.gridTemplateRows grid-column=s.gridColumn grid-row=s.gridRow padding-top=s.paddingTop padding-right=s.paddingRight padding-bottom=s.paddingBottom padding-left=s.paddingLeft margin-top=s.marginTop margin-right=s.marginRight margin-bottom=s.marginBottom margin-left=s.marginLeft overflow-x=s.overflowX overflow-y=s.overflowY scroll-snap-type=s.scrollSnapType scroll-snap-align=s.scrollSnapAlign scrollbar-width=s.scrollbarWidth scroll-behavior=s.scrollBehavior scroll-padding-left=s.scrollPaddingLeft color-scheme=s.colorScheme color=(dc != "" ? dc : s.color) background-color=(dbg != "" ? dbg : s.backgroundColor) background-image=(dbi != "" ? dbi : wash != "" ? wash : s.backgroundImage) opacity=(fade ? 0 : dop != "" ? num(dop) : s.opacity) border-width=s.borderWidth border-style=s.borderStyle border-color=s.borderColor border-radius=s.borderRadius border-top-width=s.borderTopWidth border-top-color=s.borderTopColor border-bottom-width=s.borderBottomWidth border-bottom-color=s.borderBottomColor border-left-width=s.borderLeftWidth border-left-color=s.borderLeftColor box-shadow=s.boxShadow filter=s.filter backdrop-filter=s.backdropFilter mask-image=s.maskImage font-family=s.fontFamily font-size=s.fontSize font-weight=s.fontWeight font-style=s.fontStyle line-height=s.lineHeight letter-spacing=s.letterSpacing text-transform=s.textTransform text-align=s.textAlign text-shadow=s.textShadow -webkit-text-stroke=s.textStroke text-overflow=s.textOverflow white-space=s.whiteSpace font-variant-numeric=s.fontVariantNumeric transform-origin=s.transformOrigin translate=(dtr != "" ? dtr : s.translate) scale=s.scale rotate=s.rotate perspective=s.perspective transition=s.transition animation=(anim != "" ? anim : s.animation) pointer-events=s.pointerEvents cursor=s.cursor
+    box id=domId hover=hovering pointerdown=pointing pointerup=releasing key=keying tabindex=-1 testId=test role=role aria-label=label -exact-layout-transition=lt -exact-exit-animation=exitAnim display=s.display position=pos top=s.top right=s.right bottom=s.bottom left=s.left z-index=s.zIndex width=(dw != "" ? dw : s.width) height=s.height min-width=s.minWidth min-height=s.minHeight max-width=s.maxWidth max-height=s.maxHeight aspect-ratio=s.aspectRatio box-sizing=s.boxSizing flex-grow=s.flexGrow flex-basis=s.flexBasis flex-direction=s.flexDirection flex-wrap=s.flexWrap flex-shrink=s.flexShrink align-items=s.alignItems align-self=s.alignSelf justify-content=s.justifyContent gap=s.gap column-gap=s.columnGap row-gap=s.rowGap order=s.order grid-template-columns=s.gridTemplateColumns grid-template-rows=s.gridTemplateRows grid-column=s.gridColumn grid-row=s.gridRow padding-top=s.paddingTop padding-right=s.paddingRight padding-bottom=s.paddingBottom padding-left=s.paddingLeft margin-top=s.marginTop margin-right=s.marginRight margin-bottom=s.marginBottom margin-left=s.marginLeft overflow-x=s.overflowX overflow-y=s.overflowY scroll-snap-type=s.scrollSnapType scroll-snap-align=s.scrollSnapAlign scrollbar-width=s.scrollbarWidth scroll-behavior=s.scrollBehavior scroll-padding-left=s.scrollPaddingLeft color-scheme=s.colorScheme color=(dc != "" ? dc : s.color) background-color=(dbg != "" ? dbg : s.backgroundColor) background-image=(dbi != "" ? dbi : wash != "" ? wash : s.backgroundImage) opacity=(fade ? 0 : dop != "" ? num(dop) : dim ? 0.65 : s.opacity) border-width=s.borderWidth border-style=s.borderStyle border-color=s.borderColor border-radius=s.borderRadius border-top-width=s.borderTopWidth border-top-color=s.borderTopColor border-bottom-width=s.borderBottomWidth border-bottom-color=s.borderBottomColor border-left-width=s.borderLeftWidth border-left-color=s.borderLeftColor box-shadow=s.boxShadow filter=s.filter backdrop-filter=s.backdropFilter mask-image=s.maskImage font-family=s.fontFamily font-size=s.fontSize font-weight=s.fontWeight font-style=s.fontStyle line-height=s.lineHeight letter-spacing=s.letterSpacing text-transform=s.textTransform text-align=s.textAlign text-shadow=s.textShadow -webkit-text-stroke=s.textStroke text-overflow=s.textOverflow white-space=s.whiteSpace font-variant-numeric=s.fontVariantNumeric transform-origin=s.transformOrigin translate=(dtr != "" ? dtr : s.translate) scale=s.scale rotate=s.rotate perspective=s.perspective transition=s.transition animation=(anim != "" ? anim : s.animation) pointer-events=s.pointerEvents cursor=s.cursor corner-shape=s.cornerShape
       children
+
+// A shared element (sharedElement): a leaf box that morphs between routes. Exact starts a view
+// transition for any element bound with sharedElement, even an empty one, and a press during
+// one lands on <html>; so only the nodes that name one draw through this light element.
+component SharedEl
+  props
+    s: Style
+    pos: string
+    lt: string
+    se: string
+    anim: string
+  view
+    box sharedElement=se -exact-layout-transition=lt position=pos top=s.top right=s.right bottom=s.bottom left=s.left z-index=s.zIndex width=s.width height=s.height border-radius=s.borderRadius background-color=s.backgroundColor background-image=s.backgroundImage box-shadow=s.boxShadow opacity=s.opacity translate=s.translate scale=s.scale transition=s.transition animation=(anim != "" ? anim : s.animation) pointer-events="none" aria-hidden=true
 
 component V1
   props
@@ -208,10 +223,17 @@ component V1
   state ready = false
   action hovering(v: bool)
     over = v
+    if not v
+      held = false
   state pointed = false
+  // Pressed (pointer down on a pressable): Exact's pressed control state.
+  state held = false
   // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
   action pointing
     pointed = true
+    held = true
+  action releasing
+    held = false
   action focusing
     focused = not pointed
   action blurring
@@ -239,6 +261,9 @@ component V1
     loadMoreHome(entry)
   action hitRow(entry: IntersectionObserverEntry)
     loadMoreRow(rowIdOf(c), entry)
+  // A year field's change filters the library by it (empty: any year).
+  action yearChanged(v: string)
+    act("libraryFilter", `year|${v.trim()}`)
   // A select widget's choice: its action, with {value} in its argument template filled.
   action choose(v: string)
     act(n.act, fill(n.arg, binds(c, e), e).replaceAll("{value}", v))
@@ -274,20 +299,30 @@ component V1
                       vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
                 else if n.t == "textInput"
                   if n.sym == "password"
-                    input id="vela-password" type="password" autocomplete="current-password" value=password input=editPassword key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="password" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                    input id="vela-password" type="password" autocomplete="current-password" value=password input=editPassword key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="password" width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
                       ::placeholder
                         color=n.ivb
                   else
-                    input id="vela-username" type="text" autocomplete="username" value=username input=editUsername key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="username" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                    input id="vela-username" type="text" autocomplete="username" value=username input=editUsername key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="username" width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
                       ::placeholder
                         color=n.ivb
                 else if n.t == "searchInput"
-                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
-                    ::placeholder
-                      color=n.sym
+                  if n.rn
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign outline-style="none"
+                      ::placeholder
+                        color=n.sym
+                  else
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                      ::placeholder
+                        color=n.sym
+                else if n.t == "yearInput"
+                  for l in e.library key=l.id
+                    input type="number" inputmode="numeric" value=(l.yearFilter > 0 ? l.yearFilter.toString() : "") change=yearChanged placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                      ::placeholder
+                        color=n.sym
                 else if n.t == "select"
                   for l in e.library key=l.id
-                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing outline-style=(st.outlineStyle == "none" ? "none" : e.ring)
+                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing line-height=st.lineHeight
                       if n.parts.length > 0
                         option fill(n.parts, vals, e) value=""
                       for o in (n.sym == "library.sorts" ? l.sorts.map(x => LibraryOption(id=x.id, label=x.label)) : n.sym == "library.kinds" ? l.kinds : n.sym == "library.genres" ? l.genres : []) key=o.id
@@ -305,8 +340,10 @@ component V1
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
+                  else if n.se != ""
+                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-                    BoxEl(s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
@@ -329,10 +366,17 @@ component V1
                             if n.sym != ""
                               column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
-                              if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
+                              if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V2
   props
@@ -360,10 +404,17 @@ component V2
   state ready = false
   action hovering(v: bool)
     over = v
+    if not v
+      held = false
   state pointed = false
+  // Pressed (pointer down on a pressable): Exact's pressed control state.
+  state held = false
   // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
   action pointing
     pointed = true
+    held = true
+  action releasing
+    held = false
   action focusing
     focused = not pointed
   action blurring
@@ -391,6 +442,9 @@ component V2
     loadMoreHome(entry)
   action hitRow(entry: IntersectionObserverEntry)
     loadMoreRow(rowIdOf(c), entry)
+  // A year field's change filters the library by it (empty: any year).
+  action yearChanged(v: string)
+    act("libraryFilter", `year|${v.trim()}`)
   // A select widget's choice: its action, with {value} in its argument template filled.
   action choose(v: string)
     act(n.act, fill(n.arg, binds(c, e), e).replaceAll("{value}", v))
@@ -426,20 +480,30 @@ component V2
                       vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
                 else if n.t == "textInput"
                   if n.sym == "password"
-                    input id="vela-password" type="password" autocomplete="current-password" value=password input=editPassword key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="password" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                    input id="vela-password" type="password" autocomplete="current-password" value=password input=editPassword key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="password" width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
                       ::placeholder
                         color=n.ivb
                   else
-                    input id="vela-username" type="text" autocomplete="username" value=username input=editUsername key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="username" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                    input id="vela-username" type="text" autocomplete="username" value=username input=editUsername key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="username" width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
                       ::placeholder
                         color=n.ivb
                 else if n.t == "searchInput"
-                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
-                    ::placeholder
-                      color=n.sym
+                  if n.rn
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign outline-style="none"
+                      ::placeholder
+                        color=n.sym
+                  else
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                      ::placeholder
+                        color=n.sym
+                else if n.t == "yearInput"
+                  for l in e.library key=l.id
+                    input type="number" inputmode="numeric" value=(l.yearFilter > 0 ? l.yearFilter.toString() : "") change=yearChanged placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                      ::placeholder
+                        color=n.sym
                 else if n.t == "select"
                   for l in e.library key=l.id
-                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing outline-style=(st.outlineStyle == "none" ? "none" : e.ring)
+                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing line-height=st.lineHeight
                       if n.parts.length > 0
                         option fill(n.parts, vals, e) value=""
                       for o in (n.sym == "library.sorts" ? l.sorts.map(x => LibraryOption(id=x.id, label=x.label)) : n.sym == "library.kinds" ? l.kinds : n.sym == "library.genres" ? l.genres : []) key=o.id
@@ -457,8 +521,10 @@ component V2
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
+                  else if n.se != ""
+                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-                    BoxEl(s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
@@ -481,10 +547,17 @@ component V2
                             if n.sym != ""
                               column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
-                              if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
+                              if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V3
   props
@@ -512,10 +585,17 @@ component V3
   state ready = false
   action hovering(v: bool)
     over = v
+    if not v
+      held = false
   state pointed = false
+  // Pressed (pointer down on a pressable): Exact's pressed control state.
+  state held = false
   // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
   action pointing
     pointed = true
+    held = true
+  action releasing
+    held = false
   action focusing
     focused = not pointed
   action blurring
@@ -543,6 +623,9 @@ component V3
     loadMoreHome(entry)
   action hitRow(entry: IntersectionObserverEntry)
     loadMoreRow(rowIdOf(c), entry)
+  // A year field's change filters the library by it (empty: any year).
+  action yearChanged(v: string)
+    act("libraryFilter", `year|${v.trim()}`)
   // A select widget's choice: its action, with {value} in its argument template filled.
   action choose(v: string)
     act(n.act, fill(n.arg, binds(c, e), e).replaceAll("{value}", v))
@@ -578,20 +661,30 @@ component V3
                       vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
                 else if n.t == "textInput"
                   if n.sym == "password"
-                    input id="vela-password" type="password" autocomplete="current-password" value=password input=editPassword key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="password" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                    input id="vela-password" type="password" autocomplete="current-password" value=password input=editPassword key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="password" width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
                       ::placeholder
                         color=n.ivb
                   else
-                    input id="vela-username" type="text" autocomplete="username" value=username input=editUsername key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="username" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                    input id="vela-username" type="text" autocomplete="username" value=username input=editUsername key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="username" width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
                       ::placeholder
                         color=n.ivb
                 else if n.t == "searchInput"
-                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
-                    ::placeholder
-                      color=n.sym
+                  if n.rn
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign outline-style="none"
+                      ::placeholder
+                        color=n.sym
+                  else
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                      ::placeholder
+                        color=n.sym
+                else if n.t == "yearInput"
+                  for l in e.library key=l.id
+                    input type="number" inputmode="numeric" value=(l.yearFilter > 0 ? l.yearFilter.toString() : "") change=yearChanged placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                      ::placeholder
+                        color=n.sym
                 else if n.t == "select"
                   for l in e.library key=l.id
-                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing outline-style=(st.outlineStyle == "none" ? "none" : e.ring)
+                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing line-height=st.lineHeight
                       if n.parts.length > 0
                         option fill(n.parts, vals, e) value=""
                       for o in (n.sym == "library.sorts" ? l.sorts.map(x => LibraryOption(id=x.id, label=x.label)) : n.sym == "library.kinds" ? l.kinds : n.sym == "library.genres" ? l.genres : []) key=o.id
@@ -609,8 +702,10 @@ component V3
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
+                  else if n.se != ""
+                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-                    BoxEl(s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
@@ -633,10 +728,17 @@ component V3
                             if n.sym != ""
                               column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
-                              if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
+                              if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V4
   props
@@ -654,10 +756,17 @@ component V4
   state ready = false
   action hovering(v: bool)
     over = v
+    if not v
+      held = false
   state pointed = false
+  // Pressed (pointer down on a pressable): Exact's pressed control state.
+  state held = false
   // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
   action pointing
     pointed = true
+    held = true
+  action releasing
+    held = false
   action focusing
     focused = not pointed
   action blurring
@@ -680,6 +789,9 @@ component V4
     loadMoreHome(entry)
   action hitRow(entry: IntersectionObserverEntry)
     loadMoreRow(rowIdOf(c), entry)
+  // A year field's change filters the library by it (empty: any year).
+  action yearChanged(v: string)
+    act("libraryFilter", `year|${v.trim()}`)
   // A select widget's choice: its action, with {value} in its argument template filled.
   action choose(v: string)
     act(n.act, fill(n.arg, binds(c, e), e).replaceAll("{value}", v))
@@ -701,9 +813,14 @@ component V4
               for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
                 if n.t == "install"
                   vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else if n.t == "yearInput"
+                  for l in e.library key=l.id
+                    input type="number" inputmode="numeric" value=(l.yearFilter > 0 ? l.yearFilter.toString() : "") change=yearChanged placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                      ::placeholder
+                        color=n.sym
                 else if n.t == "select"
                   for l in e.library key=l.id
-                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing outline-style=(st.outlineStyle == "none" ? "none" : e.ring)
+                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing line-height=st.lineHeight
                       if n.parts.length > 0
                         option fill(n.parts, vals, e) value=""
                       for o in (n.sym == "library.sorts" ? l.sorts.map(x => LibraryOption(id=x.id, label=x.label)) : n.sym == "library.kinds" ? l.kinds : n.sym == "library.genres" ? l.genres : []) key=o.id
@@ -721,8 +838,10 @@ component V4
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
+                  else if n.se != ""
+                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-                    BoxEl(s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
@@ -745,10 +864,17 @@ component V4
                             if n.sym != ""
                               column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
-                              if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
+                              if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V5
   props
@@ -768,10 +894,17 @@ component V5
   state ready = false
   action hovering(v: bool)
     over = v
+    if not v
+      held = false
   state pointed = false
+  // Pressed (pointer down on a pressable): Exact's pressed control state.
+  state held = false
   // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
   action pointing
     pointed = true
+    held = true
+  action releasing
+    held = false
   action focusing
     focused = not pointed
   action blurring
@@ -794,6 +927,9 @@ component V5
     loadMoreHome(entry)
   action hitRow(entry: IntersectionObserverEntry)
     loadMoreRow(rowIdOf(c), entry)
+  // A year field's change filters the library by it (empty: any year).
+  action yearChanged(v: string)
+    act("libraryFilter", `year|${v.trim()}`)
   // A select widget's choice: its action, with {value} in its argument template filled.
   action choose(v: string)
     act(n.act, fill(n.arg, binds(c, e), e).replaceAll("{value}", v))
@@ -824,12 +960,22 @@ component V5
                 if n.t == "install"
                   vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
                 else if n.t == "searchInput"
-                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
-                    ::placeholder
-                      color=n.sym
+                  if n.rn
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign outline-style="none"
+                      ::placeholder
+                        color=n.sym
+                  else
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                      ::placeholder
+                        color=n.sym
+                else if n.t == "yearInput"
+                  for l in e.library key=l.id
+                    input type="number" inputmode="numeric" value=(l.yearFilter > 0 ? l.yearFilter.toString() : "") change=yearChanged placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                      ::placeholder
+                        color=n.sym
                 else if n.t == "select"
                   for l in e.library key=l.id
-                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing outline-style=(st.outlineStyle == "none" ? "none" : e.ring)
+                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing line-height=st.lineHeight
                       if n.parts.length > 0
                         option fill(n.parts, vals, e) value=""
                       for o in (n.sym == "library.sorts" ? l.sorts.map(x => LibraryOption(id=x.id, label=x.label)) : n.sym == "library.kinds" ? l.kinds : n.sym == "library.genres" ? l.genres : []) key=o.id
@@ -847,8 +993,10 @@ component V5
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
+                  else if n.se != ""
+                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-                    BoxEl(s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
@@ -871,10 +1019,17 @@ component V5
                             if n.sym != ""
                               column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
-                              if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
+                              if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V6
   props
@@ -894,10 +1049,17 @@ component V6
   state ready = false
   action hovering(v: bool)
     over = v
+    if not v
+      held = false
   state pointed = false
+  // Pressed (pointer down on a pressable): Exact's pressed control state.
+  state held = false
   // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
   action pointing
     pointed = true
+    held = true
+  action releasing
+    held = false
   action focusing
     focused = not pointed
   action blurring
@@ -920,6 +1082,9 @@ component V6
     loadMoreHome(entry)
   action hitRow(entry: IntersectionObserverEntry)
     loadMoreRow(rowIdOf(c), entry)
+  // A year field's change filters the library by it (empty: any year).
+  action yearChanged(v: string)
+    act("libraryFilter", `year|${v.trim()}`)
   // A select widget's choice: its action, with {value} in its argument template filled.
   action choose(v: string)
     act(n.act, fill(n.arg, binds(c, e), e).replaceAll("{value}", v))
@@ -950,12 +1115,22 @@ component V6
                 if n.t == "install"
                   vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
                 else if n.t == "searchInput"
-                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
-                    ::placeholder
-                      color=n.sym
+                  if n.rn
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign outline-style="none"
+                      ::placeholder
+                        color=n.sym
+                  else
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                      ::placeholder
+                        color=n.sym
+                else if n.t == "yearInput"
+                  for l in e.library key=l.id
+                    input type="number" inputmode="numeric" value=(l.yearFilter > 0 ? l.yearFilter.toString() : "") change=yearChanged placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                      ::placeholder
+                        color=n.sym
                 else if n.t == "select"
                   for l in e.library key=l.id
-                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing outline-style=(st.outlineStyle == "none" ? "none" : e.ring)
+                    select value=(n.sym == "library.sorts" ? l.sort : n.sym == "library.kinds" ? l.kindFilter : n.sym == "library.played" ? l.playedFilter : l.genreFilter) change=choose aria-label=fill(n.label, vals, e) testId=fill(n.test, vals, e) box-sizing="border-box" height=st.height min-width=st.minWidth width=st.width padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-family=st.fontFamily font-size=st.fontSize font-weight=st.fontWeight letter-spacing=st.letterSpacing line-height=st.lineHeight
                       if n.parts.length > 0
                         option fill(n.parts, vals, e) value=""
                       for o in (n.sym == "library.sorts" ? l.sorts.map(x => LibraryOption(id=x.id, label=x.label)) : n.sym == "library.kinds" ? l.kinds : n.sym == "library.genres" ? l.genres : []) key=o.id
@@ -973,8 +1148,10 @@ component V6
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
+                  else if n.se != ""
+                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-                    BoxEl(s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
@@ -997,10 +1174,17 @@ component V6
                             if n.sym != ""
                               column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
-                              if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
+                              if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V7
   props
@@ -1017,10 +1201,17 @@ component V7
   state ready = false
   action hovering(v: bool)
     over = v
+    if not v
+      held = false
   state pointed = false
+  // Pressed (pointer down on a pressable): Exact's pressed control state.
+  state held = false
   // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
   action pointing
     pointed = true
+    held = true
+  action releasing
+    held = false
   action focusing
     focused = not pointed
   action blurring
@@ -1056,14 +1247,21 @@ component V7
                 if n.t == "install"
                   vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
                 else if n.t == "searchInput"
-                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
-                    ::placeholder
-                      color=n.sym
+                  if n.rn
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign outline-style="none"
+                      ::placeholder
+                        color=n.sym
+                  else
+                    input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                      ::placeholder
+                        color=n.sym
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
+                  else if n.se != ""
+                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-                    BoxEl(s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
@@ -1082,10 +1280,17 @@ component V7
                               for cc, j in ctxs8(k, cx, e) key=ctxKey(cc, j)
                                 V8(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
+                              if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V8
   props
@@ -1099,10 +1304,17 @@ component V8
   state ready = false
   action hovering(v: bool)
     over = v
+    if not v
+      held = false
   state pointed = false
+  // Pressed (pointer down on a pressable): Exact's pressed control state.
+  state held = false
   // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
   action pointing
     pointed = true
+    held = true
+  action releasing
+    held = false
   action focusing
     focused = not pointed
   action blurring
@@ -1132,8 +1344,10 @@ component V8
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
+                  else if n.se != ""
+                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-                    BoxEl(s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
@@ -1152,10 +1366,17 @@ component V8
                               for cc, j in ctxs9(k, cx, e) key=ctxKey(cc, j)
                                 V9(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
+                              if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V9
   props
@@ -1169,10 +1390,17 @@ component V9
   state ready = false
   action hovering(v: bool)
     over = v
+    if not v
+      held = false
   state pointed = false
+  // Pressed (pointer down on a pressable): Exact's pressed control state.
+  state held = false
   // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
   action pointing
     pointed = true
+    held = true
+  action releasing
+    held = false
   action focusing
     focused = not pointed
   action blurring
@@ -1202,8 +1430,10 @@ component V9
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
+                  else if n.se != ""
+                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-                    BoxEl(s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
@@ -1222,10 +1452,17 @@ component V9
                               for cc, j in ctxs10(k, cx, e) key=ctxKey(cc, j)
                                 V10(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
+                              if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V10
   props
@@ -1239,10 +1476,17 @@ component V10
   state ready = false
   action hovering(v: bool)
     over = v
+    if not v
+      held = false
   state pointed = false
+  // Pressed (pointer down on a pressable): Exact's pressed control state.
+  state held = false
   // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
   action pointing
     pointed = true
+    held = true
+  action releasing
+    held = false
   action focusing
     focused = not pointed
   action blurring
@@ -1272,8 +1516,10 @@ component V10
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
+                  else if n.se != ""
+                    SharedEl(s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), lt=(e.still ? "none" : n.lt), se=n.se, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)))
                   else
-                    BoxEl(s=st, wash=(over and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? e.wash : ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                    BoxEl(s=st, wash=((over or held) and n.act != "" and n.cs and not dis and st.backgroundImage == "" ? (held ? e.washPressed : e.wash) : ""), dim=(held and n.act != "" and n.cs and not dis and st.backgroundColor == "" and st.backgroundImage == ""), pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, releasing=releasing, keying=escaping(fill(n.escTo, vals, e)))
                       if n.t == "text"
                         text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
@@ -1289,8 +1535,15 @@ component V10
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             if n.act != ""
-                              if n.aexp.length > 0 or n.asel.length > 0
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
+                              if n.aexp.length > 0 or n.asel.length > 0 or n.achk.length > 0
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-checked=(n.achk.length > 0 and shows(n.achk, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
                               else
-                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline-style=(st.outlineStyle == "none" or (st.outlineStyle != "auto" and (n.hf or n.gf)) ? "none" : e.ring) position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                                if n.rn
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer" outline-style="none"
+                                else
+                                  button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(sr.lbl.length > 0 ? sr.lbl : n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 

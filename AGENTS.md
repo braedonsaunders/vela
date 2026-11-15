@@ -21,6 +21,9 @@ Vela is a greenfield client. Speed of high-quality code is the priority. Read
   `bun tools/check.ts doc --serve --port <n>` keeps a built profile served for repeated drives
   (`bun exact.mjs agent web --url http://127.0.0.1:<n>/ …`).
   Document skins use `doc`.
+- **Renderer changes are driven before they are announced**: a new widget, binding, action or
+  resolver rule ships only after one document that uses it has been driven in a browser
+  (`bun tools/check.ts doc --serve` or `--agent`). A compile alone has twice broken every document.
 - **Look at the result** when you change UI or playback: one `bun exact.mjs agent web
   "screenshot .exact/x.png"` drive or a short manual run. One look, not a loop. If a fix
   takes three tries, stop and report the blocker.

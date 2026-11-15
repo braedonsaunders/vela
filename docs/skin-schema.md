@@ -273,7 +273,35 @@ Without `routes.library` the foundation's library page shows.
 - Fixes: the platform focus ring is no longer overridden by an empty bound outline (`outline:
   auto` works); the control hover wash follows the page's colour scheme (Exact's variable).
 
-## Next (renderer 11, names final)
+## Renderer 11
+
+- **routes.auth**: the signed-out page (sign-in, connecting, offline, quick connect), drawn
+  by the route view in home's place. `env.auth` is `offline`, `connecting`, `redeeming`,
+  `signin` or `quick`; `signin.error`, `signin.busy`, `signin.canPassword`, `signin.canQuick`,
+  `quick.code`, `quick.expires`, `quick.error`. Widget `textInput` (`params.field`
+  `username` | `password`, `placeholder`, `label`, `placeholderColor`; the node style styles
+  the field; Enter signs in). Actions `signIn`, `startQuick`, `cancelQuick`. A Plex server's
+  sign-in stays the foundation's Connect page.
+- **traits** also take `page` and `ink` (colours behind every screen) and `splashOnPaper`, so a
+  cold start and the launch splash wear the document.
+- **states** may carry a `label`: the press button's name while that state holds (one node can
+  flip Ascending/Descending and keep its animation).
+- Route flag actions `open`, `close`, `only`, `reset` (as the shell's).
+- **Pressed**: a pressable box with control states dims its content to .65 while pressed when
+  it has no ground, and shows Exact's pressed wash (`--exact-tertiary-fill`) when it has one.
+- **Focus ring**: no inline outline unless the node suppresses the ring (`outline: none`, or a
+  focus/groupFocus overlay without `outline: auto`), so Exact's own focus-visible ring is
+  drawn exactly as on a compiled button.
+- Widget `yearInput` (library pages): the number field on `library.year`; changing it runs
+  `libraryFilter year|…`. `a11y.checked` (aria-checked) for menu item radios and checkboxes.
+- Row `corner-shape` (e.g. `superellipse(1.6)`, Exact's control curve).
+- `sharedElement` belongs on a leaf box without press (an indicator: underline, chip): it is drawn
+  by a light element with position, inset, size, radius, ground, shadow, opacity, transform and
+  transition rows.
+- A group's `groupHover`/`groupFocus` style its descendants, never the group node itself (use
+  `hover`/`focus` there).
+
+## Next (renderer 12, names final)
 
 - Per-document `traits`: `page`, `ink`, `splashOnPaper`. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 

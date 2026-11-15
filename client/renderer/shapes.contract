@@ -93,6 +93,7 @@ shape Style
   pointerEvents: string
   cursor: string
   outlineStyle: string
+  cornerShape: string
 
 // One piece of a template: literal text, or a vocabulary key.
 shape Part
@@ -113,6 +114,8 @@ shape StateRef
   cond: Cond[]
   s: number
   pos: number
+  // The press button's name in this state (empty: the node's label).
+  lbl: Part[]
   hs: number
   fs: number
   gs: number
@@ -190,8 +193,8 @@ shape Env
   quickError: string
   // Exact's control hover wash (a background image the document's data carries).
   wash: string
-  // The platform focus ring's outline-style ("revert", data: the checker admits only "none" as a literal).
-  ring: string
+  // Exact's pressed wash (tertiary fill).
+  washPressed: string
   // The environment's own vocabulary values (envBinds), bound once per slot.
   ev: string[]
 
@@ -231,6 +234,8 @@ shape N10
   sym: string
   act: string
   cs: bool
+  rn: bool
+  achk: Cond[]
   role: string
   level: number
   test: Part[]
@@ -291,6 +296,8 @@ shape N9
   sym: string
   act: string
   cs: bool
+  rn: bool
+  achk: Cond[]
   role: string
   level: number
   test: Part[]
@@ -352,6 +359,8 @@ shape N8
   sym: string
   act: string
   cs: bool
+  rn: bool
+  achk: Cond[]
   role: string
   level: number
   test: Part[]
@@ -413,6 +422,8 @@ shape N7
   sym: string
   act: string
   cs: bool
+  rn: bool
+  achk: Cond[]
   role: string
   level: number
   test: Part[]
@@ -474,6 +485,8 @@ shape N6
   sym: string
   act: string
   cs: bool
+  rn: bool
+  achk: Cond[]
   role: string
   level: number
   test: Part[]
@@ -535,6 +548,8 @@ shape N5
   sym: string
   act: string
   cs: bool
+  rn: bool
+  achk: Cond[]
   role: string
   level: number
   test: Part[]
@@ -596,6 +611,8 @@ shape N4
   sym: string
   act: string
   cs: bool
+  rn: bool
+  achk: Cond[]
   role: string
   level: number
   test: Part[]
@@ -657,6 +674,8 @@ shape N3
   sym: string
   act: string
   cs: bool
+  rn: bool
+  achk: Cond[]
   role: string
   level: number
   test: Part[]
@@ -718,6 +737,8 @@ shape N2
   sym: string
   act: string
   cs: bool
+  rn: bool
+  achk: Cond[]
   role: string
   level: number
   test: Part[]
@@ -779,6 +800,8 @@ shape N1
   sym: string
   act: string
   cs: bool
+  rn: bool
+  achk: Cond[]
   role: string
   level: number
   test: Part[]
@@ -885,12 +908,16 @@ shape SkinDoc
   // The document's foundation traits ("" keeps the doc engine's): home under the bar fades, sections pan.
   barMask: string
   panSections: string
+  // The page and ink colours behind every screen and whether the splash stands on paper ("" keeps the doc engine's).
+  pageColor: string
+  inkColor: string
+  splashOnPaper: string
   // The document draws its pages' loading and failure states (env.load); else the foundation's status screen shows.
   drawsStatus: bool
   wash: string
-  ring: string
+  washPressed: string
 
-fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", columnGap="", rowGap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", scrollBehavior="", scrollPaddingLeft="", colorScheme="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", borderTopWidth="", borderTopColor="", borderBottomWidth="", borderBottomColor="", borderLeftWidth="", borderLeftColor="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", textOverflow="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, rotate=0, perspective="", transition="", animation="", pointerEvents="", cursor="", outlineStyle="")
-fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)
-fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=true, nodes=[holderNode5()]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none", detailScrim="transparent", detailBlur="none", detailFlat=true, barMask="", panSections="", drawsStatus=false, wash="", ring="revert")
-fn holderNode5(): N5 = N5(t="holder", base=noRef(), sts=[], hh=false, hf=false, grp=false, hg=false, gf=false, fade=false, dis=[], aexp=[], asel=[], acur=[], aprs=[], ahp="", atitle=[], brole="", pfocus=[], esc="", escTo=[], lt="", se="", ex="", exs="", ivb="", ipaths=[], fr="", cond=[], parts=[], src=[], label=[], arg=[], sym="", act="", cs=false, role="", level=0, test=[], dom=[], rep="", lim=0, mk="", md=0, mdl=0, me="", mf="", mit="", mdir="", msk="", msd=0, step=0, cap=0, dw=[], dbg=[], dbi=[], dc=[], dop=[], dtr=[], kids=[])
+fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", columnGap="", rowGap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", scrollBehavior="", scrollPaddingLeft="", colorScheme="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", borderTopWidth="", borderTopColor="", borderBottomWidth="", borderBottomColor="", borderLeftWidth="", borderLeftColor="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", textOverflow="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, rotate=0, perspective="", transition="", animation="", pointerEvents="", cursor="", outlineStyle="", cornerShape="")
+fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, lbl=[], hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)
+fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=true, nodes=[holderNode5()]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none", detailScrim="transparent", detailBlur="none", detailFlat=true, barMask="", panSections="", pageColor="", inkColor="", splashOnPaper="", drawsStatus=false, wash="", washPressed="")
+fn holderNode5(): N5 = N5(t="holder", base=noRef(), sts=[], hh=false, hf=false, grp=false, hg=false, gf=false, fade=false, dis=[], aexp=[], asel=[], acur=[], aprs=[], ahp="", atitle=[], brole="", pfocus=[], esc="", escTo=[], lt="", se="", ex="", exs="", ivb="", ipaths=[], fr="", cond=[], parts=[], src=[], label=[], arg=[], sym="", act="", cs=false, rn=false, achk=[], role="", level=0, test=[], dom=[], rep="", lim=0, mk="", md=0, mdl=0, me="", mf="", mit="", mdir="", msk="", msd=0, step=0, cap=0, dw=[], dbg=[], dbi=[], dc=[], dop=[], dtr=[], kids=[])

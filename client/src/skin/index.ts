@@ -59,7 +59,7 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
 type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; holds: boolean; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
-export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string; drawsStatus: boolean; wash: string; ring: string }
+export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string; pageColor: string; inkColor: string; splashOnPaper: string; drawsStatus: boolean; wash: string; washPressed: string }
 interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
@@ -205,7 +205,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     const when = [...(from > 0 ? [{ ...widthKey, is: 'lt', v: String(from), not: true }] : []), ...(to < Infinity ? [{ ...widthKey, is: 'lt', v: String(to), not: false }] : [])];
     return { applied, when };
   }) : [];
-  const level: Level = { t: 'box', parts: [], src: [], label: parts(node.label, r), arg: [], sym: '', act: '', cs: false, role: node.role ?? '', level: node.level ?? 0, test: parts(node.testId, r), dom: parts(node.id, r), rep: '', lim: 1000,
+  const level: Level = { t: 'box', parts: [], src: [], label: parts(node.label, r), arg: [], sym: '', act: '', cs: false, rn: false, achk: [], role: node.role ?? '', level: node.level ?? 0, test: parts(node.testId, r), dom: parts(node.id, r), rep: '', lim: 1000,
     mk: '', md: 0, mdl: 0, me: '', mf: '', mit: '', mdir: '', msk: '', msd: 0, step: node.stagger?.step ?? 0, cap: node.stagger?.cap ?? 0, cond: conds(node.when) };
   for (const f of Object.values(BINDABLE)) level[f] = [];
   const base = style(variant, r, level, weight);
@@ -220,7 +220,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     const plain = style(layers, r, undefined, weight), sIdx = intern(plain, r);
     const overlay = (o?: Style) => o ? at(o) : sIdx, calm = (o?: Style) => o ? at(still(o)) : sIdx;
     // Position is a choice the renderer binds per state (a viewport variant may move a node into flow).
-    return { cond: conds(cond), s: sIdx, pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
+    return { cond: conds(cond), lbl: [], s: sIdx, pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
       hs2: calm(s.hover), fs2: calm(s.focus), gs2: calm(s.groupHover), gfs2: calm(s.groupFocus) };
   };
   const overlays = { hover: node.hover, focus: node.focus, groupHover: node.groupHover, groupFocus: n.groupFocus };
@@ -230,12 +230,12 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   if (userStates.length * Math.max(1, intervals.length) + intervals.length > 48) throw new Error('Too many states x breakpoints on one node');
   const within = intervals.length ? intervals : [{ applied: [] as Style[], when: [] as { k: number; f: string; is: string; v: string; not: boolean }[] }];
   level.sts = [
-    ...userStates.flatMap(x => within.map(w => ({ ...stateRef([...variant, x.style, ...w.applied], { hover: x.hover ?? node.hover, focus: x.focus ?? node.focus, groupHover: x.groupHover ?? node.groupHover, groupFocus: x.groupFocus ?? n.groupFocus }, x.when), cond: [...conds(x.when), ...w.when] }))),
+    ...userStates.flatMap(x => within.map(w => ({ ...stateRef([...variant, x.style, ...w.applied], { hover: x.hover ?? node.hover, focus: x.focus ?? node.focus, groupHover: x.groupHover ?? node.groupHover, groupFocus: x.groupFocus ?? n.groupFocus }, x.when), cond: [...conds(x.when), ...w.when], lbl: parts((x as { label?: string }).label, r) }))),
     ...intervals.map(w => ({ ...stateRef([...variant, ...w.applied], overlays, []), cond: w.when })),
   ];
   level.dis = conds(n.disabled);
   const a = n.a11y ?? {};
-  Object.assign(level, { aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
+  Object.assign(level, { achk: conds((a as { checked?: Condition[] }).checked), aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
     pfocus: parts(node.type === 'box' ? node.press?.focus : undefined, r), esc: n.escape ?? '', escTo: parts(n.returnFocus, r), lt: n.layoutTransition ?? '', se: n.sharedElement ?? '', ex: '', exs: '', ivb: '', ipaths: [], fr: 'nonzero' });
   if (n.exit) {
     const m = r.doc.motion?.[n.exit];
@@ -272,6 +272,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
       // The bare search input: the document draws the field around it and styles its text through the node's style.
       else if (node.widget === 'searchInput') {
         if (!searchLevel(depth)) throw new Error('The searchInput widget must sit within 3 levels of home or of the shell');
+        level.rn = ((node.style as Record<string, string> | undefined)?.outline ?? (node.style as Record<string, string> | undefined)?.['outline-style']) === 'none';
         level.t = 'searchInput'; level.parts = parts(node.params?.placeholder, r); level.label = parts(node.params?.label ?? node.params?.placeholder, r);
         level.sym = value(node.params?.placeholderColor ?? 'inherit', r);
       }
@@ -282,6 +283,12 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
         if (field !== 'username' && field !== 'password') throw new Error('textInput params.field: username or password');
         level.t = 'textInput'; level.sym = field; level.parts = parts(node.params?.placeholder, r); level.label = parts(node.params?.label ?? node.params?.placeholder, r);
         level.ivb = value(node.params?.placeholderColor ?? 'inherit', r);
+      }
+      // A library page's year filter: a number field on library.year (change filters by year).
+      else if (node.widget === 'yearInput') {
+        if (depth > PAGER_DEPTH) throw new Error(`A yearInput must sit within ${PAGER_DEPTH} levels of its slot`);
+        level.t = 'yearInput'; level.parts = parts(node.params?.placeholder, r); level.label = parts(node.params?.label ?? node.params?.placeholder, r);
+        level.sym = value(node.params?.placeholderColor ?? 'inherit', r);
       }
       // A native select over a library's options (the platform's control and menu), styled by its node.
       else if (node.widget === 'select') {
@@ -307,8 +314,13 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
       return { ...item, rep: node.over, lim: node.limit ?? 1000 };
     }
     case 'box':
-      if (node.press) { if (!ACTIONS.has(node.press.action)) throw new Error(`Unknown action ${node.press.action}`); level.act = node.press.action; level.arg = parts(node.press.arg, r); level.cs = node.controlStates !== false; }
+      if (node.press) { if (!ACTIONS.has(node.press.action)) throw new Error(`Unknown action ${node.press.action}`); level.act = node.press.action; level.arg = parts(node.press.arg, r); level.cs = node.controlStates !== false;
+        // The platform focus ring stays unless the node says outline: none, or a focus overlay suppresses it (not outline: auto).
+        const rings = [node.style, node.focus, (node as NodeExtra).groupFocus].map(o => (o as Record<string, string> | undefined)?.outline ?? (o as Record<string, string> | undefined)?.['outline-style']);
+        level.rn = rings.includes('none') || (!rings.includes('auto') && (!!node.focus || !!(node as NodeExtra).groupFocus)); }
       kids = node.children ?? [];
+      // A shared element is a leaf indicator box (drawn by the renderer's light SharedEl).
+      if ((node as NodeExtra).sharedElement && (kids.length || node.press)) throw new Error('sharedElement belongs on a box with no children and no press');
       // A row's pager: this box is the row's sideways scroller (its style sets overflow-x); pageNext/pagePrev {row.id} move it.
       if (node.pager) {
         if (depth > PAGER_DEPTH) throw new Error(`A pager must sit within ${PAGER_DEPTH} levels of its slot`);
@@ -389,9 +401,10 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
     // The framed title's surround, drawn by the route frame: scrim (colour or token), blur, or flat.
     ...detailFrame(doc, r),
     // Foundation traits the document sets ("" leaves the doc engine's).
-    barMask: tri(doc.traits?.barMask), panSections: tri(doc.traits?.panSections), drawsStatus: doc.status === true,
+    barMask: tri(doc.traits?.barMask), panSections: tri(doc.traits?.panSections), splashOnPaper: tri(doc.traits?.splashOnPaper),
+    pageColor: doc.traits?.page ? style([{ color: doc.traits.page } as Style], r)['color'] as string : '',
+    inkColor: doc.traits?.ink ? style([{ color: doc.traits.ink } as Style], r)['color'] as string : '', drawsStatus: doc.status === true,
     // Exact's control hover wash, carried as data (a literal would be checked as an app token).
     wash: 'linear-gradient(var(--exact-quaternary-fill) 0 0)',
-    // The platform focus ring kept: outline-style reverts to the browser's (Exact's own :focus-visible rule).
-    ring: 'revert' };
+    washPressed: 'linear-gradient(var(--exact-tertiary-fill) 0 0)' };
 }
