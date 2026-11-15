@@ -274,6 +274,7 @@ component Guide
     chooseGuideDay: action
     setGuideZoom: action
     retuneTile: action
+    retryTileStop: action
   provide
     watch = watchChannel
     previous = earlierGuide
@@ -281,6 +282,7 @@ component Guide
     chooseDay = chooseGuideDay
     setZoom = setGuideZoom
     retune = retuneTile
+    retryPreviewStop = retryTileStop
   view
     column flex=1 min-height=0
       if activeSkin == "index"

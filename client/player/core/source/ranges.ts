@@ -23,9 +23,9 @@ export class RangeReader implements ByteReader {
   readonly bandwidth=new BandwidthEstimator();
   readonly metrics = { requests: 0, bytes: 0, cacheHits: 0, milliseconds: 0 };
 
-  constructor(url: string, private readonly fetcher: typeof fetch = (...args) => fetch(...args)) {
+  constructor(url: string, private readonly fetcher: typeof fetch = (...args) => fetch(...args),allowed?:(url:URL)=>boolean) {
     const parsed = new URL(url, document.baseURI);
-    if (!['http:','https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.origin !== location.origin)
+    if (!['http:','https:'].includes(parsed.protocol) || parsed.username || parsed.password || (allowed?!allowed(parsed):parsed.origin !== location.origin))
       throw new RangeFailure('Original source must be a same-origin scoped HTTP URL');
     this.url = parsed.href;
   }

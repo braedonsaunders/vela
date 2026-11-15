@@ -45,10 +45,12 @@ export class SegmentPipeline {
   get pendingAudioTrackId() { return this.audio?.pendingTrackId ?? null; }
   get audioTracks() { return this.current?.audioGroupId ? this.audio?.available(this.current.audioGroupId) ?? [] : []; }
   selectAudio(trackId: string) { return this.audio ? this.audio.select(trackId) : Promise.reject(new Error('No alternate audio buffer')); }
-  lowDelay = false; expensiveSwitches = false; initialRenditionId?: string;
+  liveTargetSeconds = 12; livePlaybackRate = 1;
+  expensiveSwitches = false; initialRenditionId?: string;
   timelineOriginSeconds = 0; liveWindowStart: number | null = null; maxLiveDrift = 45;
   publishedEdge: number | null = null; publishedStart: number | null = null;
-  retrying = false;
+  retrying = false; networkRetries = 0;
+  nominalSegmentSeconds = 2;
   private publicationPending = false; private upstreamGap = false;
   private segmentStarted: number | null = null; private segmentDuration = 0;
   get delivery(): LiveSnapshot['delivery'] {
@@ -58,14 +60,14 @@ export class SegmentPipeline {
     return this.publishedEdge === null ? 'unknown' : 'available';
   }
   private published(list: Playlist) {
+    this.nominalSegmentSeconds = list.targetDuration;
     this.publishedStart = list.segments[0]?.start ?? null;
     const last = list.segments.at(-1); this.publishedEdge = last ? last.start + last.duration : null;
   }
   private streamingAllowed = true; private request?: AbortController; private detachStreaming?: () => void;
   private media?: MediaSource; private objectUrl?: string; private buffer?: SourceBuffer;
   private dropPrevious = { dropped: 0, total: 0 }; private dropRatio = 0;
-  private driftPenalty = 0;
-  constructor(private video: HTMLVideoElement, private onRendition: (r: Rendition) => void, private refreshPlan: () => void) {}
+  constructor(private video: HTMLVideoElement, private onRendition: (r: Rendition) => void, private refreshPlan: () => void,private readonly fetcher:typeof fetch=(...args)=>fetch(...args)) {}
   dispose() {
     this.audio?.dispose(); this.audio = undefined;
     this.detachStreaming?.(); this.detachStreaming = undefined; this.request?.abort(); this.request = undefined;
@@ -75,7 +77,7 @@ export class SegmentPipeline {
   }
   private async fetchBytes(url: string, signal: AbortSignal, progress?: (bytes: number, elapsed: number) => void, timeoutMs = 12000): Promise<ArrayBuffer> {
     const started = performance.now();
-    const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]), credentials: 'same-origin' });
+    const response = await this.fetcher(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]), credentials: 'same-origin' });
     if (!response.ok) throw new PlaybackFault(`Media HTTP ${response.status}`, 'network', response.status === 408 || response.status === 429 || response.status >= 500 || response.status === 404);
     const chunks: Uint8Array[] = []; let size = 0;
     if (response.body) {
@@ -110,7 +112,7 @@ export class SegmentPipeline {
         const retryable = error instanceof TypeError || error instanceof PlaybackFault && error.retryable;
         if (!retryable || attempt >= 2 || performance.now() >= deadline) throw error;
         this.retrying = true;
-        this.driftPenalty = Math.min(12, this.driftPenalty + 3);
+        this.networkRetries++;
         await delay(300 * 2 ** attempt, signal);
       }
     } } finally { this.retrying = false; }
@@ -161,14 +163,15 @@ export class SegmentPipeline {
       await this.audio.start(rendition.audioGroupId, this.initialAudioTrackId, list, signal);
     }
     if (!live && list.ended) media.duration = this.timelineOriginSeconds + list.segments.reduce((sum, s) => sum + s.duration, 0);
-    let next = live ? (position > 0 ? list.segments.find(s => s.start + s.duration > position) : undefined) ?? list.segments[Math.max(0, list.segments.length - (this.lowDelay ? 2 : 4))] : list.segments.find(s => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
+    const liveStart = Math.max(list.segments[0].start, (this.publishedEdge ?? 0) - this.liveTargetSeconds);
+    let next = live ? list.segments.find(s => s.start + s.duration > (position > 0 ? position : liveStart)) ?? list.segments.at(-1) : list.segments.find(s => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
     if (!next) throw new PlaybackFault('Position outside source timeline', 'source');
     let sequence = next.sequence, init = '', first = true;
     // Live sliding manifests are anchored by overlapping sequence, never reset to zero.
     while (!signal.aborted) {
       await this.audio?.applySelection(list, signal);
       const ahead = bufferAhead(this.video);
-      const target = live ? (this.lowDelay ? 6 : 18 + this.driftPenalty) : 30;
+      const target = live ? this.liveTargetSeconds + this.nominalSegmentSeconds * 2 : 30;
       if (ahead >= target || !this.streamingAllowed) { await delay(250, signal); continue; }
       const quality = this.video.getVideoPlaybackQuality?.();
       if (quality) {
@@ -254,8 +257,8 @@ export class SegmentPipeline {
       }
       if (live && this.video.buffered.length) {
         const drift = this.video.buffered.end(this.video.buffered.length - 1) - this.video.currentTime;
-        if (drift > Math.max(this.maxLiveDrift, target + 6)) this.video.currentTime = this.video.buffered.end(this.video.buffered.length - 1) - target;
-        this.video.playbackRate = this.lowDelay && drift > 8 ? 1.03 : 1;
+        if (drift > Math.max(this.maxLiveDrift, this.liveTargetSeconds + 6)) this.video.currentTime = this.video.buffered.end(this.video.buffered.length - 1) - this.liveTargetSeconds;
+        this.video.playbackRate = this.livePlaybackRate;
       }
     }
   }

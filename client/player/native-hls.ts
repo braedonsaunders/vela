@@ -1,9 +1,9 @@
 import { cancelled } from './session';
 
 /** Resolve once; native ABR must not restart a serial server encoder per rung. */
-export async function nativeMediaPlaylist(url: string, signal: AbortSignal, depth = 0): Promise<{ url: string; duration: number | null }> {
+export async function nativeMediaPlaylist(url: string, signal: AbortSignal, depth = 0,fetcher:typeof fetch=(...args)=>fetch(...args)): Promise<{ url: string; duration: number | null }> {
   if (depth > 1) throw new Error('Nested HLS masters are unsupported');
-  const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), credentials: 'same-origin' });
+  const response = await fetcher(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), credentials: 'same-origin',redirect:'error' });
   if (!response.ok) throw new TypeError(`HLS manifest HTTP ${response.status}`);
   const text = await response.text(); cancelled(signal);
   if (text.length > 1024 * 1024 || !text.trimStart().startsWith('#EXTM3U')) throw new Error('Invalid HLS manifest');
@@ -18,5 +18,5 @@ export async function nativeMediaPlaylist(url: string, signal: AbortSignal, dept
   if (!uri) throw new Error('HLS default variant is missing');
   const variant = new URL(uri, response.url);
   if (variant.origin !== new URL(response.url).origin || variant.username || variant.password) throw new Error('HLS variant outside broker origin');
-  return nativeMediaPlaylist(variant.href, signal, depth + 1);
+  return nativeMediaPlaylist(variant.href, signal, depth + 1,fetcher);
 }

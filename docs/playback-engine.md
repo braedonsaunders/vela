@@ -1639,5 +1639,102 @@ Its seek spent only 1.1 ms in metadata and 10.1 ms in configure; the remaining
 
 Screenshots are `client/.exact/lab-core-*.png`; content-free numeric drive records
 are `client/.exact/core-lab18-results.json`. No original source bytes, credentials,
-grants or private request headers were captured. The corrected priming build and
-further lab qualification are paused for the owner-facing 0.1.33 build priority.
+grants or private request headers were captured. The local generated wrapped-AAC fixture subsequently played through the core
+(635 ms first frame, 482 ms authorized seek) and reported the exact correction.
+That drive exposed four drops from a separate idle-warmup/active-playback race;
+its guard and performance work remain separate qualification gates. The 0.1.33
+release hold is now lifted; no production core switch is claimed.
+
+### Idle GPU reuse and bounded preroll candidate
+
+Core candidate `39a841e9b754f1e0` moves HEVC shader/colour-route compilation to
+idle after first paint or title intent. One idle GPU device/package cache is
+retained for two minutes; an active playback lease prevents a competing warmup
+from creating another device. If Play claims a warming device, remaining warm
+stages yield instead of competing with playback. Media, audio and byte caches
+are not retained across sessions. The qualified wrapper payload does no core
+warmup. Seeks keep the same source/reader and device; ordered encoded read-ahead
+is bounded by 64 packets, 12 MiB and six seconds plus one in-flight packet.
+
+Native HEVC HDR is admitted only through the library's validated external-HDR
+route. Decoder configuration and in-band SPS colour are neutralized before the
+browser decode, preventing double colour conversion; original PQ/HLG facts
+still drive Vela's SDR tone mapper. A route/frame-contract mismatch falls back
+to the package decoder. This is base-layer tone mapping, not DV RPU rendering.
+
+One local native-view drive per fixture, generated media and real same-origin
+assets, Chrome on this Mac:
+
+| Fixture | First frame | Authorized seek | Dropped | Outcome |
+| --- | --- | --- | --- | --- |
+| Old muxed H.264/AAC HLS with raw unsigned `tfdt = 2^64 - 1024` | 347 ms | 70 ms at 6 s | 0 | Playing, exact `-1024/48000` correction recorded |
+| HEVC Main10 PQ / E-AC-3 5.1, 640×360 | 47 ms after idle warmup | 86 ms at 4 s | 0 | Native hardware route, SDR tone-map picture, true EOF at 7.995 s |
+
+The HDR idle warmup took 551 ms before Play. Both seeks retained the runtime
+and reader. The HLS maximum observed frame age was 9.12 ms; no stale/drop events
+were recorded. Audio preroll preserves negative AAC priming at the start and
+reads up to 100 ms before a seek target for decoder/output trimming. These small
+fixtures establish mechanism and cleanup, **not 4K lab parity or physical A/V
+lipsync**. The earlier four-drop warmup race did not recur. Dedicated Chrome and
+the owned local fixture server were closed after the drive.
+
+### Lab.20 HLS requalification: startup pass, seek blocked
+
+Core39a841 on real 1917 H.264-copy/AAC fMP4 started in **1,400 ms**
+including a71 ms plan. Native AVC/AAC decode presented72frames/drop0 with
+zero audio underruns after3s; maximum physical-clock frame age5.59ms.
+The first4.2MB segment waited661ms for its first byte. No priming failure
+occurred. Idle warmup was claimed before completion and yielded, taking
+416ms of the startup window before metadata acquisition.
+
+The authorized60s seek returned HTTP200 in28ms and a new source generation,
+so the core correctly opened the new HLS source. It presented a preview, but
+subsequent segment acquisition failed with `Invalid segment byte request`.
+Automatic fallback recovered playback near the beginning (6.31s), not the
+requested60s. **Seek fails parity; no production core switch.** The successful
+local same-source seek does not establish offset-HLS seek support. This run
+needs numeric segment-length/read-bound diagnostics before a new qualification.
+Ether correlated this same playback and confirmed a60s encoder restart reused
+`00000.m4s` and `init.mp4` from the preceding epoch with different bytes. Segment0
+was ready640ms after fetch. The public timeline is60s plus the plan's segment
+start, not a segment number inferred from a fixed duration. The confirmed mux
+target was250ms;4s was a code default, not a captured playlist measurement.
+Its worker is adding generation-unique media URLs.
+The measured HTTP seek was28.4ms; the earlier proposed20s authorization diagnosis
+was withdrawn. The driver's15s wait used a too-strict local-epoch comparison
+across replaced runtimes, so it is not a seek-latency measurement.
+
+Session7OV3767GLKYOJSRTTUDXL7GM7F, test device9f2c223b-171d-4df1-9acb-919ae33ff42e:
+Stop returned ended, auth revoke accepted, native view removed all video/canvas
+nodes, and the dedicated Chrome was closed. One stream, no captured media bytes
+or headers.
+
+The follow-up HLS guard explicitly disallows retained HLS readers/demux indexes
+across authoritative seek generations. Every segment cache/in-flight entry is
+keyed by `(sourceGeneration,seekGeneration,url)` inside a newly scoped reader;
+HTTP reads use `cache:no-store`. A repeated filename changing length within one
+generation fails with numeric requested/indexed/available sizes, with no URL or
+headers. Immutable original-file readers still validate ranges/revisions and
+retain their same-source cache for direct seeks. This is client containment;
+it cannot turn a reused server resource into the correct seek-generation bytes.
+A new 1917 seek qualification waits for Ether's generation-unique producer fix.
+
+### Local offset-HLS generation check
+
+Candidate `9e1e4578186740d8` passed one generated local native-view transition
+from the old wrapped-AAC HLS fixture to a new source/seek generation whose
+`timelineOriginSeconds` is 4. Real FFmpeg output had first video PTS/DTS 4.000 s
+and two 2 s fMP4 segments with distinct generation-prefixed names. The new core
+runtime presented the target at title time 4.000 s in **86 ms**, zero drops and
+no failure. The initial wrapped-AAC source started in 288 ms, zero drops, and
+reported its exact priming correction. Seek intent immediately showed target 4
+and buffering. This establishes local offset mapping with a genuinely replaced
+HLS source; the earlier same-source cached seek was a different case.
+
+The first fixture construction was discarded before playback because its only
+video keyframe preceded the requested offset: stream copy kept the whole 8 s
+video while audio started at 4 s. The corrected fixture explicitly has 2 s video
+keyframes and its raw packet timestamps were checked before the single drive.
+No lab media or credentials were used. The native view, named Chrome and owned
+local server were disposed/closed. Lab.21 requalification remains pending the
+packager's first slot.

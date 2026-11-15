@@ -1,0 +1,21 @@
+/** A narrow repair for muxers that wrote AAC encoder preroll as unsigned tfdt.
+ * Read the two exact words BEFORE conversion to Number: the rounded 64-bit
+ * value has already lost the small priming offset and cannot be subtracted. */
+const observers=new WeakMap<object,(note:string)=>void>();
+export function observeFragmentTiming(source:object,report:(note:string)=>void){observers.set(source,report);}
+export function inheritFragmentTiming(parent:object,child:object){const report=observers.get(parent);if(report)observers.set(child,report);}
+interface FragmentTrack {timescale:number;info:{type:string;codec?:string|null;sampleRate?:number}|null}
+export function fragmentDecodeTime(source:object,track:FragmentTrack|null,high:number,low:number):number{
+  const normal=high*0x100000000+low;
+  const report=observers.get(source),info=track?.info,rate=track?.timescale;
+  if(!report||high!==0xffffffff||info?.type!=='audio'||info.codec!=='aac'||
+    typeof rate!=='number'||!Number.isSafeInteger(rate)||rate<8000||rate>384000||info.sampleRate!==rate)return normal;
+  const raw=(BigInt(high)<<32n)|BigInt(low),signed=BigInt.asIntN(64,raw);
+  // At most 8192 AAC priming samples and 250 ms. Everything else remains an
+  // invalid timestamp, not an invented clock reset or a blanket signed cast.
+  const limit=BigInt(Math.min(8192,Math.floor(rate/4)));
+  if(signed>=0n||signed < -limit)return normal;
+  const samples=Number(signed);
+  report(`audio-timing:aac-priming-wrap:${samples}/${rate}`);
+  return samples;
+}

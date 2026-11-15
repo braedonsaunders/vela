@@ -12,6 +12,8 @@ import { SessionController, cancelled, delay, type Generation } from './session'
 import { mediaSourceClass, PlaybackFault, SegmentPipeline } from './pipeline';
 import { nativeMediaPlaylist } from './native-hls';
 import { randomId } from '../src/protocol/id';
+import {LiveLatency} from './live-latency';
+import type {MediaAccess} from './media-auth';
 
 interface NativeAudioTrack { id: string; language: string; enabled: boolean }
 type ExtendedVideo = HTMLVideoElement & { audioTracks?: ArrayLike<NativeAudioTrack>; webkitEnterFullscreen?: () => void; webkitExitFullscreen?: () => void; webkitSupportsFullscreen?: boolean; webkitDisplayingFullscreen?: boolean; webkitSupportsPresentationMode?: (mode: string) => boolean; webkitSetPresentationMode?: (mode: string) => void };
@@ -41,26 +43,33 @@ export class PlaybackEngine {
   private attempted = new Set<string>(); private recovering = false; private disposed = false;
   private resumePosition = 0;
   private pendingSwitch?: { startedAt: number; sessionId: string; sourceId: string; source: number; seek: number; position: number; recovery: boolean };
-  private lowDelayOverride: boolean | undefined;
+  private readonly liveLatency = new LiveLatency();
+  private liveTargetSeconds = 12;
+  private liveNetworkRetries = 0;
   private terminalMedia?: { position: number; duration: number | null; frames?: number | null; dropped?: number | null };
   private localTransportIntent: 'playing' | 'paused' | undefined;
   private startupDeadlineMs = 45000;
   private nativeOrigin = 0;
   private pendingSeek?: { position: number; startedAt: number; authorized: boolean };
   private waitSince = 0; private everPlayed = false; private lastPosition = 0; private lastAdvance = 0;
-  private wantsPlay = false; private lowDelay = false; private manualQuality: string | null = null;
+  private wantsPlay = false; private manualQuality: string | null = null;
   private speed = 1;
   private pendingTracks?: { audio?: string; subtitle?: string | null; startedAt: number };
   private track?: HTMLTrackElement; private lastObservation = 0;
-  constructor(readonly video: ExtendedVideo, private deliver: (event: EngineEvent) => void, private fullscreenContainer: HTMLElement = video, private readonly ambient = false) {
+  constructor(readonly video: ExtendedVideo, private deliver: (event: EngineEvent) => void, private fullscreenContainer: HTMLElement = video, private readonly ambient = false,private readonly mediaAccess?:MediaAccess) {
     video.crossOrigin = 'anonymous'; video.playsInline = true; video.controls = false; video.preload = 'auto';
     if (ambient) { video.defaultMuted = true; video.muted = true; }
     else try { const saved = localStorage.getItem('vela.player.volume'); if (saved !== null && Number.isFinite(Number(saved))) video.volume = Math.max(0, Math.min(1, Number(saved))); video.muted = video.muted || localStorage.getItem('vela.player.muted') === 'true'; } catch {}
-    this.timer = setInterval(() => { this.checkWaiting(); this.publish(); }, 1000);
+    this.timer = setInterval(() => { this.checkWaiting(); this.adaptLive(); this.publish(); }, 1000);
   }
   private emit(event: EngineEvent) {
     this.deliver(event.type === 'error' ? { ...event, sessionId: this.session?.id ?? null,
       sourceGeneration: this.controller.source, seekGeneration: this.controller.seek } : event);
+  }
+  /** A server/principal/credential switch retires every old private reader. */
+  retireMediaAuthorization(){
+    this.controller.stop();this.detachMedia();this.resetMedia();this.session=undefined;this.source=undefined;
+    this.pendingSeek=undefined;this.pendingSwitch=undefined;this.pendingTracks=undefined;this.failure=null;this.status='idle';
   }
   private position() { return this.terminalMedia?.position ?? this.original?.position ?? (this.video.readyState >= 1 && Number.isFinite(this.video.currentTime) ? this.nativeOrigin + this.video.currentTime : this.resumePosition); }
   private duration() { return this.terminalMedia?.duration ?? this.original?.readout.duration ?? (Number.isFinite(this.video.duration) ? this.nativeOrigin + this.video.duration : this.session?.duration ?? null); }
@@ -69,6 +78,21 @@ export class PlaybackEngine {
     return {frames:this.original?.readout.frames ?? quality?.totalVideoFrames ?? null, dropped:this.original?.readout.dropped ?? quality?.droppedVideoFrames ?? null};
   }
   private saveVolume() { if (this.ambient) return; try { localStorage.setItem('vela.player.volume', String(this.video.volume)); localStorage.setItem('vela.player.muted', String(this.video.muted)); } catch {} }
+  private adaptLive() {
+    if (!this.session?.live) return;
+    this.liveLatency.setPreference(this.session.livePolicy);
+    const bounds = this.liveBounds();
+    const retries = this.pipeline?.networkRetries ?? 0;
+    const decision = this.liveLatency.sample({now:performance.now(),playing:this.status==='playing'&&this.wantsPlay,
+      waiting:this.status==='buffering'||retries>this.liveNetworkRetries,
+      bufferAhead:bufferAhead(this.video),throughputBps:this.pipeline?.bandwidth.bps??null,
+      bitrateBps:this.pipeline?.current?.bandwidth??null,segmentSeconds:this.pipeline?.nominalSegmentSeconds??2,
+      windowSeconds:bounds.edge!==null&&bounds.start!==null?bounds.edge-bounds.start:null,
+      behindSeconds:bounds.edge===null?null:Math.max(0,bounds.edge-this.video.currentTime)});
+    this.liveNetworkRetries=retries;this.liveTargetSeconds=decision.targetSeconds;
+    if(this.pipeline){this.pipeline.liveTargetSeconds=decision.targetSeconds;this.pipeline.livePlaybackRate=decision.playbackRate;}
+    if(!this.original)this.video.playbackRate=decision.playbackRate;
+  }
   private checkWaiting() {
     if (this.pendingTracks && performance.now() - this.pendingTracks.startedAt > 15000) {
       this.pendingTracks = undefined; this.emit({type:'error',failure:{kind:'action',message:'Track selection authorization timed out',recoverable:true}});
@@ -128,7 +152,7 @@ export class PlaybackEngine {
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 }, lockedQuality: this.manualQuality,
       audioTracks: this.original?.supportsLocalAudioSwitch!==false?this.original?.audioTracks??this.session?.audioTracks??[]:this.session?.audioTracks??[], subtitleTracks, renditions: this.source?.renditions?.map(({url,...rendition})=>({...rendition,bitrateBps:rendition.bandwidth,requiredBandwidthBps:rendition.bandwidth*QUALITY_HEADROOM}))??[],
       video,currentBitrateBps,requiredBandwidthBps:currentBitrateBps===null?null:currentBitrateBps*QUALITY_HEADROOM,bufferAheadSeconds:ahead,throughputHistory:this.pipeline?.bandwidth.history??readout?.throughputHistory??[],
-      speed: this.speed, speeds: this.original && !this.original.setSpeed ? [] : [0.5,0.75,1,1.25,1.5,1.75,2],
+      speed: this.session?.live?1:this.speed, speeds: this.session?.live||this.original && !this.original.setSpeed ? [] : [0.5,0.75,1,1.25,1.5,1.75,2],
       pendingSubtitleTrackId: this.pendingTracks?.subtitle ?? this.overlay?.pending ?? null,
       chapters: this.session?.chapters ?? [],
       subtitleError:this.overlay?.error??null,subtitleStyle:this.subtitleStyle,subtitleStyleAvailable:!!this.overlay&&!burned&&(!selectedSubtitle||['srt','webvtt','tx3g'].includes(selectedSubtitle.codec)),
@@ -147,15 +171,15 @@ export class PlaybackEngine {
     };
   }
   private catchUpTarget(): number | null {
-    const ranges = this.backend === 'mse' ? this.video.buffered : this.video.seekable;
-    if (!this.session?.live || !ranges.length) return null;
-    const index = ranges.length - 1, start = ranges.start(index), end = ranges.end(index);
+    if (!this.session?.live) return null;
+    const bounds=this.liveBounds();
+    if(bounds.edge===null||bounds.start===null)return null;
+    const start=bounds.start,end=bounds.edge;
     if (end - start < 0.25) return null;
-    const target = Math.max(start + 0.05, end - (this.lowDelay ? 6 : 18));
+    const target = Math.max(start + 0.05, end - this.liveTargetSeconds);
     return target > this.video.currentTime + 0.25 ? Math.min(target, end - 0.1) : null;
   }
-  private liveSnapshot(): LiveSnapshot | null {
-    if (!this.session?.live) return null;
+  private liveBounds():{edge:number|null;start:number|null;source:LiveSnapshot['edgeSource']} {
     const seekable = this.video.seekable;
     let edge = this.pipeline?.publishedEdge ?? null;
     let start = this.pipeline?.publishedStart ?? null;
@@ -163,9 +187,14 @@ export class PlaybackEngine {
     if (edge === null && seekable.length) {
       edge = seekable.end(seekable.length - 1); start = seekable.start(0); source = 'seekable';
     }
-    if (edge === null && Number.isFinite(this.session.liveEdge)) {
-      edge = this.session.liveEdge!; start = this.session.liveWindowStart ?? null; source = 'server';
+    if (edge === null && Number.isFinite(this.session?.liveEdge)) {
+      edge = this.session!.liveEdge!; start = this.session!.liveWindowStart ?? null; source = 'server';
     }
+    return{edge,start,source};
+  }
+  private liveSnapshot(): LiveSnapshot | null {
+    if (!this.session?.live) return null;
+    const {edge,start,source}=this.liveBounds();
     return { edgeSeconds: edge, windowStartSeconds: start,
       driftSeconds: edge === null ? null : Math.max(0, edge - this.video.currentTime), edgeSource: source,
       reconnecting: this.status === 'recovering' || !!this.pipeline?.retrying,
@@ -196,7 +225,7 @@ export class PlaybackEngine {
     return (this.session?.sources ?? []).filter(s => this.supported(s)).sort((a,b) => priority[a.strategy] - priority[b.strategy]);
   }
   async load(session: PlaybackSession) {
-    if (!this.timer) this.timer = setInterval(() => { this.checkWaiting(); this.publish(); }, 1000);
+    if (!this.timer) this.timer = setInterval(() => { this.checkWaiting(); this.adaptLive(); this.publish(); }, 1000);
     if (session.id !== this.session?.id || session.sourceGeneration !== this.controller.source || session.seekGeneration !== this.controller.seek) this.localDecoderRetries.clear();
     const retained=session.sources.find(source=>source.id===session.selectedSourceId);
     if(retained&&this.canRetainOriginal(session,retained)){await this.seekRetainedOriginal(session,retained);return;}
@@ -216,7 +245,8 @@ export class PlaybackEngine {
     if (session.id !== this.session?.id) {
       this.subtitleFailures.clear();
       this.subtitlePreference=undefined;
-      this.audioPreference = undefined; this.lowDelayOverride = undefined; this.localTransportIntent = undefined;
+      this.audioPreference = undefined; this.localTransportIntent = undefined;
+      this.liveLatency.reset(session.livePolicy);this.liveNetworkRetries=0;
       // Opening the watch view is a play request. Later ready revisions merely
       // update metadata and must not override an explicit pause.
       this.wantsPlay = session.serverState !== 'paused' && session.serverState !== 'ended';
@@ -225,7 +255,7 @@ export class PlaybackEngine {
     if (session.serverState === 'ended') { this.source = session.sources.find(s => s.id === session.selectedSourceId); this.endPlayback(session.position ?? 0); return; }
     this.applyServerState(session.serverState, previousServerState, false);
     this.source = undefined; this.failure = null; this.attempted.clear(); this.recovering = false;
-    this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? false;
+    this.adaptLive();
     const preferred = this.audioPreference;
     const selected = session.sources.find(s => s.id === session.selectedSourceId);
     this.audio = preferred && (selected?.audioRenditions?.some(a => a.trackId === preferred) || selected?.original && session.audioTracks.some(track => track.id === preferred)) ? preferred : session.audioTrackId ?? null; this.subtitle = session.subtitleTrackId ?? null;
@@ -238,7 +268,9 @@ export class PlaybackEngine {
     if(!previous||!current||!original?.retainsSource||!this.originalJob||this.originalJob.signal.aborted||
       session.serverState==='ended'||session.id!==previous.id||session.mediaId!==previous.mediaId||
       session.sourceGeneration!==this.controller.source||session.seekGeneration===this.controller.seek||
-      (!source.original&&!(source.delivery==='hls'&&hasCoreHls()))||source.delivery!==current.delivery||source.id!==current.id||source.url!==current.url||source.edition!==current.edition||
+      // Converted HLS may reuse filenames with different bytes after a seek.
+      // Only an immutable original-file reader can survive a wire seek epoch.
+      !source.original||source.delivery!=='file'||source.delivery!==current.delivery||source.id!==current.id||source.url!==current.url||source.edition!==current.edition||
       source.timeline!==current.timeline||source.sourceRevision!==current.sourceRevision||source.timelineOriginSeconds!==current.timelineOriginSeconds||
       (session.subtitleTrackId??null)!==this.subtitle)return false;
     const identities=(tracks:PlaybackSession['audioTracks'])=>JSON.stringify(tracks.map(track=>[track.id,track.streamIndex]));
@@ -274,8 +306,8 @@ export class PlaybackEngine {
     if (source) { this.source = source; this.pipeline?.updateRenditions(source.renditions ?? []); }
     this.applyServerState(session.serverState, previousState);
     if (this.status === 'ended') return;
-    this.lowDelay = this.lowDelayOverride ?? session.lowDelay ?? this.lowDelay;
-    if (this.pipeline) { this.pipeline.lowDelay = this.lowDelay; this.pipeline.maxLiveDrift = session.liveMaxDrift ?? 45; }
+    this.adaptLive();
+    if (this.pipeline) this.pipeline.maxLiveDrift = session.liveMaxDrift ?? 45;
     if(this.subtitlePreference!==undefined&&(session.subtitleTrackId??null)===this.subtitlePreference)this.subtitlePreference=undefined;
     if (this.subtitlePreference===undefined&&(session.subtitleTrackId ?? null) !== this.subtitle) {
       this.subtitle = session.subtitleTrackId ?? null; this.applySubtitle();
@@ -354,7 +386,7 @@ export class PlaybackEngine {
         if (!(parent instanceof HTMLDivElement)) throw new Error('Original renderer surface is missing');
         const job=this.originalJob=new AbortController();this.originalGeneration=token;
         const current=()=>this.originalJob===job&&!job.signal.aborted&&!!this.originalGeneration&&this.controller.current(this.originalGeneration);
-        const original = await loadOriginalRuntime({ surface:{container:parent,video:this.video}, signal:job.signal, retry,
+        const original = await loadOriginalRuntime({ surface:{container:parent,video:this.video}, signal:job.signal, retry,mediaRequests:this.mediaAccess,
           onFailure: reason => { if (current()) void this.recover(new PlaybackFault(reason,'decoder'),this.originalGeneration!); },
           onEvent: event => {
             if (!current() || !this.original) return;
@@ -370,6 +402,7 @@ export class PlaybackEngine {
         if (this.subtitle&&!original.supportsSubtitles) throw new Error('Selected subtitles require a compatible fallback; original overlay is not ready');
         const info = source.originalVideo;
         await original.open({url:source.delivery==='hls'?(source.renditions?.find(r=>r.id===(this.manualQuality??source.initialRenditionId))?.url??source.url):source.url,
+          authority:{sourceGeneration:this.controller.source,seekGeneration:this.controller.seek},
           ...(source.delivery==='hls'?{hls:{originSeconds:source.timelineOriginSeconds??0}}:{}),container:'',duration:this.session?.duration ?? null,position,
           video:{...info,codec:info?.codec ?? '',width:info?.width ?? 0,height:info?.height ?? 0},
           audio:(this.session?.audioTracks ?? []).map(t => ({id:t.id,label:t.label,codec:t.codec ?? '',channels:t.channels,language:t.language,streamIndex:t.streamIndex ?? -1})),selectedAudioId:this.audio});
@@ -383,21 +416,22 @@ export class PlaybackEngine {
       }
       if (source.delivery === 'hls' && !this.useNativeHls(source)) {
         this.backend = 'mse';
-        const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish(), () => { if (this.controller.current(token) && this.session) this.emit({ type: 'session-refresh', sessionId: this.session.id }); });
+        const pipeline = this.pipeline = new SegmentPipeline(this.video, () => this.publish(), () => { if (this.controller.current(token) && this.session) this.emit({ type: 'session-refresh', sessionId: this.session.id }); },this.mediaAccess?.fetch);
         pipeline.timelineOriginSeconds = source.timelineOriginSeconds ?? 0;
         pipeline.audioRenditions = source.audioRenditions ?? []; pipeline.initialAudioTrackId = this.audio;
-        pipeline.expensiveSwitches = source.strategy === 'transcode'; pipeline.initialRenditionId = this.manualQuality ?? source.initialRenditionId; pipeline.lowDelay = this.lowDelay; pipeline.liveWindowStart = this.session?.liveWindowStart ?? null; pipeline.maxLiveDrift = this.session?.liveMaxDrift ?? 45; pipeline.abr.manual = this.manualQuality;
+        pipeline.expensiveSwitches = source.strategy === 'transcode'; pipeline.initialRenditionId = this.manualQuality ?? source.initialRenditionId; pipeline.liveTargetSeconds = this.liveTargetSeconds; pipeline.liveWindowStart = this.session?.liveWindowStart ?? null; pipeline.maxLiveDrift = this.session?.liveMaxDrift ?? 45; pipeline.abr.manual = this.manualQuality;
         void pipeline.run(source.renditions ?? [], position, !!this.session?.live, token.signal).catch(e => { if (this.controller.current(token)) void this.recover(e, token); });
       } else {
         this.backend = source.delivery === 'file' ? 'file' : 'native-hls';
         this.video.disableRemotePlayback = false;
         const pinned = source.renditions?.find(r => r.id === this.manualQuality);
-        const media = source.delivery === 'hls' ? await nativeMediaPlaylist(pinned?.url ?? source.url, token.signal) : { url: source.url, duration: null };
+        const media = source.delivery === 'hls' ? await nativeMediaPlaylist(pinned?.url ?? source.url, token.signal,0,this.mediaAccess?.fetch) : { url: source.url, duration: null };
         cancelled(token.signal);
         const legacyOffset = !this.session?.live && position > 0 && media.duration !== null && this.session?.duration !== undefined && Math.abs(media.duration + position - this.session.duration) <= 0.25;
         if (source.timelineOriginSeconds !== undefined && (!Number.isFinite(source.timelineOriginSeconds) || source.timelineOriginSeconds < 0)) throw new Error('Invalid media timeline origin');
         this.nativeOrigin = source.delivery === 'hls' ? source.timelineOriginSeconds ?? (legacyOffset ? position : 0) : 0;
-        this.video.src = media.url;
+        const attached=this.mediaAccess?await this.mediaAccess.nativeURL(media.url,token.signal):media.url;
+        cancelled(token.signal);this.video.src = attached;
       }
       await this.metadata(token);
       cancelled(token.signal);
@@ -531,7 +565,7 @@ export class PlaybackEngine {
     const original=this.original;
     const current=()=>this.overlayJob===job&&!job.signal.aborted&&!this.disposed;
     const loading=(async()=>{
-      const overlay=await loadSubtitleSession({surface,reader:original?.supportsSubtitles?original.byteReader:undefined,
+      const overlay=await loadSubtitleSession({surface,reader:original?.supportsSubtitles?original.byteReader:undefined,mediaRequests:this.mediaAccess,
         source:{url:source.url,container:original?.sourceContainer??source.delivery,sessionId:session.id,sourceGeneration:this.controller.source,seekGeneration:this.controller.seek},
         epoch:++this.overlayEpoch,clock:()=>this.position(),signal:job.signal,
         describedTracks:session.subtitleTracks.map(track=>({id:track.id,streamIndex:track.streamIndex,codec:track.codec,label:track.label,language:track.language,
@@ -581,6 +615,7 @@ export class PlaybackEngine {
     if(this.disposed||!this.subtitle||this.track)return;
     const selected=this.session?.subtitleTracks.find(track=>track.id===this.subtitle);
     if (!selected?.url) throw new Error('Selected subtitle has no WebVTT URL');
+    if(this.mediaAccess?.authorization())throw new Error('Authorized subtitles require the installed overlay');
     const track = this.track = document.createElement('track'); track.kind = 'subtitles';
     track.label = selected.label; track.srclang = selected.language ?? 'und'; track.src = selected.url; track.default = true;
     track.addEventListener('load', () => { if (this.track === track) track.track.mode = 'showing'; }, { once: true });
@@ -628,6 +663,7 @@ export class PlaybackEngine {
         case 'mute': this.video.muted = command.muted ?? !this.video.muted; this.original?.setMuted(this.video.muted); this.saveVolume(); this.lastObservation = -Infinity; break;
         case 'volume': if (!Number.isFinite(command.value) || command.value < 0 || command.value > 1) throw new Error('Volume outside 0–1'); this.video.volume = command.value; this.original?.setVolume(command.value); if (command.value > 0) this.video.muted = false; this.original?.setMuted(this.video.muted); this.saveVolume(); this.lastObservation = -Infinity; break;
         case 'speed':
+          if(this.session?.live)throw new Error('Live playback speed is managed automatically');
           if (!Number.isFinite(command.value) || command.value < 0.5 || command.value > 2) throw new Error('Playback speed must be between 0.5 and 2');
           if (this.original) { if (!this.original.setSpeed) throw new Error('Playback speed requires an updated runtime'); await this.original.setSpeed(command.value); }
           else this.video.playbackRate = command.value;
@@ -674,7 +710,9 @@ export class PlaybackEngine {
           if (command.trackId && !this.session?.subtitleTracks.some(t => t.id === command.trackId && t.url)) throw new Error('Unknown WebVTT track');
           this.subtitlePreference=command.trackId;this.subtitle = command.trackId; this.applySubtitle(); break;
         }
-        case 'lowDelay': this.lowDelayOverride = command.enabled; this.lowDelay = command.enabled; if (this.pipeline) this.pipeline.lowDelay = command.enabled; if (!command.enabled) this.video.playbackRate = 1; break;
+        // Older shells may still send this. Latency now follows source policy
+        // and sustained buffer evidence, never a viewer mode override.
+        case 'lowDelay': break;
         case 'pip':
           if (!this.pipAvailable()) throw new Error('Picture-in-picture is unavailable');
           if (document.pictureInPictureElement === this.video) await document.exitPictureInPicture();

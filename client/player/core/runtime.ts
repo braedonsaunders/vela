@@ -1,6 +1,7 @@
 import {playbackMark} from '../timing';
 import { abortable } from './async';
 import { MediaClock } from './clock';
+import {bufferedPackets} from './packet-buffer';
 import { FileDemux,type PacketDemux } from './demux/file';
 import { HlsDemux } from './demux/hls';
 import { SegmentReader } from './source/segments';
@@ -23,7 +24,7 @@ export interface CoreState {
   epoch:number; positionUs:number; durationUs:number|null;
   tracks:readonly MediaTrack[]; videoTrackId:string|null; audioTrackId:string|null;
   bufferAheadSeconds:number|null;throughputBps:number|null;throughputHistory:number[];
-  decoded:number; presented:number; dropped:number; failure:string|null;
+  decoded:number; presented:number; dropped:number; failure:string|null;diagnostics:string[];
 }
 interface Epoch {
   id:number; abort:AbortController; demux:PacketDemux; decoder:VideoBackend;
@@ -63,7 +64,8 @@ export class PlaybackCore {
     private readonly onState:(state:CoreState)=>void,
     /** The host owns authorized decoder/conversion recovery after this route. */
     private readonly onFailure:(error:Error,positionUs:number)=>void,
-    private readonly createVideo:(callbacks:VideoCallbacks)=>VideoBackend) {
+    private readonly createVideo:(callbacks:VideoCallbacks)=>VideoBackend,
+    private readonly mediaRequests?:import('../media-auth').MediaRequestPolicy) {
     this.scheduler=new VideoScheduler(this.clock,(frame,position)=>presenter.present(frame,position),error=>this.fail(error),()=>{
       const run=this.epoch;if(!run)return;
       run.resolveFirst();
@@ -76,25 +78,25 @@ export class PlaybackCore {
     const videoEnd=this.scheduler.bufferedEnd(position);
     const bufferedEnd=this.audio?Math.min(videoEnd,run?.audioBufferedUntilUs??position):videoEnd;
     const network=this.source?.kind==='file'?this.source.reader.bandwidth:this.source?.segments.bandwidth;
-    return {bufferAheadSeconds:run?Math.max(0,(bufferedEnd-position)/1e6):null,throughputBps:network?.bps??null,throughputHistory:network?.history??[],state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
+    return {diagnostics:run?.demux.diagnostics.slice()??[],bufferAheadSeconds:run?Math.max(0,(bufferedEnd-position)/1e6):null,throughputBps:network?.bps??null,throughputHistory:network?.history??[],state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
       tracks:this.tracks,videoTrackId:this.video?.id??null,audioTrackId:this.audio?.id??null,
       decoded:this.decodedBeforeEpoch+(this.epoch?.decoder.metrics.decoded??0),presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
   }
-  get presentationTelemetry(){return {lastPresentationLagUs:this.scheduler.metrics.lastLagUs,maxPresentationLagUs:this.scheduler.metrics.maxLagUs};}
+  get presentationTelemetry(){return {lastPresentationLagUs:this.scheduler.metrics.lastLagUs,maxPresentationLagUs:this.scheduler.metrics.maxLagUs,dropEvents:this.scheduler.dropEvents.map(value=>({...value}))};}
   get byteReader(){return this.source?.kind==='file'?this.source.reader:undefined;}
   get container(){return this.containerName;}
   private publish(){this.onState(this.snapshot());}
   private current(run:Epoch){return this.epoch===run&&!run.abort.signal.aborted&&!this.closed;}
 
   open(url:string,positionUs=0,audioOrdinal=0):Promise<void>{return this.openSource({kind:'file',url},positionUs,audioOrdinal);}
-  openHls(url:string,positionUs:number,originUs:number,audioOrdinal=0):Promise<void>{
+  openHls(url:string,positionUs:number,originUs:number,audioOrdinal=0,authority?:{sourceGeneration:number;seekGeneration:number}):Promise<void>{
     if(!Number.isSafeInteger(originUs)||originUs<0||positionUs<originUs)throw new Error('Invalid HLS source timeline');
-    return this.openSource({kind:'hls',url,originUs},positionUs,audioOrdinal);
+    return this.openSource({kind:'hls',url,originUs,cacheIdentity:authority?`${authority.sourceGeneration}:${authority.seekGeneration}`:`local:${this.nextEpoch+1}`},positionUs,audioOrdinal);
   }
-  private async openSource(input:{kind:'file';url:string}|{kind:'hls';url:string;originUs:number},positionUs:number,audioOrdinal:number):Promise<void>{
+  private async openSource(input:{kind:'file';url:string}|{kind:'hls';url:string;originUs:number;cacheIdentity:string},positionUs:number,audioOrdinal:number):Promise<void>{
     if(this.closed)throw new Error('Playback core is disposed');
     await this.closeSource();
-    this.decodedBeforeEpoch=0;Object.assign(this.scheduler.metrics,{presented:0,dropped:0,preroll:0,lastLagUs:0,maxLagUs:0});
+    this.decodedBeforeEpoch=0;this.scheduler.dropEvents.length=0;Object.assign(this.scheduler.metrics,{presented:0,dropped:0,preroll:0,lastLagUs:0,maxLagUs:0});
     const abort=new AbortController();
     const audio=this.createAudio({signal:abort.signal,onClock:anchor=>{
       if(this.clock.update(anchor)){
@@ -104,7 +106,8 @@ export class PlaybackCore {
         this.checkEnded();
       }
     },onFailure:failure=>{if(this.epoch?.id===failure.epoch)this.fail(new Error(`Audio ${failure.stage}: ${failure.message}`));}});
-    const source:SourceState=input.kind==='file'?{kind:'file',abort,audio,reader:new RangeReader(input.url)}:{kind:'hls',abort,audio,segments:new SegmentReader(input.url),originUs:input.originUs};
+    const allowed=this.mediaRequests?.allows.bind(this.mediaRequests);
+    const source:SourceState=input.kind==='file'?{kind:'file',abort,audio,reader:new RangeReader(input.url,this.mediaRequests?.fetch,allowed)}:{kind:'hls',abort,audio,segments:new SegmentReader(input.url,this.mediaRequests?.fetch,allowed,input.cacheIdentity),originUs:input.originUs};
     this.source=source;this.failure=null;this.tracks=[];this.video=undefined;this.audio=undefined;this.requestedAudioId=undefined;this.durationUs=null;
     this.initialAudioOrdinal=Number.isSafeInteger(audioOrdinal)&&audioOrdinal>=0?audioOrdinal:0;
     try{
@@ -181,7 +184,7 @@ export class PlaybackCore {
 
   private async videoPackets(run:Epoch,track:VideoTrack,positionUs:number,signal:AbortSignal){
     try{
-      for await(const packet of run.demux.packets(track.id,positionUs,run.id,signal)){
+      for await(const packet of bufferedPackets(run.demux.packets(track.id,positionUs,run.id,signal),signal)){
         if(!this.current(run))return;
         run.videoEndUs=Math.max(run.videoEndUs,packet.timestampUs+packet.durationUs);
         await run.decoder.decode(packet,signal);
