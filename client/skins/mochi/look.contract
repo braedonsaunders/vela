@@ -227,7 +227,8 @@ component Mascot
     mood: string
     size: number
   view
-    image `assets/mochi/mascot-${mood}.svg` alt="" width=size height=(size * 0.9) flex-shrink=0 aria-hidden=true
+    // Whole literal paths: the release packager content-addresses only the asset URLs it can see.
+    image (mood == "sad" ? "assets/mochi/mascot-sad.svg" : mood == "sleepy" ? "assets/mochi/mascot-sleepy.svg" : mood == "wow" ? "assets/mochi/mascot-wow.svg" : "assets/mochi/mascot-happy.svg") alt="" width=size height=(size * 0.9) flex-shrink=0 aria-hidden=true
 
 // Mochi hopping with a squash, over a shadow that breathes with it: the skin's
 // loading moment. Reduced motion holds Mochi still.
@@ -279,20 +280,27 @@ component Burst
             column color=(i % 3 == 0 ? "mochi.pink" : i % 3 == 1 ? "mochi.butter" : "mochi.mint") animation=`mochiBurst 620ms ${settle()} both`
               PixelIcon(name=(i % 2 == 0 ? "sparkle" : "star"), size=12)
 
-// A speech bubble with a tail pointing down at whatever it speaks for. Decorative:
-// the control it belongs to carries the accessible name.
+// A speech bubble with a tail pointing at whatever it speaks for. It opens above
+// the control (side "above"), below it for controls at the top of the screen
+// ("below"), or above and aligned to the control's end for controls at the right
+// edge ("end"), so it always stays on screen. Decorative: the control it belongs
+// to carries the accessible name.
 component SpeechBubble
   props
     message: string
     shown: bool
     still: bool
     night: bool
+    side: string
   view
     if shown
-      column position="absolute" bottom="calc(100% + 12px)" left="50%" translate="-50% 0px" z-index=40 pointer-events="none" aria-hidden=true align-items="center"
-        column transform-origin="50% 100%" align-items="center" animation=(still ? "mochiFade 120ms linear both" : `mochiBubble 300ms ${boing()} both`)
+      column position="absolute" top=(side == "below" ? "calc(100% + 12px)" : "auto") bottom=(side == "below" ? "auto" : "calc(100% + 12px)") left=(side == "end" ? "auto" : "50%") right=(side == "end" ? 0 : "auto") translate=(side == "end" ? "0px 0px" : "-50% 0px") z-index=40 pointer-events="none" aria-hidden=true align-items=(side == "end" ? "flex-end" : "center")
+        column transform-origin=(side == "below" ? "50% 0%" : side == "end" ? "100% 100%" : "50% 100%") align-items=(side == "end" ? "flex-end" : "center") animation=(still ? "mochiFade 120ms linear both" : `mochiBubble 300ms ${boing()} both`)
+          if side == "below"
+            image "assets/mochi/tail-small-up.svg" alt="" width=16 height=9 margin-bottom=-2.5 position="relative" z-index=1
           text message white-space="nowrap" padding="6px 12px" border-radius=14 border="2.5px solid var(--mochi.ink)" background-color=(night ? "mochi.butter-soft" : "mochi.card") color="mochi.ink" font-family="Fredoka, ui-rounded, system-ui, sans-serif" font-size=13 font-weight=600 box-shadow="0px 3px 0px var(--mochi.ink)"
-          image (night ? "assets/mochi/tail-small-butter.svg" : "assets/mochi/tail-small.svg") alt="" width=16 height=9 margin-top=-2.5
+          if side != "below"
+            image (night ? "assets/mochi/tail-small-butter.svg" : "assets/mochi/tail-small.svg") alt="" width=16 height=9 margin-top=-2.5 margin-right=(side == "end" ? 13 : 0)
 
 // A loading placeholder: a candy block swept by a soft highlight.
 component Skeleton

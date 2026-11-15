@@ -101,12 +101,12 @@ component PlayerChrome
           row gap=(p.small ? 4 : 10) align-items="center"
             button disabled=(p.model.state == "ended") press=command(p.model.playing ? "pause" : "play", "") aria-label=(p.model.state == "ended" ? t("ui.finished") : p.model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" class=Candy width=(p.small ? 48 : 60) height=(p.small ? 48 : 60) padding=0 display="flex" align-items="center" justify-content="center" flex-shrink=0
               PixelIcon(name=(p.model.playing ? "pause" : "play"), size=(p.small ? 18 : 22))
-            TipButton(name="back10", label=t("ui.back10Seconds"), icon="rewind", tip=tip, disabled=blocked, still=p.still, press=command("seekBy", "-10"), size=btn, hint=hint)
-            TipButton(name="fwd10", label=t("ui.forward10Seconds"), icon="ffwd", tip=tip, disabled=(p.model.duration <= 0 or blocked), still=p.still, press=command("seekBy", "10"), size=btn, hint=hint)
+            TipButton(name="back10", side="above", label=t("ui.back10Seconds"), icon="rewind", tip=tip, disabled=blocked, still=p.still, press=command("seekBy", "-10"), size=btn, hint=hint)
+            TipButton(name="fwd10", side="above", label=t("ui.forward10Seconds"), icon="ffwd", tip=tip, disabled=(p.model.duration <= 0 or blocked), still=p.still, press=command("seekBy", "10"), size=btn, hint=hint)
             column position="relative" flex-shrink=0
               button press=command("mute", "") hover=hint("mute") focus=hint("mute", true) blur=hint("mute", false) aria-label=(p.model.muted ? t("ui.unmute") : t("ui.mute")) aria-pressed=p.model.muted testId="player-mute" class=NightBubble width=btn height=btn padding=0 display="flex" align-items="center" justify-content="center"
                 PixelIcon(name=(p.model.muted or p.model.volume <= 0 ? "mute" : "speaker"), size=17)
-              SpeechBubble(message=(p.model.muted ? t("ui.unmute") : t("ui.mute")), shown=(tip == "mute"), still=p.still, night=true)
+              SpeechBubble(message=(p.model.muted ? t("ui.unmute") : t("ui.mute")), shown=(tip == "mute"), still=p.still, night=true, side="above")
             if not p.small
               column position="relative" width=110 height=26 justify-content="center" flex-shrink=0 margin-right=4
                 column position="absolute" left=0 right=0 height=10 border-radius=5 background-color="mochi.night-track" border="2px solid var(--mochi.night-edge-strong)" box-sizing="border-box" overflow="hidden"
@@ -120,11 +120,11 @@ component PlayerChrome
               column position="relative" flex-shrink=0
                 button popovertarget="player-settings" hover=hint("settings") focus=hint("settings", true) blur=hint("settings", false) aria-label=t("ui.playbackSettings") testId="player-settings-button" class=NightBubble width=btn height=btn padding=0 display="flex" align-items="center" justify-content="center"
                   PixelIcon(name="sliders", size=17)
-                SpeechBubble(message=t("ui.playbackSettings"), shown=(tip == "settings"), still=p.still, night=true)
+                SpeechBubble(message=t("ui.playbackSettings"), shown=(tip == "settings"), still=p.still, night=true, side="end")
             if p.model.pip
-              TipButton(name="pip", label=t("ui.pictureInPicture"), icon="pip", tip=tip, disabled=false, still=p.still, press=command("pip", ""), size=btn, hint=hint)
+              TipButton(name="pip", side="end", label=t("ui.pictureInPicture"), icon="pip", tip=tip, disabled=false, still=p.still, press=command("pip", ""), size=btn, hint=hint)
             if p.model.fullscreen
-              TipButton(name="full", label=t("ui.fullscreen"), icon="full", tip=tip, disabled=false, still=p.still, press=command("fullscreen", ""), size=btn, hint=hint)
+              TipButton(name="full", side="end", label=t("ui.fullscreen"), icon="full", tip=tip, disabled=false, still=p.still, press=command("fullscreen", ""), size=btn, hint=hint)
       if hasSettings
         column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=14 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(p.small ? "calc(100vw - 32px)" : 340) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=22 gap=14 border="3px solid var(--mochi.ink)" border-radius=26 background-color="mochi.card" color="mochi.ink" box-shadow="6px 7px 0px var(--mochi.lavender)"
           row gap=12 align-items="center"
@@ -190,12 +190,13 @@ component TipButton
     still: bool
     press: action
     size: number
+    side: string
     hint: action
   view
     column position="relative" flex-shrink=0
       button press=press() disabled=disabled hover=hint(name) focus=hint(name, true) blur=hint(name, false) aria-label=label class=NightBubble width=size height=size padding=0 display="flex" align-items="center" justify-content="center"
         PixelIcon(name=icon, size=17)
-      SpeechBubble(message=label, shown=(tip == name and not disabled), still=still, night=true)
+      SpeechBubble(message=label, shown=(tip == name and not disabled), still=still, night=true, side=side)
 
 style MenuSelect
   box-sizing = "border-box"
