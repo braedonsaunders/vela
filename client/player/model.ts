@@ -1,8 +1,9 @@
+import type {VideoInfo,DynamicRange} from './video-info';
 import type { SessionCommand, AudioRendition, OriginalVideo, Chapter } from '../wire/v0/types';
 import type {SubtitleDelivery,SubtitlePreferences} from './universal/subtitles/types';
 /** Local engine input. protocol.ts translates the versioned server plan here. */
 export interface Track { id: string; label: string; language?: string; url?: string; codec?: string; channels?: number; streamIndex?: number; delivery?: SubtitleDelivery; forced?: boolean; hearingImpaired?: boolean }
-export interface Rendition { id: string; url: string; bandwidth: number; mime: string; height?: number; audioGroupId?: string; codecStatus?: 'pending' | 'verified' }
+export interface Rendition { id: string; url: string; bandwidth: number; mime: string; height?: number; width?:number;codec?:string;dynamicRange?:DynamicRange;averageBitrate?:number; audioGroupId?: string; codecStatus?: 'pending' | 'verified' }
 export function codecKnown(rendition: Rendition) {
   return rendition.codecStatus !== 'pending' && /codecs="[^"]+"/.test(rendition.mime);
 }
@@ -10,6 +11,7 @@ export interface Source {
   id: string; strategy: 'direct' | 'remux' | 'transcode'; delivery: 'file' | 'hls';
   url: string; mime: string; timeline: string; edition: string; audioTrackId?: string; recoveryAllowed?: boolean; boundaries?: number[];
   original?: boolean; originalVideo?: OriginalVideo;
+  quality?:{width:number;height:number;bitrate:number;codec?:string;dynamicRange?:DynamicRange};
   sourceRevision?: string;
   timelineOriginSeconds?: number; audioRenditions?: AudioRendition[]; initialRenditionId?: string; renditions?: Rendition[];
 }
@@ -44,7 +46,8 @@ export interface Snapshot {
   sourceId: string | null; strategy: Source['strategy'] | null;
   backend: 'file' | 'native-hls' | 'mse' | 'webgpu' | null; renditionId: string | null; qualityIds: string[];
   capabilities: { pip: boolean; fullscreen: boolean; audioSwitch: boolean }; lockedQuality: string | null;
-  audioTracks: Track[]; subtitleTracks: Track[]; renditions: Omit<Rendition,'url'>[];
+  audioTracks: Track[]; subtitleTracks: Track[]; renditions: (Omit<Rendition,'url'>&{bitrateBps:number;requiredBandwidthBps:number})[];
+  video:VideoInfo|null;currentBitrateBps:number|null;requiredBandwidthBps:number|null;bufferAheadSeconds:number|null;throughputHistory:number[];
   speed: number; speeds: number[]; pendingSubtitleTrackId: string | null;
   chapters: Chapter[];
   subtitleError: string | null; subtitleStyle: SubtitlePreferences; subtitleStyleAvailable: boolean;

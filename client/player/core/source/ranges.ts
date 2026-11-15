@@ -1,3 +1,4 @@
+import {BandwidthEstimator} from '../../abr';
 import { abortable, delay } from '../async';
 import type { ByteReader } from '../types';
 
@@ -19,6 +20,7 @@ export class RangeReader implements ByteReader {
   private modified: string | null = null;
   private hasRevision = false;
   private readonly url: string;
+  readonly bandwidth=new BandwidthEstimator();
   readonly metrics = { requests: 0, bytes: 0, cacheHits: 0, milliseconds: 0 };
 
   constructor(url: string, private readonly fetcher: typeof fetch = (...args) => fetch(...args)) {
@@ -124,6 +126,7 @@ export class RangeReader implements ByteReader {
         }
       } finally { if (written !== expected) await body.cancel().catch(() => {}); body.releaseLock(); }
       if (written !== expected) throw new TypeError('Original range body was truncated');
+      this.bandwidth.sample(written,performance.now()-at,Number(response.headers.get('Age')??0)>0||/hit/i.test(response.headers.get('X-Cache')??''));
       this.metrics.bytes += written; this.metrics.milliseconds += performance.now()-at;
       return bytes;
     } catch (error) { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); throw error; }

@@ -1,3 +1,5 @@
+import {QUALITY_HEADROOM} from './video-info';
+import {bufferAhead} from './pipeline';
 import {playbackMark} from './timing';
 import { decoderRetry, type DecoderRetry } from './universal/retry';
 import { canAttemptOriginal,hasCoreHls, loadOriginalRuntime,loadSubtitleSession, type OriginalBackend } from './universal/loader';
@@ -110,13 +112,22 @@ export class PlaybackEngine {
     const subtitleId=this.overlay&&!burned?this.overlay.selected:this.subtitle;
     const selectedSubtitle=this.overlay?.tracks.find(track=>track.id===subtitleId);
     const audioId=this.original?.readout.audioTrackId??this.pipeline?.audioTrackId??this.audio;
+    const readout=this.original?.readout;
+    const rendition=this.pipeline?.current??this.source?.renditions?.find(r=>r.id===(this.manualQuality??this.source?.initialRenditionId));
+    const bitrate=rendition?.bandwidth??this.source?.quality?.bitrate;
+    const currentBitrateBps=bitrate&&Number.isFinite(bitrate)&&bitrate>0?bitrate:null;
+    const video=readout?.video??(this.video.videoWidth>0?{width:this.video.videoWidth,height:this.video.videoHeight,
+      codec:rendition?.codec??'',dynamicRange:rendition?.dynamicRange??null}:null);
+    const ahead=this.original?readout?.bufferAheadSeconds??null:this.video.readyState>=1?bufferAhead(this.video):null;
+
     return {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.pendingSeek ? 'buffering' : this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
       diagnostics: this.original ? {metadataDiscrepancies:this.original.readout.metadataDiscrepancies} : undefined,
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? (this.backend === 'native-hls' ? this.manualQuality ?? this.source?.initialRenditionId ?? null : null), qualityIds: this.pipeline?.qualityIds ?? [],
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 }, lockedQuality: this.manualQuality,
-      audioTracks: this.original?.supportsLocalAudioSwitch!==false?this.original?.audioTracks??this.session?.audioTracks??[]:this.session?.audioTracks??[], subtitleTracks, renditions: this.source?.renditions?.map(({url,...rendition})=>rendition)??[],
+      audioTracks: this.original?.supportsLocalAudioSwitch!==false?this.original?.audioTracks??this.session?.audioTracks??[]:this.session?.audioTracks??[], subtitleTracks, renditions: this.source?.renditions?.map(({url,...rendition})=>({...rendition,bitrateBps:rendition.bandwidth,requiredBandwidthBps:rendition.bandwidth*QUALITY_HEADROOM}))??[],
+      video,currentBitrateBps,requiredBandwidthBps:currentBitrateBps===null?null:currentBitrateBps*QUALITY_HEADROOM,bufferAheadSeconds:ahead,throughputHistory:this.pipeline?.bandwidth.history??readout?.throughputHistory??[],
       speed: this.speed, speeds: this.original && !this.original.setSpeed ? [] : [0.5,0.75,1,1.25,1.5,1.75,2],
       pendingSubtitleTrackId: this.pendingTracks?.subtitle ?? this.overlay?.pending ?? null,
       chapters: this.session?.chapters ?? [],
@@ -130,8 +141,8 @@ export class PlaybackEngine {
         ? this.video.readyState < 1 ? 'media-metadata' : this.video.paused ? 'starting' : 'initial-buffer' : null,
       position: this.position(),
       duration: this.duration(),
-      playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: this.nativeOrigin + ranges.start(i), end: this.nativeOrigin + ranges.end(i) })),
-      throughputBps: this.pipeline?.bandwidth.bps ?? null, droppedFrames: this.terminalMedia?.dropped ?? this.original?.readout.dropped ?? quality?.droppedVideoFrames ?? null,
+      playable:this.original?(ahead!==null&&ahead>0?[{start:this.position(),end:this.position()+ahead}]:[]):Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: this.nativeOrigin + ranges.start(i), end: this.nativeOrigin + ranges.end(i) })),
+      throughputBps: this.pipeline?.bandwidth.bps ?? readout?.throughputBps ?? null, droppedFrames: this.terminalMedia?.dropped ?? this.original?.readout.dropped ?? quality?.droppedVideoFrames ?? null,
       totalFrames: this.terminalMedia?.frames ?? this.original?.readout.frames ?? quality?.totalVideoFrames ?? null, audioTrackIds, audioTrackId:audioId, pendingAudioTrackId: this.pendingTracks?.audio ?? this.original?.pendingAudioTrackId ?? this.pipeline?.pendingAudioTrackId ?? null, subtitleTrackId:subtitleId, failure: this.failure,
     };
   }
