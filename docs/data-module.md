@@ -52,8 +52,12 @@ and resource discovery use their own explicitly scoped plex.tv authority, separa
 from the selected PMS token. Ether retains its existing strict `/sessions/media/`
 broker validation. Native adapters must explicitly validate their own media and image
 paths against the selected origin and base path; adding them must not relax Ether's
-rules. Native media that requires a persistent token in a URL needs a reviewed
-transport decision before it is exposed through player plans or DOM properties.
+rules. Universal and MSE playback send native-server credentials in request headers, never
+in media URLs. Only native-element fallback may use a URL credential: Plex uses a
+short-lived delegation token; Jellyfin may use its api_key in memory only. Such URLs
+are never persisted, logged, sent in diagnostics or observations, or exposed to skins,
+and errors must redact them. The private data-to-host transfer needed for header
+authorization remains to be confirmed with Exact; it is not yet implemented.
 
 Session updates use the adapter's stream when supported, including cursor resume and
 snapshot fallback. A server without an event stream uses bounded, cancellable snapshot
