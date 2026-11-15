@@ -375,7 +375,7 @@ function createInstall(element, json, event) {
 }
 
 // client/player/media-auth.ts
-var headerName = /^(authorization|x-plex-token|x-emby-token|x-emby-authorization)$/i;
+var headerName = /^(accept|authorization|x-plex-token|x-emby-token|x-emby-authorization|x-plex-product|x-plex-version|x-plex-client-identifier|x-plex-platform|x-plex-device-name)$/i;
 var urlSecrets = /^(api_key|x-plex-token|x-emby-token|access_token|authorization)$/i;
 var aborted = () => new DOMException("Media authorization retired", "AbortError");
 function parseMediaAuthorization(json) {
@@ -3400,6 +3400,7 @@ function sessionFromPlan(plan) {
     position: plan.positionSeconds,
     duration: plan.durationSeconds,
     live: !!plan.channelId,
+    livePolicy: plan.livePolicy,
     liveWindowStart: plan.live?.windowStartSeconds,
     liveEdge: plan.live?.liveEdgeSeconds,
     liveMaxDrift: plan.live?.maxDriftSeconds,

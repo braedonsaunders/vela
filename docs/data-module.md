@@ -67,7 +67,11 @@ principal or credential change. The host retires old readers on rotation and
 clears authorization on disposal. Media requests attach headers only to the
 validated exact origin and base-path boundary; redirects are refused. Runtime
 assets and decoder packages never use those credentials. A private copy crosses
-only to a dedicated demux worker, never through decoder telemetry.
+only to a dedicated demux worker, never through decoder telemetry. The host
+also admits the explicit Plex client headers (`Accept`, `X-Plex-Product`,
+`X-Plex-Version`, `X-Plex-Client-Identifier`, `X-Plex-Platform`,
+`X-Plex-Device-Name`) alongside auth headers; transport headers such as `Host`,
+`Cookie`, `Origin`, `Referer` and `Proxy-Authorization` remain refused.
 
 When a native element needs a URL, the host emits `native-media-request` with
 `{requestId, handle, url}` using the token-free source URL. Foundation asks the

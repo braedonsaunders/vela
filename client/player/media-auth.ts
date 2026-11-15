@@ -8,7 +8,9 @@ export interface MediaRequestPolicy {
   /** A private copy for a dedicated demux worker, not a UI/telemetry DTO. */
   authorization():MediaAuthorization|undefined;
 }
-const headerName=/^(authorization|x-plex-token|x-emby-token|x-emby-authorization)$/i;
+// Plex identifies its playback client with these headers as well as the token.
+// Keep the set explicit: no caller-controlled transport or routing headers.
+const headerName=/^(accept|authorization|x-plex-token|x-emby-token|x-emby-authorization|x-plex-product|x-plex-version|x-plex-client-identifier|x-plex-platform|x-plex-device-name)$/i;
 const urlSecrets=/^(api_key|x-plex-token|x-emby-token|access_token|authorization)$/i;
 const aborted=()=>new DOMException('Media authorization retired','AbortError');
 
