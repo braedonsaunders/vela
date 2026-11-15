@@ -435,3 +435,23 @@ revision-1 playback reply reported 1395.25 seconds. The Vela resume read path
 remains under investigation; neither stale state nor snapping has been proven.
 Unpin returned 204, the independent pin list is empty, and the operator confirmed
 zero sessions. No additional reset or playback was requested.
+
+The operator subsequently verified that `state_watch` stays at 1390.5 seconds
+for ten seconds and across a full restart after the reset. The server's play
+handler uses that live value when the request omits `positionSeconds`; an
+explicit request value wins. Home hero resume actions instead embed the watch
+position captured when cached Home rows were built. The client's source layer
+passes that supplied position through to `api.playback`. Therefore a stale
+cached hero is a supported explanation for 1395.25; the old capture did not
+record its outgoing position, so that last causal link remains an inference,
+not observed request evidence. Ether queued the hero action correction.
+
+Fresh private controlled drivers now record only the outgoing position scalar
+(and whether it was present), plus the opening HTTP plan position. They require
+that ready plan to equal 1390.5 seconds before continuing into timed playback;
+a mismatch runs the normal stop/revoke/context cleanup and invalidates the run.
+They neither rewrite a playback request nor open detail, which would change the
+cold/prewarm conditions. The completed evidence/driver files were preserved.
+Only syntax checks ran for these new guards; no new browser, stream or reset
+was started. A future controlled run still needs the server's low-water fix and
+a fresh authorized reset.
