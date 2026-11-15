@@ -44,9 +44,11 @@ export interface ArtworkRef {
 }
 export type TitleKind = 'movie' | 'show' | 'season' | 'episode';
 export interface WatchState { positionSeconds: number; played: boolean; favorite: boolean; watchlisted: boolean }
+/** Actual server-sourced rating; scale is the maximum possible value. */
+export interface TitleRating { source: string; kind: 'critic' | 'audience'; value: number; scale: number; state?: string; votes?: number; url?: string }
 export interface Title {
   id: ID; kind: TitleKind; name: string; summary: string; year?: number; genres: string[];
-  durationSeconds?: number; rating?: string; artwork: ArtworkRef[]; watch?: WatchState;
+  durationSeconds?: number; rating?: string; ratings?: TitleRating[]; artwork: ArtworkRef[]; watch?: WatchState;
   showId?: ID; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
 }
 export interface Extra { id: ID; parentId: ID; kind: 'trailer' | 'clip' | 'featurette' | 'other'; name: string;
@@ -104,6 +106,8 @@ export interface PlaybackPathBase { originalVideo?: OriginalVideo; original?: bo
   qualities: Quality[]; boundaries: SwitchBoundary[] }
 export type PlaybackPath = PlaybackPathBase & ({ readiness: 'on-demand'; url?: never } | { readiness: 'ready' | 'preparing' | 'unavailable'; url: string });
 export interface Fallback { state: 'unsupported' | 'idle' | 'preparing' | 'ready' | 'unavailable' | 'capacity'; pathId?: ID; reason?: string }
+/** HTTP 202 while an explicitly requested extra is being prepared; no session exists yet. */
+export interface PlaybackPreparing { state: 'preparing'; retryAfterSeconds: number }
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; purpose?: 'playback' | 'preview';
   state: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended'; positionSeconds: number; durationSeconds?: number;
   paths: PlaybackPath[]; selectedPathId: ID; audioTracks: Track[]; subtitleTracks: Track[];

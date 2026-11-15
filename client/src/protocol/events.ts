@@ -6,7 +6,7 @@ import { mediaPlan } from './media';
 const cursors = new Map<string, string>();
 
 /** The host owns the stream lifetime. Each connection starts from a fresh snapshot. */
-export async function sessionEvents(api: EtherAdapter, origin: string, sessionId: string): Promise<{ planJson: string; sessionId: string }> {
+export async function sessionEvents(api: EtherAdapter, origin: string, sessionId: string): Promise<{ planJson: string; sessionId: string; preparing: boolean; retryAfterSeconds: number }> {
   let snapshot: SessionSnapshot = await api.snapshot(sessionId);
   let revision = snapshot.revision;
   return api.streamSession(sessionId, cursors.get(sessionId) ?? snapshot.cursor, async (event: StreamEvent) => {
@@ -14,7 +14,7 @@ export async function sessionEvents(api: EtherAdapter, origin: string, sessionId
       if (typeof event.data !== 'string') throw new Error('Invalid session event');
       const value = JSON.parse(event.data) as SessionEvent;
       if (value.sessionId !== sessionId || !value.cursor || typeof value.revision !== 'number') throw new Error('Invalid session event');
-      if (value.revision < revision) return { planJson: JSON.stringify(mediaPlan(snapshot.plan, origin)), sessionId };
+      if (value.revision < revision) return { planJson: JSON.stringify(mediaPlan(snapshot.plan, origin)), sessionId, preparing: false, retryAfterSeconds: 0 };
       switch (value.type) {
         case 'snapshot': snapshot = value.snapshot; break;
         case 'plan': snapshot = { ...snapshot, plan: value.plan, cursor: value.cursor, revision: value.revision }; break;
@@ -24,6 +24,6 @@ export async function sessionEvents(api: EtherAdapter, origin: string, sessionId
       }
       revision = snapshot.revision;
       cursors.set(sessionId, snapshot.cursor);
-      return { planJson: JSON.stringify(mediaPlan(snapshot.plan, origin)), sessionId };
+      return { planJson: JSON.stringify(mediaPlan(snapshot.plan, origin)), sessionId, preparing: false, retryAfterSeconds: 0 };
     });
 }

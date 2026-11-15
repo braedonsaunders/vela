@@ -50,7 +50,7 @@ export function homeModel(data: Bootstrap, origin?: string, _now?: number, artWi
     rows: data.rows.map(row => feedRow(row, origin, artWidth)), nextCursor: data.nextCursor ?? '',
     liveAvailable: data.capabilities.features.liveTV.available, aiAvailable: data.capabilities.features.aiSearch.available, descriptiveAvailable: data.capabilities.features.descriptiveSearch.available, trailerPreviewAvailable: data.capabilities.features.trailerPreview?.available ?? false };
 }
-export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560) {
+export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560, extraPlayback = false) {
   const facts: string[] = [];
   const video = (data.mediaSummary?.video ?? []).filter(v => (v.width ?? 0) > 0 && (v.height ?? 0) > 0)
     .sort((a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0] ?? data.mediaSummary?.video[0];
@@ -68,9 +68,18 @@ export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560)
     }
     return { name: value.name, role: value.role ?? '', portrait };
   };
-  return { title: [card(data.title, '', origin, artWidth)], related: [], mediaFacts: facts, resumePosition: clock(data.title.watch?.positionSeconds ?? 0), crew: (data.crew ?? []).map(c => c.role ? `${c.name} · ${c.role}` : c.name), crewPeople: (data.crew ?? []).map(person), canPlay: data.canPlay ?? false, resumeSeconds: data.title.watch?.positionSeconds ?? 0,
+  const trailers = data.extras.filter(extra => extra.kind === 'trailer');
+  const trailer = trailers.find(extra => extra.availability !== 'unavailable') ?? trailers[0];
+  const labels: Record<string, string> = { tomatoes: 'ratings.tomatoes', popcorn: 'ratings.popcorn', imdb: 'ratings.imdb', metacritic: 'ratings.metacritic', tmdb: 'ratings.tmdb', letterboxd: 'ratings.letterboxd' };
+  const ratings = (data.title.ratings ?? []).filter(r => Number.isFinite(r.value) && Number.isFinite(r.scale) && r.scale > 0 && r.value >= 0 && r.value <= r.scale).map(r => ({
+    source: r.source === 'tomatoes' && r.kind === 'critic' ? 'rt-critics' : r.source === 'popcorn' && r.kind === 'audience' ? 'rt-audience' : r.source,
+    label: labels[r.source] ? msg(labels[r.source]!) : r.source,
+    value: r.source === 'tomatoes' || r.source === 'popcorn' ? number(r.value / r.scale, { style: 'percent', maximumFractionDigits: 20 }) : number(r.value, { maximumFractionDigits: 20 }),
+    score: r.value / r.scale * 100, state: r.state ?? '',
+  }));
+  return { title: [card(data.title, '', origin, artWidth)], ratings, trailerId: trailer?.id ?? '', trailerReady: !!trailer && extraPlayback && trailer.availability !== 'unavailable', related: [], mediaFacts: facts, resumePosition: clock(data.title.watch?.positionSeconds ?? 0), crew: (data.crew ?? []).map(c => c.role ? `${c.name} · ${c.role}` : c.name), crewPeople: (data.crew ?? []).map(person), canPlay: data.canPlay ?? false, resumeSeconds: data.title.watch?.positionSeconds ?? 0,
     seasons: (data.seasons ?? []).map(t => card(t, '', origin, artWidth)), episodes: (data.episodes ?? []).map(t => card(t, '', origin, artWidth)),
-    extras: data.extras.map(e => ({ id: e.id, name: e.name, kind: e.kind, ready: e.availability === 'ready' })),
+    extras: data.extras.map(e => ({ id: e.id, name: e.name, kind: e.kind, ready: extraPlayback && e.kind === 'trailer' && e.availability !== 'unavailable' })),
     cast: data.cast.map(c => c.role ? `${c.name} · ${c.role}` : c.name),
     castPeople: data.cast.map(person) };
 }

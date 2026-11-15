@@ -384,7 +384,7 @@ const sources: Sources = {
     const data = await (await session(store)).rows({ placement: 'detail', titleId: id });
     return withLocale(localeJSON, () => data.items.map(row => feedRow(row, API, artWidth)));
   },
-  uiDetail: async ([id, localeJSON, artWidth], store) => { const detail = await (await session(store)).detail(id); return withLocale(localeJSON, () => detailModel(detail, API, artWidth)); },
+  uiDetail: async ([id, localeJSON, artWidth], store) => { const api = await session(store); const [detail, capabilities] = await Promise.all([api.detail(id), api.capabilities()]); return withLocale(localeJSON, () => detailModel(detail, API, artWidth, capabilities.features.extraPlayback?.available === true)); },
   uiSearch: async ([query, generation, epoch, at, localeJSON, artWidth], store) => {
     const api = await session(store);
     const result = await api.search({ query, generation, mode: 'fast', idempotencyKey: `search-${epoch}-${generation}` });
@@ -439,7 +439,11 @@ const sources: Sources = {
     const position = positionText === '' ? undefined : Number(positionText);
     if (position !== undefined && (!Number.isFinite(position) || position < 0)) throw new Error('Invalid playback position');
     const plan = await api.playback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}` });
-    return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId };
+    if (plan.state === 'preparing') {
+      if (kind !== 'extra' || !Number.isFinite(plan.retryAfterSeconds) || plan.retryAfterSeconds < 1) throw new Error('Invalid playback preparation response');
+      return { planJson: '', sessionId: '', preparing: true, retryAfterSeconds: Math.ceil(plan.retryAfterSeconds) };
+    }
+    return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId, preparing: false, retryAfterSeconds: 0 };
   },
   uiSkinDoc: async ([url, width, localeJSON], store) => {
     const path = new URL(url).pathname;

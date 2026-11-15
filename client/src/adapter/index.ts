@@ -25,7 +25,7 @@ export interface ServerAdapter {
   aiJob(id: string): Promise<V.AISearchJob>;
   cancelAI(id: string, request: V.CancelRequest): Promise<V.AISearchJob>;
   interactions(request: V.InteractionsRequest): Promise<V.Ack>;
-  playback(request: V.PlaybackRequest): Promise<V.PlaybackPlan>;
+  playback(request: V.PlaybackRequest): Promise<V.PlaybackPlan | V.PlaybackPreparing>;
   createAudioFallback(id: string, request: V.AudioFallbackRequest, signal?: AbortSignal): Promise<V.AudioFallbackResponse>;
   cancelAudioFallback(id: string, audioId: string, request: V.Mutation, signal?: AbortSignal): Promise<V.Ack>;
   observe(id: string, request: V.PlayerObservation): Promise<V.Ack>;
