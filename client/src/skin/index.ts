@@ -85,12 +85,16 @@ function intern(s: Record<string, string | number>, r: Resolve): number {
   return at;
 }
 
-function parts(template: string | undefined, r?: Resolve): Part[] {
+/** Bindings whose value is an image URL (Plex puts a short-lived token in its query): only an
+ * image source or a background-image may read them, never text, labels, ids or press arguments. */
+const URL_KEYS = /^(card|hero|detail|dest|person|ch|tile)\.(poster|backdrop|logo|portrait|nowArt)$/;
+function parts(template: string | undefined, r?: Resolve, urls = false): Part[] {
   const out: Part[] = [];
   // Document strings are resolved now, for the viewer's locale.
   const text = (template ?? '').replace(/\{s:([a-zA-Z0-9.-]+)\}/g, (_, key) => r?.strings[key] ?? '');
   let at = 0;
   for (const m of text.matchAll(/\{([a-zA-Z.:-]+)\}/g)) {
+    if (!urls && URL_KEYS.test(m[1])) throw new Error(`${m[1]} is an image URL: only an image src or background-image may bind it`);
     if (m.index! > at) out.push({ l: text.slice(at, m.index), k: -1, f: '' });
     out.push({ l: '', ...key(m[1]) });
     at = m.index! + m[0].length;
@@ -147,7 +151,7 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
     }
     const row = name;
     if (!ROW_TO_FIELD.has(row) || typeof raw !== 'string') throw new Error(`Unknown style property ${row}`);
-    if (dyn && BINDABLE[row] && raw.includes('{')) { dyn[BINDABLE[row]] = parts(value(raw, r)); continue; }
+    if (dyn && BINDABLE[row] && raw.includes('{')) { dyn[BINDABLE[row]] = parts(value(raw, r), undefined, row === 'background-image'); continue; }
     merged[row] = value(raw, r);
   }
   // Per-side border rows follow the shorthand's width and colour unless set: an empty bound
@@ -243,7 +247,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   let kids: Node[] = [];
   switch (node.type) {
     case 'text': level.t = 'text'; level.parts = parts(node.text, r); break;
-    case 'image': level.t = 'image'; level.src = parts(asset(node.src, r)); level.label = parts(node.alt, r); level.fade = node.fade === true; break;
+    case 'image': level.t = 'image'; level.src = parts(asset(node.src, r), undefined, true); level.label = parts(node.alt, r); level.fade = node.fade === true; break;
     case 'icon': {
       level.t = 'icon';
       // A platform symbol, or a document SVG painted as a mask in the current colour.
