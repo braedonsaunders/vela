@@ -9,6 +9,7 @@ import { stageUniversalAssets } from '../release/universal-assets';
 import { transformUpstreamAudio } from '../../client/player/universal/audio/ffmpeg/upstream-transform';
 import {transformUpstreamTransport} from '../../client/player/universal/transport-transform';
 import {transformCoreDemux} from '../../client/player/core/demux/transform';
+import {transformCoreAudio} from '../../client/player/core/audio/transform';
 import { transformUpstreamVideo } from '../../client/player/universal/video/upstream-transform';
 import { installSubtitleAssets } from '../../client/player/universal/subtitles/install';
 import subtitleManifest from '../../client/player/universal/subtitles/assets.json';
@@ -59,7 +60,8 @@ const plugin = { name:'vela-audio', setup(builder: any) {
     const video = transformUpstreamVideo(path, audio ?? original);
     const transport=transformUpstreamTransport(path,video??audio??original);
     const clock=Bun.argv.includes('--core')?transformCoreDemux(path,transport??video??audio??original):null;
-    const transformed = clock??transport??video??audio;
+    const coreAudio=Bun.argv.includes('--core')?transformCoreAudio(path,clock??transport??video??audio??original):null;
+    const transformed = coreAudio??clock??transport??video??audio;
     if (transformed !== null) return {contents:transformed, loader:'ts', resolveDir:dirname(path)};
   });
 }};
@@ -80,6 +82,7 @@ await copyFile(join(root,'client/player/media-auth.ts'),join(sourceDir,'vela-med
 await copyFile(join(root,'client/player/universal/video/upstream-transform.ts'), join(sourceDir,'vela-video-transform.ts'));
 if(Bun.argv.includes('--core')){
   await mkdir(join(sourceDir,'vela-core-demux'),{recursive:true});
+  await copyFile(join(root,'client/player/core/audio/transform.ts'),join(sourceDir,'vela-core-audio-transform.ts'));
   for(const file of ['fragment-time.ts','subtitle-stream.ts','transform.ts'])await copyFile(join(root,'client/player/core/demux',file),join(sourceDir,'vela-core-demux',file));
 }
 const audioDirectory = Bun.argv.find(arg => arg.startsWith('--audio-dir='))?.slice(12);
