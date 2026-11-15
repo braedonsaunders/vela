@@ -132,8 +132,12 @@ all grant query fields, sets `ether_window=1`, and replaces only `from_ms` with
 absolute title milliseconds. It polls the covering120s window every second,
 prefetches its successor in the last20s, merges/deduplicates cues and discards
 expired history.503 retries while selected.200 empty is provisional, with no
-invented completeness or EOF. Epoch/selection disposal cancels late replies.
-This matches lab.15's supplied server contract; the local check simulates that
+invented completeness or EOF. On HTTP200 only, `X-Ether-Subtitle-Complete:1` marks a complete cached/sidecar
+body and stops polling for that selection epoch; its absolute cues replace the
+partial cue set. `0` or a missing/unrecognized header continues polling. Headers
+on errors are ignored. Epoch/selection disposal cancels late replies.
+The marker is additive in Ether b488175b0, scheduled for lab.16; missing-header
+behaviour remains compatible with lab.15. The local check simulates that
 contract and does not claim a live server qualification.
 
 ## Complete local session evidence
@@ -156,3 +160,10 @@ owned Chrome and8795 server were closed afterward. No lab/provider access or
 private media capture occurred. Engine snapshot/commands integration and the
 1917 PGS lab qualification remain outstanding; lab access is held for the
 coordinator's restart clearance.
+
+The completeness-marker follow-up used one local Chrome measurement:503 with
+header1,200 empty with0,200 populated with no header, then200 whole track with1.
+Exactly four requests occurred; the count remained four after another1.5s,
+with2574 alpha pixels and no session failures. This proves error headers do not
+stop retries and unknown/growing responses continue polling. The dedicated
+Chrome and8795 server were closed afterward.

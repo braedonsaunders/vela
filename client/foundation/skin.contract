@@ -1,5 +1,5 @@
 use Shell as DocShell, Home as DocHome, detailPresentation as DocPresentation from "../skins/doc/slots.contract"
-use SkinDoc from "../renderer/levels.contract"
+use SkinDoc from "../renderer/shapes.contract"
 use Shell as ExampleShell, Home as ExampleHome, SearchSurface as ExampleSearchSurface, Row as ExampleRow, Detail as ExampleDetail, SearchField as ExampleSearchField, PlayerChrome as ExamplePlayerChrome, Guide as ExampleGuide, LiveControls as ExampleLiveControls, detailPresentation as ExamplePresentation, detailSplit as ExampleSplit from "../skins/example/slots.contract"
 use PlayerView from "./player-models.contract"
 use PlayerChrome as CinePlayerChrome from "../skins/cinematic/player.contract"

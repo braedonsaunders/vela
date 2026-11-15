@@ -1,7 +1,8 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
 use HomeModel, Viewport, LibraryNav from "../../foundation/models.contract"
-use Style, Env, Ctx, DocSlot, SkinDoc, L1, heroActFor, num, styleAt, rootCtx from "../../renderer/levels.contract"
+use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, noStyle from "../../renderer/shapes.contract"
+use V1, V5, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, rootCtx from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 
 fn part(s: string, i: number): string = match s.split("|").at(i) { case some(x) => x, case none => "" }
@@ -14,7 +15,7 @@ component Root
     s: Style
   slot
   view
-    column display=s.display position="relative" width=s.width height=s.height min-height=s.minHeight flex-direction=s.flexDirection gap=s.gap padding=s.padding overflow-x=s.overflowX overflow-y=s.overflowY color=s.color background-color=s.backgroundColor background-image=s.backgroundImage font-family=s.fontFamily font-size=s.fontSize
+    box display=s.display position="relative" width=s.width height=s.height min-height=s.minHeight flex-direction=s.flexDirection gap=s.gap padding-top=s.paddingTop padding-right=s.paddingRight padding-bottom=s.paddingBottom padding-left=s.paddingLeft overflow-x=s.overflowX overflow-y=s.overflowY color=s.color background-color=s.backgroundColor background-image=s.backgroundImage font-family=s.fontFamily font-size=s.fontSize
       children
 
 // Where the foundation's content sits among a slot's nodes: its flex order, an outer
@@ -27,7 +28,7 @@ component SlotBox
     e: Env
   slot
   view
-    column order=num(order) position="relative" display=s.display flex-direction=s.flexDirection flex-grow=s.flexGrow flex-shrink=s.flexShrink flex-basis=s.flexBasis min-height=s.minHeight height=s.height width=s.width padding=s.padding padding-top=s.paddingTop padding-right=s.paddingRight padding-bottom=s.paddingBottom padding-left=s.paddingLeft margin=s.margin align-items=s.alignItems justify-content=s.justifyContent box-sizing=s.boxSizing
+    column order=num(order) position="relative" display=s.display flex-direction=s.flexDirection flex-grow=s.flexGrow flex-shrink=s.flexShrink flex-basis=s.flexBasis min-height=s.minHeight height=s.height width=s.width padding-top=s.paddingTop padding-right=s.paddingRight padding-bottom=s.paddingBottom padding-left=s.paddingLeft margin-top=s.marginTop margin-bottom=s.marginBottom align-items=s.alignItems justify-content=s.justifyContent box-sizing=s.boxSizing
       column position="relative" width=inner.width max-width=inner.maxWidth height=inner.height min-height=inner.minHeight flex-grow=inner.flexGrow flex-shrink=inner.flexShrink display=inner.display flex-direction=inner.flexDirection animation=(e.still ? "none" : inner.animation)
         children
 
@@ -50,7 +51,6 @@ component Shell
   slot
   state flags: string[] = []
   state pickerOpen = false
-  derive env = Env(styles=doc.styles, home=[], libraries=libraries, viewer=viewer, section=section, query="", heroIndex=0, small=viewport.width < 640, still=viewport.prefersReducedMotion, canLive=canLive, flags=flags)
   action act(name: string, arg: string)
     if name == "home"
       flags = []
@@ -84,13 +84,16 @@ component Shell
   action dismiss
     pickerOpen = false
   view
-    Root(s=styleAt(doc.styles, doc.shell.root))
-      SlotBox(order=doc.shell.slotOrder, s=styleAt(doc.styles, doc.shell.slotStyle), inner=styleAt(doc.styles, doc.shell.slotInner), e=env)
-        children
-      for n, i in doc.shell.nodes key=`${i}`
-        L1(n=n, c=rootCtx(), e=env, act=act, obs=seen)
-      if pickerOpen
-        SkinPicker(skins=skins, current=skin, small=env.small, still=env.still, choose=pick, dismiss=dismiss)
+    // One Env, bound once (Exact expands a derive at every use).
+    for env in [Env(styles=doc.styles, dflt=noStyle(), home=[], libraries=libraries, viewer=viewer, section=section, query="", heroIndex=0, small=viewport.width < 640, still=viewport.prefersReducedMotion, canLive=canLive, flags=flags)] key="env"
+      Root(s=styleAt(env, doc.shell.root))
+        SlotBox(order=doc.shell.slotOrder, s=styleAt(env, doc.shell.slotStyle), inner=styleAt(env, doc.shell.slotInner), e=env)
+          children
+        for n, i in doc.shell.nodes key=`${i}`
+          for cc, j in ctxs5(n, rootCtx(), env) key=ctxKey(cc, j)
+            V5(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=seen)
+        if pickerOpen
+          SkinPicker(skins=skins, current=skin, small=env.small, still=env.still, choose=pick, dismiss=dismiss)
 
 component Home
   props
@@ -106,7 +109,6 @@ component Home
     playHero: action
   slot
   state flags: string[] = []
-  derive env = Env(styles=doc.styles, home=[model], libraries=[], viewer=model.viewer, section="home", query=query, heroIndex=heroIndex, small=small, still=still, canLive=model.liveAvailable, flags=flags)
   action act(name: string, arg: string)
     if name == "select"
       selectTitle(part(arg, 0), part(arg, 1), part(arg, 2))
@@ -117,10 +119,12 @@ component Home
     if name == "toggle"
       flags = toggled(flags, arg)
   view
-    Root(s=styleAt(doc.styles, doc.home.root))
-      SlotBox(order=doc.home.slotOrder, s=styleAt(doc.styles, doc.home.slotStyle), inner=styleAt(doc.styles, doc.home.slotInner), e=env)
-        children
-      for n, i in doc.home.nodes key=`${i}`
-        L1(n=n, c=rootCtx(), e=env, act=act, obs=observe)
+    // One Env, bound once (Exact expands a derive at every use).
+    for env in [Env(styles=doc.styles, dflt=noStyle(), home=[model], libraries=[], viewer=model.viewer, section="home", query=query, heroIndex=heroIndex, small=small, still=still, canLive=model.liveAvailable, flags=flags)] key="env"
+      Root(s=styleAt(env, doc.home.root))
+        SlotBox(order=doc.home.slotOrder, s=styleAt(env, doc.home.slotStyle), inner=styleAt(env, doc.home.slotInner), e=env)
+          children
+        for n, i in doc.home.nodes key=`${i}`
+          for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
+            V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observe)
 
-fn emptyDoc(): SkinDoc = SkinDoc(id="", styles=[], shell=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), detailWide="fullscreen", detailSmall="fullscreen")

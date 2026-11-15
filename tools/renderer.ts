@@ -9,14 +9,16 @@
 import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-export const DEPTH = 12;
+export const DEPTH = 10;
+/** The shell's tree enters the levels at this depth: it needs 6, so its copy of the renderer is 6 levels, not 10. */
+export const SHELL_FROM = 5;
 /** Style rows: Contract field name and the row it writes. Inherited ones default to "inherit" (src/skin). */
 export const STYLE: [string, string][] = [
-  ['display', 'display'], ['position', 'position'], ['inset', 'inset'], ['top', 'top'], ['right', 'right'], ['bottom', 'bottom'], ['left', 'left'], ['zIndex', 'z-index'],
+  ['display', 'display'], ['position', 'position'], ['top', 'top'], ['right', 'right'], ['bottom', 'bottom'], ['left', 'left'], ['zIndex', 'z-index'],
   ['width', 'width'], ['height', 'height'], ['minWidth', 'min-width'], ['minHeight', 'min-height'], ['maxWidth', 'max-width'], ['maxHeight', 'max-height'], ['aspectRatio', 'aspect-ratio'], ['boxSizing', 'box-sizing'],
   ['flexGrow', 'flex-grow'], ['flexBasis', 'flex-basis'], ['flexDirection', 'flex-direction'], ['flexWrap', 'flex-wrap'], ['flexShrink', 'flex-shrink'], ['alignItems', 'align-items'], ['alignSelf', 'align-self'], ['justifyContent', 'justify-content'], ['gap', 'gap'], ['order', 'order'],
   ['gridTemplateColumns', 'grid-template-columns'], ['gridTemplateRows', 'grid-template-rows'], ['gridColumn', 'grid-column'], ['gridRow', 'grid-row'],
-  ['margin', 'margin'], ['padding', 'padding'], ['paddingTop', 'padding-top'], ['paddingRight', 'padding-right'], ['paddingBottom', 'padding-bottom'], ['paddingLeft', 'padding-left'], ['marginTop', 'margin-top'], ['marginRight', 'margin-right'], ['marginBottom', 'margin-bottom'], ['marginLeft', 'margin-left'], ['overflowX', 'overflow-x'], ['overflowY', 'overflow-y'], ['scrollSnapType', 'scroll-snap-type'], ['scrollSnapAlign', 'scroll-snap-align'], ['scrollbarWidth', 'scrollbar-width'],
+  ['paddingTop', 'padding-top'], ['paddingRight', 'padding-right'], ['paddingBottom', 'padding-bottom'], ['paddingLeft', 'padding-left'], ['marginTop', 'margin-top'], ['marginRight', 'margin-right'], ['marginBottom', 'margin-bottom'], ['marginLeft', 'margin-left'], ['overflowX', 'overflow-x'], ['overflowY', 'overflow-y'], ['scrollSnapType', 'scroll-snap-type'], ['scrollSnapAlign', 'scroll-snap-align'], ['scrollbarWidth', 'scrollbar-width'],
   ['color', 'color'], ['backgroundColor', 'background-color'], ['backgroundImage', 'background-image'], ['opacity', 'opacity'],
   ['borderWidth', 'border-width'], ['borderStyle', 'border-style'], ['borderColor', 'border-color'], ['borderRadius', 'border-radius'], ['boxShadow', 'box-shadow'], ['filter', 'filter'], ['backdropFilter', 'backdrop-filter'], ['maskImage', 'mask-image'],
   ['fontFamily', 'font-family'], ['fontSize', 'font-size'], ['fontWeight', 'font-weight'], ['fontStyle', 'font-style'], ['lineHeight', 'line-height'], ['letterSpacing', 'letter-spacing'], ['textTransform', 'text-transform'],
@@ -40,15 +42,44 @@ export const NUMERIC = new Set(['opacity', 'order', 'flexGrow', 'flexShrink', 'f
 /** Rows a node may bind to the vocabulary (`width: "{card.progressPct}%"`). */
 export const BINDABLE: [string, string][] = [['width', 'dw'], ['backgroundColor', 'dbg'], ['backgroundImage', 'dbi'], ['color', 'dc'], ['opacity', 'dop'], ['translate', 'dtr']];
 
-const rows = (indent: string) => STYLE.map(([field, row]) => {
+/** An element's rows, read off its `s: Style` prop (a prop is evaluated once at the call
+ * site; a derive or fn is expanded at every use, which made each row carry the whole style
+ * lookup), with the bound overrides (`d*` props, already filled) and the motion. */
+const CONTENT_ONLY = new Set(['lineClamp', 'objectFit']);
+const rows = () => STYLE.filter(([field]) => !CONTENT_ONLY.has(field)).map(([field, row]) => {
   const bind = BINDABLE.find(([f]) => f === field);
-  const fillOf = NUMERIC.has(field) ? `num(fill(n.${bind?.[1]}, c, e))` : `fill(n.${bind?.[1]}, c, e)`;
-  const value = bind ? `(n.${bind[1]}.length > 0 ? ${fillOf} : st.${field})` : `st.${field}`;
-  // A box that clips or scrolls takes only relative/absolute/sticky (lower-attr-value): fixed and static are not offered.
-  // Exact's checker reads a choice of literals off a prop, not off the style table: the node carries its position.
-  if (field === 'position') return 'position=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative")';
-  return field === 'animation' ? `${row}=(n.mk == "" ? st.animation : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, c.index, e))` : `${row}=${value}`;
+  // A box that clips or scrolls takes only relative/absolute/sticky (lower-attr-value); the checker reads the choice off a prop.
+  if (field === 'position') return 'position=pos';
+  if (field === 'animation') return 'animation=(anim != "" ? anim : s.animation)';
+  if (field === 'opacity') return 'opacity=(fade ? 0 : dop != "" ? num(dop) : s.opacity)';
+  return bind ? `${row}=(${bind[1]} != "" ? ${bind[1]} : s.${field})` : `${row}=s.${field}`;
 }).join(' ');
+const elementProps = `    s: Style
+    pos: string
+    anim: string
+    fade: bool
+${BINDABLE.map(([, f]) => `    ${f}: string`).join('\n')}`;
+/** The four element components every level draws through. */
+/** One element per level: a box carrying every style row. Text, images and icons are
+ * light children of that box (a few content rows), so a level emits one heavy element,
+ * not four (each emitted element costs its ~90 bound rows again). */
+function elements(): string {
+  return `// The renderer's element: every node draws through it (docs/skin-schema.md).
+component BoxEl
+  props
+${elementProps}
+    test: string
+    role: string
+    label: string
+    hovering: action
+  slot
+  view
+    box hover=hovering testId=test role=role aria-label=label ${rows()}
+      children
+`;
+}
+/** The props every element call passes: the node's style for its state, motion and bound rows. */
+const pass = () => `s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}`;
 
 function shape(d: number): string {
   const fields = ['t: string', 's: number', 'hs: number', 'fs: number', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gs: number', 'hs2: number', 'fs2: number', 'gs2: number', 'fade: bool', 'pos: number', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
@@ -60,11 +91,16 @@ function shape(d: number): string {
 }
 
 function level(d: number): string {
+  // A repeat is its item node with `rep` set: the parent steps each child into its own
+  // contexts, so repeated items are the parent's direct children (no wrapper box).
+  const child = 'Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot))';
+  // Exact substitutes a prop's expression at every use and expands fns and derives in place,
+  // so each value the renderer reuses is bound once by a one-element \`for\` (a runtime value).
   const next = d < DEPTH ? `
-                  for k, ki in n.kids key=\`\${ki}\`
-                    for cc, j in ctxs(n, c, e) key=ctxKey(cc, j)
-                      L${d + 1}(n=k, c=Ctx(cc, index=(n.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot)), e=e, act=act, obs=obs)` : '';
-  return `component L${d}
+                        for k, ki in n.kids key=\`\${ki}\`
+                          for cc, j in ctxs${d + 1}(k, cx, e) key=ctxKey(cc, j)
+                            V${d + 1}(n=k, c=${child}, e=e, act=act, obs=obs)` : '';
+  return `component V${d}
   props
     n: N${d}
     c: Ctx
@@ -74,8 +110,6 @@ function level(d: number): string {
   state over = false
   state focused = false
   state ready = false
-  // Under reduced motion the overlays drop their transforms (the resolver's *2 styles).
-  derive st = styleAt(e.styles, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : c.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)
   action hovering(v: bool)
     over = v
   action focusing
@@ -85,31 +119,36 @@ function level(d: number): string {
   action loaded
     ready = true
   view
-    if shows(n.cond, c, e)
-      if n.t == "text"
-        text fill(n.parts, c, e) role=n.role aria-level=n.level testId=fill(n.test, c, e) ${rows('')}
-      else
-        if n.t == "image"
-          image fill(n.src, c, e) alt=fill(n.label, c, e) testId=fill(n.test, c, e) load=loaded ${rows('').replace('opacity=st.opacity', 'opacity=(n.fade and not ready ? 0 : st.opacity)')}
-        else
-          if n.t == "icon"
-            image \`symbol:\${n.sym}\` aria-hidden=true ${rows('')}
-          else
+    for cx in [c] key="c"
+      for vals in [binds(cx, e)] key="v"
+        if shows(n.cond, vals, e)
+          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
             if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, c, e)
+              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
             else
               if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, c, e))
+                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
               else
-                column hover=hovering testId=fill(n.test, c, e) role=n.role aria-label=(n.act == "" ? fill(n.label, c, e) : "") ${rows('')}${next}
-                  if n.act != ""
-                    button press=act(n.act, fill(n.arg, c, e)) aria-label=fill(n.label, c, e) focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                BoxEl(${pass()}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
+                  if n.t == "text"
+                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+                  else
+                    if n.t == "image"
+                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                    else
+                      if n.t == "icon"
+                        image \`symbol:\${n.sym}\` aria-hidden=true width="100%" height="100%"
+                      else${next}
+                        if n.act != ""
+                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
 `;
 }
 
 // Contexts are zero-or-one lists (a record the renderer never has to construct, as
 // foundation records gain fields): `m(list, expr)` reads a field or yields "".
-const m = (list: string, expr: string) => `${list}.map(x => ${expr}).join("")`;
+// A `match first(...)` reads the field without building a list (a `.map(...).join` built
+// one per key per node: 1,600 record constructions in the bundle).
+const m = (list: string, expr: string) => `match first(${list}) { case some(x) => ${expr}, case none => "" }`;
 const yes = (cond: string) => `(${cond} ? "true" : "false")`;
 const vocabulary: [string, string][] = [
   ...['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rating', 'progressLabel', 'poster', 'backdrop', 'logo', 'accent', 'receipt'].flatMap(f => [[`card.${f}`, m('c.card', `x.${f}`)], [`hero.${f}`, m('c.hero', `x.${f}`)]] as [string, string][]),
@@ -130,11 +169,9 @@ const vocabulary: [string, string][] = [
 ];
 
 function core(): string {
-  // Expressions nest at most 64 deep (syntax-expression-depth): the vocabulary is split into chunks.
-  const chunks: [string, string][][] = [];
-  for (let i = 0; i < vocabulary.length; i += 24) chunks.push(vocabulary.slice(i, i + 24));
-  const chunkFns = chunks.map((chunk, i) => `fn val${i}(k: string, c: Ctx, e: Env): string = (${chunk.reduceRight((rest, [key, expr]) => `k == "${key}" ? ${expr} : ${rest}`, i + 1 < chunks.length ? `val${i + 1}(k, c, e)` : 'k.startsWith("flag:") ? (e.flags.includes(k.slice(5)) ? "true" : "false") : ""')})`).join('\n');
-  const val = 'val0(k, c, e)';
+  // Every vocabulary value of a context, once per node (a derive), in VOCAB order:
+  // inlining a resolver at each template site multiplied the bundle (4,752 copies).
+  const binds = vocabulary.map(([, expr]) => expr).join(', ');
   return `// Generated by tools/renderer.ts: do not edit. The skin document renderer (docs/skin-schema.md).
 use Card, FeedRow, HomeModel, HeroAction, LibraryNav, cardName from "../foundation/models.contract"
 
@@ -144,10 +181,12 @@ ${STYLE.map(([f]) => `  ${f}: ${NUMERIC.has(f) ? 'number' : 'string'}`).join('\n
 // One piece of a template: literal text, or a vocabulary key.
 shape Part
   l: string
-  k: string
+  k: number
+  f: string
 
 shape Cond
-  k: string
+  k: number
+  f: string
   is: string
   v: string
   not: bool
@@ -165,6 +204,7 @@ shape Ctx
 // What every node may read: the slot's models, the viewport class and the skin's flags.
 shape Env
   styles: Style[]
+  dflt: Style
   home: HomeModel[]
   libraries: LibraryNav[]
   viewer: string
@@ -188,38 +228,62 @@ shape DocSlot
   slotOrder: string
   nodes: N1[]
 
+shape ShellSlot
+  present: bool
+  root: number
+  slotStyle: number
+  slotInner: number
+  slotOrder: string
+  nodes: N${SHELL_FROM}[]
+
 // A skin document as the renderer takes it (src/skin resolves it for one viewport class).
 shape SkinDoc
   id: string
   styles: Style[]
-  shell: DocSlot
+  shell: ShellSlot
   home: DocSlot
   detailWide: string
   detailSmall: string
 
 ${Object.entries(KEYFRAMES).map(([k, v]) => `keyframes vr-${k}\n  ${v}\n`).join('\n')}
-fn noStyle(): Style = Style(${STYLE.map(([f]) => `${f}=${NUMERIC.has(f) ? ({ opacity: 1, flexShrink: 1, fontWeight: 400, scale: 1 } as Record<string, number>)[f] ?? 0 : '""'}`).join(', ')})
+fn noStyle(): Style = ${noStyleBody()}
 // The document's distinct styles, shared by index (nodes name theirs by position).
-fn styleAt(styles: Style[], i: number): Style = match styles.at(i) { case some(s) => s, case none => noStyle() }
+fn styleAt(e: Env, i: number): Style = match e.styles.at(i) { case some(s) => s, case none => e.dflt }
 fn pct(at: number, of: number): string = (of > 0 ? min(100, at / of * 100).toString() : "0")
-${chunkFns}
-fn val(k: string, c: Ctx, e: Env): string = ${val}
-fn fill(parts: Part[], c: Ctx, e: Env): string = parts.map(p => (p.k == "" ? p.l : val(p.k, c, e))).join("")
+fn binds(c: Ctx, e: Env): string[] = [${binds}]
+fn pick(vals: string[], i: number): string = match vals.at(i) { case some(v) => v, case none => "" }
+fn flagged(e: Env, f: string): string = (e.flags.includes(f) ? "true" : "false")
+fn fill(parts: Part[], vals: string[], e: Env): string = parts.map(p => (p.f != "" ? flagged(e, p.f) : p.k < 0 ? p.l : pick(vals, p.k))).join("")
 fn num(s: string): number = match parseNumber(s) { case some(x) => x, case none => 0 }
-fn holds(k: Cond, c: Ctx, e: Env): bool = (k.is == "eq" ? val(k.k, c, e) == k.v : k.is == "ne" ? val(k.k, c, e) != k.v : k.is == "gt" ? num(val(k.k, c, e)) > num(k.v) : k.is == "lt" ? num(val(k.k, c, e)) < num(k.v) : val(k.k, c, e) != "" and val(k.k, c, e) != "false" and val(k.k, c, e) != "0")
-fn shows(conds: Cond[], c: Ctx, e: Env): bool = not conds.map(k => holds(k, c, e) == k.not).includes(true)
+fn subject(k: Cond, vals: string[], e: Env): string = (k.f != "" ? flagged(e, k.f) : pick(vals, k.k))
+fn holds(k: Cond, vals: string[], e: Env): bool = (k.is == "eq" ? subject(k, vals, e) == k.v : k.is == "ne" ? subject(k, vals, e) != k.v : k.is == "gt" ? num(subject(k, vals, e)) > num(k.v) : k.is == "lt" ? num(subject(k, vals, e)) < num(k.v) : not ["", "false", "0"].includes(subject(k, vals, e)))
+fn shows(conds: Cond[], vals: string[], e: Env): bool = not conds.map(k => holds(k, vals, e) == k.not).includes(true)
 fn motion(mk: string, md: number, mdl: number, me: string, mf: string, mit: string, mdir: string, msk: string, msd: number, step: number, cap: number, i: number, e: Env): string = (e.still ? (msk == "" ? "none" : \`\${msk} \${msd}ms linear both\`) : \`\${mk} \${md}ms \${me} \${mdl + min(i, cap) * step}ms \${mit} \${mdir} \${mf}\`)
 fn heroActFor(home: HomeModel, id: string): HeroAction[] = home.heroActions.filter(a => a.heroId == id).slice(0, 1)
 fn rootCtx(): Ctx = Ctx(hot=false, card=[], row=[], hero=[], heroAct=[], dest=[], index=0)
 fn ctxKey(c: Ctx, j: number): string = \`\${j}:\${c.card.map(x => x.id).join("")}:\${c.row.map(x => x.id).join("")}:\${c.hero.map(x => x.id).join("")}:\${c.dest.map(x => x.id).join("")}\`
-${Array.from({ length: DEPTH - 1 }, (_, i) => i + 1).map(d => `fn ctxs${d}(n: N${d}, c: Ctx, e: Env): Ctx[] = ${ctxsBody(d)}`).join('\n')}
+${Array.from({ length: DEPTH }, (_, i) => i + 1).map(d => `fn ctxs${d}(n: N${d}, c: Ctx, e: Env): Ctx[] = ${ctxsBody(d)}`).join('\n')}
 `;
 }
 const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : [])`;
 
+const noStyleBody = () => `Style(${STYLE.map(([f]) => `${f}=${NUMERIC.has(f) ? ({ opacity: 1, flexShrink: 1, fontWeight: 400, scale: 1 } as Record<string, number>)[f] ?? 0 : '""'}`).join(', ')})`;
+const EMPTY_DOC = `fn emptyDoc(): SkinDoc = SkinDoc(id="", styles=[], shell=ShellSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), detailWide="fullscreen", detailSmall="fullscreen")\n`;
+
 export async function generate(out = resolve(import.meta.dir, '../client/renderer')) {
+  await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order.\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\n`);
   let levels = '';
-  for (let d = 1; d <= DEPTH; d++) levels += level(d).replace('ctxs(n, c, e)', `ctxs${d}(n, c, e)`) + '\n';
-  await writeFile(join(out, 'levels.contract'), core() + '\n' + levels);
+  for (let d = 1; d <= DEPTH; d++) levels += level(d) + '\n';
+  // Shapes (and the empty document) live apart from the renderer: the foundation imports
+  // them in every engine, while the components, functions and vr-* keyframes compile
+  // only into the doc engine (Exact embeds every keyframe name in each animated row).
+  const all = core();
+  const cut = all.indexOf('keyframes vr-');
+  const header = all.slice(0, all.indexOf('\nshape Style'));
+  const shapes = all.slice(0, cut) + `fn noStyle(): Style = ${noStyleBody()}\n` + EMPTY_DOC;
+  await writeFile(join(out, 'shapes.contract'), shapes.replace('do not edit. The skin document renderer', 'do not edit. The skin document shapes'));
+  const shapeNames = [...shapes.matchAll(/^(?:shape|fn) (\w+)/gm)].map(m => m[1]);
+  const body = all.slice(cut).replace(/^fn noStyle\(\): Style = [^\n]*\n/m, '');
+  await writeFile(join(out, 'levels.contract'), `${header}\nuse ${shapeNames.join(', ')} from "./shapes.contract"\n\n${body}\n${elements()}\n${levels}`);
 }
 if (import.meta.main) await generate();
