@@ -129,11 +129,11 @@ const lowerThird: Node = { type: 'box', when: [{ test: 'tile.channelId' }, { tes
 
 /** Honest tile states over the standby card: waiting for the viewer, tuning, or no picture. */
 const tuneIn: Node = { type: 'box', when: [{ test: 'tile.state', is: 'eq', value: 'tune-in' }], press: { action: 'tuneIn' }, label: '{s:tuneInTo}', testId: 'broadcast-tune-in',
-  style: { position: 'absolute', inset: '0px', ...col('14px'), 'align-items': 'center', 'justify-content': 'center', color: '$ink' }, focus: { 'box-shadow': 'inset 0px 0px 0px 3px $cue' }, children: [
+  style: { position: 'absolute', inset: '0px', ...col('14px'), 'align-items': 'center', 'justify-content': 'center', color: '$ink' }, small: { 'justify-content': 'flex-start', 'padding-top': '44px' }, focus: { 'box-shadow': 'inset 0px 0px 0px 3px $cue' }, children: [
     { type: 'box', style: { width: '72px', height: '72px', 'border-radius': '36px', 'background-color': '$signal', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-shadow': '0px 12px 40px rgba(255, 61, 46, 0.35)' }, small: { width: '56px', height: '56px' }, children: [
       { type: 'icon', symbol: 'play-fill', style: { width: '26px', height: '26px', color: '$ink', 'margin-left': '4px' } },
     ] },
-    { type: 'text', text: '{s:tuneInTo}', style: caps('20px'), small: { 'font-size': '16px' } },
+    { type: 'text', text: '{s:tuneInTo}', style: caps('20px'), small: { display: 'none' } },
   ] };
 const tuning: Node = { type: 'box', when: [{ test: 'tile.state', is: 'eq', value: 'connecting' }], role: 'status', label: '{s:tuning}', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', ...col('12px'), 'align-items': 'center', 'justify-content': 'center', 'pointer-events': 'none' }, children: [
   { type: 'box', style: { width: '160px', height: '3px', 'background-color': 'rgba(255, 255, 255, 0.12)', ...clip }, children: [
