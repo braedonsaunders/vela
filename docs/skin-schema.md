@@ -179,7 +179,16 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
 `env.skinCount`, `env.libraryCount`, `env.hasLiveLibrary`, `env.homeMoreLoading`,
 `env.homeHasMore`, `env.clock`; `detail.hasMediaFacts` beside the other `detail.has*`. `detail.nameLength`; `env.canRetry` with the `retry` action (a failed route asks again).
 
-## Next (renderer 5, names final)
+## Renderer 5
+
+- `detail.trailerId`, `detail.trailerReady` (press `playExtra {detail.trailerId}`), `card.genresComma`.
+- `detail: { from?: px, small, wide, split?: px }`: below `from` (default 640) the title page
+  takes `small`, from it `wide`, and home stays beside it as a pane `split` px wide (none by default).
+- A colour row may name a theme token bare (`border: 1px solid cinematic.glass-edge`), as `var(--cinematic.glass-edge)`.
+- The press layer over a pressable box is transparent in every state: a document draws its own
+  hover and pressed looks (a compiled button's hover fill is `var(--exact-quaternary-fill)`).
+
+## Next (renderer 6, names final)
 
 - Per-document `traits`: `page`, `ink`, `flatDetail`, `panSections`, `barMask`, `splashOnPaper`,
   detail frame tokens. `env.searchFocused`, `env.clock12`, `rotate-axis`.
