@@ -29,7 +29,7 @@ const capsuleFocus: Style = { 'background-color': '$ink', color: '$ground', scal
 // ---------------------------------------------------------------- shell: the top bar
 
 const tab = (label: string, press: { action: 'home' | 'library'; arg?: string }, on: Node['when'], testId: string): Node => ({
-  type: 'box', press, label, testId,
+  type: 'box', press, label, testId, a11y: { current: on },
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '10px', height: 'clamp(44px, 3.4vw, 62px)', 'box-sizing': 'border-box', padding: '0px clamp(18px, 1.5vw, 28px)', 'border-radius': '999px', color: '$ink-dim', 'font-size': 'clamp(16px, 1.25vw, 24px)', 'font-weight': '600', 'white-space': 'nowrap', 'flex-shrink': '0', transition: lift },
   focus: { 'background-color': '$ink', color: '$ground', scale: '1.08', 'box-shadow': '0px 14px 34px -10px rgba(0, 0, 0, 0.7)' },
   hover: { color: '$ink', 'background-color': 'rgba(255, 255, 255, 0.12)' },
@@ -68,7 +68,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
                 ] },
             ] },
         ] },
-        { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', display: 'flex', 'flex-shrink': '0', 'border-radius': '999px', transition: lift },
+        { type: 'box', id: 'lounge-profile', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', a11y: { expanded: [{ test: 'flag:menu' }], haspopup: 'dialog' }, style: { position: 'relative', display: 'flex', 'flex-shrink': '0', 'border-radius': '999px', transition: lift },
           focus: { scale: '1.12', 'box-shadow': '0px 0px 0px 4px rgba(255, 255, 255, 0.94), 0px 0px 40px 4px rgba(220, 185, 152, 0.4)' }, hover: { scale: '1.06' }, children: [
             { type: 'text', text: '{env.viewerInitial}', style: { display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: 'clamp(44px, 3.4vw, 62px)', height: 'clamp(44px, 3.4vw, 62px)', 'border-radius': '999px', 'font-size': 'clamp(18px, 1.35vw, 26px)', 'font-weight': '700', color: '$ground', 'background-image': 'linear-gradient(140deg, #f5f1e9 0%, #dcb998 100%)' },
               small: { width: '40px', height: '40px', 'font-size': '16px' } },
@@ -76,7 +76,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       ] },
   ] },
   // The profile sheet: large rows a remote can step through.
-  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'sheet', role: 'dialog', label: '{s:profile}',
+  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'sheet', role: 'dialog', label: '{s:profile}', escape: 'menu', returnFocus: 'lounge-profile',
     style: { position: 'absolute', top: 'calc(clamp(84px, 7vw, 132px) + 8px)', right: side, 'z-index': '30', width: 'clamp(300px, 24vw, 440px)', 'box-sizing': 'border-box', padding: 'clamp(18px, 1.4vw, 26px)', display: 'flex', 'flex-direction': 'column', gap: '10px', 'border-radius': '30px', 'background-color': 'rgba(24, 26, 32, 0.86)', 'backdrop-filter': 'blur(40px) saturate(1.5)', 'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.10), 0px 40px 90px -20px rgba(0, 0, 0, 0.9)', 'font-size': 'clamp(16px, 1.2vw, 22px)' },
     small: { top: '68px', right: '12px', left: '12px', width: 'auto' }, children: [
       { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'align-items': 'center', padding: '6px 10px 14px' }, children: [
@@ -157,7 +157,7 @@ const shelf: Node = { type: 'box', when: [{ test: 'env.searching', not: true }],
     ] } },
     // Featured titles: one large focusable dot each, the current one long and filling.
     { type: 'box', role: 'group', label: '{s:featured}', when: [{ test: 'env.heroCount', is: 'gt', value: '1' }], motion: 'copy3', style: { display: 'flex', 'flex-direction': 'row', gap: '6px', 'align-items': 'center', 'margin-top': 'clamp(14px, 1.6vw, 30px)', 'margin-left': '-8px' } as Style, children: [
-      { type: 'repeat', over: 'home.heroes', item: { type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', style: { position: 'relative', display: 'flex', 'align-items': 'center', padding: '10px 8px', 'border-radius': '999px', transition: lift },
+      { type: 'repeat', over: 'home.heroes', item: { type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', a11y: { current: [{ test: 'index.current' }] }, style: { position: 'relative', display: 'flex', 'align-items': 'center', padding: '10px 8px', 'border-radius': '999px', transition: lift },
         focus: { 'background-color': 'rgba(255, 255, 255, 0.16)', scale: '1.15' }, children: [
           { type: 'box', when: [{ test: 'index.current' }], style: { position: 'relative', width: 'clamp(36px, 2.6vw, 52px)', height: 'clamp(7px, 0.5vw, 10px)', 'border-radius': '999px', 'background-color': 'rgba(255, 255, 255, 0.28)', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
             { type: 'box', when: [{ test: 'env.rotating' }], motion: 'heroFill', style: { position: 'absolute', inset: '0px', 'background-color': '$ink' } },
@@ -294,7 +294,7 @@ const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: 
   ] };
 
 // The season picker: capsules, the selected one filled.
-const season: Node = { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', testId: 'season-{card.id}',
+const season: Node = { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', testId: 'season-{card.id}', a11y: { selected: [{ test: 'season.on' }] },
   style: { ...capsule('clamp(46px, 3.4vw, 64px)'), 'background-color': 'rgba(255, 255, 255, 0.08)', color: '$ink-dim', 'font-size': 'clamp(15px, 1.15vw, 22px)' }, focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.18)' }, children: [
     // The chosen season, or the first while none is chosen yet.
     { type: 'box', when: [{ test: 'season.on' }], style: { position: 'absolute', inset: '0px', 'border-radius': '999px', 'background-color': 'rgba(255, 255, 255, 0.2)', 'box-shadow': 'inset 0px 0px 0px 2px rgba(255, 255, 255, 0.5)' } },
@@ -351,7 +351,7 @@ const titleCopy: Node = { type: 'box', style: { display: 'flex', 'flex-direction
         { type: 'text', text: '{s:back}' },
       ] },
     ] },
-    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px' } as Style, children: [
+    { type: 'box', when: [{ test: 'detail.hasMediaFacts' }], style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px' } as Style, children: [
       { type: 'repeat', over: 'detail.mediaFacts', item: { type: 'text', text: '{fact.text}', style: { padding: '6px 12px', 'border-radius': '8px', 'font-size': 'clamp(12px, 0.85vw, 16px)', 'font-weight': '700', 'letter-spacing': '0.04em', color: '$ink-dim', 'box-shadow': 'inset 0px 0px 0px 1.5px rgba(245, 241, 233, 0.35)' } } },
     ] },
   ] };
@@ -389,7 +389,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
 const rise = (delay: number) => ({ keyframes: 'rise', duration: 760, delay, easing: ease, fill: 'both' as const, still: { keyframes: 'dissolve', duration: 220 } });
 
 const lounge: SkinDocument = {
-  schema: 1, renderer: 2, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
+  schema: 1, renderer: 4, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.0/preview.jpg', swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
   tokens: { ground: '#05060a', raised: '#1a1d24', ink: '#f5f1e9', 'ink-dim': 'rgba(245, 241, 233, 0.78)', 'ink-quiet': 'rgba(245, 241, 233, 0.52)', amber: '#f2c27e' },
   strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew' } },
