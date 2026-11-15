@@ -1,7 +1,7 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
 use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, RouteProps, noStyle from "../../renderer/shapes.contract"
-use V1, V5, BoxEl, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, stateOf, rootCtx, selectedSeason from "../../renderer/levels.contract"
+use V1, V5, BoxEl, ctxs1, ctxs5, ctxKey, binds, envBinds, heroActFor, num, styleAt, stateOf, rootCtx, selectedSeason from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use HomeProps, ShellProps from "../../foundation/slot-api.contract"
 use GuideModel, GuideChannel, LiveTile from "../../live/models.contract"
@@ -111,18 +111,19 @@ component Shell
     pickerOpen = false
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route="shell", entry="", load="ready", detail=[], season="", home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query="", heroIndex=0, small=p.viewport.width < 640, tv=p.viewport.width >= 1600, width=p.viewport.width, skinCount=p.skins.length, rowLoading=[], homeLoading=false, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags, guide=homeGuide, tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0)] key="env"
-      for rv in [binds(rootCtx(), env)] key="rv"
-        for rs in [stateOf(doc.shell.rootSts, doc.shell.rootBase, rv, env)] key="rs"
-          for ss in [stateOf(doc.shell.slotSts, doc.shell.slotBase, rv, env)] key="ss"
-            Root(s=styleAt(env, rs.s), pos=(rs.pos == 1 ? "absolute" : rs.pos == 2 ? "sticky" : "relative"), e=env)
-              SlotBox(order=doc.shell.slotOrder, pos=(ss.pos == 1 ? "absolute" : ss.pos == 2 ? "sticky" : "relative"), s=styleAt(env, ss.s), inner=styleAt(env, doc.shell.slotInner), e=env)
-                children
-              for n, i in doc.shell.nodes key=`${i}`
-                for cc, j in ctxs5(n, rootCtx(), env) key=ctxKey(cc, j)
-                  V5(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=seen)
-              if pickerOpen
-                SkinPicker(skins=p.skins, current=p.skin, small=env.small, still=env.still, choose=pick, dismiss=dismiss)
+    for env0 in [Env(styles=doc.styles, dflt=noStyle(), route="shell", entry="", load="ready", detail=[], season="", home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query="", heroIndex=0, small=p.viewport.width < 640, tv=p.viewport.width >= 1600, width=p.viewport.width, skinCount=p.skins.length, rowLoading=[], homeLoading=false, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags, guide=homeGuide, tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0, ev=[])] key="env0"
+      for env in [Env(env0, ev=envBinds(env0))] key="env"
+        for rv in [binds(rootCtx(), env)] key="rv"
+          for rs in [stateOf(doc.shell.rootSts, doc.shell.rootBase, rv, env)] key="rs"
+            for ss in [stateOf(doc.shell.slotSts, doc.shell.slotBase, rv, env)] key="ss"
+              Root(s=styleAt(env, rs.s), pos=(rs.pos == 1 ? "absolute" : rs.pos == 2 ? "sticky" : "relative"), e=env)
+                SlotBox(order=doc.shell.slotOrder, pos=(ss.pos == 1 ? "absolute" : ss.pos == 2 ? "sticky" : "relative"), s=styleAt(env, ss.s), inner=styleAt(env, doc.shell.slotInner), e=env)
+                  children
+                for n, i in doc.shell.nodes key=`${i}`
+                  for cc, j in ctxs5(n, rootCtx(), env) key=ctxKey(cc, j)
+                    V5(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=seen)
+                if pickerOpen
+                  SkinPicker(skins=p.skins, current=p.skin, small=env.small, still=env.still, choose=pick, dismiss=dismiss)
 
 component Home
   props
@@ -178,16 +179,18 @@ component Home
       flags = toggled(flags, arg)
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route="home", entry="", load="ready", detail=[], season="", home=[p.model], libraries=p.libraries, viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, tv=homeWidth >= 1600, width=homeWidth, skinCount=0, rowLoading=p.rowMoreLoading, homeLoading=p.homeMoreLoading, still=p.still, canLive=p.model.liveAvailable, flags=flags, guide=homeGuide, tile=homeTile, tuned=homeTuned, tunedId=homeTuned.map(c => c.id).join(""), zapping=homeZapping, favoriteCount=match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 })] key="env"
-      for rv in [binds(rootCtx(), env)] key="rv"
-        for rs in [stateOf(doc.home.rootSts, doc.home.rootBase, rv, env)] key="rs"
-          for ss in [stateOf(doc.home.slotSts, doc.home.slotBase, rv, env)] key="ss"
-            Root(s=styleAt(env, rs.s), pos=(rs.pos == 1 ? "absolute" : rs.pos == 2 ? "sticky" : "relative"), e=env)
-              SlotBox(order=doc.home.slotOrder, pos=(ss.pos == 1 ? "absolute" : ss.pos == 2 ? "sticky" : "relative"), s=styleAt(env, ss.s), inner=styleAt(env, doc.home.slotInner), e=env)
-                children
-              for n, i in doc.home.nodes key=`${i}`
-                for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
-                  V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observe)
+    for env0 in [Env(styles=doc.styles, dflt=noStyle(), route="home", entry="", load="ready", detail=[], season="", home=[p.model], libraries=p.libraries, viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, tv=homeWidth >= 1600, width=homeWidth, skinCount=0, rowLoading=p.rowMoreLoading, homeLoading=p.homeMoreLoading, still=p.still, canLive=p.model.liveAvailable, flags=flags, guide=homeGuide, tile=homeTile, tuned=homeTuned, tunedId=homeTuned.map(c => c.id).join(""), zapping=homeZapping, favoriteCount=match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 }, ev=[])] key="env0"
+      for env in [Env(env0, ev=envBinds(env0))] key="env"
+        for rv in [binds(rootCtx(), env)] key="rv"
+          for rs in [stateOf(doc.home.rootSts, doc.home.rootBase, rv, env)] key="rs"
+            for ss in [stateOf(doc.home.slotSts, doc.home.slotBase, rv, env)] key="ss"
+              Root(s=styleAt(env, rs.s), pos=(rs.pos == 1 ? "absolute" : rs.pos == 2 ? "sticky" : "relative"), e=env)
+                if doc.home.holds
+                  SlotBox(order=doc.home.slotOrder, pos=(ss.pos == 1 ? "absolute" : ss.pos == 2 ? "sticky" : "relative"), s=styleAt(env, ss.s), inner=styleAt(env, doc.home.slotInner), e=env)
+                    children
+                for n, i in doc.home.nodes key=`${i}`
+                  for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
+                    V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observe)
 
 // The route view: the one place the renderer draws a whole route (docs/skin-distribution.md,
 // "End state"). It draws the document's tree named after the stack entry's route, with
@@ -218,12 +221,13 @@ component Route
     if name == "toggle"
       flags = toggled(flags, arg)
   view
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=[], libraries=[], viewer="", section=p.route, query="", heroIndex=0, small=p.small, tv=p.tv, width=p.width, skinCount=0, rowLoading=[], homeLoading=false, still=p.still, canLive=false, flags=flags, guide=[], tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0)] key="env"
-      for tree in doc.routes.filter(t => t.name == p.route) key=tree.name
-        for rv in [binds(rootCtx(), env)] key="rv"
-          for rs in [stateOf(tree.rootSts, tree.rootBase, rv, env)] key="rs"
-            for ss in [stateOf(tree.slotSts, tree.slotBase, rv, env)] key="ss"
-              Root(s=styleAt(env, rs.s), pos=(rs.pos == 1 ? "absolute" : rs.pos == 2 ? "sticky" : "relative"), e=env)
-                for n, i in tree.nodes key=`${i}`
-                  for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
-                    V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observeDetail)
+    for env0 in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=[], libraries=[], viewer="", section=p.route, query="", heroIndex=0, small=p.small, tv=p.tv, width=p.width, skinCount=0, rowLoading=[], homeLoading=false, still=p.still, canLive=false, flags=flags, guide=[], tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0, ev=[])] key="env0"
+      for env in [Env(env0, ev=envBinds(env0))] key="env"
+        for tree in doc.routes.filter(t => t.name == p.route) key=tree.name
+          for rv in [binds(rootCtx(), env)] key="rv"
+            for rs in [stateOf(tree.rootSts, tree.rootBase, rv, env)] key="rs"
+              for ss in [stateOf(tree.slotSts, tree.slotBase, rv, env)] key="ss"
+                Root(s=styleAt(env, rs.s), pos=(rs.pos == 1 ? "absolute" : rs.pos == 2 ? "sticky" : "relative"), e=env)
+                  for n, i in tree.nodes key=`${i}`
+                    for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
+                      V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observeDetail)

@@ -2,7 +2,7 @@
 // inlined, viewport variants and document tokens applied, motion presets expanded,
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
-import { RENDERER_VERSION, VOCAB } from './vocabulary';
+import { FIXED_TOKENS, RENDERER_VERSION, VOCAB } from './vocabulary';
 
 const KEY = new Map(VOCAB.map((key, i) => [key, i]));
 /** A vocabulary key's index, a flag, or a refusal: documents name only known keys. */
@@ -73,7 +73,7 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
   disabled?: Condition[]; disabledStyle?: Style; a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; haspopup?: string; title?: string; role?: string };
   escape?: string; returnFocus?: string; layoutTransition?: string; sharedElement?: string; exit?: string }
 type Level = Record<string, unknown>;
-export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; nodes: Level[] }
+export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; holds: boolean; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
 export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string }
 interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
@@ -106,7 +106,9 @@ function parts(template: string | undefined, r?: Resolve, urls = false): Part[] 
 /** A style value: document tokens substituted, unsafe CSS refused. */
 /** A Tamber name inside var() as the page declares it (`var(--x-cinematic-glass)`):
  * Contract rewrites literal rows at build time, but a bound value reaches CSS as written. */
-const cssVar = (text: string) => text.replace(/var\(--([a-zA-Z][\w-]*(?:\.[\w-]+)+)\)/g, (_, name: string) => `var(--x-${name.replace(/[^A-Za-z0-9_-]/g, '-')})`);
+/** A theme token as the page has it: its value when Tamber folded it, else its custom property. */
+const themeToken = (name: string) => FIXED_TOKENS[name] ?? `var(--x-${name.replace(/[^A-Za-z0-9_-]/g, '-')})`;
+const cssVar = (text: string) => text.replace(/var\(--([a-zA-Z][\w-]*(?:\.[\w-]+)+)\)/g, (_, name: string) => themeToken(name));
 /** Four-sided shorthands become longhands: an empty bound longhand would reset what the shorthand set. */
 function sides(raw: string): [string, string, string, string] {
   const v = raw.trim().split(/\s+(?![^(]*\))/);
@@ -133,7 +135,7 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
       continue;
     }
     // A family token by name is the property the page declares for it.
-    if (name === 'font-family' && typeof raw === 'string' && /^[a-z][\w-]*(\.[\w-]+)+$/.test(raw.trim())) { merged[name] = `var(--x-${raw.trim().replace(/[^A-Za-z0-9_-]/g, '-')})`; continue; }
+    if (name === 'font-family' && typeof raw === 'string' && /^[a-z][\w-]*(\.[\w-]+)+$/.test(raw.trim())) { merged[name] = themeToken(raw.trim()); continue; }
     // A two-value gap is row-gap and column-gap (a bound gap takes one length).
     if (name === 'gap' && typeof raw === 'string' && value(raw, r).trim().split(/\s+/).length === 2) {
       const [rg, cg] = value(raw, r).trim().split(/\s+/);
@@ -163,7 +165,7 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
   // so a one-value gap is both longhands.
   if (merged.gap !== undefined) { merged['row-gap'] ??= merged.gap; merged['column-gap'] ??= merged.gap; }
   // A colour may name a theme token bare (`cinematic.glass-edge`), as font-family may.
-  for (const [row, v] of Object.entries(merged)) if (row.endsWith('color') && /^[a-z][\w-]*(\.[\w-]+)+$/.test(v.trim())) merged[row] = `var(--x-${v.trim().replace(/[^A-Za-z0-9_-]/g, '-')})`;
+  for (const [row, v] of Object.entries(merged)) if (row.endsWith('color') && /^[a-z][\w-]*(\.[\w-]+)+$/.test(v.trim())) merged[row] = themeToken(v.trim());
   // Per-side border rows follow the shorthand's width and colour unless set: an empty bound
   // longhand would reset a side to the CSS default (3px currentColor).
   for (const side of ['top', 'bottom', 'left']) {
@@ -306,17 +308,19 @@ function boxStates(node: { style?: Style; small?: Style; wide?: Style; below?: R
   return { base: level.base, sts: level.sts as unknown[] };
 }
 function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchField', from = 1): DocSlot {
-  if (!root) { const none = boxStates(undefined, r); return { present: false, rootBase: none.base, rootSts: [], slotBase: none.base, slotSts: [], slotInner: intern(style([], r), r), slotOrder: '0', nodes: [] }; }
+  if (!root) { const none = boxStates(undefined, r); return { present: false, rootBase: none.base, rootSts: [], slotBase: none.base, slotSts: [], slotInner: intern(style([], r), r), slotOrder: '0', holds: false, nodes: [] }; }
   if (root.type !== 'box') throw new Error('A slot tree starts with a box');
   const kids = root.children ?? [];
   const at = kids.findIndex(k => k.type === 'slot' && k.slot === holder);
   const holderNode = kids[at] as (Extract<Node, { type: 'slot' }> & { below?: Record<string, Style>; above?: Record<string, Style>; states?: unknown }) | undefined;
   // Every top-level node gets its flex order; the foundation's content takes the slot's.
-  const nodes = kids.flatMap((k, i) => k.type === 'slot' ? [] : [convert({ ...k, style: { ...k.style, order: String(i) } } as Node, from, r)!]);
+  // (A repeat draws no box: its item takes the order.)
+  const ordered = (k: Node, i: number): Node => k.type === 'repeat' ? { ...k, item: ordered(k.item, i) } as Node : { ...k, style: { ...k.style, order: String(i) } } as Node;
+  const nodes = kids.flatMap((k, i) => k.type === 'slot' ? [] : [convert(ordered(k, i), from, r)!]);
   // The slot box's own flex order rides in its style (the box takes every row).
   const rootStates = boxStates(root as Parameters<typeof boxStates>[0], r);
   const holderStates = boxStates(holderNode, r, { order: String(at < 0 ? kids.length : at) } as Style);
-  return { present: true, rootBase: rootStates.base, rootSts: rootStates.sts, slotBase: holderStates.base, slotSts: holderStates.sts, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), nodes };
+  return { present: true, rootBase: rootStates.base, rootSts: rootStates.sts, slotBase: holderStates.base, slotSts: holderStates.sts, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), holds: at >= 0, nodes };
 }
 
 export function skinDoc(doc: SkinDocument, width: number, origin: string, locale = 'en'): SkinDocModel {
