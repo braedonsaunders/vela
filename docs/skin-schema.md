@@ -224,7 +224,8 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
   field) is drawn at its node's position, so Tab reaches nodes in document order.
 - **Focus ring**: a press button and the search input show Exact's (the platform's) focus ring
   unless the style in force says `outline: none` (a node with a `focus`/`groupFocus` overlay
-  suppresses it, as before). Only `none` is accepted: the platform draws the ring itself.
+  suppresses it, as before; `outline: auto` in the overlay keeps the ring with it). Only `none` and
+  `auto` are accepted: the platform draws the ring itself.
 - **Control states**: a pressable box shows Exact's hover wash under its content (as a compiled
   button does), unless its style has a background image or it sets `controlStates: false`.
 - **searchInput** takes its node's padding (the input is the padded box, so the ring hugs it).

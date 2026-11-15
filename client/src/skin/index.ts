@@ -147,8 +147,10 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
     }
     // The focus ring is Exact's own (the platform's): a document may only suppress it.
     if (name === 'outline' || name === 'outline-style') {
-      if (String(raw).trim() !== 'none') throw new Error(`Only outline: none (the platform draws the focus ring): ${raw}`);
-      merged['outline-style'] = 'none';
+      // `auto` keeps the platform ring even where a focus overlay would suppress it.
+      const v = String(raw).trim();
+      if (v !== 'none' && v !== 'auto') throw new Error(`Only outline: none or auto (the platform draws the focus ring): ${raw}`);
+      merged['outline-style'] = v;
       continue;
     }
     // A border shorthand becomes its longhands: Contract binds only literal shorthands.
