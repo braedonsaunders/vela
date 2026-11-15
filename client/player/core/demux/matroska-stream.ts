@@ -73,6 +73,7 @@ export class StreamingMatroskaTrack {
  private async step(){this.scope.signal.throwIfAborted();return new Step(this.scope,await this.scope.reader.size(this.scope.signal));}
  private async cursor(at:number,step:Step):Promise<Cursor>{
   const segment=this.track.segment,limit=segment.elementEndPos??step.size;
+  if(!this.scope.metadata&&at<limit)this.scope.reader.prefetch?.(at,this.scope.signal);
   for(;at<limit;){const element=await step.element(at,limit);if(element.id===CLUSTER)return{cluster:at,data:element.data,end:element.end,at:element.data,timestamp:null,remaining:[]};if(element.unknown)throw new Error('Unknown-sized Matroska metadata');at=element.end;}
   return{cluster:limit,data:limit,end:limit,at:limit,timestamp:null,remaining:[]};
  }
