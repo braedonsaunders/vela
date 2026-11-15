@@ -85,7 +85,11 @@ export function detailModel(data: TitleDetail, origin?: string, artWidth = 2560,
   const ratings = (data.title.ratings ?? []).filter(r => Number.isFinite(r.value) && Number.isFinite(r.scale) && r.scale > 0 && r.value >= 0 && r.value <= r.scale).map(r => ({
     source: r.source === 'tomatoes' && r.kind === 'critic' ? 'rt-critics' : r.source === 'popcorn' && r.kind === 'audience' ? 'rt-audience' : r.source,
     label: labels[r.source] ? msg(labels[r.source]!) : r.source,
-    value: r.source === 'tomatoes' || r.source === 'popcorn' ? number(r.value / r.scale, { style: 'percent', maximumFractionDigits: 20 }) : number(r.value, { maximumFractionDigits: 20 }),
+    value: r.source === 'tomatoes' || r.source === 'popcorn'
+      ? number(r.value / r.scale, { style: 'percent', maximumFractionDigits: 0 })
+      : r.source === 'imdb' || r.source === 'tmdb' || r.source === 'letterboxd'
+        ? number(r.value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+        : number(r.value, { maximumFractionDigits: r.source === 'metacritic' ? 0 : 20 }),
     score: r.value / r.scale * 100, state: r.state ?? '',
   }));
   return { title: [card(data.title, '', origin, artWidth)], ratings, trailerId: trailer?.id ?? '', trailerReady: !!trailer && extraPlayback && trailer.availability !== 'unavailable', themeMusicUrl, themeMusicExpiresAt, related: [], mediaFacts: facts, resumePosition: clock(data.title.watch?.positionSeconds ?? 0), crew: (data.crew ?? []).map(c => c.role ? `${c.name} · ${c.role}` : c.name), crewPeople: (data.crew ?? []).map(person), canPlay: data.canPlay ?? false, resumeSeconds: data.title.watch?.positionSeconds ?? 0,

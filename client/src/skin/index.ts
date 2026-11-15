@@ -15,6 +15,8 @@ function key(name: string): { k: number; f: string } {
 
 /** Must match tools/renderer.ts. */
 const DEPTH = 10;
+/** Must match tools/renderer.ts WIDGET_DEPTH. */
+const WIDGET_DEPTH = 3;
 /** Must match tools/renderer.ts SHELL_FROM: the shell's nodes start at this level. */
 const SHELL_FROM = 5;
 const MAX_NODES = 4000;
@@ -61,8 +63,8 @@ function keyframesCss(doc: SkinDocument): string {
     return `@keyframes dk-${docId}-${name}{${body}}`;
   }).join('');
 }
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset']);
-const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
+const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
 type Part = { l: string; k: number; f: string };
@@ -73,7 +75,7 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
 type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; root: number; rootPos: number; slotStyle: number; slotPos: number; slotInner: number; slotOrder: string; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
-export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; detailWide: string; detailSmall: string }
+export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string }
 interface Resolve { doc: SkinDocument; small: boolean; wide: boolean; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
@@ -258,6 +260,8 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     case 'widget':
       if (node.widget === 'install') { level.t = 'install'; level.sym = node.params?.action === 'update' ? 'update' : 'install'; level.label = parts(node.params?.label, r); }
       else if (node.widget === 'observe') { level.t = 'observe'; level.arg = parts(node.params?.receipt); }
+      // The live tile's picture: the renderer draws it only in its first levels.
+      else if (node.widget === 'liveTile') { if (depth > WIDGET_DEPTH) throw new Error(`The liveTile widget must sit within ${WIDGET_DEPTH} levels of its slot`); level.t = 'liveTile'; }
       else throw new Error(`Unknown widget ${node.widget}`);
       break;
     case 'repeat': {
@@ -279,7 +283,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
 /** Image sources: a vocabulary template, an app asset, or a same-origin pack asset. */
 function asset(src: string, r: Resolve): string {
   if (/^\{[a-zA-Z.]+\}$/.test(src) || /^assets\/[a-z0-9/._-]+$/.test(src)) return src;
-  if (src.startsWith('/vela/v0/appearance/') && !/[?#\\]/.test(src)) return `${r.assets}${src}`;
+  if ((src.startsWith('/vela/v0/appearance/') || src.startsWith('/vela/skins/')) && !/[?#\\]/.test(src)) return `${r.assets}${src}`;
   throw new Error(`Image source outside the document's assets: ${src}`);
 }
 
@@ -310,10 +314,10 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
   const routes = Object.entries(doc.routes ?? {}).map(([name, tree]) => { const { present: _, ...rest } = slot(tree, r, 'children'); return { name, ...rest }; });
   // Document fonts: same-origin appearance files, registered by the vela-theme view under their family names.
   const fonts = Object.values(doc.fonts ?? {}).slice(0, 8).flatMap(f => /^[A-Za-z0-9 ]{1,48}$/.test(f?.family ?? '') ? (f.files ?? []).slice(0, 4).flatMap(file => {
-    const url = file && typeof file.url === 'string' && file.url.startsWith('/vela/v0/appearance/') && /\.(woff2|woff|ttf|otf)$/.test(file.url) && !/[?#\\]/.test(file.url) ? `${origin}${file.url}` : '';
+    const url = file && typeof file.url === 'string' && (file.url.startsWith('/vela/v0/appearance/') || file.url.startsWith('/vela/skins/')) && /\.(woff2|woff|ttf|otf)$/.test(file.url) && !/[?#\\]/.test(file.url) ? `${origin}${file.url}` : '';
     const w = String(file.weight ?? 400).trim();
     return url && /^\d{3}( \d{3})?$/.test(w) ? [{ family: f.family, url, weight: w, style: file.style === 'italic' ? 'italic' : 'normal', sizeAdjust: Number(f.sizeAdjust) || 100 }] : [];
   }) : []);
-  return { id: doc.id, fontsJson: fonts.length ? JSON.stringify(fonts) : '', keyframesCss: kfCss, styles: r.styles, shell, home, routes,
+  return { id: doc.id, fontsJson: fonts.length ? JSON.stringify(fonts) : '', keyframesCss: kfCss, styles: r.styles, shell, home, routes, liveHome: doc.live?.home === true,
     detailWide: doc.detail?.wide === 'stack' ? '' : doc.detail?.wide ?? 'fullscreen', detailSmall: doc.detail?.small === 'stack' ? '' : doc.detail?.small ?? 'fullscreen' };
 }

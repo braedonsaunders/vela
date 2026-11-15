@@ -105,7 +105,7 @@ function documentFonts(handle: ThemeHandle, json: string) {
   for (const f of JSON.parse(json) as DocFont[]) {
     let url: URL;
     try { url = new URL(f.url, location.href); } catch { continue; }
-    if (!/^[A-Za-z0-9 ]{1,48}$/.test(f.family) || !url.pathname.startsWith('/vela/v0/appearance/') || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname)) continue;
+    if (!/^[A-Za-z0-9 ]{1,48}$/.test(f.family) || !(url.pathname.startsWith('/vela/v0/appearance/') || url.pathname.startsWith('/vela/skins/')) || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname)) continue;
     const face = new FontFace(f.family, `url("${url.href.replace(/["\\]/g, '')}")`, { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, f.sizeAdjust || 100))}%` });
     document.fonts.add(face);
     void face.load().catch(() => document.fonts.delete(face));

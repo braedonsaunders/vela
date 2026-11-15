@@ -10,7 +10,7 @@ import { liveStatus, stopPlan } from './live/player';
 import { InteractionQueue } from './telemetry';
 import { PreviewCoordinator } from './discovery/preview';
 import { sessionEvents } from './protocol/events';
-import { appearanceModel, appearanceStream } from './appearance';
+import { appearanceModel, appearanceStream, builtInDocuments } from './appearance';
 import { skinDoc } from './skin';
 import { mediaPlan } from './protocol/media';
 import { randomId } from './protocol/id';
@@ -291,7 +291,7 @@ const sources: Sources = {
         try {
           try { return await api.bootstrap(); }
           catch (error) {
-            if (!(error instanceof VelaError) || error.status !== 409) throw error;
+            if (!(error instanceof VelaError) || error.status !== 409 || error.detail.code !== 'cursor_expired') throw error;
             return await api.bootstrapFresh();
           }
         } catch (error) {
@@ -411,7 +411,7 @@ const sources: Sources = {
   cancelAISearch: async (_args, store) => {
     const previous = ai;
     ai = undefined;
-    if (previous?.job && (previous.job.status === 'queued' || previous.job.status === 'running'))
+    if (previous?.job && (previous.job.status === 'queued' || previous.job.status === 'running' || previous.job.status === 'partial'))
       await (await session(store)).cancelAI(previous.job.id, { generation: previous.generation, idempotencyKey: `cancel-${previous.epoch}-${previous.generation}` });
     // A start still in flight detects that it was superseded and cancels itself.
     return { accepted: true };
@@ -455,7 +455,7 @@ const sources: Sources = {
       const previous = ai;
       const current = { epoch, generation, query } as NonNullable<typeof ai>;
       ai = current;
-      const previousJobId = previous?.job && (previous.job.status === 'running' || previous.job.status === 'queued') ? previous.job.id : undefined;
+      const previousJobId = previous?.job && (previous.job.status === 'running' || previous.job.status === 'queued' || previous.job.status === 'partial') ? previous.job.id : undefined;
       current.starting = api.startAI({ query, generation, ...(previousJobId ? { previousJobId } : {}), idempotencyKey: `ai-${epoch}-${generation}` });
       current.job = await current.starting;
       current.starting = undefined;
@@ -465,13 +465,14 @@ const sources: Sources = {
       }
     } else if (ai.starting) {
       await ai.starting;
-    } else if (ai.job && (ai.job.status === 'queued' || ai.job.status === 'running')) {
+    } else if (ai.job && (ai.job.status === 'queued' || ai.job.status === 'running' || ai.job.status === 'partial')) {
       const current = ai;
       const job = await api.aiJob(ai.job.id);
       if (ai === current) current.job = job;
     }
     if (!ai || ai.epoch !== epoch || ai.generation !== generation || !ai.job || ai.job.generation !== generation) return lane(query, generation);
     const job = ai.job;
+    if (job.results && (job.results.query !== query || job.results.generation !== generation)) return lane(query, generation);
     return withLocale(localeJSON, () => ({ ...lane(query, generation), items: (job.results?.items ?? []).map(t => card(t, '', API, artWidth)), aiStatus: job.status }));
   },
   interaction: async ([receipt, kind, at], store) => {
@@ -482,7 +483,7 @@ const sources: Sources = {
     if (kind !== 'visible' || interactions.size >= 16) await interactions.flush(key(store), at);
     return { accepted: !interactions.disabled };
   },
-  uiPlayback: async ([id, kind, epoch, entryId, positionText, manual, attempt], store) => {
+  uiPlayback: async ([id, kind, epoch, entryId, positionText, manual, attempt, preparationAttempt], store) => {
     const api = await session(store);
     await ensureNegotiated(api, store);
     if (kind !== 'title' && kind !== 'extra' && kind !== 'channel') throw new Error('Unsupported playback target');
@@ -496,7 +497,7 @@ const sources: Sources = {
       playbackDeclarations.set(declarationKey, declared);
       if (playbackDeclarations.size > 64) playbackDeclarations.delete(playbackDeclarations.keys().next().value!);
     }
-    const cacheKey = JSON.stringify([version, entryId, kind, id, positionText, manual, attempt]);
+    const cacheKey = JSON.stringify([version, entryId, kind, id, positionText, manual, attempt, preparationAttempt]);
     let read = playbackReads.get(cacheKey);
     if (!read) {
       read = (async () => {
@@ -526,11 +527,17 @@ const sources: Sources = {
   },
   uiSkinDoc: async ([url, width, localeJSON], store) => {
     const path = new URL(url).pathname;
+    // A built-in document is a static file of this release; a server document lives in the appearance tree.
+    if (path.startsWith('/vela/skins/') && path.endsWith('/document.json')) {
+      const response = await fetch(`${API}${path}`);
+      if (!response.ok) throw new Error(`Built-in skin document ${path}: ${response.status}`);
+      return skinDoc(await response.json(), width, API, String(JSON.parse(localeJSON).locale ?? 'en')) as unknown as Awaited<ReturnType<Sources['uiSkinDoc']>>;
+    }
     if (!path.startsWith('/vela/v0/appearance/skins/')) throw new Error('Skin document outside the appearance tree');
     // The model is built from the same tables tools/renderer.ts generates its shapes from.
     return skinDoc(await server(store).skinDocument(path.slice('/vela/v0'.length)), width, API, String(JSON.parse(localeJSON).locale ?? 'en')) as unknown as Awaited<ReturnType<Sources['uiSkinDoc']>>;
   },
-  uiAppearance: async (_args, store) => appearanceModel(await server(store).appearance(), API),
+  uiAppearance: async (_args, store) => appearanceModel(await server(store).appearance(), API, await builtInDocuments(API)),
   appearanceEvents: async ([_attempt, floor], store) => {
     const api = await session(store);
     return appearanceStream(API, mapper => api.streamEvents(mapper), floor);

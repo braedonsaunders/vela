@@ -38,7 +38,9 @@ export interface Condition {
 
 export type Action =
   | 'select' | 'play' | 'pickHero' | 'home' | 'search' | 'live' | 'library'
-  | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'signOut' | 'moreRow' | 'playExtra' | 'back';
+  | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
+  /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
+  | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
 
 interface NodeBase extends Breakpoints {
   /** Overrides by viewport: `small` under 640 px, `wide` from 1200 px. */
@@ -116,6 +118,8 @@ export interface SkinDocument {
   slots: Partial<Record<'shell' | 'home' | 'row' | 'card' | 'status', Node>>;
   /** A tree per route the document draws whole (the route view); a route left out uses the slots, then cinematic. */
   routes?: Partial<Record<'home' | 'title' | 'collection' | 'library' | 'live' | 'watch', Node>>;
+  /** `home: true` makes home a live surface: the guide's listings, clock and one preview tile run there (docs/skin-schema.md, "Live home"). */
+  live?: { home?: boolean };
   /** Detail route presentation per viewport class. */
   detail?: { small?: 'fullscreen' | 'modal' | 'stack'; wide?: 'fullscreen' | 'modal' | 'stack'; split?: string };
 }
