@@ -268,7 +268,9 @@ export class PlaybackEngine {
     if(!previous||!current||!original?.retainsSource||!this.originalJob||this.originalJob.signal.aborted||
       session.serverState==='ended'||session.id!==previous.id||session.mediaId!==previous.mediaId||
       session.sourceGeneration!==this.controller.source||session.seekGeneration===this.controller.seek||
-      (!source.original&&!(source.delivery==='hls'&&hasCoreHls()))||source.delivery!==current.delivery||source.id!==current.id||source.url!==current.url||source.edition!==current.edition||
+      // Converted HLS may reuse filenames with different bytes after a seek.
+      // Only an immutable original-file reader can survive a wire seek epoch.
+      !source.original||source.delivery!=='file'||source.delivery!==current.delivery||source.id!==current.id||source.url!==current.url||source.edition!==current.edition||
       source.timeline!==current.timeline||source.sourceRevision!==current.sourceRevision||source.timelineOriginSeconds!==current.timelineOriginSeconds||
       (session.subtitleTrackId??null)!==this.subtitle)return false;
     const identities=(tracks:PlaybackSession['audioTracks'])=>JSON.stringify(tracks.map(track=>[track.id,track.streamIndex]));
@@ -400,6 +402,7 @@ export class PlaybackEngine {
         if (this.subtitle&&!original.supportsSubtitles) throw new Error('Selected subtitles require a compatible fallback; original overlay is not ready');
         const info = source.originalVideo;
         await original.open({url:source.delivery==='hls'?(source.renditions?.find(r=>r.id===(this.manualQuality??source.initialRenditionId))?.url??source.url):source.url,
+          authority:{sourceGeneration:this.controller.source,seekGeneration:this.controller.seek},
           ...(source.delivery==='hls'?{hls:{originSeconds:source.timelineOriginSeconds??0}}:{}),container:'',duration:this.session?.duration ?? null,position,
           video:{...info,codec:info?.codec ?? '',width:info?.width ?? 0,height:info?.height ?? 0},
           audio:(this.session?.audioTracks ?? []).map(t => ({id:t.id,label:t.label,codec:t.codec ?? '',channels:t.channels,language:t.language,streamIndex:t.streamIndex ?? -1})),selectedAudioId:this.audio});
