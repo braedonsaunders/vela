@@ -419,6 +419,9 @@ export class JellyfinAdapter implements ServerAdapter {
             state: 'unavailable', reason: 'No scoped trailer-preview grants'
         };
     }
+    trailerPreviewStatus(id: string): Promise<V.TrailerPreviewResponse> {
+        return this.trailerPreview(id, undefined!);
+    }
     async search(r: V.SearchRequest): Promise<V.SearchResponse> {
         if (r.mode !== 'fast')
             return this.unsupported('Descriptive search');

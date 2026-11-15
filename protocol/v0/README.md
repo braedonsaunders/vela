@@ -40,6 +40,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /titles/:id/children | cursor, limit (query) | Page<Title> |
 | GET | /titles/:id/extras | — | ExtrasResponse |
 | POST | /titles/:id/trailer-preview | TrailerPreviewRequest | TrailerPreviewResponse |
+| GET | /titles/:id/trailer-preview | — | TrailerPreviewResponse |
 | POST | /titles/:id/watch | WatchRequest | Ack |
 | POST | /search | SearchRequest | SearchResponse |
 | POST | /search/ai | AISearchRequest | AISearchJob |
@@ -164,17 +165,25 @@ owner toggle from the featured source row; absent=false. Hero preview requests
 require both the capability and that hero's explicit true flag, including when
 trailer metadata or a cached grant is present. Capability alone never opts a hero
 in; do not infer the flag from another row or from trailer availability.
-Hero and focused-card previews use the
-same authenticated POST /titles/:id/trailer-preview, with a matching client device.
+Hero and focused-card previews use the same authenticated
+`POST /titles/:id/trailer-preview` to request preparation, then
+`GET /titles/:id/trailer-preview` to poll, with a matching client device.
 The host authorizes the title before checking/preparing cached trailer media.
 Ready/preparing/unavailable are200 no-store results; a missing/hidden title is404.
 Unsupported feature is403 feature_unavailable, never a fake ready grant.
 
+GET returns the same `TrailerPreviewResponse` shape for an already-requested
+preview in the authenticated viewer/device scope. It never starts preparation;
+when no preview was requested it returns404. GET has no request body or
+idempotency key. Clients POST once per preview intent, then poll with GET rather
+than issuing repeated preparation POSTs.
+
 TrailerPreviewResponse is ready with grant, preparing with retryAfterSeconds,
 or unavailable with reason. Preparing creates no session/grant and carries
 Retry-After; bounded cache preparation may continue after the UI cancels interest.
-Poll only while still interested, at the supplied delay, using a fresh idempotency
-key for each call; same-key retries replay the original result, including preparing.
+Poll with GET only while still interested, at the supplied delay. Retries of the
+initial POST retain its idempotency key and replay its original result, including
+preparing; a new preview intent uses a new key.
 A ready grant has sessionId, URL, mimeType, expiry, purpose=preview and the source/
 seek generations needed for existing POST /sessions/:id/commands kind=stop.
 Preview stop returns an ended PlaybackPlan with purpose=preview. There is no new

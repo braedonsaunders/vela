@@ -238,6 +238,7 @@ members Client
   state previewRow = ""
   state previewGeneration = 0
   state previewRetryAt = 0
+  state previewAttempts = 0
   state previewAskedGeneration = -1
   state previewDwellAt = 0
   state cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=0)
@@ -253,6 +254,7 @@ members Client
     previewRow = ""
     previewRetryAt = 0
     previewGeneration = previewGeneration + 1
+    previewAttempts = 0
     // A slide's trailer starts only after it has been on screen for three seconds.
     previewDwellAt = time.epochAtZero + performanceNow() + 3000
     cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
@@ -264,6 +266,7 @@ members Client
         previewRow = rowId
         previewRetryAt = 0
         previewGeneration = previewGeneration + 1
+        previewAttempts = 0
         previewDwellAt = time.epochAtZero + performanceNow() + 700
         cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
         send previewCancelled = uiPreviewCancel(previewGeneration)
@@ -272,6 +275,7 @@ members Client
       previewRow = ""
       previewRetryAt = 0
       previewGeneration = previewGeneration + 1
+      previewAttempts = 0
       previewDwellAt = time.epochAtZero + performanceNow() + 700
       cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
       send previewCancelled = uiPreviewCancel(previewGeneration)
@@ -281,6 +285,7 @@ members Client
       previewRow = ""
       previewRetryAt = 0
       previewGeneration = previewGeneration + 1
+      previewAttempts = 0
       previewDwellAt = time.epochAtZero + performanceNow() + 700
       cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
       send previewCancelled = uiPreviewCancel(previewGeneration)
@@ -298,8 +303,11 @@ members Client
             cardPreview = p
             previewRow = (previewTarget == "" ? "@hero" : previewRow)
             previewRetryAt = 0
-          else if p.retryAfterSeconds > 0
-            previewRetryAt = time.epochAtZero + performanceNow() + p.retryAfterSeconds * 1000
+          else if p.retryAfterSeconds > 0 and previewAttempts < 3
+            // A preparing trailer is polled (GET after the intent's one POST; re-POST on an older Ether)
+            // at the server's delay doubled per attempt, at most three times per intent.
+            previewRetryAt = time.epochAtZero + performanceNow() + p.retryAfterSeconds * 1000 * (previewAttempts == 0 ? 1 : previewAttempts == 1 ? 2 : 4)
+            previewAttempts = previewAttempts + 1
       case none
         previewRetryAt = 0
   task retryPreview when previewDesired != ""
