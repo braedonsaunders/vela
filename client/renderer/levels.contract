@@ -281,12 +281,12 @@ component V1
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs2(k, cx, e) key=ctxKey(cc, j)
                                 V2(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -395,12 +395,12 @@ component V2
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs3(k, cx, e) key=ctxKey(cc, j)
                                 V3(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -509,12 +509,12 @@ component V3
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs4(k, cx, e) key=ctxKey(cc, j)
                                 V4(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -602,12 +602,12 @@ component V4
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs5(k, cx, e) key=ctxKey(cc, j)
                                 V5(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -709,12 +709,12 @@ component V5
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs6(k, cx, e) key=ctxKey(cc, j)
                                 V6(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -816,12 +816,12 @@ component V6
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs7(k, cx, e) key=ctxKey(cc, j)
                                 V7(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=`calc(-1px - ${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})` pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"

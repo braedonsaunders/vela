@@ -87,7 +87,7 @@ const catalogue = (heading: string, over: string, when: Condition[] = []): Node 
 const loadingMore = (when: Condition[]): Node => ({ type: 'text', text: '{s:loadingMore}', role: 'status', when, style: { color: '$secondary', padding: '8px 4%' } });
 const row: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: [
   catalogue('{row.name}', 'row.items'),
-  // Pending renderer 5 (sentinel): the 1 px continuation sentinel before this line.
+  { type: 'box', when: [{ test: 'row.hasMore' }], style: { height: '1px' }, children: [{ type: 'widget', widget: 'sentinel', params: { on: 'row' } }] },
   loadingMore([{ test: 'row.hasMore' }, { test: 'row.loadingMore' }]),
 ] };
 
@@ -98,16 +98,23 @@ const home: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'c
   { type: 'box', style: { display: 'block', padding: '24px 4% 0px' }, children: [
     { type: 'text', text: '{s:viewingIndex}', role: 'heading', level: 1, ...responsive({ 'font-size': '42px', 'font-weight': '700' }, { 'font-size': '28px' }) },
   ] },
-  // Pending renderer 5 (searchInput): Index's own field (SEARCH label, bare input, Clear, 2 px rule)
-  // replaces this foundation slot.
-  { type: 'slot', slot: 'searchField', style: { display: 'flex', 'flex-direction': 'column', padding: '18px 4% 0px' } as Style, inner: { width: '100%' } },
+  // The search field: a bold label, the bare input and a plain Clear over a 2 px rule.
+  // (Its 18 px and 4% sit in the margin: searchInput must be within three levels of home.)
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '12px', margin: '18px 4% 0px', padding: '8px 0px', ...rule('2px', '$ink') }, children: [
+    { type: 'text', text: '{s:searchLabel}', style: { 'font-size': '12px', 'font-weight': '700' } },
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px', padding: '8px' }, children: [
+      { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:searchPlaceholder}', label: '{s:searchLibrary}', placeholderColor: '$placeholder' },
+        style: { flex: '1', 'min-width': '0px', color: '$ink', 'font-family': serif, 'font-size': '16px' } },
+    ] },
+    { type: 'box', when: [{ test: 'env.query' }], press: { action: 'clearSearch' }, label: '{s:clearSearch}', style: { display: 'block', 'text-align': 'center' }, hover: wash, children: [{ type: 'text', text: '{s:clear}' }] },
+  ] },
   { type: 'box', when: [{ test: 'env.searching', not: true }], style: { display: 'flex', 'flex-direction': 'column', padding: '0px 4%' }, children: [
     { type: 'repeat', over: 'home.hero', item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', padding: '16px 0px', 'margin-top': '18px' }, children: [
       { type: 'widget', widget: 'observe', params: { receipt: '{hero.receipt}' } },
       { type: 'text', text: '{s:featured}', style: { 'font-size': '11px', 'letter-spacing': '2px' } },
       { type: 'box', press: { action: 'select', arg: '{hero.kindId}' }, label: '{hero.label}', style: { display: 'block', 'text-align': 'left' }, hover: wash, children: [
         { type: 'text', text: '{hero.name}', style: { 'font-size': '26px', 'font-weight': '700' } },
-      ] },
+    ] },
       { type: 'text', text: '{hero.facts}', style: { 'font-size': '12px' } },
       { type: 'text', text: '{hero.summary}', style: { 'font-size': '14px', 'line-clamp': '2' } },
     ] } },
@@ -115,6 +122,7 @@ const home: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'c
   { type: 'box', style: { height: '24px' } },
   { type: 'box', when: [{ test: 'env.searching', not: true }], style: { display: 'flex', 'flex-direction': 'column' }, children: [
     { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'row' } },
+    { type: 'box', when: [{ test: 'env.homeHasMore' }], style: { height: '1px' }, children: [{ type: 'widget', widget: 'sentinel', params: { on: 'home' } }] },
     loadingMore([{ test: 'env.homeHasMore' }, { test: 'env.homeMoreLoading' }]),
   ] },
 ] };
@@ -170,17 +178,17 @@ const title: Node = { type: 'box', style: { width: '100%', height: '100%', displ
 ] };
 
 export default {
-  schema: 1, renderer: 5, id, name: 'Index', version, tagline: 'A quiet printed catalogue: light paper, serif type, plain lists.',
+  schema: 1, renderer: 7, id, name: 'Index', version, tagline: 'A quiet printed catalogue: light paper, serif type, plain lists.',
   preview: asset('preview.jpg'), swatches: ['#f3f0e8', '#22221e', '#813b31', '#e3dfd3', '#bcb8ae'],
   tokens: {
-    page: '#f3f0e8', ink: '#22221e', rail: '#e3dfd3', field: '#ffffff', secondary: '#55554d', line: '#bcb8ae', accent: '#813b31',
+    page: '#f3f0e8', ink: '#22221e', placeholder: 'rgba(60, 60, 67, 0.3)', rail: '#e3dfd3', field: '#ffffff', secondary: '#55554d', line: '#bcb8ae', accent: '#813b31',
     separator: '#d6d1c6', airing: '#e9e1d3',
     'video-header': '#000000dd', 'video-footer': '#000000ee', 'on-video': '#f5f1e9', 'video-line': '#ffffff24', 'video-ground': '#090b0e',
   },
   strings: { en: {
     mainNavigation: 'Main navigation', vela: 'vela', home: 'Home', search: 'Search', live: 'Live TV', choose: 'Change appearance',
     install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out',
-    viewingIndex: 'THE VIEWING INDEX', featured: 'FEATURED', loadingMore: 'Loading more…',
+    viewingIndex: 'THE VIEWING INDEX', searchLabel: 'SEARCH', searchPlaceholder: 'Title, person, or description', searchLibrary: 'Search your library', clearSearch: 'Clear search', clear: 'Clear', featured: 'FEATURED', loadingMore: 'Loading more…',
     film: 'Film', series: 'Series', episode: 'Episode', season: 'Season', collection: 'Collection', noYear: '—',
     closeTitle: 'Close title', titleDetails: 'Title details', opening: 'Opening title…', failed: 'This title couldn\'t be opened. It may no longer be available.',
     play: 'Play', resume: 'Resume watching', seasons: 'Seasons', episodes: 'Episodes', extras: 'Extras', notAvailable: '{extra.name} · Not available',

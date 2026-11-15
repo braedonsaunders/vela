@@ -99,7 +99,10 @@ export class PlaybackCore {
 
   open(url:string,positionUs=0,audioOrdinal=0):Promise<void>{return this.openSource({kind:'file',url},positionUs,audioOrdinal);}
   openHls(url:string,positionUs:number,originUs:number,audioOrdinal=0,authority?:{sourceGeneration:number;seekGeneration:number},live?:CoreLiveOptions):Promise<void>{
-    if(!Number.isSafeInteger(originUs)||originUs<0||!live&&positionUs<originUs)throw new Error('Invalid HLS source timeline');
+    // Both values enter from seconds. Compare on the same microsecond grid:
+    // rounding only the origin can put it half a microsecond after the target.
+    positionUs=Math.round(positionUs);originUs=Math.round(originUs);
+    if(!Number.isSafeInteger(positionUs)||positionUs<0||!Number.isSafeInteger(originUs)||originUs<0||!live&&positionUs<originUs)throw new Error('Invalid HLS source timeline');
     return this.openSource({kind:'hls',url,originUs,cacheIdentity:authority?`${authority.sourceGeneration}:${authority.seekGeneration}`:`local:${this.nextEpoch+1}`,live},positionUs,audioOrdinal);
   }
   private async openSource(input:{kind:'file';url:string}|{kind:'hls';url:string;originUs:number;cacheIdentity:string;live?:CoreLiveOptions},positionUs:number,audioOrdinal:number):Promise<void>{

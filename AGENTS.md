@@ -18,6 +18,8 @@ Vela is a greenfield client. Speed of high-quality code is the priority. Read
   and runs the errors-only contract build under the shared build lock; `bun tools/check.ts doc
   --agent "<op>" …` drives the profile with `exact.mjs agent web`, under reduced motion
   (ambient players stall on the agent's virtual clock); add `--motion` to drive with motion.
+  `bun tools/check.ts doc --serve --port <n>` keeps a built profile served for repeated drives
+  (`bun exact.mjs agent web --url http://127.0.0.1:<n>/ …`).
   Document skins use `doc`.
 - **Look at the result** when you change UI or playback: one `bun exact.mjs agent web
   "screenshot .exact/x.png"` drive or a short manual run. One look, not a loop. If a fix
