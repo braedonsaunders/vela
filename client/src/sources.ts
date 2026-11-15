@@ -261,7 +261,7 @@ let plexCode = '';
 let jellyQuick: { handle: string; serverId: string; secret: string; expiresAt: number } | undefined;
 let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, driftLabel: '', canCatchUp: false };
 /** The last applied skin document (raw, by path): one entry, at most a document's own limit. */
-const SKIN_DOC_KEY = 'vela.skinDoc';
+const SKIN_DOC_KEY = 'vela.skin-doc';
 const SKIN_DOC_MAX = 600 * 1024;
 function keptSkinDoc(store: { get(key: string): string | null }, path: string): unknown {
   try {
