@@ -274,3 +274,15 @@ a separate unit-boundary defect: an interpolated clock may contain fractional
 microseconds, whereas the audio output's epoch floor requires an integer.
 `startEpoch` now rounds once and rejects unsafe integers before any decoder/output
 reconfiguration. This also applies to audio switches at a running position.
+
+Final generated-media native-view look after integer target normalization passed:
+selected EAC3 audio `a1`, visible external captions `s`, speed 1.25, and paused seek
+to exactly 2 s. A real 320×180 lower HLS rendition played through `vela-core`;
+releasing its quality pin to Auto retained that same runtime and active low rung.
+The moving live source also stayed on `vela-core`: initial position 66/edge 78,
+then edge 84 and local seek to 79, wire seek generation unchanged at 1. It decoded
+190 frames with zero drops and zero worklet underruns in this short sample.
+The dedicated browser and fixture server were closed; no lab/provider requests
+were made. Build/type checks passed. This establishes the local components and
+first-edge motion, not long-run latency tightening, metadata-epoch rotation,
+PGS burn-in or cross-path continuity; those remain in the combined real-app run.
