@@ -201,3 +201,68 @@ was fetched, and presentation drops stayed0. Selecting audioa1 emitted the norma
 server tracks command rather than attempting a nonexistent local HLS track.
 Chrome and the local server were closed. Finite HLS remains a migration candidate;
 live-window, alternate-group and cross-rendition continuity gates are outstanding.
+
+## Watch-view integration
+
+The core uses the existing `vela-player` roster entry and immutable shared
+runtime descriptor, including the actual `/watch` foundation's private media
+props, transport/menu commands, snapshots and session observations. A production
+payload choice changes that implementation; no diagnostic-only route, alternate
+chrome or viewer switch is required. `snapshot.diagnostics.implementation` reports
+`vela-core` for qualification without exposing media URLs or authorization.
+
+The hidden video element is only the native fallback surface and volume store.
+Its waiting/error/transport events cannot change a WebGPU backend's state.
+Snapshots come from the core clock and presented frames. Observations pause while
+a seek/source switch is pending, and until the first presented frame, so an old
+clock cannot overwrite a newly authorized broker position or report startup as
+paused. Chrome and Close remain foundation-owned through loading and recovery.
+
+## Track, quality and live transitions
+
+Original audio selection uses actual demux track identity and publishes pending
+state. A superseded selection cannot replace a newer one. Text/ASS/PGS overlay
+selection is local; turning off server-burned image subtitles issues the canonical
+tracks command. Before original→converted delivery, a local audio or PGS choice
+is authorized by a tracks command, followed by the requested path switch. No new
+session or invented switch boundary is introduced. The returned generations,
+measured origin and position control replacement demux/decoder state.
+
+Core HLS exposes its active rung and real ladder to the same chrome. Pinning
+opens only that advertised URL; Auto releases the pin while retaining the current
+level. Conversion Auto is deliberately conservative: producing rung at startup,
+no speculative encoder probing or upswitch, one step down only after a sustained
+stall, with startup hold and cooldown. Original/lower-quality path changes remain
+server-authorized. This is interrupted, position-preserving transition coverage;
+seamless cross-source overlap has not been established.
+
+The live reader refreshes versioned playlist snapshots independently of immutable
+media caching. Every size/header/body read sees one playlist version. Sequence
+identity plus actual EXTINF durations merges overlapping windows; missing history
+is never replaced by sequence×targetDuration arithmetic. Initial mapping requires
+`X-Ether-Live-Media-Sequence` and `X-Ether-Live-Window-Start` from the same response.
+These describe session time, independent of broadcast PDT. A private synthetic
+date anchor conveys that exact mapping to the demux library only; it is neither
+claimed as broadcast time nor sent back to Ether. Missing initial proof falls
+through to the narrow browser backend rather than guessing.
+
+The same packet/decode/AudioWorklet clock serves live. At the moving edge, packet
+reads are provisional and release the serial demux lane between polls, allowing
+audio and video to progress independently. Encoded and decoded queue bounds stay
+in force; duration remains unknown until actual stream end. The live census is
+bounded, and the library demux epoch rotates over the same reader every three
+minutes to bound its retained metadata. That rotation can briefly buffer and is
+not a seamless-handoff claim. Ten seconds without a presented frame invokes
+bounded recovery. Exact source/seek generation changes still retire old readers.
+
+Live bounds, measured throughput/read-ahead and starvation feed the existing
+adaptive latency policy; its catch-up rate is applied to the physical audio
+output and core clock, without a viewer mode choice. Jump-to-live uses that same
+moving window. The installed wrapper stays production until the combined real-app
+qualification; these additions are candidate code, not a lab pass.
+
+Live metadata deliberately skips the demux library's duration query: its default
+segmented implementation asks for the segment at Infinity and waits for live EOF.
+The first local look exposed that wait; the eight-second watchdog recovered to
+native playback. That is a recovery pass, not a core live pass. Core live must
+present frames and advance its mapped edge in the follow-up local check.

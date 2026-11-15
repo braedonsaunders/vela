@@ -50,6 +50,7 @@ class TimedPresenter extends Presenter {
 /** One original file/session. This module is loaded separately from Contract and
  * the legacy media engine; workers and decoder packages remain separate assets. */
 export class UniversalRuntime {
+  readonly implementation='upstream-controller' as const;
   private nativeAudio?:HTMLAudioElement;
   private presenter: Presenter;
   private controller?: Controller;

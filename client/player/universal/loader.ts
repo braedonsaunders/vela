@@ -11,11 +11,14 @@ import type {Track} from '../model';
 import type {MediaRequestPolicy} from '../media-auth';
 export interface UniversalReadout {
   state: 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'failed';
-  video?:VideoInfo|null;bufferAheadSeconds?:number|null;throughputBps?:number|null;throughputHistory?:number[];
+  video?:VideoInfo|null;readAheadSeconds?:number|null;bufferAheadSeconds?:number|null;throughputBps?:number|null;throughputHistory?:number[];
   position: number; duration: number | null; frames: number; dropped: number; audioTrackId: string | null; metadataDiscrepancies: string[]; presentedFrames: number; decoderReady: boolean;
 }
 export interface OriginalBackend {
+  readonly implementation?: 'vela-core' | 'upstream-controller';
   readonly retainsSource?: boolean;
+  readonly live?:{startSeconds:number;edgeSeconds:number;segmentSeconds:number;ended:boolean;retries:number;retrying:boolean;delivery:'upstream-gap'|'segment-delayed'|'waiting-for-publication'|'available'};
+  setLiveTarget?(seconds:number,rate:number):void;
   readonly supportsLocalAudioSwitch?:boolean;
   readonly supportsSubtitles?: boolean;
   readonly byteReader?: ByteReader;
@@ -62,12 +65,13 @@ interface RuntimeManifest {
   version:number;assetKey:string;upstreamRevision:string;
   originalPlayback?:ClientCapabilities['originalPlayback'];
   subtitleAssets?:{assetKey:string;directory:string};originalSubtitleFormats?:unknown;
-  core?:{version:1;vodHls:boolean};
+  core?:{version:1;vodHls:boolean;liveHls?:boolean};
 }
 const manifests=new Map<string,Promise<RuntimeManifest>>();
 const resolvedManifests=new Map<string,RuntimeManifest>();
 /** Only an explicitly prepared migration payload enables this route. */
 export function hasCoreHls(){return canAttemptOriginal()&&resolvedManifests.get(capabilityIdentity())?.core?.version===1&&resolvedManifests.get(capabilityIdentity())?.core?.vodHls===true;}
+export function hasCoreLive(){return hasCoreHls()&&resolvedManifests.get(capabilityIdentity())?.core?.liveHls===true;}
 /** Identity changes invalidate the page-local capability snapshot. */
 export function capabilityIdentity(){const {base,assetKey}=assetLocation();return `${base.href}#${assetKey??''}`;}
 function runtimeManifest(signal:AbortSignal):Promise<RuntimeManifest>{

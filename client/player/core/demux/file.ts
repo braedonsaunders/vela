@@ -2,7 +2,7 @@ import { ALL_FORMATS, CustomSource, Input, InputVideoTrack, PacketReader, type I
 import { readWaveFormatAudioTrack } from '../../../../vendor/webgpu-player/src/demux/WaveFormatAudioConfiguration';
 import { velaContainerCodec, velaTrackPrivate } from '../../universal/audio/ffmpeg/track-configuration';
 import { canonicalAudioCodec } from '../../universal/audio/packages';
-import { abortable } from '../async';
+import { abortable,delay } from '../async';
 import {observeFragmentTiming} from './fragment-time';
 import type { AudioTrack, ByteReader, EncodedPacket, MediaTrack, VideoTrack } from '../types';
 
@@ -17,7 +17,7 @@ export class PacketDemux {
   readonly diagnostics:string[]=[];
 
   constructor(makeSource:(signal:()=>AbortSignal,count:(bytes:number)=>void)=>Source,
-    sourceSignal:AbortSignal,private readonly originUs=0) {
+    sourceSignal:AbortSignal,private readonly originUs=0,private readonly liveEnded?:()=>boolean) {
     this.operationSignal=AbortSignal.any([sourceSignal,this.lifetime.signal]);
     const report=(note:string)=>{if(this.diagnostics.length<16&&!this.diagnostics.includes(note))this.diagnostics.push(note);};
     const source=makeSource(()=>this.operationSignal,bytes=>{
@@ -25,7 +25,7 @@ export class PacketDemux {
       if(this.readBytes>32*1024*1024)throw new Error('Demux operation exceeded its bounded search budget');
     });
     observeFragmentTiming(source,report);
-    this.input=new Input({source,formats:ALL_FORMATS,formatOptions:{hls:{offsetTimestampsByDateTime:false}}});
+    this.input=new Input({source,formats:ALL_FORMATS,formatOptions:{hls:{offsetTimestampsByDateTime:!!liveEnded}}});
     sourceSignal.addEventListener('abort',this.abort,{once:true});
     this.detach = () => sourceSignal.removeEventListener('abort',this.abort);
     if (sourceSignal.aborted) this.dispose();
@@ -51,7 +51,7 @@ export class PacketDemux {
   async open(signal: AbortSignal): Promise<{tracks: MediaTrack[]; durationUs: number | null; container: string}> {
     return this.operation(async () => {
       const [format,videos,audios,duration] = await Promise.all([
-        this.input.getFormat(),this.input.getVideoTracks(),this.input.getAudioTracks(),this.input.getDurationFromMetadata(),
+        this.input.getFormat(),this.input.getVideoTracks(),this.input.getAudioTracks(),this.liveEnded?Promise.resolve(null):this.input.getDurationFromMetadata(),
       ]);
       const tracks: MediaTrack[] = [];
       for (const track of videos) {
@@ -93,21 +93,25 @@ export class PacketDemux {
     // Decode audio preroll too; the output stage trims PCM at the exact target.
     // getFirst preserves negative AAC priming at the start instead of skipping it.
     let packet = await this.operation(() => track instanceof InputVideoTrack
-      ? reader.getKeyAt(querySeconds) : querySeconds===0?reader.getFirst():reader.getAt(Math.max(0,querySeconds-0.1)),signal);
+      ? reader.getKeyAt(querySeconds,{skipLiveWait:!!this.liveEnded}) : querySeconds===0?reader.getFirst({skipLiveWait:!!this.liveEnded}):reader.getAt(Math.max(0,querySeconds-0.1),{skipLiveWait:!!this.liveEnded}),signal);
     if (!packet) {
       const first = await this.operation(() => track instanceof InputVideoTrack ? reader.getFirstKey() : reader.getFirst(),signal);
       // A track starting after the target needs its first packet. EOF must never
       // wrap to packet zero and silently replay the beginning of the title.
       if (first && first.timestamp * 1e6 + this.originUs >= positionUs) packet = first;
     }
-    while (packet) {
+    while (packet || this.liveEnded&&!this.liveEnded()) {
+      if(!packet){await delay(100,signal);packet=await this.operation(()=>track instanceof InputVideoTrack?reader.getKeyAt(querySeconds,{skipLiveWait:true}):reader.getAt(Math.max(0,querySeconds-0.1),{skipLiveWait:true}),signal);continue;}
       signal.throwIfAborted();
       if (packet.data.length > 16 * 1024 * 1024) throw new Error('Encoded packet exceeds decode budget');
       if (![packet.timestamp,packet.duration].every(Number.isFinite) || packet.duration < 0) throw new Error('Invalid encoded packet timing');
       yield {trackId,epoch,data:packet.data,timestampUs:Math.round(packet.timestamp*1e6)+this.originUs,durationUs:Math.round(packet.duration*1e6),
         key:packet.type === 'key',additions:packet.sideData.matroskaBlockAdditions?.map(item => ({addId:item.addId,data:item.data}))};
       const previous = packet;
-      packet = await this.operation(() => reader.getNext(previous),signal);
+      packet = await this.operation(() => reader.getNext(previous,{skipLiveWait:!!this.liveEnded}),signal);
+      while(!packet&&this.liveEnded&&!this.liveEnded()){
+        await delay(100,signal);packet=await this.operation(()=>reader.getNext(previous,{skipLiveWait:true}),signal);
+      }
     }
   }
 

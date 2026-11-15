@@ -1,7 +1,7 @@
 /** An owner preference is a bias, never a viewer-selectable playback mode. */
 export interface LivePreference {latencyProfile:'auto'|'low'|'stable';targetLatencySeconds:number}
 export interface LiveLatencySample {
-  now:number;playing:boolean;waiting:boolean;bufferAhead:number;
+  now:number;playing:boolean;waiting:boolean;bufferAhead:number;bufferGoalSeconds?:number;
   throughputBps:number|null;bitrateBps:number|null;segmentSeconds:number;
   windowSeconds:number|null;behindSeconds:number|null;
 }
@@ -25,6 +25,7 @@ export class LiveLatency {
   }
   sample(sample:LiveLatencySample):LiveLatencyDecision{
     const segment=Number.isFinite(sample.segmentSeconds)&&sample.segmentSeconds>0?clamp(sample.segmentSeconds,0.2,10):2;
+    const goal=sample.bufferGoalSeconds!==undefined&&Number.isFinite(sample.bufferGoalSeconds)?clamp(sample.bufferGoalSeconds,0.5,segment*2):segment*2;
     const profile=this.preference?.latencyProfile??'auto';
     const declared=this.preference?.targetLatencySeconds;
     const preferred=declared&&Number.isFinite(declared)&&declared>0?declared:Math.max(6,segment*2);
@@ -41,8 +42,8 @@ export class LiveLatency {
     if(starved||insufficient){
       this.steady=null;this.cooldown=sample.now+30000;
       if(sample.now-this.lastRelax>=5000){this.target=clamp(Math.max(baseline,this.target+segment*2),floor,ceiling);this.lastRelax=sample.now;}
-    }else if(sample.playing&&!sample.waiting&&sample.bufferAhead>=Math.min(segment*2,this.target*0.75)&&
-      (headroom===null?sample.bufferAhead>=segment*2:headroom>=1.5)){
+    }else if(sample.playing&&!sample.waiting&&sample.bufferAhead>=Math.min(goal,this.target*0.75)&&
+      (headroom===null?sample.bufferAhead>=goal:headroom>=1.5)){
       this.steady??=sample.now;
       const stableFor=sample.now-this.steady,threshold=profile==='low'?10000:profile==='stable'?45000:20000;
       if(sample.now>=this.cooldown&&stableFor>=threshold){
@@ -52,7 +53,7 @@ export class LiveLatency {
       }
     }else this.steady=null;
     const steady=this.steady!==null&&sample.now-this.steady>=5000;
-    const catchingUp=sample.playing&&!sample.waiting&&steady&&sample.bufferAhead>=segment*2&&
+    const catchingUp=sample.playing&&!sample.waiting&&steady&&sample.bufferAhead>=goal&&
       sample.behindSeconds!==null&&sample.behindSeconds>this.target+Math.max(1,segment);
     return{targetSeconds:this.target,playbackRate:catchingUp?1.03:1};
   }
