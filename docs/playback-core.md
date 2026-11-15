@@ -266,3 +266,11 @@ segmented implementation asks for the segment at Infinity and waits for live EOF
 The first local look exposed that wait; the eight-second watchdog recovered to
 native playback. That is a recovery pass, not a core live pass. Core live must
 present frames and advance its mapped edge in the follow-up local check.
+
+The focused live follow-up after removing that query presented through the core,
+advanced its mapped edge 80→86 s and locally sought to 81 s while preserving wire
+seek generation 1; zero drops/underruns. A quality switch in that same look exposed
+a separate unit-boundary defect: an interpolated clock may contain fractional
+microseconds, whereas the audio output's epoch floor requires an integer.
+`startEpoch` now rounds once and rejects unsafe integers before any decoder/output
+reconfiguration. This also applies to audio switches at a running position.

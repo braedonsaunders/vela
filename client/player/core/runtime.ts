@@ -136,7 +136,10 @@ export class PlaybackCore {
 
   private async startEpoch(positionUs:number,deadline=performance.now()+8000):Promise<void>{
     const source=this.source;if(!source)throw new Error('Playback source is absent');
-    if(!Number.isFinite(positionUs)||positionUs<0)throw new Error('Invalid seek target');
+    // Physical-clock interpolation may contain sub-microsecond fractions.
+    // Decoder/output epoch boundaries use integer media microseconds.
+    positionUs=Math.round(positionUs);
+    if(!Number.isSafeInteger(positionUs)||positionUs<0)throw new Error('Invalid seek target');
     this.decodedBeforeEpoch+=this.epoch?.decoder.metrics.decoded??0;
     this.epoch?.abort.abort();this.epoch?.decoder.dispose();this.epoch?.demux.dispose();
     source.audio.pause();
