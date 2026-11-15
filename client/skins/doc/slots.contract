@@ -1,7 +1,7 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
 use Style, Env, Ctx, ShellSlot, SkinDoc, RouteProps, noStyle, holderNode5 from "../../renderer/shapes.contract"
-use V1, V5, BoxEl, RootEl, KeyRootEl, ctxs1, ctxs5, ctxKey, binds, envBinds, styleAt, stateOf, rootCtx, selectedSeason from "../../renderer/levels.contract"
+use V1, V5, RootEl, KeyRootEl, kids1, kids5, binds, envBinds, styleAt, stateOf, rootCtx, selectedSeason from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use HomeProps, ShellProps from "../../foundation/slot-api.contract"
 use GuideModel, GuideChannel, LiveTile from "../../live/models.contract"
@@ -51,8 +51,8 @@ component SlotBox
     e: Env
   slot
   view
-    // The outer box takes every style row (sticky strips, z-index, glass), as a document node does.
-    BoxEl(s=s, pos=pos, anim=(e.still ? "none" : s.animation), fade=false, ahid=false, dw="", dbg="", dbi=s.backgroundImage, dc="", dop="", dtr="", test="", domId="", role="", label="", lt="", exitAnim="", vs="", vf=false, vg=false)
+    // The outer box takes every style row (sticky strips, z-index, glass), bound (its style may be the renderer's own).
+    RootEl(s=s, pos=pos, anim=(e.still ? "none" : s.animation), fade=false, ahid=false, dw="", dbg="", dbi=s.backgroundImage, dc="", dop="", dtr="", test="", domId="", role="", label="", lt="", exitAnim="")
       column position="relative" width=inner.width max-width=inner.maxWidth height=inner.height min-height=inner.minHeight flex-grow=inner.flexGrow flex-shrink=inner.flexShrink display=inner.display flex-direction=inner.flexDirection animation=(e.still ? "none" : inner.animation)
         children
 
@@ -83,8 +83,8 @@ component Shell
                     SlotBox(order=(p.bare ? "0" : doc.shell.slotOrder), pos=(not p.bare and ss.pos == 1 ? "absolute" : not p.bare and ss.pos == 2 ? "sticky" : "relative"), s=(p.bare ? bareStyle() : styleAt(env, ss.s)), inner=(p.bare ? bareStyle() : styleAt(env, doc.shell.slotInner)), e=env)
                       children
                   else
-                    for cc, j in ctxs5(n, rootCtx(), env) key=ctxKey(cc, j)
-                      V5(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, scope="shell")
+                    for kid in kids5([n], rootCtx(), env, false) key=kid.key
+                      V5(n=kid.n, c=kid.c, vals=kid.vals, sr=kid.sr, dis=kid.dis, e=env, scope="shell")
                 if docPickerOpen and not p.bare
                   SkinPicker(skins=p.skins, current=p.skin, small=env.small, still=env.still, choose=docPickSkin, dismiss=docDismissPicker)
 
@@ -132,5 +132,5 @@ component Route
                       SlotBox(order=tree.slotOrder, pos=(ss.pos == 1 ? "absolute" : ss.pos == 2 ? "sticky" : "relative"), s=styleAt(env, ss.s), inner=styleAt(env, tree.slotInner), e=env)
                         children
                     else
-                      for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
-                        V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, scope=scope)
+                      for kid in kids1([n], rootCtx(), env, false) key=kid.key
+                        V1(n=kid.n, c=kid.c, vals=kid.vals, sr=kid.sr, dis=kid.dis, e=env, scope=scope)

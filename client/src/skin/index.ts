@@ -2,7 +2,7 @@
 // inlined, viewport variants and document tokens applied, motion presets expanded,
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
-import { DEPTH, FIELD_DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
+import { BOUND_ROWS, DEPTH, FIELD_DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
 
 const KEY = new Map(VOCAB.map((key, i) => [key, i]));
 /** A vocabulary key's index, a flag, or a refusal: documents name only known keys. */
@@ -59,15 +59,16 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
 type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; holds: boolean; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
-export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string; pageColor: string; inkColor: string; splashOnPaper: string; drawsStatus: boolean; statesCss: string; escapes: { flags: string; to: string }[] }
+export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string; pageColor: string; inkColor: string; splashOnPaper: string; drawsStatus: boolean; css: string; escapes: { flags: string; to: string }[] }
 interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number>;
-  /** Hover/group-hover rules and press rules (statesCss), the next state id, and the Escape closures. */
+  /** Hover/group-hover rules and press rules (the document's css), the next state id, and the Escape closures. */
   group: Map<string, string[]>; hover: Map<string, string[]>; press: Map<string, string[]>; ids: number; escapes: { flags: string; to: string }[] }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
   const key = JSON.stringify(s);
   let at = r.index.get(key);
-  if (at === undefined) { at = r.styles.length; r.styles.push(s); r.index.set(key, at); }
+  // Its id is its rule in the document's css (baseCss), which a renderer box matches by data-st.
+  if (at === undefined) { at = r.styles.length; r.styles.push({ ...s, id: at }); r.index.set(key, at); }
   return at;
 }
 
@@ -186,6 +187,9 @@ function setsRow(node: unknown, key: string): boolean {
   return Object.entries(node).some(([k, v]) => k === key || (k !== 'children' && k !== 'item' && setsRow(v, key)));
 }
 
+/** A pressed scale is no motion: reduced motion keeps it, as Exact's press scale (only its transition goes). */
+const pressScale = (active: Style | undefined) => (active as Record<string, string> | undefined)?.scale !== undefined ? { scale: (active as Record<string, string>).scale } as Style : {};
+
 function convert(node: Node, depth: number, r: Resolve, weight = 400, root = false): Level | undefined {
   if (++r.count > MAX_NODES) throw new Error('Skin document has too many nodes');
   if (node.type === 'use') {
@@ -232,7 +236,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
     const plain = style(layers, r, undefined, weight), sIdx = intern(plain, r);
     const overlay = (o?: Style) => o ? at(o) : sIdx, calm = (o?: Style) => o ? at(still(o)) : sIdx;
     // Position is a choice the renderer binds per state (a viewport variant may move a node into flow).
-    return { cond: conds(cond), lbl: [], s: sIdx, as: s.active ? at({ ...s.hover, ...s.active }) : overlay(s.hover), as2: s.active ? at(still({ ...s.hover, ...s.active })) : calm(s.hover), pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
+    return { cond: conds(cond), lbl: [], s: sIdx, as: s.active ? at({ ...s.hover, ...s.active }) : overlay(s.hover), as2: s.active ? at({ ...still({ ...s.hover, ...s.active }), ...pressScale(s.active) }) : calm(s.hover), pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
       hs2: calm(s.hover), fs2: calm(s.focus), gs2: calm(s.groupHover), gfs2: calm(s.groupFocus) };
   };
   const overlays = { hover: node.hover, focus: node.focus, groupHover: node.groupHover, groupFocus: n.groupFocus, active: n.active };
@@ -347,10 +351,17 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
   for (const f of ['hh', 'ha', 'cs', 'esc', 'escTo']) delete level[f];
   if (depth < DEPTH) level.kids = kids.map(k => convert(k, depth + 1, r, own.fontWeight)).filter(Boolean);
   else if (kids.length) throw new Error(`Skin document nests deeper than ${DEPTH}`);
+  // A pager's edge markers are its first and last children (renderer node "edge", sym "s|inset|peek"):
+  // 1 px wide, taken out of the row's spacing by a margin of -1 px less the row's gap.
+  if (node.type === 'box' && node.pager) {
+    const gap = String(own.columnGap || own.gap || '0px');
+    const edge = (which: string) => ({ ...convert({ type: 'box' } as Node, depth + 1, r)!, t: 'edge', sym: `${which}|${level.sym}`, ivb: `calc(-1px - ${gap})` });
+    level.kids = [edge('s'), ...(level.kids as Level[]), edge('e')];
+  }
   return level;
 }
 
-// Hover, press and group hover as CSS (the renderer's statesCss, which vela-theme injects): a
+// Hover, press and group hover as CSS (the document's css, which vela-theme injects): a
 // pointer over the page runs no script. Each node state with a look gets an id (v; v2 under
 // reduced motion) that the renderer writes as data-vs; data-vg marks a group, data-vf a focus
 // look the renderer drew (it outranks a group's hover). Every rule is !important over the
@@ -363,7 +374,20 @@ const cssValue = (field: string, v: string | number) => v === '' ? 'unset' : fie
 function declarations(to: Record<string, string | number>, from: Record<string, string | number>[]): string[] {
   return CSS_ROWS.filter(([field]) => from.some(f => f[field] !== to[field])).map(([field, row]) => `${row}:${cssValue(field, to[field])}!important`);
 }
-/** The rules, those with one body sharing it: group hover, then hover (only where a pointer
+/** Each distinct style's rows a renderer box does not bind (BOUND_ROWS), as one rule its
+ * data-st matches: the root's id twice and two attributes outrank Exact's element classes (which nest
+ * under #exact-root#exact-root), as the box's inline rows did; every such row is first reset to unset (scale and rotate to their identity, position to relative), as an empty bound row was written. */
+const SHEET_ROWS = CSS_ROWS.filter(([field]) => !BOUND_ROWS.includes(field));
+function baseCss(r: Resolve): string {
+  // A box always writes scale and rotate (1, 0deg: an identity transform, not none), as its bound rows did.
+  const reset = `#exact-root#exact-root [data-st][data-st]{${SHEET_ROWS.map(([field, row]) => `${row}:${field === 'scale' ? '1' : field === 'rotate' ? '0deg' : field === 'position' ? 'relative' : 'unset'}`).join(';')}}`;
+  return reset + r.styles.map((st, i) => {
+    // A box is relative unless absolute or sticky (fixed and static are not offered).
+    const rows = SHEET_ROWS.filter(([field]) => st[field] !== '' && !(field === 'position' && st[field] !== 'absolute' && st[field] !== 'sticky') && !(field === 'flexShrink' && st[field] === 1) && !(field === 'scale' && st[field] === 1) && !(field === 'rotate' && st[field] === 0) && !(field === 'order' && st[field] === 0) && !(field === 'flexGrow' && st[field] === 0));
+    return rows.length ? `#exact-root#exact-root [data-st="${i}"][data-st]{${rows.map(([field, row]) => `${row}:${cssValue(field, st[field])}`).join(';')}}` : '';
+  }).join('');
+}
+/** The state rules, those with one body sharing it: group hover, then hover (only where a pointer
  * hovers, so a touch leaves no hover behind), then press. */
 function statesCss(r: Resolve): string {
   const rules = (m: Map<string, string[]>) => [...m].map(([body, sels]) => `:where(${sels.join(',')}){${body}}`).join('');
@@ -383,8 +407,9 @@ function cssStates(level: Level, r: Resolve) {
       const inline = [base, ...(level.hf ? [at(k('fs'))] : []), ...(level.gf ? [at(k('gfs'))] : []), ...(level.hg ? [at(k('gs'))] : [])];
       const group = level.hg ? declarations(at(k('gs')), [base]) : [];
       const over = hover ? declarations(hover, inline) : [];
-      // Exact's control wash under a pressable's content when its state draws no image of its own (no bound image).
-      if (pressable && !(level.dbi as Part[]).length && ground(hover ?? base)) over.push(`background-image:${WASH}!important`);
+      // Exact's control wash under a pressable's content when its state draws no image of its own (no bound image);
+      // an authored hover replaces it (author over platform, per state), while the pressed look below stays.
+      if (pressable && !hover && !(level.dbi as Part[]).length && ground(base)) over.push(`background-image:${WASH}!important`);
       const held = active ? declarations(active, [...inline, ...(hover ? [hover] : [])]) : [];
       const pressedLook = active ?? hover ?? base;
       if (pressable && !(level.dbi as Part[]).length && ground(pressedLook)) held.push(`background-image:${WASH_PRESSED}!important`);
@@ -472,5 +497,5 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
     pageColor: doc.traits?.page ? style([{ color: doc.traits.page } as Style], r)['color'] as string : '',
     inkColor: doc.traits?.ink ? style([{ color: doc.traits.ink } as Style], r)['color'] as string : '', drawsStatus: doc.status === true,
     // Hover and group hover only where a pointer hovers (a touch leaves no hover behind), then press.
-    statesCss: statesCss(r), escapes: [...r.escapes].reverse() };
+    css: baseCss(r) + statesCss(r), escapes: [...r.escapes].reverse() };
 }

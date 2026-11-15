@@ -25,7 +25,7 @@
     "vela-theme",
     "vela-engine"
   ],
-  "data": ["vs", "vf", "vg"],
+  "data": ["st", "vs", "vf", "vg"],
   "env": [
     "API_BASE_URL",
     "VELA_MOCK",

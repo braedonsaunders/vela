@@ -116,11 +116,11 @@ function documentFonts(handle: ThemeHandle, json: string) {
 }
 
 function apply(handle: ThemeHandle, json: string) {
-  const props = JSON.parse(json) as { pack?: string; fonts?: string; keyframes?: string; states?: string };
+  const props = JSON.parse(json) as { pack?: string; fonts?: string; keyframes?: string; css?: string };
   if (props.fonts !== undefined) { documentFonts(handle, props.fonts); return; }
-  // A skin document's hover, press and group-hover rules: CSS the data module built from its
-  // validated style values, every selector keyed by the renderer's data-vs (src/skin statesCss).
-  if (props.states !== undefined) { handle.sheet.textContent = !/[<\\]|@import/i.test(props.states) ? props.states : ''; return; }
+  // A skin document's stylesheet: CSS the data module built from its validated style values, every
+  // selector keyed by the renderer's data-st and data-vs (src/skin baseCss, statesCss).
+  if (props.css !== undefined) { handle.sheet.textContent = !/[<\\]|@import/i.test(props.css) ? props.css : ''; return; }
   // A skin document's keyframes: CSS the data module built from validated numbers and lengths.
   if (props.keyframes !== undefined) { handle.sheet.textContent = /^[@a-zA-Z0-9{}:;.%\s,()-]*$/.test(props.keyframes) ? props.keyframes : ''; return; }
   const packJson = props.pack ?? '';

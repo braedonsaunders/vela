@@ -137,7 +137,7 @@ component Client
       vela-theme pack=activePackJson width=0 height=0 aria-hidden=true
       vela-theme fonts=activeDoc.fontsJson width=0 height=0 aria-hidden=true
       vela-theme keyframes=activeDoc.keyframesCss width=0 height=0 aria-hidden=true
-      vela-theme states=activeDoc.statesCss width=0 height=0 aria-hidden=true
+      vela-theme css=activeDoc.css width=0 height=0 aria-hidden=true
       vela-engine build=buildEngine() wanted=resolveSkin(wantedSkin) chosen=pickEngine fallback=serverEngine settled=engineSettled still=still width=0 height=0 aria-hidden=true
       vela-context message=receiveOrigin secureNavigate=secureNavigate secureOrigins=secureOriginsJSON width=0 height=0 aria-hidden=true
       vela-context probe="media" message=receiveCapabilities width=0 height=0 aria-hidden=true

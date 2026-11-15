@@ -14,7 +14,7 @@ fidelity proof, cinematic as a document: `protocol/v0/fixtures/skins/cinematic.t
 | --- | --- |
 | Shapes are finite and nonrecursive (`contract-grammar.md:3020`); a component cannot use itself (`syntax-inline-depth`) | The renderer is 12 generated levels `L1..L12` over shapes `N1..N12`. A document nests at most 12 boxes deep; the resolver refuses deeper ones. |
 | A component is inlined at every call site | Each level calls the next from exactly one place: one generic container; only leaves (text, image, icon, widgets) branch. A slot draws its tree from one call site. |
-| `:hover`/`:focus` rows are literals or token names (`lower-state-literal`) | Hover, press and group hover are CSS the resolver writes (`statesCss`, injected by vela-theme) on the nodes' `data-vs`/`data-vg`/`data-vf`: a pointer over the page runs no script. Focus looks (keyboard focus, a group's focus) are the renderer's own state, since parent-from-child CSS (`:has`) is missing on the TV browsers. |
+| `:hover`/`:focus` rows are literals or token names (`lower-state-literal`) | Hover, press and group hover are CSS the resolver writes (the document's `css`, injected by vela-theme) on the nodes' `data-vs`/`data-vg`/`data-vf`: a pointer over the page runs no script. Focus looks (keyboard focus, a group's focus) are the renderer's own state, since parent-from-child CSS (`:has`) is missing on the TV browsers. |
 | An action receives every prop and inject of its component as hidden arguments, type-checked deeply on each call | Renderer components declare no actions that read their props: events go to the app's own actions (`client/skins/doc/members.contract`) with a few strings, so an event never re-checks a subtree or the page's models. |
 | Every element with `color-scheme` is a colour boundary that Exact's modes pass walks after every commit | `color-scheme` is set only on a tree's root box (the shell's or a route's); the resolver refuses it elsewhere. |
 | Computed `border`/`flex` must be longhands (`lower-css-shorthand`, `lower-attr-type`) | Write the shorthands; the resolver splits them. |
@@ -232,7 +232,9 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
   suppresses it, as before; `outline: auto` in the overlay keeps the ring with it). Only `none` and
   `auto` are accepted: the platform draws the ring itself.
 - **Control states**: a pressable box shows Exact's hover wash under its content (as a compiled
-  button does), unless its style has a background image or it sets `controlStates: false`.
+  button does), unless its style has a background image, it has its own `hover` overlay (an
+  authored hover replaces the wash, as an authored `:hover` does in Exact; the pressed look and
+  `active` still apply), or it sets `controlStates: false` (no wash and no pressed look).
 - **searchInput** takes its node's padding (the input is the padded box, so the ring hugs it).
 - **traits**: `{ barMask?: bool, panSections?: bool }`: home fades under a floating bar; home,
   libraries and Live TV pan sideways between sections (unset: the doc engine's).

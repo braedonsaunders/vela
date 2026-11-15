@@ -838,8 +838,8 @@ function apply2(handle, json) {
     documentFonts(handle, props.fonts);
     return;
   }
-  if (props.states !== undefined) {
-    handle.sheet.textContent = !/[<\\]|@import/i.test(props.states) ? props.states : "";
+  if (props.css !== undefined) {
+    handle.sheet.textContent = !/[<\\]|@import/i.test(props.css) ? props.css : "";
     return;
   }
   if (props.keyframes !== undefined) {
