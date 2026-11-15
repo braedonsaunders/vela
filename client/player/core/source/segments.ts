@@ -21,6 +21,7 @@ export class SegmentReader {
   private polling?:ReturnType<typeof setInterval>;
   readonly bandwidth=new BandwidthEstimator();
   readonly metrics={requests:0,bytes:0,cacheHits:0,milliseconds:0};
+  readonly diagnostics:string[]=[];
   constructor(url:string,private readonly fetcher:typeof fetch=(...args)=>fetch(...args),private readonly allowed?:(url:URL)=>boolean,private readonly cacheIdentity='local',live=false){
     this.root=this.scoped(url);
     if(live)this.liveWindow=new LiveWindow();
@@ -114,7 +115,7 @@ export class SegmentReader {
     }finally{this.active--;this.waiters.values().next().value?.();}
   }
   private async request(path:string,signal:AbortSignal,playlist:boolean):Promise<ObjectBytes>{
-    const at=performance.now();this.metrics.requests++;
+    const at=performance.now(),request=++this.metrics.requests;
     const response=await this.fetcher(path,{signal,credentials:'same-origin',redirect:'error',cache:'no-store'});
     try{
       if(response.status!==200){
@@ -137,6 +138,12 @@ export class SegmentReader {
       }finally{if(!complete)await reader.cancel().catch(()=>{});reader.releaseLock();}
       if(length!==null&&size!==length)throw new TypeError('Segment response was truncated');
       let bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+      if(!playlist){
+        // Fixed vocabulary only: never expose a URL, response text, media bytes
+        // or arbitrary fourcc. Retain just the last eight bounded object facts.
+        this.diagnostics.push(`hls-object:${request}:bytes=${size}:${objectShape(bytes)}`);
+        if(this.diagnostics.length>8)this.diagnostics.shift();
+      }
       if(!playlist)this.bandwidth.sample(size,performance.now()-at,Number(response.headers.get('Age')??0)>0||/hit/i.test(response.headers.get('X-Cache')??''));
       this.metrics.bytes+=size;this.metrics.milliseconds+=performance.now()-at;
       if(playlist&&this.liveWindow&&path===this.root){
@@ -152,4 +159,21 @@ export class SegmentReader {
     }catch(error){if(!response.body?.locked)await response.body?.cancel().catch(()=>{});throw error;}
   }
   dispose(){if(this.polling)clearInterval(this.polling);this.polling=undefined;this.lifetime.abort();this.cache.clear();this.pending.clear();this.cached=0;for(const wake of [...this.waiters])wake();}
+}
+
+function objectShape(bytes:Uint8Array):string{
+  if(bytes[0]===0x47&&(bytes.length<189||bytes[188]===0x47))return 'mpegts';
+  const known=new Set(['ftyp','styp','moov','moof','mdat','sidx','emsg','prft','free','skip','wide','mfra','mfro']);
+  const boxes:string[]=[],view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  for(let at=0;at<bytes.length&&boxes.length<32;){
+    if(at+8>bytes.length)return boxes.join(',')+':truncated-header';
+    let size=view.getUint32(at);const type=String.fromCharCode(...bytes.subarray(at+4,at+8));
+    if(!known.has(type))return boxes.join(',')+':other';
+    let header=8;
+    if(size===1){if(at+16>bytes.length)return boxes.join(',')+':truncated-header';size=Number(view.getBigUint64(at+8));header=16;}
+    else if(size===0)size=bytes.length-at;
+    if(!Number.isSafeInteger(size)||size<header||size>bytes.length-at)return boxes.join(',')+':invalid-size';
+    boxes.push(type);at+=size;
+  }
+  return boxes.length?boxes.join(','):'empty';
 }

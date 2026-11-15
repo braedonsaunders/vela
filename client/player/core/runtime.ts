@@ -82,7 +82,7 @@ export class PlaybackCore {
     const videoEnd=this.scheduler.bufferedEnd(position);
     const bufferedEnd=this.audio?Math.min(videoEnd,run?.audioBufferedUntilUs??position):videoEnd;
     const network=this.source?.kind==='file'?this.source.reader.bandwidth:this.source?.segments.bandwidth;
-    return {readAheadSeconds:run?Math.max(0,(run.readAheadEndUs-position)/1e6):null,diagnostics:run?.demux.diagnostics.slice()??[],bufferAheadSeconds:run?Math.max(0,(bufferedEnd-position)/1e6):null,throughputBps:network?.bps??null,throughputHistory:network?.history??[],state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
+    return {readAheadSeconds:run?Math.max(0,(run.readAheadEndUs-position)/1e6):null,diagnostics:[...(run?.demux.diagnostics??[]),...(this.source?.kind==='hls'?this.source.segments.diagnostics:[])],bufferAheadSeconds:run?Math.max(0,(bufferedEnd-position)/1e6):null,throughputBps:network?.bps??null,throughputHistory:network?.history??[],state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
       tracks:this.tracks,videoTrackId:this.video?.id??null,audioTrackId:this.audio?.id??null,
       decoded:this.decodedBeforeEpoch+(this.epoch?.decoder.metrics.decoded??0),presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
   }
