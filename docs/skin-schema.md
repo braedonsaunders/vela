@@ -25,7 +25,7 @@ fidelity proof, cinematic as a document: `protocol/v0/fixtures/skins/cinematic.t
 ## Document
 
 ```ts
-{ schema: 1, id, name, version, tagline?, preview?, swatches,
+{ schema: 1, renderer: 1, id, name, version, tagline?, preview?, swatches,
   tokens?: { name: css },                 // `$name` in any style value
   strings?: { en: { key: text }, fr: … },  // `{s:key}` in any template, by the viewer's locale
   fonts?: { name: { family, files[], sizeAdjust? } },
@@ -37,6 +37,10 @@ fidelity proof, cinematic as a document: `protocol/v0/fixtures/skins/cinematic.t
 
 Colour values may be CSS, a Tamber token name (`surface.page`, `cinematic.glass`) or
 `var(--token.name)` inside gradients and shadows, as Contract rows accept them.
+
+`renderer` is the lowest renderer version the document needs; a client draws it only when
+its `RENDERER_VERSION` is at least that (`docs/distribution.md`, "Skin document
+compatibility"), and otherwise falls back to the built-in cinematic document.
 
 ## Nodes
 
