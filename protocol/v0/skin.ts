@@ -75,7 +75,7 @@ export interface TextNode extends NodeBase { type: 'text'; text: Template }
 /** Breakpoints at the document's own widths, evaluated against the slot's width. */
 export interface Breakpoints { below?: Record<string, Style>; above?: Record<string, Style> }
 export interface ImageNode extends NodeBase { type: 'image'; src: Template; alt?: Template; /** Fade in once loaded. */ fade?: boolean }
-export interface IconNode extends NodeBase { type: 'icon'; /** A platform symbol */ symbol?: string; /** or a document SVG painted in currentColor. */ src?: string }
+export interface IconNode extends NodeBase { type: 'icon'; /** A platform symbol, */ symbol?: string; /** or the document's own glyph: SVG path data (up to 8) painted in currentColor. */ paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
 /** Repeat a template over a collection from the vocabulary (`home.rows`, `row.items`, `home.heroes`, `nav.destinations`). */
 export interface RepeatNode extends NodeBase { type: 'repeat'; over: string; limit?: number; item: Node }
 /** A template from the document's `templates`, inlined where it is used. */

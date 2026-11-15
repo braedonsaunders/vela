@@ -116,8 +116,11 @@ fn holds(k: Cond, vals: string[], e: Env): bool = (k.is == "eq" ? subject(k, val
 fn shows(conds: Cond[], vals: string[], e: Env): bool = not conds.map(k => holds(k, vals, e) == k.not).includes(true)
 // The first state whose conditions hold, else the node's own.
 fn stateOf(sts: StateRef[], base: StateRef, vals: string[], e: Env): StateRef = match first(sts.filter(x => shows(x.cond, vals, e))) { case some(x) => x, case none => base }
+fn ariaOpt(conds: Cond[], vals: string[], e: Env): option<bool> = (conds.length == 0 ? none : some(shows(conds, vals, e)))
 fn aria(conds: Cond[], vals: string[], e: Env): string = (conds.length == 0 ? "" : shows(conds, vals, e) ? "true" : "false")
 fn motion(mk: string, md: number, mdl: number, me: string, mf: string, mit: string, mdir: string, msk: string, msd: number, step: number, cap: number, i: number, e: Env): string = (e.still ? (msk == "" ? "none" : `${msk} ${msd}ms linear both`) : `${mk} ${md}ms ${me} ${mdl + min(i, cap) * step}ms ${mit} ${mdir} ${mf}`)
+// The season a title page shows: the visit's pick, else its episodes' season, else the season page itself.
+fn selectedSeason(detail: DetailModel[], picked: string): string = (picked != "" ? picked : match first(detail) { case some(d) => match first(d.episodes) { case some(x) => x.seasonId, case none => d.title.filter(t => t.kind == "season").map(t => t.id).join("") }, case none => "" })
 fn heroActFor(home: HomeModel, id: string): HeroAction[] = home.heroActions.filter(a => a.heroId == id).slice(0, 1)
 fn rootCtx(): Ctx = Ctx(hot=false, fhot=false, card=[], row=[], hero=[], heroAct=[], dest=[], extra=[], person=[], fact=[], index=0)
 fn ctxKey(c: Ctx, j: number): string = `${j}:${c.card.map(x => x.id).join("")}:${c.row.map(x => x.id).join("")}:${c.hero.map(x => x.id).join("")}:${c.dest.map(x => x.id).join("")}`
@@ -227,13 +230,18 @@ component V1
                             if n.sym != ""
                               image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=`url("${fill(n.isrc, vals, e)}")` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs2(k, cx, e) key=ctxKey(cc, j)
                                 V2(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V2
   props
@@ -292,13 +300,18 @@ component V2
                             if n.sym != ""
                               image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=`url("${fill(n.isrc, vals, e)}")` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs3(k, cx, e) key=ctxKey(cc, j)
                                 V3(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V3
   props
@@ -357,13 +370,18 @@ component V3
                             if n.sym != ""
                               image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=`url("${fill(n.isrc, vals, e)}")` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs4(k, cx, e) key=ctxKey(cc, j)
                                 V4(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V4
   props
@@ -422,13 +440,18 @@ component V4
                             if n.sym != ""
                               image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=`url("${fill(n.isrc, vals, e)}")` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs5(k, cx, e) key=ctxKey(cc, j)
                                 V5(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V5
   props
@@ -487,13 +510,18 @@ component V5
                             if n.sym != ""
                               image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=`url("${fill(n.isrc, vals, e)}")` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs6(k, cx, e) key=ctxKey(cc, j)
                                 V6(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V6
   props
@@ -552,13 +580,18 @@ component V6
                             if n.sym != ""
                               image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=`url("${fill(n.isrc, vals, e)}")` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs7(k, cx, e) key=ctxKey(cc, j)
                                 V7(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V7
   props
@@ -617,13 +650,18 @@ component V7
                             if n.sym != ""
                               image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=`url("${fill(n.isrc, vals, e)}")` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs8(k, cx, e) key=ctxKey(cc, j)
                                 V8(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V8
   props
@@ -682,13 +720,18 @@ component V8
                             if n.sym != ""
                               image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=`url("${fill(n.isrc, vals, e)}")` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs9(k, cx, e) key=ctxKey(cc, j)
                                 V9(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V9
   props
@@ -747,13 +790,18 @@ component V9
                             if n.sym != ""
                               image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=`url("${fill(n.isrc, vals, e)}")` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs10(k, cx, e) key=ctxKey(cc, j)
                                 V10(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V10
   props
@@ -812,8 +860,13 @@ component V10
                             if n.sym != ""
                               image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=`url("${fill(n.isrc, vals, e)}")` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 

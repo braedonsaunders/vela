@@ -91,7 +91,7 @@ ${elementProps}
 const pass = () => `s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}`;
 
 function shape(d: number): string {
-  const fields = ['t: string', 'base: StateRef', 'sts: StateRef[]', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gf: bool', 'fade: bool', 'pos: number', 'dis: Cond[]', 'aexp: Cond[]', 'asel: Cond[]', 'acur: Cond[]', 'aprs: Cond[]', 'ahp: string', 'atitle: Part[]', 'brole: string', 'pfocus: Part[]', 'esc: string', 'escTo: Part[]', 'lt: string', 'se: string', 'ex: string', 'exs: string', 'isrc: Part[]', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
+  const fields = ['t: string', 'base: StateRef', 'sts: StateRef[]', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gf: bool', 'fade: bool', 'pos: number', 'dis: Cond[]', 'aexp: Cond[]', 'asel: Cond[]', 'acur: Cond[]', 'aprs: Cond[]', 'ahp: string', 'atitle: Part[]', 'brole: string', 'pfocus: Part[]', 'esc: string', 'escTo: Part[]', 'lt: string', 'se: string', 'ex: string', 'exs: string', 'ivb: string', 'ipaths: string[]', 'fr: string', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
     'sym: string', 'act: string', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
     'mk: string', 'md: number', 'mdl: number', 'me: string', 'mf: string', 'mit: string', 'mdir: string', 'msk: string', 'msd: number', 'step: number', 'cap: number',
     ...BINDABLE.map(([, f]) => `${f}: Part[]`)];
@@ -166,10 +166,15 @@ function level(d: number): string {
                             if n.sym != ""
                               image \`symbol:\${n.sym}\` aria-hidden=true width="100%" height="100%"
                             else
-                              box aria-hidden=true width="100%" height="100%" background-color="currentColor" mask-image=\`url("\${fill(n.isrc, vals, e)}")\` mask-size="contain" mask-repeat="no-repeat" mask-position="center"
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=\`\${pi}\`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else${next}
                             if n.act != ""
-                              button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=aria(n.aexp, vals, e) aria-selected=aria(n.asel, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 `;
 }
 
@@ -189,7 +194,7 @@ const vocabulary: [string, string][] = [
   ...['reasonLabel', 'actionLabel', 'actionDetail', 'action', 'targetId'].map(f => [`heroAct.${f}`, m('c.heroAct', `x.${f}`)] as [string, string]),
   ['heroAct.progressPct', m('c.heroAct', '(x.progress * 100).toString()')], ['heroAct.hasProgress', m('c.heroAct', yes('x.progress > 0'))],
   ['heroAct.playable', m('c.heroAct', yes('x.action != "details" and x.targetId != ""'))],
-  ['dest.id', m('c.dest', 'x.id')], ['dest.name', m('c.dest', 'x.name')], ['dest.kind', m('c.dest', 'x.kind')], ['dest.on', m('c.dest', yes('e.section == x.id'))],
+  ['dest.id', m('c.dest', 'x.id')], ['dest.name', m('c.dest', 'x.name')], ['dest.kind', m('c.dest', 'x.kind')], ['dest.on', m('c.dest', yes('(x.kind == "live" ? e.section == "live" : e.section == x.id)'))],
   ['env.viewer', 'e.viewer'], ['env.viewerInitial', 'e.viewer.slice(0, 1).toUpperCase()'], ['env.section', 'e.section'], ['env.query', 'e.query'],
   ['env.small', yes('e.small')], ['env.tv', yes('e.tv')], ['env.still', yes('e.still')], ['env.searching', yes('e.query != ""')], ['env.canLive', yes('e.canLive')],
   ['env.heroCount', m('e.home', 'x.hero.length.toString()')], ['env.heroIndex', 'e.heroIndex.toString()'], ['env.rowCount', m('e.home', 'x.rows.length.toString()')],
@@ -339,7 +344,9 @@ ${Array.from({ length: DEPTH }, (_, i) => shape(DEPTH - i)).join('\n')}
 shape DocSlot
   present: bool
   root: number
+  rootPos: number
   slotStyle: number
+  slotPos: number
   slotInner: number
   slotOrder: string
   nodes: N1[]
@@ -347,7 +354,9 @@ shape DocSlot
 shape ShellSlot
   present: bool
   root: number
+  rootPos: number
   slotStyle: number
+  slotPos: number
   slotInner: number
   slotOrder: string
   nodes: N${SHELL_FROM}[]
@@ -368,7 +377,9 @@ shape RouteProps
 shape RouteTree
   name: string
   root: number
+  rootPos: number
   slotStyle: number
+  slotPos: number
   slotInner: number
   slotOrder: string
   nodes: N1[]
@@ -400,8 +411,11 @@ fn holds(k: Cond, vals: string[], e: Env): bool = (k.is == "eq" ? subject(k, val
 fn shows(conds: Cond[], vals: string[], e: Env): bool = not conds.map(k => holds(k, vals, e) == k.not).includes(true)
 // The first state whose conditions hold, else the node's own.
 fn stateOf(sts: StateRef[], base: StateRef, vals: string[], e: Env): StateRef = match first(sts.filter(x => shows(x.cond, vals, e))) { case some(x) => x, case none => base }
+fn ariaOpt(conds: Cond[], vals: string[], e: Env): option<bool> = (conds.length == 0 ? none : some(shows(conds, vals, e)))
 fn aria(conds: Cond[], vals: string[], e: Env): string = (conds.length == 0 ? "" : shows(conds, vals, e) ? "true" : "false")
 fn motion(mk: string, md: number, mdl: number, me: string, mf: string, mit: string, mdir: string, msk: string, msd: number, step: number, cap: number, i: number, e: Env): string = (e.still ? (msk == "" ? "none" : \`\${msk} \${msd}ms linear both\`) : \`\${mk} \${md}ms \${me} \${mdl + min(i, cap) * step}ms \${mit} \${mdir} \${mf}\`)
+// The season a title page shows: the visit's pick, else its episodes' season, else the season page itself.
+fn selectedSeason(detail: DetailModel[], picked: string): string = (picked != "" ? picked : match first(detail) { case some(d) => match first(d.episodes) { case some(x) => x.seasonId, case none => d.title.filter(t => t.kind == "season").map(t => t.id).join("") }, case none => "" })
 fn heroActFor(home: HomeModel, id: string): HeroAction[] = home.heroActions.filter(a => a.heroId == id).slice(0, 1)
 fn rootCtx(): Ctx = Ctx(hot=false, fhot=false, card=[], row=[], hero=[], heroAct=[], dest=[], extra=[], person=[], fact=[], index=0)
 fn ctxKey(c: Ctx, j: number): string = \`\${j}:\${c.card.map(x => x.id).join("")}:\${c.row.map(x => x.id).join("")}:\${c.hero.map(x => x.id).join("")}:\${c.dest.map(x => x.id).join("")}\`
@@ -413,7 +427,7 @@ const detailCtxsBody = `match first(e.detail) { case some(d) => (n.rep == "detai
 const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs${d}(n, c, e) : [])`;
 
 const noStyleBody = () => `Style(${STYLE.map(([f]) => `${f}=${NUMERIC.has(f) ? ({ opacity: 1, flexShrink: 1, fontWeight: 400, scale: 1 } as Record<string, number>)[f] ?? 0 : '""'}`).join(', ')})`;
-const EMPTY_DOC = `fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], detailWide="fullscreen", detailSmall="fullscreen")\n`;
+const EMPTY_DOC = `fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], detailWide="fullscreen", detailSmall="fullscreen")\n`;
 
 /**
  * The renderer's compatibility version: a document names the version it needs

@@ -71,7 +71,7 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
   disabled?: Condition[]; disabledStyle?: Style; a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; haspopup?: string; title?: string; role?: string };
   escape?: string; returnFocus?: string; layoutTransition?: string; sharedElement?: string; exit?: string }
 type Level = Record<string, unknown>;
-export interface DocSlot { present: boolean; root: number; slotStyle: number; slotInner: number; slotOrder: string; nodes: Level[] }
+export interface DocSlot { present: boolean; root: number; rootPos: number; slotStyle: number; slotPos: number; slotInner: number; slotOrder: string; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
 export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; detailWide: string; detailSmall: string }
 interface Resolve { doc: SkinDocument; small: boolean; wide: boolean; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
@@ -123,6 +123,12 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
     }
     // A family token by name is the property the page declares for it.
     if (name === 'font-family' && typeof raw === 'string' && /^[a-z][\w-]*(\.[\w-]+)+$/.test(raw.trim())) { merged[name] = `var(--x-${raw.trim().replace(/[^A-Za-z0-9_-]/g, '-')})`; continue; }
+    // A two-value gap is row-gap and column-gap (a bound gap takes one length).
+    if (name === 'gap' && typeof raw === 'string' && value(raw, r).trim().split(/\s+/).length === 2) {
+      const [rg, cg] = value(raw, r).trim().split(/\s+/);
+      Object.assign(merged, { 'row-gap': rg, 'column-gap': cg });
+      continue;
+    }
     // The flex shorthand becomes grow/shrink/basis: a computed flex must be longhands.
     if (name === 'flex' && typeof raw === 'string') {
       const words = raw.trim().split(/\s+/);
@@ -141,6 +147,12 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
     if (!ROW_TO_FIELD.has(row) || typeof raw !== 'string') throw new Error(`Unknown style property ${row}`);
     if (dyn && BINDABLE[row] && raw.includes('{')) { dyn[BINDABLE[row]] = parts(value(raw, r)); continue; }
     merged[row] = value(raw, r);
+  }
+  // Per-side border rows follow the shorthand's width and colour unless set: an empty bound
+  // longhand would reset a side to the CSS default (3px currentColor).
+  for (const side of ['top', 'bottom', 'left']) {
+    if (merged[`border-${side}-width`] === undefined && merged['border-width'] !== undefined) merged[`border-${side}-width`] = merged['border-width'];
+    if (merged[`border-${side}-color`] === undefined && merged['border-color'] !== undefined) merged[`border-${side}-color`] = merged['border-color'];
   }
   const out: Record<string, string | number> = {};
   for (const [field, row] of STYLE) {
@@ -214,7 +226,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   level.dis = conds(n.disabled);
   const a = n.a11y ?? {};
   Object.assign(level, { aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
-    pfocus: parts(node.type === 'box' ? node.press?.focus : undefined, r), esc: n.escape ?? '', escTo: parts(n.returnFocus, r), lt: n.layoutTransition ?? '', se: n.sharedElement ?? '', ex: '', exs: '', isrc: [] });
+    pfocus: parts(node.type === 'box' ? node.press?.focus : undefined, r), esc: n.escape ?? '', escTo: parts(n.returnFocus, r), lt: n.layoutTransition ?? '', se: n.sharedElement ?? '', ex: '', exs: '', ivb: '', ipaths: [], fr: 'nonzero' });
   if (n.exit) {
     const m = r.doc.motion?.[n.exit];
     if (!m) throw new Error(`Unknown motion ${n.exit}`);
@@ -233,9 +245,13 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     case 'icon': {
       level.t = 'icon';
       // A platform symbol, or a document SVG painted as a mask in the current colour.
-      const src = (node as { src?: string }).src;
-      if (src) level.isrc = parts(asset(src, r));
-      else if (node.symbol && /^[a-z0-9.-]{1,48}$/.test(node.symbol)) level.sym = node.symbol;
+      // A platform symbol, or the document's own glyph: SVG path data painted in the current colour.
+      const glyph = node as { paths?: string[]; viewBox?: string };
+      if (glyph.paths?.length) {
+        if (glyph.paths.length > 8 || glyph.paths.some(d => typeof d !== 'string' || d.length > 4096 || !/^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\s-]+$/.test(d))) throw new Error('Icon paths are SVG path data');
+        if (!/^-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+$/.test(glyph.viewBox ?? '0 0 24 24')) throw new Error('Icon viewBox is four numbers');
+        level.ipaths = glyph.paths; level.ivb = glyph.viewBox ?? '0 0 24 24'; level.fr = (glyph as { fillRule?: string }).fillRule === 'evenodd' ? 'evenodd' : 'nonzero';
+      } else if (node.symbol && /^[a-z0-9.-]{1,48}$/.test(node.symbol)) level.sym = node.symbol;
       else throw new Error(`Bad symbol ${node.symbol}`);
       break;
     }
@@ -268,7 +284,7 @@ function asset(src: string, r: Resolve): string {
 }
 
 function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchField', from = 1): DocSlot {
-  if (!root) return { present: false, root: intern(style([], r), r), slotStyle: intern(style([], r), r), slotInner: intern(style([], r), r), slotOrder: '0', nodes: [] };
+  if (!root) return { present: false, root: intern(style([], r), r), rootPos: 0, slotStyle: intern(style([], r), r), slotPos: 0, slotInner: intern(style([], r), r), slotOrder: '0', nodes: [] };
   if (root.type !== 'box') throw new Error('A slot tree starts with a box');
   const kids = root.children ?? [];
   const at = kids.findIndex(k => k.type === 'slot' && k.slot === holder);
@@ -277,7 +293,8 @@ function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchFi
   const nodes = kids.flatMap((k, i) => k.type === 'slot' ? [] : [convert({ ...k, style: { ...k.style, order: String(i) } } as Node, from, r)!]);
   // The slot box's own flex order rides in its style (the box takes every row).
   const outer = style([holderNode?.style, r.small ? holderNode?.small : undefined, r.wide ? holderNode?.wide : undefined, { order: String(at < 0 ? kids.length : at) } as Style], r);
-  return { present: true, root: intern(style([root.style, r.small ? root.small : undefined, r.wide ? root.wide : undefined], r), r), slotStyle: intern(outer, r), slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), nodes };
+  const rootStyle = style([root.style, r.small ? root.small : undefined, r.wide ? root.wide : undefined], r);
+  return { present: true, root: intern(rootStyle, r), rootPos: rootStyle.position === 'absolute' ? 1 : rootStyle.position === 'sticky' ? 2 : 0, slotStyle: intern(outer, r), slotPos: outer.position === 'absolute' ? 1 : outer.position === 'sticky' ? 2 : 0, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), nodes };
 }
 
 export function skinDoc(doc: SkinDocument, width: number, origin: string, locale = 'en'): SkinDocModel {
