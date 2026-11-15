@@ -1,3 +1,4 @@
+import {mountPlaybackTiming,playbackMark} from './timing';
 import { mediaCapabilities } from './media-capabilities';
 import { createInstall, type InstallHandle } from './install';
 import { createPreview, setPreview, destroyPreview, type PreviewHandle } from './preview';
@@ -9,7 +10,7 @@ import type { PlaybackPlan } from '../../protocol/v0/types';
 import { observation, sessionFromPlan } from './protocol';
 export const abi = 1;
 export const roster = { 'vela-player': { snapshot: false }, 'vela-context': { snapshot: false }, 'vela-preview': { snapshot: false }, 'vela-install': { snapshot: false }, 'vela-theme': { snapshot: false }, 'vela-engine': { snapshot: false } };
-interface ContextHandle { context: true; disposed: boolean; lastNavigation: string; probe: string; revision: number; abort: AbortController; event: (kind: number, payload: string) => void }
+interface ContextHandle { releaseTiming?:()=>void; context: true; disposed: boolean; lastNavigation: string; probe: string; revision: number; abort: AbortController; event: (kind: number, payload: string) => void }
 interface Handle {
   engine: PlaybackEngine; video: HTMLVideoElement; sessionJson: string; lastCommand: number;
   endedReport: string; reportedFailure: string; serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
@@ -24,6 +25,7 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
     const handle: ContextHandle = { context:true, disposed:false, lastNavigation:'', probe:'', revision:0, abort:new AbortController(), event };
     const props = JSON.parse(json) as Record<string, string>;
     handle.probe = props.probe ?? '';
+    if(handle.probe==='media')handle.releaseTiming=mountPlaybackTiming();
     navigateSecurely(handle,props);
     queueMicrotask(() => { void publishContext(handle); });
     return handle;
@@ -76,6 +78,7 @@ export function setProps(handle: Handle | ContextHandle | PreviewHandle | Instal
       session = sessionFromPlan(plan); handle.planRevision = plan.revision; handle.planSession = plan.sessionId;
     } else session = JSON.parse(input) as PlaybackSession;
     if (!session.id || !Array.isArray(session.sources)) throw new Error('Invalid playback session');
+    if(handle.engine.snapshot().sessionId!==session.id)playbackMark('plan:received');
     handle.sessionJson = input;
     const current = handle.engine.snapshot();
     if (props.plan && current.sessionId === session.id && current.sourceId === session.selectedSourceId && current.sourceGeneration === session.sourceGeneration && current.seekGeneration === session.seekGeneration) handle.engine.updateSession(session);
@@ -107,7 +110,7 @@ function applyCommand(handle: Handle, props: Record<string, string>) {
     if (command.id > handle.lastCommand) { handle.lastCommand = command.id; void handle.engine.command(command); }
   }
 }
-export function destroy(handle: Handle | ContextHandle | PreviewHandle | InstallHandle | ThemeHandle | EngineHandle) { if ('leaving' in handle) { destroyEngine(handle); return; } if ('theme' in handle) { destroyTheme(handle); return; } if ('install' in handle) { handle.dispose(); return; } if ('preview' in handle) { destroyPreview(handle); return; } if ('context' in handle) { handle.disposed = true; handle.abort.abort(); return; } handle.engine.dispose(); handle.video.remove(); }
+export function destroy(handle: Handle | ContextHandle | PreviewHandle | InstallHandle | ThemeHandle | EngineHandle) { if ('leaving' in handle) { destroyEngine(handle); return; } if ('theme' in handle) { destroyTheme(handle); return; } if ('install' in handle) { handle.dispose(); return; } if ('preview' in handle) { destroyPreview(handle); return; } if ('context' in handle) { handle.disposed = true; handle.abort.abort(); handle.releaseTiming?.(); return; } handle.engine.dispose(); handle.video.remove(); }
 
 /** The data realm issues the one-time code and validates the server identity;
  * the host enforces the advertised HTTPS destination and never logs the code. */

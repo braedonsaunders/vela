@@ -1,3 +1,65 @@
+// client/player/timing.ts
+var key = Symbol.for("vela.playback.timing");
+var state = Reflect.get(globalThis, key) ?? { points: [], attempt: 0, mounted: 0, source: 0, firstSource: -1 };
+Reflect.set(globalThis, key, state);
+function playbackMark(stage, detail) {
+  if (stage === "play")
+    state.attempt++;
+  if (stage === "source:open")
+    state.source++;
+  if (stage === "first-frame") {
+    if (state.firstSource === state.source)
+      return;
+    state.firstSource = state.source;
+  }
+  state.points.push({ attempt: state.attempt, source: state.source, stage, at: performance.now(), ...detail ? { detail } : {} });
+  if (state.points.length > 200)
+    state.points.shift();
+}
+function playbackTimings() {
+  return state.points.map((point) => ({ ...point }));
+}
+var playIntent = (event) => {
+  const target = event.composedPath().find((node) => node instanceof HTMLElement && node.hasAttribute("data-testid"));
+  const id = target?.getAttribute("data-testid") ?? "";
+  if (!id.startsWith("player-") && /(^|[-_])(play|watch)([-_]|$)/.test(id))
+    playbackMark("play");
+};
+function mountPlaybackTiming() {
+  if (state.mounted++ === 0) {
+    document.addEventListener("click", playIntent, true);
+    Object.defineProperty(window, "velaPlaybackTimings", { configurable: true, value: playbackTimings });
+  }
+  let removed = false;
+  return () => {
+    if (removed)
+      return;
+    removed = true;
+    if (--state.mounted === 0)
+      document.removeEventListener("click", playIntent, true);
+  };
+}
+
+// client/player/core/async.ts
+function abortable(value, signal) {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      cleanup();
+      reject(signal.reason);
+    };
+    const cleanup = () => signal.removeEventListener("abort", abort);
+    signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve(value).then((result) => {
+      cleanup();
+      resolve(result);
+    }, (error) => {
+      cleanup();
+      reject(error);
+    });
+  });
+}
+
 // client/player/universal/qualified.ts
 var QUALIFIED_ORIGINAL_VIDEO = ["h264", "hevc"];
 var QUALIFIED_ORIGINAL_AUDIO = ["aac", "ac3", "eac3", "truehd", "dts", "flac", "opus", "vorbis", "mp3", "alac", "mp2", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le", "pcm_f64le"];
@@ -26,19 +88,50 @@ async function loadOriginalRuntime(options) {
   const { module, assets } = await loadRuntimeModule(options.signal);
   return new module.UniversalRuntime({ ...options, assets });
 }
-async function loadRuntimeModule(signal) {
+var manifests = new Map;
+function capabilityIdentity() {
   const { base, assetKey } = assetLocation();
-  const response = await fetch(new URL("assets.json", base), { signal: AbortSignal.any([signal, AbortSignal.timeout(1e4)]), credentials: "same-origin" });
-  if (!response.ok)
-    throw new Error(`Original runtime assets HTTP ${response.status}`);
-  const manifest = await response.json();
-  if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
-    throw new Error("Original runtime asset identity mismatch");
+  return `${base.href}#${assetKey ?? ""}`;
+}
+function runtimeManifest(signal) {
+  const { base, assetKey } = assetLocation(), key = capabilityIdentity();
+  let pending = manifests.get(key);
+  if (!pending) {
+    playbackMark("assets:start");
+    const load = (async () => {
+      const response = await fetch(new URL("assets.json", base), { signal: AbortSignal.timeout(1e4), credentials: "same-origin" });
+      if (!response.ok)
+        throw new Error(`Original runtime assets HTTP ${response.status}`);
+      const manifest = await response.json();
+      if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
+        throw new Error("Original runtime asset identity mismatch");
+      if (manifest.subtitleAssets && (!/^[a-f0-9]{16}$/.test(manifest.subtitleAssets.assetKey) || manifest.subtitleAssets.directory !== "libraries/subtitles/"))
+        throw new Error("Invalid subtitle asset identity");
+      playbackMark("assets:ready");
+      return Object.freeze(manifest);
+    })();
+    pending = load.catch((error) => {
+      if (manifests.get(key) === pending)
+        manifests.delete(key);
+      throw error;
+    });
+    manifests.set(key, pending);
+    pending.catch(() => {});
+    if (manifests.size > 2)
+      manifests.delete(manifests.keys().next().value);
+  }
+  return abortable(pending, signal);
+}
+async function loadRuntimeModule(signal) {
+  const { base } = assetLocation();
+  const manifest = await runtimeManifest(signal);
   signal.throwIfAborted();
+  playbackMark("runtime:start");
   const moduleURL = new URL("runtime.js", base);
   moduleURL.searchParams.set("v", manifest.assetKey);
   const module = await import(moduleURL.href);
   signal.throwIfAborted();
+  playbackMark("runtime:ready");
   const subtitles = manifest.subtitleAssets;
   if (subtitles && (!/^[a-f0-9]{16}$/.test(subtitles.assetKey) || subtitles.directory !== "libraries/subtitles/"))
     throw new Error("Invalid subtitle asset identity");
@@ -58,12 +151,8 @@ async function loadSubtitleSession(options) {
   return new module.SubtitleSession({ ...options, assetBaseURL: assets.subtitleBaseURL });
 }
 async function subtitleCapabilities(signal, original) {
-  const { base, assetKey } = assetLocation();
-  const response = await fetch(new URL("assets.json", base), { credentials: "same-origin", signal: AbortSignal.any([signal, AbortSignal.timeout(1e4)]) });
-  if (!response.ok)
-    return [];
-  const value = await response.json();
-  if (value.version !== 1 || assetKey !== undefined && value.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(value.assetKey ?? "") || value.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2" || !/^[a-f0-9]{16}$/.test(value.subtitleAssets?.assetKey ?? "") || value.subtitleAssets?.directory !== "libraries/subtitles/")
+  const value = await runtimeManifest(signal);
+  if (!value.subtitleAssets)
     return [];
   const embedded = original && Array.isArray(value.originalSubtitleFormats) ? value.originalSubtitleFormats.filter((format) => typeof format === "string" && ["srt", "webvtt", "ass", "ssa", "pgs", "tx3g"].includes(format)) : [];
   return [...new Set(["webvtt", "ether-vtt-window", ...embedded])];
@@ -71,25 +160,13 @@ async function subtitleCapabilities(signal, original) {
 async function originalPlaybackCapabilities(signal) {
   if (!canAttemptOriginal())
     return null;
-  let timer;
-  try {
-    const gpu = navigator.gpu;
-    const adapter = await Promise.race([gpu?.requestAdapter(), new Promise((resolve) => {
-      timer = setTimeout(() => resolve(null), 2000);
-    })]);
-    if (!adapter)
-      return null;
-  } finally {
-    if (timer)
-      clearTimeout(timer);
-  }
-  signal.throwIfAborted();
-  const { base, assetKey } = assetLocation();
-  const response = await fetch(new URL("assets.json", base), { credentials: "same-origin", signal: AbortSignal.any([signal, AbortSignal.timeout(1e4)]) });
-  if (!response.ok)
-    return null;
-  const manifest = await response.json();
-  if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey ?? "") || manifest.upstreamRevision !== "a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2")
+  const adapterSignal = AbortSignal.timeout(2000);
+  const gpu = navigator.gpu;
+  const [adapter, manifest] = await abortable(Promise.all([
+    abortable(gpu?.requestAdapter(), adapterSignal).catch(() => null),
+    runtimeManifest(signal)
+  ]), signal);
+  if (!adapter)
     return null;
   const declaration = manifest.originalPlayback;
   if (!declaration || declaration.version !== 1 || declaration.range !== true || declaration.webgpu !== true)
@@ -106,7 +183,27 @@ async function originalPlaybackCapabilities(signal) {
 }
 
 // client/player/media-capabilities.ts
+var cached;
 async function mediaCapabilities(signal) {
+  const identity = capabilityIdentity();
+  if (!cached || cached.identity !== identity) {
+    const current = { identity, pending: Promise.resolve(null) };
+    playbackMark("probe:start");
+    current.pending = probe(AbortSignal.timeout(12000)).then((value) => {
+      playbackMark("probe:ready");
+      return value;
+    }).catch((error) => {
+      if (cached === current)
+        cached = undefined;
+      throw error;
+    });
+    cached = current;
+    current.pending.catch(() => {});
+  } else
+    playbackMark("probe:cached");
+  return structuredClone(await abortable(cached.pending, signal));
+}
+async function probe(signal) {
   try {
     localStorage.removeItem("vela.player.beta");
   } catch {}
@@ -120,8 +217,8 @@ async function mediaCapabilities(signal) {
     ["av1", 'video/mp4; codecs="av01.0.05M.08"']
   ];
   const audioFormats = [["aac", 'audio/mp4; codecs="mp4a.40.2"'], ["opus", 'audio/webm; codecs="opus"'], ["ac3", 'audio/mp4; codecs="ac-3"'], ["eac3", 'audio/mp4; codecs="ec-3"']];
-  const originalPlayback = await originalPlaybackCapabilities(signal).catch(() => null);
-  const subtitles = await subtitleCapabilities(signal, !!originalPlayback).catch(() => []);
+  const [originalPlayback, availableSubtitles] = await Promise.all([originalPlaybackCapabilities(signal).catch(() => null), subtitleCapabilities(signal, true).catch(() => [])]);
+  const subtitles = originalPlayback ? availableSubtitles : availableSubtitles.filter((format) => ["webvtt", "ether-vtt-window"].includes(format));
   return {
     ...originalPlayback ? { originalPlayback } : {},
     containers: [supports("video/mp4") ? "mp4" : "", supports("video/webm") ? "webm" : ""].filter(Boolean),
@@ -1450,6 +1547,8 @@ class PlaybackEngine {
   session;
   source;
   pipeline;
+  startupFrameSeen = false;
+  startupVideoCallback;
   original;
   originalJob;
   originalGeneration;
@@ -1733,6 +1832,10 @@ class PlaybackEngine {
       return;
     if (this.pipeline?.audioTrackId)
       this.audio = this.pipeline.audioTrackId;
+    if (this.original && !this.startupFrameSeen && this.original.readout.presentedFrames > 0) {
+      this.startupFrameSeen = true;
+      playbackMark("first-frame", "webgpu");
+    }
     const now = performance.now();
     if (!force && now - this.lastObservation < 250)
       return;
@@ -1964,6 +2067,9 @@ class PlaybackEngine {
       this.originalClosing = original.dispose().catch(() => {});
   }
   resetMedia() {
+    if (this.startupVideoCallback !== undefined)
+      this.video.cancelVideoFrameCallback?.(this.startupVideoCallback);
+    this.startupVideoCallback = undefined;
     if (this.originalStartTimer)
       clearTimeout(this.originalStartTimer);
     this.originalStartTimer = undefined;
@@ -1989,6 +2095,17 @@ class PlaybackEngine {
     const token = this.controller.changeSource(!initial);
     this.resetMedia();
     this.source = source;
+    this.startupFrameSeen = false;
+    playbackMark("source:open", source.delivery);
+    this.startupVideoCallback = this.video.requestVideoFrameCallback?.(() => {
+      if (this.controller.current(token)) {
+        this.startupVideoCallback = undefined;
+        if (!this.original && !this.startupFrameSeen) {
+          this.startupFrameSeen = true;
+          playbackMark("first-frame", this.backend === "mse" ? "mse" : "native");
+        }
+      }
+    });
     this.bindMedia(token);
     this.attempted.add(source.id);
     this.status = recovery ? "recovering" : "loading";
@@ -2248,6 +2365,7 @@ class PlaybackEngine {
     if (this.originalStartTimer)
       clearTimeout(this.originalStartTimer);
     this.originalStartTimer = undefined;
+    playbackMark("source:failed");
     this.status = "recovering";
     this.failure = failure;
     this.publish(true);
@@ -2859,6 +2977,8 @@ function create(tag, element, json, event) {
     const handle = { context: true, disposed: false, lastNavigation: "", probe: "", revision: 0, abort: new AbortController, event };
     const props = JSON.parse(json);
     handle.probe = props.probe ?? "";
+    if (handle.probe === "media")
+      handle.releaseTiming = mountPlaybackTiming();
     navigateSecurely(handle, props);
     queueMicrotask(() => {
       publishContext(handle);
@@ -2958,6 +3078,8 @@ function setProps(handle, json) {
       session = JSON.parse(input);
     if (!session.id || !Array.isArray(session.sources))
       throw new Error("Invalid playback session");
+    if (handle.engine.snapshot().sessionId !== session.id)
+      playbackMark("plan:received");
     handle.sessionJson = input;
     const current = handle.engine.snapshot();
     if (props.plan && current.sessionId === session.id && current.sourceId === session.selectedSourceId && current.sourceGeneration === session.sourceGeneration && current.seekGeneration === session.seekGeneration)
@@ -3037,6 +3159,7 @@ function destroy(handle) {
   if ("context" in handle) {
     handle.disposed = true;
     handle.abort.abort();
+    handle.releaseTiming?.();
     return;
   }
   handle.engine.dispose();

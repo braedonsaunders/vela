@@ -1,3 +1,4 @@
+import {playbackMark} from '../timing';
 import { abortable } from './async';
 import { MediaClock } from './clock';
 import { FileDemux,type PacketDemux } from './demux/file';
@@ -130,7 +131,9 @@ export class PlaybackCore {
     this.clock.reset(positionUs,id,!!this.audio);this.clock.setPlaying(false);this.publish();
     const startup=AbortSignal.any([signal,AbortSignal.timeout(Math.max(0,Math.ceil(deadline-performance.now())))]);
     try{
+      playbackMark('metadata:start');
       const metadata=await abortable(demux.open(startup),startup);
+      playbackMark('metadata:ready');
       if(!this.current(run))return;
       const video=metadata.tracks.find((track):track is VideoTrack=>track.kind==='video'&&track.id===this.video?.id)
         ?? metadata.tracks.find((track):track is VideoTrack=>track.kind==='video');
@@ -141,11 +144,13 @@ export class PlaybackCore {
       const sameAudio=!!this.audio&&this.audio.id===audio?.id;
       this.tracks=metadata.tracks;this.video=video;this.audio=audio;this.durationUs=metadata.durationUs;this.containerName=metadata.container;
       this.clock.reset(positionUs,id,!!audio);
+      playbackMark('decode:start');
       await abortable(Promise.all([
         run.decoder.configure(video,id,startup),
         audio?(async()=>{if(!sameAudio)await source.audio.configure(audio,id,startup);if(sameAudio||positionUs!==0)await source.audio.flush(positionUs,id,startup);})():Promise.resolve(),
       ]),startup);
       if(!this.current(run))return;
+      playbackMark('decode:ready');
       source.audio.setVolume(this.volume,this.muted);source.audio.setRate(this.rate);
       this.scheduler.start();
       void this.videoPackets(run,video,positionUs,signal);
