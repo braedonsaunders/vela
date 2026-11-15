@@ -586,6 +586,8 @@ component SearchField
 component Status
   props
     p: StatusProps
+  inject
+    retry: action
   view
     if p.kind == "home"
       column role="status" aria-label=p.message animation=(p.still ? "dissolve 240ms linear both" : "dissolve 500ms ease-out both")
@@ -623,4 +625,9 @@ component Status
               Pulse(still=p.still)
               text p.message color="ink.secondary" font-size=15
           else
-            EmptyState(icon="symbol:alert", title=t("ui.somethingWentQuiet"), message=p.message, still=p.still)
+            column gap=4
+              EmptyState(icon="symbol:alert", title=t("ui.somethingWentQuiet"), message=p.message, still=p.still)
+              if p.canRetry
+                row justify-content="center"
+                  button press=retry() class=PrimaryPill height=44 padding="0px 24px" font-size=14
+                    text t("ui.tryAgain")

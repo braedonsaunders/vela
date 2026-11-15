@@ -197,6 +197,9 @@ component Status
     p: StatusProps
   inject
     activeSkin: string
+    retryFailed: action
+  provide
+    retry = retryFailed
   view
     if activeSkin == "index"
       IndexStatus(p=p)
@@ -338,11 +341,13 @@ component PlayerChrome
     watchSeek: action
     editWatch: action
     closeWatch: action
+    toggleWatchInfo: action
   provide
     command = watchControl
     seek = watchSeek
     editing = editWatch
     close = closeWatch
+    toggleInfo = toggleWatchInfo
   view
     if activeSkin == "index"
       IndexPlayerChrome(p=p)

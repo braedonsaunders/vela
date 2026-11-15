@@ -69,6 +69,8 @@ shape StatusProps
   // "home", "library", "detail", "loading" or "failure".
   kind: string
   message: string
+  // A failure the viewer can ask again (the injected retry repeats what failed).
+  canRetry: bool
   small: bool
   still: bool
 
@@ -117,6 +119,8 @@ shape PlayerProps
   still: bool
   busy: bool
   serverError: string
+  // The live playback info card is open.
+  info: bool
 
 shape AuthStageProps
   still: bool
