@@ -43,6 +43,10 @@ export type Action =
   | 'retry'
   /** Shell: open this flag alone, closing the others (keep- flags stay); pressed again it closes. */
   | 'only'
+  /** The search input (widget searchInput): empty the query; focus the input (id vela-search). */
+  | 'clearSearch' | 'focusSearch'
+  /** Page a row's pager by one page (arg: the row id). */
+  | 'pageNext' | 'pagePrev'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
 
@@ -75,6 +79,9 @@ export interface BoxNode extends NodeBase {
   type: 'box';
   /** Pressing it: `press` with an optional Template argument (`toggle` and `open`/`close` take a flag name). */
   press?: { action: Action; arg?: Template; /** Focus this element id after the action. */ focus?: Template };
+  /** A row's pager (inside a home row): this box scrolls sideways; `pageNext`/`pagePrev {row.id}` move it by
+   *  max(200, width - 2 x inset - peek) px, and `pager.*` say whether it overflows and is at an end. */
+  pager?: { inset?: number; peek?: number };
   children?: Node[];
 }
 export interface TextNode extends NodeBase { type: 'text'; text: Template }
@@ -89,6 +96,8 @@ export interface UseNode extends NodeBase { type: 'use'; template: string }
 /** A foundation slot: `children` (the route content the shell wraps), `searchField`. */
 export interface SlotNode extends NodeBase { type: 'slot'; slot: 'children' | 'searchField'; /** The inner box around the content (`style` is the outer). */ inner?: Style }
 /** A compiled interactive part, styled by `params`: `skinPicker`, `install`, `heroPreview`, `cardPreview`. */
+/** Widgets: `install`, `observe`, `liveTile`; `searchInput` (params placeholder, label, placeholderColor; its node style sets the
+ *  text's colour and font) within 3 levels of home or the shell; `sentinel` (params.on: `row` | `home`) asks for the next page. */
 export interface WidgetNode extends NodeBase { type: 'widget'; widget: string; params?: Record<string, string> }
 export type Node = BoxNode | TextNode | ImageNode | IconNode | RepeatNode | UseNode | SlotNode | WidgetNode;
 

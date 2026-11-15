@@ -201,17 +201,30 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
 - A top-level `repeat` keeps its place among its siblings.
 - Smaller engine: environment-only vocabulary is bound once per slot, not per node.
 
-## Next (renderer 7, names final)
+## Renderer 7
+
+- **searchInput** widget (within 3 levels of home or of the shell): the bare input (`id`
+  `vela-search`, test id `search`) on the foundation's query. `params`: `placeholder`, `label`
+  (accessible name, default the placeholder), `placeholderColor`; the node's style sets the text's
+  `color`, `font-*`, `letter-spacing`, `text-align`. The document draws the field around it.
+  `env.searchFocused` while it has focus; actions `clearSearch` and `focusSearch` (or
+  `press.focus: "vela-search"`); Escape with a query clears it. Leave out home's `searchField`
+  slot node and the foundation draws no field of its own.
+- **sentinel** widget (within 6 levels): `params.on: "row"` (inside a row: its next page) or
+  `"home"` (home's next rows). It fills its box; place it in the end cell you draw, and show
+  `row.loadingMore` / `env.homeMoreLoading` around it.
+- **pager** on a box inside a home row: `pager: { inset?: px, peek?: px (60) }` makes that box
+  the row's sideways scroller (give it `overflow-x: auto`, `scrollbar-width: none`). Actions
+  `pageNext` / `pagePrev` with arg `{row.id}` scroll it by max(200, home width - 2 x inset - peek);
+  `pager.overflows`, `pager.atStart`, `pager.atEnd` for the arrows.
+
+## Next (renderer 8, names final)
 
 - Per-document `traits`: `page`, `ink`, `flatDetail`, `panSections`, `barMask`, `splashOnPaper`,
-  detail frame tokens. `env.searchFocused`, `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
+  detail frame tokens. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 
-**Widgets** (leaf nodes drawn only in the first levels): `searchInput` (the bare input with
-`params` for type and ink; the document draws the field around it; `env.searchFocused`,
-actions `clearSearch`, `focusSearch`), `sentinel` (`params.on`: `row` or `home`, with margins:
-calls the foundation's continuation), `heroPreview`, `cardPreview` (with the card's intent on
-hover/focus in preview rows), `pager` (a row's scroller with `pagePrev`/`pageNext` and
-`pager.overflows/atStart/atEnd`).
+**Widgets**: `heroPreview`, `cardPreview` (with the card's intent on hover/focus in preview
+rows); an `active` (pressed) overlay and `replayOnPress`.
 
 **Routes next** (each with its vocabulary): search (lanes, status), status, collection,
 library (toolbar menus, sort/filter), auth (sign-in fields, quick connect), player chrome

@@ -169,6 +169,8 @@ shape Env
   tunedId: string
   zapping: string
   favoriteCount: number
+  // Home's row pagers as reported by their edge markers: rowId|start visible|end visible|inset|peek.
+  pagers: string[]
   // The environment's own vocabulary values (envBinds), bound once per slot.
   ev: string[]
 

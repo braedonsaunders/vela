@@ -2,7 +2,7 @@
 // inlined, viewport variants and document tokens applied, motion presets expanded,
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
-import { FIXED_TOKENS, RENDERER_VERSION, VOCAB } from './vocabulary';
+import { DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, VOCAB, WIDGET_DEPTH } from './vocabulary';
 
 const KEY = new Map(VOCAB.map((key, i) => [key, i]));
 /** A vocabulary key's index, a flag, or a refusal: documents name only known keys. */
@@ -13,12 +13,8 @@ function key(name: string): { k: number; f: string } {
   return { k, f: '' };
 }
 
-/** Must match tools/renderer.ts. */
-const DEPTH = 10;
-/** Must match tools/renderer.ts WIDGET_DEPTH. */
-const WIDGET_DEPTH = 3;
-/** Must match tools/renderer.ts SHELL_FROM: the shell's nodes start at this level. */
-const SHELL_FROM = 5;
+/** The search input is drawn in home's and the shell's first three levels (tools/renderer.ts searchLevel). */
+const searchLevel = (d: number) => d <= 3 || (d >= SHELL_FROM && d < SHELL_FROM + 3);
 const MAX_NODES = 4000;
 const STYLE: [string, string][] = [
   ['display', 'display'], ['position', 'position'], ['top', 'top'], ['right', 'right'], ['bottom', 'bottom'], ['left', 'left'], ['zIndex', 'z-index'],
@@ -63,7 +59,7 @@ function keyframesCss(doc: SkinDocument): string {
     return `@keyframes dk-${docId}-${name}{${body}}`;
   }).join('');
 }
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
 const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
@@ -277,6 +273,14 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
       else if (node.widget === 'observe') { level.t = 'observe'; level.arg = parts(node.params?.receipt); }
       // The live tile's picture: the renderer draws it only in its first levels.
       else if (node.widget === 'liveTile') { if (depth > WIDGET_DEPTH) throw new Error(`The liveTile widget must sit within ${WIDGET_DEPTH} levels of its slot`); level.t = 'liveTile'; }
+      // The bare search input: the document draws the field around it and styles its text through the node's style.
+      else if (node.widget === 'searchInput') {
+        if (!searchLevel(depth)) throw new Error('The searchInput widget must sit within 3 levels of home or of the shell');
+        level.t = 'searchInput'; level.parts = parts(node.params?.placeholder, r); level.label = parts(node.params?.label ?? node.params?.placeholder, r);
+        level.sym = value(node.params?.placeholderColor ?? 'inherit', r);
+      }
+      // Asks for the next page of home or of its row when it scrolls into view.
+      else if (node.widget === 'sentinel') { if (depth > PAGER_DEPTH) throw new Error(`A sentinel must sit within ${PAGER_DEPTH} levels of its slot`); level.t = 'sentinel'; level.sym = node.params?.on === 'home' ? 'home' : 'row'; }
       else throw new Error(`Unknown widget ${node.widget}`);
       break;
     case 'repeat': {
@@ -288,7 +292,15 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     }
     case 'box':
       if (node.press) { if (!ACTIONS.has(node.press.action)) throw new Error(`Unknown action ${node.press.action}`); level.act = node.press.action; level.arg = parts(node.press.arg, r); }
-      kids = node.children ?? []; break;
+      kids = node.children ?? [];
+      // A row's pager: this box is the row's sideways scroller (its style sets overflow-x); pageNext/pagePrev {row.id} move it.
+      if (node.pager) {
+        if (depth > PAGER_DEPTH) throw new Error(`A pager must sit within ${PAGER_DEPTH} levels of its slot`);
+        if (node.press) throw new Error('A pager box takes no press');
+        const px = (v: unknown, d: number) => Math.max(0, Math.min(400, Math.round(Number(v ?? d)) || 0));
+        level.dom = parts('pager-{row.id}'); level.sym = `${px(node.pager.inset, 0)}|${px(node.pager.peek, 60)}`;
+      }
+      break;
     case 'slot': throw new Error('A slot node belongs at the top of its slot tree');
   }
   if (depth < DEPTH) level.kids = kids.map(k => convert(k, depth + 1, r, own.fontWeight)).filter(Boolean);
