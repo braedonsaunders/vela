@@ -13,12 +13,13 @@ export class NativeVideoDecoder {
   private waiters = new Set<() => void>();
   private generation = 0;
   private durations = new Map<number,number>();
-  constructor(private readonly output: (frame: NativeVideoFrame) => void, private readonly onFailure: (error: Error) => void) {}
+  constructor(private readonly output: (frame: NativeVideoFrame) => void, private readonly onFailure: (error: Error) => void,
+    private readonly acceleration:HardwareAcceleration='prefer-hardware') {}
 
   async configure(track: VideoTrack, epoch: number, signal: AbortSignal): Promise<void> {
     this.dispose();
     if (!track.config || typeof VideoDecoder !== 'function') throw new Error('Native video decoder is unavailable for this actual configuration');
-    const generation = this.generation, config: VideoDecoderConfig = {...track.config,hardwareAcceleration:'prefer-hardware'};
+    const generation = this.generation, config: VideoDecoderConfig = {...track.config,hardwareAcceleration:this.acceleration};
     const support = await abortable(VideoDecoder.isConfigSupported(config),AbortSignal.any([signal,AbortSignal.timeout(1500)]));
     signal.throwIfAborted();
     if (generation !== this.generation) throw new DOMException('Decoder configuration superseded','AbortError');

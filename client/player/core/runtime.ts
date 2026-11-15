@@ -1,14 +1,13 @@
 import { abortable } from './async';
 import { MediaClock } from './clock';
 import { FileDemux } from './demux/file';
-import { NativeVideoDecoder, type NativeVideoFrame } from './decode/native-video';
+import type { CoreVideoFrame,VideoBackend,VideoCallbacks } from './decode/video';
 import { VideoScheduler } from './scheduler';
 import { RangeReader } from './source/ranges';
 import type { AudioClockAnchor, AudioOutput, AudioTrack, MediaTrack, VideoTrack } from './types';
 
 export interface CorePresenter {
-  prepare(track: VideoTrack, epoch: number, signal: AbortSignal): Promise<void>;
-  present(frame: NativeVideoFrame, positionUs: number): boolean;
+  present(frame: CoreVideoFrame, positionUs: number): boolean;
   dispose(): void;
 }
 export interface CoreAudioFactoryOptions {
@@ -23,7 +22,7 @@ export interface CoreState {
   decoded:number; presented:number; dropped:number; failure:string|null;
 }
 interface Epoch {
-  id:number; abort:AbortController; demux:FileDemux; decoder:NativeVideoDecoder;
+  id:number; abort:AbortController; demux:FileDemux; decoder:VideoBackend;
   firstFrame:Promise<void>; resolveFirst():void; videoEndUs:number; audioEndUs:number;
   videoEnded:boolean; audioEnded:boolean; audioTailReported:boolean; audioBufferedUntilUs:number;
 }
@@ -31,7 +30,7 @@ interface Epoch {
 /** Vela's direct-file orchestration. It deliberately has no upstream controller. */
 export class PlaybackCore {
   readonly clock = new MediaClock();
-  private readonly scheduler: VideoScheduler<NativeVideoFrame>;
+  private readonly scheduler: VideoScheduler<CoreVideoFrame>;
   private source?: {abort:AbortController;reader:RangeReader;audio:AudioOutput};
   private epoch?:Epoch;
   private nextEpoch = 0;
@@ -42,6 +41,7 @@ export class PlaybackCore {
   private requestedAudioId?:string;
   private initialAudioOrdinal=0;
   private durationUs:number|null=null;
+  private containerName='';
   private failure:string|null=null;
   private playing=true;
   private closed=false;
@@ -56,7 +56,8 @@ export class PlaybackCore {
     private readonly createAudio:(options:CoreAudioFactoryOptions)=>AudioOutput,
     private readonly onState:(state:CoreState)=>void,
     /** The host owns authorized decoder/conversion recovery after this route. */
-    private readonly onFailure:(error:Error,positionUs:number)=>void) {
+    private readonly onFailure:(error:Error,positionUs:number)=>void,
+    private readonly createVideo:(callbacks:VideoCallbacks)=>VideoBackend) {
     this.scheduler=new VideoScheduler(this.clock,(frame,position)=>presenter.present(frame,position),error=>this.fail(error),()=>{
       const run=this.epoch;if(!run)return;
       run.resolveFirst();
@@ -69,6 +70,8 @@ export class PlaybackCore {
       tracks:this.tracks,videoTrackId:this.video?.id??null,audioTrackId:this.audio?.id??null,
       decoded:this.decodedBeforeEpoch+(this.epoch?.decoder.metrics.decoded??0),presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
   }
+  get byteReader(){return this.source?.reader;}
+  get container(){return this.containerName;}
   private publish(){this.onState(this.snapshot());}
   private current(run:Epoch){return this.epoch===run&&!run.abort.signal.aborted&&!this.closed;}
 
@@ -102,7 +105,9 @@ export class PlaybackCore {
     let resolveFirst!:()=>void;
     const firstFrame=new Promise<void>(resolve=>{resolveFirst=resolve;});
     const run:Epoch={id,abort,demux,firstFrame,resolveFirst,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,audioTailReported:false,audioBufferedUntilUs:positionUs,
-      decoder:new NativeVideoDecoder(frame=>{if(this.current(run))this.scheduler.push(frame);else frame.release();},error=>{if(this.current(run))this.fail(error);})};
+      decoder:this.createVideo({output:frame=>{if(this.current(run))this.scheduler.push(frame);else frame.release();},
+        canOutput:()=>!this.scheduler.buffer.full,active:()=>this.playing,
+        onFailure:error=>{if(this.current(run))this.fail(error);}})};
     this.epoch=run;this.scheduler.reset(id,positionUs,!this.playing);this.state='loading';this.failure=null;
     this.clock.reset(positionUs,id,!!this.audio);this.clock.setPlaying(false);this.publish();
     const startup=AbortSignal.any([signal,AbortSignal.timeout(8000)]);
@@ -116,10 +121,10 @@ export class PlaybackCore {
         ?? metadata.tracks.filter((track):track is AudioTrack=>track.kind==='audio')[this.initialAudioOrdinal]
         ?? metadata.tracks.find((track):track is AudioTrack=>track.kind==='audio');
       const sameAudio=!!this.audio&&this.audio.id===audio?.id;
-      this.tracks=metadata.tracks;this.video=video;this.audio=audio;this.durationUs=metadata.durationUs;
+      this.tracks=metadata.tracks;this.video=video;this.audio=audio;this.durationUs=metadata.durationUs;this.containerName=metadata.container;
       this.clock.reset(positionUs,id,!!audio);
       await abortable(Promise.all([
-        run.decoder.configure(video,id,startup),this.presenter.prepare(video,id,startup),
+        run.decoder.configure(video,id,startup),
         audio?(async()=>{if(!sameAudio)await source.audio.configure(audio,id,startup);if(sameAudio||positionUs!==0)await source.audio.flush(positionUs,id,startup);})():Promise.resolve(),
       ]),startup);
       if(!this.current(run))return;

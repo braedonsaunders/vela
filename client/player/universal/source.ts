@@ -7,7 +7,7 @@ export interface OriginalVideo {
   colorSpace?: string; colorRange?: string; dvProfile?: number; dvLevel?: number;
   dvBlSignalCompatibilityId?: number; rpuPresent?: boolean; elPresent?: boolean; blPresent?: boolean;
 }
-export interface OriginalAudio { id: string; codec: string; channels?: number; sampleRate?: number; language?: string; channelMask?: number | null; nativeSupported?: boolean; streamIndex: number }
+export interface OriginalAudio { id: string; label?:string; codec: string; channels?: number; sampleRate?: number; language?: string; channelMask?: number | null; nativeSupported?: boolean; streamIndex: number }
 export interface OriginalMedia {
   url: string; container: string; duration: number | null; position: number; audioTrackCount?: number; discrepancies?: string[];
   video: OriginalVideo; audio: OriginalAudio[]; selectedAudioId: string | null;

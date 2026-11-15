@@ -2,9 +2,9 @@
 
 The core supplies the source-scoped ByteReader, absolute clock, seek epoch and
 isolated media surface. Subtitle modules do not own a media clock, AV controller
-or duplicate byte cache. This work is under development: the following component
-proof does not yet qualify embedded discovery, the complete SubtitleSession,
-engine snapshots/commands or a lab title. Those remain delivery gates.
+or duplicate byte cache. The borrowed-reader SubtitleSession and its local container/renderer proof are
+implemented. Engine snapshot/command integration and the lab title remain
+delivery gates; the core host owns those integration points.
 
 ## Implemented components
 
@@ -71,6 +71,99 @@ glyph cache limit units; both were corrected before the successful drive.
 The dedicated Chrome, worker and owned8795 server were closed afterward. No lab,
 provider requests or private source capture was involved. Use `fixtures.py` to
 regenerate SRT/VTT/ASS/SUP and optional MKV/tx3g files from a generated video and
-licensed font. The remaining local gate is actual container discovery, attached
-font extraction and epoch-safe session selection/seeking; the1917 PGS lab gate
-waits for the coordinator's all-clear.
+licensed font. The complete local session evidence below adds container discovery, attachment
+extraction and epoch-safe selection/seeking. The1917 PGS lab gate waits for the
+coordinator's all-clear.
+
+## Borrowed-reader session
+
+`session.ts` exports `SubtitleSession`. The host dynamically imports this module
+when subtitles are enabled. Construction accepts `surface`, `reader?: ByteReader`,
+`source: SubtitleSource`, `epoch`, `clock: () => number` (absolute title seconds),
+`assetBaseURL`, `describedTracks?`, `signal`, `getViewport?`, `onTracks?`,
+`onState?` and `onFailure?`. The surface must be positioned and isolated inside
+the media layer. `getViewport` returns CSS-pixel `x/y/width/height/bottomInset`
+for the actual displayed video, including any letterboxing. Rendering is capped
+at4096x2160 and device pixel ratio2. No subtitle URL or time rebasing comes from
+the HLS video element.
+
+- `discover(): Promise<readonly SubtitleTrack[]>` publishes actual container
+  identities. MKV `TrackNumber` and MP4 `track_ID` remain exact; `streamIndex`
+  counts every TrackEntry/trak, including AV and unrecognized tracks. A unique
+  matching described full-container index can alias the server track ID;
+  `serverId` is retained separately for an authorized server fallback.
+- `select(id | null): Promise<void>` prepares a fresh selection, exposing
+  `pending`, `selected` and `error`. `onState` tells the host to resnapshot.
+  Preparation errors publish `onFailure({trackId,serverId,code,message})` and leave
+  the overlay Off. The host owns any server burn-in command. Nothing changes AV.
+- `seek(positionSeconds, epoch): Promise<void>` clears immediately and reacquires
+  at the supplied position, including paused seeks. Older epochs are refused.
+  The host changes the clock to that same target. Epochs are local playback
+  epochs, separate from the source/wire generation fields.
+- `setPreferences(preferences | "name=value")` uses the UI's persisted device
+  preferences. ASS preserves authored styling; appearance options affect plain
+  text. PGS preserves authored pixels. `dispose()` aborts operations, destroys
+  the ASS worker, removes its canvas and forgets document/font caches.
+
+`matroska.ts` and `mp4.ts` parse subtitles directly over the borrowed core reader;
+no Mediabunny AV numbering is used. Disposal never disposes the reader. Metadata
+and cue operations have8s deadlines,48MiB requested-byte limits,64MiB maximum
+source-page coverage and bounded record/packet counts. Fonts are read only for
+ASS selection, at most8MiB each/32MiB total. Text/ASS windows retain at most8192
+packets/16MiB. Only the current PGS composition is decoded to RGBA; future packets
+stay compressed. Window/crop geometry is intersected with the composition plane.
+
+Long cues require complete acquisition history. MKV Cues are useful seek hints
+but do not prove that every earlier text event was indexed. A scan from the
+beginning or overlapping continuation proves text history; otherwise the module
+reports exact seek unavailable. It does not silently omit a possible long cue.
+PGS can establish its current state from a complete display/clear acquisition set
+before the target, retaining palettes and fragmented objects within a window.
+Distant seeks lacking such a bounded acquisition fall back through the host.
+Compressed/encrypted/laced MKV subtitle packets and nonstandard per-track time
+transforms are reported unavailable. MP4 tx3g/wvtt uses actual sample tables,
+composition offsets, language and title edit-list mapping. Non-unit edit rates,
+multiple sample descriptions and fragment-only subtitle indexing are explicitly
+unsupported; they require the server path.
+
+External files must use an authorized same-origin HTTP URL; redirects are
+rejected and document reads are size/deadline bounded. `webvtt-window` preserves
+all grant query fields, sets `ether_window=1`, and replaces only `from_ms` with
+absolute title milliseconds. It polls the covering120s window every second,
+prefetches its successor in the last20s, merges/deduplicates cues and discards
+expired history.503 retries while selected.200 empty is provisional, with no
+invented completeness or EOF. On HTTP200 only, `X-Ether-Subtitle-Complete:1` marks a complete cached/sidecar
+body and stops polling for that selection epoch; its absolute cues replace the
+partial cue set. `0` or a missing/unrecognized header continues polling. Headers
+on errors are ignored. Epoch/selection disposal cancels late replies.
+The marker is additive in Ether b488175b0, scheduled for lab.16; missing-header
+behaviour remains compatible with lab.15. The local check simulates that
+contract and does not claim a live server qualification.
+
+## Complete local session evidence
+
+One Chrome drive over core RangeReader and generated files rendered MKV SRT,
+ASS with its2,049,096-byte Noto attachment, PGS and MP4 tx3g. Full stream index2
+and actual container ID3 were preserved, while an intentionally mismatched
+server language did not replace actual `eng`. At2s the overlays painted
+5795/2005/3168/6481 alpha pixels respectively. Paused seek4.5s painted the next
+cue (ASS3970 pixels including899 yellow; PGS3168); seek8s cleared each to zero.
+Each selection had one visible canvas; Off and disposal left zero. A retired
+pending selection did not restore its canvas. The borrowed-reader disposal count
+was zero and no session failures were recorded. Progressive VTT recovered from
+503, empty200, then populated200 and painted2574 pixels including901 yellow.
+
+A separate indexed wvtt fixture within that same local browser exercised an empty
+initial edit and absolute cue mapping; its4.5s positioned yellow cue painted2671
+pixels (988 yellow). The attached-font ASS session screenshot was inspected. The
+owned Chrome and8795 server were closed afterward. No lab/provider access or
+private media capture occurred. Engine snapshot/commands integration and the
+1917 PGS lab qualification remain outstanding; lab access is held for the
+coordinator's restart clearance.
+
+The completeness-marker follow-up used one local Chrome measurement:503 with
+header1,200 empty with0,200 populated with no header, then200 whole track with1.
+Exactly four requests occurred; the count remained four after another1.5s,
+with2574 alpha pixels and no session failures. This proves error headers do not
+stop retries and unknown/growing responses continue polling. The dedicated
+Chrome and8795 server were closed afterward.

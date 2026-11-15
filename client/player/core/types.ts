@@ -1,9 +1,5 @@
 /** Source lifetime is independent of seek epochs. All times here are title µs. */
-export interface ByteReader {
-  size(signal: AbortSignal): Promise<number>;
-  read(offset: number, length: number, signal: AbortSignal): Promise<Uint8Array>;
-  dispose(): void;
-}
+export type {ByteReader} from './source/types';
 
 export interface EncodedPacket {
   trackId: string;

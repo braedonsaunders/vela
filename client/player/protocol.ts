@@ -38,7 +38,8 @@ export function observation(snapshot: Snapshot, sequence: number): PlayerObserva
     ...(snapshot.throughputBps === null ? {} : { throughputBps: snapshot.throughputBps }),
     ...(snapshot.droppedFrames === null ? {} : { droppedFrames: snapshot.droppedFrames }),
     ...(snapshot.totalFrames === null ? {} : { totalFrames: snapshot.totalFrames }),
-    ...(snapshot.audioTrackId === null ? {} : { audioTrackId: snapshot.audioTrackId }), subtitleTrackId: snapshot.subtitleTrackId,
+    ...(snapshot.audioTrackId === null || snapshot.audioClientOnly ? {} : { audioTrackId: snapshot.audioTrackId }),
+    ...(snapshot.subtitleClientOnly ? {} : {subtitleTrackId:snapshot.subtitleReportingId??snapshot.subtitleTrackId}),
     ...(snapshot.failure ? { error: { class: snapshot.failure.kind === 'network' ? 'transient' : snapshot.failure.kind === 'decoder' ? 'decoder' : 'source', message: snapshot.failure.message } } : {}),
   };
 }

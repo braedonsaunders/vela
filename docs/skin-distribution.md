@@ -16,6 +16,63 @@ server event. Simple reskins (colours, fonts, imagery) skip the build entirely: 
 **skin packs**, data that applies live over a compiled engine. Native apps (Apple TV) are a
 separate, harder story, covered at the end.
 
+## End state: every skin is data (owner directive)
+
+> Once skins are data, completely remove the old compiled skin code. One build, no skin code baked in.
+
+This supersedes the compiled-package path below (sections 5.3 builder and container,
+per-engine builds): those remain only until the conversion finishes, then they are
+deleted. What ships at the end:
+
+- **One client build:** the foundation (routes, data, auth, playback engine), the
+  generic renderer (`client/renderer`, generated) and a small set of compiled
+  **widgets** the documents place and style through `params`: search field, player
+  scrubber and track/quality menus, guide time grid, sign-in fields and quick-connect
+  code, hero/card trailer previews, install/update, visibility sentinels, the
+  appearance picker.
+- **Every skin is a document plus assets** (`docs/skin-schema.md`): Cinematic, Index,
+  Jelly Twin, Marquee, Mochi and example included. Ether stores and serves them; the
+  picker lists them with previews; the server default (and force) switches viewers live.
+  `tools/skin.ts` becomes the document validator and packager (no compile).
+- **Two renderer call sites in the whole app** (Exact inlines a component per call site,
+  `docs/skin-authoring.md` "Performance"): the shell, and one route view inside the
+  navigation stack that draws whichever route's tree the document has (home, title,
+  collection, library, live, watch), with that route's models in its environment.
+  Today's per-slot call sites (Shell, Home) become these two; Detail, Search, Library,
+  Collection, Status, Auth, Player chrome and Guide are trees in the document, not
+  compiled slots. Heavy widgets are drawn only by the first levels.
+- **Deleted at the end:** `client/skins/<id>/`, the dispatch in `foundation/skin.contract`
+  and its slot API, `tools/engine.ts` profiles, `client/player/engine-handoff.ts` and the
+  engine loader, per-skin tokens/icons/strings in `app.tamber` and `strings/`, and the
+  docs on compiled skins (`docs/skins.md` slot tables, compiled sections of this file and
+  of `docs/skin-authoring.md`).
+
+**Rough sizes.** Compiled skin source today: Cinematic 2,483 lines, Mochi 2,435, Marquee
+2,274, Jelly Twin 1,823, Index 497, example 225 (about 9,700 lines of Contract plus their
+`app.tamber` blocks). The all-skins entry is 2.6 MB gzip; one compiled engine is about
+300 KB. The renderer measured about 20 KB gzip per level copy (doc engine 503 KB gzip
+with 16 copies plus cinematic's remaining compiled slots). The end-state build carries
+16 level copies (shell 6, route view 10), the widgets and the foundation: estimated
+450-550 KB gzip for all skins together, against 2.6 MB today; each further reduction of
+the per-level element (about 85 bound rows) shrinks every copy.
+
+**Order.** Each step ends with side-by-side screenshots (compiled vs document) at 1440 and
+390 and a measured size, then deletes that skin's compiled code.
+
+1. **Renderer to the end-state shape** (architect): the route view call site, route
+   environments (home, detail, search, library, collection, live, watch, auth), the
+   widget set, detail/search/library/player/guide vocabulary. Cinematic's compiled slots
+   stay as the reference while this lands.
+2. **Cinematic** (architect + UI lead): Shell and Home are done as data; then Row,
+   Search, Detail, Library, Collection, Status, Auth, Player chrome, Guide. Delete
+   `client/skins/cinematic`.
+3. **Index** and **example** (small; prove a light, split-detail layout).
+4. **Jelly Twin**, **Marquee** (skin owners convert their own once the schema is stable).
+5. **Mochi** last (mascot, pixel art and playful motion: animated SVG assets and the
+   motion presets).
+6. Delete the dispatch, engine profiles and hand-off, the per-engine release path, and
+   the compiled-skin docs; one build.
+
 ## 1. What Exact can and cannot do (evidence, Exact `29e5bbd`)
 
 | Question | Answer | Evidence |

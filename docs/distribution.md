@@ -162,6 +162,9 @@ bridge it without exposing credentials or arbitrary DOM access to skins.
 
 ## Per-engine release layout
 
+This is the temporary shipping layout. The planned replacement below takes over
+when all installed skins have been converted to documents.
+
 The release packager compiles each installed layout engine as a separate supported
 static Exact app. `engines.json` lists their immutable versioned bases under
 `/vela/engines/<engine>/<version>/`, entry bytes and gzip9 bytes. The root
@@ -184,6 +187,51 @@ are outside the immutable allowlist. Offline navigation shows the offline page.
 An update activates through the existing explicit update action, clears obsolete
 version caches and claims clients. The artifact remains one archive and manifest;
 Ether performs the same atomic installation and rollback as before.
+
+## Planned single-renderer release
+
+The end state is one compiled Exact app plus skin documents conforming to
+`protocol/v0/skin.ts`. Skin selection changes data within that app. Compiled
+per-skin implementations, per-engine profiles and engine-switch reloads are
+removed together once the conversion is complete; the current release path
+continues to ship until then.
+
+The release transition is one coherent change:
+
+1. Compile the shared foundation, document renderer and native player host once
+   from the captured committed source. Every route and interactive slot must be
+   supported without falling back to an old skin's compiled implementation.
+2. Emit bundled skin JSON and its image/font assets as separate versioned static
+   files. Include their schema, renderer compatibility and content hashes in the
+   release inventory; keep document contents out of the JavaScript entry. Reuse
+   the canonical document validation and asset admission rules rather than
+   introducing a second skin language in the packager.
+3. Replace the engine selector with a single-app entry. Publish the validated
+   Universal payload descriptor before importing the native host. The foundation
+   resolves the viewer's skin preference and server appearance default, applies
+   document updates in place and keeps the current route, scroll and session.
+   Include a compatible bundled default document for startup or an unavailable
+   server document; it must also use the shared renderer.
+4. Generate one shell/asset cache inventory. Bundled immutable skin documents and
+   assets may enter the exact digest allowlist on request; server appearance API
+   responses, artwork grants and media continue to bypass the worker. Keep the
+   explicit update/activation and offline-page behavior.
+5. Remove `engines.json`, engine-specific output roots, `prepareEngine`, engine
+   handoff code and per-engine build loops after their consumers have migrated.
+   Convert the skin package builder to emit validated JSON plus assets, with no
+   Exact app or per-skin JavaScript bundle.
+
+The archive, trusted manifest/hash inputs, atomic install and rollback contract
+remain unchanged. Preserve skin identities and viewer preferences through the
+conversion; agree the final renderer/document compatibility metadata with the
+skin-distribution owner before changing the manifest. The required player payload
+remains shared and independently hash-verified.
+
+Before switching the release path, the conversion owner confirms route/slot and
+skin fidelity, including controls and accessibility. Packaging then performs one
+production compile, records renderer entry raw/gzip bytes separately from JSON,
+fonts, images and player payload, and takes one cold-load/skin-switch look. No
+per-engine measurements or duplicated app compilation remain in that pipeline.
 
 
 ## Required player payload

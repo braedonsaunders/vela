@@ -8,6 +8,8 @@ import decoderPins from '../../vendor/webgpu-player/tools/pinned-releases.json';
 import { stageUniversalAssets } from '../release/universal-assets';
 import { transformUpstreamAudio } from '../../client/player/universal/audio/ffmpeg/upstream-transform';
 import { transformUpstreamVideo } from '../../client/player/universal/video/upstream-transform';
+import { installSubtitleAssets } from '../../client/player/universal/subtitles/install';
+import subtitleManifest from '../../client/player/universal/subtitles/assets.json';
 const root = resolve(import.meta.dir, '../..');
 const upstream = join(root, 'vendor/webgpu-player');
 const revision = 'a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2';
@@ -73,6 +75,8 @@ const audioDirectory = Bun.argv.find(arg => arg.startsWith('--audio-dir='))?.sli
 if (audioDirectory) await run([process.execPath, join(root,'client/player/universal/audio/install-packages.ts'), join(libraries,'audio-decoders'), `--from=${resolve(audioDirectory)}`], root);
 const videoDirectory = Bun.argv.find(arg => arg.startsWith('--video-dir='))?.slice(12);
 if (videoDirectory) await run([process.execPath, join(root,'client/player/universal/video/install-packages.ts'), join(libraries,'video-decoders'), `--from=${resolve(videoDirectory)}`], root);
+const subtitleDirectory=Bun.argv.find(arg=>arg.startsWith('--subtitle-dir='))?.slice(15);
+if(subtitleDirectory)await installSubtitleAssets(join(libraries,'subtitles'),resolve(subtitleDirectory));
 const hash = createHash('sha256');
 async function hashFiles(directory: string) {
   for (const entry of (await readdir(directory,{withFileTypes:true})).sort((a,b)=>a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
@@ -101,5 +105,8 @@ const originalPlayback = completeAudio && installedVideo.includes('hevc') ? {
   videoDecoders:[...new Set(['h264','hevc','vp9','av1',...installedVideo])],
   audioDecoders:['aac','ac3','eac3','truehd','dts','flac','opus','vorbis','mp3','alac','mp1','mp2','pcm_s16le','pcm_s24le','pcm_s32le','pcm_f32le','pcm_f64le'],
 } : undefined;
-await Bun.write(join(destination, 'assets.json'), JSON.stringify({ version:1, upstreamRevision:revision, assetKey, libraries:'./libraries/', sources:'./sources/', originalPlayback },null,2)+'\n');
+const completeSubtitles=(await Promise.all(Object.entries(subtitleManifest.files).map(([file,fact])=>verified('subtitles',file,fact.sha256)))).every(Boolean);
+const subtitleAssets=completeSubtitles?{assetKey:subtitleManifest.assetKey,directory:'libraries/subtitles/'}:undefined;
+const originalSubtitleFormats=completeSubtitles&&Bun.argv.includes('--core')?['srt','webvtt','ass','ssa','pgs','tx3g']:undefined;
+await Bun.write(join(destination, 'assets.json'), JSON.stringify({ version:1, upstreamRevision:revision, assetKey, libraries:'./libraries/', sources:'./sources/', originalPlayback,subtitleAssets,originalSubtitleFormats },null,2)+'\n');
 console.log(`Universal runtime assets assembled at ${destination}, key ${assetKey}`);

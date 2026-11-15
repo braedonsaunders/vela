@@ -2,14 +2,21 @@ import { configureEngineAssets } from '../../../vendor/webgpu-player/src/EngineA
 import { createCoreAudioOutput } from '../universal/audio/core-output';
 import type { OriginalBackend, OriginalRuntimeOptions, UniversalReadout } from '../universal/loader';
 import type { OriginalMedia } from '../universal/source';
-import { NativeSDRPresenter } from './render/native-presenter';
+import { CoreVideoPresenter } from './render/video-presenter';
 import { PlaybackCore, type CoreState } from './runtime';
 import type { AudioTrack } from './types';
 import { canonicalAudioCodec } from '../universal/audio/packages';
+import { VideoPackages } from '../universal/video/packages';
+import { VideoDecoderRouter } from './decode/video';
+export {SubtitleSession} from '../universal/subtitles/session';
 
 /** Same native-view boundary; all orchestration beneath it belongs to Vela. */
 export class UniversalRuntime implements OriginalBackend {
   readonly retainsSource=true;
+  get supportsSubtitles(){return !!this.options.assets.subtitleBaseURL;}
+  get byteReader(){return this.core.byteReader;}
+  get sourceContainer(){return this.core.container;}
+  get videoSize(){const track=this.core.snapshot().tracks.find(track=>track.kind==='video');return track?{width:track.width,height:track.height}:undefined;}
   private readonly core:PlaybackCore;
   private media?:OriginalMedia;
   private audioAliases=new Map<string,string>();
@@ -23,11 +30,12 @@ export class UniversalRuntime implements OriginalBackend {
   constructor(private readonly options:OriginalRuntimeOptions){
     this.volume=options.surface.video.volume;this.muted=options.surface.video.muted;
     configureEngineAssets({baseURL:options.assets.baseURL,cacheKey:options.assets.assetKey});
-    const presenter=new NativeSDRPresenter(options.surface,error=>this.failed(error));
+    const presenter=new CoreVideoPresenter(options.surface,error=>this.failed(error));
+    const packages=new VideoPackages(options.assets.videoDecoderURL);
     this.core=new PlaybackCore(presenter,audio=>createCoreAudioOutput({...audio,libraryBaseURL:options.assets.baseURL,
       assetKey:options.assets.assetKey,forceSoftware:options.retry?.audio}),state=>this.publish(state),(error,position)=>{
       if(!this.disposed)options.onFailure(error.message,position/1e6);
-    });
+    },callbacks=>new VideoDecoderRouter(presenter,packages,callbacks,options.retry?.video));
     this.core.setVolume(this.volume,this.muted);
     options.signal.addEventListener('abort',this.abort,{once:true});
   }
@@ -52,6 +60,14 @@ export class UniversalRuntime implements OriginalBackend {
   }
   get position(){return this.core.snapshot().positionUs/1e6;}
   get audioTrackIds(){return [...this.audioAliases.keys()];}
+  get audioTracks(){
+    const descriptions=[...(this.media?.audio??[])].sort((a,b)=>a.streamIndex-b.streamIndex);
+    return this.core.snapshot().tracks.filter((track):track is AudioTrack=>track.kind==='audio').map((track,index)=>({
+      id:[...this.audioAliases].find(([,actual])=>actual===track.id)?.[0]??track.id,
+      label:descriptions[index]?.label??[track.language,track.codec.toUpperCase(),`${track.channels} ch`].filter(Boolean).join(' · '),
+      language:track.language,codec:track.codec,channels:track.channels,
+    }));
+  }
   get pendingAudioTrackId(){return this.pendingAudio;}
   get readout():UniversalReadout{
     const state=this.core.snapshot();

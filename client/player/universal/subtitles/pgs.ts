@@ -4,13 +4,13 @@ export interface PGSDisplay {time:number;width:number;height:number;bitmaps:PGSB
 const MAX_PIXELS=4096*4096,MAX_BYTES=32*1024*1024;
 const u16=(a:Uint8Array,i:number)=>(a[i]<<8)|a[i+1];
 interface ObjectData {width:number;height:number;expected:number;chunks:Uint8Array[];size:number;complete:boolean}
-interface Placement {id:number;x:number;y:number;crop?:PGSBitmap['crop']}
+interface Placement {id:number;window:number;x:number;y:number;crop?:PGSBitmap['crop']}
 function requireBytes(data:Uint8Array,at:number,count:number){if(at<0||at+count>data.length)throw new Error('Truncated PGS segment')}
 export class PGSDecoder {
   private palettes=new Map<number,Uint8ClampedArray>(); private objects=new Map<number,ObjectData>();
   private composition:{time:number;width:number;height:number;palette:number;objects:Placement[]}|null=null;
-  private bytes=0;
-  reset(){this.palettes.clear();this.objects.clear();this.composition=null;this.bytes=0}
+  private bytes=0;private windows=new Map<number,{x:number;y:number;width:number;height:number}>();
+  reset(){this.palettes.clear();this.objects.clear();this.composition=null;this.bytes=0;this.windows.clear()}
   /** MKV stores type/u16 length segments, SUP prepends PG/PTS/DTS. */
   push(data:Uint8Array,time:number):PGSDisplay[]{
     const displays:PGSDisplay[]=[];let at=0;
@@ -22,6 +22,7 @@ export class PGSDecoder {
       if(kind===0x14)this.palette(segment);
       else if(kind===0x15)this.object(segment);
       else if(kind===0x16)this.picture(segment,stamp);
+      else if(kind===0x17)this.window(segment);
       else if(kind===0x80){const display=this.finish();if(display)displays.push(display)}
     }
     return displays;
@@ -48,14 +49,18 @@ export class PGSDecoder {
   private picture(data:Uint8Array,time:number){
     requireBytes(data,0,11);const width=u16(data,0),height=u16(data,2);
     if(!width||!height||width*height>MAX_PIXELS)throw new Error('PGS composition exceeds bounds');
-    if(data[7]&0x80){this.objects.clear();this.palettes.clear();this.bytes=0}
+    if(data[7]&0x80){this.objects.clear();this.palettes.clear();this.windows.clear();this.bytes=0}
     const objects:Placement[]=[];let at=11;
     for(let n=0;n<data[10];n++){
       requireBytes(data,at,8);const id=u16(data,at),cropped=!!(data[at+3]&0x80),x=u16(data,at+4),y=u16(data,at+6);at+=8;
       let crop:PGSBitmap['crop'];if(cropped){requireBytes(data,at,8);crop={x:u16(data,at),y:u16(data,at+2),width:u16(data,at+4),height:u16(data,at+6)};at+=8}
-      objects.push({id,x,y,crop});
+      objects.push({id,window:data[at-(cropped?16:8)+2],x,y,crop});
     }
     this.composition={time,width,height,palette:data[9],objects};
+  }
+  private window(data:Uint8Array){
+    requireBytes(data,0,1);if(data.length!==1+data[0]*9)throw new Error('Invalid PGS window segment');
+    for(let n=0;n<data[0];n++){const at=1+n*9;this.windows.set(data[at],{x:u16(data,at+1),y:u16(data,at+3),width:u16(data,at+5),height:u16(data,at+7)})}
   }
   private finish():PGSDisplay|null{
     const composition=this.composition;if(!composition)return null;
@@ -78,7 +83,10 @@ export class PGSDecoder {
       }
       if(y*object.width+x!==object.width*object.height)throw new Error('Incomplete PGS bitmap');
       if(placement.crop&&(placement.crop.x+placement.crop.width>object.width||placement.crop.y+placement.crop.height>object.height))throw new Error('PGS crop exceeds bitmap');
-      bitmaps.push({x:placement.x,y:placement.y,width:object.width,height:object.height,rgba,crop:placement.crop});
+      const crop=placement.crop??{x:0,y:0,width:object.width,height:object.height},window=this.windows.get(placement.window);
+      const left=Math.max(placement.x,window?.x??0,0),top=Math.max(placement.y,window?.y??0,0);
+      const right=Math.min(placement.x+crop.width,window?window.x+window.width:composition.width,composition.width),bottom=Math.min(placement.y+crop.height,window?window.y+window.height:composition.height,composition.height);
+      if(right>left&&bottom>top)bitmaps.push({x:left,y:top,width:object.width,height:object.height,rgba,crop:{x:crop.x+left-placement.x,y:crop.y+top-placement.y,width:right-left,height:bottom-top}});
     }
     return {time:composition.time,width:composition.width,height:composition.height,bitmaps};
   }

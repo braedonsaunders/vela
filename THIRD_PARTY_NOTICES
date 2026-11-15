@@ -37,5 +37,14 @@ LGPL-2.1-or-later. Their manifests, licence texts and exact corresponding source
 archives must accompany the independently loaded modules when distributed.
 Do not infer those packages are MIT from the engine licence. Runtime package
 installation must retain source/replacement information and verified version
-identities. This source adoption does not yet distribute built decoder packages.
+identities. Production runtime payloads retain these notices and corresponding
+sources alongside their independently loaded decoder packages.
 The unlicensed Jellyfin host plugin is not included or copied.
+
+Subtitle distributions
+----------------------
+Optional JASSUB 1.8.8 assets are independently loaded. The wrapper is MIT;
+libass is ISC, FriBidi LGPL-2.1-or-later, FreeType FTL, HarfBuzz MIT/NTP,
+and Brotli MIT. Noto Sans fallback fonts use SIL OFL 1.1. The verified subtitle
+asset distribution includes JASSUB-COPYRIGHT.txt, font licences, exact matching
+source archives/build scripts and SOURCE-OFFER.txt; see docs/subtitles.md.

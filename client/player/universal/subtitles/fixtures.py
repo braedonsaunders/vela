@@ -56,6 +56,31 @@ print('Generated SRT, VTT, ASS and PGS/SUP fixtures')
 if args.video:
     for name,extension,codec in [('srt','mkv','copy'),('ass','mkv','copy'),('sup','mkv','copy'),('srt','mp4','mov_text')]:
         output=root/({'srt':'tx3g' if extension=='mp4' else 'srt','ass':'ass-font','sup':'pgs'}[name]+'.'+extension)
-        command=['ffmpeg','-hide_banner','-loglevel','error','-i',args.video,'-i',str(root/('sample.'+name)),'-map','0','-map','1','-c:v','copy','-c:a','copy','-c:s',codec,'-metadata:s:s:0','language=eng']
+        command=['ffmpeg','-hide_banner','-loglevel','error','-copyts','-i',args.video,'-i',str(root/('sample.'+name)),'-map','0','-map','1','-c:v','copy','-c:a','copy','-c:s',codec,'-metadata:s:s:0','language=eng']
         if name=='ass' and args.font: command+=['-attach',args.font,'-metadata:s:t:0','mimetype=application/x-truetype-font','-metadata:s:t:0','filename=NotoSans.ttf']
         subprocess.run(command+[str(output)],check=True)
+
+# A standalone, indexed ISO BMFF WebVTT track, without requiring an ffmpeg wvtt encoder.
+def box(kind,data): return pack('>I',len(data)+8)+kind.encode('ascii')+data
+def full(kind,data,version=0,flags=0): return box(kind,bytes([version])+flags.to_bytes(3,'big')+data)
+wvtt_samples=[box('vttc',box('sttg',b'align:center position:50%')+box('payl',b'<b>Vela embedded WebVTT</b>')),box('vtte',b''),box('vttc',box('sttg',b'line:20% align:start')+box('payl',b'<c.yellow>Seek-safe WebVTT</c>'))]
+ftyp=box('ftyp',b'isom'+pack('>I',0)+b'isomiso6mp41')
+matrix=pack('>9I',0x10000,0,0,0,0x10000,0,0,0,0x40000000)
+mvhd=full('mvhd',pack('>4I',0,0,1000,7000)+pack('>IHH',0x10000,0x100,0)+bytes(8)+matrix+bytes(24)+pack('>I',2))
+tkhd=full('tkhd',pack('>5I',0,0,1,0,7000)+bytes(8)+pack('>4H',0,0,0,0)+matrix+bytes(8),flags=3)
+mdhd=full('mdhd',pack('>4I2H',0,0,1000,7000,0x15c7,0))
+hdlr=full('hdlr',pack('>I',0)+b'subt'+bytes(12)+b'Vela WebVTT\0')
+# Empty edit places media timeline zero at absolute title second one.
+elst=full('elst',pack('>I',2)+pack('>IiI',1000,-1,0x10000)+pack('>IiI',6000,0,0x10000))
+stsd=full('stsd',pack('>I',1)+box('wvtt',bytes(6)+pack('>H',1)+box('vttC',b'WEBVTT\n')))
+stts=full('stts',pack('>I6I',3,1,2000,1,1000,1,3000))
+stsc=full('stsc',pack('>4I',1,1,3,1))
+stsz=full('stsz',pack('>II',0,3)+b''.join(pack('>I',len(sample)) for sample in wvtt_samples))
+dinf=box('dinf',full('dref',pack('>I',1)+full('url ',b'',flags=1)))
+def movie(offset):
+ stco=full('stco',pack('>II',1,offset))
+ stbl=box('stbl',stsd+stts+stsc+stsz+stco)
+ minf=box('minf',full('nmhd',b'')+dinf+stbl)
+ return box('moov',mvhd+box('trak',tkhd+box('edts',elst)+box('mdia',mdhd+hdlr+minf)))
+moov=movie(0);moov=movie(len(ftyp)+len(moov)+8)
+(root/'wvtt.mp4').write_bytes(ftyp+moov+box('mdat',b''.join(wvtt_samples)))

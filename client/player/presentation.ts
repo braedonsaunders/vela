@@ -1,10 +1,10 @@
 import { clock, number, msg, setLocale } from '../foundation/i18n';
-import type { PlaybackPlan, Track } from '../wire/v0/types';
+import type { PlaybackPlan } from '../wire/v0/types';
 import type { Snapshot } from './model';
 const snapshots = new Map<string, Snapshot>();
 const errors = new Map<string, string>();
-function trackLabel(track: Track) {
-  const parts = [track.name, track.language !== 'und' ? track.language : '', track.codec.toUpperCase(),
+function trackLabel(track: {name?:string;label?:string;language?:string;codec?:string;channels?:number;forced?:boolean;hearingImpaired?:boolean}) {
+  const parts = [track.name??track.label??'', track.language && track.language !== 'und' ? track.language : '', (track.codec??'').toUpperCase(),
     track.channels ? `${track.channels} ch` : '', track.forced ? 'Forced' : '', track.hearingImpaired ? 'SDH' : ''];
   return parts.filter((value,index) => value && !parts.slice(0,index).some(previous => previous.toLowerCase().includes(value.toLowerCase()))).join(' · ');
 }
@@ -33,7 +33,7 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
   const quality = path?.qualities.find(q => q.id === snapshot?.renditionId);
   const capability = snapshot?.capabilities;
   const selectedAudio = plan?.audioTracks.find(t => t.id === snapshot?.audioTrackId || !snapshot && t.id === plan.selectedAudioTrackId);
-  const subtitles = plan?.subtitleTracks ?? [];
+  const subtitles = snapshot?.subtitleTracks??plan?.subtitleTracks ?? [];
   const sourceGeneration = snapshot?.sourceGeneration ?? plan?.sourceGeneration ?? 0;
   const seekGeneration = snapshot?.seekGeneration ?? plan?.seekGeneration ?? 0;
   return {
@@ -42,6 +42,10 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
       command: { kind: 'stop', sourceGeneration, seekGeneration, idempotencyKey: `stop-${plan.sessionId}-${sourceGeneration}-${seekGeneration}` } }) : '',
     waiting: snapshot?.waiting ?? state === 'loading', volume: snapshot?.volume ?? 1, muted: snapshot?.muted ?? false,
     speed: snapshot?.speed ?? 1, speeds: snapshot?.speeds ?? [],
+    pendingSubtitleId:snapshot?.pendingSubtitleTrackId??'',subtitleError:snapshot?.subtitleError??'',
+    subtitleStyleAvailable:snapshot?.subtitleStyleAvailable??false,
+    subtitleSize:snapshot?.subtitleStyle?.subtitleSize??'medium',subtitleBackground:snapshot?.subtitleStyle?.subtitleBackground??'shadow',
+    subtitleColor:snapshot?.subtitleStyle?.subtitleColor??'white',subtitlePosition:snapshot?.subtitleStyle?.subtitlePosition??'bottom',
     preparation: snapshot?.preparation ? msg(`data.preparation.${snapshot.preparation}`) : !snapshot ? msg('data.preparation.media-metadata') : '',
     ready: !!snapshot && !['idle','loading'].includes(state), state, playing: state === 'playing', position, duration,
     elapsed: clock(position), remaining: duration > 0 ? clock(Math.max(0, duration - position)) : msg('data.live'),
@@ -52,10 +56,9 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
     lockedQuality: path?.original || path && !path.qualities.length && (path.id === 'primary' || path.quality) ? `path:${path.id}` : snapshot?.lockedQuality ?? '',
     qualityAuto: snapshot?.backend === 'mse' && (path?.qualities.length ?? 0) > 1,
     pendingAudioId: snapshot?.pendingAudioTrackId ?? '',
-    pendingSubtitleId: snapshot?.pendingSubtitleTrackId ?? '',
-    audioId: snapshot?.audioTrackId ?? plan?.selectedAudioTrackId ?? '', audioLabel: selectedAudio?.name ?? msg('data.originalAudio'),
-    subtitleId: snapshot?.subtitleTrackId ?? plan?.selectedSubtitleTrackId ?? '',
-    audio: (plan?.audioTracks ?? []).map(t => ({ id: t.id, label: trackLabel(t) })),
+    audioId: snapshot?snapshot.audioTrackId??'':plan?.selectedAudioTrackId??'', audioLabel: selectedAudio?.name ?? msg('data.originalAudio'),
+    subtitleId: snapshot?snapshot.subtitleTrackId??'':plan?.selectedSubtitleTrackId??'',
+    audio: (snapshot?.audioTracks??plan?.audioTracks ?? []).map(t => ({ id: t.id, label: trackLabel(t) })),
     subtitles: subtitles.map(t => ({ id: t.id, label: trackLabel(t) })),
     qualities: [
       ...(plan?.paths ?? []).filter(p => p.original || p.id === 'primary').map(p => ({id:`path:${p.id}`,label:msg('data.original')})),

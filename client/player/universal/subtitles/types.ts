@@ -1,4 +1,4 @@
-export type SubtitleCodec = 'srt' | 'webvtt' | 'ass' | 'ssa' | 'pgs' | 'tx3g';
+export type SubtitleCodec = 'srt' | 'webvtt' | 'ass' | 'ssa' | 'pgs' | 'tx3g' | 'unknown';
 export type SubtitleDelivery = {kind:'embedded'} | {kind:'external';format:'webvtt'|'webvtt-window'|'srt'|'ass'|'ssa'|'sup';url:string} | {kind:'burn-in'};
 export interface SubtitleTrack {
   id:string; serverId?:string; streamIndex:number|null; containerTrackId:number|null;
@@ -12,18 +12,14 @@ export interface SubtitleSource extends SubtitleGenerations {url:string;containe
 export interface SubtitleFailure {trackId:string;serverId?:string;code:string;message:string}
 export interface SubtitlePacket {time:number;duration:number|null;data:Uint8Array}
 export interface SubtitleFont {name:string;mime:string;size:number;read(signal:AbortSignal):Promise<Uint8Array>}
+export interface SubtitlePacketWindow {packets:SubtitlePacket[];completeHistory:boolean;fromStart:boolean}
 export interface SubtitleContainer {
   tracks:readonly SubtitleTrack[]; fonts:readonly SubtitleFont[];
   configuration(trackId:string):Uint8Array|null;
-  packets(trackId:string,start:number,end:number,signal:AbortSignal):Promise<SubtitlePacket[]>;
+  packets(trackId:string,start:number,end:number,signal:AbortSignal):Promise<SubtitlePacketWindow>;
   dispose():void;
 }
 export function subtitleAbort(signal:AbortSignal){signal.throwIfAborted()}
 export function subtitleLimit(value:number,max:number,label:string){if(!Number.isSafeInteger(value)||value<0||value>max)throw new Error(`Subtitle ${label} exceeds its bound`);return value}
 
-/** Structural core ByteReader: shared source cache and per-epoch cancellation remain core-owned. */
-export interface SubtitleByteReader {
-  size(signal:AbortSignal):Promise<number>;
-  read(offset:number,length:number,signal:AbortSignal):Promise<Uint8Array>;
-  dispose():void;
-}
+export type {ByteReader as SubtitleByteReader} from '../../core/source/types';

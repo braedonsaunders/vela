@@ -205,6 +205,33 @@ measured 32,520 plan nodes, over half of the whole app. Keep the plan small:
   writes a map whose nodes name their source file and component; count nodes per
   file to see what your skin adds.
 
+## Performance: how Exact expands code
+
+Plan nodes are only half the cost. Exact also expands **expressions** in place, and the
+compiled JavaScript grows with every expansion:
+
+- A component **prop** is substituted, not evaluated once: the caller's expression is
+  emitted again at every place the callee reads the prop. A probe `Child(x=marker(t))`
+  whose view reads `x` eleven times put the `marker` body into `app.js` 25 times.
+- A `fn` call and a component `derive` are expanded at every use too, including any
+  record or list they construct (each construction carries a size check, roughly
+  200 bytes of output).
+- A one-element loop binds a value once, as a runtime value: `for v in [marker(t)]
+  key="v"` then `Child(x=v)` emitted the body once.
+
+So:
+
+- Bind an expensive value once with `for x in [expr] key="x"` before reading it more
+  than once (a style record, a list of bound strings, a context record), and pass the
+  loop variable down, never the expression.
+- Keep record constructors (`Card(...)`, `Style(...)`) out of props and derives read
+  by many rows; construct once in a one-element loop or take the record from data.
+- Keep heavy components behind few call sites, and give a component that many levels
+  reuse its values as plain fields (`s.width`), not as expressions over props.
+- Measure what you ship: the generated skin-document renderer measured 53.1 MB raw /
+  3.27 MB gzip for its engine (compiled cinematic: 2.3 MB / 307 KB) until its per-node
+  style, bindings and contexts were bound once this way.
+
 ## Install and build
 
 Official and third-party skins are installed by exactly the same mechanism:

@@ -141,7 +141,7 @@ export async function generateRegistry(client: string, only?: string): Promise<s
     only ? `// Single-engine build: dispatches ${only}${only === fallback.skin.id ? '' : ` and ${fallback.skin.id}'s fallback slots`}.` : '// Every installed engine is dispatched.',
     'use SkinManifest from "./models.contract"',
     'use SkinTraits, ' + SLOTS.map(s => s.record).join(', ') + ' from "./slot-api.contract"',
-    'use SkinDoc from "../renderer/levels.contract"',
+    'use SkinDoc from "../renderer/shapes.contract"',
   ];
   const local = (f: Found, name: string) => `${pascal(f.skin.id)}${name[0].toUpperCase()}${name.slice(1)}`;
   for (const f of engines) {

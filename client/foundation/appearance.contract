@@ -1,7 +1,6 @@
 use SkinManifest from "./models.contract"
 use resolveSkin from "./skins.generated.contract"
-use SkinDoc from "../renderer/levels.contract"
-use emptyDoc from "../skins/doc/slots.contract"
+use SkinDoc, emptyDoc from "../renderer/shapes.contract"
 
 // One runtime skin pack the server installed: data only, validated by the data
 // module (src/appearance). packJson is its canonical form for the vela-theme view.

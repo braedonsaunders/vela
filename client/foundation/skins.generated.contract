@@ -3,7 +3,7 @@
 // Every installed engine is dispatched.
 use SkinManifest from "./models.contract"
 use SkinTraits, ShellProps, HomeProps, SearchProps, SearchFieldProps, DetailProps, StatusProps, CollectionProps, LibraryProps, GuideProps, LiveControlsProps, MiniGuideProps, PlayerProps, AuthStageProps, AuthNoticeProps, SignInProps, QuickConnectProps from "./slot-api.contract"
-use SkinDoc from "../renderer/levels.contract"
+use SkinDoc from "../renderer/shapes.contract"
 use AuthStage as CinematicAuthStage, AuthNotice as CinematicAuthNotice, SignIn as CinematicSignIn, QuickConnect as CinematicQuickConnect from "../skins/cinematic/auth.contract"
 use Collection as CinematicCollection from "../skins/cinematic/browse.contract"
 use Detail as CinematicDetail from "../skins/cinematic/detail.contract"
