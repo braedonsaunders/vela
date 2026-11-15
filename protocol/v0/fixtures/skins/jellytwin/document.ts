@@ -100,7 +100,7 @@ const header: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigatio
         { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', padding: '0px 8px', 'flex-shrink': '0', color: '$ink-strong' }, children: [wordmark] },
         sections({ flex: '1' }, { display: 'none' }),
         { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { display: 'flex', flex: '1' } } },
-        { type: 'box', press: { action: 'search', focus: 'jt-search' }, label: '{s:search}', testId: 'jt-search-button', style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [glyph('search', 23)] },
+        { type: 'box', press: { action: 'search', focus: 'vela-search' }, label: '{s:search}', testId: 'jt-search-button', style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [glyph('search', 23)] },
         { type: 'box', id: 'jt-user', press: { action: 'only', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', a11y: { expanded: [{ test: 'flag:menu' }] },
           style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [initial(30, 14)] },
       ] },
@@ -179,7 +179,7 @@ const card = (wide: boolean, width = wide ? wideW : posterW): Node => {
   const art = wide ? ['card.backdrop', 'card.poster'] : ['card.poster', 'card.backdrop'];
   const noArt: Condition[] = [{ test: 'card.poster', not: true }, { test: 'card.backdrop', not: true }];
   const ring: Style = { 'box-shadow': '0px 0px 0px 3px $accent', filter: 'brightness(0.75)' };
-  return { type: 'box', id: 'jt-{row.id}-{index}', style: col({ position: 'relative', width: width.style, 'flex-shrink': '0', gap: '1px', 'align-items': 'center', 'text-align': 'center' }),
+  return { type: 'box', style: col({ position: 'relative', width: width.style, 'flex-shrink': '0', gap: '1px', 'align-items': 'center', 'text-align': 'center' }),
     small: { width: width.small }, children: [
       { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
       { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}',
@@ -201,15 +201,30 @@ const card = (wide: boolean, width = wide ? wideW : posterW): Node => {
 };
 
 // A section: its heading, then one line of cards (wide thumbnails for a landscape row).
-const section = (items: string, heading: Node[], landscape: Condition | undefined): Node => ({ type: 'box', style: col({ gap: '8px', 'padding-bottom': '26px' }), small: { gap: '6px', 'padding-bottom': '18px' }, children: [
-  { type: 'box', style: row({ 'align-items': 'center', gap: '8px', ...side, 'min-height': '40px' }), small: sideSmall, children: heading },
-  { type: 'box', style: row({ 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'scroll-padding-left': '3.3%' }), small: { 'scroll-padding-left': '14px' }, children: [
+// A section: its heading (with page-by-page arrows on a home row), then one line of cards,
+// wide thumbnails for a landscape row, and the end cell that asks for the row's next page.
+const arrow = (dir: 'pagePrev' | 'pageNext', icon: string, label: string, end: string): Node => ({ type: 'box', press: { action: dir, arg: '{row.id}' }, label, disabled: [{ test: end }],
+  style: iconBtn(36), hover: iconBtnHover, focus: iconBtnHover, disabledStyle: { opacity: '0.35' }, children: [jelly(icon, 22)] } as Node);
+const rowEnd: Node = { type: 'box', when: [{ test: 'row.hasMore' }], style: col({ position: 'relative', width: '80px', 'align-self': 'stretch', 'flex-shrink': '0', 'align-items': 'center', 'justify-content': 'center' }), small: { width: '48px' }, children: [
+  { type: 'widget', widget: 'sentinel', params: { on: 'row' }, style: fill },
+  spinner(28, { when: [{ test: 'row.loadingMore' }] }),
+] };
+const section = (items: string, heading: Node[], landscape: Condition | undefined, paged = false): Node => ({ type: 'box', style: col({ gap: '8px', 'padding-bottom': '26px' }), small: { gap: '6px', 'padding-bottom': '18px' }, children: [
+  { type: 'box', style: row({ 'align-items': 'center', gap: '8px', ...side, 'min-height': '40px' }), small: sideSmall, children: [
+    ...heading,
+    ...(paged ? [{ type: 'box', when: [{ test: 'pager.overflows' }, { test: 'env.small', not: true }], style: row({ gap: '8px' }), children: [
+      arrow('pagePrev', 'left', '{s:previousPage}', 'pager.atStart'),
+      arrow('pageNext', 'right', '{s:nextPage}', 'pager.atEnd'),
+    ] } as Node] : []),
+  ] },
+  { type: 'box', ...(paged ? { pager: { inset: 48, peek: 63 } } : {}), style: row({ 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'scroll-padding-left': '3.3%' }), small: { 'scroll-padding-left': '14px' }, children: [
     { type: 'box', style: row({ gap: '16px', 'align-items': 'flex-start', 'padding-top': '4px', 'padding-bottom': '6px', ...side }), small: { gap: '10px', ...sideSmall }, children: [
       { type: 'repeat', over: items, when: landscape ? [not(landscape)] : [], item: { type: 'use', template: 'poster' } },
       ...(landscape ? [{ type: 'repeat', over: items, when: [landscape], item: { type: 'use', template: 'wide' } } as Node] : []),
+      ...(paged ? [rowEnd] : []),
     ] },
   ] },
-] });
+] } as Node);
 const sectionTitle = (text: string, when: Condition[] = []): Node => ({ type: 'text', text, when, role: 'heading', level: 2, style: { flex: '1', 'min-width': '0px', 'font-size': '20px', 'font-weight': '600', color: '$ink-strong', 'line-clamp': '1' } });
 
 // ---------------------------------------------------------------- Home
@@ -270,14 +285,30 @@ const myMedia: Node = { type: 'box', when: [{ test: 'env.searching', not: true }
   ] },
 ] };
 
+// Search: a field that stays folded away until the header's search opens it or it holds a query.
+const open: Condition[][] = [[{ test: 'env.searchFocused' }], [{ test: 'env.searching' }]];
+const folded: Style = col({ 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'max-height': '0px', opacity: '0', transition: 'opacity 160ms linear', 'flex-shrink': '0' });
+const searchBox: Style = row({ position: 'relative', margin: '18px auto 6px', width: 'calc(100% - 28px)', 'max-width': '760px', height: '48px', 'box-sizing': 'border-box', 'align-items': 'center', gap: '10px', padding: '0px 6px 0px 14px', 'border-radius': '4px', 'background-color': '$field', border: '1px solid $field', 'flex-shrink': '0' });
+const searchField: Node = { type: 'box', style: folded, layoutTransition: '220ms ease-out', states: open.map(when => ({ when, style: { ...folded, 'max-height': '96px', opacity: '1' } })), children: [
+  { type: 'box', style: searchBox, states: [{ when: [{ test: 'env.searchFocused' }], style: { ...searchBox, 'border-color': '$accent', 'border-top-color': '$accent', 'border-bottom-color': '$accent' } }], children: [
+    glyph('search', 20, { style: { width: '20px', height: '20px', 'flex-shrink': '0', color: '$secondary' }, states: [{ when: [{ test: 'env.searchFocused' }], style: { width: '20px', height: '20px', 'flex-shrink': '0', color: '$accent' } }] }),
+    { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:search}', label: '{s:searchLibrary}', placeholderColor: '$quiet' }, style: { flex: '1', 'min-width': '0px', height: '100%', color: '$ink-strong', 'font-size': '16px' } },
+    { type: 'box', when: [{ test: 'env.searching' }], press: { action: 'clearSearch' }, label: '{s:clearSearch}', style: iconBtn(36), hover: iconBtnHover, focus: iconBtnHover, children: [glyph('close', 18)] },
+  ] },
+] } as Node;
+
 const home: Node = { type: 'box', style: col({ 'padding-bottom': '40px', color: '$ink', 'font-family': sans }), children: [
-  { type: 'slot', slot: 'searchField', style: col() },
+  searchField,
   { type: 'box', style: col(), children: [mediaBar] },
   { type: 'box', when: [{ test: 'env.searching', not: true }, { test: 'env.heroCount', is: 'eq', value: '0' }], style: { height: '22px', 'flex-shrink': '0' }, small: { height: '14px' } },
   myMedia,
   // Repeats sit in a container: a repeat's own style (its flex order among these nodes) belongs to its items.
   { type: 'box', when: [{ test: 'env.searching', not: true }], style: col(), children: [
-    { type: 'repeat', over: 'home.rows', item: section('row.items', [sectionTitle('{row.name}')], { test: 'row.landscape' }) },
+    { type: 'repeat', over: 'home.rows', item: section('row.items', [sectionTitle('{row.name}')], { test: 'row.landscape' }, true) },
+  ] },
+  { type: 'box', when: [{ test: 'env.searching', not: true }, { test: 'env.homeHasMore' }], style: col({ position: 'relative', height: '100px', 'align-items': 'center', 'justify-content': 'center', 'flex-shrink': '0' }), children: [
+    { type: 'widget', widget: 'sentinel', params: { on: 'home' }, style: fill },
+    { type: 'box', when: [{ test: 'env.homeMoreLoading' }], role: 'status', label: '{s:loadingMore}', style: row(), children: [spinner(36)] },
   ] },
   emptyState(jelly('folder', 44), '{s:nothingHere}', '{s:noRows}', [{ test: 'env.searching', not: true }, { test: 'env.rowCount', is: 'eq', value: '0' }, { test: 'env.heroCount', is: 'eq', value: '0' }]),
 ] };
@@ -452,7 +483,7 @@ const title: Node = { type: 'box', style: col({ position: 'relative', height: '1
 ] };
 
 export default {
-  schema: 1, renderer: 4, id, name: 'Jelly Twin', version,
+  schema: 1, renderer: 7, id, name: 'Jelly Twin', version,
   tagline: 'A familiar home-media client: near-black, cyan accents, card rows.',
   preview: asset('preview.jpg'), swatches: ['#101010', '#ffffff', '#00a4dc', '#aa5cc3', '#292929'],
   tokens: {
@@ -467,7 +498,7 @@ export default {
     mainNavigation: 'Main navigation', velaHome: 'Vela home', search: 'Search', profile: 'Profile and appearance', close: 'Close',
     openMenu: 'Open menu', closeMenu: 'Close menu', menu: 'Menu', media: 'Media', user: 'User', sections: 'Sections', liveTv: 'Live TV',
     home: 'Home', appearance: 'Change appearance', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out',
-    moreInfo: 'More info', featured: 'Featured titles', featuredOf: 'Featured title {index.label} of {env.heroCount}: {hero.name}', myMedia: 'My Media',
+    moreInfo: 'More info', featured: 'Featured titles', featuredOf: 'Featured title {index.label} of {env.heroCount}: {hero.name}', myMedia: 'My Media', searchLibrary: 'Search your library', clearSearch: 'Clear search', loadingMore: 'Loading more…', previousPage: 'Scroll {row.name} back', nextPage: 'Scroll {row.name} forward',
     seasonEpisode: 'S{card.seasonNumberLabel}:E{card.episodeNumberLabel}',
     nothingHere: 'Nothing here yet', noRows: 'Your library hasn\'t offered any rows yet. Titles appear here as your server adds them.',
     play: 'Play', resume: 'Resume', resumeFrom: 'Resume from {detail.resumePosition}', trailer: 'Trailer', watchProgress: 'Watch progress', crew: 'Crew', genres: 'Genres', played: 'Played',
