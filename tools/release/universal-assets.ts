@@ -72,3 +72,11 @@ export async function stageUniversalAssets(input: string, dist: string): Promise
   if (await hashFile(join(target, 'PAYLOAD-MANIFEST.json')) !== digest(manifestBytes)) throw new Error('Universal manifest changed while staging');
   return { baseURL: `/vela/universal/${manifest.assetKey}/`, assetKey: manifest.assetKey, upstreamRevision: UPSTREAM, payloadManifestSha256: digest(manifestBytes) };
 }
+
+/** Reuse only already-shipped bytes after checking the full prior release inventory. */
+export async function stageUniversalFromRelease(archive: string, dist: string): Promise<UniversalAssets> {
+  const child = Bun.spawn(['python3', join(import.meta.dir, 'universal-from-release.py'), resolve(archive), dist], { stdout: 'pipe', stderr: 'inherit' });
+  const result = await new Response(child.stdout).text();
+  if (await child.exited) throw new Error('Previous release verification failed');
+  return JSON.parse(result) as UniversalAssets;
+}

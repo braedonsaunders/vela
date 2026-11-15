@@ -3,15 +3,17 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { stageUniversalAssets } from './universal-assets';
+import { stageUniversalAssets, stageUniversalFromRelease } from './universal-assets';
 import { engines as installedEngines } from '../engine';
 import { finalizeEngineRoot } from './engine-root';
 import { writePwaAssets, pwaIcons } from './pwa-assets';
 const root = resolve(import.meta.dir, '../..'), output = join(root, '.artifacts/release');
 const assetArgument = process.argv.find(arg => arg.startsWith('--universal-assets='));
+const releaseIndex = process.argv.indexOf('--universal-from-release');
+const releaseArgument = process.argv.find(arg => arg.startsWith('--universal-from-release='))?.slice('--universal-from-release='.length) ?? (releaseIndex >= 0 ? process.argv[releaseIndex + 1] : undefined);
 const excludedSkinDocuments = process.argv.filter(arg => arg.startsWith('--exclude-document=')).map(arg => arg.slice('--exclude-document='.length));
 if (excludedSkinDocuments.some(id => !/^[a-z][a-z0-9-]{0,31}$/.test(id))) throw new Error('Invalid excluded skin document id');
-if (!assetArgument || assetArgument === '--universal-assets=' || process.argv.includes('--universal-assets')) throw new Error('Production releases require --universal-assets=<verified player payload directory>');
+if (Boolean(assetArgument) === Boolean(releaseArgument) || assetArgument === '--universal-assets=' || process.argv.includes('--universal-assets') || releaseArgument?.startsWith('--')) throw new Error('Provide exactly one of --universal-assets=<verified payload> or --universal-from-release <verified release.tar.gz>');
 const version = (await readFile(join(import.meta.dir, 'VERSION'), 'utf8')).trim();
 const hash = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex');
 async function run(cmd: string[], cwd = root) { const child = Bun.spawn(cmd, { cwd, env: { ...process.env, COPYFILE_DISABLE: '1' }, stdout: 'inherit', stderr: 'inherit' }); if (await child.exited) throw new Error(`${cmd[0]} failed`); }
@@ -22,7 +24,7 @@ for (const name of [archiveName,manifestName]) if (await Bun.file(join(output,na
 const work = await mkdtemp(join(output,'.multi-'));
 try {
   const dist = join(work,'dist'); await mkdir(dist);
-  const universalAssets = await stageUniversalAssets(assetArgument.slice('--universal-assets='.length), dist);
+  const universalAssets = releaseArgument ? await stageUniversalFromRelease(releaseArgument, dist) : await stageUniversalAssets(assetArgument!.slice('--universal-assets='.length), dist);
   await run([process.execPath, join(root, 'tools/skin.ts'), 'documents', join(dist, 'skins')]);
   if (excludedSkinDocuments.length) {
     const catalogFile = join(dist, 'skins/catalog.json');
