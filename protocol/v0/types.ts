@@ -120,6 +120,7 @@ export interface PlaybackPathBase { originalVideo?: OriginalVideo; original?: bo
   qualities: Quality[]; boundaries: SwitchBoundary[] }
 export type PlaybackPath = PlaybackPathBase & ({ readiness: 'on-demand'; url?: never } | { readiness: 'ready' | 'preparing' | 'unavailable'; url: string });
 export interface Fallback { state: 'unsupported' | 'idle' | 'preparing' | 'ready' | 'unavailable' | 'capacity'; pathId?: ID; reason?: string }
+export interface LiveAnchor { /** Nonnegative safe integer from the published snapshot. */ mediaSequence: number; windowStartSeconds: number }
 /** HTTP 202 while an explicitly requested extra is being prepared; no session exists yet. */
 export interface PlaybackPreparing { state: 'preparing'; retryAfterSeconds: number }
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; purpose?: 'playback' | 'preview';
@@ -128,7 +129,7 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   selectedAudioTrackId?: ID; selectedSubtitleTrackId: ID | null; chapters: Chapter[]; fallback: Fallback;
   qualityLimitations?: { height: number; reason: string }[];
   livePolicy?: { latencyProfile: 'auto' | 'low' | 'stable'; targetLatencySeconds: number };
-  live?: { mode: 'adaptive' | 'low-delay'; windowStartSeconds?: number; liveEdgeSeconds?: number; maxDriftSeconds?: number } }
+  live?: { mode: 'adaptive' | 'low-delay'; anchor?: LiveAnchor; windowStartSeconds?: number; liveEdgeSeconds?: number; maxDriftSeconds?: number } }
 export type PlaybackTarget = { titleId: ID; channelId?: never; extraId?: never } |
   { channelId: ID; titleId?: never; extraId?: never } | { extraId: ID; titleId?: never; channelId?: never };
 export type PlaybackRequest = Mutation & PlaybackTarget & { client: ClientCapabilities; positionSeconds?: number;
