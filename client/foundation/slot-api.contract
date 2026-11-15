@@ -26,6 +26,8 @@ shape ShellProps
   secureError: string
   // The viewer's servers, for the switcher (the selected one first is the skin's choice).
   servers: ServerOption[]
+  // The shell wraps a document's route page with no chrome of its own (the doc engine's one page call site).
+  bare: bool
 
 shape HomeProps
   model: HomeModel

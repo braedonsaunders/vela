@@ -92,6 +92,7 @@ shape Style
   animation: string
   pointerEvents: string
   cursor: string
+  outlineStyle: string
 
 // One piece of a template: literal text, or a vocabulary key.
 shape Part
@@ -209,6 +210,7 @@ shape N10
   arg: Part[]
   sym: string
   act: string
+  cs: bool
   role: string
   level: number
   test: Part[]
@@ -268,6 +270,7 @@ shape N9
   arg: Part[]
   sym: string
   act: string
+  cs: bool
   role: string
   level: number
   test: Part[]
@@ -328,6 +331,7 @@ shape N8
   arg: Part[]
   sym: string
   act: string
+  cs: bool
   role: string
   level: number
   test: Part[]
@@ -388,6 +392,7 @@ shape N7
   arg: Part[]
   sym: string
   act: string
+  cs: bool
   role: string
   level: number
   test: Part[]
@@ -448,6 +453,7 @@ shape N6
   arg: Part[]
   sym: string
   act: string
+  cs: bool
   role: string
   level: number
   test: Part[]
@@ -508,6 +514,7 @@ shape N5
   arg: Part[]
   sym: string
   act: string
+  cs: bool
   role: string
   level: number
   test: Part[]
@@ -568,6 +575,7 @@ shape N4
   arg: Part[]
   sym: string
   act: string
+  cs: bool
   role: string
   level: number
   test: Part[]
@@ -628,6 +636,7 @@ shape N3
   arg: Part[]
   sym: string
   act: string
+  cs: bool
   role: string
   level: number
   test: Part[]
@@ -688,6 +697,7 @@ shape N2
   arg: Part[]
   sym: string
   act: string
+  cs: bool
   role: string
   level: number
   test: Part[]
@@ -748,6 +758,7 @@ shape N1
   arg: Part[]
   sym: string
   act: string
+  cs: bool
   role: string
   level: number
   test: Part[]
@@ -773,21 +784,8 @@ shape N1
   dtr: Part[]
   kids: N2[]
 
-// One slot's tree: its root container's style, its top-level nodes, and the flex
-// order of the foundation's content among them (the route a shell wraps, the
-// search field a home holds), so the renderer is inlined at one call site per slot.
-shape DocSlot
-  present: bool
-  rootBase: StateRef
-  rootSts: StateRef[]
-  slotBase: StateRef
-  slotSts: StateRef[]
-  slotInner: number
-  slotOrder: string
-  // The tree places the foundation's content (a slot node); without one, none is drawn (home).
-  holds: bool
-  nodes: N1[]
-
+// The shell's tree: its root container's style, its top-level nodes, and the flex order
+// of the route it wraps among them.
 shape ShellSlot
   present: bool
   rootBase: StateRef
@@ -811,6 +809,13 @@ shape RouteProps
   tv: bool
   width: number
   still: bool
+  // Home's models (route "home"): the model (zero or one), the query, the hero shown, paging.
+  home: HomeModel[]
+  query: string
+  heroIndex: number
+  rowMoreLoading: string[]
+  homeMoreLoading: bool
+  libraries: LibraryNav[]
 
 // A route's tree (the route view draws the one named after the current stack entry).
 shape RouteTree
@@ -832,14 +837,24 @@ shape SkinDoc
   keyframesCss: string
   styles: Style[]
   shell: ShellSlot
-  home: DocSlot
+  // Home and the routes the document draws, each by name (one renderer call site draws them all).
   routes: RouteTree[]
   liveHome: bool
   detailWide: string
   detailSmall: string
   detailFrom: number
   detailSplit: string
+  // A framed title page's surround (detail.frame): its scrim colour and backdrop blur, or flat (none).
+  detailScrim: string
+  detailBlur: string
+  detailFlat: bool
+  // The document's foundation traits ("" keeps the doc engine's): home under the bar fades, sections pan.
+  barMask: string
+  panSections: string
+  // The document draws its pages' loading and failure states (env.load); else the foundation's status screen shows.
+  drawsStatus: bool
 
-fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", columnGap="", rowGap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", scrollBehavior="", scrollPaddingLeft="", colorScheme="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", borderTopWidth="", borderTopColor="", borderBottomWidth="", borderBottomColor="", borderLeftWidth="", borderLeftColor="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", textOverflow="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, rotate=0, perspective="", transition="", animation="", pointerEvents="", cursor="")
+fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", columnGap="", rowGap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", scrollBehavior="", scrollPaddingLeft="", colorScheme="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", borderTopWidth="", borderTopColor="", borderBottomWidth="", borderBottomColor="", borderLeftWidth="", borderLeftColor="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", textOverflow="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, rotate=0, perspective="", transition="", animation="", pointerEvents="", cursor="", outlineStyle="")
 fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)
-fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=false, nodes=[]), home=DocSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=false, nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none")
+fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=true, nodes=[holderNode5()]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none", detailScrim="transparent", detailBlur="none", detailFlat=true, barMask="", panSections="", drawsStatus=false)
+fn holderNode5(): N5 = N5(t="holder", base=noRef(), sts=[], hh=false, hf=false, grp=false, hg=false, gf=false, fade=false, dis=[], aexp=[], asel=[], acur=[], aprs=[], ahp="", atitle=[], brole="", pfocus=[], esc="", escTo=[], lt="", se="", ex="", exs="", ivb="", ipaths=[], fr="", cond=[], parts=[], src=[], label=[], arg=[], sym="", act="", cs=false, role="", level=0, test=[], dom=[], rep="", lim=0, mk="", md=0, mdl=0, me="", mf="", mit="", mdir="", msk="", msd=0, step=0, cap=0, dw=[], dbg=[], dbi=[], dc=[], dop=[], dtr=[], kids=[])

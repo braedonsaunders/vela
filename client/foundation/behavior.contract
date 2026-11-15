@@ -1,4 +1,6 @@
 use buildEngine from "./engine.contract"
+use SkinTraits from "./slot-api.contract"
+use SkinDoc from "../renderer/shapes.contract"
 use skinTraits, skinDetailSplit, resolveSkin, documentsSkin, defaultSkin from "./skins.generated.contract"
 use FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel, AuthModel, QuickModel, CollectionModel, LibraryNav, LibraryModel, HomeRowsPage, HomeRowPage, CardPreview, HeroPreview, SecureSwitchReply, HomeRetryPolicy, ServerList, ServerProbe, ServerReply, PlexLink, PlexServer, libraryQuery from "./models.contract"
 
@@ -15,6 +17,7 @@ shape PageState
   hasFocus: bool
 
 // The home visit's query for a library section and its browse query.
+fn docTraits(base: SkinTraits, isDoc: bool, d: SkinDoc): SkinTraits = (isDoc ? SkinTraits(base, barMask=(d.barMask == "" ? base.barMask : d.barMask == "true"), panSections=(d.panSections == "" ? base.panSections : d.panSections == "true")) : base)
 fn librarySection(id: string, query: string): string = (query == "" ? `?lib=${encodeURIComponent(id)}` : `${query}&lib=${encodeURIComponent(id)}`)
 
 members Client
@@ -533,7 +536,8 @@ members Client
   derive small = viewport.width < 640
   derive still = viewport.prefersReducedMotion
   // What the root reads about the active skin, from its skin.json (never its name).
-  derive traits = skinTraits(activeSkin)
+  // A skin document may set the foundation's traits (barMask, panSections) over the doc engine's.
+  derive traits = docTraits(skinTraits(activeSkin), activeSkin == "doc", activeDoc)
   // A plain title page rather than a framed overlay.
   derive flatDetail = traits.flatDetail
   // A skin that splits the title page beside home narrows home to the split's column.

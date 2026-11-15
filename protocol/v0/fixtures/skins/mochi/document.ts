@@ -28,11 +28,11 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 8 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// Renderer 9 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
-const r6 = (fields: Record<string, unknown>) => fields as object;
-const active = (style: Style) => r6({ active: style });
+const pending = (fields: Record<string, unknown>) => fields as object;
+const active = (style: Style) => pending({ active: style });
 const candy = { hover: { 'background-color': '$pink-hover' }, focus: { 'box-shadow': ring }, active: press94 };
 const puffy = { hover: { 'background-color': '$lavender-soft' }, focus: { 'box-shadow': ring }, active: press94 };
 const bubble = { hover: { 'background-color': '$pink-wash' }, focus: { 'box-shadow': ring }, active: { scale: '0.9' } };
@@ -197,7 +197,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
   style: { ...col, position: 'relative', 'z-index': '20', 'flex-shrink': '0', 'padding-top': '14px', ...gutter, 'padding-bottom': '8px' }, below: { [COMPACT]: { 'padding-top': '10px', ...gutterSmall, 'padding-bottom': '4px' } }, children: [
     { type: 'box', style: { ...row, height: '66px', 'box-sizing': 'border-box', 'padding-left': '22px', 'padding-right': '10px', 'align-items': 'center', gap: '10px', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$card', 'box-shadow': '0px 5px 0px $ink' },
       below: { [COMPACT]: { height: '56px', 'padding-left': '14px', 'padding-right': '8px', gap: '6px' } }, children: [
-        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { ...row, position: 'relative', 'align-items': 'center', gap: `${26 * 0.24}px`, 'margin-right': '18px', 'flex-shrink': '0', color: '$ink' },
+        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', ...pending({ controlStates: false }), style: { ...row, position: 'relative', 'align-items': 'center', gap: `${26 * 0.24}px`, 'margin-right': '18px', 'flex-shrink': '0', color: '$ink' },
           below: { [COMPACT]: { gap: `${22 * 0.24}px`, 'margin-right': '0px' } }, children: [
             { type: 'box', style: { ...row, 'align-items': 'center', gap: `${26 * 0.24}px` }, below: { [COMPACT]: { display: 'none' } }, children: wordmark(26) },
             { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { ...row, 'align-items': 'center', gap: `${22 * 0.24}px` } }, children: wordmark(22) },
@@ -211,7 +211,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
           searchTip,
         ] },
         // The profile button, washed pink while its menu is open.
-        { type: 'box', id: 'profile-menu-trigger', press: { action: 'toggle', arg: 'menu' }, label: '{s:profileAndAppearance}', testId: 'profile-menu', a11y: { expanded: [set('flag:menu')], ...r6({ controls: 'viewer-settings' }) },
+        { type: 'box', id: 'profile-menu-trigger', press: { action: 'toggle', arg: 'menu' }, label: '{s:profileAndAppearance}', testId: 'profile-menu', a11y: { expanded: [set('flag:menu')], ...pending({ controls: 'viewer-settings' }) },
           style: profileButton, states: [{ when: [set('flag:menu')], style: { ...profileButton, 'background-color': '$pink-wash' } }], below: { [COMPACT]: { 'padding-right': '4px' } }, ...bubble, children: [
             { type: 'text', text: '{env.viewerInitial}', style: { ...sz(32), 'border-radius': '16px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-family': pixelFace, 'font-size': '16px', 'font-weight': '700', color: '$ink', 'background-color': '$pink-soft', border: '2px solid $ink', 'box-sizing': 'border-box' } },
             { type: 'text', text: '{env.viewer}', style: { 'font-size': '15px', 'font-weight': '600', 'max-width': '140px', 'white-space': 'nowrap', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis' }, below: { [COMPACT]: { display: 'none' } } },
@@ -327,6 +327,40 @@ const shelf = (paged: boolean): Node => ({ type: 'box', style: { ...col, positio
     ] },
 ] });
 
+// ---------------------------------------------------------------- status
+
+// A loading placeholder: a candy block swept by a soft highlight (look.contract Skeleton).
+const skeleton = (width: string, height: string, radius: number, extra: Extra = {}): Node => ({ type: 'box', ...extra,
+  style: { ...col, width, height, 'flex-shrink': '0', 'border-radius': `${radius}px`, 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$skeleton', ...(extra.style ?? {}) }, children: [
+    { type: 'box', when: [moving], motion: 'shimmer', style: { width: '100%', height: '100%', 'background-image': 'linear-gradient(90deg, $page-clear 0%, $skeleton-light 50%, $page-clear 100%)' } },
+  ] } as Node);
+// A row-shaped placeholder while titles load (slots.contract RowSkeleton).
+const rowSkeleton: Node = { type: 'box', style: { ...col, gap: '18px', 'padding-bottom': '24px' }, children: [
+  { type: 'box', style: { ...col, ...gutter }, small: gutterSmall, children: [skeleton('190px', '22px', 8)] },
+  { type: 'box', style: { ...row, gap: '20px', ...gutter, 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, small: { gap: '14px', ...gutterSmall }, children: [0, 1, 2, 3, 4, 5, 6, 7].map(() => ({ type: 'box', style: { ...col, gap: '10px', 'flex-shrink': '0' }, children: [
+    skeleton('clamp(146px, 11.6vw, 208px)', 'clamp(219px, 17.4vw, 312px)', 20, { small: { width: '132px', height: '198px' } }),
+    skeleton('70%', '12px', 6),
+  ] } as Node)) },
+] };
+// Home while it loads: Mochi hopping inside a banner-shaped frame, the field and rows as
+// skeletons; when it fails, a sad Mochi and, when the foundation can ask again, Try again
+// (slots.contract Status).
+const homeLoading: Node = { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:findingYourEvening}', motion: 'statusIn', style: { ...col, 'padding-top': '10px', gap: '34px' }, small: { 'padding-top': '6px', gap: '26px' }, children: [
+  { type: 'box', style: { ...col, position: 'relative', 'margin-left': 'max(24px, 3.6vw)', 'margin-right': 'max(24px, 3.6vw)', height: 'clamp(380px, 54vh, 560px)', 'box-sizing': 'border-box', border: '3px dashed $shadow', 'border-radius': '34px', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$lavender-soft' },
+    small: { 'margin-left': '16px', 'margin-right': '16px', height: '440px', 'border-radius': '26px' }, children: [
+      { ...loader('{s:findingYourEvening}', 80), small: { display: 'none' } } as Node,
+      { ...loader('{s:findingYourEvening}', 64), style: { display: 'none' }, small: { ...col, 'align-items': 'center', gap: '14px' } } as Node,
+    ] },
+  { type: 'box', style: { ...col, 'align-items': 'center', ...gutter }, small: gutterSmall, children: [skeleton('min(720px, 100%)', '62px', 31)] },
+  rowSkeleton,
+] };
+const retryButton: Node = { type: 'box', when: [set('env.canRetry')], style: { ...row, 'justify-content': 'center' }, children: [
+  { type: 'box', press: { action: 'retry' }, label: '{s:tryAgain}', style: { ...Candy, height: '46px', padding: '0px 24px' }, ...candy, children: [{ type: 'text', text: '{s:tryAgain}' }] },
+] };
+const failed = (message: string): Node => ({ type: 'box', when: [is('env.load', 'failed')], style: { ...col, 'padding-top': '48px' }, small: { 'padding-top': '24px' }, children: [
+  { type: 'box', style: { ...col, gap: '4px' }, children: [emptyState('sad', '{s:somethingWentQuiet}', message), retryButton] },
+] });
+
 // ---------------------------------------------------------------- home
 
 const heroChip: Style = { 'font-size': '12.5px', 'font-weight': '600', padding: '3px 10px', 'border-radius': '999px', 'background-color': '$night-veil', border: '1.5px solid $night-edge-strong', color: '$night-ink', 'font-variant-numeric': 'tabular-nums' };
@@ -397,26 +431,30 @@ const searchField: Node = { type: 'box', style: field, states: [{ when: [set('en
   ] },
   { type: 'box', style: badge, states: [{ when: [set('env.searchFocused')], style: { ...badge, 'background-color': '$pink' } }], children: [icon('search', 16)] },
   { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:searchPlaceholder}', label: '{s:searchYourLibrary}', placeholderColor: '$ink-quiet' },
-    style: { flex: '1', 'min-width': '0px', height: '100%', color: '$ink', 'font-family': fredoka, 'font-size': '17px', 'font-weight': '500' } },
+    style: { flex: '1', 'min-width': '0px', height: '100%', color: '$ink', 'font-family': fredoka, 'font-size': '17px', 'font-weight': '500', outline: 'none' } },
   { type: 'box', when: [set('env.searching')], press: { action: 'clearSearch' as Action }, label: '{s:clearSearch}', style: { ...Bubble, ...sz(40) }, ...bubble, children: [icon('close', 12)] },
 ] };
 
 const searchBlock: Style = { ...col, position: 'relative', 'padding-top': '34px', 'padding-bottom': '10px', ...gutter, 'align-items': 'center' };
-const home: Node = { type: 'box', style: { ...col, position: 'relative', 'padding-top': '10px' }, small: { 'padding-top': '6px' }, children: [
-  { type: 'repeat', over: 'home.hero', when: [not('env.searching')], item: { type: 'box', exit: 'heroOut', style: { ...col, ...gutter }, small: gutterSmall, children: [banner] } },
-  { type: 'box', role: 'group', label: '{s:featuredTitles}', when: [not('env.searching'), { test: 'env.heroCount', is: 'gt', value: '1' }],
+const ready: Condition = is('env.load', 'ready');
+const home: Node = { type: 'box', style: { ...col, position: 'relative' }, children: [
+  homeLoading,
+  failed('{s:homeFailed}'),
+  { type: 'box', when: [ready], style: { height: '10px', 'flex-shrink': '0' }, small: { height: '6px' } },
+  { type: 'repeat', over: 'home.hero', when: [ready, not('env.searching')], item: { type: 'box', exit: 'heroOut', style: { ...col, ...gutter }, small: gutterSmall, children: [banner] } },
+  { type: 'box', role: 'group', label: '{s:featuredTitles}', when: [ready, not('env.searching'), { test: 'env.heroCount', is: 'gt', value: '1' }],
     style: { ...row, gap: '8px', 'align-items': 'center', 'justify-content': 'center', 'padding-top': '20px' }, small: { 'padding-top': '16px' }, children: [
       { type: 'repeat', over: 'home.heroes', item: heroDot },
     ] },
   // Padding by searching and phone width, as states (variants layer over them).
-  { type: 'box', style: searchBlock, layoutTransition: '420ms ease-out', states: [
+  { type: 'box', when: [ready], style: searchBlock, layoutTransition: '420ms ease-out', states: [
       { when: [set('env.searching'), set('env.small')], style: { ...searchBlock, 'padding-top': '40px' } },
       { when: [set('env.searching')], style: { ...searchBlock, 'padding-top': '48px' } },
       { when: [set('env.small')], style: { ...searchBlock, 'padding-top': '26px' } },
     ], small: { 'padding-bottom': '4px', ...gutterSmall }, children: [
       searchField,
     ] },
-  { type: 'box', when: [not('env.searching')], style: { ...col, position: 'relative', 'padding-top': '18px' }, small: { 'padding-top': '12px' }, children: [
+  { type: 'box', when: [ready, not('env.searching')], style: { ...col, position: 'relative', 'padding-top': '18px' }, small: { 'padding-top': '12px' }, children: [
     { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'shelf', motion: 'hopRow', stagger: { step: 80, cap: 4 }, exit: 'rowOut' } as Node },
     { type: 'box', when: [set('env.homeHasMore')], style: { ...col, position: 'relative', 'min-height': '120px', 'align-items': 'center', 'justify-content': 'center' }, children: [
       { type: 'widget', widget: 'sentinel', params: { on: 'home' } },
@@ -431,8 +469,6 @@ const home: Node = { type: 'box', style: { ...col, position: 'relative', 'paddin
 
 const side: Style = { 'padding-left': 'max(48px, 5vw)', 'padding-right': 'max(48px, 5vw)' };
 const sideSmall = (n: number): Style => ({ 'padding-left': `${n}px`, 'padding-right': `${n}px` });
-const ready: Condition = is('env.load', 'ready');
-
 // A section title in pixel type beside a pixel icon in a candy badge (detail.contract).
 const sectionHeading = (label: string, english: string, iconName: string): Node => ({ type: 'box', style: { ...row, gap: '10px', 'align-items': 'center' }, children: [
   { type: 'box', style: { ...row, 'align-items': 'center', 'justify-content': 'center', ...sz(32), 'border-radius': '10px', 'background-color': `$${accentOf(english)}`, border: '2.5px solid $ink', 'box-sizing': 'border-box' }, children: [icon(iconName, 14)] },
@@ -568,7 +604,7 @@ const episodesBody: Node[] = [
     ] },
   ] },
   upNext,
-  { type: 'box', style: episodeList, small: { gap: '12px' }, states: [{ when: [set('detail.seasonPending')], style: { ...episodeList, opacity: '0.5' } }], ...r6({ a11y: { busy: [set('detail.seasonPending')] } }), children: [
+  { type: 'box', style: episodeList, small: { gap: '12px' }, states: [{ when: [set('detail.seasonPending')], style: { ...episodeList, opacity: '0.5' } }], ...pending({ a11y: { busy: [set('detail.seasonPending')] } }), children: [
     { type: 'repeat', over: 'detail.episodes', item: episodeCard },
   ] },
 ];
@@ -611,11 +647,12 @@ const crew: Node = { type: 'box', when: [ready, set('detail.crewLine')], motion:
 
 const related: Node = { type: 'repeat', over: 'detail.related', when: [ready], item: { type: 'use', template: 'relatedShelf', motion: 'hop500' } as Node };
 
-// The title page opens as a framed page over a blurred scrim, with an ink-ringed close button.
+// The title page opens as a framed page over the route frame's blurred scrim (detail.frame),
+// with an ink-ringed close button.
 // (The compiled trait's frame shadow named `var(--mochi.ink)` in a bound row, which never
 // resolved, so the frame draws without one; matched here.)
 const title: Node = { type: 'box', style: { ...col, position: 'relative', height: '100%' }, children: [
-  { type: 'box', motion: 'scrimIn', style: { ...col, ...inset0, 'box-sizing': 'border-box', padding: '4vh 4vw', 'background-color': '$scrim', 'backdrop-filter': 'blur(18px) saturate(1.1)', color: '$ink' }, small: { padding: '0px' }, children: [
+  { type: 'box', style: { ...col, ...inset0, 'box-sizing': 'border-box', padding: '4vh 4vw', color: '$ink' }, small: { padding: '0px' }, children: [
     { type: 'box', motion: 'pageOpen', style: { ...col, position: 'relative', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': '$page' },
       small: { 'border-radius': '0px' }, children: [
         { type: 'box', id: 'back', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', ...sz(44), 'box-sizing': 'border-box', padding: '13px', border: '3px solid $ink', 'border-radius': '22px', 'background-color': '$card', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: '$ink' },
@@ -626,17 +663,11 @@ const title: Node = { type: 'box', style: { ...col, position: 'relative', height
             // Opening: Mochi hopping where the page will be; failed: a sad Mochi.
             { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:openingTitle}', motion: 'statusIn', style: { ...col, gap: '34px' }, small: { gap: '26px' }, children: [
               { type: 'box', style: { ...col, position: 'relative', height: '70vh', 'border-radius': '34px', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box' }, small: { 'border-radius': '26px' }, children: [
-                loader('{s:openingTitle}', 80),
+                { ...loader('{s:openingTitle}', 80), small: { display: 'none' } } as Node,
+                { ...loader('{s:openingTitle}', 64), style: { display: 'none' }, small: { ...col, 'align-items': 'center', gap: '14px' } } as Node,
               ] },
             ] },
-            { type: 'box', when: [is('env.load', 'failed')], style: { ...col, 'padding-top': '48px' }, small: { 'padding-top': '24px' }, children: [
-              { type: 'box', style: { ...col, gap: '4px' }, children: [
-                emptyState('sad', '{s:somethingWentQuiet}', '{s:titleFailed}'),
-                { type: 'box', when: [set('env.canRetry')], style: { ...row, 'justify-content': 'center' }, children: [
-                  { type: 'box', press: { action: 'retry' }, label: '{s:tryAgain}', style: { ...Candy, height: '46px', padding: '0px 24px' }, ...candy, children: [{ type: 'text', text: '{s:tryAgain}' }] },
-                ] },
-              ] },
-            ] },
+            failed('{s:titleFailed}'),
             titleHead,
             episodesSection([set('detail.hasEpisodes')]), episodesSection([not('detail.hasEpisodes'), set('detail.hasSeasons')]),
             extras, cast, crew, related,
@@ -654,7 +685,7 @@ const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds 
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
 export default {
-  schema: 1, renderer: 8, id, name: 'Mochi', version,
+  schema: 1, renderer: 9, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true, flatDetail: false },
@@ -681,6 +712,7 @@ export default {
     closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', titleFailed: "This title couldn't be opened. It may no longer be available.",
     watchTrailer: 'Watch trailer', watchProgress: 'Watch progress', watchProgressOf: 'Watch progress:', episodes: 'Episodes', season: 'Season', episode: 'Episode',
     extras: 'Extras', featuring: 'Featuring', behindTheStory: 'Behind the story', play: 'Play', resume: 'Resume', watched: 'Watched', notAvailable: 'Not available', notAvailableYet: 'Not available yet', tryAgain: 'Try again',
+    findingYourEvening: 'Finding your evening…', homeFailed: "Your library couldn't be reached. Check your server connection.",
   } },
   fonts: {
     fredoka: { family: 'Fredoka', files: [{ url: asset('fredoka.ttf'), weight: '300 700', style: 'normal' }] },
@@ -714,12 +746,14 @@ export default {
     float36: float(3.6), float50: float(5), float32: float(3.2),
     pop0: popIn(0), pop60: popIn(60), pop120: popIn(120), pop260: popIn(260),
     hop0: hop(0), hop160: hop(160), hop260: hop(260), hop380: hop(380), hop420: hop(420), hop460: hop(460), hop480: hop(480), hop500: hop(500), hopRow: hop(120),
+    shimmer: { keyframes: 'shimmer', duration: 1600, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     statusIn: { keyframes: 'dissolve', duration: 400, easing: 'ease-out', fill: 'both', still: fade(200) },
-    scrimIn: { keyframes: 'dissolve', duration: 420, easing: 'ease-out', fill: 'both', still: fade(200) },
     pageOpen: { keyframes: 'open', duration: 680, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both', still: fade(240) },
   },
+  // Home draws its own loading and failure states.
+  status: true,
   templates: { card, shelf: shelf(true), relatedShelf: shelf(false) },
   slots: { shell, home },
   routes: { title },
-  detail: { wide: 'fullscreen', small: 'fullscreen' },
+  detail: { wide: 'fullscreen', small: 'fullscreen', frame: { scrim: '$scrim' } },
 } as unknown as SkinDocument;

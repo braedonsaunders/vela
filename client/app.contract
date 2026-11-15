@@ -121,11 +121,15 @@ component Client
       vela-context probe="media" message=receiveCapabilities width=0 height=0 aria-hidden=true
       vela-context probe="network" message=receiveNetwork width=0 height=0 aria-hidden=true
       for e in stack(nav) key=e.id
-        if e.name == "home"
-          column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width, activeDoc) : "none") navigationScroll="home-scroll" key=homeKey position="absolute" inset=0
-            for slotProps in [ShellProps(skin=activeSkin, current=(docReady ? match first(currentDocManifest) { case some(m) => m, case none => skinManifest(activeSkin) } : skinManifest(activeSkin)), skins=(auth.authenticated and current(home) ? pickerSkins(home.skins).concat(docManifests) : []), viewer=(auth.authenticated and current(home) ? home.viewer : ""), viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section=(libraryId == "" ? "home" : libraryId == "@live" ? "live" : libraryId), secureOrigin=(auth.authenticated and current(home) ? auth.secureOrigin : ""), secureBusy=secureBusy, secureError=secureError, servers=(current(servers) ? servers.servers : []))] key="shell"
+        // Home, and each route the active skin document draws (title, …): one column, one shell
+        // (bare on a route) and one route view, so the renderer has one page call site. A framed
+        // title's scrim and blur (the document's detail frame) sit on the route column itself: a
+        // route is its own backdrop root, so a blur inside it would not see home beneath.
+        if e.name == "home" or docRoutes.includes(e.name)
+          column navigationKey=`${e.id}` navigationBar=(e.name == "home" ? "auto" : "none") navigationSplit=(e.name == "home" and top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width, activeDoc) : "none") navigationPresentation=(e.name == "title" ? skinDetailPresentation(activeSkin, viewport.width, activeDoc) : "") navigationScroll=(e.name == "home" ? "home-scroll" : `${e.name}-scroll-${e.id}`) key=homeKey tabindex=-1 position="absolute" inset=0 background-color=(e.name == "title" and not activeDoc.detailFlat ? activeDoc.detailScrim : "transparent") backdrop-filter=(e.name == "title" and not activeDoc.detailFlat ? activeDoc.detailBlur : "none") animation=(e.name != "title" or activeDoc.detailFlat ? "none" : still ? "dissolve 200ms linear both" : "dissolve 420ms ease-out both")
+            for slotProps in [ShellProps(skin=activeSkin, current=(docReady ? match first(currentDocManifest) { case some(m) => m, case none => skinManifest(activeSkin) } : skinManifest(activeSkin)), skins=(auth.authenticated and current(home) ? pickerSkins(home.skins).concat(docManifests) : []), viewer=(auth.authenticated and current(home) ? home.viewer : ""), viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section=(libraryId == "" ? "home" : libraryId == "@live" ? "live" : libraryId), secureOrigin=(auth.authenticated and current(home) ? auth.secureOrigin : ""), secureBusy=secureBusy, secureError=secureError, servers=(current(servers) ? servers.servers : []), bare=(e.name != "home"))] key="shell"
               Shell(p=slotProps)
-                if failed(auth) or not current(auth) or not auth.authenticated
+                if e.name == "home" and (failed(auth) or not current(auth) or not auth.authenticated)
                   scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") flex=1 min-height=0
                     for slotProps in [AuthStageProps(still=still, backdrop=packBackdrop, wordmark=packWordmark)] key="authStage"
                       AuthStage(p=slotProps)
@@ -149,24 +153,35 @@ component Client
                                 SignIn(p=slotProps)
                 else
                   // Home and the libraries side by side: the track pans to the active section.
-                  column flex=1 min-height=0 position="relative" z-index=0 overflow="hidden"
-                    row height="100%" translate=`${sectionIndex * -100}% 0px` transition=(not traits.panSections or still ? "none" : "translate 640ms cubic-bezier(0.65, 0, 0.35, 1)")
-                      scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") scroll=cancelPreviewOnScroll mask-image=(traits.barMask ? (small ? "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 64px, black 118px)" : "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 48px, black 96px)") : "none") width="100%" height="100%" flex-shrink=0 inert=(sectionIndex != 0) aria-hidden=(sectionIndex != 0) opacity=(sectionIndex == 0 or not still ? 1 : 0) transition=(not traits.panSections ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
-                        if homeKnown
+                  // The section track clips (never scrolls): a focus or scrollIntoView inside a row would
+                  // otherwise scroll this sideways and slide the whole page off its section.
+                  column flex=1 min-height=0 position="relative" z-index=0 overflow="clip"
+                    row height="100%" translate=`${e.name == "home" ? sectionIndex * -100 : 0}% 0px` transition=(not traits.panSections or still ? "none" : "translate 640ms cubic-bezier(0.65, 0, 0.35, 1)")
+                      scroll id=(e.name == "home" ? "home-scroll" : `page-${e.id}`) role=(e.name == "home" ? "region" : "") aria-label=(e.name == "home" ? t("ui.browseAndSearch") : "") scroll=cancelPreviewOnScroll mask-image=(e.name == "home" and traits.barMask ? (small ? "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 64px, black 118px)" : "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 48px, black 96px)") : "none") width="100%" height="100%" flex-shrink=0 inert=(e.name == "home" and sectionIndex != 0) aria-hidden=(e.name == "home" and sectionIndex != 0) opacity=(e.name != "home" or sectionIndex == 0 or not still ? 1 : 0) transition=(not traits.panSections ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
+                        if e.name == "home" and homeKnown
                           for slotProps in [HomeProps(model=homeSurface, active=(top(nav).name == "home" and sectionIndex == 0 and page.visibilityState == "visible"), query=query, small=homeSmall, still=still, heroIndex=heroAt, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, cardPreview=cardPreview, libraries=(current(libraries) ? libraries : []), canLive=home.liveAvailable)] key="home"
                             Home(p=slotProps)
                               for slotProps in [SearchFieldProps(query=query)] key="searchField"
                                 SearchField(p=slotProps)
-                          if query != ""
-                            for slotProps in [SearchProps(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(searchTimeQuery != query or searchTimeGeneration != generation or pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results) and searchTimeQuery == query and searchTimeGeneration == generation), aiAvailable=home.aiAvailable, descriptiveState=descriptiveState, descriptiveCanRetry=descriptiveCanRetry, aiState=aiState, small=homeSmall, still=still)] key="searchSurface"
-                              SearchSurface(p=slotProps)
-                        else if failed(home)
-                          for slotProps in [StatusProps(kind="failure", message=t("ui.yourLibraryCouldnTBeReachedCheckYourServerConnection"), canRetry=true, small=homeSmall, still=still)] key="status"
-                            Status(p=slotProps)
-                        else
-                          for slotProps in [StatusProps(kind="home", canRetry=false, message=t("ui.findingYourEvening"), small=homeSmall, still=still)] key="status"
-                            Status(p=slotProps)
-                      for sid in sectionIds.slice(1) key=sid
+                        // The route view: home's tree when a document draws home, else the route's; one call site.
+                        // A document that draws its own status (activeDoc.drawsStatus) gets home while it loads or fails.
+                        if (e.name != "home" or homeKnown or activeDoc.drawsStatus) and docRoutes.includes(e.name)
+                          for routeProps in [RouteProps(route=e.name, entry=`${e.id}`, load=(e.name == "title" ? (failed(detail) ? "failed" : current(detail) ? "ready" : "loading") : e.name == "home" and not homeKnown ? (failed(home) ? "failed" : "loading") : "ready"), detail=(e.name == "title" and current(detail) ? [detailSurface] : []), season=detailSeason, small=(e.name == "home" ? homeSmall : small), tv=(viewport.width >= 1600), width=viewport.width, still=still, home=(e.name == "home" and homeKnown ? [homeSurface] : []), query=query, heroIndex=heroAt, rowMoreLoading=rowMoreLoading, homeMoreLoading=homeMoreLoading, libraries=(current(libraries) ? libraries : []))] key="route"
+                            DocRoute(p=routeProps)
+                              if e.name == "home"
+                                for slotProps in [SearchFieldProps(query=query)] key="searchField"
+                                  SearchField(p=slotProps)
+                        if e.name == "home" and homeKnown and query != ""
+                          for slotProps in [SearchProps(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(searchTimeQuery != query or searchTimeGeneration != generation or pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results) and searchTimeQuery == query and searchTimeGeneration == generation), aiAvailable=home.aiAvailable, descriptiveState=descriptiveState, descriptiveCanRetry=descriptiveCanRetry, aiState=aiState, small=homeSmall, still=still)] key="searchSurface"
+                            SearchSurface(p=slotProps)
+                        if e.name == "home" and not homeKnown and not (activeDoc.drawsStatus and docRoutes.includes("home"))
+                          if failed(home)
+                            for slotProps in [StatusProps(kind="failure", message=t("ui.yourLibraryCouldnTBeReachedCheckYourServerConnection"), canRetry=true, small=homeSmall, still=still)] key="status"
+                              Status(p=slotProps)
+                          else
+                            for slotProps in [StatusProps(kind="home", canRetry=false, message=t("ui.findingYourEvening"), small=homeSmall, still=still)] key="status"
+                              Status(p=slotProps)
+                      for sid in (e.name == "home" ? sectionIds.slice(1) : []) key=sid
                         if sid == "@live"
                           // Live TV: the guide owns its scrolling; it mounts on first visit and stays (inert) so it keeps its place.
                           column role="region" aria-label=t("ui.live") width="100%" height="100%" flex-shrink=0 min-height=0 inert=(libraryId != "@live") aria-hidden=(libraryId != "@live") opacity=(libraryId == "@live" or not still ? 1 : 0) transition=(not traits.panSections ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
@@ -200,11 +215,6 @@ component Client
                                   Status(p=slotProps)
         if e.name == "live"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor
-        // The route view: a route the active skin document draws whole (one renderer call site).
-        if docRoutes.includes(e.name)
-          column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=(e.name == "title" ? skinDetailPresentation(activeSkin, viewport.width, activeDoc) : "") navigationScroll=`${e.name}-scroll-${e.id}` position="absolute" inset=0
-            for routeProps in [RouteProps(route=e.name, entry=`${e.id}`, load=(e.name == "title" ? (failed(detail) ? "failed" : current(detail) ? "ready" : "loading") : "ready"), detail=(e.name == "title" and current(detail) ? [detailSurface] : []), season=detailSeason, small=small, tv=(viewport.width >= 1600), width=viewport.width, still=still)] key="route"
-              DocRoute(p=routeProps)
         if e.name == "title" and not docRoutes.includes("title")
           column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=skinDetailPresentation(activeSkin, viewport.width, activeDoc) navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 box-sizing="border-box" padding=(flatDetail or small ? "0px" : "4vh 4vw") background-color=(flatDetail ? pageColor : traits.detailScrim) backdrop-filter=(flatDetail ? "none" : "blur(18px) saturate(1.1)") animation=(flatDetail ? "none" : still ? "dissolve 200ms linear both" : "dissolve 420ms ease-out both") color=inkColor
             column position="relative" flex=1 min-height=0 overflow="hidden" border-radius=(flatDetail or small ? 0 : 28) background-color=pageColor box-shadow=(flatDetail or small ? "none" : traits.detailShadow) animation=(flatDetail ? "none" : still ? "dissolve 240ms linear both" : "open 680ms cubic-bezier(0.16, 1, 0.3, 1) both")
