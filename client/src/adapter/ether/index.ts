@@ -152,7 +152,7 @@ export class EtherAdapter implements ServerAdapter {
   row(id: string, cursor?: string, limit?: number) { return this.request<V.Row>('GET', `/rows/${encodeURIComponent(id)}${query({ cursor, limit })}`, undefined, true, true); }
   libraries(q: V.LibrariesQuery) { return this.request<V.Page<V.Library>>('GET', `/libraries${query(q)}`, undefined, true, true); }
   library(id: string, q: V.LibraryBrowseQuery) { return this.request<V.LibraryContents>('GET', `/libraries/${encodeURIComponent(id)}/items${query(q)}`, undefined, true, true); }
-  collection(id: string) { return this.request<V.CollectionContents>('GET', `/collections/${encodeURIComponent(id)}`, undefined, true, true); }
+  collection(id: string, cursor?: string, limit?: number) { return this.request<V.CollectionContents>('GET', `/collections/${encodeURIComponent(id)}${query({ cursor, limit })}`, undefined, true, true); }
   detail(id: string) { return this.request<V.TitleDetail>('GET', `/titles/${encodeURIComponent(id)}`, undefined, true, true); }
   search(r: V.SearchRequest) { return this.request<V.SearchResponse>('POST', '/search', r); }
   startAI(r: V.AISearchRequest) { return this.request<V.AISearchJob>('POST', '/search/ai', r); }

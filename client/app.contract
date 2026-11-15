@@ -13,6 +13,8 @@ routes nav
     watch "/watch/:id"
     extra "/watch/extra/:id"
     collection "/collection/:id"
+    connect "/connect"
+    connectServer "/connect/:id"
     library "/library/:id"
     live "/live"
     liveWatch "/live/:id"
@@ -57,12 +59,18 @@ component Client
     setLibrarySort
     setLibraryFilter
     moreLibrary
+    moreCollection
     watchChannel
     earlierGuide
     laterGuide
     chooseGuideDay
     setGuideZoom
     tileMessage
+    // Foundation-private media authorization: injected only into vela-player and vela-preview.
+    mediaAuthJson
+    tileNativeMedia
+    previewNativeMedia
+    previewMessage
     tileUnmute
     tileTuneIn
     retuneTile
@@ -200,11 +208,11 @@ component Client
                 for slotProps in [StatusProps(kind="failure", message=t("ui.thisCollectionCouldnTBeOpened"), canRetry=true, small=small, still=still)] key="status"
                   Status(p=slotProps)
               else
-                if not current(collection)
+                if not current(collection) and activeCollectionPages <= 1
                   for slotProps in [StatusProps(kind="loading", canRetry=false, message=t("ui.openingCollection"), small=small, still=still)] key="status"
                     Status(p=slotProps)
                 else
-                  for slotProps in [CollectionProps(id=e.params.id, name=collection.name, items=collection.items, small=small, still=still)] key="collection"
+                  for slotProps in [CollectionProps(id=e.params.id, name=collection.name, items=collection.items, more=(current(collection) and collection.more), moreLoading=collectionMoreLoading, complete=collection.complete, small=small, still=still)] key="collection"
                     Collection(p=slotProps)
         if e.name == "library"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor
@@ -213,8 +221,8 @@ component Client
             // The chrome stands from the moment Play is pressed (a loading view until the session
             // and its plan exist, however long the server prepares), so its spinner runs on
             // without a swap; the picture joins beneath it.
-            if current(playback) and watchPlan != ""
-              vela-player plan=(watchModel.planJson != "" ? watchModel.planJson : currentPlan) playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%" z-index=0
+            if current(playback) and watchPlan != "" and mediaReady
+              vela-player plan=(watchModel.planJson != "" ? watchModel.planJson : currentPlan) mediaAuth=mediaAuthJson nativeMedia=watchNativeMedia playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%" z-index=0
             // The chrome is its own layer above the picture: whatever the engine composites
             // (a video element or a GPU canvas) stays under it, and pointer events bubble to the stage.
             column position="absolute" inset=0 z-index=1

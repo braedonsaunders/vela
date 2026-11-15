@@ -80,6 +80,10 @@ shape CollectionProps
   id: string
   name: string
   items: Card[]
+  // more: the skin may call moreCollection (an end-of-list sentinel); complete: the server says the list is whole.
+  more: bool
+  moreLoading: bool
+  complete: bool
   small: bool
   still: bool
 
