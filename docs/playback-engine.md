@@ -1181,3 +1181,273 @@ The Mummy (1959), HEVC Main10/1080p SDR + E-AC-3 mono; and Model Citizen (2026),
 HEVC Main10/2160p SDR + AAC5.1. Probe factsVersion6 omitted field order, so these
 are not evidence of progressive scan. No HEVC, HDR/DV7, or new live qualification
 has yet occurred; each lab stream still needs fresh owner-idle clearance.
+
+### The Mummy (1999) lab qualification — source/admission blocked
+
+Standing owner authorization permits polite sequential lab drives. A conservative
+HEVC/E-AC-3 declaration first returned a remux plan: the selected default audio
+was Italian AC-3, outside that deliberately narrowed audio declaration. That
+unused session was stopped200/ended with **zero media reads**.
+
+After restoring the full detected audio declarations and explicitly requesting
+the offered English E-AC-3 track2, the broker selected a different best release:
+4K HEVC Main10,23.976fps,10-bit BT.2020/PQ/DV8 compatibility1. Its selected track2
+was now reported as English AAC7-channel, not the earlier SDR/E-AC-3 source.
+The plan returned in137.3ms; the original probe rejected a channel-count mismatch
+before any GPU frame. The old generic message did not retain the actual container
+count, so a value such as8 must not be inferred. The diagnostic now includes
+both `broker=<count>` and `container=<count>` in future ordinary playback errors.
+No HEVC SDR, DV8, E-AC-3, seek or sync pass is claimed for this drive.
+
+Automatic fallback ran. A proposed64KiB private-header artifact was rejected by
+automatic approval review because capture/storage was not explicitly authorized;
+no capture occurred and no indirect capture was attempted. The browser session
+subsequently vanished before cleanup commands could run; no client stop/revoke
+ACK is claimed. Ether independently confirmed the transcode closed16:42:06,
+broker playback ended16:42:06.658, lease released and zero FFmpeg children; the
+owner signed out the test-only viewer, revoking6 auth records. Only then was
+Vela0.1.27 installed,1013/1013 files verified.
+
+The broker chooses a best release for the declared profile. Persisted probe
+candidates do not pin the source used by a later session. A controlled real-title
+HEVC SDR result therefore needs a supported release-pinning mechanism, or must
+qualify the actual returned release and codec facts honestly. The metadata
+mismatch was handed to Ether with exact broker facts; its container-side count
+remains unavailable for this stopped session.
+
+### 0.1.28 startup hotfix and qualification policy
+
+Original admission now intersects installed modules with **qualified** families:
+H.264 video only until another family passes its real playback gate. Native video
+advertisement is also H.264 only: the owner's1917 evidence was HEVC-copy HLS,
+so merely restricting original admission would still permit that unqualified
+copy route. HEVC/AV1/DV sources must receive compatible H.264 HLS for now. There is
+one player, no toggle; modules on disk do not establish qualification. Runtime
+admission independently checks the actual container codec, not just the broker
+label. Qualified audio families remain available.
+
+Every original start has an independent8s first-**presented**-frame watchdog.
+Audio-clock movement, a playing label or decoded-but-unpresented frames cannot
+satisfy it. Startup owns a cancellation controller; caller-scoped abortable waits
+cover demux/browser config, audio preparation, shared capability promises,
+presentation setup and controller start. Cancellation does not reset shared page
+probes. Old-renderer teardown is bounded3.5s. Actual decoder failures may try the
+local software/package route once, then the authorized compatible backend.
+Unavailable startup input bypasses pointless decoder retry. All attempts remain
+bounded and errors are reported rather than leaving a spinner indefinitely.
+
+Local same-origin native-view verification, no lab/media provider involved:
+
+| Case | Measured result |
+|---|---|
+| Actual HEVC/E-AC-3 fixture |Unqualified actual HEVC rejected into internal fallback; H.264/AAC file playing by2680.9ms,16 frames/0 dropped,position0.50542s |
+| Local media promise deliberately never resolves |Timeout reported8003.3ms; compatible fallback playing8947.8ms,17 frames/0 dropped,position0.503214s |
+
+Metadata descriptions are now advisory: actual selected container facts drive
+codec, channels/rate/layout/language, dimensions, profile/level, scan/rotation,
+colour and timeline. Differences enter bounded `snapshot.diagnostics` rather than
+rejecting playback. Only selected actual audio is inspected; description inventory
+mismatches map by source order, audio ordinal or first actual audio, with the
+mapping recorded. Unsupported decoder/output configurations, unsafe unknown
+multichannel PCM positions, corrupt or changed sources and HTTP/range violations
+still take automatic fallback. HEVC/DV presentation expansion remains gated.
+
+### HEVC local qualification candidate (production admission still H.264 only)
+
+The coordinator corrected the owner-session analysis: **both** 1917 and End of
+Oak Street used HEVC-copy fMP4 HLS with TrueHD converted to AAC. Oak Street was
+not original-file playback. Neither run qualifies original HEVC; 0.1.28's native
+and original H.264-only declarations remain necessary until this gate passes.
+
+An isolated, non-production candidate enabled HEVC only for these local native-view
+drives. Real same-origin assets, installed Chrome, synthetic 640×360/24fps files,
+one source at a time. SDR used the exact-config-supported native WebCodecs route
+with hardware preference; API support and route choice do not prove the silicon
+actually used. PQ used the separately loaded HEVC WASM-parser/GPU decoder package
+and WebGPU HDR-to-SDR presentation. The forced-package case bypassed native route
+selection without changing the fixture.
+
+| Fixture / actual route | First presented frame, warm | Before seek: decoded / presented / dropped | Position after seek to 4s (~700ms observation delay) | Worst post-seek frame lag | PCM underruns |
+|---|---:|---:|---:|---:|---:|
+| Main8 BT.709 + E-AC-3 5.1 / native |197.6ms|20 /16 /0|4.632s|13.800ms|0|
+| Main10 BT.709 + AAC / native |116.7ms|20 /16 /0|4.625s|11.848ms|0|
+| Main10 actual PQ/BT.2020 + E-AC-3 / package |167.5ms|43 /16 /0|4.638s|15.996ms|0|
+| Main10 BT.709 + AAC / forced package |109.6ms|43 /16 /0|4.639s|12.017ms|0|
+
+Initial cold Main8 first frame was2702.3ms. Stereo output/downmix was used;
+physical surround and human-perceived lipsync were not measured. PQ input was
+actual ST2084 neutral steps0–203nits plus a moving bar, not relabelled SDR.
+A never-settling `VideoDecoder.isConfigSupported` call was cancelled at150ms:
+startup rejected `AbortError` at155.6ms, runtime disposed, zero remaining canvas.
+Shared capability promises are raced per caller, never globally cancelled; audio
+package, video package and GPU-device offer preparation now use that same wait.
+
+The drive found and fixed two integration defects. GPU decode must consume seek
+preroll to reconstruct references, but frames ending before the requested start
+must be released before presentation readiness/queueing. Otherwise a seek to4s
+presented old pictures, counted92 drops and recorded up to1.795s lag. The pinned
+build-time adaptation drops only those decoded output frames and returns their
+slots; compressed packets and dependencies remain intact. Afterward both package
+seek cases had zero drops. Native VideoFrame GPU completions can outlive decoder
+retirement; seeks and audio switches now advance the presenter's/frame loop's
+presentation generation so old completion acknowledgements cannot fail the new
+playback. All four final cases completed without playback failure. No lab HEVC
+pass, 4K/DV8 pass, DV7 reconstruction or production HEVC enablement is claimed here.
+
+### Real HTTPS HEVC candidate drives (2026-11-14)
+
+The Ether coordinator confirmed the owner idle immediately before each drive.
+The isolated native-view candidate used the normal password auth/negotiate,
+playback broker, commands and observations. It did not replace the installed
+0.1.28 app shell. One stream at a time; each finished with stop200/ended,
+current-family revoke200/accepted, zero video/canvas, and the dedicated Chrome
+closed. No original file bytes were captured to disk.
+
+| Actual selected source | First GPU incl. plan | Broker plan | Seek → first new GPU | Frames / dropped after seek | Worst post-seek lag | Audio |
+|---|---:|---:|---:|---:|---:|---|
+| The Mummy (1959), original HEVC Main10,1800×1080 BT.709; native WebCodecs |4364.1ms|3672.1ms|60s:6458.0ms|32 decoded /28 presented /0 dropped|16.989ms|PCM underruns0|
+| Requested The Mummy (1999); actually The Mummy Returns (server pack-selection defect), original HEVC Main10,3840×2160 PQ/BT.2020 + DTS8ch; package GPU decode and SDR tone map |4609.3ms|3392.6ms|120s:3155.3ms|43 decoded /35 presented /0 dropped|16.625ms|PCM underruns0|
+
+The SDR run initially decoded64/presented60/drop0; Ether independently confirmed
+zero FFmpeg/transcode starts during that session. The 4K run initially decoded88,
+presented59/drop0. Its broker facts contained HDR10 colour but no Dolby Vision
+profile/compatibility facts, so this is **not** a DV8 qualification. The rendered
+post-seek film frame is `client/.exact/lab-29-hevc-4k-hdr.png`; the SDR opening
+capture `lab-28-hevc-sdr.png` is black at2.506s and is not claimed as visible film
+content. These are short decoder/presentation/clock measurements, not physical
+lipsync, HDR-display output, CPU/GPU utilization or long-film reliability results.
+
+Broker metadata remained advisory: frame-rate differences and eng/en language
+spelling differences were recorded without preventing decoding. The first Model
+Citizen request selected H.264 despite its persisted HEVC probes and was stopped
+unused. An isolated-candidate setup error then inherited production's H.264-only
+shared runtime descriptor: HEVC rejection automatically selected authorized HLS,
+which played88 frames/drop0 by3.514s media time; stop200/ended followed. This
+proves the production native-view runtime's internal handoff in that drive, not
+a separate real `/watch` UI acceptance pass. The diagnostic driver now removes
+that inherited descriptor before loading its explicitly staged candidate.
+
+The explicit DV8 candidate then reached the runtime and fell back promptly with
+`video-track-unavailable`; authorized HLS advanced6.466s with159 frames/drop0.
+Stop/revoke both200, resources zero, Chrome closed. Offline reproduction identified
+an adapter defect: removing the DV profile to use its HDR10-compatible base left
+`dvBlSignalCompatibilityId=1`. Upstream treats any surviving DV field as a DV
+selection; with no profile its selected video ordinal was null. Clearing the
+compatibility field as well yields ordinal0. Both SDR-conflict and compatible-base
+normalization now remove that field. Remaining DV reconstruction profiles are
+explicitly unqualified and immediately take the compatible backend; DV7 is not
+silently advertised as reconstructed playback. The corrected DV8 drive follows.
+
+### HEVC original admission enabled after corrected DV8 pass
+
+The final corrected Model Citizen (2026) source was original HEVC Main10,
+3840×2160, PQ/BT.2020, DV8 compatibility1, RPU present, enhancement layer absent.
+The same pinned runtime decoded its HDR10-compatible base into the SDR renderer;
+RPU reconstruction was explicitly disabled and recorded in the snapshot.
+
+| Final DV8-base measurement | Result |
+|---|---:|
+| Broker plan (cached source resolution) |79.7ms|
+| First presented GPU frame from click |957.8ms|
+| Initial decoded / presented / dropped |86 /59 /0|
+| Authorized seek120s → first new GPU frame |1022.4ms|
+| Resumed position |121.236111s|
+| Post-seek decoded / presented / dropped |55 /31 /0|
+| Worst post-seek frame lag / late frames |16.659ms /0|
+| PCM underruns |0|
+| Observations, stop, revoke |200; ended; accepted|
+
+`client/.exact/lab-30-hevc-dv8-base.png` was visually inspected after the seek.
+The session ended, current authorization family was revoked, video/canvas counts
+were zero, and Chrome was closed. The coordinator's fresh idle check preceded
+this one retry. No further source was opened afterward. These cached-startup
+numbers are not cold-provider resolution latency or physical lipsync measurements.
+
+Original negotiation now admits H.264 and HEVC, backed by the exact per-source
+native probe and installed package fallback. **Native HLS negotiation remains
+H.264-only** so an internal handoff cannot reproduce the unqualified HEVC-copy
+HLS path from0.1.27. DV7 and other full Dolby Vision reconstruction remain outside
+admission: after actual-container inspection, only normalized compatible DV8
+HDR10-base playback proceeds; remaining DV profiles immediately use the authorized
+fallback. This qualification adds neither full RPU/FEL reconstruction, PGS/ASS,
+nor universal live TS decoding. Those remain subsequent work.
+
+
+### Title-attribution correction from Ether's resolver audit
+
+The coordinator subsequently traced the 4K HDR10 request labelled The Mummy
+(1999) to a pack whose acquired file was **The Mummy Returns.mkv**. Its codec,
+decoder, frame, seek, timing and no-FFmpeg measurements remain valid for that
+actual file; it is **not a correct-title playback pass**. Ether owns the pack-file
+identity defect and is fixing it before plan-latency optimization. No client-side
+permission to substitute a film or edition is implied by these results.
+
+### 0.1.30 overlay hotfix: real app watch verification
+
+A real `/vela/watch/...` route reproduced the missing chrome on an original H.264
+1800×1080 source. The Contract chrome and all children had opacity1, but the
+shadow canvas's z-index1 escaped its media surface (isolation/z-index both auto)
+and painted above it. A shadow root is not a CSS stacking context. The native
+view now isolates its media surface at z-index0 and disables all media pointer
+targets. The shared Contract wrapper gives chrome z-index1 and focuses the watch
+stage on entry. UI state continues to come from engine snapshots, not the unused
+video element's paused property.
+
+Exact committed/proposed styles and focus were applied on that same installed
+0.1.29 stream before packaging30. One manual drive measured idle chrome opacity0;
+pointer movement0.995, centre tap0.995 and an otherwise unhandled key0.997 during
+fade-in; after Space paused playback, opacity remained1 and the transport label
+was Play. Playing/paused observations returned200,1825 frames/drop0. Before/after
+images `lab-31-overlay-before.png` and `lab-32-overlay-fixed.png` were inspected.
+Real Close player returned broker stop200/ended, own-family revoke200/accepted;
+the test Chrome was closed. Native fix3ec6089 and UI a549994/8bdb8d0 are paired;
+the universal runtime e2e583f40c93c9f6 is unchanged. No extra stream was opened.
+
+### Lab.14 fallback track verification
+
+One installed0.1.30 session requested1917 at120s with H.264/AAC fallback
+capabilities. The broker selected an H.264 remux with three audio tracks and one
+external WebVTT subtitle, rather than the FraMeSToR/PGS source. Audio1→2 returned
+200 with source/seek generations2/2. Subtitle4 on/off returned200 at a nonzero
+position. Final playback reached169.901s,360frames,0drops; playing observations
+returned200. Stop returned200/ended, own-family revoke200/accepted, Chrome closed.
+
+| Requested check | Measured result |
+| --- | --- |
+| Audio switch | Pass: server command200 and playback resumed |
+| Offered subtitle on/off | Selection pass: both commands200; glyph appearance not qualified |
+| Ladder, rung and Auto | Unqualified: selected remux qualities were empty |
+| PGS burn-in | Unqualified: selected source offered WebVTT only |
+| Prepare lower fallback |403 feature_unavailable; sent to Ether owner |
+
+The engine projection now preserves typed subtitle delivery and all offered audio
+tracks. Burn-in and server-managed audio use authorized tracks commands; embedded
+subtitle rendering remains a separate subsystem under construction. Pending codec
+qualities start their selected init and wait for exact codec verification before
+SourceBuffer creation. New speed support is advertised only when the installed
+runtime/backend implements it. No PGS rendering or nonexistent quality is implied
+by listing an actually offered server track/path.
+
+### Lab.15 quality-everywhere verification
+
+One installed0.1.30 session of1917 offered primary H.264 remux plus source-capped
+480p/1.8Mbps and360p/0.96Mbps lazy conversion paths. Here Original means the
+primary starting quality; the delivery readout correctly remains remux. An
+untouched original file is separately identified by the wire's original flag.
+
+| Check | Measured result |
+| --- | --- |
+| Original plus lower choices | Pass: primary,480p,360p;720p absent and unqualified |
+| Lower path at nonzero position | Switch200, generations2/2;480p playing170.441s,562frames,0drops |
+| Return to Original | Switch200, generations3/3; final primary playing229.872s,1419frames,0drops |
+| Prepare≤2Mbps without switching |200, ready480p in1112.7ms; primary remained playing209.005→210.119s |
+| Encoder bound | Ether independently observed one h264_videotoolbox encoder; separate Matroska helper was not an encoder |
+| Cleanup | Stop200/ended, own-family revoke200/accepted; Chrome closed |
+
+The matching controls payload2da664809bbc2c82 also passed one local AVC/AAC
+native-view drive at1.25×:0.984571s of media advanced over803ms,34frames,
+0drops and no failure. Local canonical audio and PGS burn-in commands carried the
+offered track IDs and current generations. That command check does not claim PGS
+glyph rendering. Core TypeScript and host builds passed; the redundant full
+Contract build was stopped after10minutes without a result, with UI integration
+compile delegated to the UI owner. No new core code is in this shipping payload.

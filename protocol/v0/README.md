@@ -64,6 +64,16 @@ cues) or a direct file. There is no parallel Vela media API. A plan advertises o
 currently authorized paths, never provider credentials. Media grants expire and
 must be revalidated against the owning device/session and current policy.
 
+Subtitle `Track.delivery` optionally describes an external `webvtt` or
+`webvtt-window` URL, an `embedded` source track, or `burn-in` delivery. Omission
+makes no delivery claim. `Track.streamIndex` remains the full source stream index;
+embedded/burn-in PGS retains codec `pgs`, while converted external text may report
+`webvtt`. The existing `Track.url` remains available for external VTT. Windowed VTT
+uses `from_ms` in absolute title milliseconds; cue timestamps also remain absolute
+title time, including after seeking. These resources use the same broker grants
+and policy checks as other media. This field does not change quality codec
+readiness, audio selection or client capability declarations.
+
 ## Identity and Ether mapping
 
 Implement in `internal/frontends/vela` against `internal/frontend` neutral host
@@ -357,6 +367,11 @@ and `atSeconds` on the pinned source; there is no separate select-path command.
 An `on-demand` playback path has no URL and is never fetched or considered ready.
 The generation-aware `switch` command authorizes preparation, then returns the
 actual broker plan. Existing ready/preparing/unavailable paths keep their URL rule.
+Optional `PlaybackPath.quality: {width, height, bitrate}` describes the target
+output (pixel dimensions and bits per second), including for on-demand paths.
+It is menu metadata, not codec, init-segment or playability evidence. Switching
+to a lazy quality path must return the actual plan and its rendition readiness;
+clients must not turn target metadata into verified `Quality` entries or a URL.
 
 `POST /auth/web-code` requires bearer/device authentication. Its targetOrigin must
 exactly match an advertised trusted HTTPS origin; the server issues a short-lived

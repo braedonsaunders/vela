@@ -7,6 +7,7 @@ import { audioPackages } from '../../client/player/universal/audio/packages';
 import decoderPins from '../../vendor/webgpu-player/tools/pinned-releases.json';
 import { stageUniversalAssets } from '../release/universal-assets';
 import { transformUpstreamAudio } from '../../client/player/universal/audio/ffmpeg/upstream-transform';
+import { transformUpstreamVideo } from '../../client/player/universal/video/upstream-transform';
 const root = resolve(import.meta.dir, '../..');
 const upstream = join(root, 'vendor/webgpu-player');
 const revision = 'a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2';
@@ -49,7 +50,10 @@ await copyFile(join(bunny, 'LICENSE'), join(sourceDir, 'Mediabunny-LICENSE'));
 const { build } = await import(pathToFileURL(join(upstream, 'node_modules/esbuild/lib/main.js')).href);
 const plugin = { name:'vela-audio', setup(builder: any) {
   builder.onLoad({filter:/\.ts$/}, async ({path}: {path:string}) => {
-    const transformed = transformUpstreamAudio(path, await readFile(path, 'utf8'));
+    const original = await readFile(path, 'utf8');
+    const audio = transformUpstreamAudio(path, original);
+    const video = transformUpstreamVideo(path, audio ?? original);
+    const transformed = video ?? audio;
     if (transformed !== null) return {contents:transformed, loader:'ts', resolveDir:dirname(path)};
   });
 }};
@@ -59,8 +63,12 @@ const { getWorkerEntryPoints } = await import(pathToFileURL(join(upstream, 'scri
 for (const [target, entry] of getWorkerEntryPoints()) {
   await build({...common, entryPoints:[entry], format:'iife', outfile:join(libraries,target)});
 }
-await build({...common, entryPoints:[join(root,'client/player/universal/runtime.ts')], format:'esm', outfile:join(destination,'runtime.js')});
+// Explicit local migration candidate. Production stays on the qualified entry
+// until the Vela-owned core passes its direct H.264/HEVC parity gate.
+const runtimeEntry=Bun.argv.includes('--core')?'client/player/core/adapter.ts':'client/player/universal/runtime.ts';
+await build({...common, entryPoints:[join(root,runtimeEntry)], format:'esm', outfile:join(destination,'runtime.js')});
 await cp(join(root,'client/player/universal/audio/ffmpeg'), join(sourceDir,'vela-audio-hooks'), {recursive:true});
+await copyFile(join(root,'client/player/universal/video/upstream-transform.ts'), join(sourceDir,'vela-video-transform.ts'));
 const audioDirectory = Bun.argv.find(arg => arg.startsWith('--audio-dir='))?.slice(12);
 if (audioDirectory) await run([process.execPath, join(root,'client/player/universal/audio/install-packages.ts'), join(libraries,'audio-decoders'), `--from=${resolve(audioDirectory)}`], root);
 const videoDirectory = Bun.argv.find(arg => arg.startsWith('--video-dir='))?.slice(12);
