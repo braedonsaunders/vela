@@ -838,6 +838,10 @@ function apply2(handle, json) {
     documentFonts(handle, props.fonts);
     return;
   }
+  if (props.css !== undefined) {
+    handle.sheet.textContent = !/[<\\]|@import/i.test(props.css) ? props.css : "";
+    return;
+  }
   if (props.keyframes !== undefined) {
     handle.sheet.textContent = /^[@a-zA-Z0-9{}:;.%\s,()-]*$/.test(props.keyframes) ? props.keyframes : "";
     return;

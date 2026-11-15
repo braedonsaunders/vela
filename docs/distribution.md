@@ -329,3 +329,12 @@ Release output and temporary engine builds now live under `.artifacts/release/`
 in the current internal checkout. This directory is ignored. Worktrees and build
 outputs must not use the disconnected external Scratch drive; only regenerable
 media fixtures may remain under `~/.scratch/tmp/vela/media/`.
+
+To retain an already-qualified runtime without its original diagnostic input, use
+`bun tools/release/build.ts --committed --universal-from-release <previous-release.tar.gz>`.
+Keep the adjacent `<previous-release>.manifest.json` and its `.sha256` file.
+This mode verifies the manifest checksum, the archive checksum and every archive
+file against the release inventory before copying only its shipped universal tree.
+The payload manifest, upstream pin and runtime asset key are verified again. No
+runtime is rebuilt, and the unshipped diagnostic host is neither needed nor copied.
+Use exactly one universal input option per build.

@@ -2,6 +2,7 @@ use Card, CardPreview from "../../foundation/models.contract"
 use TitleCard, gutter from "./slots.contract"
 use Display, Eyebrow, IconButton, enter, expose, drift, stagger, dissolve, rise, open, drift from "./look.contract"
 use CollectionProps from "../../foundation/slot-api.contract"
+use Pulse from "./auth.contract"
 
 // Posters in a wrapping grid, in the order given, entering with a short stagger.
 component TitleGrid
@@ -66,5 +67,14 @@ component Collection
     close: action
     selectTitle: action
     observe: action
+    more: action
+  action reachEnd(entry: IntersectionObserverEntry)
+    if entry.isIntersecting
+      more()
   view
     BrowsePage(eyebrow=t("library.collection"), name=p.name, items=p.items, small=p.small, still=p.still, close=close, selectTitle=selectTitle, observe=observe)
+    // More of a long collection loads as its end comes near.
+    if p.more
+      column height=120 align-items="center" justify-content="center" intersect=reachEnd intersect-margin="0px 0px 100% 0px" aria-hidden=(not p.moreLoading)
+        if p.moreLoading
+          Pulse(still=p.still)

@@ -26,6 +26,7 @@ component Client
   members "./foundation/appearance.contract"
   members "./foundation/launch.contract"
   members "./foundation/theme.contract"
+  members "./skins/doc/members.contract"
   // What every skin slot reads besides its record: the active skin, the server's skin
   // document, and the app's actions by their own names. Each slot's generated dispatch
   // (foundation/skins.generated.contract) offers these to its skin under the slot ABI's names.
@@ -36,6 +37,23 @@ component Client
     doc = activeDoc
     // The home pane's own width (a split title page narrows it): document breakpoints follow it.
     homeWidth = shellViewport.width
+    // The doc renderer's state and events (skins/doc/members.contract).
+    docShellFlags
+    docFlags
+    docPagers
+    docPickerOpen
+    docAct
+    docPick
+    docYear
+    docEdge
+    docObserve
+    docMoreLibrary
+    docMoreCollection
+    docFieldKey
+    docSearchKey
+    docKey
+    docPickSkin
+    docDismissPicker
     chooseSkin
     logout
     goHome
@@ -119,6 +137,7 @@ component Client
       vela-theme pack=activePackJson width=0 height=0 aria-hidden=true
       vela-theme fonts=activeDoc.fontsJson width=0 height=0 aria-hidden=true
       vela-theme keyframes=activeDoc.keyframesCss width=0 height=0 aria-hidden=true
+      vela-theme css=activeDoc.css width=0 height=0 aria-hidden=true
       vela-engine build=buildEngine() wanted=resolveSkin(wantedSkin) chosen=pickEngine fallback=serverEngine settled=engineSettled still=still width=0 height=0 aria-hidden=true
       vela-context message=receiveOrigin secureNavigate=secureNavigate secureOrigins=secureOriginsJSON width=0 height=0 aria-hidden=true
       vela-context probe="media" message=receiveCapabilities width=0 height=0 aria-hidden=true
