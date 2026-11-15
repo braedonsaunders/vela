@@ -2,7 +2,8 @@
 // inlined, viewport variants and document tokens applied, motion presets expanded,
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
-import { BOUND_ROWS, DEPTH, FIELD_DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
+import { perfReport } from './budget';
+import { BOUND_ROWS, DEPTH, FIELD_DEPTH, MOTION_DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
 
 const KEY = new Map(VOCAB.map((key, i) => [key, i]));
 /** A vocabulary key's index, a flag, or a refusal: documents name only known keys. */
@@ -62,7 +63,9 @@ export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
 export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string; pageColor: string; inkColor: string; splashOnPaper: string; drawsStatus: boolean; css: string; escapes: { flags: string; to: string }[] }
 interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number>;
   /** Hover/group-hover rules and press rules (the document's css), the next state id, and the Escape closures. */
-  group: Map<string, string[]>; hover: Map<string, string[]>; press: Map<string, string[]>; ids: number; escapes: { flags: string; to: string }[] }
+  group: Map<string, string[]>; hover: Map<string, string[]>; press: Map<string, string[]>; ids: number; escapes: { flags: string; to: string }[];
+  /** Converting the shell's tree (its levels all bind motion; a route's only to MOTION_DEPTH). */
+  shell: boolean }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
   const key = JSON.stringify(s);
@@ -253,6 +256,9 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
   const a = n.a11y ?? {};
   Object.assign(level, { ahid: a.hidden === true, achk: conds(a.checked), aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
     pfocus: parts(node.type === 'box' ? node.press?.focus : undefined, r), esc: n.escape ?? '', escTo: parts(n.returnFocus, r), lt: n.layoutTransition ?? '', ex: '', exs: '', ivb: '', ipaths: [], fr: 'nonzero' });
+  // Exact probes every element that binds a layout transition or an exit before every commit: a
+  // route's deep levels (cards and their parts) draw through a box without them.
+  if (!r.shell && depth > MOTION_DEPTH && (n.layoutTransition || n.exit)) throw new Error(`layoutTransition and exit are allowed within ${MOTION_DEPTH} levels of a route (this node is at level ${depth}): Exact checks every such element on every update`);
   if (n.exit) {
     const m = r.doc.motion?.[n.exit];
     if (!m) throw new Error(`Unknown motion ${n.exit}`);
@@ -475,14 +481,24 @@ function detailFrame(doc: SkinDocument, r: Resolve): { detailScrim: string; deta
 }
 
 export function skinDoc(doc: SkinDocument, width: number, origin: string, locale = 'en'): SkinDocModel {
+  const model = resolveDoc(doc, width, origin, locale);
+  // Over a performance limit (src/skin/budget.ts), the document is refused, as any invalid one.
+  const over = perfReport(model).findings.filter(f => f.level === 'error');
+  if (over.length) throw new Error(`Skin document over its performance budget: ${over.map(f => `${f.route}: ${f.message}`).join('; ')}`);
+  return model;
+}
+
+function resolveDoc(doc: SkinDocument, width: number, origin: string, locale: string): SkinDocModel {
   if (!doc || doc.schema !== 1 || typeof doc.id !== 'string' || !/^[a-z][a-z0-9-]{0,31}$/.test(doc.id)) throw new Error('Not a schema 1 skin document');
   if (JSON.stringify(doc).length > 512 * 1024) throw new Error('Skin document over 512 KiB');
   if (!Number.isInteger(doc.renderer) || doc.renderer < 1 || doc.renderer > RENDERER_VERSION) throw new Error(`Skin document needs renderer ${doc.renderer}; this client has ${RENDERER_VERSION}`);
   docId = doc.id; docKeyframes = new Set();
   const kfCss = keyframesCss(doc);
   const strings = { ...doc.strings?.en, ...doc.strings?.[locale.split('-')[0]], ...doc.strings?.[locale] };
-  const r: Resolve = { doc, count: 0, assets: origin, strings, styles: [], index: new Map(), group: new Map(), hover: new Map(), press: new Map(), ids: 0, escapes: [] };
+  const r: Resolve = { doc, count: 0, assets: origin, strings, styles: [], index: new Map(), group: new Map(), hover: new Map(), press: new Map(), ids: 0, escapes: [], shell: false };
+  r.shell = true;
   const shell = slot(doc.slots.shell, r, 'children', SHELL_FROM);
+  r.shell = false;
   // A route tree is a slot without `present` (a route is drawn only when the document has it).
   // Home is a route like the others (its holder is the foundation's search field): one renderer call site draws them all.
   const tree = (name: string, root: Node | undefined, holder: 'children' | 'searchField') => { const { present, ...rest } = slot(root, r, holder); return present ? [{ name, ...rest }] : []; };

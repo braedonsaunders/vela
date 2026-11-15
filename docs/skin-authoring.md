@@ -232,6 +232,25 @@ So:
   3.27 MB gzip for its engine (compiled cinematic: 2.3 MB / 307 KB) until its per-node
   style, bindings and contexts were bound once this way.
 
+## Skin documents: what the checker enforces
+
+A skin document (docs/skin-schema.md) is checked as the client loads it. Run
+`bun tools/skin.ts check <document.ts|.json>` to see its report at the phone, desktop and TV widths. The resolver
+refuses a document over a limit; over a budget, the report warns:
+
+| Measure | Budget | Limit | Why |
+| --- | --- | --- | --- |
+| Nodes in one page | 320 | 1000 | Each node is a box with its bindings, mounted with the page |
+| Nodes per repeated item | 24 | 48 | A row mounts ~20 items at once while you scroll |
+| Images per repeated item | 4 | 8 | Each image decodes and holds a texture |
+| Endless animations per item of a row, grid or list | 0 | 4 | One per item; they keep the compositor busy on screen or not |
+| Blur or backdrop filters per item of a row, grid or list | 0 | 4 | Each is an offscreen pass over its area every frame |
+| `layoutTransition` or `exit` deeper than 6 levels in a route | | refused | Exact checks every such element on every update |
+| `color-scheme` on a node that is not a tree's root | | refused | Each is a colour boundary that Exact walks on every update |
+
+Counts are upper bounds: every node counts as if each `when` held. The numbers come from measuring the doc engine
+against the compiled skins (docs/performance.md, "Skin documents").
+
 ## Install and build
 
 Official and third-party skins are installed by exactly the same mechanism:

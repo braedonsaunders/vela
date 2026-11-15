@@ -12,3 +12,26 @@ Measured 2026-11-13/14 on a 24 GB Mac, macOS 26.6.2, Chrome 157.0.8103.51, using
 ## Findings
 
 The initial run exposed a reactive bootstrap timestamp that produced over 14,000 revalidations within seconds. That run was stopped and excluded; UI commit `456c0df` captured a stable request timestamp. In the clean search run, 30 queries produced roughly 30 extra capability revalidations in addition to fast and descriptive searches. The data module now reuses the latest authenticated bootstrap capability snapshot instead of fetching capabilities for each search; a post-change browser count was interrupted when the measurement session closed, so the reduction has not yet been remeasured. Startup still showed duplicate capability and bootstrap revalidations and eagerly requested many artwork images; further profiling should distinguish concurrent initial calls and viewport loading before changing policy.
+
+## Skin documents
+
+Measured on an M4 Pro in Chrome at 1440×900 with the release build of the doc engine against compiled Cinematic, using the
+same mock and the same script (scroll, hover 10 cards, open a title, sections). These figures set the document budgets in
+`client/src/skin/budget.ts`.
+
+Cold scroll means the first pass down the home page, where rows mount as they arrive; warm scroll is a later pass over
+the same rows.
+
+| | Doc engine (51228f0) | Compiled Cinematic |
+| --- | --- | --- |
+| Cold scroll | 83 fps | 101 fps |
+| Warm scroll | 112–118 fps | 110 fps |
+| Hover | 114–121 fps, no long tasks | 120 fps |
+| Load script | 0.76 s | 0.30 s |
+| Heap on home | 68 MB | 20 MB |
+| Card | 13 elements, ~8 nodes | 3 elements |
+
+What a document page costs is the nodes it mounts. A repeated item, such as a card, is mounted about 20 at a time as a
+row arrives, and the cold-scroll cost is linear in its nodes. An endless animation or a blur inside a card exists once
+per card, and every blur is an offscreen pass over its area on every frame. `bun tools/skin.ts check <document>` prints
+these costs per page. The resolver refuses a document over a limit.

@@ -459,11 +459,33 @@ trusted`). Owner rollback to 0.1.41 and a subsequent 0.1.42 install both ran thr
 the installer. The 193,700,293-byte archive streamed in about six seconds; all
 1,117 installed file hashes matched and the served version was 0.1.42.
 
-This is **provisional**, not public-release approval. The dry run exposed two Ether
-installer defects: rollback failed to carry forward additive assets staged after
-the rollback point, and rollback retention sorted names and pruned the newest
-rollback. The coordinator restored the missing verified diagnostic assets and
-confirmed the signed 0.1.42 tree and zero sessions/pins. Both defects must be fixed
-and the owner rollback/check/reinstall repeated, proving additive preservation
-and retention of the two newest rollbacks, before the distribution gate passes.
-No public GitHub release or stable channel has been published by these commands.
+The initial dry run exposed two Ether defects (loss of newer additive assets on
+rollback and retention pruning the newest rollback). Both were fixed in Ether
+`857dffc36`, integrated as `84a5c9482`. The corrected owner-only cycle passed
+without hand repair:
+
+- Rollback 0.1.42 → 0.1.41 retained all 15 universal keys, including keys staged
+  after the rollback point, 3 root CORE JSON files, 11 diagnostic/core-app items
+  and 15 cinematic engine directories.
+- Check reported installed 0.1.41 and available signed 0.1.42.
+- Reinstall streamed the same 193,700,293-byte archive; all 1,117 manifest entries
+  matched byte-for-byte and all additive items remained present.
+- Retention kept exactly the two newest rollbacks by time (0.1.42 at 13:50:54 and
+  0.1.41 at 13:50:59), pruning the older legacy-named directory.
+- The lab served signed 0.1.42; checked runtime URLs returned 200, with zero
+  playback sessions and zero pins.
+
+**The local signed-distribution dry run is complete.** No public GitHub release or
+stable channel has been published by these commands. Before a public release:
+
+1. Confirm the **production** Ether build pins the dedicated Vela production public
+   key (not the lab-test key), with the optional next-key pin ready for rotation.
+   The production public pin has been supplied to the Ether coordinator; the lab
+   qualification deliberately used only its independent test pin.
+2. Obtain the owner's explicit approval for the exact public Vela version. The
+   completed dry run is evidence for that decision, not authorization to publish.
+3. Sign that approved version with the production key and HTTPS GitHub asset URLs,
+   validate it with `publish.ts V --dry-run`, then deliberately run
+   `bun tools/release/publish.ts V --approved=V`. This publishes immutable versioned
+   assets and advances the signed stable channel last. The local test-key/file://
+   descriptor must never be published as the production channel.

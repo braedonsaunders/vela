@@ -21,6 +21,11 @@ export const PAGER_DEPTH = 6;
 export const FIELD_DEPTH = 7;
 /** The shell's tree enters the levels at this depth: it needs 6, so its copy of the renderer is 6 levels, not 10. */
 export const SHELL_FROM = 5;
+/** A route's nodes may bind a layout transition or an exit only within this many levels: Exact
+ * probes every element that binds one before every commit, so deeper route levels (a row's cards,
+ * their posters and captions) draw through a box without them. The shell draws through its own
+ * levels (S*), which all keep them (a shell holds few nodes). */
+export const MOTION_DEPTH = 6;
 /** Style rows: Contract field name and the row it writes. Inherited ones default to "inherit" (src/skin). */
 export const STYLE: [string, string][] = [
   ['display', 'display'], ['position', 'position'], ['top', 'top'], ['right', 'right'], ['bottom', 'bottom'], ['left', 'left'], ['zIndex', 'z-index'],
@@ -89,7 +94,7 @@ ${BINDABLE.map(([, f]) => `    ${f}: string`).join('\n')}`;
  * data-vs, data-vf and data-vg), so a pointer moving over the page runs no script: the
  * element has no hover or press handlers, and no actions capture the level's props. */
 function elements(): string {
-  const box = (name: string, note: string, scheme: boolean, key: boolean) => `${note}
+  const box = (name: string, note: string, scheme: boolean, key: boolean, motion = true) => `${note}
 component ${name}
   props
 ${scheme ? elementProps : elementProps.replace('    pos: string\n', '')}
@@ -97,9 +102,9 @@ ${scheme ? elementProps : elementProps.replace('    pos: string\n', '')}
     domId: string
     role: string
     label: string
-    lt: string
+${motion ? `    lt: string
     exitAnim: string
-    // Decorative: hidden from assistive technology (a11y.hidden).
+` : ''}    // Decorative: hidden from assistive technology (a11y.hidden).
     ahid: bool
 ${scheme ? '' : `    // The node's state rules (the document's css): its state's id, whether a focus look holds, whether it is a group.
     vs: string
@@ -107,7 +112,7 @@ ${scheme ? '' : `    // The node's state rules (the document's css): its state's
     vg: bool
 `}${key ? '    keying: action\n' : ''}  slot
   view
-    box id=domId${key ? ' key=keying' : ''} tabindex=-1 testId=test role=role aria-label=label aria-hidden=ahid${scheme ? '' : ' data-st=s.id.toString() data-vs=vs data-vf=(vf ? "1" : "") data-vg=(vg ? "1" : "")'} -exact-layout-transition=lt -exact-exit-animation=exitAnim ${rows(scheme)}
+    box id=domId${key ? ' key=keying' : ''} tabindex=-1 testId=test role=role aria-label=label aria-hidden=ahid${scheme ? '' : ' data-st=s.id.toString() data-vs=vs data-vf=(vf ? "1" : "") data-vg=(vg ? "1" : "")'}${motion ? ' -exact-layout-transition=lt -exact-exit-animation=exitAnim' : ''} ${rows(scheme)}
       children
 `;
   return [
@@ -125,7 +130,8 @@ component FadeImg
   view
     image src alt=alt testId=test load=loaded width="100%" height="100%" object-fit=fit opacity=(ready ? 1 : 0) transition="opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)"
 `,
-    box('BoxEl', '// The renderer\'s element: every node draws through it (docs/skin-schema.md).', false, false),
+    box('BoxEl', '// The renderer\'s element: every node draws through it (docs/skin-schema.md); it binds no layout transition\n// or exit (a route\'s deep levels, MOTION_DEPTH), so Exact keeps no presence probe for it.', false, false, false),
+    box('MoBoxEl', '// BoxEl with a layout transition and an exit (the shell\'s levels and a route\'s first MOTION_DEPTH).', false, false, true),
     box('RootEl', '// A tree\'s root or slot box: every row bound (its style may be the renderer\'s own), and color-scheme, which documents set only on a root.', true, false),
     box('KeyRootEl', '// The shell\'s root: RootEl plus the one key handler (Escape closes the open menus, by the document\'s escapes).', true, true),
   ].join('\n') + '\n';
@@ -149,7 +155,8 @@ function holderNode(d: number): string {
   return `fn holderNode${d}(): N${d} = N${d}(${fields.join(', ')})\n`;
 }
 
-function level(d: number): string {
+function level(d: number, prefix = 'V'): string {
+  const motion = prefix === 'S' || d <= MOTION_DEPTH;
   // The node's style index for its state: disabled, its focus look, its group's focus looks, else its state's own
   // (hover, press and group hover are the document's css over this).
   const ST = 'styleAt(e, styleIx(n.hf, n.gf, n.hg, sr, dis, focused, c.hot, e.still))';
@@ -159,13 +166,13 @@ function level(d: number): string {
   // element and its row needs no anchors. \`hot\`: this box's focus when it is a group.
   const next = d < DEPTH ? `
         for kid in kids${d + 1}(n.kids, c, e, (n.grp ? focused : c.hot), vals) key=kid.key
-          V${d + 1}(n=kid.n, c=kid.c, vals=kid.vals, sr=kid.sr, dis=kid.dis, e=e, scope=scope)` : '';
+          ${prefix}${d + 1}(n=kid.n, c=kid.c, vals=kid.vals, sr=kid.sr, dis=kid.dis, e=e, scope=scope)` : '';
   // A level declares no action that reads its props: Exact passes every prop and inject of a
   // component to each of its actions as hidden arguments and checks their types on every call,
   // so an action here would re-check the node's subtree and the whole Env per event. Events go
   // to the app's own actions (skins/doc/members.contract) with small arguments; the level keeps
   // only its focus look (focus and blur are rare events).
-  return `component V${d}
+  return `component ${prefix}${d}
   props
     n: N${d}
     c: Ctx
@@ -218,7 +225,7 @@ ${d <= FIELD_DEPTH ? `  // A sign-in field shows its focus look whenever it has 
 ` : ''}  view
     // One element per node: a box, text, image or icon is its styled box; a widget sits in a box
     // that draws nothing (display: contents).
-    BoxEl(s=(${boxy} ? ${ST} : contentsStyle()), ahid=n.ahid, vs=(dis or not ${boxy} ? "" : e.still ? sr.v2 : sr.v), vf=(not dis and ((focused and n.hf) or (c.hot and n.gf))), vg=n.grp, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, c.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=(n.act != "" or not ${boxy} ? "" : fill(n.dom, vals, e)), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex))
+    ${motion ? 'MoBoxEl' : 'BoxEl'}(s=(${boxy} ? ${ST} : contentsStyle()), ahid=n.ahid, vs=(dis or not ${boxy} ? "" : e.still ? sr.v2 : sr.v), vf=(not dis and ((focused and n.hf) or (c.hot and n.gf))), vg=n.grp, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, c.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=(n.act != "" or not ${boxy} ? "" : fill(n.dom, vals, e)), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : "")${motion ? ', lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex)' : ''})
       if n.t == "box"${next}
         if n.act != ""
           // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
@@ -769,9 +776,11 @@ export async function generate(out = resolve(import.meta.dir, '../client/rendere
   const leak = vocabulary.find(([, expr]) => /mediaAuth|planJson|commandJson|headers/.test(expr));
   if (leak) throw new Error(`Vocabulary ${leak[0]} reads player plumbing`);
   const renderer = await rendererVersion(out, bump);
-  await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order, and the renderer's compatibility version.\nexport const RENDERER_VERSION = ${renderer.version};\nexport const RENDERER_DIGEST = ${JSON.stringify(renderer.digest)};\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\nexport const STYLE: [string, string][] = ${JSON.stringify(STYLE)};\n// Rows a renderer box binds; its other rows are the document's css (data-st).\nexport const BOUND_ROWS: string[] = ${JSON.stringify([...BOUND_ROWS])};\n// Theme tokens with one value (client/app.tamber): Tamber folds them, so the page declares no property for them.\nexport const FIXED_TOKENS: Record<string, string> = ${JSON.stringify(await fixedTokens())};\n// The renderer's shape: its levels, the shell's first level, and how deep widgets and pagers may sit.\nexport const DEPTH = ${DEPTH};\nexport const SHELL_FROM = ${SHELL_FROM};\nexport const WIDGET_DEPTH = ${WIDGET_DEPTH};\nexport const PAGER_DEPTH = ${PAGER_DEPTH};\nexport const FIELD_DEPTH = ${FIELD_DEPTH};\n`);
+  await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order, and the renderer's compatibility version.\nexport const RENDERER_VERSION = ${renderer.version};\nexport const RENDERER_DIGEST = ${JSON.stringify(renderer.digest)};\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\nexport const STYLE: [string, string][] = ${JSON.stringify(STYLE)};\n// Rows a renderer box binds; its other rows are the document's css (data-st).\nexport const BOUND_ROWS: string[] = ${JSON.stringify([...BOUND_ROWS])};\n// Theme tokens with one value (client/app.tamber): Tamber folds them, so the page declares no property for them.\nexport const FIXED_TOKENS: Record<string, string> = ${JSON.stringify(await fixedTokens())};\n// The renderer's shape: its levels, the shell's first level, and how deep widgets and pagers may sit.\nexport const DEPTH = ${DEPTH};\nexport const SHELL_FROM = ${SHELL_FROM};\nexport const MOTION_DEPTH = ${MOTION_DEPTH};\nexport const WIDGET_DEPTH = ${WIDGET_DEPTH};\nexport const PAGER_DEPTH = ${PAGER_DEPTH};\nexport const FIELD_DEPTH = ${FIELD_DEPTH};\n`);
   let levels = '';
   for (let d = 1; d <= DEPTH; d++) levels += level(d) + '\n';
+  // The shell's own levels (its tree enters at SHELL_FROM): the same code with motion everywhere.
+  for (let d = SHELL_FROM; d <= DEPTH; d++) levels += level(d, 'S') + '\n';
   // Shapes (and the empty document) live apart from the renderer: the foundation imports
   // them in every engine, while the components, functions and vr-* keyframes compile
   // only into the doc engine (Exact embeds every keyframe name in each animated row).

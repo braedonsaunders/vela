@@ -1,7 +1,7 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
 use Style, Env, Ctx, ShellSlot, SkinDoc, RouteProps, noStyle, holderNode5 from "../../renderer/shapes.contract"
-use V1, V5, RootEl, KeyRootEl, kids1, kids5, binds, envBinds, styleAt, stateOf, rootCtx, selectedSeason from "../../renderer/levels.contract"
+use V1, S5, RootEl, KeyRootEl, kids1, kids5, binds, envBinds, styleAt, stateOf, rootCtx, selectedSeason from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use HomeProps, ShellProps from "../../foundation/slot-api.contract"
 use GuideModel, GuideChannel, LiveTile from "../../live/models.contract"
@@ -84,7 +84,7 @@ component Shell
                       children
                   else
                     for kid in kids5([n], rootCtx(), env, false, rv) key=kid.key
-                      V5(n=kid.n, c=kid.c, vals=kid.vals, sr=kid.sr, dis=kid.dis, e=env, scope="shell")
+                      S5(n=kid.n, c=kid.c, vals=kid.vals, sr=kid.sr, dis=kid.dis, e=env, scope="shell")
                 if docPickerOpen and not p.bare
                   SkinPicker(skins=p.skins, current=p.skin, small=env.small, still=env.still, choose=docPickSkin, dismiss=docDismissPicker)
 
