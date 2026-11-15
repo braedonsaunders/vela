@@ -215,10 +215,12 @@ export class StreamingMatroskaTrack {
   const step=new Step(this.scope,await this.scope.reader.size(this.scope.signal),false);
   for(const common of [true,false]){
    const start=await this.indexed(target,step,common);
+   let release=()=>{};
+   try{
    let candidate:{element:Element;cursor:Cursor}|undefined;
    const search:BlockSearch={done:false,visit:(element,cursor,timestamp)=>{
-    if(timestamp<=target)candidate={element,cursor};
-    else{candidate??={element,cursor};search.done=true;}
+    if(timestamp<=target||!candidate){release();release=this.scope.reader.retain?.(element.start,element.end-element.start)??(()=>{});candidate={element,cursor};}
+    if(timestamp>target)search.done=true;
    }};
    await this.next(start.cursor,step,undefined,search);
    if(!candidate)return result.set({packet:null,provisional:false});
@@ -231,6 +233,7 @@ export class StreamingMatroskaTrack {
    if(common&&'shared'in start&&start.shared&&packet&&(packet.timestamp>this.scope.startSeconds+packet.duration||packet.type!=='key'))continue;
    this.scope.reader.prefetch?.(candidate.element.start,this.scope.signal);
    return result.set({packet,provisional:false});
+   }finally{release();}
   }
   return result.set({packet:null,provisional:false});
  }
@@ -243,6 +246,9 @@ export class StreamingMatroskaTrack {
 
 function rawTrack(value:unknown){const backing=(value as {_backing?:unknown})?._backing??value;return(backing as {internalTrack?:Track})?.internalTrack;}
 export function hasStreamingMatroskaBacking(value:unknown){return !!streamingMatroskaTrack(rawTrack(value))?.sequential;}
+export function streamingMatroskaOffset(value:unknown,packet:EncodedPacket){
+ return streamingMatroskaTrack(rawTrack(value))?.owns(packet)?packet.sequenceNumber:undefined;
+}
 export function primeMatroskaIndex(backing:unknown){
  const track=rawTrack(backing);
  const scope=track?.demuxer&&scopes.get(track.demuxer.input._rootSource);

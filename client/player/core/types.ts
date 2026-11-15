@@ -7,6 +7,8 @@ export interface EncodedPacket {
   durationUs: number;
   key: boolean;
   data: Uint8Array;
+  /** Actual original-file byte position, never a generic packet sequence id. */
+  sourceOffset?:number;
   epoch: number;
   /** Preserve container side data, including HDR metadata, through demux. */
   additions?: readonly { addId: number; data: Uint8Array }[];

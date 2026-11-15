@@ -246,3 +246,51 @@ difference unimportant. The final compiled counter projection uses actual PCM
 submissions, not the initialized timeline origin. Own browser/profile and
 fixture server closed. A matching-host real-app capture and the alternating
 cold pairs are still required before any default proposal.
+
+## Signed 0.1.43 qualification stopped for cache thrashing
+
+The signed host hash is `70623c5d64968475d539ed59a12fa9d8e6b10c632ac50dcf15ba76909caba567`.
+The raw repository-root build was `0227cfa2…01d65`: release builds run from the
+staged client directory. Normalizing only the 29 anchored source-path comment
+prefixes makes the entire raw host byte-equal to the signed 170,277-byte host.
+Both delegation guards are present. This was independently checked against the
+served bytes and packager's tar/manifest. An identity-aborted drive made no
+playback request and its exact grant was revoked by the operator.
+
+On fixed signed 0.1.43 / Ether integration `58e86491a`, core `aaa11c29` passed a
+bounded cold capture: first image 7.097 s, playable 7.537 s, full 1.916667-second
+PCM reserve and zero drops/underruns in two playing seconds. The following
+core-first half (`GXIKBXZPSU5TYQB7H4TUVMYBKY`, Ether `3fde9b44`) reached an image
+at 5.553 s, playable at 6.755 s, and cold-seek playing at 5.245 s. It accumulated
+three startup underruns (75,040 output frames) and three more during the early
+post-seek ramp. No additional underruns appeared through the stopped sample.
+
+More seriously, at post-seek 151.7 s the reader reported 6,110 unique pages and
+5,492 reacquisitions of completed pages, 2,768 HTTP requests and about 158.5 Mbps
+validated acquisition. This was not just discarded transport bytes. The parent
+stopped the half around 272 seconds; neither a wrapper half nor pair 3 ran.
+There is no completed new paired qualification and no default proposal.
+
+The owned Node driver's SIGTERM handler did not prevent Playwright's default
+browser signal handler from closing Chrome before UI cleanup. The operator
+stopped exactly Ether session `3fde9b44` (200), revoked only device
+`31825224-5fb5-473e-a83a-196bc22f81de` (200), unpinned (204), and confirmed zero
+sessions/FFmpeg. Future private drivers disable Playwright signal handling and
+perform their own bounded cleanup. No unrelated browser or grant was touched.
+
+The old policy added five seconds of bytes to a demux cursor that was itself
+already several seconds ahead. Unrestricted LRU eviction then discarded future
+pages or pages another track still needed, and the planner fetched them again.
+The replacement maps demuxed packet byte positions to the media clock, pins the
+front window and outstanding parser spans, and evicts media behind the playhead
+in byte order. Its budget is five-second read-ahead (8–64 MiB) plus a bounded
+40–64-MiB back-buffer, at most 128 MiB total. Static metadata has a bounded
+24-MiB reserve inside that total. When protected pages occupy the budget,
+acquisition waits for playhead progress instead of evicting them. Retired seek
+bytes outside the replacement window can be discarded; active epoch future
+pages cannot. Packet sequence numbers are treated as byte offsets only for the
+explicit streaming Matroska adapter that defines them that way.
+
+Scoped TypeScript and matching asset assembly passed (`973a2fa0aef90a31`). The
+requested eight-minute generated 4K/65-Mbps run with seeks is pending. This
+candidate is not staged or qualified, and production remains the wrapper.

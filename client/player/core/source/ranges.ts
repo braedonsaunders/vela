@@ -5,8 +5,9 @@ import type { ByteReader } from '../types';
 
 const PAGE = 256 * 1024;
 const MAX_READ = 16 * 1024 * 1024;
-const CACHE = 32 * 1024 * 1024;
+const CACHE = 48 * 1024 * 1024;
 const MIB=1024*1024,WINDOW=64*MIB;
+const METADATA=24*MIB;
 class RangeFailure extends Error {}
 class RangePreempt extends Error {}
 interface ReadEpoch {id:number;seen:Uint8Array|null|undefined;unique:number;repeated:number}
@@ -19,7 +20,8 @@ interface ForwardRun {
 
 /** One pinned original, shared by AV and subtitles. Media runs use streamed
  * 64-MiB windows; metadata stays random-access. Five seconds of byte reserve
- * (8–64 MiB) and a 32–128 MiB LRU bound read-ahead without a second cache. */
+ * (8–64 MiB) starts at the media playhead. Protected front pages and a bounded
+ * back-buffer share one cache; an LRU must never evict the decoder's future. */
 export class RangeReader implements ByteReader {
   private readonly lifetime = new AbortController();
   private readonly pages = new Map<number, Uint8Array>();
@@ -29,6 +31,14 @@ export class RangeReader implements ByteReader {
   private cachedBytes = 0;
   private cacheLimit=CACHE;
   private ahead=8*MIB;
+  private back=40*MIB;
+  private playhead:number|null=null;
+  private readonly metadata=new Set<number>();
+  private metadataBytes=0;
+  private readonly pageEpoch=new Map<number,number>();
+  private readonly leases=new Map<number,number>();
+  private readonly reads=new Set<{start:number;end:number;media:boolean}>();
+  private readonly packets=new Map<string,{time:number;offset:number}[]>();
   private forward?:ForwardRun;
   private forwardSignal?:AbortSignal;
   private forwardAnchor=0;
@@ -51,6 +61,7 @@ export class RangeReader implements ByteReader {
   beginEpoch(id:number){
     for(const run of this.forwardRuns)this.cancelForward(run);
     this.forward=undefined;this.forwardSignal=undefined;this.forwardDemand=0;
+    this.playhead=null;this.packets.clear();
     this.demands.length=0;
     this.readEpoch={id,seen:undefined,unique:0,repeated:0};
     this.metrics.sourceEpoch=id;this.metrics.uniquePageRequests=0;this.metrics.repeatedPageRequests=0;
@@ -58,13 +69,14 @@ export class RangeReader implements ByteReader {
   configureBuffer(durationSeconds:number|null){
     const rate=this.total!==null&&durationSeconds!==null&&Number.isFinite(durationSeconds)&&durationSeconds>0?this.total/durationSeconds:null;
     this.ahead=Math.ceil(rate===null?8*MIB:Math.max(8*MIB,Math.min(64*MIB,rate*5)));
-    this.cacheLimit=Math.max(CACHE,Math.min(128*MIB,this.ahead*2));
+    this.back=Math.max(40*MIB,Math.min(64*MIB,this.ahead));
+    this.cacheLimit=this.ahead+this.back;
     this.trim();this.wakeProgress();
   }
   prefetch(offset:number,signal:AbortSignal){
     signal.throwIfAborted();this.lifetime.signal.throwIfAborted();
     if(this.total===null||!Number.isSafeInteger(offset)||offset<0||offset>=this.total)return;
-    if(!this.forwardSignal){this.forwardSignal=signal;this.forwardAnchor=offset;this.forwardDemand=offset;}
+    if(!this.forwardSignal){this.forwardSignal=signal;this.forwardAnchor=offset;this.forwardDemand=offset;this.playhead=offset;this.trim();}
     this.forwardAnchor=Math.min(this.forwardAnchor,offset);
     this.maintainForward(offset,offset,true);
   }
@@ -74,10 +86,10 @@ export class RangeReader implements ByteReader {
     // Random indexes do not retarget the established media run.
     if(!foreground&&previous&&offset>previous.end+MAX_READ)return;
     this.forwardDemand=Math.max(this.forwardDemand,end);
-    for(const run of this.forwardRuns)run.demand=this.forwardDemand;
+    for(const run of this.forwardRuns)run.demand=this.playhead??offset;
     this.wakeProgress();
-    const wanted=Math.min(this.total,this.forwardDemand+this.ahead);
-    let index=Math.floor(offset/PAGE);
+    const wanted=Math.min(this.total,this.edge());
+    let index=Math.floor(Math.max(offset,this.playhead??offset)/PAGE);
     // Cached metadata islands split a run into disjoint ranges. Fill their
     // gaps concurrently rather than paying another RTT after every island.
     while(index*PAGE<wanted){
@@ -94,7 +106,7 @@ export class RangeReader implements ByteReader {
   }
   private startForward(start:number,limit:number,signal:AbortSignal){
     const abort=new AbortController();
-    const run:ForwardRun={end:limit,next:start,demand:this.forwardDemand,scope:this.readEpoch,
+    const run:ForwardRun={end:limit,next:start,demand:this.playhead??start,scope:this.readEpoch,
       abort,signal:AbortSignal.any([signal,this.lifetime.signal,abort.signal]),slots:new Map()};
     for(let at=start;at<limit;at+=PAGE){
       let resolve!:(bytes:Uint8Array)=>void,reject!:(error:unknown)=>void;
@@ -121,7 +133,7 @@ export class RangeReader implements ByteReader {
       const cut=index*PAGE;
       if(!run.slots.has(index))continue;
       if(cut<=run.next+PAGE)return;
-      const abort=new AbortController(),tail:ForwardRun={end:run.end,next:cut,demand:this.forwardDemand,scope:run.scope,
+      const abort=new AbortController(),tail:ForwardRun={end:run.end,next:cut,demand:this.playhead??cut,scope:run.scope,
         abort,signal:AbortSignal.any([this.forwardSignal!,this.lifetime.signal,abort.signal]),slots:new Map()};
       for(const [at,slot]of run.slots)if(at>=index){tail.slots.set(at,slot);run.slots.delete(at);}
       run.end=cut;this.forward=tail;this.forwardRuns.add(tail);
@@ -132,9 +144,9 @@ export class RangeReader implements ByteReader {
   }
   /** Bounded scalars survive teardown in the host's durable recovery record. */
   get acquisitionState(){return {epoch:this.readEpoch.id,requests:this.metrics.requests,bytes:this.metrics.bytes,active:this.active,
-    anchor:this.forwardSignal?this.forwardAnchor:null,demand:this.forwardDemand,ahead:this.ahead,cacheBytes:this.cachedBytes,cacheLimit:this.cacheLimit,
+    anchor:this.forwardSignal?this.forwardAnchor:null,playhead:this.playhead,demand:this.forwardDemand,ahead:this.ahead,back:this.back,cacheBytes:this.cachedBytes,cacheLimit:this.cacheLimit,
     runs:[...this.forwardRuns].map(run=>({next:run.next,end:run.end,demand:run.demand,pages:run.slots.size,request:!!run.request,
-      paused:run.next>=run.demand+this.ahead})),demands:this.demands.map(value=>({...value}))};}
+      paused:run.next>=this.edge(run)})),demands:this.demands.map(value=>({...value}))};}
   private wakeProgress(){for(const wake of [...this.progressWaiters])wake();}
   private changed(signal:AbortSignal,waiters=this.progressWaiters){
     signal.throwIfAborted();return new Promise<void>((resolve,reject)=>{
@@ -143,9 +155,52 @@ export class RangeReader implements ByteReader {
       waiters.add(wake);signal.addEventListener('abort',abort,{once:true});
     });
   }
-  private trim(){while(this.cachedBytes>this.cacheLimit){const oldest=this.pages.keys().next().value!;this.cachedBytes-=this.pages.get(oldest)!.length;this.pages.delete(oldest);}}
-  private store(index:number,bytes:Uint8Array){
-    this.cachedBytes-=this.pages.get(index)?.length??0;this.pages.delete(index);this.pages.set(index,bytes);this.cachedBytes+=bytes.length;this.trim();
+  retain(offset:number,length:number){
+    if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(length)||length<0||length>MAX_READ+PAGE)throw new RangeFailure('Invalid retained source span');
+    const indexes:number[]=[];for(let at=Math.floor(offset/PAGE);at*PAGE<offset+length;at++){indexes.push(at);this.leases.set(at,(this.leases.get(at)??0)+1);}
+    let held=true;return()=>{if(!held)return;held=false;for(const at of indexes){const count=this.leases.get(at)??0;if(count<=1)this.leases.delete(at);else this.leases.set(at,count-1);}this.trim();this.wakeProgress();};
+  }
+  notePacket(kind:string,time:number,offset:number){
+    if(!Number.isFinite(time)||!Number.isSafeInteger(offset)||offset<0||this.total!==null&&offset>=this.total)return;
+    const rows=this.packets.get(kind)??[];rows.push({time,offset});if(rows.length>2048)rows.shift();this.packets.set(kind,rows);
+  }
+  /** File offsets are supplied by demuxed packets, not an average byte estimate.
+   * B-frame presentation reordering cannot move a source window backwards. */
+  advance(time:number){
+    if(this.playhead===null)return;
+    const head=(kind:string)=>{let at:number|null=null;for(const row of this.packets.get(kind)??[])if(row.time<=time)at=Math.max(at??0,row.offset);return at;};
+    const video=head('video'),audio=head('audio');if(video===null)return;
+    this.playhead=Math.max(this.playhead,audio===null?video:Math.min(video,audio));
+    for(const [kind,rows]of this.packets){const kept=rows.filter(row=>row.time>=time-1000000);const earlier=rows.filter(row=>row.time<time-1000000).sort((a,b)=>b.time-a.time)[0];if(earlier)kept.unshift(earlier);this.packets.set(kind,kept);}
+    for(const run of this.forwardRuns)run.demand=this.playhead;
+    this.trim();this.wakeProgress();
+  }
+  private edge(run?:ForwardRun){
+    let edge=(this.playhead??this.forwardAnchor)+this.ahead;
+    for(const read of this.reads)if(read.media&&(!run||read.start<run.end&&read.end>run.next))edge=Math.max(edge,read.end);
+    return Math.min(this.total??Number.MAX_SAFE_INTEGER,Math.ceil(edge/PAGE)*PAGE);
+  }
+  private isMedia(offset:number){return this.playhead!==null&&(offset>=this.playhead-this.back&&offset<this.playhead+this.ahead+MAX_READ||
+    [...this.forwardRuns].some(run=>!run.signal.aborted&&offset>=run.next&&offset<run.end));}
+  private drop(index:number){const bytes=this.pages.get(index);if(!bytes)return;this.cachedBytes-=bytes.length;if(this.metadata.delete(index))this.metadataBytes-=bytes.length;this.pages.delete(index);this.pageEpoch.delete(index);}
+  private trim(needed=0){
+    if(this.playhead===null)return;
+    const indexes=[...this.pages.keys()].sort((a,b)=>a-b);
+    for(const at of indexes){
+      if(this.metadata.has(at)||this.leases.has(at))continue;
+      const end=at*PAGE+this.pages.get(at)!.length;
+      // Completed old-epoch bytes outside the new seek window are retired;
+      // current-epoch future pages are never an eviction candidate.
+      const retired=this.pageEpoch.get(at)!==this.readEpoch.id&&(end<=this.playhead-this.back||at*PAGE>=this.edge());
+      if(retired||end<=this.playhead&&(end<=this.playhead-this.back||this.cachedBytes+needed>this.cacheLimit))this.drop(at);
+    }
+  }
+  private async store(index:number,bytes:Uint8Array,scope:ReadEpoch,signal:AbortSignal,media:boolean){
+    const extra=bytes.length-(this.pages.get(index)?.length??0);
+    if(!media&&!this.metadata.has(index)&&this.metadataBytes+bytes.length>METADATA)throw new RangeFailure('Original metadata cache exceeds its bounded reserve');
+    for(;;){signal.throwIfAborted();this.trim(extra);if(this.cachedBytes+extra<=this.cacheLimit)break;await this.changed(signal);}
+    this.drop(index);this.pages.set(index,bytes);this.pageEpoch.set(index,scope.id);this.cachedBytes+=bytes.length;
+    if(!media){this.metadata.add(index);this.metadataBytes+=bytes.length;}
   }
   private notePage(scope:ReadEpoch,index:number,total:number){
     if(scope.seen===undefined){const length=Math.ceil(Math.ceil(total/PAGE)/8);scope.seen=length<=1024*1024?new Uint8Array(length):null;}
@@ -154,10 +209,10 @@ export class RangeReader implements ByteReader {
   }
   /** Scalar metadata only, sampled by an explicit buffer-audit payload. */
   get bufferCache(){
-    let end=this.forwardDemand,index=Math.floor(end/PAGE);
+    let end=this.playhead??this.forwardDemand,index=Math.floor(end/PAGE);
     if(this.forwardSignal)while(this.pages.has(index)){end=Math.max(end,index*PAGE+this.pages.get(index)!.length);index++;}
     return {ranges:[...this.pages].map(([index,bytes])=>({start:index*PAGE,end:index*PAGE+bytes.length})).sort((a,b)=>a.start-b.start),
-      bytes:this.cachedBytes,limit:this.cacheLimit,readAhead:this.forwardSignal?Math.max(0,end-this.forwardDemand):0,offset:this.forwardDemand};
+      bytes:this.cachedBytes,limit:this.cacheLimit,readAhead:this.forwardSignal?Math.max(0,end-(this.playhead??end)):0,offset:this.playhead??this.forwardDemand};
   }
 
   constructor(url: string, private readonly fetcher: typeof fetch = (...args) => fetch(...args),allowed?:(url:URL)=>boolean) {
@@ -179,6 +234,8 @@ export class RangeReader implements ByteReader {
         length > MAX_READ || !Number.isSafeInteger(offset + length)) throw new RangeFailure('Invalid or oversized original read');
     const total = await this.size(signal);
     if (offset + length > total) throw new RangeFailure('Original read exceeds pinned source length');
+    const release=this.retain(offset,length),read={start:offset,end:offset+length,media:this.isMedia(offset)};this.reads.add(read);
+    try{
     this.demands.push({offset,length});if(this.demands.length>12)this.demands.shift();
     this.maintainForward(offset,offset+length);
     const firstPage=Math.floor(offset/PAGE);
@@ -199,6 +256,7 @@ export class RangeReader implements ByteReader {
       }
     }
     return output;
+    }finally{this.reads.delete(read);release();}
   }
 
   private page(index: number): Promise<Uint8Array> {
@@ -206,9 +264,10 @@ export class RangeReader implements ByteReader {
     const cached = this.pages.get(index);
     if (cached) { this.pages.delete(index); this.pages.set(index,cached); this.metrics.cacheHits++; return Promise.resolve(cached); }
     const pending = this.pending.get(index); if (pending) return pending;
-    const work = this.load(index,this.readEpoch).then(bytes => {
+    const scope=this.readEpoch,media=this.isMedia(index*PAGE);
+    const work = this.load(index,scope).then(async bytes => {
       this.lifetime.signal.throwIfAborted();
-      this.store(index,bytes);
+      await this.store(index,bytes,scope,this.lifetime.signal,media);
       return bytes;
     }).finally(() => {if(this.pending.get(index)===work)this.pending.delete(index);});
     this.pending.set(index,work); return work;
@@ -237,7 +296,7 @@ export class RangeReader implements ByteReader {
   private async loadForward(run:ForwardRun){
     let attempts=0;
     while(run.next<run.end){
-      while(run.next>=run.demand+this.ahead)await this.changed(run.signal);
+      while(run.next>=this.edge(run))await this.changed(run.signal);
       while(this.active>=3)await this.changed(run.signal,this.slotWaiters);
       run.signal.throwIfAborted();this.active++;
       let failure:unknown;
@@ -266,7 +325,7 @@ export class RangeReader implements ByteReader {
         signal.throwIfAborted();
         // Explicit backpressure: intentionally paused network reads have no
         // inactivity timer. A seek/epoch still cancels the fetch immediately.
-        while(run.next<run.end&&run.next>=run.demand+this.ahead)await this.changed(signal);
+        while(run.next<run.end&&run.next>=this.edge(run))await this.changed(signal);
         arm();let chunk:ReadableStreamReadResult<Uint8Array>;
         try{chunk=await body.read();}finally{disarm();}
         if(chunk.done){if(run.next!==run.end||filled)throw new TypeError('Original forward range was truncated');complete=true;break;}
@@ -275,13 +334,13 @@ export class RangeReader implements ByteReader {
         while(cursor<chunk.value.length){
           signal.throwIfAborted();
           if(run.next>=run.end)throw new RangeFailure('Original forward body exceeds declared length');
-          while(run.next>=run.demand+this.ahead)await this.changed(signal);
+          while(run.next>=this.edge(run))await this.changed(signal);
           const count=Math.min(page.length-filled,chunk.value.length-cursor);
           page.set(chunk.value.subarray(cursor,cursor+count),filled);cursor+=count;filled+=count;
           if(filled===page.length){
             const index=run.next/PAGE,slot=run.slots.get(index);
             if(!slot)throw new RangeFailure('Original forward page lost its owner');
-            this.store(index,page);this.notePage(run.scope,index,total);
+            await this.store(index,page,run.scope,signal,true);this.notePage(run.scope,index,total);
             const now=performance.now();this.metrics.bytes+=page.length;this.metrics.milliseconds+=now-lastPublication;
             this.bandwidth.sample(page.length,now-lastPublication,cacheHit);this.delivery.record(at,firstByte,page.length);lastPublication=now;
             if(this.pending.get(index)===slot.promise)this.pending.delete(index);run.slots.delete(index);slot.resolve(page);
@@ -345,6 +404,7 @@ export class RangeReader implements ByteReader {
 
   dispose(): void {
     this.lifetime.abort();for(const run of this.forwardRuns)this.cancelForward(run);this.wakeProgress();this.pages.clear();this.cachedBytes=0;
+    this.metadata.clear();this.metadataBytes=0;this.pageEpoch.clear();this.packets.clear();
     for(const wake of [...this.slotWaiters])wake();
   }
 }
