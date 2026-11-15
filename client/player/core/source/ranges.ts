@@ -24,6 +24,9 @@ export class RangeReader implements ByteReader {
   readonly bandwidth=new BandwidthEstimator();
   readonly delivery=new DeliveryMeter();
   readonly metrics = { requests: 0, bytes: 0, cacheHits: 0, milliseconds: 0 };
+  /** Scalar metadata only, sampled by an explicit buffer-audit payload. */
+  get bufferCache(){return {ranges:[...this.pages].map(([index,bytes])=>({start:index*PAGE,end:index*PAGE+bytes.length})).sort((a,b)=>a.start-b.start),
+    bytes:this.cachedBytes,limit:CACHE,readAhead:0,offset:0};}
 
   constructor(url: string, private readonly fetcher: typeof fetch = (...args) => fetch(...args),allowed?:(url:URL)=>boolean) {
     const parsed = new URL(url, document.baseURI);
