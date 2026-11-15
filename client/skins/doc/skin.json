@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "id": "doc",
+  "name": "Skin document",
+  "tagline": "Draws the server's skin document.",
+  "preview": "assets/skins/cinematic.jpg",
+  "swatches": [
+    "#090b0e",
+    "#f5f1e9"
+  ],
+  "order": 99,
+  "offer": "never",
+  "documents": true,
+  "traits": {
+    "barMask": false
+  }
+}

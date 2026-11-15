@@ -1,5 +1,6 @@
 use PlayerView from "../../foundation/player-models.contract"
 use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, chrome, enter, base, glide, spin, breathe, dissolve from "./look.contract"
+use PlayerProps from "../../foundation/slot-api.contract"
 
 // A screening's controls: a top bar with the title, a centred spinner while the
 // engine waits, a failure card, and a bottom bar with the timeline and icon
@@ -13,13 +14,8 @@ fn clock(total: number): string = `${floor(total / 3600) > 0 ? `${floor(total / 
 
 component PlayerChrome
   props
-    model: PlayerView
-    title: string
-    visible: bool
-    small: bool
-    still: bool
-    busy: bool
-    serverError: string
+    p: PlayerProps
+  inject
     command: action
     seek: action
     editing: action
@@ -29,20 +25,20 @@ component PlayerChrome
   action opened(menu: string, e: ToggleEvent)
     editing(e.newState == "open")
     if e.newState == "open"
-      focus(`${menu}-${(menu == "player-cc" ? (model.subtitleId == "" ? 0 : 1 + model.subtitles.map(x => x.id).indexOf(model.subtitleId)) : menu == "player-audio" ? max(0, model.audio.map(x => x.id).indexOf(model.audioId)) : menu == "player-quality" ? (model.qualityAuto ? (model.lockedQuality == "" ? 0 : 1 + model.qualities.map(x => x.id).indexOf(model.lockedQuality)) : max(0, model.qualities.map(x => x.id).indexOf(model.lockedQuality))) : menu == "player-speed" ? max(0, speeds.indexOf(model.speeds.length > 0 ? model.speed : 1)) : chapterIndex)}`)
+      focus(`${menu}-${(menu == "player-cc" ? (p.model.subtitleId == "" ? 0 : 1 + p.model.subtitles.map(x => x.id).indexOf(p.model.subtitleId)) : menu == "player-audio" ? max(0, p.model.audio.map(x => x.id).indexOf(p.model.audioId)) : menu == "player-quality" ? (p.model.qualityAuto ? (p.model.lockedQuality == "" ? 0 : 1 + p.model.qualities.map(x => x.id).indexOf(p.model.lockedQuality)) : max(0, p.model.qualities.map(x => x.id).indexOf(p.model.lockedQuality))) : menu == "player-speed" ? max(0, speeds.indexOf(p.model.speeds.length > 0 ? p.model.speed : 1)) : chapterIndex)}`)
   action scrubFocus(on: bool)
     scrubbing = on
     editing(on)
-  derive blocked = busy or model.state == "ended"
+  derive blocked = p.busy or p.model.state == "ended"
   // The standard rates are always listed; they are live only when the engine can change speed.
-  derive speeds = (model.speeds.length > 0 ? model.speeds : [0.5, 0.75, 1, 1.25, 1.5, 2])
-  derive chapterIndex = max(0, model.chapters.filter(c => c.seconds <= model.position).length - 1)
-  derive failure = (serverError != "" ? serverError : model.reason)
-  derive failed = model.state == "failed" or serverError != ""
-  derive waiting = not failed and (model.waiting or model.state == "loading" or model.state == "buffering" or model.state == "recovering")
-  derive shown = (visible or model.state != "playing")
-  derive level = (model.muted ? 0 : max(0, min(1, model.volume)))
-  derive gutter = (small ? 16 : 40)
+  derive speeds = (p.model.speeds.length > 0 ? p.model.speeds : [0.5, 0.75, 1, 1.25, 1.5, 2])
+  derive chapterIndex = max(0, p.model.chapters.filter(c => c.seconds <= p.model.position).length - 1)
+  derive failure = (p.serverError != "" ? p.serverError : p.model.reason)
+  derive failed = p.model.state == "failed" or p.serverError != ""
+  derive waiting = not failed and (p.model.waiting or p.model.state == "loading" or p.model.state == "buffering" or p.model.state == "recovering")
+  derive shown = (p.visible or p.model.state != "playing")
+  derive level = (p.model.muted ? 0 : max(0, min(1, p.model.volume)))
+  derive gutter = (p.small ? 16 : 40)
   action scrub(v: number)
     seek(v)
   action setVolume(v: number)
@@ -58,15 +54,15 @@ component PlayerChrome
   view
     column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="ink.primary"
       // Top: close, and the title being screened.
-      row position="relative" padding=(small ? "18px 16px 72px" : "30px 40px 140px") gap=(small ? 14 : 20) align-items="center" background-image="linear-gradient(180deg, var(--cinematic.player-top) 0%, var(--cinematic.player-upper) 38%, var(--cinematic.player-mid) 68%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or still ? "0px 0px" : "0px -14px") transition=chrome(still)
+      row position="relative" padding=(p.small ? "18px 16px 72px" : "30px 40px 140px") gap=(p.small ? 14 : 20) align-items="center" background-image="linear-gradient(180deg, var(--cinematic.player-top) 0%, var(--cinematic.player-upper) 38%, var(--cinematic.player-mid) 68%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or p.still ? "0px 0px" : "0px -14px") transition=chrome(p.still)
         button press=close pointer-events=(shown ? "auto" : "none") aria-label=t("ui.closePlayer") class=IconButton width=46 height=46 padding=13 flex-shrink=0 transition=`background-color 180ms linear`
           image "symbol:back" width=20 height=20
         column gap=4 flex=1 min-width=0
           text t("ui.nowPlaying") class=Eyebrow font-size=10 color="ink.quiet"
-          text title class=Display font-size=(small ? 24 : 34) line-clamp=1 text-shadow="0px 2px 18px var(--cinematic.shadow)"
+          text p.title class=Display font-size=(p.small ? 24 : 34) line-clamp=1 text-shadow="0px 2px 18px var(--cinematic.shadow)"
       // Centre: the engine is waiting, or playback has failed.
       if failed
-        column pointer-events="auto" align-self="center" align-items="center" text-align="center" gap=14 padding=(small ? "26px 22px" : "34px 40px") margin="0px 16px" max-width=440 box-sizing="border-box" border-radius=24 background-color="cinematic.glass" backdrop-filter="blur(28px) saturate(1.3)" border="1px solid var(--cinematic.glass-edge)" box-shadow="0px 30px 90px var(--cinematic.shadow)" role="alert" testId="player-status" animation=enter(still, 0)
+        column pointer-events="auto" align-self="center" align-items="center" text-align="center" gap=14 padding=(p.small ? "26px 22px" : "34px 40px") margin="0px 16px" max-width=440 box-sizing="border-box" border-radius=24 background-color="cinematic.glass" backdrop-filter="blur(28px) saturate(1.3)" border="1px solid var(--cinematic.glass-edge)" box-shadow="0px 30px 90px var(--cinematic.shadow)" role="alert" testId="player-status" animation=enter(p.still, 0)
           image "symbol:alert" width=26 height=26 color="brand.warm" aria-hidden=true
           text t("ui.playbackInterrupted") class=Display font-size=30
           if failure != ""
@@ -78,86 +74,86 @@ component PlayerChrome
               text t("ui.closePlayer") font-size=14
       else
         if waiting
-          column align-self="center" align-items="center" gap=18 role="status" aria-label=(model.state == "recovering" ? t("ui.findingAWayForward") : model.state == "loading" ? t("ui.preparingYourScreening") : t("ui.buildingALittleBreathingRoom")) testId="player-status" animation=(still ? "dissolve 240ms linear both" : "dissolve 400ms ease-out 120ms both")
-            Spinner(size=(small ? 52 : 64), still=still)
-            if model.state == "loading" or model.state == "recovering"
-              text (model.state == "recovering" ? t("ui.findingAWayForward") : t("ui.preparingYourScreening")) class=Display font-size=(small ? 22 : 26) color="ink.primary" text-shadow="0px 2px 24px var(--cinematic.shadow)"
+          column align-self="center" align-items="center" gap=18 role="status" aria-label=(p.model.state == "recovering" ? t("ui.findingAWayForward") : p.model.state == "loading" ? t("ui.preparingYourScreening") : t("ui.buildingALittleBreathingRoom")) testId="player-status" animation=(p.still ? "dissolve 240ms linear both" : "dissolve 400ms ease-out 120ms both")
+            Spinner(size=(p.small ? 52 : 64), still=p.still)
+            if p.model.state == "loading" or p.model.state == "recovering"
+              text (p.model.state == "recovering" ? t("ui.findingAWayForward") : t("ui.preparingYourScreening")) class=Display font-size=(p.small ? 22 : 26) color="ink.primary" text-shadow="0px 2px 24px var(--cinematic.shadow)"
       // Bottom: the timeline, then icon transport and screening controls.
-      column position="relative" padding=(small ? "80px 16px 18px" : "150px 40px 30px") gap=(small ? 10 : 14) background-image="linear-gradient(0deg, var(--cinematic.player-bottom) 0%, var(--cinematic.player-upper) 42%, var(--cinematic.player-mid) 72%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or still ? "0px 0px" : "0px 18px") transition=chrome(still) pointer-events=(shown ? "auto" : "none")
-        if model.actionError != "" and failure == ""
-          text model.actionError color="brand.warm" font-size=13 role="status"
+      column position="relative" padding=(p.small ? "80px 16px 18px" : "150px 40px 30px") gap=(p.small ? 10 : 14) background-image="linear-gradient(0deg, var(--cinematic.player-bottom) 0%, var(--cinematic.player-upper) 42%, var(--cinematic.player-mid) 72%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or p.still ? "0px 0px" : "0px 18px") transition=chrome(p.still) pointer-events=(shown ? "auto" : "none")
+        if p.model.actionError != "" and failure == ""
+          text p.model.actionError color="brand.warm" font-size=13 role="status"
         // Timeline: buffered ranges, played fill and a thumb over a transparent native range.
         column position="relative" height=22 justify-content="center"
-          column position="absolute" left=0 right=0 height=(scrubbing ? 6 : 4) border-radius=3 background-color="cinematic.track-strong" overflow="hidden" transition=(still ? "none" : `height ${base()}ms ${glide()}`)
-            for range in model.buffered key=range.id
+          column position="absolute" left=0 right=0 height=(scrubbing ? 6 : 4) border-radius=3 background-color="cinematic.track-strong" overflow="hidden" transition=(p.still ? "none" : `height ${base()}ms ${glide()}`)
+            for range in p.model.buffered key=range.id
               column position="absolute" top=0 bottom=0 left=`${range.left}%` width=`${range.width}%` background-color="cinematic.buffer"
-            column position="absolute" left=0 top=0 bottom=0 width=`${model.progress}%` border-radius=3 background-color="ink.primary"
-          for chapter in model.chapters key=chapter.id
+            column position="absolute" left=0 top=0 bottom=0 width=`${p.model.progress}%` border-radius=3 background-color="ink.primary"
+          for chapter in p.model.chapters key=chapter.id
             column position="absolute" left=`${chapter.percent}%` height=(scrubbing ? 6 : 4) width=2 background-color="cinematic.marker" aria-hidden=true
-          column position="absolute" left=`calc(${model.progress}% - 7px)` width=14 height=14 border-radius=7 background-color="ink.primary" box-shadow=(scrubbing ? "0px 0px 0px 6px var(--cinematic.focus-halo), 0px 2px 10px var(--cinematic.shadow)" : "0px 2px 10px var(--cinematic.shadow)") scale=(scrubbing or still ? 1 : 0.85) transition=(still ? "none" : `scale ${base()}ms ${glide()}, box-shadow ${base()}ms ${glide()}`) aria-hidden=true
-          input focus=scrubFocus(true) blur=scrubFocus(false) type="range" min=0 max=max(1, model.duration) step=0.1 value=model.position change=scrub aria-label=t("ui.playbackPosition") testId="player-scrub" disabled=(model.duration <= 0 or blocked) position="absolute" left=0 right=0 width="100%" height=22 margin=0 opacity=0 cursor="pointer"
+          column position="absolute" left=`calc(${p.model.progress}% - 7px)` width=14 height=14 border-radius=7 background-color="ink.primary" box-shadow=(scrubbing ? "0px 0px 0px 6px var(--cinematic.focus-halo), 0px 2px 10px var(--cinematic.shadow)" : "0px 2px 10px var(--cinematic.shadow)") scale=(scrubbing or p.still ? 1 : 0.85) transition=(p.still ? "none" : `scale ${base()}ms ${glide()}, box-shadow ${base()}ms ${glide()}`) aria-hidden=true
+          input focus=scrubFocus(true) blur=scrubFocus(false) type="range" min=0 max=max(1, p.model.duration) step=0.1 value=p.model.position change=scrub aria-label=t("ui.playbackPosition") testId="player-scrub" disabled=(p.model.duration <= 0 or blocked) position="absolute" left=0 right=0 width="100%" height=22 margin=0 opacity=0 cursor="pointer"
         row align-items="center" justify-content="space-between"
-          text model.elapsed font-size=12 font-variant-numeric="tabular-nums" color="ink.secondary"
-          text model.remaining font-size=12 font-variant-numeric="tabular-nums" color="ink.secondary"
-        row gap=(small ? 4 : 8) align-items="center" margin-top=(small ? 0 : 2)
-          button disabled=(model.state == "ended") press=command(model.playing ? "pause" : "play", "") aria-label=(model.state == "ended" ? t("ui.finished") : model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" class=PrimaryPill width=(small ? 48 : 52) height=(small ? 48 : 52) padding=(small ? 14 : 15) box-sizing="border-box" flex-shrink=0 transition=`background-color 180ms linear`
-            image (model.playing ? "symbol:pause-fill" : "symbol:play-fill") width=22 height=22
+          text p.model.elapsed font-size=12 font-variant-numeric="tabular-nums" color="ink.secondary"
+          text p.model.remaining font-size=12 font-variant-numeric="tabular-nums" color="ink.secondary"
+        row gap=(p.small ? 4 : 8) align-items="center" margin-top=(p.small ? 0 : 2)
+          button disabled=(p.model.state == "ended") press=command(p.model.playing ? "pause" : "play", "") aria-label=(p.model.state == "ended" ? t("ui.finished") : p.model.playing ? t("ui.pause") : t("ui.play")) testId="player-toggle" class=PrimaryPill width=(p.small ? 48 : 52) height=(p.small ? 48 : 52) padding=(p.small ? 14 : 15) box-sizing="border-box" flex-shrink=0 transition=`background-color 180ms linear`
+            image (p.model.playing ? "symbol:pause-fill" : "symbol:play-fill") width=22 height=22
           button disabled=blocked press=command("seekBy", "-10") aria-label=t("ui.back10Seconds") class=Bare width=44 height=44 padding=8 flex-shrink=0
             SkipIcon(forward=false)
-          button press=command("seekBy", "10") disabled=(model.duration <= 0 or blocked) aria-label=t("ui.forward10Seconds") class=Bare width=44 height=44 padding=8 flex-shrink=0
+          button press=command("seekBy", "10") disabled=(p.model.duration <= 0 or blocked) aria-label=t("ui.forward10Seconds") class=Bare width=44 height=44 padding=8 flex-shrink=0
             SkipIcon(forward=true)
-          button press=command("mute", "") aria-label=(model.muted ? t("ui.unmute") : t("ui.mute")) aria-pressed=model.muted testId="player-mute" class=Bare width=44 height=44 padding=11 flex-shrink=0
-            image (model.muted or model.volume <= 0 ? "symbol:speaker-mute" : "symbol:speaker") width=22 height=22
-          if not small
+          button press=command("mute", "") aria-label=(p.model.muted ? t("ui.unmute") : t("ui.mute")) aria-pressed=p.model.muted testId="player-mute" class=Bare width=44 height=44 padding=11 flex-shrink=0
+            image (p.model.muted or p.model.volume <= 0 ? "symbol:speaker-mute" : "symbol:speaker") width=22 height=22
+          if not p.small
             column position="relative" width=104 height=22 justify-content="center" flex-shrink=0 margin-right=8
               column position="absolute" left=0 right=0 height=4 border-radius=2 background-color="cinematic.track-strong" overflow="hidden"
                 column height=4 width=`${level * 100}%` background-color="ink.primary"
               column position="absolute" left=`calc(${level * 100}% - 6px)` width=12 height=12 border-radius=6 background-color="ink.primary" box-shadow="0px 1px 6px var(--cinematic.shadow)" aria-hidden=true
               input type="range" min=0 max=1 step=0.01 value=level change=setVolume focus=editing(true) blur=editing(false) aria-label=t("ui.volume") testId="player-volume" position="absolute" left=0 width="100%" height=22 margin=0 opacity=0 cursor="pointer"
           row flex=1 min-width=0 justify-content="flex-end"
-            if not small
-              text (model.quality != "" ? model.quality : model.path) testId="player-quality" font-size=11 font-weight=600 color="ink.secondary" letter-spacing="0.04em" line-clamp=1 padding="4px 10px" border="1px solid var(--cinematic.glass-edge)" border-radius=6 margin-right=6
+            if not p.small
+              text (p.model.quality != "" ? p.model.quality : p.model.path) testId="player-quality" font-size=11 font-weight=600 color="ink.secondary" letter-spacing="0.04em" line-clamp=1 padding="4px 10px" border="1px solid var(--cinematic.glass-edge)" border-radius=6 margin-right=6
           button popovertarget="player-cc" aria-label=t("ui.subtitles") testId="player-cc-button" class=Bare width=44 height=44 padding=10 flex-shrink=0
-            CaptionsIcon(on=(model.subtitleId != ""))
+            CaptionsIcon(on=(p.model.subtitleId != ""))
           button popovertarget="player-audio" aria-label=t("ui.audio") testId="player-audio-button" class=Bare width=44 height=44 padding=10 flex-shrink=0
             image "symbol:waveform" width=22 height=22
           button popovertarget="player-quality" aria-label=t("ui.quality") testId="player-quality-button" class=Bare width=44 height=44 padding=10 flex-shrink=0
             image "symbol:settings" width=22 height=22
           button popovertarget="player-speed" aria-label=t("player.speed") testId="player-speed-button" class=Bare width=44 height=44 padding=10 flex-shrink=0
             SpeedIcon()
-          button popovertarget="player-chapters" aria-label=t("ui.chapters") testId="player-chapters-button" disabled=(model.chapters.length == 0) class=Bare width=44 height=44 padding=10 flex-shrink=0
+          button popovertarget="player-chapters" aria-label=t("ui.chapters") testId="player-chapters-button" disabled=(p.model.chapters.length == 0) class=Bare width=44 height=44 padding=10 flex-shrink=0
             image "symbol:list" width=22 height=22
-          if model.pip
+          if p.model.pip
             button press=command("pip", "") aria-label=t("ui.pictureInPicture") class=Bare width=44 height=44 padding=10 flex-shrink=0
               PipIcon()
-          if model.fullscreen
+          if p.model.fullscreen
             button press=command("fullscreen", "") aria-label=t("ui.fullscreen") class=Bare width=44 height=44 padding=10 flex-shrink=0
               FullscreenIcon()
       // One compact menu per control: the menu's name, then a radio list (arrow keys move, Escape closes).
-      MenuPanel(menu="player-cc", name=t("ui.subtitles"), small=small, opened=opened)
-        ChoiceRow(menu="player-cc", index=0, count=model.subtitles.length + 1, label=t("ui.off"), detail="", selected=(model.subtitleId == "" and model.pendingSubtitleId == ""), pending=false, enabled=not blocked, still=still, choose=subtitles(""))
-        for track, i in model.subtitles key=track.id
-          ChoiceRow(menu="player-cc", index=i + 1, count=model.subtitles.length + 1, label=itemName(track.label), detail=itemDetail(track.label), selected=(model.subtitleId == track.id), pending=(model.pendingSubtitleId == track.id), enabled=not blocked, still=still, choose=subtitles(track.id))
-      MenuPanel(menu="player-audio", name=t("ui.audio"), small=small, opened=opened)
-        if model.audio.length > 0
-          for track, i in model.audio key=track.id
-            ChoiceRow(menu="player-audio", index=i, count=model.audio.length, label=itemName(track.label), detail=itemDetail(track.label), selected=(model.audioId == track.id), pending=(model.pendingAudioId == track.id), enabled=not blocked, still=still, choose=audio(track.id))
+      MenuPanel(menu="player-cc", name=t("ui.subtitles"), small=p.small, opened=opened)
+        ChoiceRow(menu="player-cc", index=0, count=p.model.subtitles.length + 1, label=t("ui.off"), detail="", selected=(p.model.subtitleId == "" and p.model.pendingSubtitleId == ""), pending=false, enabled=not blocked, still=p.still, choose=subtitles(""))
+        for track, i in p.model.subtitles key=track.id
+          ChoiceRow(menu="player-cc", index=i + 1, count=p.model.subtitles.length + 1, label=itemName(track.label), detail=itemDetail(track.label), selected=(p.model.subtitleId == track.id), pending=(p.model.pendingSubtitleId == track.id), enabled=not blocked, still=p.still, choose=subtitles(track.id))
+      MenuPanel(menu="player-audio", name=t("ui.audio"), small=p.small, opened=opened)
+        if p.model.audio.length > 0
+          for track, i in p.model.audio key=track.id
+            ChoiceRow(menu="player-audio", index=i, count=p.model.audio.length, label=itemName(track.label), detail=itemDetail(track.label), selected=(p.model.audioId == track.id), pending=(p.model.pendingAudioId == track.id), enabled=not blocked, still=p.still, choose=audio(track.id))
         else
-          ChoiceRow(menu="player-audio", index=0, count=1, label=itemName(model.audioLabel != "" ? model.audioLabel : t("player.audioDefault")), detail=itemDetail(model.audioLabel), selected=true, pending=false, enabled=false, still=still, choose=audio(""))
-      MenuPanel(menu="player-quality", name=t("ui.quality"), small=small, opened=opened)
-        if model.qualityAuto
-          ChoiceRow(menu="player-quality", index=0, count=model.qualities.length + 1, label=t("player.auto"), detail=(model.lockedQuality == "" ? model.quality : ""), selected=(model.lockedQuality == ""), pending=false, enabled=not blocked, still=still, choose=quality(""))
-        for option, i in model.qualities key=option.id
-          ChoiceRow(menu="player-quality", index=(model.qualityAuto ? i + 1 : i), count=(model.qualityAuto ? model.qualities.length + 1 : model.qualities.length), label=itemName(option.label), detail=itemDetail(option.label), selected=(model.lockedQuality == option.id or (model.lockedQuality == "" and not model.qualityAuto and option.label == model.quality)), pending=false, enabled=not blocked, still=still, choose=quality(option.id))
-        if model.qualities.length == 0 and not model.qualityAuto
-          ChoiceRow(menu="player-quality", index=0, count=1, label=itemName(model.quality != "" ? model.quality : model.path), detail=itemDetail(model.quality != "" ? model.quality : model.path), selected=true, pending=false, enabled=false, still=still, choose=quality(""))
-      MenuPanel(menu="player-speed", name=t("player.speed"), small=small, opened=opened)
+          ChoiceRow(menu="player-audio", index=0, count=1, label=itemName(p.model.audioLabel != "" ? p.model.audioLabel : t("player.audioDefault")), detail=itemDetail(p.model.audioLabel), selected=true, pending=false, enabled=false, still=p.still, choose=audio(""))
+      MenuPanel(menu="player-quality", name=t("ui.quality"), small=p.small, opened=opened)
+        if p.model.qualityAuto
+          ChoiceRow(menu="player-quality", index=0, count=p.model.qualities.length + 1, label=t("player.auto"), detail=(p.model.lockedQuality == "" ? p.model.quality : ""), selected=(p.model.lockedQuality == ""), pending=false, enabled=not blocked, still=p.still, choose=quality(""))
+        for option, i in p.model.qualities key=option.id
+          ChoiceRow(menu="player-quality", index=(p.model.qualityAuto ? i + 1 : i), count=(p.model.qualityAuto ? p.model.qualities.length + 1 : p.model.qualities.length), label=itemName(option.label), detail=itemDetail(option.label), selected=(p.model.lockedQuality == option.id or (p.model.lockedQuality == "" and not p.model.qualityAuto and option.label == p.model.quality)), pending=false, enabled=not blocked, still=p.still, choose=quality(option.id))
+        if p.model.qualities.length == 0 and not p.model.qualityAuto
+          ChoiceRow(menu="player-quality", index=0, count=1, label=itemName(p.model.quality != "" ? p.model.quality : p.model.path), detail=itemDetail(p.model.quality != "" ? p.model.quality : p.model.path), selected=true, pending=false, enabled=false, still=p.still, choose=quality(""))
+      MenuPanel(menu="player-speed", name=t("player.speed"), small=p.small, opened=opened)
         for rate, i in speeds key=`${rate}`
-          ChoiceRow(menu="player-speed", index=i, count=speeds.length, label=`${formatNumber(rate, "decimal")}×`, detail=(rate == 1 ? t("player.normal") : ""), selected=(model.speeds.length == 0 ? rate == 1 : model.speed == rate), pending=false, enabled=(model.speeds.length > 0 and not blocked), still=still, choose=speed(rate))
-      if model.chapters.length > 0
-        MenuPanel(menu="player-chapters", name=t("ui.chapters"), small=small, opened=opened)
-          for chapter, i in model.chapters key=chapter.id
-            ChoiceRow(menu="player-chapters", index=i, count=model.chapters.length, label=chapter.label, detail=clock(chapter.seconds), selected=(i == chapterIndex), pending=false, enabled=not blocked, still=still, choose=seek(chapter.seconds))
+          ChoiceRow(menu="player-speed", index=i, count=speeds.length, label=`${formatNumber(rate, "decimal")}×`, detail=(rate == 1 ? t("player.normal") : ""), selected=(p.model.speeds.length == 0 ? rate == 1 : p.model.speed == rate), pending=false, enabled=(p.model.speeds.length > 0 and not blocked), still=p.still, choose=speed(rate))
+      if p.model.chapters.length > 0
+        MenuPanel(menu="player-chapters", name=t("ui.chapters"), small=p.small, opened=opened)
+          for chapter, i in p.model.chapters key=chapter.id
+            ChoiceRow(menu="player-chapters", index=i, count=p.model.chapters.length, label=chapter.label, detail=clock(chapter.seconds), selected=(i == chapterIndex), pending=false, enabled=not blocked, still=p.still, choose=seek(chapter.seconds))
 
 // A control's menu: a compact glass popover over its button, the menu's name above a radio list.
 component MenuPanel

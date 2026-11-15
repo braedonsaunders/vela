@@ -1,36 +1,28 @@
-use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, CardPreview, cardName, skinLabel from "../../foundation/models.contract"
+use Card, FeedRow, HomeModel, SearchModel, Viewport, LibraryNav, CardPreview, cardName from "../../foundation/models.contract"
 use Display, Eyebrow, PrimaryPill, IconButton, Skeleton, enter, expose, drift, stagger, base, slow, glide, quick, dissolve, pop, vanish, rise, fill, FadeImage, GhostPill, breathe from "./look.contract"
 use Wordmark, Pulse from "./auth.contract"
-use SkinPicker, skinManifest from "../../foundation/skin-picker.contract"
+use SkinPicker from "../../foundation/skin-picker.contract"
+use HomeProps, SearchFieldProps, SearchProps, ShellProps, StatusProps from "../../foundation/slot-api.contract"
 
 // The page gutter: content aligns to it everywhere in the skin.
 fn gutter(small: bool): string = (small ? "18px" : "max(28px, 4vw)")
 
 component Shell
   props
-    viewer: string
-    skin: string
-    skins: string[]
+    p: ShellProps
+  inject
     chooseSkin: action
     signOut: action
-    viewport: Viewport
-    canLive: bool
-    canLibrary: bool
     home: action
     search: action
     live: action
     library: action
-    libraries: LibraryNav[]
-    section: string
     openLibrary: action
-    secureOrigin: string
-    secureBusy: bool
-    secureError: string
     goSecure: action
   slot
   state menuOpen = false
-  derive compact = viewport.width < 640
-  derive still = viewport.prefersReducedMotion
+  derive compact = p.viewport.width < 640
+  derive still = p.viewport.prefersReducedMotion
   action toggleMenu
     menuOpen = not menuOpen
   state pickerOpen = false
@@ -57,7 +49,7 @@ component Shell
       focus("profile-menu-trigger")
   view
     column position="relative" key=menuKey height="100%" min-height=0 background-color="surface.page" color="ink.primary" color-scheme="dark" font-family="system-ui, -apple-system, \"Segoe UI Variable\", \"Segoe UI\", Roboto, sans-serif"
-      if viewer != ""
+      if p.viewer != ""
         column role="navigation" aria-label=t("ui.mainNavigation") position="absolute" top=0 left=0 right=0 z-index=20 animation=(still ? "dissolve 240ms linear both" : "dissolve 900ms ease-out both")
           column position="absolute" top=0 left=0 right=0 bottom=(compact ? -18 : 0) pointer-events="none" aria-hidden=true background-image="linear-gradient(180deg, var(--cinematic.nav-scrim) 0%, var(--cinematic.scrim-clear) 100%)" backdrop-filter="blur(16px) saturate(1.2)" mask-image="linear-gradient(180deg, black 0%, black 45%, transparent 100%)"
           row position="relative" height=(compact ? 56 : 84) box-sizing="border-box" padding-left=gutter(compact) padding-right=gutter(compact) align-items="center" gap=(compact ? 8 : 10)
@@ -67,41 +59,41 @@ component Shell
               column flex=1
             else
               scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none" flex=1 min-width=0 mask-image="linear-gradient(90deg, black 0%, black 90%, transparent 100%)"
-                Destinations(libraries=libraries, section=section, canLive=canLive, still=still, chips=false, home=home, live=live, openLibrary=openLibrary)
+                Destinations(libraries=p.libraries, section=p.section, canLive=p.canLive, still=still, chips=false, home=home, live=live, openLibrary=openLibrary)
             button press=findSomething aria-label=t("ui.search") class=IconButton width=40 height=40 padding=10 flex-shrink=0
               image "symbol:search" width=18 height=18
             button id="profile-menu-trigger" press=toggleMenu aria-expanded=menuOpen aria-controls="viewer-settings" aria-label=t("ui.profileAndAppearance") testId="profile-menu" class=NavLink flex-shrink=0 padding-top=4 padding-bottom=4 padding-left=4 padding-right=(compact ? 4 : 14)
               row gap=10 align-items="center"
-                text viewer.slice(0, 1).toUpperCase() width=32 height=32 border-radius=16 display="flex" align-items="center" justify-content="center" font-size=14 font-weight=650 color="ink.primary" background-image="linear-gradient(135deg, var(--cinematic.ember) 0%, var(--cinematic.dusk) 100%)" box-shadow="inset 0px 0px 0px 1px var(--cinematic.ring)" aria-hidden=true
+                text p.viewer.slice(0, 1).toUpperCase() width=32 height=32 border-radius=16 display="flex" align-items="center" justify-content="center" font-size=14 font-weight=650 color="ink.primary" background-image="linear-gradient(135deg, var(--cinematic.ember) 0%, var(--cinematic.dusk) 100%)" box-shadow="inset 0px 0px 0px 1px var(--cinematic.ring)" aria-hidden=true
                 if not compact
-                  text viewer font-size=14 font-weight=550
+                  text p.viewer font-size=14 font-weight=550
           if compact
             scroll position="relative" overflow-x="auto" overflow-y="hidden" scrollbar-width="none" mask-image="linear-gradient(90deg, transparent 0%, black 5%, black 88%, transparent 100%)"
               row padding-left=18 padding-right=18 padding-bottom=8
-                Destinations(libraries=libraries, section=section, canLive=canLive, still=still, chips=true, home=home, live=live, openLibrary=openLibrary)
-      if viewer != "" and menuOpen
+                Destinations(libraries=p.libraries, section=p.section, canLive=p.canLive, still=still, chips=true, home=home, live=live, openLibrary=openLibrary)
+      if p.viewer != "" and menuOpen
         column id="viewer-settings" position="absolute" top=(compact ? 104 : 78) right=(compact ? 12 : "max(28px, 4vw)") z-index=30 width=260 box-sizing="border-box" padding=20 gap=16 border="1px solid var(--cinematic.glass-edge)" border-radius=20 background-color="cinematic.popover" backdrop-filter="blur(30px) saturate(1.4)" color="ink.primary" box-shadow="0px 30px 80px var(--cinematic.shadow), inset 0px 1px 0px var(--cinematic.ring)" transform-origin="top right" animation=(still ? "dissolve 200ms linear both" : "pop 320ms cubic-bezier(0.16, 1, 0.3, 1) both") -exact-exit-animation=(still ? "vanish 120ms linear both" : "vanish 180ms ease-in both")
           row gap=12 align-items="center"
-            text viewer.slice(0, 1).toUpperCase() width=40 height=40 border-radius=20 display="flex" align-items="center" justify-content="center" font-size=17 font-weight=650 background-image="linear-gradient(135deg, var(--cinematic.ember) 0%, var(--cinematic.dusk) 100%)" aria-hidden=true
-            text viewer font-size=16 font-weight=600 flex=1 min-width=0 line-clamp=1
+            text p.viewer.slice(0, 1).toUpperCase() width=40 height=40 border-radius=20 display="flex" align-items="center" justify-content="center" font-size=17 font-weight=650 background-image="linear-gradient(135deg, var(--cinematic.ember) 0%, var(--cinematic.dusk) 100%)" aria-hidden=true
+            text p.viewer font-size=16 font-weight=600 flex=1 min-width=0 line-clamp=1
           column height=1 background-color="cinematic.glass-edge"
-          if skins.length > 1
+          if p.skins.length > 1
             button press=openPicker testId="skin-picker" class=NavLink justify-content="space-between" padding="8px 10px" margin="0px -10px"
               row gap=12 align-items="center" width="100%"
                 column gap=2 flex=1 min-width=0 text-align="left"
                   text t("ui.appearance") class=Eyebrow font-size=10 color="ink.quiet"
-                  text skinLabel(skin) font-size=14 color="ink.primary"
+                  text p.current.name font-size=14 color="ink.primary"
                 row gap=4 aria-hidden=true
-                  for color, c in skinManifest(skin).swatches.slice(0, 4) key=`${c}`
+                  for color, c in p.current.swatches.slice(0, 4) key=`${c}`
                     column width=10 height=10 border-radius=5 background-color=color box-shadow="inset 0px 0px 0px 1px var(--cinematic.glass-edge-strong)"
                 image "symbol:forward-chevron" width=12 height=12 color="ink.quiet" aria-hidden=true
-          if secureOrigin != ""
-            button press=goSecure disabled=secureBusy testId="secure-switch-menu" class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
+          if p.secureOrigin != ""
+            button press=goSecure disabled=p.secureBusy testId="secure-switch-menu" class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
               row gap=10 align-items="center"
                 image "symbol:lock" width=16 height=16 color="brand.warm" aria-hidden=true
                 column gap=2 text-align="left"
                   text t("secure.action") font-size=14 color="ink.primary"
-                  text (secureError != "" ? secureError : secureOrigin) font-size=11 color=(secureError != "" ? "brand.warm" : "ink.quiet") line-clamp=1
+                  text (p.secureError != "" ? p.secureError : p.secureOrigin) font-size=11 color=(p.secureError != "" ? "brand.warm" : "ink.quiet") line-clamp=1
           vela-install pwaAction="install" buttonLabel=t("pwa.install")
           vela-install pwaAction="update" buttonLabel=t("pwa.update")
           button press=leaveSession class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
@@ -110,7 +102,7 @@ component Shell
               text t("ui.signOut") font-size=14
       children
       if pickerOpen
-        SkinPicker(skins=skins, current=skin, small=compact, still=still, choose=changeAppearance, dismiss=closePicker)
+        SkinPicker(skins=p.skins, current=p.skin, small=compact, still=still, choose=changeAppearance, dismiss=closePicker)
 
 // Home, the server's libraries in order (a live library opens the guide), and Live
 // when the server offers it without a live library.
@@ -296,71 +288,64 @@ component RowSkeleton
 
 component Home
   props
-    model: HomeModel
-    active: bool
-    query: string
-    small: bool
-    still: bool
+    p: HomeProps
+  inject
     selectTitle: action
     observe: action
-    heroIndex: number
     pickHero: action
     reachEnd: action
     reachRowEnd: action
-    homeMoreLoading: bool
-    rowMoreLoading: string[]
-    cardPreview: CardPreview
     previewIntent: action
     playHero: action
   slot
-  derive primaries = model.heroActions.filter(a => a.action != "details" and a.targetId != "")
-  derive searching = query != ""
-  derive shown = model.hero.slice(heroIndex, heroIndex + 1)
-  derive previewing = not still and not searching and model.previews.filter(p => shown.map(h => h.id).includes(p.id)).length > 0
-  derive rotating = model.hero.length > 1 and active and not searching and not still and model.previews.filter(p => shown.map(h => h.id).includes(p.id)).length == 0
+  derive primaries = p.model.heroActions.filter(a => a.action != "details" and a.targetId != "")
+  derive searching = p.query != ""
+  derive shown = p.model.hero.slice(p.heroIndex, p.heroIndex + 1)
+  derive previewing = not p.still and not searching and p.model.previews.filter(entry => shown.map(h => h.id).includes(entry.id)).length > 0
+  derive rotating = p.model.hero.length > 1 and p.active and not searching and not p.still and p.model.previews.filter(entry => shown.map(h => h.id).includes(entry.id)).length == 0
   view
     column position="relative"
       // The artwork stage: behind the hero and the start of the rows, blurred into an aura while searching.
       for hero in shown key=hero.id
-        column position="absolute" top=0 left=0 right=0 height=(small ? "640px" : "max(680px, 92vh)") overflow="hidden" pointer-events="none" aria-hidden=true mask-image="linear-gradient(180deg, black 0%, black 70%, transparent 100%)" animation=expose(still) -exact-exit-animation=(still ? "vanish 160ms linear both" : "vanish 900ms ease-in-out both")
+        column position="absolute" top=0 left=0 right=0 height=(p.small ? "640px" : "max(680px, 92vh)") overflow="hidden" pointer-events="none" aria-hidden=true mask-image="linear-gradient(180deg, black 0%, black 70%, transparent 100%)" animation=expose(p.still) -exact-exit-animation=(p.still ? "vanish 160ms linear both" : "vanish 900ms ease-in-out both")
           if hero.backdrop != ""
             image hero.backdrop alt="" position="absolute" top="-12%" left="-12%" width="124%" height="124%" object-fit="cover" filter="blur(70px) saturate(1.5)" opacity=(searching ? 0.5 : 0) transition=`opacity ${slow()}ms ${glide()}`
           column position="absolute" inset=0 opacity=(searching ? 0 : 1) transition=`opacity ${slow()}ms ${glide()}`
             if hero.backdrop != ""
-              column position="absolute" inset=0 transform-origin="62% 38%" animation=drift(still)
+              column position="absolute" inset=0 transform-origin="62% 38%" animation=drift(p.still)
                 FadeImage(src=hero.backdrop)
             else
               if hero.poster != ""
-                image hero.poster alt="" position="absolute" top="-20%" left="-20%" width="140%" height="140%" object-fit="cover" filter="blur(90px) saturate(1.6)" opacity=0.7 animation=drift(still)
-            if not still and not searching
-              for preview in model.previews.filter(p => p.id == hero.id) key=preview.id
-                vela-preview url=preview.url active=(active and not searching ? "true" : "false") still=(still ? "true" : "false") expiresAt=preview.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                image hero.poster alt="" position="absolute" top="-20%" left="-20%" width="140%" height="140%" object-fit="cover" filter="blur(90px) saturate(1.6)" opacity=0.7 animation=drift(p.still)
+            if not p.still and not searching
+              for preview in p.model.previews.filter(entry => entry.id == hero.id) key=preview.id
+                vela-preview url=preview.url active=(p.active and not searching ? "true" : "false") still=(p.still ? "true" : "false") expiresAt=preview.expiresAt.toString() position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
           column position="absolute" left="-10%" bottom="8%" width="75%" height="70%" background-color=(hero.accent == "" ? "brand.warm" : hero.accent) opacity=0.2 mask-image="radial-gradient(closest-side, black 0%, transparent 100%)"
           column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-strong) 34%, var(--cinematic.scrim-mid) 52%, var(--cinematic.scrim-clear) 78%)" opacity=(previewing ? 1 : 0) transition=`opacity ${slow()}ms ${glide()}`
           column position="absolute" inset=0 background-image="linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-mid) 32%, var(--cinematic.scrim-clear) 68%), linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-strong) 22%, var(--cinematic.scrim-clear) 58%), linear-gradient(180deg, var(--cinematic.nav-scrim) 0%, var(--cinematic.scrim-clear) 20%), radial-gradient(ellipse 120% 100% at 60% 35%, var(--cinematic.scrim-clear) 50%, var(--cinematic.vignette) 100%)"
           image "assets/grain.svg" alt="" position="absolute" inset=0 width="100%" height="100%" object-fit="fill" opacity=0.05
-          if hero.backdrop == "" and hero.poster != "" and not small
-            image hero.poster alt="" position="absolute" right="max(28px, 6vw)" top="max(110px, 14vh)" height="min(56vh, 520px)" aspect-ratio="2 / 3" object-fit="cover" border-radius=16 box-shadow="0px 50px 120px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)" opacity=(searching ? 0 : 1) transition=`opacity ${slow()}ms ${glide()}` animation=enter(still, 300)
+          if hero.backdrop == "" and hero.poster != "" and not p.small
+            image hero.poster alt="" position="absolute" right="max(28px, 6vw)" top="max(110px, 14vh)" height="min(56vh, 520px)" aspect-ratio="2 / 3" object-fit="cover" border-radius=16 box-shadow="0px 50px 120px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)" opacity=(searching ? 0 : 1) transition=`opacity ${slow()}ms ${glide()}` animation=enter(p.still, 300)
       // The hero copy, then the search box it settles onto.
-      column position="relative" height=(searching or model.hero.length == 0 ? (small ? "176px" : "190px") : "auto") min-height=(searching or model.hero.length == 0 ? "0px" : small ? "520px" : "clamp(500px, 62vh, 700px)") padding-top=(searching or model.hero.length == 0 ? "0px" : small ? "calc(104px + 22px + env(safe-area-inset-top))" : "calc(84px + 32px + env(safe-area-inset-top))") justify-content="flex-end" box-sizing="border-box" -exact-layout-transition=(still ? "none" : "640ms ease-out")
+      column position="relative" height=(searching or p.model.hero.length == 0 ? (p.small ? "176px" : "190px") : "auto") min-height=(searching or p.model.hero.length == 0 ? "0px" : p.small ? "520px" : "clamp(500px, 62vh, 700px)") padding-top=(searching or p.model.hero.length == 0 ? "0px" : p.small ? "calc(104px + 22px + env(safe-area-inset-top))" : "calc(84px + 32px + env(safe-area-inset-top))") justify-content="flex-end" box-sizing="border-box" -exact-layout-transition=(p.still ? "none" : "640ms ease-out")
         if not searching
           for hero in shown key=hero.id
-            column padding-left=gutter(small) padding-right=gutter(small) gap=(small ? 12 : 16) max-width=(small ? "none" : "46rem") intersect=observe(hero.receipt) -exact-exit-animation=(still ? "vanish 120ms linear both" : "vanish 240ms ease-in both")
+            column padding-left=gutter(p.small) padding-right=gutter(p.small) gap=(p.small ? 12 : 16) max-width=(p.small ? "none" : "46rem") intersect=observe(hero.receipt) -exact-exit-animation=(p.still ? "vanish 120ms linear both" : "vanish 240ms ease-in both")
               // Why this title is here: the server's reason, as a small chip.
-              row gap=8 align-items="center" align-self="flex-start" padding="6px 12px 6px 10px" border-radius=999 background-color="cinematic.glass" backdrop-filter="blur(14px)" border="1px solid var(--cinematic.glass-edge)" animation=enter(still, 220)
+              row gap=8 align-items="center" align-self="flex-start" padding="6px 12px 6px 10px" border-radius=999 background-color="cinematic.glass" backdrop-filter="blur(14px)" border="1px solid var(--cinematic.glass-edge)" animation=enter(p.still, 220)
                 column width=6 height=6 border-radius=3 background-color=(hero.accent == "" ? "brand.warm" : hero.accent)
-                text (match first(model.heroActions.filter(a => a.heroId == hero.id)) { case some(a) => a.reasonLabel, case none => t("ui.selectedForYou") }) font-size=11 font-weight=650 letter-spacing="0.08em" text-transform="uppercase" color="ink.primary"
+                text (match first(p.model.heroActions.filter(a => a.heroId == hero.id)) { case some(a) => a.reasonLabel, case none => t("ui.selectedForYou") }) font-size=11 font-weight=650 letter-spacing="0.08em" text-transform="uppercase" color="ink.primary"
               if hero.logo != ""
-                image hero.logo alt=hero.name role="heading" aria-level=1 height=(small ? 96 : 150) width="auto" max-width=(small ? "78%" : "min(520px, 70%)") object-fit="contain" align-self="flex-start" animation=enter(still, 300)
+                image hero.logo alt=hero.name role="heading" aria-level=1 height=(p.small ? 96 : 150) width="auto" max-width=(p.small ? "78%" : "min(520px, 70%)") object-fit="contain" align-self="flex-start" animation=enter(p.still, 300)
               else
-                text hero.name role="heading" aria-level=1 class=Display font-size=(small ? 48 : 84) text-shadow="0px 4px 40px var(--cinematic.shadow)" animation=enter(still, 300)
-              text ([hero.facts].concat(hero.genres.slice(0, 3)).filter(f => f != "").join(" · ")) font-size=(small ? 13 : 14) color="ink.secondary" text-shadow="0px 1px 12px var(--cinematic.shadow)" font-variant-numeric="tabular-nums" animation=enter(still, 380)
+                text hero.name role="heading" aria-level=1 class=Display font-size=(p.small ? 48 : 84) text-shadow="0px 4px 40px var(--cinematic.shadow)" animation=enter(p.still, 300)
+              text ([hero.facts].concat(hero.genres.slice(0, 3)).filter(f => f != "").join(" · ")) font-size=(p.small ? 13 : 14) color="ink.secondary" text-shadow="0px 1px 12px var(--cinematic.shadow)" font-variant-numeric="tabular-nums" animation=enter(p.still, 380)
               if hero.summary != ""
-                text hero.summary font-size=(small ? 14 : 16) color=(previewing ? "ink.primary" : "ink.secondary") text-shadow="0px 1px 14px var(--cinematic.shadow)" line-clamp=(small ? 2 : 3) line-height=1.55 max-width="36rem" animation=enter(still, 440)
+                text hero.summary font-size=(p.small ? 14 : 16) color=(previewing ? "ink.primary" : "ink.secondary") text-shadow="0px 1px 14px var(--cinematic.shadow)" line-clamp=(p.small ? 2 : 3) line-height=1.55 max-width="36rem" animation=enter(p.still, 440)
               // The one thing to press: the server's predicted action, then More info.
-              row gap=12 align-items="center" flex-wrap="wrap" margin-top=(small ? 4 : 8) animation=enter(still, 500)
+              row gap=12 align-items="center" flex-wrap="wrap" margin-top=(p.small ? 4 : 8) animation=enter(p.still, 500)
                 for act in primaries.filter(a => a.heroId == hero.id).slice(0, 1) key=act.heroId
-                  button press=playHero(act.targetId, act.positionSeconds, act.hasPosition) testId="hero-primary" class=PrimaryPill height=(small ? 50 : 56) padding-left=(small ? 22 : 28) padding-right=(small ? 26 : 32) box-shadow=(heroIndex == 0 ? "0px 14px 44px var(--cinematic.focus-halo), 0px 0px 0px 1px var(--cinematic.ring)" : "none") transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
+                  button press=playHero(act.targetId, act.positionSeconds, act.hasPosition) testId="hero-primary" class=PrimaryPill height=(p.small ? 50 : 56) padding-left=(p.small ? 22 : 28) padding-right=(p.small ? 26 : 32) box-shadow=(p.heroIndex == 0 ? "0px 14px 44px var(--cinematic.focus-halo), 0px 0px 0px 1px var(--cinematic.ring)" : "none") transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
                     row gap=12 align-items="center"
                       image "symbol:play-fill" width=18 height=18 aria-hidden=true
                       column gap=3 align-items="flex-start"
@@ -371,44 +356,44 @@ component Home
                         column width=44 height=3 border-radius=2 background-color="cinematic.ink-track" overflow="hidden" aria-hidden=true
                           column height=3 width=`${min(100, act.progress * 100)}%` background-color="ink.inverse"
                 if primaries.filter(a => a.heroId == hero.id).length > 0
-                  button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) testId="hero-more" class=GhostPill height=(small ? 50 : 56) padding-left=(small ? 20 : 24) padding-right=(small ? 22 : 26) transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
+                  button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) testId="hero-more" class=GhostPill height=(p.small ? 50 : 56) padding-left=(p.small ? 20 : 24) padding-right=(p.small ? 22 : 26) transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
                     row gap=10 align-items="center"
                       image "symbol:info" width=17 height=17 aria-hidden=true
                       text t("hero.moreInfo") font-size=15
                 else
-                  button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) testId="hero-more" class=PrimaryPill height=(small ? 50 : 56) padding-left=(small ? 22 : 28) padding-right=(small ? 24 : 30) box-shadow=(heroIndex == 0 ? "0px 14px 44px var(--cinematic.focus-halo), 0px 0px 0px 1px var(--cinematic.ring)" : "none") transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
+                  button press=selectTitle(hero.id, hero.kind, hero.receipt) aria-label=cardName(hero) testId="hero-more" class=PrimaryPill height=(p.small ? 50 : 56) padding-left=(p.small ? 22 : 28) padding-right=(p.small ? 24 : 30) box-shadow=(p.heroIndex == 0 ? "0px 14px 44px var(--cinematic.focus-halo), 0px 0px 0px 1px var(--cinematic.ring)" : "none") transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
                     row gap=10 align-items="center"
                       image "symbol:info" width=17 height=17 aria-hidden=true
                       text t("hero.moreInfo") font-size=15
-        if not searching and model.hero.length > 1
-          row gap=8 align-items="center" padding-left=gutter(small) padding-right=gutter(small) padding-top=(small ? 16 : 22) role="group" aria-label=t("ui.featuredTitles") animation=enter(still, 560)
-            for hero, i in model.hero key=hero.id
-              button press=pickHero(i) aria-label=t("ui.featuredTitleOf", position=formatNumber(i + 1, "decimal"), total=formatNumber(model.hero.length, "decimal"), title=hero.name) aria-current=(i == heroIndex ? "true" : "false") position="relative" width=(i == heroIndex ? 34 : 8) height=8 padding=0 border="none" border-radius=4 overflow="hidden" background-color=(i == heroIndex ? "cinematic.track-strong" : "cinematic.glass-edge-strong") cursor="pointer" -exact-layout-transition=(still ? "none" : "420ms ease-out")
+        if not searching and p.model.hero.length > 1
+          row gap=8 align-items="center" padding-left=gutter(p.small) padding-right=gutter(p.small) padding-top=(p.small ? 16 : 22) role="group" aria-label=t("ui.featuredTitles") animation=enter(p.still, 560)
+            for hero, i in p.model.hero key=hero.id
+              button press=pickHero(i) aria-label=t("ui.featuredTitleOf", position=formatNumber(i + 1, "decimal"), total=formatNumber(p.model.hero.length, "decimal"), title=hero.name) aria-current=(i == p.heroIndex ? "true" : "false") position="relative" width=(i == p.heroIndex ? 34 : 8) height=8 padding=0 border="none" border-radius=4 overflow="hidden" background-color=(i == p.heroIndex ? "cinematic.track-strong" : "cinematic.glass-edge-strong") cursor="pointer" -exact-layout-transition=(p.still ? "none" : "420ms ease-out")
                 :hover
                   background-color="cinematic.control-hover"
                 :focus-visible
                   box-shadow="0px 0px 0px 2px var(--brand.warm)"
-                if i == heroIndex
-                  for n in [heroIndex] key=`fill-${n}`
+                if i == p.heroIndex
+                  for n in [p.heroIndex] key=`fill-${n}`
                     column position="absolute" inset=0 border-radius=4 background-color="ink.primary" animation=(rotating ? "fill 9000ms linear both" : "none")
-        column padding-top=(small ? 26 : 34) padding-bottom=(small ? 10 : 14) padding-left=(small ? "16px" : "max(28px, 4vw)") padding-right=(small ? "16px" : "max(28px, 4vw)") align-items="center" -exact-layout-transition=(still ? "none" : "640ms ease-out")
-          column width="100%" max-width=720 animation=enter(still, 420)
+        column padding-top=(p.small ? 26 : 34) padding-bottom=(p.small ? 10 : 14) padding-left=(p.small ? "16px" : "max(28px, 4vw)") padding-right=(p.small ? "16px" : "max(28px, 4vw)") align-items="center" -exact-layout-transition=(p.still ? "none" : "640ms ease-out")
+          column width="100%" max-width=720 animation=enter(p.still, 420)
             children
       if not searching
-        column position="relative" padding-top=(small ? 14 : 22)
-          for row, i in model.rows key=row.id
-            column animation=enter(still, 520 + stagger(i, 90, 4)) -exact-exit-animation=(still ? "vanish 120ms linear both" : "vanish 220ms ease-in both")
-              Shelf(row=row, small=small, still=still, selectTitle=selectTitle, observe=observe, preview=cardPreview, intent=previewIntent)
+        column position="relative" padding-top=(p.small ? 14 : 22)
+          for row, i in p.model.rows key=row.id
+            column animation=enter(p.still, 520 + stagger(i, 90, 4)) -exact-exit-animation=(p.still ? "vanish 120ms linear both" : "vanish 220ms ease-in both")
+              Shelf(row=row, small=p.small, still=p.still, selectTitle=selectTitle, observe=observe, preview=p.cardPreview, intent=previewIntent)
                 if row.nextCursor != ""
-                  column width=(small ? 60 : 96) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) intersect-margin="0px 100% 0px 0px" aria-hidden=(not rowMoreLoading.includes(row.id))
-                    if rowMoreLoading.includes(row.id)
-                      Pulse(still=still)
-          if model.nextCursor != ""
+                  column width=(p.small ? 60 : 96) align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" intersect=reachRowEnd(row.id) intersect-margin="0px 100% 0px 0px" aria-hidden=(not p.rowMoreLoading.includes(row.id))
+                    if p.rowMoreLoading.includes(row.id)
+                      Pulse(still=p.still)
+          if p.model.nextCursor != ""
             column height=120 align-items="center" justify-content="center" intersect=reachEnd intersect-margin="0px 0px 100% 0px"
-              if homeMoreLoading
-                RowSkeleton(small=small, still=still)
-          if model.rows.length == 0
-            EmptyState(icon="symbol:sparkles", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"), still=still)
+              if p.homeMoreLoading
+                RowSkeleton(small=p.small, still=p.still)
+          if p.model.rows.length == 0
+            EmptyState(icon="symbol:sparkles", title=t("ui.nothingHereYet"), message=t("ui.yourLibraryHasNoRowsYet"), still=p.still)
 
 // A centred, designed moment for empty results and unavailable lanes.
 component EmptyState
@@ -427,89 +412,79 @@ component EmptyState
 
 component SearchSurface
   props
-    query: string
-    model: SearchModel
-    descriptive: SearchModel
-    ai: SearchModel
-    generation: number
-    loading: bool
-    error: bool
-    aiAvailable: bool
-    descriptiveState: string
-    aiState: string
-    small: bool
-    still: bool
+    p: SearchProps
+  inject
     selectTitle: action
     openLiveProgramme: action
     observe: action
   // Several words read as a description, not a name: an empty answer is then about the
   // mood, never "nothing by that name".
-  derive describing = query.trim().split(" ").filter(w => w != "").length > 1 and descriptiveState != "off"
-  derive vibes = (descriptiveState == "ready" ? descriptive.items : [])
-  derive titlesFound = not loading and not error and model.items.length > 0
+  derive describing = p.query.trim().split(" ").filter(w => w != "").length > 1 and p.descriptiveState != "off"
+  derive vibes = (p.descriptiveState == "ready" ? p.descriptive.items : [])
+  derive titlesFound = not p.loading and not p.error and p.model.items.length > 0
   // Live hits come with the fast lane: channels and programmes airing now, then what's coming up on the guide.
-  derive airing = (loading or error ? [] : model.liveProgrammes.filter(p => p.airing))
-  derive upcoming = (loading or error ? [] : model.liveProgrammes.filter(p => not p.airing))
-  derive channels = (loading or error ? [] : model.liveChannels)
+  derive airing = (p.loading or p.error ? [] : p.model.liveProgrammes.filter(entry => entry.airing))
+  derive upcoming = (p.loading or p.error ? [] : p.model.liveProgrammes.filter(entry => not entry.airing))
+  derive channels = (p.loading or p.error ? [] : p.model.liveChannels)
   derive liveFound = channels.length > 0 or airing.length > 0 or upcoming.length > 0
-  derive aiRunning = aiState == "loading" or (aiState == "ready" and (ai.aiStatus == "queued" or ai.aiStatus == "running"))
-  derive aiFailed = aiState == "failed" or (aiState == "ready" and ai.aiStatus == "failed")
-  derive aiShown = aiAvailable and (aiRunning or aiFailed or (aiState == "ready" and ai.aiStatus == "complete"))
+  derive aiRunning = p.aiState == "loading" or (p.aiState == "ready" and (p.ai.aiStatus == "queued" or p.ai.aiStatus == "running"))
+  derive aiFailed = p.aiState == "failed" or (p.aiState == "ready" and p.ai.aiStatus == "failed")
+  derive aiShown = p.aiAvailable and (aiRunning or aiFailed or (p.aiState == "ready" and p.ai.aiStatus == "complete"))
   view
-    column position="relative" gap=(small ? 18 : 26) padding-bottom=72 animation=(still ? "dissolve 240ms linear both" : "rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both")
-      column padding-left=gutter(small) padding-right=gutter(small) gap=6
-        text t("ui.resultsForQuery", query=query) role="heading" aria-level=1 class=Display font-size=(small ? 32 : 46) line-clamp=2
-      if loading
+    column position="relative" gap=(p.small ? 18 : 26) padding-bottom=72 animation=(p.still ? "dissolve 240ms linear both" : "rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both")
+      column padding-left=gutter(p.small) padding-right=gutter(p.small) gap=6
+        text t("ui.resultsForQuery", query=p.query) role="heading" aria-level=1 class=Display font-size=(p.small ? 32 : 46) line-clamp=2
+      if p.loading
         column
           text t("ui.findingTitles") role="status" position="absolute" width=1 height=1 overflow="hidden" opacity=0
-          RowSkeleton(small=small, still=still)
+          RowSkeleton(small=p.small, still=p.still)
       else if titlesFound
-        Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-      else if liveFound or descriptiveState == "loading" or vibes.length > 0 or aiRunning
+        Row(row=FeedRow(id="fast", name=t("ui.titleMatches"), receipt="", items=p.model.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+      else if liveFound or p.descriptiveState == "loading" or vibes.length > 0 or aiRunning
         // No titles, but live hits or a slower lane answer below.
         column
-      else if error
-        EmptyState(icon="symbol:alert", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"), still=still)
-      else if describing and descriptiveState == "failed"
-        EmptyState(icon="symbol:alert", title=t("search.moodUnavailable"), message=t("search.moodUnavailableMessage"), still=still)
+      else if p.error
+        EmptyState(icon="symbol:alert", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"), still=p.still)
+      else if describing and p.descriptiveState == "failed"
+        EmptyState(icon="symbol:alert", title=t("search.moodUnavailable"), message=t("search.moodUnavailableMessage"), still=p.still)
       else if describing
-        EmptyState(icon="symbol:search", title=t("search.noMood"), message=t("search.noMoodMessage"), still=still)
+        EmptyState(icon="symbol:search", title=t("search.noMood"), message=t("search.noMoodMessage"), still=p.still)
       else
-        EmptyState(icon="symbol:search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"), still=still)
+        EmptyState(icon="symbol:search", title=t("ui.noMatches"), message=t("ui.noTitleMatchesTryANameAMoodOrADifferentDescription"), still=p.still)
       if channels.length > 0 or airing.length > 0
-        LiveLane(name=t("live.onNow"), small=small, still=still)
+        LiveLane(name=t("live.onNow"), small=p.small, still=p.still)
           for channel in channels key=`c-${channel.id}`
-            LiveTile(title=(channel.nowTitle != "" ? channel.nowTitle : channel.name), detail=(channel.nowEndLabel != "" ? t("search.live.until", channel=channel.name, time=channel.nowEndLabel) : t("search.live.channel", number=channel.number)), artwork="", logo=channel.logo, mark=channel.name, live=(channel.nowTitle != ""), progress=channel.nowProgress, chip="", enabled=true, small=small, still=still, open=selectTitle(channel.id, "channel", ""))
-          for p in airing key=`p-${p.id}`
-            LiveTile(title=p.name, detail=t("search.live.until", channel=(p.episode != "" ? `${p.episode} · ${p.channelName}` : p.channelName), time=p.endLabel), artwork=p.artwork, logo=p.channelLogo, mark=p.channelName, live=true, progress=p.progress, chip="", enabled=p.navigable, small=small, still=still, open=openLiveProgramme(p.id))
+            LiveTile(title=(channel.nowTitle != "" ? channel.nowTitle : channel.name), detail=(channel.nowEndLabel != "" ? t("search.live.until", channel=channel.name, time=channel.nowEndLabel) : t("search.live.channel", number=channel.number)), artwork="", logo=channel.logo, mark=channel.name, live=(channel.nowTitle != ""), progress=channel.nowProgress, chip="", enabled=true, small=p.small, still=p.still, open=selectTitle(channel.id, "channel", ""))
+          for entry in airing key=`p-${entry.id}`
+            LiveTile(title=entry.name, detail=t("search.live.until", channel=(entry.episode != "" ? `${entry.episode} · ${entry.channelName}` : entry.channelName), time=entry.endLabel), artwork=entry.artwork, logo=entry.channelLogo, mark=entry.channelName, live=true, progress=entry.progress, chip="", enabled=entry.navigable, small=p.small, still=p.still, open=openLiveProgramme(entry.id))
       if upcoming.length > 0
-        LiveLane(name=t("search.live.comingUp"), small=small, still=still)
-          for p in upcoming key=`p-${p.id}`
-            LiveTile(title=p.name, detail=(p.episode != "" ? `${p.episode} · ${p.channelName}` : p.channelName), artwork=p.artwork, logo=p.channelLogo, mark=p.channelName, live=false, progress=0, chip=(p.startsInLabel != "" ? p.startsInLabel : p.startLabel), enabled=p.navigable, small=small, still=still, open=openLiveProgramme(p.id))
-      if descriptiveState == "loading" and not loading
-        row gap=12 align-items="center" padding-left=gutter(small) padding-right=gutter(small) role="status" animation=enter(still, 80)
-          Pulse(still=still)
+        LiveLane(name=t("search.live.comingUp"), small=p.small, still=p.still)
+          for entry in upcoming key=`p-${entry.id}`
+            LiveTile(title=entry.name, detail=(entry.episode != "" ? `${entry.episode} · ${entry.channelName}` : entry.channelName), artwork=entry.artwork, logo=entry.channelLogo, mark=entry.channelName, live=false, progress=0, chip=(entry.startsInLabel != "" ? entry.startsInLabel : entry.startLabel), enabled=entry.navigable, small=p.small, still=p.still, open=openLiveProgramme(entry.id))
+      if p.descriptiveState == "loading" and not p.loading
+        row gap=12 align-items="center" padding-left=gutter(p.small) padding-right=gutter(p.small) role="status" animation=enter(p.still, 80)
+          Pulse(still=p.still)
           text t("search.lookingForVibe") color="ink.secondary" font-size=15
       if vibes.length > 0
-        column animation=enter(still, 120)
-          Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=vibes, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
-      if descriptiveState == "failed" and titlesFound
-        text t("search.moodUnavailableBelowTitles") color="ink.secondary" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
+        column animation=enter(p.still, 120)
+          Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=vibes, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
+      if p.descriptiveState == "failed" and titlesFound
+        text t("search.moodUnavailableBelowTitles") color="ink.secondary" font-size=14 padding-left=gutter(p.small) padding-right=gutter(p.small)
       if aiShown
-        column gap=10 animation=enter(still, 160)
-          row gap=10 align-items="center" padding-left=gutter(small) padding-right=gutter(small)
+        column gap=10 animation=enter(p.still, 160)
+          row gap=10 align-items="center" padding-left=gutter(p.small) padding-right=gutter(p.small)
             image "symbol:sparkles" width=18 height=18 color="brand.warm" aria-hidden=true
-            text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 class=Display font-size=(small ? 26 : 30)
+            text t("ui.aLittleFurtherAfield") role="heading" aria-level=2 class=Display font-size=(p.small ? 26 : 30)
           if aiRunning
-            row gap=12 align-items="center" padding-left=gutter(small) padding-right=gutter(small) role="status"
-              Pulse(still=still)
+            row gap=12 align-items="center" padding-left=gutter(p.small) padding-right=gutter(p.small) role="status"
+              Pulse(still=p.still)
               text t("ui.exploringYourDescription") color="ink.secondary" font-size=14
-          if aiState == "ready" and ai.items.length > 0
-            Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=small, still=still, selectTitle=selectTitle, observe=observe)
+          if p.aiState == "ready" and p.ai.items.length > 0
+            Row(row=FeedRow(id="ai", name=t("ui.discoveredForYou"), receipt="", items=p.ai.items, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
           if aiFailed
-            text (titlesFound ? t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") : t("search.discoveryUnavailable")) color="ink.secondary" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
-          if aiState == "ready" and ai.aiStatus == "complete" and ai.items.length == 0
-            text t("search.discoveryEmpty") color="ink.secondary" font-size=14 padding-left=gutter(small) padding-right=gutter(small)
+            text (titlesFound ? t("ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove") : t("search.discoveryUnavailable")) color="ink.secondary" font-size=14 padding-left=gutter(p.small) padding-right=gutter(p.small)
+          if p.aiState == "ready" and p.ai.aiStatus == "complete" and p.ai.items.length == 0
+            text t("search.discoveryEmpty") color="ink.secondary" font-size=14 padding-left=gutter(p.small) padding-right=gutter(p.small)
 
 // A lane of live hits under search: a heading and a horizontal scroller of tiles.
 component LiveLane
@@ -578,7 +553,8 @@ fn detailSplit(width: number): string = "none"
 // The rounded search box at the centre of the home composition.
 component SearchField
   props
-    query: string
+    p: SearchFieldProps
+  inject
     edit: action
   state focused = false
   action focusField
@@ -588,55 +564,52 @@ component SearchField
   view
     row align-items="center" gap=14 height=60 box-sizing="border-box" padding="0px 8px 0px 22px" border-radius=999 background-color=(focused ? "cinematic.search-focus" : "cinematic.search") backdrop-filter="blur(26px) saturate(1.5)" border=(focused ? "1px solid var(--cinematic.glass-edge-strong)" : "1px solid var(--cinematic.glass-edge)") box-shadow=(focused ? "0px 26px 70px var(--cinematic.search-shadow), 0px 0px 0px 3px var(--cinematic.focus-halo), inset 0px 1px 0px var(--cinematic.ring)" : "0px 18px 50px var(--cinematic.search-shadow), inset 0px 1px 0px var(--cinematic.ring)") transition=`background-color 180ms linear, border-color 180ms linear, box-shadow ${base()}ms ${glide()}`
       image "symbol:search" color=(focused ? "ink.primary" : "ink.secondary") width=20 height=20 flex-shrink=0 aria-hidden=true
-      input id="vela-search" value=query input=edit focus=focusField blur=blurField outline="none" placeholder=t("ui.aTitleAFeelingAWorldToGetLostIn") aria-label=t("ui.searchYourLibrary") testId="search" flex=1 min-width=0 height="100%" padding=0 border="none" background-color="transparent" color="ink.primary" font-size=17
+      input id="vela-search" value=p.query input=edit focus=focusField blur=blurField outline="none" placeholder=t("ui.aTitleAFeelingAWorldToGetLostIn") aria-label=t("ui.searchYourLibrary") testId="search" flex=1 min-width=0 height="100%" padding=0 border="none" background-color="transparent" color="ink.primary" font-size=17
         ::placeholder
           color="ink.quiet"
-      if query != ""
+      if p.query != ""
         button press=edit("") aria-label=t("ui.clearSearch") class=IconButton width=40 height=40 padding=11 flex-shrink=0
           image "symbol:close" width=16 height=16
 
 // Waiting and failure moments the foundation reports: shaped like what is coming, never blank.
 component Status
   props
-    kind: string
-    message: string
-    small: bool
-    still: bool
+    p: StatusProps
   view
-    if kind == "home"
-      column role="status" aria-label=message animation=(still ? "dissolve 240ms linear both" : "dissolve 500ms ease-out both")
-        column height=(small ? "520px" : "clamp(500px, 62vh, 700px)") justify-content="flex-end" gap=16 padding-left=gutter(small) padding-right=gutter(small) box-sizing="border-box" background-image="radial-gradient(ellipse 80% 70% at 20% 40%, var(--cinematic.skeleton) 0%, var(--cinematic.scrim-clear) 70%)"
-          Skeleton(width="120px", height="10px", radius=4, still=still)
-          Skeleton(width=(small ? "80%" : "min(560px, 50%)"), height=(small ? "48px" : "76px"), radius=10, still=still)
-          Skeleton(width=(small ? "60%" : "300px"), height="14px", radius=4, still=still)
-          Skeleton(width="150px", height="52px", radius=26, still=still)
+    if p.kind == "home"
+      column role="status" aria-label=p.message animation=(p.still ? "dissolve 240ms linear both" : "dissolve 500ms ease-out both")
+        column height=(p.small ? "520px" : "clamp(500px, 62vh, 700px)") justify-content="flex-end" gap=16 padding-left=gutter(p.small) padding-right=gutter(p.small) box-sizing="border-box" background-image="radial-gradient(ellipse 80% 70% at 20% 40%, var(--cinematic.skeleton) 0%, var(--cinematic.scrim-clear) 70%)"
+          Skeleton(width="120px", height="10px", radius=4, still=p.still)
+          Skeleton(width=(p.small ? "80%" : "min(560px, 50%)"), height=(p.small ? "48px" : "76px"), radius=10, still=p.still)
+          Skeleton(width=(p.small ? "60%" : "300px"), height="14px", radius=4, still=p.still)
+          Skeleton(width="150px", height="52px", radius=26, still=p.still)
           column align-items="center" padding-top=34
-            Skeleton(width="min(720px, 100%)", height="60px", radius=30, still=still)
+            Skeleton(width="min(720px, 100%)", height="60px", radius=30, still=p.still)
         column padding-top=36
-          RowSkeleton(small=small, still=still)
+          RowSkeleton(small=p.small, still=p.still)
     else
-      if kind == "library"
-        column role="status" aria-label=message gap=28 padding-top=(small ? 120 : 128) animation=(still ? "dissolve 240ms linear both" : "dissolve 400ms ease-out both")
-          column gap=16 padding-left=gutter(small) padding-right=gutter(small)
-            Skeleton(width="90px", height="10px", radius=4, still=still)
-            Skeleton(width=(small ? "70%" : "380px"), height=(small ? "44px" : "68px"), radius=10, still=still)
+      if p.kind == "library"
+        column role="status" aria-label=p.message gap=28 padding-top=(p.small ? 120 : 128) animation=(p.still ? "dissolve 240ms linear both" : "dissolve 400ms ease-out both")
+          column gap=16 padding-left=gutter(p.small) padding-right=gutter(p.small)
+            Skeleton(width="90px", height="10px", radius=4, still=p.still)
+            Skeleton(width=(p.small ? "70%" : "380px"), height=(p.small ? "44px" : "68px"), radius=10, still=p.still)
             row gap=10
-              Skeleton(width="220px", height="42px", radius=21, still=still)
-              Skeleton(width="160px", height="42px", radius=21, still=still)
-          RowSkeleton(small=small, still=still)
-          RowSkeleton(small=small, still=still)
+              Skeleton(width="220px", height="42px", radius=21, still=p.still)
+              Skeleton(width="160px", height="42px", radius=21, still=p.still)
+          RowSkeleton(small=p.small, still=p.still)
+          RowSkeleton(small=p.small, still=p.still)
       else
-        if kind == "detail"
-          column role="status" aria-label=message gap=18 padding-left=(small ? "20px" : "max(32px, 5.5vw)") padding-right=(small ? "20px" : "max(32px, 5.5vw)") padding-top=(small ? 260 : 300) padding-bottom=48 background-image="radial-gradient(ellipse 90% 60% at 30% 20%, var(--cinematic.skeleton) 0%, var(--cinematic.scrim-clear) 70%)" animation=(still ? "dissolve 240ms linear both" : "dissolve 400ms ease-out both")
-            Skeleton(width="90px", height="10px", radius=4, still=still)
-            Skeleton(width=(small ? "85%" : "min(620px, 60%)"), height=(small ? "44px" : "72px"), radius=10, still=still)
-            Skeleton(width="260px", height="14px", radius=4, still=still)
-            Skeleton(width=(small ? "100%" : "min(560px, 55%)"), height="52px", radius=8, still=still)
-            Skeleton(width="170px", height="56px", radius=28, still=still)
+        if p.kind == "detail"
+          column role="status" aria-label=p.message gap=18 padding-left=(p.small ? "20px" : "max(32px, 5.5vw)") padding-right=(p.small ? "20px" : "max(32px, 5.5vw)") padding-top=(p.small ? 260 : 300) padding-bottom=48 background-image="radial-gradient(ellipse 90% 60% at 30% 20%, var(--cinematic.skeleton) 0%, var(--cinematic.scrim-clear) 70%)" animation=(p.still ? "dissolve 240ms linear both" : "dissolve 400ms ease-out both")
+            Skeleton(width="90px", height="10px", radius=4, still=p.still)
+            Skeleton(width=(p.small ? "85%" : "min(620px, 60%)"), height=(p.small ? "44px" : "72px"), radius=10, still=p.still)
+            Skeleton(width="260px", height="14px", radius=4, still=p.still)
+            Skeleton(width=(p.small ? "100%" : "min(560px, 55%)"), height="52px", radius=8, still=p.still)
+            Skeleton(width="170px", height="56px", radius=28, still=p.still)
         else
-          if kind == "loading"
+          if p.kind == "loading"
             column role="status" padding="96px 24px" align-items="center" gap=16
-              Pulse(still=still)
-              text message color="ink.secondary" font-size=15
+              Pulse(still=p.still)
+              text p.message color="ink.secondary" font-size=15
           else
-            EmptyState(icon="symbol:alert", title=t("ui.somethingWentQuiet"), message=message, still=still)
+            EmptyState(icon="symbol:alert", title=t("ui.somethingWentQuiet"), message=p.message, still=p.still)

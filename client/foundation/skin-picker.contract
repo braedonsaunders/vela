@@ -1,14 +1,4 @@
 use SkinManifest from "./models.contract"
-use manifest as CinematicManifest from "../skins/cinematic/manifest.contract"
-use manifest as IndexManifest from "../skins/index/manifest.contract"
-use manifest as ExampleManifest from "../skins/example/manifest.contract"
-use manifest as JellyTwinManifest from "../skins/jellytwin/manifest.contract"
-use manifest as MochiManifest from "../skins/mochi/manifest.contract"
-use manifest as MarqueeManifest from "../skins/marquee/manifest.contract"
-
-// Every compiled skin registers its manifest here (one branch per id); unknown ids
-// show the cinematic entry, matching the foundation's fallback.
-fn skinManifest(id: string): SkinManifest = (id == "mochi" ? MochiManifest() : id == "index" or id == "editorial" ? IndexManifest() : id == "example" ? ExampleManifest() : id == "jellytwin" ? JellyTwinManifest() : id == "marquee" ? MarqueeManifest() : CinematicManifest())
 
 keyframes pickerVeil
   from opacity=0
@@ -27,7 +17,8 @@ keyframes pickerCard
 // card applies that skin; the root then dissolves into it.
 component SkinPicker
   props
-    skins: string[]
+    // The picker entries (the registry's pickerSkins) and the active skin's id.
+    skins: SkinManifest[]
     current: string
     small: bool
     still: bool
@@ -54,9 +45,9 @@ component SkinPicker
           button press=dismiss aria-label=t("ui.close") width=40 height=40 padding=12 flex-shrink=0 box-sizing="border-box" border="1px solid var(--picker.edge)" border-radius=20 background-color="picker.control" color="picker.ink"
             image "symbol:close" width=16 height=16
         column role="radiogroup" aria-label=t("ui.appearance") display="grid" grid-template-columns=(small ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))") gap=(small ? 14 : 20)
-          for id, i in skins key=id
+          for entry, i in skins key=entry.id
             column animation=(still ? "pickerVeil 200ms linear both" : `pickerCard 560ms cubic-bezier(0.16, 1, 0.3, 1) ${120 + min(i, 6) * 60}ms both`)
-              SkinCard(manifest=skinManifest(id), selected=(id == current), still=still, pick=pick, previousId=match skins.at((i + skins.length - 1) % skins.length) { case some(x) => x, case none => id }, nextId=match skins.at((i + 1) % skins.length) { case some(x) => x, case none => id })
+              SkinCard(manifest=entry, selected=(entry.id == current), still=still, pick=pick, previousId=match skins.at((i + skins.length - 1) % skins.length) { case some(x) => x.id, case none => entry.id }, nextId=match skins.at((i + 1) % skins.length) { case some(x) => x.id, case none => entry.id })
 
 // One look: its live miniature, name, tagline and palette. Arrow keys move between
 // looks (radio-group semantics); Enter or Space chooses.

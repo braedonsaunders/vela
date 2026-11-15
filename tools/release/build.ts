@@ -4,7 +4,7 @@ import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node
 import { join, relative, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { stageUniversalAssets } from './universal-assets';
-import { ENGINES } from '../engine';
+import { engines as installedEngines } from '../engine';
 import { finalizeEngineRoot } from './engine-root';
 import { writePwaAssets, pwaIcons } from './pwa-assets';
 const root = resolve(import.meta.dir, '../..'), output = join(root, '.artifacts/release');
@@ -22,7 +22,7 @@ try {
   const dist = join(work,'dist'); await mkdir(dist);
   const universalAssets = await stageUniversalAssets(assetArgument.slice('--universal-assets='.length), dist);
   const engines: Record<string,{base:string;appBytes:number;appGzipBytes:number}> = {};
-  for (const engine of ENGINES) {
+  for (const engine of await installedEngines(join(root, 'client'))) {
     const stem = `vela-${version}-${engine}`, childManifest = join(output,`${stem}.manifest.json`);
     if (!await Bun.file(childManifest).exists()) await run([process.execPath,join(import.meta.dir,'engine-build.ts'),'--committed','--engine',engine,...process.argv.includes('--map-report')?['--map-report']:[]]);
     const metadata = await Bun.file(childManifest).json();

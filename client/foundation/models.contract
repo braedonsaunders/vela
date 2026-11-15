@@ -178,8 +178,6 @@ shape CollectionModel
 
 fn cardName(card: Card): string = t("ui.openTitleYearProgress", title=card.name, year=(card.year > 0 ? t("ui.year", year=card.yearLabel) : ""), progress=(card.played ? t("ui.watched") : card.progressSeconds > 0 and card.durationSeconds > 0 ? t("ui.progressComplete", progress=card.progressLabel) : ""))
 
-fn skinLabel(id: string): string = (id == "mochi" ? t("mochi.name") : id == "cinematic" ? t("ui.cinematic") : id == "index" or id == "editorial" ? t("ui.index") : id == "example" ? t("example.name") : id == "jellytwin" ? t("jellytwin.name") : id == "marquee" ? t("marquee.name") : id)
-
 shape LibraryOption
   id: string
   label: string
@@ -233,7 +231,7 @@ shape HomeRowPage
   requestCursor: string
   homeAt: number
 
-// A skin's appearance-picker entry: skins/<id>/manifest.contract exports `fn manifest()`.
+// A skin's appearance-picker entry, generated from its skin.json (foundation/skins.generated.contract).
 // preview is an app-relative asset path (assets/skins/<id>.jpg, a 1440x900 home capture
 // scaled to 720x450); swatches are 3-5 CSS colours from the skin's palette, ground first.
 shape SkinManifest

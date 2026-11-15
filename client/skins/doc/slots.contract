@@ -1,3 +1,4 @@
+use HomeProps, ShellProps from "../../foundation/slot-api.contract"
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
 use HomeModel, Viewport, LibraryNav from "../../foundation/models.contract"
@@ -33,24 +34,19 @@ component SlotBox
 
 component Shell
   props
+    p: ShellProps
+  inject
     doc: SkinDoc
-    viewer: string
-    skin: string
-    skins: string[]
     chooseSkin: action
     signOut: action
-    viewport: Viewport
-    canLive: bool
     home: action
     search: action
     live: action
-    libraries: LibraryNav[]
-    section: string
     openLibrary: action
   slot
   state flags: string[] = []
   state pickerOpen = false
-  derive env = Env(styles=doc.styles, home=[], libraries=libraries, viewer=viewer, section=section, query="", heroIndex=0, small=viewport.width < 640, still=viewport.prefersReducedMotion, canLive=canLive, flags=flags)
+  derive env = Env(styles=doc.styles, home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query="", heroIndex=0, small=p.viewport.width < 640, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags)
   action act(name: string, arg: string)
     if name == "home"
       flags = []
@@ -90,28 +86,25 @@ component Shell
       for n, i in doc.shell.nodes key=`${i}`
         L1(n=n, c=rootCtx(), e=env, act=act, obs=seen)
       if pickerOpen
-        SkinPicker(skins=skins, current=skin, small=env.small, still=env.still, choose=pick, dismiss=dismiss)
+        SkinPicker(skins=p.skins, current=p.skin, small=env.small, still=env.still, choose=pick, dismiss=dismiss)
 
 component Home
   props
+    p: HomeProps
+  inject
     doc: SkinDoc
-    model: HomeModel
-    query: string
-    small: bool
-    still: bool
     selectTitle: action
     observe: action
-    heroIndex: number
     pickHero: action
     playHero: action
   slot
   state flags: string[] = []
-  derive env = Env(styles=doc.styles, home=[model], libraries=[], viewer=model.viewer, section="home", query=query, heroIndex=heroIndex, small=small, still=still, canLive=model.liveAvailable, flags=flags)
+  derive env = Env(styles=doc.styles, home=[p.model], libraries=[], viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, still=p.still, canLive=p.model.liveAvailable, flags=flags)
   action act(name: string, arg: string)
     if name == "select"
       selectTitle(part(arg, 0), part(arg, 1), part(arg, 2))
     if name == "play"
-      playHero(heroActFor(model, arg).map(a => a.targetId).join(""), num(heroActFor(model, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(model, arg).map(a => a.hasPosition).includes(true))
+      playHero(heroActFor(p.model, arg).map(a => a.targetId).join(""), num(heroActFor(p.model, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(p.model, arg).map(a => a.hasPosition).includes(true))
     if name == "pickHero"
       pickHero(match parseNumber(arg) { case some(x) => x, case none => 0 })
     if name == "toggle"
