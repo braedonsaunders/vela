@@ -196,9 +196,10 @@ const heat: Node[] = [
   { type: 'box', style: { ...fill, 'background-color': '$scrim-faint', opacity: '0', transition: 'opacity 120ms linear' }, groupHover: { opacity: '1' }, groupFocus: { opacity: '1' } } as Node,
   { type: 'box', style: { ...fill, 'border-radius': '4px', 'box-shadow': 'inset 0px 0px 0px 3px $amber', opacity: '0', transition: 'opacity 120ms linear' }, groupHover: { opacity: '1' }, groupFocus: { opacity: '1' } } as Node,
 ];
-// An unwatched film or episode carries an amber corner.
+// An unwatched film or episode carries an amber corner: a border triangle, as drawn compiled.
+const tri = (size: number): Style => ({ position: 'absolute', top: '0px', right: '0px', width: '0px', height: '0px', 'border-style': 'solid', 'border-width': '0px', 'border-top-width': px(size), 'border-top-color': '$amber', 'border-left-width': px(size), 'border-left-color': 'transparent' });
 const corner = (size: number, sizeSmall = size): Node => ({ type: 'box', when: [set('card.unwatched')],
-  style: { position: 'absolute', top: '0px', right: '0px', width: px(size), height: px(size), 'background-image': 'linear-gradient(225deg, $amber 50%, transparent 50%)' }, small: { width: px(sizeSmall), height: px(sizeSmall) } });
+  style: tri(size), small: tri(sizeSmall) });
 // Artwork is absent: the kind's icon and the title on a quiet panel.
 const placeholder: Node = { type: 'box', when: [unset('card.poster')], style: { ...fill, display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'justify-content': 'center', gap: '10px', padding: '12px', 'box-sizing': 'border-box', 'background-image': 'linear-gradient(160deg, $raised 0%, $chrome 100%)', color: '$ink-faint' }, children: [
   glyph('film', 32, { when: [is('card.kind', 'movie')], small: { width: '26px', height: '26px' } }),
@@ -514,7 +515,7 @@ const detailLoading: Node = { type: 'box', role: 'status', label: '{s:openingTit
 // The title page scrolls in its own box (navigation restores it); the close button stays put.
 const title: Node = { type: 'box', style: { position: 'relative', height: '100%', 'min-height': '0px', display: 'flex', 'flex-direction': 'column', 'background-color': '$page', color: '$ink', 'font-family': sans }, children: [
   { type: 'box', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', display: 'flex', 'box-sizing': 'border-box', width: '44px', height: '44px', border: '1px solid $close-line', 'border-radius': '22px', padding: '13px', 'background-color': '$close-glass', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: '$close-ink' }, children: [
-    { type: 'icon', symbol: 'close', style: { width: '16px', height: '16px' } },
+    { type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } },
   ] },
   { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{s:titleDetails}', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'auto', 'padding-bottom': '60px' }, children: [
     detailLoading,
