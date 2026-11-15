@@ -71,7 +71,7 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
 type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; holds: boolean; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
-export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean }
+export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string }
 interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
@@ -346,6 +346,7 @@ function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchFi
   return { present: true, rootBase: rootStates.base, rootSts: rootStates.sts, slotBase: holderStates.base, slotSts: holderStates.sts, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), holds: holderAt >= 0, nodes };
 }
 
+const tri = (v: unknown) => v === true ? 'true' : v === false ? 'false' : '';
 function detailFrame(doc: SkinDocument, r: Resolve): { detailScrim: string; detailBlur: string; detailFlat: boolean } {
   const frame = (doc.detail as { frame?: { scrim?: string; blur?: string; flat?: boolean } } | undefined)?.frame;
   if (frame?.flat) return { detailScrim: 'transparent', detailBlur: 'none', detailFlat: true };
@@ -378,5 +379,7 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
     // From this viewport width the detail takes its wide presentation and splits home beside it (a pane width in px).
     detailFrom: Math.max(0, Math.min(4000, Math.round(Number(doc.detail?.from ?? 640)) || 0)), detailSplit: /^(\d{2,4})(px)?$/.exec(String(doc.detail?.split ?? ''))?.[1] ?? 'none',
     // The framed title's surround, drawn by the route frame: scrim (colour or token), blur, or flat.
-    ...detailFrame(doc, r) };
+    ...detailFrame(doc, r),
+    // Foundation traits the document sets ("" leaves the doc engine's).
+    barMask: tri(doc.traits?.barMask), panSections: tri(doc.traits?.panSections) };
 }

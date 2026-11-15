@@ -137,6 +137,8 @@ export interface SkinDocument {
   live?: { home?: boolean };
   /** Detail route presentation per viewport class. */
   /** The title page's presentation below and from `from` px (default 640), and the home pane width in px it splits beside it from there. */
+  /** How the foundation frames the document's pages: home fades under a floating bar; home, libraries and Live TV pan sideways. */
+  traits?: { barMask?: boolean; panSections?: boolean };
   detail?: { from?: number; small?: 'fullscreen' | 'modal' | 'stack'; wide?: 'fullscreen' | 'modal' | 'stack'; split?: string;
     /** A framed title page's surround, drawn behind the document's frame over home: scrim colour (default media.overlay),
      *  backdrop blur (default 'blur(18px) saturate(1.1)'), or flat: no scrim (a full-page title). */

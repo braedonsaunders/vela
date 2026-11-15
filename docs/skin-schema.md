@@ -229,6 +229,8 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
 - **Control states**: a pressable box shows Exact's hover wash under its content (as a compiled
   button does), unless its style has a background image or it sets `controlStates: false`.
 - **searchInput** takes its node's padding (the input is the padded box, so the ring hugs it).
+- **traits**: `{ barMask?: bool, panSections?: bool }`: home fades under a floating bar; home,
+  libraries and Live TV pan sideways between sections (unset: the doc engine's).
 - **detail.frame**: a framed title page's surround, drawn by the route frame over home:
   `{ scrim?: colour (media.overlay), blur?: 'blur(18px) saturate(1.1)', flat?: true }`.
 
@@ -241,8 +243,7 @@ home beneath.
 
 ## Next (renderer 9, names final)
 
-- Per-document `traits`: `page`, `ink`, `flatDetail`, `panSections`, `barMask`, `splashOnPaper`,
-  detail frame tokens. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
+- Per-document `traits`: `page`, `ink`, `splashOnPaper`. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 
 **Widgets**: `heroPreview`, `cardPreview` (with the card's intent on hover/focus in preview
 rows); an `active` (pressed) overlay and `replayOnPress`.
