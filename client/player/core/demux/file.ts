@@ -90,8 +90,10 @@ export class PacketDemux {
     const reader = new PacketReader(track);
     const querySeconds=Math.max(0,positionUs-this.originUs)/1e6;
     // Container cues/sample tables locate a preceding random-access packet.
+    // Decode audio preroll too; the output stage trims PCM at the exact target.
+    // getFirst preserves negative AAC priming at the start instead of skipping it.
     let packet = await this.operation(() => track instanceof InputVideoTrack
-      ? reader.getKeyAt(querySeconds) : reader.getAt(querySeconds),signal);
+      ? reader.getKeyAt(querySeconds) : querySeconds===0?reader.getFirst():reader.getAt(Math.max(0,querySeconds-0.1)),signal);
     if (!packet) {
       const first = await this.operation(() => track instanceof InputVideoTrack ? reader.getFirstKey() : reader.getFirst(),signal);
       // A track starting after the target needs its first packet. EOF must never

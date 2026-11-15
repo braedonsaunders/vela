@@ -95,7 +95,7 @@ async function loadRuntimeModule(signal:AbortSignal){
   const manifest=await runtimeManifest(signal);
   signal.throwIfAborted();playbackMark('runtime:start');
   const moduleURL = new URL('runtime.js', base); moduleURL.searchParams.set('v', manifest.assetKey);
-  const module = await import(moduleURL.href) as {UniversalRuntime: new (options: OriginalRuntimeOptions) => OriginalBackend;SubtitleSession?:new(options:SubtitleSessionOptions)=>SubtitleSession};
+  const module = await import(moduleURL.href) as {UniversalRuntime: new (options: OriginalRuntimeOptions) => OriginalBackend;SubtitleSession?:new(options:SubtitleSessionOptions)=>SubtitleSession;warmup?:(options:Pick<OriginalRuntimeOptions,'assets'|'signal'>)=>Promise<boolean|undefined>};
   signal.throwIfAborted();playbackMark('runtime:ready');
   const subtitles=manifest.subtitleAssets;
   if(subtitles&&(!/^[a-f0-9]{16}$/.test(subtitles.assetKey)||subtitles.directory!=='libraries/subtitles/'))throw new Error('Invalid subtitle asset identity');
@@ -140,4 +140,30 @@ export async function originalPlaybackCapabilities(signal: AbortSignal): Promise
   const videoDecoders = declaration.videoDecoders.filter(codec => QUALIFIED_ORIGINAL_VIDEO.includes(codec));
   if (!videoDecoders.length) return null;
   return {...declaration,videoDecoders,audioDecoders:declaration.audioDecoders.filter(codec => QUALIFIED_ORIGINAL_AUDIO.includes(codec))};
+}
+
+/** Warm only a verified core payload, after first paint or a title hover/focus.
+ * This issues no playback, source, grant or auth request. The current wrapper
+ * payload has no core flag, so an installed wrapper does no extra runtime work. */
+export function mountCoreWarmup(signal:AbortSignal):()=>void{
+  let phase=new AbortController(),pending=false,last=-Infinity,frame:number|undefined,idle:number|undefined;
+  const stopped=()=>signal.aborted||!canAttemptOriginal()||document.hidden||
+    (navigator as Navigator & {connection?:{saveData?:boolean}}).connection?.saveData===true;
+  const run=()=>{idle=undefined;if(stopped()||pending)return;pending=true;last=performance.now();const active=phase;
+    void(async()=>{const manifest=await runtimeManifest(active.signal);if(manifest.core?.version!==1)return;
+      const {module,assets}=await loadRuntimeModule(active.signal);active.signal.throwIfAborted();if(!module.warmup)return;playbackMark('warmup:start');
+      const ready=await module.warmup({assets,signal:active.signal});active.signal.throwIfAborted();playbackMark(ready===undefined?'warmup:skipped':ready?'warmup:ready':'warmup:failed');
+    })().catch(()=>{if(!active.signal.aborted)playbackMark('warmup:failed');}).finally(()=>{pending=false;if(active!==phase&&!stopped())queue();});};
+  const queue=()=>{if(stopped()||pending||frame!==undefined||idle!==undefined||performance.now()-last<5000)return;
+    frame=requestAnimationFrame(()=>{frame=requestAnimationFrame(()=>{frame=undefined;
+      idle=typeof requestIdleCallback==='function'?requestIdleCallback(run,{timeout:1000}):window.setTimeout(run,0);
+    });});};
+  const intent=(event:Event)=>{const target=event.composedPath().find(node=>node instanceof HTMLElement&&node.hasAttribute('data-testid')) as HTMLElement|undefined;
+    const id=target?.getAttribute('data-testid')??'';if(!id.startsWith('player-')&&/card|detail|hero-primary|play/.test(id))queue();};
+  const cancelSchedule=()=>{if(frame!==undefined)cancelAnimationFrame(frame);frame=undefined;
+    if(idle!==undefined){if(typeof cancelIdleCallback==='function')cancelIdleCallback(idle);clearTimeout(idle);}idle=undefined;};
+  const visible=()=>{if(document.hidden){cancelSchedule();phase.abort();phase=new AbortController();last=-Infinity;}else queue();};
+  const release=()=>{cancelSchedule();phase.abort();document.removeEventListener('pointerover',intent);document.removeEventListener('focusin',intent);document.removeEventListener('visibilitychange',visible);signal.removeEventListener('abort',release);};
+  signal.addEventListener('abort',release,{once:true});document.addEventListener('pointerover',intent,{passive:true});document.addEventListener('focusin',intent);document.addEventListener('visibilitychange',visible);
+  queue();return release;
 }

@@ -5,6 +5,7 @@ import type { DecodedVideoFrame } from './types';
 /** Vela's presentation scheduler; no upstream frame loop or playback controller. */
 export class VideoScheduler<T extends DecodedVideoFrame> {
   readonly buffer = new VideoBuffer<T>(8);
+  readonly dropEvents:{epoch:number;clockUs:number;targetUs:number;firstDroppedUs:number|null;selectedUs:number|null;presentedBefore:number}[]=[];
   readonly metrics = {presented:0,dropped:0,preroll:0,lastLagUs:0,maxLagUs:0};
   private epoch = 0;
   private targetUs = 0;
@@ -44,6 +45,7 @@ export class VideoScheduler<T extends DecodedVideoFrame> {
       const deadline = this.preview && !this.hasPresented && next !== null && next <= this.targetUs+100000 ? Math.max(position,next) : position;
       const selected = this.buffer.takeDue(deadline,this.epoch,this.targetUs);
       this.metrics.dropped += selected.dropped;
+      if(selected.dropped){this.dropEvents.push({epoch:this.epoch,clockUs:position,targetUs:this.targetUs,firstDroppedUs:selected.firstDroppedUs,selectedUs:selected.frame?.timestampUs??null,presentedBefore:this.metrics.presented});if(this.dropEvents.length>8)this.dropEvents.shift();}
       if (selected.frame) {
         try { if (this.present(selected.frame,position)) { this.hasPresented = true;this.displayedEndUs=selected.frame.timestampUs+selected.frame.durationUs; this.metrics.presented++;this.metrics.lastLagUs=position-selected.frame.timestampUs;this.metrics.maxLagUs=Math.max(this.metrics.maxLagUs,Math.abs(this.metrics.lastLagUs)); this.onPresent(); } }
         finally { selected.frame.release(); }
