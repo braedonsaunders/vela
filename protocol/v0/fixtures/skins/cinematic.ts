@@ -63,7 +63,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
           { type: 'repeat', over: 'nav.destinations', item: navItem([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}') },
         ] },
       { type: 'box', small: { flex: '1' } },
-      { type: 'box', press: { action: 'search' }, label: '{s:search}', style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '10px', 'border-radius': '999px', border: '1px solid var(--cinematic.glass-edge)', 'background-color': 'cinematic.control', 'flex-shrink': '0' }, hover: { 'background-color': 'cinematic.control-hover' }, focus: { 'box-shadow': focusRing },
+      { type: 'box', press: { action: 'search', focus: 'vela-search' }, label: '{s:search}', style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '10px', 'border-radius': '999px', border: '1px solid var(--cinematic.glass-edge)', 'background-color': 'cinematic.control', 'flex-shrink': '0' }, hover: { 'background-color': 'cinematic.control-hover' }, focus: { 'box-shadow': focusRing },
         children: [{ type: 'icon', symbol: 'search', style: { width: '18px', height: '18px' } }] },
       { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', padding: '4px 14px 4px 4px', 'border-radius': '999px', 'flex-shrink': '0', color: 'ink.secondary', 'font-weight': '550' },
         hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus, small: { padding: '4px' }, children: [
@@ -523,11 +523,11 @@ const toolbar: Node = { type: 'box', style: { position: 'sticky', top: '0px', 'z
     { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, small: { 'mask-image': 'linear-gradient(90deg, black 0%, black 90%, transparent 100%)' }, children: [
       { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', 'padding-top': '10px', 'padding-bottom': '10px', ...gutter, 'min-width': '100%', 'box-sizing': 'border-box' } as Style, small: { ...gutterSmall }, children: [
         chipGroup('{s:all}', [
-          libChip([{ test: 'library.kindFilter', not: true }], 'kind|', '{s:all}'),
+          libChip([{ test: 'library.kindFilter', is: 'eq', value: '' }], 'kind|', '{s:all}'),
           { type: 'repeat', over: 'library.kinds', item: libChip([{ test: 'opt.on' }], 'kind|{opt.id}', '{opt.label}') },
         ], [{ test: 'library.kindCount', is: 'gt', value: '1' }]),
         chipGroup('{s:unwatched}', [
-          libChip([{ test: 'library.playedFilter', not: true }], 'played|', '{s:all}'),
+          libChip([{ test: 'library.playedFilter', is: 'eq', value: '' }], 'played|', '{s:all}'),
           libChip([{ test: 'library.playedFilter', is: 'eq', value: 'false' }], 'played|false', '{s:unwatched}'),
           libChip([{ test: 'library.playedFilter', is: 'eq', value: 'true' }], 'played|true', '{s:watched}'),
         ], [{ test: 'library.canPlayed' }]),
@@ -615,3 +615,12 @@ export const cinematicDoc: SkinDocument = {
   traits: { barMask: true },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
 };
+
+// A compiled control with its own hover style draws no platform hover wash, so a press that
+// carries a hover overlay here opts out of the document's control states.
+const ownHover = (node: Node): void => {
+  if ('press' in node && node.press && node.hover && node.controlStates === undefined) node.controlStates = false;
+  if ('children' in node) node.children?.forEach(ownHover);
+  if (node.type === 'repeat') ownHover(node.item);
+};
+[...Object.values(cinematicDoc.slots ?? {}), ...Object.values(cinematicDoc.routes ?? {}), ...Object.values(cinematicDoc.templates ?? {})].forEach(n => n && ownHover(n as Node));
