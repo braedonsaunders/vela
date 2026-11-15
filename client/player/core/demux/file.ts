@@ -3,6 +3,7 @@ import { readWaveFormatAudioTrack } from '../../../../vendor/webgpu-player/src/d
 import { velaContainerCodec, velaTrackPrivate } from '../../universal/audio/ffmpeg/track-configuration';
 import { canonicalAudioCodec } from '../../universal/audio/packages';
 import { abortable } from '../async';
+import {observeFragmentTiming} from './fragment-time';
 import type { AudioTrack, ByteReader, EncodedPacket, MediaTrack, VideoTrack } from '../types';
 
 /** Demux only. No upstream controller, decoder, clock or independent HTTP cache. */
@@ -13,14 +14,17 @@ export class PacketDemux {
   private serial: Promise<unknown> = Promise.resolve();
   private operationSignal: AbortSignal;
   private readBytes = 0;
+  readonly diagnostics:string[]=[];
 
   constructor(makeSource:(signal:()=>AbortSignal,count:(bytes:number)=>void)=>Source,
     sourceSignal:AbortSignal,private readonly originUs=0) {
     this.operationSignal=AbortSignal.any([sourceSignal,this.lifetime.signal]);
+    const report=(note:string)=>{if(this.diagnostics.length<16&&!this.diagnostics.includes(note))this.diagnostics.push(note);};
     const source=makeSource(()=>this.operationSignal,bytes=>{
       this.operationSignal.throwIfAborted();this.readBytes+=bytes;
       if(this.readBytes>32*1024*1024)throw new Error('Demux operation exceeded its bounded search budget');
     });
+    observeFragmentTiming(source,report);
     this.input=new Input({source,formats:ALL_FORMATS,formatOptions:{hls:{offsetTimestampsByDateTime:false}}});
     sourceSignal.addEventListener('abort',this.abort,{once:true});
     this.detach = () => sourceSignal.removeEventListener('abort',this.abort);
