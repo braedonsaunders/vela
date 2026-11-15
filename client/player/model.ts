@@ -34,6 +34,13 @@ export type Command = { id: number } & (
   { type: 'quality'; renditionId: string | null } | { type: 'lowDelay'; enabled: boolean });
 export type FailureKind = 'network' | 'source' | 'decoder' | 'unsupported' | 'action';
 export interface Failure { kind: FailureKind; message: string; recoverable: boolean }
+/** Session-local evidence survives a successful decoder/backend replacement. */
+export interface RecoveryDiagnostic {
+  atMilliseconds: number; sourceGeneration: number; seekGeneration: number;
+  positionSeconds: number; delivery: Source['delivery'] | null; backend: Snapshot['backend'];
+  kind: FailureKind; message: string;
+  bufferAheadSeconds: number | null; readAheadSeconds: number | null;
+}
 export interface LiveSnapshot {
   edgeSeconds: number | null; windowStartSeconds: number | null; driftSeconds: number | null;
   edgeSource: 'playlist' | 'seekable' | 'server' | null;
@@ -53,7 +60,7 @@ export interface Snapshot {
   chapters: Chapter[];
   subtitleError: string | null; subtitleStyle: SubtitlePreferences; subtitleStyleAvailable: boolean;
   subtitleReportingId?: string | null; subtitleClientOnly?: boolean; audioClientOnly?: boolean;
-  diagnostics?: { implementation?:'vela-core'|'upstream-controller'; metadataDiscrepancies: string[]; subtitleFailures?:string[] };
+  diagnostics?: { implementation?:'vela-core'|'upstream-controller'; metadataDiscrepancies: string[]; subtitleFailures?:string[]; recoveryHistory?:RecoveryDiagnostic[] };
   live: LiveSnapshot | null;
   seekTarget: number | null; waiting: boolean; volume: number; muted: boolean;
   preparation: 'media-metadata' | 'initial-buffer' | 'starting' | null;
