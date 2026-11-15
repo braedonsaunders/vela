@@ -47,8 +47,8 @@ function keyframesCss(doc: SkinDocument): string {
     return `@keyframes dk-${docId}-${name}{${body}}`;
   }).join('');
 }
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'librarySort', 'librarySortFlip', 'libraryFilter', 'libraryMore', 'signIn', 'startQuick', 'cancelQuick', 'goSecure', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
-const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites', 'library.items', 'library.kinds', 'library.genres', 'library.sorts', 'quick.chars']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'librarySort', 'librarySortFlip', 'libraryFilter', 'libraryMore', 'signIn', 'startQuick', 'cancelQuick', 'goSecure', 'collectionMore', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
+const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites', 'library.items', 'library.kinds', 'library.genres', 'library.sorts', 'quick.chars', 'collection.items']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
 type Part = { l: string; k: number; f: string };
@@ -156,6 +156,8 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
   // The renderer binds gap, row-gap and column-gap: an empty bound longhand resets to normal,
   // so a one-value gap is both longhands.
   if (merged.gap !== undefined) { merged['row-gap'] ??= merged.gap; merged['column-gap'] ??= merged.gap; }
+  // A fully transparent ground is no ground (a pressed control then dims its content, as a compiled button does).
+  if (merged['background-color'] !== undefined && /^(transparent|#[0-9a-f]{3}0|#[0-9a-f]{6}00|rgba\(.*,\s*0(\.0+)?\))$/i.test(merged['background-color'].trim())) merged['background-color'] = 'transparent';
   // A colour may name a theme token bare (`cinematic.glass-edge`), as font-family may.
   for (const [row, v] of Object.entries(merged)) if (row.endsWith('color') && /^[a-z][\w-]*(\.[\w-]+)+$/.test(v.trim())) merged[row] = themeToken(v.trim());
   // Per-side border rows follow the shorthand's width and colour unless set: an empty bound
@@ -304,7 +306,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
         level.parts = parts(node.params.none, r); level.label = parts(node.params.label, r); level.test = parts(node.testId, r);
       }
       // Asks for the next page of home or of its row when it scrolls into view.
-      else if (node.widget === 'sentinel') { if (depth > PAGER_DEPTH) throw new Error(`A sentinel must sit within ${PAGER_DEPTH} levels of its slot`); level.t = 'sentinel'; level.sym = node.params?.on === 'home' ? 'home' : node.params?.on === 'library' ? 'library' : 'row'; }
+      else if (node.widget === 'sentinel') { if (depth > PAGER_DEPTH) throw new Error(`A sentinel must sit within ${PAGER_DEPTH} levels of its slot`); level.t = 'sentinel'; level.sym = ['home', 'library', 'collection'].includes(node.params?.on ?? '') ? node.params!.on! : 'row'; }
       else throw new Error(`Unknown widget ${node.widget}`);
       break;
     case 'repeat': {

@@ -28,7 +28,7 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 12 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// Renderer 14 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
 const pending = (fields: Record<string, unknown>) => fields as object;
@@ -473,8 +473,9 @@ const gridCard: Node = { ...card, stagger: { step: 28, cap: 18 }, style: { ...ca
 
 // A page heading as a sticker label: the artwork stuck on at a tilt, a pixel eyebrow, the name
 // (library.contract PageHeading).
-const pageHeading = (eyebrow: string, name: string, backdrop?: string): Node => ({ type: 'box', motion: 'hop40', style: { ...row, position: 'relative', gap: '16px', 'align-items': 'center', ...gutter, 'padding-top': '18px' },
+const pageHeading = (eyebrow: string, name: string, backdrop?: string, back = false): Node => ({ type: 'box', motion: 'hop40', style: { ...row, position: 'relative', gap: '16px', 'align-items': 'center', ...gutter, 'padding-top': '18px' },
   small: { gap: '12px', ...gutterSmall, 'padding-top': '10px' }, children: [
+    ...(back ? [{ type: 'box', press: { action: 'back' }, label: '{s:back}', style: { ...Bubble, ...sz(46) }, ...bubble, children: [icon('back', 15)] } as Node] : []),
     ...(backdrop ? [{ type: 'box', when: [set(backdrop.slice(1, -1)), not('env.small')], style: { ...col, position: 'relative', ...sz(96, 60), 'border-radius': '16px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', border: '3px solid $ink', 'box-shadow': '4px 4px 0px $lavender', rotate: '-3' }, children: [
       { type: 'image', src: backdrop, alt: '', fade: true, style: fadeIn },
     ] } as Node] : []),
@@ -563,6 +564,25 @@ const library: Node = { type: 'box', style: { ...col, position: 'relative', colo
   ] },
 ] };
 
+// ---------------------------------------------------------------- collection
+
+// A collection's titles in server order, with a way back (library.contract Collection).
+const collection: Node = { type: 'box', id: '{env.route}-scroll-{env.entry}', style: { ...col, ...inset0, 'overflow-y': 'auto', 'overflow-x': 'hidden', 'background-color': '$page', color: '$ink', 'font-family': fredoka }, children: [
+  { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:openingCollection}', motion: 'statusIn', style: { ...col, 'padding-top': '72px', 'align-items': 'center' }, small: { 'padding-top': '48px' }, children: [
+    { ...loader('{s:openingCollection}', 80), small: { display: 'none' } } as Node,
+    { ...loader('{s:openingCollection}', 64), style: { display: 'none' }, small: { ...col, 'align-items': 'center', gap: '14px' } } as Node,
+  ] },
+  failed('{s:collectionFailed}'),
+  { type: 'box', when: [ready], style: { ...col, gap: '26px', 'padding-bottom': '80px', 'padding-top': '10px' }, small: { gap: '18px', 'padding-top': '6px' }, children: [
+    pageHeading('{s:collection}', '{collection.name}', undefined, true),
+    { ...emptyState('sleepy', '{s:nothingHereYet}', ''), when: [is('collection.itemCount', '0')] } as Node,
+    { type: 'box', when: [{ test: 'collection.itemCount', is: 'gt', value: '0' }], style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(176px, 1fr))', 'column-gap': '24px', 'row-gap': '34px', ...gutter, 'padding-top': '8px' },
+      small: { 'grid-template-columns': 'repeat(auto-fill, minmax(136px, 1fr))', 'column-gap': '14px', 'row-gap': '24px', ...gutterSmall }, children: [
+        { type: 'repeat', over: 'collection.items', item: { type: 'use', template: 'gridCard' } },
+      ] },
+  ] },
+] };
+
 // ---------------------------------------------------------------- night sky and sign-in
 
 // A night sky (look.contract NightSky): a gradient, a field of twinkling pixel stars and,
@@ -586,7 +606,7 @@ const dots: Node = { type: 'box', style: { ...row, gap: '8px' }, children: (['pi
 const Field: Style = { 'box-sizing': 'border-box', height: '52px', padding: '0px 20px', border: '3px solid $ink', 'border-radius': '18px', 'background-color': '$card', color: '$ink', 'font-family': fredoka, 'font-size': '17px', outline: 'none', 'box-shadow': 'inset 0px 3px 0px $page-deep' };
 const textField = (field: 'username' | 'password', label: string): Node => ({ type: 'box', style: { ...col, gap: '6px' }, children: [
   { type: 'text', text: label, style: { ...Label, 'font-size': '11px', color: '$ink-soft' } },
-  { type: 'widget', widget: 'textInput', params: { field, label }, style: Field, focus: { 'border-color': '$lavender-deep', 'box-shadow': '0px 0px 0px 4px $lavender-soft' } } as Node,
+  { type: 'widget', widget: 'textInput', params: { field, label }, style: Field, focus: { 'border-color': '$lavender-deep', 'box-shadow': '0px 0px 0px 4px $lavender-soft', outline: 'none' } } as Node,
 ] });
 
 const welcome = (title: string, line: string, extra: Style = {}): Node => ({ type: 'box', style: { ...col, gap: '8px', 'align-items': 'center', 'text-align': 'center' }, children: [
@@ -902,7 +922,7 @@ const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds 
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
 export default {
-  schema: 1, renderer: 12, id, name: 'Mochi', version,
+  schema: 1, renderer: 14, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true },
@@ -929,7 +949,7 @@ export default {
     closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', titleFailed: "This title couldn't be opened. It may no longer be available.",
     watchTrailer: 'Watch trailer', watchProgress: 'Watch progress', watchProgressOf: 'Watch progress:', episodes: 'Episodes', season: 'Season', episode: 'Episode',
     extras: 'Extras', featuring: 'Featuring', behindTheStory: 'Behind the story', play: 'Play', resume: 'Resume', watched: 'Watched', notAvailable: 'Not available', notAvailableYet: 'Not available yet', tryAgain: 'Try again',
-    findingYourEvening: 'Finding your evening…',
+    findingYourEvening: 'Finding your evening…', back: 'Back', collection: 'Collection', openingCollection: 'Opening collection…', collectionFailed: "This collection couldn't be opened.",
     serverUnreachable: "Can't reach your server", serverUnreachableHint: 'Your server could not be reached. Reopen Vela when the connection is restored.', signingYouIn: 'Signing you in…', connecting: 'Connecting to your library…',
     welcome: 'Welcome back, friend!', signInHint: 'Sign in to your library.', username: 'Username', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…', or: 'or', connectWithCode: 'Connect with a code',
     noSignIn: "This server doesn't offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.", easierWayIn: 'An easier way in.', approveCode: 'Approve this code from a signed-in Ether device.',
@@ -983,6 +1003,6 @@ export default {
   status: true,
   templates: { card, gridCard, shelf: shelf(true), relatedShelf: shelf(false) },
   slots: { shell, home },
-  routes: { title, library, auth },
+  routes: { title, library, collection, auth },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { scrim: '$scrim' } },
 } as unknown as SkinDocument;

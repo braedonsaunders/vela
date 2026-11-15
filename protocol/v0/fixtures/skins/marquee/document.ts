@@ -51,13 +51,13 @@ const ring = (c: string) => `0px 0px 0px 2px ${c}`;
 // Marquee's controls draw their own hover and focus; Exact's control wash stays off (compiled classes replace it).
 const round = (size: number): Pick<Node, 'style' | 'hover' | 'focus'> & { controlStates: false } => ({ controlStates: false,
   style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', width: px(size), height: px(size), outline: 'auto', 'border-radius': '999px', 'background-color': 'transparent', color: '$ink-dim', 'flex-shrink': '0', 'pointer-events': 'auto' },
-  hover: { 'background-color': '$hover', color: '$ink' }, focus: { 'box-shadow': ring('$amber'), color: '$ink' } });
+  hover: { 'background-color': '$hover', color: '$ink' }, focus: { 'box-shadow': ring('$amber'), color: '$ink' }, active: { scale: '0.94' } } as Pick<Node, 'style' | 'hover' | 'focus'>);
 const primary = (h: number, pad: string): Pick<Node, 'style' | 'hover' | 'focus'> => ({
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', height: px(h), padding: pad, outline: 'auto', 'border-radius': '6px', 'background-color': '$amber', color: '$on-amber', 'font-weight': '700' },
-  hover: { 'background-color': '$amber-hover' }, focus: { 'box-shadow': '0px 0px 0px 2px $page, 0px 0px 0px 4px $ink' } });
+  hover: { 'background-color': '$amber-hover' }, focus: { 'box-shadow': '0px 0px 0px 2px $page, 0px 0px 0px 4px $ink' }, active: { scale: '0.98' } } as Pick<Node, 'style' | 'hover' | 'focus'>);
 const secondary = (h: number, pad: string): Pick<Node, 'style' | 'hover' | 'focus'> => ({
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', height: px(h), padding: pad, outline: 'auto', 'border-radius': '6px', 'background-color': '$control', color: '$ink', 'font-weight': '600' },
-  hover: { 'background-color': '$control-hover' }, focus: { 'box-shadow': ring('$amber') } });
+  hover: { 'background-color': '$control-hover' }, focus: { 'box-shadow': ring('$amber') }, active: { scale: '0.98' } } as Pick<Node, 'style' | 'hover' | 'focus'>);
 const avatar = (size: number, font: number): Node => ({ type: 'text', text: '{env.viewerInitial}', style: { display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: px(size), height: px(size), 'border-radius': px(size / 2), 'font-size': px(font), 'font-weight': '700', color: '$on-amber', 'background-color': '$amber' } });
 const label: Style = { 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.06em', 'text-transform': 'uppercase', color: '$ink-faint' };
 const oneLine: Style = { 'white-space': 'nowrap', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'text-overflow': 'ellipsis' };
@@ -661,7 +661,7 @@ const fieldLabel: Style = { 'font-size': '12px', 'font-weight': '700', 'letter-s
 const textField = (field: 'username' | 'password', top: string): Node => ({ type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'margin-top': top, width: '100%', height: '44px' }, children: [
   { type: 'widget', widget: 'textInput', params: { field, label: field === 'username' ? '{s:username}' : '{s:password}' },
     style: { width: '100%', height: '100%', 'box-sizing': 'border-box', padding: '0px 14px', border: '1px solid $line-strong', 'border-radius': '4px', 'background-color': '$field', color: '$ink', 'font-size': '15px', 'font-family': sans, outline: 'none' },
-    hover: { 'border-color': '$ink-faint' }, focus: { 'border-color': '$amber', 'box-shadow': '0px 0px 0px 1px $amber' } } as Node,
+    hover: { 'border-color': '$ink-faint' }, focus: { outline: 'none', 'border-color': '$amber', 'box-shadow': '0px 0px 0px 1px $amber' } } as Node,
 ] });
 const auth = (is_: string) => is('env.auth', is_);
 const authNotice: Node[] = [
@@ -674,7 +674,7 @@ const authNotice: Node[] = [
     spinner(36), { type: 'text', text: k === 'redeeming' ? '{s:signingYouIn}' : '{s:connecting}', style: { color: '$ink-dim', 'font-size': '15px' } },
   ] })),
 ];
-const signInButton = (busy: boolean): Node => ({ type: 'box', when: [{ test: 'signin.busy', not: !busy }], press: { action: 'signIn' }, label: '{s:signIn}', testId: 'sign-in', disabled: busy ? [set('signin.busy')] : [],
+const signInButton = (busy: boolean): Node => ({ type: 'box', when: [{ test: 'signin.busy', not: !busy }], press: { action: 'signIn' }, label: '{s:signIn}', testId: 'sign-in', disabled: busy ? [set('signin.busy')] : [{ test: 'signin.ready', not: true }],
   disabledStyle: { 'background-color': '$raised', color: '$ink-faint' }, ...primary(46, '0px'), style: { ...primary(46, '0px').style, gap: '10px', 'margin-top': '20px' }, children: [
     ...(busy ? [spinner(18)] : []), { type: 'text', text: busy ? '{s:signingIn}' : '{s:signIn}', style: { 'font-size': '16px' } },
   ] } as Node);
@@ -727,7 +727,7 @@ const authRoute: Node = { type: 'box', style: { position: 'relative', display: '
 const rise = { keyframes: 'doc:rise', duration: 420, easing: ease, fill: 'both' as const, still: { keyframes: 'dissolve', duration: 160 } };
 
 export default {
-  schema: 1, renderer: 11, id, name: 'Marquee', version, status: true,
+  schema: 1, renderer: 12, id, name: 'Marquee', version, status: true,
   tagline: 'Your media server at home: charcoal hubs, a sidebar and amber accents.',
   preview: asset('preview.jpg'), swatches: ['#1f2023', '#eeeeee', '#e9a31b', '#121315', '#2c2e32'],
   tokens: {
