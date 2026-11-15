@@ -104,3 +104,26 @@ with no audio hole. A normal 65-Mbps trace before the repair already filled
 The scoped TypeScript check and matching asset build passed. Both local browser
 contexts and the fixture server were closed. Further lab pairs remain required;
 the original 859 pair's startup underrun is still a recorded failure.
+
+## Alternating pair 2: failed before the sustained window
+
+The same cold reset preceded the repaired core-first half. Installed 0.1.42
+host/data and lab.33 were unchanged. Runtime `18273ed7e9bd2a39` presented its
+first direct frame at 7.378 s (plan 2.031 s), then its reserve expired at
+10.413 s. Automatic Ether HLS also presented a frame but expired its reserve;
+MSE continued at 16.576 s. The driver recorded failure and stopped before a
+seek or sustained window. This is a failed direct qualification, not a pass
+because a last-resort backend eventually played.
+
+Vela `7YREJOAOGD5QMW4FT2FYJKH2GH`, Ether `766ecb30`, actual pinned `525f3640`.
+Ether found no direct-source waits, slow responses or failures after its early
+cancellation; HLS segments were ready on or near fetch. That does not establish
+how much PCM the client had queued. The failure snapshots exposed only accepted
+buffer state, not the raw AudioWorklet queue. Scalar reserve diagnostics now
+include submitted PCM end, actual queued frames, pending/submitted chunk counts,
+configured credit window, and rejected clock anchors. No further reserve policy
+change is included in that diagnostic candidate.
+
+Stop/revoke both returned 200, player count zero, own browser/context closed,
+profile removed; Ether confirmed unpin 204, pins empty, zero sessions/FFmpeg.
+Pair 2's wrapper half and pair 3 are held pending the cause of this timeout.

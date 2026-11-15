@@ -1,4 +1,4 @@
-import type {AudioOutput,AudioTrack,EncodedPacket,AudioClockAnchor} from '../../core/types';
+import type {AudioOutput,AudioTrack,EncodedPacket,AudioClockAnchor,AudioBufferState} from '../../core/types';
 import AudioWorkletController from '../../../../vendor/webgpu-player/src/audio/output/AudioWorkletController';
 import CustomDecodeAudioBridge from '../../../../vendor/webgpu-player/src/audio/output/CustomDecodeAudioBridge';
 import AudioDecodeWorkerClient,{AudioDecodeWorkerPacketBatchBuilder,type AudioDecodeWorkerAttempt} from '../../../../vendor/webgpu-player/src/pipeline/AudioDecodeWorkerClient';
@@ -168,6 +168,13 @@ export class CoreAudioOutput implements AudioOutput {
   async flush(positionUs:number,epoch:number,signal:AbortSignal){const track=this.state?.track;if(track)await this.configureAt(track,epoch,positionUs,signal)}
   async play(){if(this.disposed)return;this.playing=true;await bounded(this.context.resume(),this.lifetime.signal,'AudioContext resume',5000);if(this.state)this.arm(this.state)}
   pause(){this.playing=false;this.output?.setPlaying(false)}
+  bufferState():AudioBufferState|null{
+    const state=this.state,output=this.output?.getTelemetry(),bridge=this.bridge?.getTelemetry();
+    if(!state||!output||!bridge)return null;
+    return {epoch:state.epoch,bufferedUntilUs:state.bufferedUntil,queuedFrames:output.queuedFrames,
+      consumedFrames:output.consumedFrames,outputCredits:this.bridge!.initialAudioSampleCredits,
+      pendingChunks:bridge.pendingSampleCount,submittedChunks:bridge.submittedSampleCount};
+  }
   setVolume(volume:number,muted:boolean){if(!Number.isFinite(volume)||volume<0||volume>1)throw new Error('Invalid audio volume');this.volume=volume;this.muted=muted;this.output?.setVolume(volume);this.output?.setMuted(muted)}
   setRate(rate:number){if(!Number.isFinite(rate)||rate<0.25||rate>4)throw new Error('Audio playback rate must be between0.25 and4');this.rate=rate;this.output?.setPlaybackRate(rate)}
   private anchor=(telemetry:AudioWorkletTelemetry|null)=>{

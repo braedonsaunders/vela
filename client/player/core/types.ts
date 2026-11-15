@@ -50,7 +50,19 @@ export interface AudioClockAnchor {
   bufferedUntilUs: number;
 }
 
+/** Scalar submission/output state; independent of physical-clock admission. */
+export interface AudioBufferState {
+  epoch:number;
+  bufferedUntilUs:number;
+  queuedFrames:number;
+  consumedFrames:number;
+  outputCredits:number;
+  pendingChunks:number;
+  submittedChunks:number;
+}
+
 export interface AudioOutput {
+  bufferState?():AudioBufferState|null;
   configure(track: AudioTrack, epoch: number, signal: AbortSignal): Promise<void>;
   /** Resolves when accepted; implementations apply bounded queue backpressure. */
   decode(packet: EncodedPacket, signal: AbortSignal): Promise<void>;
