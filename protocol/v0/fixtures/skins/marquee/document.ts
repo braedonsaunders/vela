@@ -49,13 +49,13 @@ const wordmark = (h: number): Node => ({ type: 'image', src: 'assets/brand/vela-
 const quick = 'background-color 120ms linear, color 120ms linear';
 const ring = (c: string) => `0px 0px 0px 2px ${c}`;
 const round = (size: number): Pick<Node, 'style' | 'hover' | 'focus'> => ({
-  style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', width: px(size), height: px(size), 'border-radius': '999px', 'background-color': 'transparent', color: '$ink-dim', 'flex-shrink': '0', 'pointer-events': 'auto' },
+  style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', width: px(size), height: px(size), outline: 'auto', 'border-radius': '999px', 'background-color': 'transparent', color: '$ink-dim', 'flex-shrink': '0', 'pointer-events': 'auto' },
   hover: { 'background-color': '$hover', color: '$ink' }, focus: { 'box-shadow': ring('$amber'), color: '$ink' } });
 const primary = (h: number, pad: string): Pick<Node, 'style' | 'hover' | 'focus'> => ({
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', height: px(h), padding: pad, 'border-radius': '6px', 'background-color': '$amber', color: '$on-amber', 'font-weight': '700' },
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', height: px(h), padding: pad, outline: 'auto', 'border-radius': '6px', 'background-color': '$amber', color: '$on-amber', 'font-weight': '700' },
   hover: { 'background-color': '$amber-hover' }, focus: { 'box-shadow': '0px 0px 0px 2px $page, 0px 0px 0px 4px $ink' } });
 const secondary = (h: number, pad: string): Pick<Node, 'style' | 'hover' | 'focus'> => ({
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', height: px(h), padding: pad, 'border-radius': '6px', 'background-color': '$control', color: '$ink', 'font-weight': '600' },
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', height: px(h), padding: pad, outline: 'auto', 'border-radius': '6px', 'background-color': '$control', color: '$ink', 'font-weight': '600' },
   hover: { 'background-color': '$control-hover' }, focus: { 'box-shadow': ring('$amber') } });
 const avatar = (size: number, font: number): Node => ({ type: 'text', text: '{env.viewerInitial}', style: { display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: px(size), height: px(size), 'border-radius': px(size / 2), 'font-size': px(font), 'font-weight': '700', color: '$on-amber', 'background-color': '$amber' } });
 const label: Style = { 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.06em', 'text-transform': 'uppercase', color: '$ink-faint' };
@@ -75,7 +75,7 @@ const notSmall = unset('env.small');
 const railLayout = '200ms ease-out';
 
 const navRow = (full: boolean, name: string, icon: Node, on: Condition, press: { action: 'home' | 'live' | 'library'; arg?: string }, extraWhen: Condition[] = [], testId = `nav-${name}`): Node => {
-  const row = (lit: boolean, slim: boolean): Style => ({ position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '14px', 'align-items': 'center', 'box-sizing': 'border-box', width: '100%', height: '44px', 'border-radius': '6px',
+  const row = (lit: boolean, slim: boolean): Style => ({ position: 'relative', outline: 'auto', display: 'flex', 'flex-direction': 'row', gap: '14px', 'align-items': 'center', 'box-sizing': 'border-box', width: '100%', height: '44px', 'border-radius': '6px',
     'justify-content': slim ? 'center' : 'flex-start', padding: slim ? '0px' : '0px 12px', 'background-color': lit ? '$selected' : 'transparent', color: lit ? '$ink' : '$ink-dim', transition: quick });
   const text = (lit: boolean): Style => ({ display: 'block', 'font-size': '15px', 'font-weight': lit ? '700' : '600', ...oneLine, 'min-width': '0px' });
   const litHover: Style = { 'background-color': '$selected', color: '$ink' };
@@ -133,14 +133,14 @@ const topBar: Node = { type: 'box', when: [set('env.viewer')], style: { position
     { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1' } },
     { type: 'box', press: { action: 'search', focus: 'vela-search' }, label: '{s:search}', ...round(44), style: { ...round(44).style, display: 'none' }, small: { display: 'flex' }, children: [glyph('search', 22)] },
     { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px', 'justify-content': 'center' }, small: { display: 'none' }, children: [
-      { type: 'box', when: [isnt('env.section', 'home')], press: { action: 'search', focus: 'vela-search' }, label: '{s:searchYourLibrary}', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', width: 'min(560px, 100%)', 'box-sizing': 'border-box', height: '38px', padding: '0px 14px', 'border-radius': '6px', 'background-color': '$field', color: '$ink-faint', cursor: 'text', 'pointer-events': 'auto' },
+      { type: 'box', when: [isnt('env.section', 'home')], press: { action: 'search', focus: 'vela-search' }, label: '{s:searchYourLibrary}', style: { position: 'relative', outline: 'auto', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', width: 'min(560px, 100%)', 'box-sizing': 'border-box', height: '38px', padding: '0px 14px', 'border-radius': '6px', 'background-color': '$field', color: '$ink-faint', cursor: 'text', 'pointer-events': 'auto' },
         hover: { 'background-color': '$field-focus' }, focus: { 'box-shadow': ring('$amber') }, children: [glyph('search', 18), { type: 'text', text: '{s:search}', style: { 'font-size': '15px' } }] },
     ] },
     { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', id: 'marquee-account', ...round(44), a11y: { expanded: [set('flag:menu')], controls: 'marquee-account-menu' }, children: [avatar(32, 14)] } as Node,
   ] };
 
 const menuRow = (text: string, icon: Node, press: { action: 'openPicker' | 'signOut' }, extra: Partial<Node> = {}): Node => ({ type: 'box', press, label: text, ...extra,
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center', 'box-sizing': 'border-box', width: '100%', height: '42px', padding: '0px 16px', color: '$ink' },
+  style: { position: 'relative', outline: 'auto', display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center', 'box-sizing': 'border-box', width: '100%', height: '42px', padding: '0px 16px', color: '$ink' },
   hover: { 'background-color': '$hover' }, focus: { 'box-shadow': 'inset 0px 0px 0px 2px $amber' }, children: [icon, { type: 'text', text, style: { 'font-size': '14px' } }] } as Node);
 const divider: Node = { type: 'box', style: { height: '1px', 'background-color': '$line' } };
 const accountMenu: Node = { type: 'box', when: [set('env.viewer'), set('flag:menu')], id: 'marquee-account-menu', motion: 'drop', exit: 'gone100', escape: 'menu', returnFocus: 'marquee-account',
@@ -291,7 +291,7 @@ const heroCopy: Node = { type: 'box', style: { position: 'absolute', left: '0px'
     ] },
   ] };
 const dot: Node = { type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{s:featuredNumber}', a11y: { current: [set('index.current')] }, layoutTransition: '200ms ease-out',
-  style: { position: 'relative', width: '8px', height: '8px', 'border-radius': '4px', 'background-color': '$track' }, states: [{ when: [set('index.current')], style: { position: 'relative', width: '22px', height: '8px', 'border-radius': '4px', 'background-color': '$amber' } }], focus: { 'box-shadow': ring('$ink') } } as Node;
+  style: { position: 'relative', outline: 'auto', width: '8px', height: '8px', 'border-radius': '4px', 'background-color': '$track' }, states: [{ when: [set('index.current')], style: { position: 'relative', outline: 'auto', width: '22px', height: '8px', 'border-radius': '4px', 'background-color': '$amber' } }], focus: { 'box-shadow': ring('$ink') } } as Node;
 const spotlight: Node = { type: 'repeat', over: 'home.hero', when: [unset('env.searching')], item: { type: 'box', motion: 'arrive',
   style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'margin-left': '40px', 'margin-right': '40px', 'margin-bottom': '30px', height: 'clamp(280px, 30vw, 380px)', 'min-height': '280px', 'border-radius': '6px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised' },
   small: { 'margin-left': '14px', 'margin-right': '14px', 'margin-bottom': '20px', height: 'auto', 'min-height': '0px' }, children: [
@@ -425,7 +425,7 @@ const facts: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
 ] };
 const kindLine: Style = { ...label, 'font-size': '13px', color: '$amber' };
 
-const seasonCard: Node = { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', testId: 'season-{card.id}', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'flex-shrink': '0', width: '140px', 'border-radius': '4px', color: '$ink' }, small: { width: '104px' },
+const seasonCard: Node = { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', testId: 'season-{card.id}', style: { position: 'relative', outline: 'auto', display: 'flex', 'flex-direction': 'column', 'flex-shrink': '0', width: '140px', 'border-radius': '4px', color: '$ink' }, small: { width: '104px' },
   hover: { opacity: '0.9' }, focus: { 'box-shadow': ring('$amber') }, children: [
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '2 / 3', 'border-radius': '4px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised' }, children: [
       { ...art('{card.poster}'), when: [set('card.poster')] },
@@ -465,7 +465,7 @@ const episodeMeta: Node[] = [
 const episodeCard: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '10px', 'align-items': 'stretch' }, small: { 'flex-direction': 'row', gap: '12px', 'align-items': 'flex-start' }, children: [
   still(true), still(false),
   { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px', 'min-width': '0px', flex: '1' }, children: [
-    { type: 'box', press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', style: { position: 'relative', color: '$ink' }, hover: { color: '$amber' }, focus: { 'box-shadow': ring('$amber') }, children: [
+    { type: 'box', press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', style: { position: 'relative', outline: 'auto', color: '$ink' }, hover: { color: '$amber' }, focus: { 'box-shadow': ring('$amber') }, children: [
       { type: 'text', text: '{card.name}', style: { 'font-size': '15px', 'font-weight': '600', 'line-clamp': '1' }, small: { 'font-size': '14px', 'line-clamp': '2' } },
     ] },
     ...episodeMeta,
@@ -473,7 +473,7 @@ const episodeCard: Node = { type: 'box', style: { display: 'flex', 'flex-directi
   ] },
 ] };
 
-const extraCard: Node = { type: 'box', press: { action: 'playExtra', arg: '{extra.id}' }, label: '{extra.name}', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'flex-shrink': '0', width: '260px', color: '$ink' }, small: { width: '200px' },
+const extraCard: Node = { type: 'box', press: { action: 'playExtra', arg: '{extra.id}' }, label: '{extra.name}', style: { position: 'relative', outline: 'auto', display: 'flex', 'flex-direction': 'column', 'flex-shrink': '0', width: '260px', color: '$ink' }, small: { width: '200px' },
   hover: { color: '$amber' }, focus: { 'box-shadow': ring('$amber') }, children: [
     { type: 'box', style: { position: 'relative', display: 'flex', width: '100%', 'aspect-ratio': '16 / 9', 'border-radius': '4px', 'align-items': 'center', 'justify-content': 'center', 'background-image': 'linear-gradient(160deg, $raised 0%, $chrome 100%)' }, children: [
       { type: 'box', when: [set('extra.ready')], style: { display: 'flex', width: '44px', height: '44px', 'border-radius': '999px', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$control', 'padding-left': '3px', 'box-sizing': 'border-box', color: '$ink' }, children: [glyph('play', 20)] },
