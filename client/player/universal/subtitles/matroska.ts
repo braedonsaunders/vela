@@ -9,6 +9,16 @@ interface Cue {time:number;cluster:number;track:number;duration:number|null}
 class UnsupportedContentEncoding extends Error {}
 const codecs:Record<string,SubtitleCodec>={'S_TEXT/UTF8':'srt','S_TEXT/ASS':'ass','S_TEXT/SSA':'ssa','S_HDMV/PGS':'pgs'};
 const MAX_PACKET_BYTES=16*1024*1024;
+/** Cues are a bounded metadata document, not hundreds of thousands of reads. */
+function* cueElements(bytes:Uint8Array,start:number,end:number,budget:{visits:number}):Generator<Element>{
+  for(let at=start;at<end;){
+    if(++budget.visits>1000000)throw new Error('Subtitle cue structure exceeds bound');
+    const id=vint(bytes,at,true);if(id.length>4)throw new Error('Invalid subtitle cue ID');
+    const size=vint(bytes,at+id.length),data=at+id.length+size.length,limit=data+size.value;
+    if(size.unknown||!Number.isSafeInteger(limit)||data>end||limit>end||limit<data)throw new Error('Subtitle cue element exceeds parent');
+    yield {id:id.value,start:at,data,end:limit,unknown:false};at=limit;
+  }
+}
 async function inflate(data:Uint8Array,max:number,signal:AbortSignal){
   signal.throwIfAborted();const stream=new Blob([data.slice().buffer]).stream().pipeThrough(new DecompressionStream('deflate')),reader=stream.getReader(),chunks:Uint8Array[]=[];let size=0;
   const abort=()=>reader.cancel(signal.reason).catch(()=>{});signal.addEventListener('abort',abort,{once:true});
@@ -112,12 +122,24 @@ export class MatroskaSubtitles implements SubtitleContainer {
   private async loadCues(scope:SubtitleReadScope){
     if(this.cues)return;const result:Cue[]=[];const at=this.seeks.get(ID.cues);if(at===undefined){this.cues=[];return}
     const root=await scope.ebml(at,this.segment.end);if(root.id!==ID.cues)throw new Error('Invalid subtitle cue index');
-    await scope.children(root,async point=>{if(point.id!==0xbb)return;let time=0;const positions:{track:number;cluster:number;duration:number|null}[]=[];
-      await scope.children(point,async item=>{if(item.id===0xb3)time=await scope.number(item)*this.scale;
-        if(item.id===0xb7){let track=0,cluster=-1,duration:number|null=null;await scope.children(item,async position=>{if(position.id===0xf7)track=await scope.number(position);if(position.id===0xf1)cluster=this.segment.data+await scope.number(position);if(position.id===0xb2)duration=await scope.number(position)*this.scale});if(track&&cluster>=this.segment.data&&cluster<this.segment.end)positions.push({track,cluster,duration})}
-      });
+    const bytes=await scope.value(root,16*1024*1024),budget={visits:0};let points=0;
+    const number=(element:Element)=>{if(element.end-element.data>8)throw new Error('Subtitle cue integer exceeds bound');return integer(bytes.subarray(element.data,element.end))};
+    for(const point of cueElements(bytes,0,bytes.length,budget)){
+      if(point.id!==0xbb)continue;
+      // Yield long indexes so a source/track retirement can cancel preparation.
+      if(++points%1024===0){await new Promise<void>(resolve=>setTimeout(resolve,0));scope.signal.throwIfAborted();}
+      let time=0;const positions:{track:number;cluster:number;duration:number|null}[]=[];
+      for(const item of cueElements(bytes,point.data,point.end,budget)){
+        if(item.id===0xb3)time=number(item)*this.scale;
+        if(item.id===0xb7){let track=0,cluster=-1,duration:number|null=null;
+          for(const position of cueElements(bytes,item.data,item.end,budget)){
+            if(position.id===0xf7)track=number(position);if(position.id===0xf1)cluster=this.segment.data+number(position);if(position.id===0xb2)duration=number(position)*this.scale;
+          }
+          if(track&&Number.isSafeInteger(cluster)&&cluster>=this.segment.data&&cluster<this.segment.end)positions.push({track,cluster,duration});
+        }
+      }
       for(const position of positions){if(result.length>=100000)throw new Error('Subtitle cue index exceeds bound');result.push({time,...position})}
-    });
+    }
     scope.signal.throwIfAborted();this.cues=result.sort((a,b)=>a.time-b.time||a.cluster-b.cluster);
   }
   private async block(scope:SubtitleReadScope,element:Element,clusterTime:number,duration:number|null,track:Track):Promise<SubtitlePacket|null>{

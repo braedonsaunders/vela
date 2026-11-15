@@ -209,11 +209,11 @@ export async function generateRegistry(client: string, only?: string): Promise<s
   // The route view (docs/skin-distribution.md, "End state"): the documents skin's Route,
   // when that skin is part of this build; otherwise a route is never handed to it.
   const docs = engines.find(f => f.skin.documents);
-  // `close` is a host command too: the route view gets the app's close as `leave`.
-  lines.push('', '// The route view: the one place the renderer draws a whole route.', 'component DocRoute', '  props', '    p: RouteProps', '  inject', '    close: action', '  provide', '    leave = close', '  view');
+  // `close` and `observe` are host commands too: the route view gets the app's as `leave` and `observeCard`.
+  lines.push('', '// The route view: the one place the renderer draws a page (home or a route); children fill the page\'s holder.', 'component DocRoute', '  props', '    p: RouteProps', '  inject', '    close: action', '    observe: action', '  provide', '    leave = close', '    observeCard = observe', '  slot', '  view');
   if (docs) {
     lines.splice(lines.indexOf('use SkinDoc from "../renderer/shapes.contract"'), 1, 'use SkinDoc, RouteProps from "../renderer/shapes.contract"', `use Route as DocumentsRoute from "../skins/${docs.skin.id}/slots.contract"`);
-    lines.push('    DocumentsRoute(p=p)');
+    lines.push('    DocumentsRoute(p=p)', '      children');
   } else {
     lines.splice(lines.indexOf('use SkinDoc from "../renderer/shapes.contract"'), 1, 'use SkinDoc, RouteProps from "../renderer/shapes.contract"');
     lines.push('    column display="none" aria-hidden=true');

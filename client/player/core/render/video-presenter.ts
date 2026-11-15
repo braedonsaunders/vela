@@ -52,10 +52,23 @@ export class CoreVideoPresenter implements CorePresenter,VideoPresentation {
     if(track.rotation!==0||track.fieldOrder&&track.fieldOrder!=='progressive')
       throw new Error('This actual scan/rotation needs an additional presentation route');
     const primaries=track.color.primaries,matrix=track.color.matrix;
-    if(!primaries||!matrix||!['bt709','bt2020','bt470bg','smpte170m'].includes(primaries)||!['bt709','bt2020-ncl','bt470bg','smpte170m'].includes(matrix))
+    // Native VideoFrames carry their decoder/browser colour conversion. Missing
+    // container facts must not become invented source metadata; raw planes and
+    // HDR still require the qualified colour route below.
+    const browserIdentity=route.kind==='native'&&!hdr&&(!primaries||!matrix);
+    if(!browserIdentity&&(!primaries||!matrix||!['bt709','bt2020','bt470bg','smpte170m'].includes(primaries)||!['bt709','bt2020-ncl','bt470bg','smpte170m'].includes(matrix)))
       throw new Error('Actual video colour needs a qualified presentation route');
-    if(this.epoch===0)this.presenter.startSession(epoch);else this.presenter.seek(epoch);
+    // seek() retains the previous colour pipeline. A new session is the pinned
+    // component's public reset to external identity with metadata:null, including
+    // when this presenter previously carried a known HDR or frame-pool route.
+    if(browserIdentity||this.epoch===0)this.presenter.startSession(epoch);else this.presenter.seek(epoch);
     this.epoch=epoch;this.presenter.setDecodedFramePushMode(true,epoch);this.presenter.attach(this.surface,epoch);
+    if(browserIdentity){
+      await abortable(this.presenter.prepareDecodedVideo({chromaFormat:null,frameWidth:track.width,frameHeight:track.height},epoch),signal);
+      signal.throwIfAborted();
+      if(this.epoch!==epoch)throw new DOMException('Presentation superseded','AbortError');
+      return;
+    }
     const bytes=track.config?.description;
     const privateBytes=bytes?ArrayBuffer.isView(bytes)?new Uint8Array(bytes.buffer,bytes.byteOffset,bytes.byteLength):new Uint8Array(bytes):null;
     const bitDepth=track.codec==='hevc'&&privateBytes&&privateBytes.length>=23&&privateBytes[0]===1?8+(privateBytes[17]&7):8;

@@ -28,11 +28,11 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 7 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// Renderer 9 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
-const r6 = (fields: Record<string, unknown>) => fields as object;
-const active = (style: Style) => r6({ active: style });
+const pending = (fields: Record<string, unknown>) => fields as object;
+const active = (style: Style) => pending({ active: style });
 const candy = { hover: { 'background-color': '$pink-hover' }, focus: { 'box-shadow': ring }, active: press94 };
 const puffy = { hover: { 'background-color': '$lavender-soft' }, focus: { 'box-shadow': ring }, active: press94 };
 const bubble = { hover: { 'background-color': '$pink-wash' }, focus: { 'box-shadow': ring }, active: { scale: '0.9' } };
@@ -197,7 +197,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
   style: { ...col, position: 'relative', 'z-index': '20', 'flex-shrink': '0', 'padding-top': '14px', ...gutter, 'padding-bottom': '8px' }, below: { [COMPACT]: { 'padding-top': '10px', ...gutterSmall, 'padding-bottom': '4px' } }, children: [
     { type: 'box', style: { ...row, height: '66px', 'box-sizing': 'border-box', 'padding-left': '22px', 'padding-right': '10px', 'align-items': 'center', gap: '10px', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$card', 'box-shadow': '0px 5px 0px $ink' },
       below: { [COMPACT]: { height: '56px', 'padding-left': '14px', 'padding-right': '8px', gap: '6px' } }, children: [
-        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { ...row, position: 'relative', 'align-items': 'center', gap: `${26 * 0.24}px`, 'margin-right': '18px', 'flex-shrink': '0', color: '$ink' },
+        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', ...pending({ controlStates: false }), style: { ...row, position: 'relative', 'align-items': 'center', gap: `${26 * 0.24}px`, 'margin-right': '18px', 'flex-shrink': '0', color: '$ink' },
           below: { [COMPACT]: { gap: `${22 * 0.24}px`, 'margin-right': '0px' } }, children: [
             { type: 'box', style: { ...row, 'align-items': 'center', gap: `${26 * 0.24}px` }, below: { [COMPACT]: { display: 'none' } }, children: wordmark(26) },
             { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { ...row, 'align-items': 'center', gap: `${22 * 0.24}px` } }, children: wordmark(22) },
@@ -211,7 +211,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
           searchTip,
         ] },
         // The profile button, washed pink while its menu is open.
-        { type: 'box', id: 'profile-menu-trigger', press: { action: 'toggle', arg: 'menu' }, label: '{s:profileAndAppearance}', testId: 'profile-menu', a11y: { expanded: [set('flag:menu')], ...r6({ controls: 'viewer-settings' }) },
+        { type: 'box', id: 'profile-menu-trigger', press: { action: 'toggle', arg: 'menu' }, label: '{s:profileAndAppearance}', testId: 'profile-menu', a11y: { expanded: [set('flag:menu')], ...pending({ controls: 'viewer-settings' }) },
           style: profileButton, states: [{ when: [set('flag:menu')], style: { ...profileButton, 'background-color': '$pink-wash' } }], below: { [COMPACT]: { 'padding-right': '4px' } }, ...bubble, children: [
             { type: 'text', text: '{env.viewerInitial}', style: { ...sz(32), 'border-radius': '16px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-family': pixelFace, 'font-size': '16px', 'font-weight': '700', color: '$ink', 'background-color': '$pink-soft', border: '2px solid $ink', 'box-sizing': 'border-box' } },
             { type: 'text', text: '{env.viewer}', style: { 'font-size': '15px', 'font-weight': '600', 'max-width': '140px', 'white-space': 'nowrap', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis' }, below: { [COMPACT]: { display: 'none' } } },
@@ -307,7 +307,7 @@ const card: Node = { type: 'box', group: true, motion: 'hop0', stagger: { step: 
 
 // A named shelf in server order (slots.contract Shelf): a pixel star in the row's
 // colour, pixel type, a squiggle, then the cards sliding horizontally.
-const shelf: Node = { type: 'box', style: { ...col, position: 'relative', gap: '0px', 'padding-bottom': '18px' }, small: { 'padding-bottom': '10px' }, children: [
+const shelf = (paged: boolean): Node => ({ type: 'box', style: { ...col, position: 'relative', gap: '0px', 'padding-bottom': '18px' }, small: { 'padding-bottom': '10px' }, children: [
   { type: 'box', style: { ...row, gap: '10px', 'align-items': 'center', ...gutter }, small: gutterSmall, children: [
     ...byAccent('row', a => ({ type: 'box', style: { ...col, 'flex-shrink': '0', color: `$${a}`, filter: 'drop-shadow(1.5px 1.5px 0px $ink)' }, children: [icon('star', 18, undefined, { small: sz(16) })] })),
     { type: 'box', style: { ...col, gap: '2px', 'min-width': '0px' }, children: [
@@ -319,13 +319,13 @@ const shelf: Node = { type: 'box', style: { ...col, position: 'relative', gap: '
   { type: 'box', style: { ...row, 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', gap: '20px', 'align-items': 'flex-start', 'padding-top': '22px', 'padding-bottom': '24px', ...gutter },
     small: { gap: '14px', 'padding-top': '18px', 'padding-bottom': '18px', ...gutterSmall }, children: [
       { type: 'repeat', over: 'row.items', item: { type: 'use', template: 'card' } },
-      // The row's end: a sentinel that asks for more, with Mochi hopping while it loads.
-      { type: 'box', when: [set('row.hasMore')], style: { ...col, width: '104px', 'align-self': 'stretch', 'flex-shrink': '0', 'align-items': 'center', 'justify-content': 'center' }, small: { width: '72px' }, children: [
+      // A home row's end: a sentinel that asks for more, with Mochi hopping while it loads.
+      ...(paged ? [{ type: 'box', when: [set('row.hasMore')], style: { ...col, position: 'relative', width: '104px', 'align-self': 'stretch', 'flex-shrink': '0', 'align-items': 'center', 'justify-content': 'center' }, small: { width: '72px' }, children: [
         { type: 'widget', widget: 'sentinel', params: { on: 'row' } },
         { ...hopper(36), when: [set('row.loadingMore')] } as Node,
-      ] },
+      ] } as Node] : []),
     ] },
-] };
+] });
 
 // ---------------------------------------------------------------- home
 
@@ -387,15 +387,20 @@ const heroDot: Node = { type: 'box', press: { action: 'pickHero', arg: '{index}'
 
 // The search box (slots.contract SearchField): a chunky white pill with a butter badge
 // that turns pink while you type, and a round clear button.
-const field: Style = { ...row, position: 'relative', 'align-items': 'center', gap: '12px', height: '62px', 'box-sizing': 'border-box', padding: '0px 8px 0px 10px', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$card', 'box-shadow': '0px 5px 0px $ink', transition: 'box-shadow 200ms ease' };
+const field: Style = { ...row, position: 'relative', width: '100%', 'max-width': '720px', 'align-items': 'center', gap: '12px', height: '62px', 'box-sizing': 'border-box', padding: '0px 8px 0px 10px', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$card', 'box-shadow': '0px 5px 0px $ink', transition: 'box-shadow 200ms ease' };
 const badge: Style = { ...row, ...sz(40), 'border-radius': '20px', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$butter', border: '2.5px solid $ink', 'box-sizing': 'border-box', color: '$ink', transition: 'background-color 160ms linear' };
+// Mochi perches on its top edge, floating; the field and Mochi slide together while searching.
 const searchField: Node = { type: 'box', style: field, states: [{ when: [set('env.searchFocused')], style: { ...field, 'box-shadow': '0px 6px 0px $ink, 0px 0px 0px 6px $lavender-soft' } }], children: [
+  { type: 'box', motion: 'float36', style: { ...col, position: 'absolute', left: '30px', top: '-36px', 'z-index': '2', 'pointer-events': 'none' }, small: { left: '18px', top: '-30px' }, children: [
+    mascot('happy', 48, { when: [not('env.searching')], small: sz(40, 36) }),
+    mascot('wow', 48, { when: [set('env.searching')], small: sz(40, 36) }),
+  ] },
   { type: 'box', style: badge, states: [{ when: [set('env.searchFocused')], style: { ...badge, 'background-color': '$pink' } }], children: [icon('search', 16)] },
-  { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:searchPlaceholder}', label: '{s:searchYourLibrary}', ink: '$ink', placeholderInk: '$ink-quiet', font: fredoka, size: '17px', weight: '500' }, style: { flex: '1', 'min-width': '0px', height: '100%' } },
+  { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:searchPlaceholder}', label: '{s:searchYourLibrary}', placeholderColor: '$ink-quiet' },
+    style: { flex: '1', 'min-width': '0px', height: '100%', color: '$ink', 'font-family': fredoka, 'font-size': '17px', 'font-weight': '500', outline: 'none' } },
   { type: 'box', when: [set('env.searching')], press: { action: 'clearSearch' as Action }, label: '{s:clearSearch}', style: { ...Bubble, ...sz(40) }, ...bubble, children: [icon('close', 12)] },
 ] };
 
-// Mochi perched on the search box: the field and Mochi slide together while searching.
 const searchBlock: Style = { ...col, position: 'relative', 'padding-top': '34px', 'padding-bottom': '10px', ...gutter, 'align-items': 'center' };
 const home: Node = { type: 'box', style: { ...col, position: 'relative', 'padding-top': '10px' }, small: { 'padding-top': '6px' }, children: [
   { type: 'repeat', over: 'home.hero', when: [not('env.searching')], item: { type: 'box', exit: 'heroOut', style: { ...col, ...gutter }, small: gutterSmall, children: [banner] } },
@@ -409,17 +414,11 @@ const home: Node = { type: 'box', style: { ...col, position: 'relative', 'paddin
       { when: [set('env.searching')], style: { ...searchBlock, 'padding-top': '48px' } },
       { when: [set('env.small')], style: { ...searchBlock, 'padding-top': '26px' } },
     ], small: { 'padding-bottom': '4px', ...gutterSmall }, children: [
-      { type: 'box', style: { ...col, position: 'relative', width: '100%', 'max-width': '720px' }, children: [
-        { type: 'box', motion: 'float36', style: { ...col, position: 'absolute', left: '30px', top: '-36px', 'z-index': '2', 'pointer-events': 'none' }, small: { left: '18px', top: '-30px' }, children: [
-          mascot('happy', 48, { when: [not('env.searching')], small: sz(40, 36) }),
-          mascot('wow', 48, { when: [set('env.searching')], small: sz(40, 36) }),
-        ] },
-        searchField,
-      ] },
+      searchField,
     ] },
   { type: 'box', when: [not('env.searching')], style: { ...col, position: 'relative', 'padding-top': '18px' }, small: { 'padding-top': '12px' }, children: [
     { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'shelf', motion: 'hopRow', stagger: { step: 80, cap: 4 }, exit: 'rowOut' } as Node },
-    { type: 'box', when: [set('env.homeHasMore')], style: { ...col, 'min-height': '120px', 'align-items': 'center', 'justify-content': 'center' }, children: [
+    { type: 'box', when: [set('env.homeHasMore')], style: { ...col, position: 'relative', 'min-height': '120px', 'align-items': 'center', 'justify-content': 'center' }, children: [
       { type: 'widget', widget: 'sentinel', params: { on: 'home' } },
       { ...loader('{s:loadingMore}', 48), when: [set('env.homeMoreLoading')] } as Node,
     ] },
@@ -569,7 +568,7 @@ const episodesBody: Node[] = [
     ] },
   ] },
   upNext,
-  { type: 'box', style: episodeList, small: { gap: '12px' }, states: [{ when: [set('detail.seasonPending')], style: { ...episodeList, opacity: '0.5' } }], ...r6({ a11y: { busy: [set('detail.seasonPending')] } }), children: [
+  { type: 'box', style: episodeList, small: { gap: '12px' }, states: [{ when: [set('detail.seasonPending')], style: { ...episodeList, opacity: '0.5' } }], ...pending({ a11y: { busy: [set('detail.seasonPending')] } }), children: [
     { type: 'repeat', over: 'detail.episodes', item: episodeCard },
   ] },
 ];
@@ -610,13 +609,14 @@ const crew: Node = { type: 'box', when: [ready, set('detail.crewLine')], motion:
   { type: 'text', text: '{detail.crewLine}', style: { 'font-size': '15px', color: '$ink-soft', 'line-height': '1.7', 'max-width': '48rem' } },
 ] };
 
-const related: Node = { type: 'repeat', over: 'detail.related', when: [ready], item: { type: 'use', template: 'shelf', motion: 'hop500' } as Node };
+const related: Node = { type: 'repeat', over: 'detail.related', when: [ready], item: { type: 'use', template: 'relatedShelf', motion: 'hop500' } as Node };
 
-// The title page opens as a framed page over a blurred scrim, with an ink-ringed close button.
+// The title page opens as a framed page over the route frame's blurred scrim (detail.frame),
+// with an ink-ringed close button.
 // (The compiled trait's frame shadow named `var(--mochi.ink)` in a bound row, which never
 // resolved, so the frame draws without one; matched here.)
 const title: Node = { type: 'box', style: { ...col, position: 'relative', height: '100%' }, children: [
-  { type: 'box', motion: 'scrimIn', style: { ...col, ...inset0, 'box-sizing': 'border-box', padding: '4vh 4vw', 'background-color': '$scrim', 'backdrop-filter': 'blur(18px) saturate(1.1)', color: '$ink' }, small: { padding: '0px' }, children: [
+  { type: 'box', style: { ...col, ...inset0, 'box-sizing': 'border-box', padding: '4vh 4vw', color: '$ink' }, small: { padding: '0px' }, children: [
     { type: 'box', motion: 'pageOpen', style: { ...col, position: 'relative', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': '$page' },
       small: { 'border-radius': '0px' }, children: [
         { type: 'box', id: 'back', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', ...sz(44), 'box-sizing': 'border-box', padding: '13px', border: '3px solid $ink', 'border-radius': '22px', 'background-color': '$card', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: '$ink' },
@@ -655,7 +655,7 @@ const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds 
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
 export default {
-  schema: 1, renderer: 7, id, name: 'Mochi', version,
+  schema: 1, renderer: 9, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true, flatDetail: false },
@@ -716,11 +716,10 @@ export default {
     pop0: popIn(0), pop60: popIn(60), pop120: popIn(120), pop260: popIn(260),
     hop0: hop(0), hop160: hop(160), hop260: hop(260), hop380: hop(380), hop420: hop(420), hop460: hop(460), hop480: hop(480), hop500: hop(500), hopRow: hop(120),
     statusIn: { keyframes: 'dissolve', duration: 400, easing: 'ease-out', fill: 'both', still: fade(200) },
-    scrimIn: { keyframes: 'dissolve', duration: 420, easing: 'ease-out', fill: 'both', still: fade(200) },
     pageOpen: { keyframes: 'open', duration: 680, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both', still: fade(240) },
   },
-  templates: { card, shelf },
+  templates: { card, shelf: shelf(true), relatedShelf: shelf(false) },
   slots: { shell, home },
   routes: { title },
-  detail: { wide: 'fullscreen', small: 'fullscreen' },
+  detail: { wide: 'fullscreen', small: 'fullscreen', frame: { scrim: '$scrim' } },
 } as unknown as SkinDocument;
