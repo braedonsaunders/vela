@@ -107,8 +107,8 @@ keyframes vr-jitter
 // The document's distinct styles, shared by index (nodes name theirs by position).
 fn styleAt(e: Env, i: number): Style = match e.styles.at(i) { case some(s) => s, case none => e.dflt }
 fn pct(at: number, of: number): string = (of > 0 ? min(100, at / of * 100).toString() : "0")
-fn binds(c: Ctx, e: Env): string[] = [match first(c.card) { case some(x) => x.id, case none => "" }, match first(c.hero) { case some(x) => x.id, case none => "" }, match first(c.card) { case some(x) => x.kind, case none => "" }, match first(c.hero) { case some(x) => x.kind, case none => "" }, match first(c.card) { case some(x) => x.name, case none => "" }, match first(c.hero) { case some(x) => x.name, case none => "" }, match first(c.card) { case some(x) => x.summary, case none => "" }, match first(c.hero) { case some(x) => x.summary, case none => "" }, match first(c.card) { case some(x) => x.facts, case none => "" }, match first(c.hero) { case some(x) => x.facts, case none => "" }, match first(c.card) { case some(x) => x.yearLabel, case none => "" }, match first(c.hero) { case some(x) => x.yearLabel, case none => "" }, match first(c.card) { case some(x) => x.rating, case none => "" }, match first(c.hero) { case some(x) => x.rating, case none => "" }, match first(c.card) { case some(x) => x.progressLabel, case none => "" }, match first(c.hero) { case some(x) => x.progressLabel, case none => "" }, match first(c.card) { case some(x) => x.poster, case none => "" }, match first(c.hero) { case some(x) => x.poster, case none => "" }, match first(c.card) { case some(x) => x.backdrop, case none => "" }, match first(c.hero) { case some(x) => x.backdrop, case none => "" }, match first(c.card) { case some(x) => x.logo, case none => "" }, match first(c.hero) { case some(x) => x.logo, case none => "" }, match first(c.card) { case some(x) => x.accent, case none => "" }, match first(c.hero) { case some(x) => x.accent, case none => "" }, match first(c.card) { case some(x) => x.receipt, case none => "" }, match first(c.hero) { case some(x) => x.receipt, case none => "" }, match first(c.card) { case some(x) => (x.played ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => x.episodeNumberLabel, case none => "" }, match first(c.card) { case some(x) => x.durationLabel, case none => "" }, match first(c.card) { case some(x) => pct(x.progressSeconds, x.durationSeconds), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 and x.durationSeconds > 0 and not x.played ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => cardName(x), case none => "" }, match first(c.card) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, match first(c.hero) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, match first(c.card) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, match first(c.hero) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, match first(c.row) { case some(x) => x.id, case none => "" }, match first(c.row) { case some(x) => x.name, case none => "" }, match first(c.row) { case some(x) => x.presentation, case none => "" }, match first(c.row) { case some(x) => (x.nextCursor != "" ? "true" : "false"), case none => "" }, match first(c.heroAct) { case some(x) => x.reasonLabel, case none => "" }, match first(c.heroAct) { case some(x) => x.actionLabel, case none => "" }, match first(c.heroAct) { case some(x) => x.actionDetail, case none => "" }, match first(c.heroAct) { case some(x) => x.action, case none => "" }, match first(c.heroAct) { case some(x) => x.targetId, case none => "" }, match first(c.heroAct) { case some(x) => (x.progress * 100).toString(), case none => "" }, match first(c.heroAct) { case some(x) => (x.progress > 0 ? "true" : "false"), case none => "" }, match first(c.heroAct) { case some(x) => (x.action != "details" and x.targetId != "" ? "true" : "false"), case none => "" }, match first(c.dest) { case some(x) => x.id, case none => "" }, match first(c.dest) { case some(x) => x.name, case none => "" }, match first(c.dest) { case some(x) => x.kind, case none => "" }, match first(c.dest) { case some(x) => ((x.kind == "live" ? e.section == "live" : e.section == x.id) ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.hero) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.dest) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.extra) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.person) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.card) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.hero) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.row) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.person) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.dest) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.card) { case some(x) => x.seasonNumber.toString(), case none => "" }, match first(c.card) { case some(x) => x.episodeNumber.toString(), case none => "" }, match first(c.card) { case some(x) => x.seasonNumberLabel, case none => "" }, match first(c.card) { case some(x) => ((x.kind == "movie" or x.kind == "episode") and not x.played and x.progressSeconds <= 0 ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => x.genres.join(", "), case none => "" }, match first(c.hero) { case some(x) => cardName(x), case none => "" }, match first(c.hero) { case some(x) => x.genres.slice(0, 3).join(", "), case none => "" }, match first(c.hero) { case some(x) => [x.yearLabel].concat(x.genres.slice(0, 3)).concat([x.rating]).filter(f => f != "").join(" · "), case none => "" }, match first(c.row) { case some(x) => (x.items.length > 0 and not x.items.map(i => i.kind == "episode" or (i.progressSeconds > 0 and not i.played)).includes(false) ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (x.items.length > 0 and not x.items.map(i => i.progressSeconds > 0 and not i.played).includes(false) ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (x.previewOnFocus ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (e.rowLoading.includes(x.id) ? "true" : "false"), case none => "" }, match first(c.dest) { case some(x) => x.backdrop, case none => "" }, match first(c.fact) { case some(x) => x, case none => "" }, c.index.toString(), (c.index + 1).toString(), (c.index == e.heroIndex ? "true" : "false"), match first(c.card) { case some(x) => (x.id == e.season ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => `${x.id}|season|`, case none => "" }, match first(c.card) { case some(x) => (x.episodeNumber > 0 ? t("ui.numberTitle", number=x.episodeNumberLabel, title=x.name) : x.name), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 ? t("ui.continueWatching") : t("ui.upNext")), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 ? t("ui.resumeEpisode") : t("ui.playEpisode")), case none => "" }, match first(c.extra) { case some(x) => x.id, case none => "" }, match first(c.extra) { case some(x) => x.name, case none => "" }, match first(c.extra) { case some(x) => x.kind, case none => "" }, match first(c.extra) { case some(x) => (x.ready ? "true" : "false"), case none => "" }, match first(c.person) { case some(x) => x.name, case none => "" }, match first(c.person) { case some(x) => x.role, case none => "" }, match first(c.person) { case some(x) => x.portrait, case none => "" }, match first(c.person) { case some(x) => x.name.split(" ").slice(0, 2).map(w => w.slice(0, 1)).join("").toUpperCase(), case none => "" }, match first(c.fact) { case some(x) => x, case none => "" }, match first(c.ch) { case some(x) => x.id, case none => "" }, match first(c.ch) { case some(x) => x.number, case none => "" }, match first(c.ch) { case some(x) => x.name, case none => "" }, match first(c.ch) { case some(x) => x.logo, case none => "" }, match first(c.ch) { case some(x) => x.group, case none => "" }, match first(c.ch) { case some(x) => x.now, case none => "" }, match first(c.ch) { case some(x) => x.next, case none => "" }, match first(c.ch) { case some(x) => x.nowRemaining, case none => "" }, match first(c.ch) { case some(x) => x.nextLabel, case none => "" }, match first(c.ch) { case some(x) => x.nowArt, case none => "" }, match first(c.ch) { case some(x) => x.nowEpisode, case none => "" }, match first(c.ch) { case some(x) => x.nowGenre, case none => "" }, match first(c.ch) { case some(x) => (x.favorite ? "true" : "false"), case none => "" }, match first(c.ch) { case some(x) => x.nowProgress.toString(), case none => "" }, match first(c.ch) { case some(x) => (x.id == e.tunedId ? "true" : "false"), case none => "" }].concat(e.ev)
-fn envBinds(e: Env): string[] = [e.viewer, e.viewer.slice(0, 1).toUpperCase(), e.section, e.query, (e.small ? "true" : "false"), (e.tv ? "true" : "false"), (e.still ? "true" : "false"), (e.query != "" ? "true" : "false"), (e.canLive ? "true" : "false"), match first(e.home) { case some(x) => x.hero.length.toString(), case none => "" }, e.heroIndex.toString(), match first(e.home) { case some(x) => x.rows.length.toString(), case none => "" }, match first(e.home) { case some(x) => (x.hero.length > 1 and not e.still and e.query == "" ? "true" : "false"), case none => "" }, e.width.toString(), e.skinCount.toString(), e.libraries.length.toString(), (e.libraries.map(l => l.kind == "live").includes(true) ? "true" : "false"), (e.homeLoading ? "true" : "false"), match first(e.home) { case some(x) => (x.nextCursor != "" ? "true" : "false"), case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.yearLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.year.toString(), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.rating, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => (x.played ? "true" : "false"), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.durationLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => (x.progressSeconds > 0 and x.durationSeconds > 0 and not x.played ? "true" : "false"), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => pct(x.progressSeconds, x.durationSeconds), case none => "" }, case none => "0" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.seasonNumberLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.episodeNumberLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.episodeNumber.toString(), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => d.resumePosition, case none => "" }, match first(e.detail) { case some(d) => d.seasons.length.toString(), case none => "0" }, match first(e.detail) { case some(d) => d.seasons.filter(x => x.id == e.season).map(x => x.name).join(""), case none => "" }, match first(e.detail) { case some(d) => (e.season != "" and d.episodes.length > 0 and not d.episodes.map(x => x.seasonId == e.season).includes(true) ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.genres.join(", "), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => d.crew.join(", "), case none => "" }, match first(e.detail) { case some(d) => d.trailerId, case none => "" }, match first(e.detail) { case some(d) => (d.trailerId != "" and d.trailerReady ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => d.cast.join(" · "), case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.name.length.toString(), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.id.length.toString(), case none => "" }, case none => "" }, e.route, e.load, (e.load == "failed" ? "true" : "false"), e.entry, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.id, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.kind, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.name, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.summary, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.facts, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.poster, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.backdrop, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.logo, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.accent, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.receipt, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => (x.kind == "movie" ? t("ui.film") : x.kind == "show" ? t("ui.series") : x.kind == "season" ? t("ui.season") : t("ui.episode")), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => (d.canPlay ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.resumeSeconds > 0 ? t("ui.resumePositionIn", position=d.resumePosition) : t("ui.play")), case none => "" }, match first(e.detail) { case some(d) => (d.canPlay and d.resumeSeconds > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => pct(d.resumeSeconds, x.durationSeconds), case none => "" }, case none => "0" }, match first(e.detail) { case some(d) => (d.seasons.length > 1 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.episodes.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.castPeople.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => d.crew.join(" · "), case none => "" }, match first(e.detail) { case some(d) => (d.extras.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.mediaFacts.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.related.length > 0 ? "true" : "false"), case none => "false" }, e.season, match first(e.tuned) { case some(x) => x.id, case none => "" }, match first(e.tuned) { case some(x) => x.name, case none => "" }, match first(e.tuned) { case some(x) => x.number, case none => "" }, match first(e.tuned) { case some(x) => x.logo, case none => "" }, match first(e.tuned) { case some(x) => x.now, case none => "" }, match first(e.tuned) { case some(x) => x.next, case none => "" }, match first(e.tuned) { case some(x) => x.nowRemaining, case none => "" }, match first(e.tuned) { case some(x) => x.nextLabel, case none => "" }, match first(e.tuned) { case some(x) => x.nowArt, case none => "" }, match first(e.tuned) { case some(x) => x.nowEpisode, case none => "" }, match first(e.tuned) { case some(x) => x.nowGenre, case none => "" }, match first(e.tuned) { case some(x) => x.nowProgress.toString(), case none => "" }, match first(e.tile) { case some(x) => x.state, case none => "" }, match first(e.tile) { case some(x) => (x.muted ? "true" : "false"), case none => "" }, e.zapping, match first(e.guide) { case some(x) => x.nowLabel, case none => "" }, match first(e.guide) { case some(x) => (x.channels.length > 0 ? "true" : "false"), case none => "" }, match first(e.guide) { case some(x) => x.channels.length.toString(), case none => "" }, e.favoriteCount.toString()]
+fn binds(c: Ctx, e: Env): string[] = [match first(c.card) { case some(x) => x.id, case none => "" }, match first(c.hero) { case some(x) => x.id, case none => "" }, match first(c.card) { case some(x) => x.kind, case none => "" }, match first(c.hero) { case some(x) => x.kind, case none => "" }, match first(c.card) { case some(x) => x.name, case none => "" }, match first(c.hero) { case some(x) => x.name, case none => "" }, match first(c.card) { case some(x) => x.summary, case none => "" }, match first(c.hero) { case some(x) => x.summary, case none => "" }, match first(c.card) { case some(x) => x.facts, case none => "" }, match first(c.hero) { case some(x) => x.facts, case none => "" }, match first(c.card) { case some(x) => x.yearLabel, case none => "" }, match first(c.hero) { case some(x) => x.yearLabel, case none => "" }, match first(c.card) { case some(x) => x.rating, case none => "" }, match first(c.hero) { case some(x) => x.rating, case none => "" }, match first(c.card) { case some(x) => x.progressLabel, case none => "" }, match first(c.hero) { case some(x) => x.progressLabel, case none => "" }, match first(c.card) { case some(x) => x.poster, case none => "" }, match first(c.hero) { case some(x) => x.poster, case none => "" }, match first(c.card) { case some(x) => x.backdrop, case none => "" }, match first(c.hero) { case some(x) => x.backdrop, case none => "" }, match first(c.card) { case some(x) => x.logo, case none => "" }, match first(c.hero) { case some(x) => x.logo, case none => "" }, match first(c.card) { case some(x) => x.accent, case none => "" }, match first(c.hero) { case some(x) => x.accent, case none => "" }, match first(c.card) { case some(x) => x.receipt, case none => "" }, match first(c.hero) { case some(x) => x.receipt, case none => "" }, match first(c.card) { case some(x) => (x.played ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => x.episodeNumberLabel, case none => "" }, match first(c.card) { case some(x) => x.durationLabel, case none => "" }, match first(c.card) { case some(x) => pct(x.progressSeconds, x.durationSeconds), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 and x.durationSeconds > 0 and not x.played ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => cardName(x), case none => "" }, match first(c.card) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, match first(c.hero) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, match first(c.card) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, match first(c.hero) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, match first(c.row) { case some(x) => x.id, case none => "" }, match first(c.row) { case some(x) => x.name, case none => "" }, match first(c.row) { case some(x) => x.presentation, case none => "" }, match first(c.row) { case some(x) => (x.nextCursor != "" ? "true" : "false"), case none => "" }, match first(c.heroAct) { case some(x) => x.reasonLabel, case none => "" }, match first(c.heroAct) { case some(x) => x.actionLabel, case none => "" }, match first(c.heroAct) { case some(x) => x.actionDetail, case none => "" }, match first(c.heroAct) { case some(x) => x.action, case none => "" }, match first(c.heroAct) { case some(x) => x.targetId, case none => "" }, match first(c.heroAct) { case some(x) => (x.progress * 100).toString(), case none => "" }, match first(c.heroAct) { case some(x) => (x.progress > 0 ? "true" : "false"), case none => "" }, match first(c.heroAct) { case some(x) => (x.action != "details" and x.targetId != "" ? "true" : "false"), case none => "" }, match first(c.dest) { case some(x) => x.id, case none => "" }, match first(c.dest) { case some(x) => x.name, case none => "" }, match first(c.dest) { case some(x) => x.kind, case none => "" }, match first(c.dest) { case some(x) => ((x.kind == "live" ? e.section == "live" : e.section == x.id) ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.hero) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.dest) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.extra) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.person) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.card) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.hero) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.row) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.person) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.dest) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.card) { case some(x) => x.seasonNumber.toString(), case none => "" }, match first(c.card) { case some(x) => x.episodeNumber.toString(), case none => "" }, match first(c.card) { case some(x) => x.seasonNumberLabel, case none => "" }, match first(c.card) { case some(x) => ((x.kind == "movie" or x.kind == "episode") and not x.played and x.progressSeconds <= 0 ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => x.genres.join(", "), case none => "" }, match first(c.hero) { case some(x) => cardName(x), case none => "" }, match first(c.hero) { case some(x) => x.genres.slice(0, 3).join(", "), case none => "" }, match first(c.hero) { case some(x) => [x.yearLabel].concat(x.genres.slice(0, 3)).concat([x.rating]).filter(f => f != "").join(" · "), case none => "" }, match first(c.row) { case some(x) => (x.items.length > 0 and not x.items.map(i => i.kind == "episode" or (i.progressSeconds > 0 and not i.played)).includes(false) ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (x.items.length > 0 and not x.items.map(i => i.progressSeconds > 0 and not i.played).includes(false) ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (x.previewOnFocus ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (e.rowLoading.includes(x.id) ? "true" : "false"), case none => "" }, match first(c.dest) { case some(x) => x.backdrop, case none => "" }, match first(c.fact) { case some(x) => x, case none => "" }, c.index.toString(), (c.index + 1).toString(), (c.index == e.heroIndex ? "true" : "false"), match first(c.card) { case some(x) => (x.id == e.season ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => `${x.id}|season|`, case none => "" }, match first(c.card) { case some(x) => (x.episodeNumber > 0 ? t("ui.numberTitle", number=x.episodeNumberLabel, title=x.name) : x.name), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 ? t("ui.continueWatching") : t("ui.upNext")), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 ? t("ui.resumeEpisode") : t("ui.playEpisode")), case none => "" }, match first(c.extra) { case some(x) => x.id, case none => "" }, match first(c.extra) { case some(x) => x.name, case none => "" }, match first(c.extra) { case some(x) => x.kind, case none => "" }, match first(c.extra) { case some(x) => (x.ready ? "true" : "false"), case none => "" }, match first(c.person) { case some(x) => x.name, case none => "" }, match first(c.person) { case some(x) => x.role, case none => "" }, match first(c.person) { case some(x) => x.portrait, case none => "" }, match first(c.person) { case some(x) => x.name.split(" ").slice(0, 2).map(w => w.slice(0, 1)).join("").toUpperCase(), case none => "" }, match first(c.fact) { case some(x) => x, case none => "" }, match first(c.ch) { case some(x) => x.id, case none => "" }, match first(c.ch) { case some(x) => x.number, case none => "" }, match first(c.ch) { case some(x) => x.name, case none => "" }, match first(c.ch) { case some(x) => x.logo, case none => "" }, match first(c.ch) { case some(x) => x.group, case none => "" }, match first(c.ch) { case some(x) => x.now, case none => "" }, match first(c.ch) { case some(x) => x.next, case none => "" }, match first(c.ch) { case some(x) => x.nowRemaining, case none => "" }, match first(c.ch) { case some(x) => x.nextLabel, case none => "" }, match first(c.ch) { case some(x) => x.nowArt, case none => "" }, match first(c.ch) { case some(x) => x.nowEpisode, case none => "" }, match first(c.ch) { case some(x) => x.nowGenre, case none => "" }, match first(c.ch) { case some(x) => (x.favorite ? "true" : "false"), case none => "" }, match first(c.ch) { case some(x) => x.nowProgress.toString(), case none => "" }, match first(c.ch) { case some(x) => (x.id == e.tunedId ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (pagerField(e.pagers, x.id, 1) == "0" or pagerField(e.pagers, x.id, 2) == "0" ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (pagerField(e.pagers, x.id, 1) != "0" ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (pagerField(e.pagers, x.id, 2) != "0" ? "true" : "false"), case none => "" }].concat(e.ev)
+fn envBinds(e: Env): string[] = [e.viewer, e.viewer.slice(0, 1).toUpperCase(), e.section, e.query, (e.small ? "true" : "false"), (e.tv ? "true" : "false"), (e.still ? "true" : "false"), (e.query != "" ? "true" : "false"), (e.canLive ? "true" : "false"), match first(e.home) { case some(x) => x.hero.length.toString(), case none => "" }, e.heroIndex.toString(), match first(e.home) { case some(x) => x.rows.length.toString(), case none => "" }, match first(e.home) { case some(x) => (x.hero.length > 1 and not e.still and e.query == "" ? "true" : "false"), case none => "" }, e.width.toString(), e.skinCount.toString(), e.libraries.length.toString(), (e.libraries.map(l => l.kind == "live").includes(true) ? "true" : "false"), (e.homeLoading ? "true" : "false"), match first(e.home) { case some(x) => (x.nextCursor != "" ? "true" : "false"), case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.yearLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.year.toString(), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.rating, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => (x.played ? "true" : "false"), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.durationLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => (x.progressSeconds > 0 and x.durationSeconds > 0 and not x.played ? "true" : "false"), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => pct(x.progressSeconds, x.durationSeconds), case none => "" }, case none => "0" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.seasonNumberLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.episodeNumberLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.episodeNumber.toString(), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => d.resumePosition, case none => "" }, match first(e.detail) { case some(d) => d.seasons.length.toString(), case none => "0" }, match first(e.detail) { case some(d) => d.seasons.filter(x => x.id == e.season).map(x => x.name).join(""), case none => "" }, match first(e.detail) { case some(d) => (e.season != "" and d.episodes.length > 0 and not d.episodes.map(x => x.seasonId == e.season).includes(true) ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.genres.join(", "), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => d.crew.join(", "), case none => "" }, match first(e.detail) { case some(d) => d.trailerId, case none => "" }, match first(e.detail) { case some(d) => (d.trailerId != "" and d.trailerReady ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => d.cast.join(" · "), case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.name.length.toString(), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.id.length.toString(), case none => "" }, case none => "" }, e.route, e.load, (e.load == "failed" ? "true" : "false"), e.entry, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.id, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.kind, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.name, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.summary, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.facts, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.poster, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.backdrop, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.logo, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.accent, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.receipt, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => (x.kind == "movie" ? t("ui.film") : x.kind == "show" ? t("ui.series") : x.kind == "season" ? t("ui.season") : t("ui.episode")), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => (d.canPlay ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.resumeSeconds > 0 ? t("ui.resumePositionIn", position=d.resumePosition) : t("ui.play")), case none => "" }, match first(e.detail) { case some(d) => (d.canPlay and d.resumeSeconds > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => pct(d.resumeSeconds, x.durationSeconds), case none => "" }, case none => "0" }, match first(e.detail) { case some(d) => (d.seasons.length > 1 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.episodes.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.castPeople.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => d.crew.join(" · "), case none => "" }, match first(e.detail) { case some(d) => (d.extras.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.mediaFacts.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.related.length > 0 ? "true" : "false"), case none => "false" }, e.season, match first(e.tuned) { case some(x) => x.id, case none => "" }, match first(e.tuned) { case some(x) => x.name, case none => "" }, match first(e.tuned) { case some(x) => x.number, case none => "" }, match first(e.tuned) { case some(x) => x.logo, case none => "" }, match first(e.tuned) { case some(x) => x.now, case none => "" }, match first(e.tuned) { case some(x) => x.next, case none => "" }, match first(e.tuned) { case some(x) => x.nowRemaining, case none => "" }, match first(e.tuned) { case some(x) => x.nextLabel, case none => "" }, match first(e.tuned) { case some(x) => x.nowArt, case none => "" }, match first(e.tuned) { case some(x) => x.nowEpisode, case none => "" }, match first(e.tuned) { case some(x) => x.nowGenre, case none => "" }, match first(e.tuned) { case some(x) => x.nowProgress.toString(), case none => "" }, match first(e.tile) { case some(x) => x.state, case none => "" }, match first(e.tile) { case some(x) => (x.muted ? "true" : "false"), case none => "" }, e.zapping, (e.flags.includes("search-focused") ? "true" : "false"), match first(e.guide) { case some(x) => x.nowLabel, case none => "" }, match first(e.guide) { case some(x) => (x.channels.length > 0 ? "true" : "false"), case none => "" }, match first(e.guide) { case some(x) => x.channels.length.toString(), case none => "" }, e.favoriteCount.toString()]
 fn pick(vals: string[], i: number): string = match vals.at(i) { case some(v) => v, case none => "" }
 fn flagged(e: Env, f: string): string = (e.flags.includes(f) ? "true" : "false")
 fn fill(parts: Part[], vals: string[], e: Env): string = parts.map(p => (p.f != "" ? flagged(e, p.f) : p.k < 0 ? p.l : pick(vals, p.k))).join("")
@@ -123,6 +123,8 @@ fn aria(conds: Cond[], vals: string[], e: Env): string = (conds.length == 0 ? ""
 fn motion(mk: string, md: number, mdl: number, me: string, mf: string, mit: string, mdir: string, msk: string, msd: number, step: number, cap: number, i: number, e: Env): string = (e.still ? (msk == "" ? "none" : `${msk} ${msd}ms linear both`) : `${mk} ${md}ms ${me} ${mdl + min(i, cap) * step}ms ${mit} ${mdir} ${mf}`)
 // The season a title page shows: the visit's pick, else its episodes' season, else the season page itself.
 fn selectedSeason(detail: DetailModel[], picked: string): string = (picked != "" ? picked : match first(detail) { case some(d) => match first(d.episodes) { case some(x) => x.seasonId, case none => d.title.filter(t => t.kind == "season").map(t => t.id).join("") }, case none => "" })
+fn rowIdOf(c: Ctx): string = match first(c.row) { case some(r) => r.id, case none => "" }
+fn pagerField(pagers: string[], rowId: string, i: number): string = match first(pagers.filter(p => p.split("|").slice(0, 1).join("") == rowId)) { case some(p) => p.split("|").slice(i, i + 1).join(""), case none => "" }
 fn heroActFor(home: HomeModel, id: string): HeroAction[] = home.heroActions.filter(a => a.heroId == id).slice(0, 1)
 // The live home's lineup in the guide's order, or its favourites alone (a subset, never a reorder).
 fn liveCtxs(rep: string, lim: number, c: Ctx, e: Env): Ctx[] = match first(e.guide) { case some(g) => (rep == "live.favorites" ? g.channels.filter(x => x.favorite) : g.channels).slice(0, lim).map(x => Ctx(c, ch=[x])), case none => [] }
@@ -185,9 +187,13 @@ component V1
     act: action
     obs: action
   inject
+    loadMoreHome: action
+    loadMoreRow: action
     tileMessage: action
     mediaAuthJson: string
     tileNativeMedia: string
+    edit: action
+    query: string
   state over = false
   state focused = false
   state ready = false
@@ -214,6 +220,25 @@ component V1
         focus(to)
   action loaded
     ready = true
+  // A sentinel asks the foundation for the next page of home or of its row.
+  action hitHome(entry: IntersectionObserverEntry)
+    loadMoreHome(entry)
+  action hitRow(entry: IntersectionObserverEntry)
+    loadMoreRow(rowIdOf(c), entry)
+  action searchFocus
+    act("searchFocus", "")
+  action searchBlur
+    act("searchBlur", "")
+  action searchKey(k: string)
+    if k == "Escape" and query != ""
+      preventDefault()
+      edit("")
+  // A pager's edge markers report when they enter or leave its scrollport (rare events:
+  // a scroll frame touches nothing else).
+  action edgeStart(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|s|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
+  action edgeEnd(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|e|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
@@ -227,6 +252,15 @@ component V1
                   for t in e.tile key=t.channelId
                     if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
                       vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                else if n.t == "searchInput"
+                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline="none" flex-grow=1 min-width=0 height="100%" padding=0 margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                    ::placeholder
+                      color=n.sym
+                else if n.t == "sentinel"
+                  if n.sym == "home"
+                    column width="100%" height="100%" min-height=1 pointer-events="none" aria-hidden=true intersect=hitHome intersect-margin="0px 0px 800px 0px"
+                  else
+                    column width="100%" height="100%" min-width=1 pointer-events="none" aria-hidden=true intersect=hitRow intersect-margin="0px 600px 0px 0px"
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
@@ -246,9 +280,13 @@ component V1
                                 for p, pi in n.ipaths key=`${pi}`
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs2(k, cx, e) key=ctxKey(cc, j)
                                 V2(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -263,9 +301,13 @@ component V2
     act: action
     obs: action
   inject
+    loadMoreHome: action
+    loadMoreRow: action
     tileMessage: action
     mediaAuthJson: string
     tileNativeMedia: string
+    edit: action
+    query: string
   state over = false
   state focused = false
   state ready = false
@@ -292,6 +334,25 @@ component V2
         focus(to)
   action loaded
     ready = true
+  // A sentinel asks the foundation for the next page of home or of its row.
+  action hitHome(entry: IntersectionObserverEntry)
+    loadMoreHome(entry)
+  action hitRow(entry: IntersectionObserverEntry)
+    loadMoreRow(rowIdOf(c), entry)
+  action searchFocus
+    act("searchFocus", "")
+  action searchBlur
+    act("searchBlur", "")
+  action searchKey(k: string)
+    if k == "Escape" and query != ""
+      preventDefault()
+      edit("")
+  // A pager's edge markers report when they enter or leave its scrollport (rare events:
+  // a scroll frame touches nothing else).
+  action edgeStart(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|s|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
+  action edgeEnd(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|e|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
@@ -305,6 +366,15 @@ component V2
                   for t in e.tile key=t.channelId
                     if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
                       vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                else if n.t == "searchInput"
+                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline="none" flex-grow=1 min-width=0 height="100%" padding=0 margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                    ::placeholder
+                      color=n.sym
+                else if n.t == "sentinel"
+                  if n.sym == "home"
+                    column width="100%" height="100%" min-height=1 pointer-events="none" aria-hidden=true intersect=hitHome intersect-margin="0px 0px 800px 0px"
+                  else
+                    column width="100%" height="100%" min-width=1 pointer-events="none" aria-hidden=true intersect=hitRow intersect-margin="0px 600px 0px 0px"
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
@@ -324,9 +394,13 @@ component V2
                                 for p, pi in n.ipaths key=`${pi}`
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs3(k, cx, e) key=ctxKey(cc, j)
                                 V3(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -341,9 +415,13 @@ component V3
     act: action
     obs: action
   inject
+    loadMoreHome: action
+    loadMoreRow: action
     tileMessage: action
     mediaAuthJson: string
     tileNativeMedia: string
+    edit: action
+    query: string
   state over = false
   state focused = false
   state ready = false
@@ -370,6 +448,25 @@ component V3
         focus(to)
   action loaded
     ready = true
+  // A sentinel asks the foundation for the next page of home or of its row.
+  action hitHome(entry: IntersectionObserverEntry)
+    loadMoreHome(entry)
+  action hitRow(entry: IntersectionObserverEntry)
+    loadMoreRow(rowIdOf(c), entry)
+  action searchFocus
+    act("searchFocus", "")
+  action searchBlur
+    act("searchBlur", "")
+  action searchKey(k: string)
+    if k == "Escape" and query != ""
+      preventDefault()
+      edit("")
+  // A pager's edge markers report when they enter or leave its scrollport (rare events:
+  // a scroll frame touches nothing else).
+  action edgeStart(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|s|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
+  action edgeEnd(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|e|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
@@ -383,6 +480,15 @@ component V3
                   for t in e.tile key=t.channelId
                     if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
                       vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                else if n.t == "searchInput"
+                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline="none" flex-grow=1 min-width=0 height="100%" padding=0 margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                    ::placeholder
+                      color=n.sym
+                else if n.t == "sentinel"
+                  if n.sym == "home"
+                    column width="100%" height="100%" min-height=1 pointer-events="none" aria-hidden=true intersect=hitHome intersect-margin="0px 0px 800px 0px"
+                  else
+                    column width="100%" height="100%" min-width=1 pointer-events="none" aria-hidden=true intersect=hitRow intersect-margin="0px 600px 0px 0px"
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
@@ -402,9 +508,13 @@ component V3
                                 for p, pi in n.ipaths key=`${pi}`
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs4(k, cx, e) key=ctxKey(cc, j)
                                 V4(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -418,6 +528,9 @@ component V4
     e: Env
     act: action
     obs: action
+  inject
+    loadMoreHome: action
+    loadMoreRow: action
   state over = false
   state focused = false
   state ready = false
@@ -444,6 +557,17 @@ component V4
         focus(to)
   action loaded
     ready = true
+  // A sentinel asks the foundation for the next page of home or of its row.
+  action hitHome(entry: IntersectionObserverEntry)
+    loadMoreHome(entry)
+  action hitRow(entry: IntersectionObserverEntry)
+    loadMoreRow(rowIdOf(c), entry)
+  // A pager's edge markers report when they enter or leave its scrollport (rare events:
+  // a scroll frame touches nothing else).
+  action edgeStart(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|s|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
+  action edgeEnd(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|e|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
@@ -453,6 +577,11 @@ component V4
               for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
                 if n.t == "install"
                   vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else if n.t == "sentinel"
+                  if n.sym == "home"
+                    column width="100%" height="100%" min-height=1 pointer-events="none" aria-hidden=true intersect=hitHome intersect-margin="0px 0px 800px 0px"
+                  else
+                    column width="100%" height="100%" min-width=1 pointer-events="none" aria-hidden=true intersect=hitRow intersect-margin="0px 600px 0px 0px"
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
@@ -472,9 +601,13 @@ component V4
                                 for p, pi in n.ipaths key=`${pi}`
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs5(k, cx, e) key=ctxKey(cc, j)
                                 V5(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -488,6 +621,11 @@ component V5
     e: Env
     act: action
     obs: action
+  inject
+    loadMoreHome: action
+    loadMoreRow: action
+    edit: action
+    query: string
   state over = false
   state focused = false
   state ready = false
@@ -514,6 +652,25 @@ component V5
         focus(to)
   action loaded
     ready = true
+  // A sentinel asks the foundation for the next page of home or of its row.
+  action hitHome(entry: IntersectionObserverEntry)
+    loadMoreHome(entry)
+  action hitRow(entry: IntersectionObserverEntry)
+    loadMoreRow(rowIdOf(c), entry)
+  action searchFocus
+    act("searchFocus", "")
+  action searchBlur
+    act("searchBlur", "")
+  action searchKey(k: string)
+    if k == "Escape" and query != ""
+      preventDefault()
+      edit("")
+  // A pager's edge markers report when they enter or leave its scrollport (rare events:
+  // a scroll frame touches nothing else).
+  action edgeStart(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|s|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
+  action edgeEnd(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|e|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
@@ -523,6 +680,15 @@ component V5
               for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
                 if n.t == "install"
                   vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else if n.t == "searchInput"
+                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline="none" flex-grow=1 min-width=0 height="100%" padding=0 margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                    ::placeholder
+                      color=n.sym
+                else if n.t == "sentinel"
+                  if n.sym == "home"
+                    column width="100%" height="100%" min-height=1 pointer-events="none" aria-hidden=true intersect=hitHome intersect-margin="0px 0px 800px 0px"
+                  else
+                    column width="100%" height="100%" min-width=1 pointer-events="none" aria-hidden=true intersect=hitRow intersect-margin="0px 600px 0px 0px"
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
@@ -542,9 +708,13 @@ component V5
                                 for p, pi in n.ipaths key=`${pi}`
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs6(k, cx, e) key=ctxKey(cc, j)
                                 V6(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -558,6 +728,11 @@ component V6
     e: Env
     act: action
     obs: action
+  inject
+    loadMoreHome: action
+    loadMoreRow: action
+    edit: action
+    query: string
   state over = false
   state focused = false
   state ready = false
@@ -584,6 +759,25 @@ component V6
         focus(to)
   action loaded
     ready = true
+  // A sentinel asks the foundation for the next page of home or of its row.
+  action hitHome(entry: IntersectionObserverEntry)
+    loadMoreHome(entry)
+  action hitRow(entry: IntersectionObserverEntry)
+    loadMoreRow(rowIdOf(c), entry)
+  action searchFocus
+    act("searchFocus", "")
+  action searchBlur
+    act("searchBlur", "")
+  action searchKey(k: string)
+    if k == "Escape" and query != ""
+      preventDefault()
+      edit("")
+  // A pager's edge markers report when they enter or leave its scrollport (rare events:
+  // a scroll frame touches nothing else).
+  action edgeStart(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|s|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
+  action edgeEnd(entry: IntersectionObserverEntry)
+    act("pagerEdge", `${rowIdOf(c)}|e|${entry.isIntersecting ? 1 : 0}|${n.sym}`)
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
@@ -593,6 +787,15 @@ component V6
               for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
                 if n.t == "install"
                   vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else if n.t == "searchInput"
+                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline="none" flex-grow=1 min-width=0 height="100%" padding=0 margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                    ::placeholder
+                      color=n.sym
+                else if n.t == "sentinel"
+                  if n.sym == "home"
+                    column width="100%" height="100%" min-height=1 pointer-events="none" aria-hidden=true intersect=hitHome intersect-margin="0px 0px 800px 0px"
+                  else
+                    column width="100%" height="100%" min-width=1 pointer-events="none" aria-hidden=true intersect=hitRow intersect-margin="0px 600px 0px 0px"
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
@@ -612,9 +815,13 @@ component V6
                                 for p, pi in n.ipaths key=`${pi}`
                                   path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
                           else
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-right=-1 pointer-events="none" aria-hidden=true intersect=edgeStart
                             for k, ki in n.kids key=`${ki}`
                               for cc, j in ctxs7(k, cx, e) key=ctxKey(cc, j)
                                 V7(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-left=-1 pointer-events="none" aria-hidden=true intersect=edgeEnd
                             if n.act != ""
                               if n.aexp.length > 0 or n.asel.length > 0
                                 button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
@@ -628,6 +835,9 @@ component V7
     e: Env
     act: action
     obs: action
+  inject
+    edit: action
+    query: string
   state over = false
   state focused = false
   state ready = false
@@ -654,6 +864,14 @@ component V7
         focus(to)
   action loaded
     ready = true
+  action searchFocus
+    act("searchFocus", "")
+  action searchBlur
+    act("searchBlur", "")
+  action searchKey(k: string)
+    if k == "Escape" and query != ""
+      preventDefault()
+      edit("")
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
@@ -663,6 +881,10 @@ component V7
               for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
                 if n.t == "install"
                   vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else if n.t == "searchInput"
+                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline="none" flex-grow=1 min-width=0 height="100%" padding=0 margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                    ::placeholder
+                      color=n.sym
                 else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))

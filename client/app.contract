@@ -55,6 +55,8 @@ component Client
     retryDescriptive
     retryFailed
     edit
+    // The search query, for a skin document's own search input (renderer widget searchInput).
+    query
     play
     playExtra
     close

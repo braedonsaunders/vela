@@ -13,6 +13,10 @@ import { join, resolve } from 'node:path';
 export const DEPTH = 10;
 /** Heavy widgets (the live tile's player) are drawn only by the first levels: each level is a copy. */
 export const WIDGET_DEPTH = 3;
+/** The search input is drawn in home's and the shell's first three levels (the shell enters at SHELL_FROM). */
+export const searchLevel = (d: number) => d <= 3 || (d >= SHELL_FROM && d < SHELL_FROM + 3);
+/** A pager (a row's scroller) sits within this many levels of its slot. */
+export const PAGER_DEPTH = 6;
 /** The shell's tree enters the levels at this depth: it needs 6, so its copy of the renderer is 6 levels, not 10. */
 export const SHELL_FROM = 5;
 /** Style rows: Contract field name and the row it writes. Inherited ones default to "inherit" (src/skin). */
@@ -107,10 +111,14 @@ function level(d: number): string {
   const child = 'Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot))';
   // Exact substitutes a prop's expression at every use and expands fns and derives in place,
   // so each value the renderer reuses is bound once by a one-element \`for\` (a runtime value).
-  const next = d < DEPTH ? `
+  // A pager box (n.sym = "pager|inset|peek") gets a 1 px marker at each end of its content.
+  const edge = (which: string) => d <= PAGER_DEPTH ? `
+                            if n.sym != ""
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-${which === 'Start' ? 'right' : 'left'}=-1 pointer-events="none" aria-hidden=true intersect=edge${which}` : '';
+  const next = d < DEPTH ? `${edge('Start')}
                             for k, ki in n.kids key=\`\${ki}\`
                               for cc, j in ctxs${d + 1}(k, cx, e) key=ctxKey(cc, j)
-                                V${d + 1}(n=k, c=${child}, e=e, act=act, obs=obs)` : '';
+                                V${d + 1}(n=k, c=${child}, e=e, act=act, obs=obs)${edge('End')}` : '';
   return `component V${d}
   props
     n: N${d}
@@ -118,10 +126,13 @@ function level(d: number): string {
     e: Env
     act: action
     obs: action
-${d <= WIDGET_DEPTH ? `  inject
-    tileMessage: action
+${d <= PAGER_DEPTH || searchLevel(d) ? '  inject\n' : ''}${d <= PAGER_DEPTH ? `    loadMoreHome: action
+    loadMoreRow: action
+` : ''}${d <= WIDGET_DEPTH ? `    tileMessage: action
     mediaAuthJson: string
     tileNativeMedia: string
+` : ''}${searchLevel(d) ? `    edit: action
+    query: string
 ` : ''}  state over = false
   state focused = false
   state ready = false
@@ -148,7 +159,26 @@ ${d <= WIDGET_DEPTH ? `  inject
         focus(to)
   action loaded
     ready = true
-  view
+${d <= PAGER_DEPTH ? `  // A sentinel asks the foundation for the next page of home or of its row.
+  action hitHome(entry: IntersectionObserverEntry)
+    loadMoreHome(entry)
+  action hitRow(entry: IntersectionObserverEntry)
+    loadMoreRow(rowIdOf(c), entry)
+` : ''}${searchLevel(d) ? `  action searchFocus
+    act("searchFocus", "")
+  action searchBlur
+    act("searchBlur", "")
+  action searchKey(k: string)
+    if k == "Escape" and query != ""
+      preventDefault()
+      edit("")
+` : ''}${d <= PAGER_DEPTH ? `  // A pager's edge markers report when they enter or leave its scrollport (rare events:
+  // a scroll frame touches nothing else).
+  action edgeStart(entry: IntersectionObserverEntry)
+    act("pagerEdge", \`\${rowIdOf(c)}|s|\${entry.isIntersecting ? 1 : 0}|\${n.sym}\`)
+  action edgeEnd(entry: IntersectionObserverEntry)
+    act("pagerEdge", \`\${rowIdOf(c)}|e|\${entry.isIntersecting ? 1 : 0}|\${n.sym}\`)
+` : ''}  view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
@@ -161,6 +191,15 @@ ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                   for t in e.tile key=t.channelId
                     if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
                       vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+` : ''}${searchLevel(d) ? `                else if n.t == "searchInput"
+                  input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline="none" flex-grow=1 min-width=0 height="100%" padding=0 margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
+                    ::placeholder
+                      color=n.sym
+` : ''}${d <= PAGER_DEPTH ? `                else if n.t == "sentinel"
+                  if n.sym == "home"
+                    column width="100%" height="100%" min-height=1 pointer-events="none" aria-hidden=true intersect=hitHome intersect-margin="0px 0px 800px 0px"
+                  else
+                    column width="100%" height="100%" min-width=1 pointer-events="none" aria-hidden=true intersect=hitRow intersect-margin="0px 600px 0px 0px"
 ` : ''}                else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
@@ -277,6 +316,8 @@ const vocabulary: [string, string][] = [
   ['ch.favorite', m('c.ch', yes('x.favorite'))], ['ch.nowProgress', m('c.ch', 'x.nowProgress.toString()')], ['ch.tuned', m('c.ch', yes('x.id == e.tunedId'))],
   ...['id', 'name', 'number', 'logo', 'now', 'next', 'nowRemaining', 'nextLabel', 'nowArt', 'nowEpisode', 'nowGenre'].map(f => [`tile.${f === 'id' || f === 'name' || f === 'number' ? `channel${f[0].toUpperCase()}${f.slice(1)}` : f}`, m('e.tuned', `x.${f}`)] as [string, string]),
   ['tile.nowProgress', m('e.tuned', 'x.nowProgress.toString()')], ['tile.state', m('e.tile', 'x.state')], ['tile.muted', m('e.tile', yes('x.muted'))], ['tile.zapping', 'e.zapping'],
+  ['env.searchFocused', yes('e.flags.includes("search-focused")')],
+  ['pager.overflows', m('c.row', yes('pagerField(e.pagers, x.id, 1) == "0" or pagerField(e.pagers, x.id, 2) == "0"'))], ['pager.atStart', m('c.row', yes('pagerField(e.pagers, x.id, 1) != "0"'))], ['pager.atEnd', m('c.row', yes('pagerField(e.pagers, x.id, 2) != "0"'))],
   ['env.clock', m('e.guide', 'x.nowLabel')], ['env.liveReady', m('e.guide', yes('x.channels.length > 0'))], ['env.channelCount', m('e.guide', 'x.channels.length.toString()')], ['env.favoriteCount', 'e.favoriteCount.toString()'],
 ];
 
@@ -374,6 +415,8 @@ shape Env
   tunedId: string
   zapping: string
   favoriteCount: number
+  // Home's row pagers as reported by their edge markers: rowId|start visible|end visible|inset|peek.
+  pagers: string[]
   // The environment's own vocabulary values (envBinds), bound once per slot.
   ev: string[]
 
@@ -466,6 +509,8 @@ fn aria(conds: Cond[], vals: string[], e: Env): string = (conds.length == 0 ? ""
 fn motion(mk: string, md: number, mdl: number, me: string, mf: string, mit: string, mdir: string, msk: string, msd: number, step: number, cap: number, i: number, e: Env): string = (e.still ? (msk == "" ? "none" : \`\${msk} \${msd}ms linear both\`) : \`\${mk} \${md}ms \${me} \${mdl + min(i, cap) * step}ms \${mit} \${mdir} \${mf}\`)
 // The season a title page shows: the visit's pick, else its episodes' season, else the season page itself.
 fn selectedSeason(detail: DetailModel[], picked: string): string = (picked != "" ? picked : match first(detail) { case some(d) => match first(d.episodes) { case some(x) => x.seasonId, case none => d.title.filter(t => t.kind == "season").map(t => t.id).join("") }, case none => "" })
+fn rowIdOf(c: Ctx): string = match first(c.row) { case some(r) => r.id, case none => "" }
+fn pagerField(pagers: string[], rowId: string, i: number): string = match first(pagers.filter(p => p.split("|").slice(0, 1).join("") == rowId)) { case some(p) => p.split("|").slice(i, i + 1).join(""), case none => "" }
 fn heroActFor(home: HomeModel, id: string): HeroAction[] = home.heroActions.filter(a => a.heroId == id).slice(0, 1)
 // The live home's lineup in the guide's order, or its favourites alone (a subset, never a reorder).
 fn liveCtxs(rep: string, lim: number, c: Ctx, e: Env): Ctx[] = match first(e.guide) { case some(g) => (rep == "live.favorites" ? g.channels.filter(x => x.favorite) : g.channels).slice(0, lim).map(x => Ctx(c, ch=[x])), case none => [] }
@@ -515,7 +560,7 @@ export async function generate(out = resolve(import.meta.dir, '../client/rendere
   const leak = vocabulary.find(([, expr]) => /mediaAuth|planJson|commandJson|headers/.test(expr));
   if (leak) throw new Error(`Vocabulary ${leak[0]} reads player plumbing`);
   const renderer = await rendererVersion(out, bump);
-  await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order, and the renderer's compatibility version.\nexport const RENDERER_VERSION = ${renderer.version};\nexport const RENDERER_DIGEST = ${JSON.stringify(renderer.digest)};\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\n// Theme tokens with one value (client/app.tamber): Tamber folds them, so the page declares no property for them.\nexport const FIXED_TOKENS: Record<string, string> = ${JSON.stringify(await fixedTokens())};\n`);
+  await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order, and the renderer's compatibility version.\nexport const RENDERER_VERSION = ${renderer.version};\nexport const RENDERER_DIGEST = ${JSON.stringify(renderer.digest)};\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\n// Theme tokens with one value (client/app.tamber): Tamber folds them, so the page declares no property for them.\nexport const FIXED_TOKENS: Record<string, string> = ${JSON.stringify(await fixedTokens())};\n// The renderer's shape: its levels, the shell's first level, and how deep widgets and pagers may sit.\nexport const DEPTH = ${DEPTH};\nexport const SHELL_FROM = ${SHELL_FROM};\nexport const WIDGET_DEPTH = ${WIDGET_DEPTH};\nexport const PAGER_DEPTH = ${PAGER_DEPTH};\n`);
   let levels = '';
   for (let d = 1; d <= DEPTH; d++) levels += level(d) + '\n';
   // Shapes (and the empty document) live apart from the renderer: the foundation imports
