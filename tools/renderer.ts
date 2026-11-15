@@ -111,10 +111,11 @@ function level(d: number): string {
   const child = 'Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot))';
   // Exact substitutes a prop's expression at every use and expands fns and derives in place,
   // so each value the renderer reuses is bound once by a one-element \`for\` (a runtime value).
-  // A pager box (n.sym = "pager|inset|peek") gets a 1 px marker at each end of its content.
+  // A pager box (n.sym = "pager|inset|peek") gets a 1 px marker at each end of its content; a negative
+  // margin of 1 px plus the box's gap takes it out of the row's spacing.
   const edge = (which: string) => d <= PAGER_DEPTH ? `
                             if n.sym != ""
-                              column width=1 min-width=1 height=1 flex-shrink=0 margin-${which === 'Start' ? 'right' : 'left'}=-1 pointer-events="none" aria-hidden=true intersect=edge${which}` : '';
+                              column width=1 min-width=1 height=1 flex-shrink=0 margin-${which === 'Start' ? 'right' : 'left'}=\`calc(-1px - \${st.columnGap != "" ? st.columnGap : st.gap != "" ? st.gap : "0px"})\` pointer-events="none" aria-hidden=true intersect=edge${which}` : '';
   const next = d < DEPTH ? `${edge('Start')}
                             for k, ki in n.kids key=\`\${ki}\`
                               for cc, j in ctxs${d + 1}(k, cx, e) key=ctxKey(cc, j)
