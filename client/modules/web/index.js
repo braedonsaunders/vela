@@ -1,8 +1,8 @@
-// client/player/universal/qualified.ts
+// player/universal/qualified.ts
 var QUALIFIED_ORIGINAL_VIDEO = ["h264", "hevc"];
 var QUALIFIED_ORIGINAL_AUDIO = ["aac", "ac3", "eac3", "truehd", "dts", "flac", "opus", "vorbis", "mp3", "alac", "mp2", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le", "pcm_f64le"];
 
-// client/player/universal/loader.ts
+// player/universal/loader.ts
 function assetLocation() {
   const descriptor = window.velaUniversalAssets;
   if (descriptor === undefined)
@@ -105,7 +105,7 @@ async function originalPlaybackCapabilities(signal) {
   return { ...declaration, videoDecoders, audioDecoders: declaration.audioDecoders.filter((codec) => QUALIFIED_ORIGINAL_AUDIO.includes(codec)) };
 }
 
-// client/player/media-capabilities.ts
+// player/media-capabilities.ts
 async function mediaCapabilities(signal) {
   try {
     localStorage.removeItem("vela.player.beta");
@@ -133,7 +133,7 @@ async function mediaCapabilities(signal) {
   };
 }
 
-// client/player/install.ts
+// player/install.ts
 function createInstall(element, json, event) {
   let runtime = window.velaPwa;
   const button = document.createElement("button");
@@ -188,7 +188,7 @@ function createInstall(element, json, event) {
   } };
 }
 
-// client/player/preview.ts
+// player/preview.ts
 function apply(handle) {
   const video = handle.video;
   if (handle.expiryTimer)
@@ -279,7 +279,7 @@ function destroyPreview(handle) {
   handle.video.remove();
 }
 
-// client/player/theme.ts
+// player/theme.ts
 var ENGINES = {
   cinematic: {
     roles: {
@@ -390,8 +390,36 @@ function fontFaces(pack, name) {
     return [face];
   });
 }
+function documentFonts(handle, json) {
+  if (json === handle.docFontsJson)
+    return;
+  handle.docFontsJson = json;
+  for (const face of handle.docFonts)
+    document.fonts.delete(face);
+  handle.docFonts = [];
+  if (!json || typeof FontFace !== "function")
+    return;
+  for (const f of JSON.parse(json)) {
+    let url;
+    try {
+      url = new URL(f.url, location.href);
+    } catch {
+      continue;
+    }
+    if (!/^[A-Za-z0-9 ]{1,48}$/.test(f.family) || !url.pathname.startsWith("/vela/v0/appearance/") || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname))
+      continue;
+    const face = new FontFace(f.family, `url("${url.href.replace(/["\\]/g, "")}")`, { weight: String(f.weight), style: f.style === "italic" ? "italic" : "normal", display: "swap", sizeAdjust: `${Math.min(150, Math.max(50, f.sizeAdjust || 100))}%` });
+    document.fonts.add(face);
+    face.load().catch(() => document.fonts.delete(face));
+    handle.docFonts.push(face);
+  }
+}
 function apply2(handle, json) {
   const props = JSON.parse(json);
+  if (props.fonts !== undefined) {
+    documentFonts(handle, props.fonts);
+    return;
+  }
   const packJson = props.pack ?? "";
   if (packJson === handle.json)
     return;
@@ -417,18 +445,18 @@ function createTheme(json) {
   const sheet = document.createElement("style");
   sheet.setAttribute("data-vela-pack", "");
   document.head.append(sheet);
-  const handle = { theme: true, sheet, fonts: [], json: "" };
+  const handle = { theme: true, sheet, fonts: [], json: "", docFonts: [], docFontsJson: "" };
   apply2(handle, json);
   return handle;
 }
 var setTheme = apply2;
 function destroyTheme(handle) {
-  for (const face of handle.fonts)
+  for (const face of [...handle.fonts, ...handle.docFonts])
     document.fonts.delete(face);
   handle.sheet.remove();
 }
 
-// client/player/engine-handoff.ts
+// player/engine-handoff.ts
 var CHOSEN = "vela.engine";
 var DEFAULT = "vela.engine.default";
 var HANDOFF = "vela.handoff";
@@ -551,17 +579,17 @@ function destroyEngine(handle) {
     handle.overlay?.remove();
 }
 
-// client/player/universal/retry.ts
+// player/universal/retry.ts
 function decoderRetry(reason) {
   if (!reason.startsWith("Original decode: decode-failed") && !reason.startsWith("Original first-frame deadline"))
     return null;
   return { audio: true, video: true };
 }
 
-// client/player/universal/subtitles/types.ts
+// player/universal/subtitles/types.ts
 var defaultSubtitlePreferences = { subtitleSize: "medium", subtitleBackground: "shadow", subtitleColor: "white", subtitlePosition: "bottom", offsetSeconds: 0 };
 
-// client/player/universal/subtitles/preferences.ts
+// player/universal/subtitles/preferences.ts
 var choices = { subtitleSize: ["small", "medium", "large", "xl"], subtitleBackground: ["none", "shadow", "box"], subtitleColor: ["white", "yellow"], subtitlePosition: ["bottom", "raised"] };
 function readSubtitlePreferences() {
   const result = { ...defaultSubtitlePreferences };
@@ -585,12 +613,12 @@ function updateSubtitlePreference(current, command) {
   return next;
 }
 
-// client/player/model.ts
+// player/model.ts
 function codecKnown(rendition) {
   return rendition.codecStatus !== "pending" && /codecs="[^"]+"/.test(rendition.mime);
 }
 
-// client/player/session.ts
+// player/session.ts
 class SessionController {
   sessionId = "";
   source = 0;
@@ -652,7 +680,7 @@ function delay(ms, signal) {
   });
 }
 
-// client/player/hls.ts
+// player/hls.ts
 function parsePlaylist(text, base) {
   if (!text.trimStart().startsWith("#EXTM3U"))
     throw new Error("Invalid HLS playlist");
@@ -691,7 +719,7 @@ function parsePlaylist(text, base) {
   return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
 }
 
-// client/player/buffer.ts
+// player/buffer.ts
 class PlaybackFault extends Error {
   kind;
   retryable;
@@ -746,7 +774,7 @@ async function appendBuffer(buffer, bytes, video, signal) {
   }
 }
 
-// client/player/audio.ts
+// player/audio.ts
 class AudioBuffer {
   media;
   video;
@@ -907,7 +935,7 @@ class AudioBuffer {
       await mutation(this.buffer, signal, () => this.buffer.remove(0, before));
   }
 }
-// client/player/abr.ts
+// player/abr.ts
 class BandwidthEstimator {
   fast = 0;
   slow = 0;
@@ -979,7 +1007,7 @@ class AdaptiveBitrate {
   }
 }
 
-// client/player/pipeline.ts
+// player/pipeline.ts
 function mediaSourceClass() {
   return globalThis.ManagedMediaSource ?? globalThis.MediaSource;
 }
@@ -1405,7 +1433,7 @@ class SegmentPipeline {
   }
 }
 
-// client/player/native-hls.ts
+// player/native-hls.ts
 async function nativeMediaPlaylist(url, signal, depth = 0) {
   if (depth > 1)
     throw new Error("Nested HLS masters are unsupported");
@@ -1432,7 +1460,7 @@ async function nativeMediaPlaylist(url, signal, depth = 0) {
   return nativeMediaPlaylist(variant.href, signal, depth + 1);
 }
 
-// client/src/protocol/id.ts
+// src/protocol/id.ts
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = bytes[6] & 15 | 64;
@@ -1440,7 +1468,7 @@ function randomId() {
   return Array.from(bytes, (b, i) => `${i === 4 || i === 6 || i === 8 || i === 10 ? "-" : ""}${b.toString(16).padStart(2, "0")}`).join("");
 }
 
-// client/player/engine.ts
+// player/engine.ts
 class PlaybackEngine {
   video;
   deliver;
@@ -2754,7 +2782,7 @@ class PlaybackEngine {
   }
 }
 
-// client/player/protocol.ts
+// player/protocol.ts
 function sessionFromPlan(plan) {
   const selected = plan.paths.find((p) => p.id === plan.selectedPathId);
   if (!selected)
@@ -2843,7 +2871,7 @@ function observation(snapshot, sequence) {
   };
 }
 
-// client/player/web-module.ts
+// player/web-module.ts
 var abi = 1;
 var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false }, "vela-theme": { snapshot: false }, "vela-engine": { snapshot: false } };
 function create(tag, element, json, event) {

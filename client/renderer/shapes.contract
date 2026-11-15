@@ -52,6 +52,10 @@ shape Style
   borderStyle: string
   borderColor: string
   borderRadius: string
+  borderTopWidth: string
+  borderTopColor: string
+  borderBottomWidth: string
+  borderBottomColor: string
   boxShadow: string
   filter: string
   backdropFilter: string
@@ -66,6 +70,7 @@ shape Style
   textAlign: string
   textShadow: string
   textStroke: string
+  textOverflow: string
   lineClamp: number
   whiteSpace: string
   fontVariantNumeric: string
@@ -73,6 +78,8 @@ shape Style
   transformOrigin: string
   translate: string
   scale: number
+  rotate: number
+  perspective: string
   transition: string
   animation: string
   pointerEvents: string
@@ -109,6 +116,7 @@ shape Env
   styles: Style[]
   dflt: Style
   route: string
+  entry: string
   load: string
   home: HomeModel[]
   detail: DetailModel[]
@@ -119,6 +127,7 @@ shape Env
   query: string
   heroIndex: number
   small: bool
+  tv: bool
   still: bool
   canLive: bool
   flags: string[]
@@ -148,6 +157,7 @@ shape N10
   role: string
   level: number
   test: Part[]
+  dom: Part[]
   rep: string
   lim: number
   mk: string
@@ -193,6 +203,7 @@ shape N9
   role: string
   level: number
   test: Part[]
+  dom: Part[]
   rep: string
   lim: number
   mk: string
@@ -239,6 +250,7 @@ shape N8
   role: string
   level: number
   test: Part[]
+  dom: Part[]
   rep: string
   lim: number
   mk: string
@@ -285,6 +297,7 @@ shape N7
   role: string
   level: number
   test: Part[]
+  dom: Part[]
   rep: string
   lim: number
   mk: string
@@ -331,6 +344,7 @@ shape N6
   role: string
   level: number
   test: Part[]
+  dom: Part[]
   rep: string
   lim: number
   mk: string
@@ -377,6 +391,7 @@ shape N5
   role: string
   level: number
   test: Part[]
+  dom: Part[]
   rep: string
   lim: number
   mk: string
@@ -423,6 +438,7 @@ shape N4
   role: string
   level: number
   test: Part[]
+  dom: Part[]
   rep: string
   lim: number
   mk: string
@@ -469,6 +485,7 @@ shape N3
   role: string
   level: number
   test: Part[]
+  dom: Part[]
   rep: string
   lim: number
   mk: string
@@ -515,6 +532,7 @@ shape N2
   role: string
   level: number
   test: Part[]
+  dom: Part[]
   rep: string
   lim: number
   mk: string
@@ -561,6 +579,7 @@ shape N1
   role: string
   level: number
   test: Part[]
+  dom: Part[]
   rep: string
   lim: number
   mk: string
@@ -601,14 +620,36 @@ shape ShellSlot
   slotOrder: string
   nodes: N5[]
 
+// What the foundation hands the route view: the stack entry's route and its models.
+shape RouteProps
+  route: string
+  entry: string
+  load: string
+  detail: DetailModel[]
+  season: string
+  small: bool
+  tv: bool
+  still: bool
+
+// A route's tree (the route view draws the one named after the current stack entry).
+shape RouteTree
+  name: string
+  root: number
+  slotStyle: number
+  slotInner: number
+  slotOrder: string
+  nodes: N1[]
+
 // A skin document as the renderer takes it (src/skin resolves it for one viewport class).
 shape SkinDoc
   id: string
+  fontsJson: string
   styles: Style[]
   shell: ShellSlot
   home: DocSlot
+  routes: RouteTree[]
   detailWide: string
   detailSmall: string
 
-fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, transition="", animation="", pointerEvents="", cursor="")
-fn emptyDoc(): SkinDoc = SkinDoc(id="", styles=[], shell=ShellSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), detailWide="fullscreen", detailSmall="fullscreen")
+fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", borderTopWidth="", borderTopColor="", borderBottomWidth="", borderBottomColor="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", textOverflow="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, rotate=0, perspective="", transition="", animation="", pointerEvents="", cursor="")
+fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", styles=[], shell=ShellSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], detailWide="fullscreen", detailSmall="fullscreen")

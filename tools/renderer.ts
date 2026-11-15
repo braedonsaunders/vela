@@ -21,10 +21,10 @@ export const STYLE: [string, string][] = [
   ['gridTemplateColumns', 'grid-template-columns'], ['gridTemplateRows', 'grid-template-rows'], ['gridColumn', 'grid-column'], ['gridRow', 'grid-row'],
   ['paddingTop', 'padding-top'], ['paddingRight', 'padding-right'], ['paddingBottom', 'padding-bottom'], ['paddingLeft', 'padding-left'], ['marginTop', 'margin-top'], ['marginRight', 'margin-right'], ['marginBottom', 'margin-bottom'], ['marginLeft', 'margin-left'], ['overflowX', 'overflow-x'], ['overflowY', 'overflow-y'], ['scrollSnapType', 'scroll-snap-type'], ['scrollSnapAlign', 'scroll-snap-align'], ['scrollbarWidth', 'scrollbar-width'],
   ['color', 'color'], ['backgroundColor', 'background-color'], ['backgroundImage', 'background-image'], ['opacity', 'opacity'],
-  ['borderWidth', 'border-width'], ['borderStyle', 'border-style'], ['borderColor', 'border-color'], ['borderRadius', 'border-radius'], ['boxShadow', 'box-shadow'], ['filter', 'filter'], ['backdropFilter', 'backdrop-filter'], ['maskImage', 'mask-image'],
+  ['borderWidth', 'border-width'], ['borderStyle', 'border-style'], ['borderColor', 'border-color'], ['borderRadius', 'border-radius'], ['borderTopWidth', 'border-top-width'], ['borderTopColor', 'border-top-color'], ['borderBottomWidth', 'border-bottom-width'], ['borderBottomColor', 'border-bottom-color'],  ['boxShadow', 'box-shadow'], ['filter', 'filter'], ['backdropFilter', 'backdrop-filter'], ['maskImage', 'mask-image'],
   ['fontFamily', 'font-family'], ['fontSize', 'font-size'], ['fontWeight', 'font-weight'], ['fontStyle', 'font-style'], ['lineHeight', 'line-height'], ['letterSpacing', 'letter-spacing'], ['textTransform', 'text-transform'],
-  ['textAlign', 'text-align'], ['textShadow', 'text-shadow'], ['textStroke', '-webkit-text-stroke'], ['lineClamp', 'line-clamp'], ['whiteSpace', 'white-space'], ['fontVariantNumeric', 'font-variant-numeric'],
-  ['objectFit', 'object-fit'], ['transformOrigin', 'transform-origin'], ['translate', 'translate'], ['scale', 'scale'],
+  ['textAlign', 'text-align'], ['textShadow', 'text-shadow'], ['textStroke', '-webkit-text-stroke'], ['textOverflow', 'text-overflow'], ['lineClamp', 'line-clamp'], ['whiteSpace', 'white-space'], ['fontVariantNumeric', 'font-variant-numeric'],
+  ['objectFit', 'object-fit'], ['transformOrigin', 'transform-origin'], ['translate', 'translate'], ['scale', 'scale'], ['rotate', 'rotate'], ['perspective', 'perspective'],
   ['transition', 'transition'], ['animation', 'animation'], ['pointerEvents', 'pointer-events'], ['cursor', 'cursor'],
 ];
 /** The motion preset library documents name (docs/skin-schema.md): compiled once, prefixed `vr-`. */
@@ -37,9 +37,11 @@ export const KEYFRAMES: Record<string, string> = {
   slideUp: 'from translate="0px 100%"', slideIn: 'from opacity=0 translate="-24px 0px"', zoom: 'from opacity=0 scale=0.8', wiggle: '25% rotate=-4\n  75% rotate=4',
   auroraA: 'from translate="-8% -6%" scale=1\n  to translate="10% 8%" scale=1.25', auroraB: 'from translate="12% 6%" scale=1.2\n  to translate="-10% -8%" scale=0.95',
   auroraC: 'from translate="0% 10%" scale=0.9\n  to translate="-6% -12%" scale=1.2', scan: 'from translate="0px -100%"\n  to translate="0px 100%"',
+  sway: '25% rotate=-1.5\n  75% rotate=1.5', sheen: 'from translate="-120% 0px"\n  to translate="120% 0px"', tick: '50% opacity=0',
+  tvOn: 'from opacity=0 scale=0.02\n  40% opacity=1 scale=1.02', jitter: '20% translate="-3px 0px"\n  40% translate="3px 0px"\n  60% translate="-2px 0px"\n  80% translate="2px 0px"',
 };
 /** Rows Exact types as numbers (lower-attr-type); the data module resolves their defaults and inheritance. */
-export const NUMERIC = new Set(['opacity', 'order', 'flexGrow', 'flexShrink', 'fontWeight', 'lineClamp', 'scale']);
+export const NUMERIC = new Set(['opacity', 'order', 'flexGrow', 'flexShrink', 'fontWeight', 'lineClamp', 'scale', 'rotate']);
 /** Rows a node may bind to the vocabulary (`width: "{card.progressPct}%"`). */
 export const BINDABLE: [string, string][] = [['width', 'dw'], ['backgroundColor', 'dbg'], ['backgroundImage', 'dbi'], ['color', 'dc'], ['opacity', 'dop'], ['translate', 'dtr']];
 
@@ -70,12 +72,13 @@ component BoxEl
   props
 ${elementProps}
     test: string
+    domId: string
     role: string
     label: string
     hovering: action
   slot
   view
-    box hover=hovering testId=test role=role aria-label=label ${rows()}
+    box id=domId hover=hovering testId=test role=role aria-label=label ${rows()}
       children
 `;
 }
@@ -84,7 +87,7 @@ const pass = () => `s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" :
 
 function shape(d: number): string {
   const fields = ['t: string', 's: number', 'hs: number', 'fs: number', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gs: number', 'hs2: number', 'fs2: number', 'gs2: number', 'fade: bool', 'pos: number', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
-    'sym: string', 'act: string', 'role: string', 'level: number', 'test: Part[]', 'rep: string', 'lim: number',
+    'sym: string', 'act: string', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
     'mk: string', 'md: number', 'mdl: number', 'me: string', 'mf: string', 'mit: string', 'mdir: string', 'msk: string', 'msd: number', 'step: number', 'cap: number',
     ...BINDABLE.map(([, f]) => `${f}: Part[]`)];
   if (d < DEPTH) fields.push(`kids: N${d + 1}[]`);
@@ -130,7 +133,7 @@ function level(d: number): string {
               if n.t == "observe"
                 column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
               else
-                BoxEl(${pass()}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
+                BoxEl(${pass()}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
                   if n.t == "text"
                     text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
                   else
@@ -141,7 +144,7 @@ function level(d: number): string {
                         image \`symbol:\${n.sym}\` aria-hidden=true width="100%" height="100%"
                       else${next}
                         if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
 `;
 }
 
@@ -153,7 +156,7 @@ const m = (list: string, expr: string) => `match first(${list}) { case some(x) =
 const yes = (cond: string) => `(${cond} ? "true" : "false")`;
 const vocabulary: [string, string][] = [
   ...['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rating', 'progressLabel', 'poster', 'backdrop', 'logo', 'accent', 'receipt'].flatMap(f => [[`card.${f}`, m('c.card', `x.${f}`)], [`hero.${f}`, m('c.hero', `x.${f}`)]] as [string, string][]),
-  ['card.played', m('c.card', yes('x.played'))], ['card.progressPct', m('c.card', 'pct(x.progressSeconds, x.durationSeconds)')],
+  ['card.played', m('c.card', yes('x.played'))], ['card.episodeNumberLabel', m('c.card', 'x.episodeNumberLabel')], ['card.durationLabel', m('c.card', 'x.durationLabel')], ['card.progressPct', m('c.card', 'pct(x.progressSeconds, x.durationSeconds)')],
   ['card.hasProgress', m('c.card', yes('x.progressSeconds > 0 and x.durationSeconds > 0 and not x.played'))],
   ['card.label', m('c.card', 'cardName(x)')], ['card.kindId', m('c.card', '`${x.id}|${x.kind}|${x.receipt}`')], ['hero.kindId', m('c.hero', '`${x.id}|${x.kind}|${x.receipt}`')],
   ['card.factsLine', m('c.card', '[x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · ")')], ['hero.factsLine', m('c.hero', '[x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · ")')],
@@ -163,11 +166,11 @@ const vocabulary: [string, string][] = [
   ['heroAct.playable', m('c.heroAct', yes('x.action != "details" and x.targetId != ""'))],
   ['dest.id', m('c.dest', 'x.id')], ['dest.name', m('c.dest', 'x.name')], ['dest.kind', m('c.dest', 'x.kind')], ['dest.on', m('c.dest', yes('e.section == x.id'))],
   ['env.viewer', 'e.viewer'], ['env.viewerInitial', 'e.viewer.slice(0, 1).toUpperCase()'], ['env.section', 'e.section'], ['env.query', 'e.query'],
-  ['env.small', yes('e.small')], ['env.still', yes('e.still')], ['env.searching', yes('e.query != ""')], ['env.canLive', yes('e.canLive')],
+  ['env.small', yes('e.small')], ['env.tv', yes('e.tv')], ['env.still', yes('e.still')], ['env.searching', yes('e.query != ""')], ['env.canLive', yes('e.canLive')],
   ['env.heroCount', m('e.home', 'x.hero.length.toString()')], ['env.heroIndex', 'e.heroIndex.toString()'], ['env.rowCount', m('e.home', 'x.rows.length.toString()')],
   ['env.rotating', m('e.home', yes('x.hero.length > 1 and not e.still and e.query == ""'))],
   ['index', 'c.index.toString()'], ['index.label', '(c.index + 1).toString()'], ['index.current', yes('c.index == e.heroIndex')],
-  ['env.route', 'e.route'], ['env.load', 'e.load'],
+  ['env.route', 'e.route'], ['env.load', 'e.load'], ['env.entry', 'e.entry'],
   // Detail: the title, its play state, seasons and episodes, extras, cast and crew.
   ...['id', 'kind', 'name', 'summary', 'facts', 'poster', 'backdrop', 'logo', 'accent', 'receipt'].map(f => [`detail.${f}`, `match first(e.detail) { case some(d) => ${m('d.title', `x.${f}`)}, case none => "" }`] as [string, string]),
   ['detail.kindLabel', `match first(e.detail) { case some(d) => ${m('d.title', '(x.kind == "movie" ? t("ui.film") : x.kind == "show" ? t("ui.series") : x.kind == "season" ? t("ui.season") : t("ui.episode"))')}, case none => "" }`],
@@ -235,6 +238,7 @@ shape Env
   styles: Style[]
   dflt: Style
   route: string
+  entry: string
   load: string
   home: HomeModel[]
   detail: DetailModel[]
@@ -245,6 +249,7 @@ shape Env
   query: string
   heroIndex: number
   small: bool
+  tv: bool
   still: bool
   canLive: bool
   flags: string[]
@@ -269,12 +274,34 @@ shape ShellSlot
   slotOrder: string
   nodes: N${SHELL_FROM}[]
 
+// What the foundation hands the route view: the stack entry's route and its models.
+shape RouteProps
+  route: string
+  entry: string
+  load: string
+  detail: DetailModel[]
+  season: string
+  small: bool
+  tv: bool
+  still: bool
+
+// A route's tree (the route view draws the one named after the current stack entry).
+shape RouteTree
+  name: string
+  root: number
+  slotStyle: number
+  slotInner: number
+  slotOrder: string
+  nodes: N1[]
+
 // A skin document as the renderer takes it (src/skin resolves it for one viewport class).
 shape SkinDoc
   id: string
+  fontsJson: string
   styles: Style[]
   shell: ShellSlot
   home: DocSlot
+  routes: RouteTree[]
   detailWide: string
   detailSmall: string
 
@@ -289,7 +316,7 @@ fn flagged(e: Env, f: string): string = (e.flags.includes(f) ? "true" : "false")
 fn fill(parts: Part[], vals: string[], e: Env): string = parts.map(p => (p.f != "" ? flagged(e, p.f) : p.k < 0 ? p.l : pick(vals, p.k))).join("")
 fn num(s: string): number = match parseNumber(s) { case some(x) => x, case none => 0 }
 fn subject(k: Cond, vals: string[], e: Env): string = (k.f != "" ? flagged(e, k.f) : pick(vals, k.k))
-fn holds(k: Cond, vals: string[], e: Env): bool = (k.is == "eq" ? subject(k, vals, e) == k.v : k.is == "ne" ? subject(k, vals, e) != k.v : k.is == "gt" ? num(subject(k, vals, e)) > num(k.v) : k.is == "lt" ? num(subject(k, vals, e)) < num(k.v) : not ["", "false", "0"].includes(subject(k, vals, e)))
+fn holds(k: Cond, vals: string[], e: Env): bool = (k.is == "eq" ? subject(k, vals, e) == k.v : k.is == "ne" ? subject(k, vals, e) != k.v : k.is == "gt" ? num(subject(k, vals, e)) > num(k.v) : k.is == "lt" ? num(subject(k, vals, e)) < num(k.v) : k.is == "mod" ? num(subject(k, vals, e)) % num(k.v.split(":").slice(0, 1).join("")) == num(k.v.split(":").slice(1, 2).join("")) : not ["", "false", "0"].includes(subject(k, vals, e)))
 fn shows(conds: Cond[], vals: string[], e: Env): bool = not conds.map(k => holds(k, vals, e) == k.not).includes(true)
 fn motion(mk: string, md: number, mdl: number, me: string, mf: string, mit: string, mdir: string, msk: string, msd: number, step: number, cap: number, i: number, e: Env): string = (e.still ? (msk == "" ? "none" : \`\${msk} \${msd}ms linear both\`) : \`\${mk} \${md}ms \${me} \${mdl + min(i, cap) * step}ms \${mit} \${mdir} \${mf}\`)
 fn heroActFor(home: HomeModel, id: string): HeroAction[] = home.heroActions.filter(a => a.heroId == id).slice(0, 1)
@@ -303,7 +330,7 @@ const detailCtxsBody = `match first(e.detail) { case some(d) => (n.rep == "detai
 const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs${d}(n, c, e) : [])`;
 
 const noStyleBody = () => `Style(${STYLE.map(([f]) => `${f}=${NUMERIC.has(f) ? ({ opacity: 1, flexShrink: 1, fontWeight: 400, scale: 1 } as Record<string, number>)[f] ?? 0 : '""'}`).join(', ')})`;
-const EMPTY_DOC = `fn emptyDoc(): SkinDoc = SkinDoc(id="", styles=[], shell=ShellSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), detailWide="fullscreen", detailSmall="fullscreen")\n`;
+const EMPTY_DOC = `fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", styles=[], shell=ShellSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], detailWide="fullscreen", detailSmall="fullscreen")\n`;
 
 /**
  * The renderer's compatibility version: a document names the version it needs

@@ -178,13 +178,50 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
   ] },
 ] };
 
+// The title page as a route (a first cut: the full Detail is the UI lead's conversion).
+const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', padding: '4vh 4vw', 'box-sizing': 'border-box', 'background-color': 'media.overlay', 'backdrop-filter': 'blur(18px) saturate(1.1)' },
+  small: { padding: '0px' }, children: [
+    { type: 'box', motion: 'open', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': 'surface.page', 'box-shadow': '0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)' },
+      small: { 'border-radius': '0px' }, children: [
+        { type: 'box', press: { action: 'back' }, label: '{s:close}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', width: '44px', height: '44px', 'box-sizing': 'border-box', padding: '13px', 'border-radius': '22px', border: '1px solid surface.line', 'background-color': 'surface.glass', 'backdrop-filter': 'blur(20px) saturate(1.3)' },
+          children: [{ type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } }] },
+        { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', style: { flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden' }, children: [
+          { type: 'text', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], text: '{s:opening}', style: { padding: '64px', color: 'ink.secondary' } },
+          { type: 'text', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], text: '{s:failed}', role: 'alert', style: { padding: '64px', color: 'ink.secondary' } },
+          { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], style: { position: 'relative', 'min-height': '70vh' }, children: [
+            { type: 'image', when: [{ test: 'detail.backdrop' }], src: '{detail.backdrop}', alt: '', fade: true, motion: 'expose', style: { position: 'absolute', inset: '0px', width: '100%', height: '70vh', 'object-fit': 'cover' } },
+            { type: 'box', style: { position: 'absolute', inset: '0px', height: '70vh', 'background-image': 'linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-clear) 70%)' } },
+            { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '14px', padding: '38vh 56px 48px', 'max-width': '46rem' }, small: { padding: '42vh 20px 32px' }, children: [
+              { type: 'text', text: '{detail.kindLabel}', style: { 'font-size': '10px', 'font-weight': '600', 'letter-spacing': '0.18em', 'text-transform': 'uppercase', color: 'brand.warm' } },
+              { type: 'text', text: '{detail.name}', role: 'heading', level: 1, style: { 'font-family': 'cinematic.display', 'font-size': '64px', 'line-height': '0.98' }, small: { 'font-size': '40px' } },
+              { type: 'text', text: '{detail.factsLine}', style: { 'font-size': '14px', color: 'ink.secondary' } },
+              { type: 'text', when: [{ test: 'detail.summary' }], text: '{detail.summary}', style: { 'font-size': '16px', 'line-height': '1.55', color: 'ink.secondary' } },
+              { type: 'box', when: [{ test: 'detail.canPlay' }], press: { action: 'play', arg: '{detail.id}' }, label: '{detail.playLabel}', testId: 'detail-play', style: { ...pill(true), position: 'relative', 'align-self': 'flex-start' }, children: [
+                { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
+                  { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' } },
+                  { type: 'text', text: '{detail.playLabel}', style: { 'font-size': '16px' } },
+                ] },
+              ] },
+            ] },
+            { type: 'box', when: [{ test: 'detail.hasEpisodes' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '10px', padding: '0px 56px 56px' }, small: { padding: '0px 20px 40px' }, children: [
+              { type: 'repeat', over: 'detail.episodes', item: { type: 'box', press: { action: 'play', arg: '{card.id}' }, label: '{card.label}', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '16px', padding: '12px', 'border-radius': '14px' }, hover: { 'background-color': 'cinematic.control' }, children: [
+                { type: 'text', text: '{episode.numberTitle}', style: { 'font-size': '15px', 'font-weight': '600' } },
+                { type: 'text', text: '{card.facts}', style: { 'font-size': '13px', color: 'ink.quiet' } },
+              ] } },
+            ] },
+          ] },
+        ] },
+      ] },
+  ] };
+
 export const cinematicDoc: SkinDocument = {
   schema: 1, renderer: 1, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg', swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
-  strings: { en: { velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles' } },
+  strings: { en: { velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', opening: 'Opening title…', failed: 'This title could not be opened.' } },
   motion: {
     ...enterPresets,
     navIn: { keyframes: 'dissolve', duration: 900, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 240 } },
+    open: { keyframes: 'open', duration: 640, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 240 } },
     pop: { keyframes: 'pop', duration: 360, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 160 } },
     expose: { keyframes: 'expose', duration: 1100, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 400 } },
     drift: { keyframes: 'drift', duration: 32000, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', direction: 'alternate', fill: 'none', still: { keyframes: 'none', duration: 0 } },
@@ -194,5 +231,6 @@ export const cinematicDoc: SkinDocument = {
   },
   templates: { card, row },
   slots: { shell, home },
+  routes: { title },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
 };

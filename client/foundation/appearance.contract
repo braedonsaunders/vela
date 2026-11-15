@@ -67,3 +67,5 @@ members Client
   resource skinDocument = uiSkinDoc(activeDocUrl, docWidth) with localeJSON when activeDocUrl != "" as shape SkinDoc
   derive docReady = activeDocUrl != "" and current(skinDocument)
   derive activeDoc = (docReady ? skinDocument : emptyDoc())
+  // The routes the active document draws whole (the route view); others use the slots.
+  derive docRoutes = (activeSkin == "doc" ? activeDoc.routes.map(t => t.name) : [])
