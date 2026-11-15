@@ -88,7 +88,8 @@ function fontFaces(pack: Pack, name: string): FontFace[] {
     try { url = new URL(f.url, location.href); } catch { return []; }
     // The server's origin, which the data module pinned (the page's own in a release).
     if (url.origin !== pack.origin || !url.pathname.startsWith('/vela/v0/appearance/') || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname)) return [];
-    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, '')}")`, { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, font.sizeAdjust ?? 100))}%` } as FontFaceDescriptors & { sizeAdjust: string });
+    const descriptors: FontFaceDescriptors & { sizeAdjust: string } = { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, font.sizeAdjust ?? 100))}%` } as FontFaceDescriptors & { sizeAdjust: string };
+    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, '')}")`, descriptors);
     document.fonts.add(face);
     void face.load().catch(() => document.fonts.delete(face));
     return [face];
@@ -106,7 +107,9 @@ function documentFonts(handle: ThemeHandle, json: string) {
     let url: URL;
     try { url = new URL(f.url, location.href); } catch { continue; }
     if (!/^[A-Za-z0-9 ]{1,48}$/.test(f.family) || !url.pathname.startsWith('/vela/v0/appearance/') || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname)) continue;
-    const face = new FontFace(f.family, `url("${url.href.replace(/["\\]/g, '')}")`, { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, f.sizeAdjust || 100))}%` });
+    // size-adjust is a real FontFace descriptor that the pinned DOM typings do not list yet.
+    const descriptors: FontFaceDescriptors & { sizeAdjust: string } = { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, f.sizeAdjust || 100))}%` };
+    const face = new FontFace(f.family, `url("${url.href.replace(/["\\]/g, '')}")`, descriptors);
     document.fonts.add(face);
     void face.load().catch(() => document.fonts.delete(face));
     handle.docFonts.push(face);
