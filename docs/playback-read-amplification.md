@@ -77,6 +77,10 @@ It reads existing cache/index metadata, stores no URLs or packet bytes, and adds
 no media request. Diagnostic sources ship with the payload. Normal builds omit
 the hook; this does not widen capability advertisement or change defaults.
 Wrapper timestamps are projected through its existing container/title origin.
+The coverage calculation uses the complete contiguous cached component,
+including bytes before the latest packet-read cursor. A cursor already ahead
+of the playhead must not hide earlier cached coverage. Disjoint cache regions
+still cannot bridge a missing interval.
 
 The cache-enabled core also passed one headed local PGS/seek regression on this
 fixture: 14,300 overlay pixels at 1.5 s and 4.5 s, 142.1 ms for the paused seek
@@ -92,6 +96,18 @@ The wrapper's source policy is already time-sized: five seconds of read-ahead
 size/duration. Prior roughly 0.36-second telemetry measured decoded AV only.
 No new buffer policy is justified until actual source and encoded reserves are
 compared on the real file.
+
+A separate 25-second warm-source wrapper audit on lab.31 (audit key 86682, not
+the paired production baseline) measured zero drops/underruns, 31–43 MB of raw
+forward cache, 128–129 MB total retained, a 41,000,970-byte read-ahead limit and
+123,002,910-byte evictable-cache limit. Its initial time-bound calculation used
+the cursor rather than the whole cached component, so it could not establish
+continuous seconds ahead; that diagnostic was corrected before the paired run.
+Restoring the resume point after measurement timed out because the HUD was
+hidden; the UI owner confirmed expected pointer-wake semantics. Stop/revoke
+returned 200, mounted players zero and the dedicated browser closed. The next
+pair sets the test viewer's 1390.5-second resume on the server before each reset,
+and performs no extra restoration seek after the measured window.
 
 ## Unchanged adaptive-runtime local DTS check
 

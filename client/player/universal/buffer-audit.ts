@@ -49,8 +49,13 @@ export function sourceBufferAudit(source:object,cache?:BufferCacheState):SourceB
     const first=Math.min(...cursors.map(cursor=>cursor.start))+cache.offset;
     frontier=Math.max(...cursors.map(cursor=>cursor.end))+cache.offset;
     // Both implementations supply sorted, nonoverlapping cache intervals.
+    let componentStart=0,componentEnd=-1;
     for(const range of cache.ranges){
-      if(start===null){if(range.start<=first&&range.end>first){start=first;end=range.end;}}
+      if(start===null){
+        if(range.start>componentEnd){componentStart=range.start;componentEnd=range.end;}
+        else componentEnd=Math.max(componentEnd,range.end);
+        if(componentStart<=first&&componentEnd>first){start=componentStart;end=componentEnd;}
+      }
       else if(range.start<=end!)end=Math.max(end!,range.end);else break;
     }
   }
