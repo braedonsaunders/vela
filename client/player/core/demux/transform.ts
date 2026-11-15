@@ -5,7 +5,7 @@ export function transformCoreDemux(path:string,source:string):string|null{
     const anchor='input._onFormatDetermined = (format) => {';
     if(source.split(anchor).length!==2)throw new Error('Pinned HLS source clock hook changed');
     const module=JSON.stringify(new URL('./fragment-time.ts',import.meta.url).pathname);
-    return `import {inheritFragmentTiming} from ${module};\n`+source.replace(anchor,'inheritFragmentTiming(this.input._rootSource,input._rootSource);\n\t\t'+anchor);
+    return `import {inheritFragmentTiming,contextualizeHlsInput} from ${module};\n`+source.replace(anchor,'inheritFragmentTiming(this.input._rootSource,input._rootSource);\n\t\tcontextualizeHlsInput(input,hlsSegment.index);\n\t\t'+anchor);
   }
   if(!normalized.endsWith('/src/isobmff/isobmff-demuxer.ts'))return null;
   const anchor='const baseMediaDecodeTime = version === 0 ? readU32Be(slice) : readU64Be(slice);';
