@@ -179,6 +179,15 @@ shape Env
   libraryMoreLoading: bool
   // Home's row pagers as reported by their edge markers: rowId|start visible|end visible|inset|peek.
   pagers: string[]
+  // Signed out: as in RouteProps.
+  authState: string
+  authError: string
+  authBusy: bool
+  canPassword: bool
+  canQuick: bool
+  quickCode: string
+  quickExpires: string
+  quickError: string
   // Exact's control hover wash (a background image the document's data carries).
   wash: string
   // The platform focus ring's outline-style ("revert", data: the checker admits only "none" as a literal).
@@ -831,6 +840,16 @@ shape RouteProps
   library: LibraryModel[]
   libraryLoading: bool
   libraryMoreLoading: bool
+  // Signed out (route "auth"): the state ("offline", "connecting", "redeeming", "signin", "quick")
+  // and the sign-in and quick-connect answers. Credentials never pass through here.
+  authState: string
+  authError: string
+  authBusy: bool
+  canPassword: bool
+  canQuick: bool
+  quickCode: string
+  quickExpires: string
+  quickError: string
 
 // A route's tree (the route view draws the one named after the current stack entry).
 shape RouteTree

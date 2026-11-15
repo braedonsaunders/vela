@@ -144,7 +144,12 @@ function level(d: number): string {
 ${d <= PAGER_DEPTH || searchLevel(d) ? '  inject\n' : ''}${d <= PAGER_DEPTH ? `    loadMoreHome: action
     loadMoreRow: action
     moreLibrary: action
-` : ''}${d <= WIDGET_DEPTH ? `    tileMessage: action
+` : ''}${d <= WIDGET_DEPTH ? `    username: string
+    password: string
+    editUsername: action
+    editPassword: action
+    submitSignIn: action
+    tileMessage: action
     mediaAuthJson: string
     tileNativeMedia: string
 ` : ''}${searchLevel(d) ? `    edit: action
@@ -175,7 +180,12 @@ ${d <= PAGER_DEPTH || searchLevel(d) ? '  inject\n' : ''}${d <= PAGER_DEPTH ? ` 
         focus(to)
   action loaded
     ready = true
-${d <= PAGER_DEPTH ? `  // A sentinel asks the foundation for the next page of home or of its row.
+${d <= PAGER_DEPTH ? `${d <= WIDGET_DEPTH ? `  // A sign-in field: Enter signs in.
+  action fieldKey(k: string)
+    if k == "Enter"
+      preventDefault()
+      submitSignIn()
+` : ''}  // A sentinel asks the foundation for the next page of home or of its row.
   action hitHome(entry: IntersectionObserverEntry)
     loadMoreHome(entry)
   action hitRow(entry: IntersectionObserverEntry)
@@ -213,6 +223,15 @@ ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                   for t in e.tile key=t.channelId
                     if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
                       vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                else if n.t == "textInput"
+                  if n.sym == "password"
+                    input id="vela-password" type="password" autocomplete="current-password" value=password input=editPassword key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="password" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                      ::placeholder
+                        color=n.ivb
+                  else
+                    input id="vela-username" type="text" autocomplete="username" value=username input=editUsername key=fieldKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="username" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) width="100%" height="100%" box-sizing="border-box" padding-top=st.paddingTop padding-right=st.paddingRight padding-bottom=st.paddingBottom padding-left=st.paddingLeft margin=0 border-width=st.borderWidth border-style=st.borderStyle border-color=st.borderColor border-radius=st.borderRadius background-color=st.backgroundColor color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing
+                      ::placeholder
+                        color=n.ivb
 ` : ''}${searchLevel(d) ? `                else if n.t == "searchInput"
                   input id="vela-search" value=query input=edit focus=searchFocus blur=searchBlur key=searchKey placeholder=fill(n.parts, vals, e) aria-label=fill(n.label, vals, e) testId="search" outline-style=(st.outlineStyle == "none" ? "none" : e.ring) flex-grow=1 min-width=0 height="100%" box-sizing="border-box" padding-top=(st.paddingTop != "" ? st.paddingTop : "0px") padding-right=(st.paddingRight != "" ? st.paddingRight : "0px") padding-bottom=(st.paddingBottom != "" ? st.paddingBottom : "0px") padding-left=(st.paddingLeft != "" ? st.paddingLeft : "0px") margin=0 border="none" background-color="transparent" color=st.color font-size=st.fontSize font-family=st.fontFamily font-weight=st.fontWeight letter-spacing=st.letterSpacing text-align=st.textAlign
                     ::placeholder
@@ -360,6 +379,9 @@ const vocabulary: [string, string][] = [
   ['env.libraryLoading', yes('e.libraryLoading')], ['env.libraryMoreLoading', yes('e.libraryMoreLoading')],
   ['opt.id', m('c.opt', 'x.id')], ['opt.label', m('c.opt', 'x.label')], ['opt.of', 'c.optOf'],
   ['opt.on', m('c.opt', yes('match first(e.library) { case some(l) => (c.optOf == "kind" ? l.kindFilter == x.id : c.optOf == "genre" ? l.genreFilter == x.id : l.sort == x.id), case none => false }'))],
+  // Signed out (route "auth").
+  ['env.auth', 'e.authState'], ['signin.error', 'e.authError'], ['signin.busy', yes('e.authBusy')], ['signin.canPassword', yes('e.canPassword')], ['signin.canQuick', yes('e.canQuick')],
+  ['quick.code', 'e.quickCode'], ['quick.expires', 'e.quickExpires'], ['quick.error', 'e.quickError'],
   ['env.searchFocused', yes('e.flags.includes("search-focused")')],
   ['pager.overflows', m('c.row', yes('pagerField(e.pagers, x.id, 1) == "0" or pagerField(e.pagers, x.id, 2) == "0"'))], ['pager.atStart', m('c.row', yes('pagerField(e.pagers, x.id, 1) != "0"'))], ['pager.atEnd', m('c.row', yes('pagerField(e.pagers, x.id, 2) != "0"'))],
   ['env.clock', m('e.guide', 'x.nowLabel')], ['env.liveReady', m('e.guide', yes('x.channels.length > 0'))], ['env.channelCount', m('e.guide', 'x.channels.length.toString()')], ['env.favoriteCount', 'e.favoriteCount.toString()'],
@@ -468,6 +490,15 @@ shape Env
   libraryMoreLoading: bool
   // Home's row pagers as reported by their edge markers: rowId|start visible|end visible|inset|peek.
   pagers: string[]
+  // Signed out: as in RouteProps.
+  authState: string
+  authError: string
+  authBusy: bool
+  canPassword: bool
+  canQuick: bool
+  quickCode: string
+  quickExpires: string
+  quickError: string
   // Exact's control hover wash (a background image the document's data carries).
   wash: string
   // The platform focus ring's outline-style ("revert", data: the checker admits only "none" as a literal).
@@ -512,6 +543,16 @@ shape RouteProps
   library: LibraryModel[]
   libraryLoading: bool
   libraryMoreLoading: bool
+  // Signed out (route "auth"): the state ("offline", "connecting", "redeeming", "signin", "quick")
+  // and the sign-in and quick-connect answers. Credentials never pass through here.
+  authState: string
+  authError: string
+  authBusy: bool
+  canPassword: bool
+  canQuick: bool
+  quickCode: string
+  quickExpires: string
+  quickError: string
 
 // A route's tree (the route view draws the one named after the current stack entry).
 shape RouteTree

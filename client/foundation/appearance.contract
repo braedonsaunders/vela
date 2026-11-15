@@ -78,6 +78,11 @@ members Client
   resource skinDocument = uiSkinDoc(activeDocUrl, docWidth) with localeJSON when activeDocUrl != "" as shape SkinDoc
   derive docReady = activeDocUrl != "" and current(skinDocument)
   derive activeDoc = (docReady ? skinDocument : emptyDoc())
+  // Signed out: the page the route view draws (route "auth") or the foundation's auth stage.
+  derive signedOutPage = failed(auth) or not current(auth) or not auth.authenticated
+  derive authState = (failed(auth) ? "offline" : not current(auth) ? (webCode != "" ? "redeeming" : "connecting") : quickSecret != "" ? "quick" : "signin")
+  // A Plex server links with the foundation's Connect page (its servers and code) until a document draws it.
+  derive docDrawsAuth = docRoutes.includes("auth") and not (current(auth) and auth.serverKind == "plex")
   // The routes the active document draws whole (the route view); others use the slots.
   derive docRoutes = (activeSkin == "doc" ? activeDoc.routes.map(t => t.name) : [])
   // The appearance picker lists the skin documents (built-in and the server's) beside the engines;

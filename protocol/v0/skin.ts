@@ -49,6 +49,8 @@ export type Action =
   | 'pageNext' | 'pagePrev'
   /** A library page: sort by an option, flip the direction, filter name|value, load more titles. */
   | 'librarySort' | 'librarySortFlip' | 'libraryFilter' | 'libraryMore'
+  /** Signed out (route auth): sign in with the fields; start or cancel a quick-connect code. */
+  | 'signIn' | 'startQuick' | 'cancelQuick'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
 
@@ -136,7 +138,7 @@ export interface SkinDocument {
   /** One tree per foundation slot; a slot left out uses cinematic's compiled one. */
   slots: Partial<Record<'shell' | 'home' | 'row' | 'card' | 'status', Node>>;
   /** A tree per route the document draws whole (the route view); a route left out uses the slots, then cinematic. */
-  routes?: Partial<Record<'home' | 'title' | 'collection' | 'library' | 'live' | 'watch', Node>>;
+  routes?: Partial<Record<'home' | 'title' | 'collection' | 'library' | 'live' | 'watch' | 'auth', Node>>;
   /** `home: true` makes home a live surface: the guide's listings, clock and one preview tile run there (docs/skin-schema.md, "Live home"). */
   live?: { home?: boolean };
   /** Detail route presentation per viewport class. */

@@ -47,7 +47,7 @@ function keyframesCss(doc: SkinDocument): string {
     return `@keyframes dk-${docId}-${name}{${body}}`;
   }).join('');
 }
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'librarySort', 'librarySortFlip', 'libraryFilter', 'libraryMore', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'librarySort', 'librarySortFlip', 'libraryFilter', 'libraryMore', 'signIn', 'startQuick', 'cancelQuick', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
 const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites', 'library.items', 'library.kinds', 'library.genres', 'library.sorts']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
@@ -274,6 +274,14 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
         if (!searchLevel(depth)) throw new Error('The searchInput widget must sit within 3 levels of home or of the shell');
         level.t = 'searchInput'; level.parts = parts(node.params?.placeholder, r); level.label = parts(node.params?.label ?? node.params?.placeholder, r);
         level.sym = value(node.params?.placeholderColor ?? 'inherit', r);
+      }
+      // A sign-in field (route auth): params.field username | password, placeholder, label, placeholderColor.
+      else if (node.widget === 'textInput') {
+        if (depth > WIDGET_DEPTH) throw new Error(`A textInput must sit within ${WIDGET_DEPTH} levels of its route`);
+        const field = node.params?.field;
+        if (field !== 'username' && field !== 'password') throw new Error('textInput params.field: username or password');
+        level.t = 'textInput'; level.sym = field; level.parts = parts(node.params?.placeholder, r); level.label = parts(node.params?.label ?? node.params?.placeholder, r);
+        level.ivb = value(node.params?.placeholderColor ?? 'inherit', r);
       }
       // A native select over a library's options (the platform's control and menu), styled by its node.
       else if (node.widget === 'select') {
