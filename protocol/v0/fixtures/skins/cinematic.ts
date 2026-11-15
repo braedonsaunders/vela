@@ -159,13 +159,23 @@ const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '
     ] },
   ] };
 
+// A Top 10 row's numeral: large, outlined, fading toward its foot, the poster overlapping
+// its right edge. "10" sits tighter so both digits fit beside the card.
+const numeral = (ten: boolean): Node => ({ type: 'text', text: '{index.label}', when: [{ test: 'row.presentation', is: 'eq', value: 'ranked' }, { test: 'index', is: ten ? 'eq' : 'lt', value: '9' }],
+  style: { 'font-family': '"Arial Black", "Helvetica Neue", Arial, sans-serif', 'font-weight': '900', 'font-size': '348px', 'line-height': '0.74', 'letter-spacing': ten ? '-0.2em' : '-0.09em',
+    color: 'cinematic.rank-fill', '-webkit-text-stroke': '5px var(--cinematic.rank-stroke)', 'mask-image': 'linear-gradient(180deg, black 0%, black 50%, rgba(0, 0, 0, 0.25) 100%)',
+    'margin-right': '-50px', 'padding-bottom': '52px', 'flex-shrink': '0' },
+  small: { 'font-size': '220px', '-webkit-text-stroke': '3px var(--cinematic.rank-stroke)', 'margin-right': '-30px', 'padding-bottom': '44px' } });
+const rowItem: Node = { type: 'box', motion: 'card', stagger: { step: 45, cap: 8 }, style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end' },
+  children: [numeral(false), numeral(true), { type: 'use', template: 'card' }] };
+// Ranked rows space their cards wider, room for the numerals.
+const shelf = (ranked: boolean): Node => ({ type: 'box', when: [{ test: 'row.presentation', is: ranked ? 'eq' : 'ne', value: 'ranked' }],
+  style: { display: 'flex', 'flex-direction': 'row', gap: ranked ? '40px' : '18px', 'align-items': 'flex-start', 'padding-top': '16px', 'padding-bottom': '22px', ...gutter },
+  small: { gap: ranked ? '22px' : '12px', 'padding-top': '14px', 'padding-bottom': '18px', ...gutterSmall }, children: [{ type: 'repeat', over: 'row.items', item: rowItem }] });
+
 const row: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '4px', 'padding-bottom': '28px' }, small: { gap: '2px', 'padding-bottom': '18px' }, children: [
   { type: 'text', text: '{row.name}', role: 'heading', level: 2, style: { 'font-size': '21px', 'font-weight': '650', 'letter-spacing': '-0.012em', ...gutter }, small: { 'font-size': '18px', ...gutterSmall } },
-  { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 94%, transparent 100%)' }, children: [
-    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '18px', 'align-items': 'flex-start', 'padding-top': '16px', 'padding-bottom': '22px', ...gutter }, small: { gap: '12px', 'padding-top': '14px', 'padding-bottom': '18px', ...gutterSmall }, children: [
-      { type: 'repeat', over: 'row.items', item: { type: 'box', motion: 'card', stagger: { step: 45, cap: 8 }, style: { position: 'relative' }, children: [{ type: 'use', template: 'card' }] } },
-    ] },
-  ] },
+  { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 94%, transparent 100%)' }, children: [shelf(false), shelf(true)] },
 ] };
 
 const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column' }, children: [
@@ -346,7 +356,7 @@ const related: Node = { type: 'repeat', over: 'detail.related', when: [{ test: '
 
 const detailSections: Node[] = [band, episodes, extras, cast, crew, related];
 
-const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', padding: '4vh 4vw', 'box-sizing': 'border-box', 'background-color': 'media.overlay', 'backdrop-filter': 'blur(18px) saturate(1.1)' },
+const title: Node = { type: 'box', motion: 'frameIn', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', padding: '4vh 4vw', 'box-sizing': 'border-box', 'background-color': 'media.overlay', 'backdrop-filter': 'blur(18px) saturate(1.1)' },
   small: { padding: '0px' }, children: [
     { type: 'box', motion: 'open', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': 'surface.page', 'box-shadow': '0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)' },
       small: { 'border-radius': '0px' }, children: [
@@ -366,6 +376,7 @@ export const cinematicDoc: SkinDocument = {
   strings: { en: { velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', opening: 'Opening title…', failed: 'This title could not be opened.' , episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
   motion: {
     ...enterPresets,
+    frameIn: { keyframes: 'dissolve', duration: 420, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 200 } },
     episode: { keyframes: 'rise', duration: 640, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both', still: { keyframes: 'dissolve', duration: 240 } },
     navIn: { keyframes: 'dissolve', duration: 900, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 240 } },
     open: { keyframes: 'open', duration: 640, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 240 } },
