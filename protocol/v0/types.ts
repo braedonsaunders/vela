@@ -19,7 +19,7 @@ export interface ServerCapabilities {
   secureOrigins?: string[];
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
-    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature; trailerPreview?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
+    descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
 }
 export interface NegotiateRequest extends Mutation { client: ClientCapabilities }
@@ -44,9 +44,11 @@ export interface ArtworkRef {
 }
 export type TitleKind = 'movie' | 'show' | 'season' | 'episode';
 export interface WatchState { positionSeconds: number; played: boolean; favorite: boolean; watchlisted: boolean }
+export interface ThemeMusic { url: string; expiresAt: Timestamp; durationSeconds?: number;
+  /** Measured integrated loudness in LUFS; omitted when unmeasured. */ loudness?: number }
 export interface Title {
   id: ID; kind: TitleKind; name: string; summary: string; year?: number; genres: string[];
-  durationSeconds?: number; rating?: string; artwork: ArtworkRef[]; watch?: WatchState;
+  durationSeconds?: number; rating?: string; artwork: ArtworkRef[]; watch?: WatchState; themeMusic?: ThemeMusic;
   showId?: ID; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
 }
 export interface Extra { id: ID; parentId: ID; kind: 'trailer' | 'clip' | 'featurette' | 'other'; name: string;

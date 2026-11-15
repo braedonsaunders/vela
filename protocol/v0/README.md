@@ -36,6 +36,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /rows/:id | cursor, limit (query) | Row |
 | GET | /collections/:id | cursor, limit (query) | CollectionContents |
 | GET | /titles/:id | — | TitleDetail |
+| GET, HEAD | /themes/:grant/theme.m4a | opaque URL grant; optional Range header | theme audio bytes |
 | GET | /titles/:id/children | cursor, limit (query) | Page<Title> |
 | GET | /titles/:id/extras | — | ExtrasResponse |
 | POST | /titles/:id/trailer-preview | TrailerPreviewRequest | TrailerPreviewResponse |
@@ -73,6 +74,23 @@ uses `from_ms` in absolute title milliseconds; cue timestamps also remain absolu
 title time, including after seeking. These resources use the same broker grants
 and policy checks as other media. This field does not change quality codec
 readiness, audio selection or client capability declarations.
+
+### Theme music
+
+`features.themeMusic` is optional; absence means unavailable. Optional
+`Title.themeMusic` supplies a ready audio grant with required `url` and
+`expiresAt`. Omission makes no availability claim for that title. Optional
+`durationSeconds` is omitted when unknown; `loudness` is measured integrated LUFS,
+omitted when unmeasured. Neither value is estimated by the client.
+
+The relative `/vela/v0/themes/<64hex>/theme.m4a` URL is an opaque secret
+capability; do not log or persist it. Native audio GET/HEAD needs no bearer or
+device headers and supports byte ranges. Grants last ten minutes, are bound to
+the host, issuing grant family and device, and recheck the current viewer/item
+policy on every read. Missing, expired or revoked grants return 404. Fetch title
+detail again for a refreshed grant. Responses use `Cache-Control: private,
+no-store`; service workers and API/media caches must bypass these resources.
+Theme audio creates no playback session, watch progress or interaction receipt.
 
 ## Identity and Ether mapping
 
