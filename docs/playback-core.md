@@ -378,3 +378,53 @@ requires 30 total reader operations and produces the expected 3,168 opaque PGS
 pixels; borrowed-reader disposal remains zero. No network cache, source scan or
 read-budget expansion was added. Scoped TypeScript compilation passed; the next
 real-title caption and long HLS proof remain gates.
+
+### Streaming embedded PGS design
+
+Embedded Matroska PGS moves to the AV cluster path. A source-scoped core feed taps
+clusters that the demux library already reads; it keeps only 64 numeric position
+hints, never another cluster byte cache. While selected, the subtitle subsystem
+copies only that track's blocks, applies its actual ContentEncodings, and feeds
+one stateful PGS decoder. Timed completed displays go to the existing overlay
+using the audio-master clock. Off unsubscribes; source/seek retirement clears
+queues, decoder state and pixels. Subtitle failures cannot throw through AV demux.
+
+Selection/seek replays at most four recent, cache-backed clusters around the
+playhead (four-second look-ahead, 48 MiB total, eight-second deadline). This uses
+the same reader and positions observed by AV; there is no subtitle Cues lookup or
+file-length scan. An incomplete object at acquisition is skipped until a complete
+display arrives; no partial bitmap is painted. If bounded acquisition cannot
+establish a display, the existing single burn-in fallback remains available.
+Selected encoded and completed-display queues stay bounded. Per-source absolute
+block positions deduplicate AV rereads, with a rolling time bound on history.
+
+The independent live presentation slice uses browser-owned native SDR identity
+when colour facts are absent, resetting retained colour state on seek. HDR and
+raw GPU routes still require actual colour facts. Its generated untagged H.264
+live-HLS look presented 280 frames, sought back in 17 ms, then continued to 326
+frames with zero failures/drops. This is local component evidence; real-live and
+streaming-PGS qualification remain separate gates.
+
+Streaming PGS local proof uses an actual generated H.264/AAC/PGS MKV with
+120,000 additional, correctly located subtitle cue entries (1.92 MiB of index)
+and one-second video keyframes. The core's adapted Matroska reader exposes the
+already-read cluster bytes; sequential AV reads leave deferred Cues alone, while
+an actual AV seek may still use its normal keyframe index. Subtitle `packets` and
+`loadCues` were guarded to throw in the local native-view look: neither was
+called. Selected PGS painted 14,300 overlay pixels at 1.5 s, a paused seek to
+4.5 s repainted those pixels in 156 ms, 7.5 s cleared to zero, and Off removed the
+canvas. Zero drops/failures; disposal left zero video/canvas elements. A separate
+packet proof read 192 video/346 audio packets, decoded the exact 3,168 source
+bitmap pixels, and sought from the four-second keyframe without disposing the
+borrowed reader. This proves the new streaming path locally, not the real remux.
+
+The unchanged actual-app `fcba818` / core `3374cb5b3bf41329` also completed a
+separate 70-second UHD retest on lab.28 after Ether's observation/media lock fix:
+first frame 403.7 ms (plan 127.6 ms, post-plan 276.1 ms), 70.595 seconds of media,
+1,698 decoded / 1,693 presented, zero drops, zero audio underruns, no buffering
+or errors. First sampled observation TTFB fell from 2,185.5 to 40.4 ms; the first
+29 sampled media requests had at most 5.9 ms TTFB, compared with three consecutive
+2,135–2,157 ms waits before the server fix. No client priming or deadline was
+widened. Ether independently confirmed clean source delivery, and after UI
+Stop/revoke 200 and Chrome closure confirmed no pin, session or encoder remained.
+The new streaming-PGS remux and real-live checks still gate the core default.

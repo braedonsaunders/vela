@@ -4,6 +4,7 @@ import { velaContainerCodec, velaTrackPrivate } from '../../universal/audio/ffmp
 import { canonicalAudioCodec } from '../../universal/audio/packages';
 import { abortable,delay } from '../async';
 import {observeFragmentTiming} from './fragment-time';
+import {observeSubtitleClusters,type MatroskaSubtitleStream} from './subtitle-stream';
 import type { AudioTrack, ByteReader, EncodedPacket, MediaTrack, VideoTrack } from '../types';
 
 /** Demux only. No upstream controller, decoder, clock or independent HTTP cache. */
@@ -15,9 +16,10 @@ export class PacketDemux {
   private operationSignal: AbortSignal;
   private readBytes = 0;
   readonly diagnostics:string[]=[];
+  private stopSubtitleClusters?:()=>void;
 
   constructor(makeSource:(signal:()=>AbortSignal,count:(bytes:number)=>void)=>Source,
-    sourceSignal:AbortSignal,private readonly originUs=0,private readonly liveEnded?:()=>boolean) {
+    sourceSignal:AbortSignal,private readonly originUs=0,private readonly liveEnded?:()=>boolean,subtitleClusters?:MatroskaSubtitleStream) {
     this.operationSignal=AbortSignal.any([sourceSignal,this.lifetime.signal]);
     const report=(note:string)=>{if(this.diagnostics.length<16&&!this.diagnostics.includes(note))this.diagnostics.push(note);};
     const source=makeSource(()=>this.operationSignal,bytes=>{
@@ -25,6 +27,7 @@ export class PacketDemux {
       if(this.readBytes>32*1024*1024)throw new Error('Demux operation exceeded its bounded search budget');
     });
     observeFragmentTiming(source,report);
+    if(subtitleClusters)this.stopSubtitleClusters=observeSubtitleClusters(source,subtitleClusters.receive);
     this.input=new Input({source,formats:ALL_FORMATS,formatOptions:{hls:{offsetTimestampsByDateTime:!!liveEnded}}});
     sourceSignal.addEventListener('abort',this.abort,{once:true});
     this.detach = () => sourceSignal.removeEventListener('abort',this.abort);
@@ -115,16 +118,16 @@ export class PacketDemux {
     }
   }
 
-  dispose(): void { if(this.lifetime.signal.aborted)return;this.lifetime.abort(); this.detach?.(); this.input.dispose(); this.tracks.clear(); }
+  dispose(): void { if(this.lifetime.signal.aborted)return;this.lifetime.abort(); this.detach?.();this.stopSubtitleClusters?.(); this.input.dispose(); this.tracks.clear(); }
 }
 
 /** Original-file transport: the reader and its cache survive demux epochs. */
 export class FileDemux extends PacketDemux {
-  constructor(readonly reader:ByteReader,signal:AbortSignal){
+  constructor(readonly reader:ByteReader,signal:AbortSignal,subtitleClusters?:MatroskaSubtitleStream){
     super((current,count)=>new CustomSource({
       getSize:()=>reader.size(current()),read:(start,end)=>{count(end-start);return reader.read(start,end-start,current());},
       maxCacheSize:0,prefetchProfile:'none',
-    }),signal);
+    }),signal,0,undefined,subtitleClusters);
   }
 }
 

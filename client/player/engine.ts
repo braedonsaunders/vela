@@ -617,7 +617,7 @@ export class PlaybackEngine {
     const original=this.original;
     const current=()=>this.overlayJob===job&&!job.signal.aborted&&!this.disposed;
     const loading=(async()=>{
-      const overlay=await loadSubtitleSession({surface,reader:original?.supportsSubtitles?original.byteReader:undefined,mediaRequests:this.mediaAccess,
+      const overlay=await loadSubtitleSession({surface,reader:original?.supportsSubtitles?original.byteReader:undefined,clusterStream:original?.subtitleClusters,mediaRequests:this.mediaAccess,
         source:{url:source.url,container:original?.sourceContainer??source.delivery,sessionId:session.id,sourceGeneration:this.controller.source,seekGeneration:this.controller.seek},
         epoch:++this.overlayEpoch,clock:()=>this.position(),signal:job.signal,
         describedTracks:session.subtitleTracks.map(track=>({id:track.id,streamIndex:track.streamIndex,codec:track.codec,label:track.label,language:track.language,

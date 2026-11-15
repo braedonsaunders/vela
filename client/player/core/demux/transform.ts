@@ -1,6 +1,21 @@
 /** Source-complete build adaptation; the pinned MPL library stays pristine. */
 export function transformCoreDemux(path:string,source:string):string|null{
   const normalized=path.replaceAll('\\','/');
+  if(normalized.endsWith('/src/matroska/matroska-demuxer.ts')){
+    const anchor='segment.lastReadCluster = cluster;';
+    const cues='segment.deferredCuesPosition !== null && searchTimestamp > this.internalTrack.codecDelay';
+    if([anchor,cues].some(value=>source.split(value).length!==2))throw new Error('Pinned Matroska cluster tap changed');
+    const module=JSON.stringify(new URL('./subtitle-stream.ts',import.meta.url).pathname);
+    return `import {publishSubtitleCluster} from ${module};\n`+source.replace(cues,'segment.deferredCuesPosition !== null && startOffset === null && searchTimestamp > this.internalTrack.codecDelay').replace(anchor,`
+        if (dataSlice) {
+          let subtitleClusterEnd = cluster.timestamp;
+          for (const trackData of cluster.trackData.values()) subtitleClusterEnd = Math.max(subtitleClusterEnd, trackData.endTimestamp);
+        publishSubtitleCluster(this.input._rootSource, elementStartPos, dataStartPos,
+          readBytes(dataSlice.slice(dataStartPos, cluster.elementEndPos - dataStartPos), cluster.elementEndPos - dataStartPos),
+          cluster.timestamp / segment.timestampFactor, subtitleClusterEnd / segment.timestampFactor);
+        }
+        `+anchor);
+  }
   if(normalized.endsWith('/src/input-format.ts')){
     // The pinned MP4 probe recognizes styp only at byte zero. Ether can retain
     // valid free/skip padding before a fragment's styp. Its existing bounded
