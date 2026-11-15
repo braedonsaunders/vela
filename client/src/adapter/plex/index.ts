@@ -28,6 +28,7 @@ export class PlexAdapter implements ServerAdapter {
   readonly origin: string;
   private sessions = new Map<string, { plan: V.PlaybackPlan; part: Node; metadata: Node; sequence: number; mutations: Map<string, V.PlaybackPlan> }>();
   private liveConfig?: { dvr: string; grid: string };
+  private delegation?: Promise<string>;
   private pins = new Map<string, { id: number; code: string; expiresAt: string }>();
   constructor(private config: PlexConfig) {
     const u = new URL(config.origin);
@@ -47,12 +48,23 @@ export class PlexAdapter implements ServerAdapter {
     if (!tokens) fail('Sign in required', 'auth');
     return { ...plexHeaders(this.config.clientIdentifier), 'X-Plex-Token': tokens.accessToken };
   }
+  /** Delegation lifetime is set by PMS; never persist it or infer an expiry. */
+  transientToken(): Promise<string> {
+    if (!this.delegation) {
+      const pending = this.request('/security/token', { type: 'delegation', scope: 'all' }).then(result => {
+        const token = result.token || result.DelegationToken?.[0]?.token;
+        if (typeof token !== 'string' || !token) return fail('Plex did not issue a transient media token', 'auth');
+        return token;
+      });
+      this.delegation = pending;
+      void pending.catch(() => { if (this.delegation === pending) this.delegation = undefined; });
+    }
+    return this.delegation;
+  }
+  rotateTransientToken(): void { this.delegation = undefined; }
   async transientMediaURL(path: string): Promise<string> {
     const url = new URL(this.mediaURL(path));
-    const result = await this.request('/security/token', { type: 'delegation', scope: 'all' });
-    const token = result.token || result.DelegationToken?.[0]?.token;
-    if (!token) fail('Plex did not issue a transient media token', 'auth');
-    url.searchParams.set('X-Plex-Token', token);
+    url.searchParams.set('X-Plex-Token', await this.transientToken());
     return url.href;
   }
   private async request(path: string, query: Record<string, unknown> = {}, method = 'GET', auth = true): Promise<Node> {
@@ -61,6 +73,7 @@ export class PlexAdapter implements ServerAdapter {
     for (const [k, v] of Object.entries(query)) if (v !== undefined) u.searchParams.set(k, String(v));
     const headers = auth ? await this.mediaHeaders() : plexHeaders(this.config.clientIdentifier);
     const response = await fetch(u.href, { method, headers, redirect: 'error', credentials: 'omit' });
+    if (response.status === 401) this.rotateTransientToken();
     if (!response.ok) throw new VelaError({ class: response.status === 401 || response.status === 403 ? 'auth' : response.status === 404 ? 'not-found' : 'source',
       code: 'plex_http', message: `Plex request failed (${response.status})`, retry: { allowed: false } }, response.status);
     if (response.status === 204) return {};
@@ -126,7 +139,7 @@ export class PlexAdapter implements ServerAdapter {
   pollQuickConnect(r: V.QuickPollRequest) { return this.pollDevice({ ...r, deviceCode: r.secret }); }
   async revoke(_r: V.RevokeRequest): Promise<V.Ack> {
     for (const [id, s] of this.sessions) if (s.plan.state !== 'ended') await this.command(id, { kind: 'stop', ...s.plan, idempotencyKey: `revoke-${id}` });
-    this.sessions.clear(); this.pins.clear(); await this.config.credentials.set(null); return ack;
+    this.sessions.clear(); this.pins.clear(); this.rotateTransientToken(); await this.config.credentials.set(null); return ack;
   }
   private artwork(n: Node): V.ArtworkRef[] {
     return (['thumb', 'art'] as const).flatMap(k => {
@@ -157,6 +170,7 @@ export class PlexAdapter implements ServerAdapter {
     return { id: key, name: h.title || '', purpose, receiptToken: '', ...page(this.nodes(h).filter(n => ['movie','show','season','episode','collection','playlist'].includes(n.type)).map(n => this.entry(n)), Number(h.offset || 0), h.totalSize ?? (h.more ? undefined : h.size)) };
   }
   async bootstrap(): Promise<V.Bootstrap> {
+    this.rotateTransientToken();
     const tokens = await this.config.credentials.get(); if (!tokens) fail('Sign in required', 'auth');
     return { viewer: tokens.viewer, capabilities: await this.capabilities(), defaultSkinId: 'cinematic', rows: (await this.rows({})).items, heroes: [] };
   }
