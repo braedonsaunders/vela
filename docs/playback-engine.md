@@ -1979,3 +1979,48 @@ Thus multiple fragments per object alone do **not** reproduce the lab failure.
 A bounded fragment-index/object-shape diagnostic is being added before changing
 parsing semantics. Both local browser and fixture server were closed; the
 production gate remains unchanged.
+
+### lab.25: padded-fragment root cause and remaining source admission work
+
+The same real-app baseline `89bed67` with context-only core `0865e3b`
+(`233780e307081d61`) repeated pinned Inception UHD on lab.25. First frame was
+349.8 ms (plan received 111.3 ms). The 30 s sample reached title position
+26.746 s with 649 decoded / 637 presented frames, five drops and two underruns;
+one buffering interval lasted wall 20.11–23.10 s. This improved the previous
+source-starved sample but remains **not a clean sustained-play pass**.
+
+At about wall 70.7 s / title 55.153 s, the original route aborted and automatically
+requested Ether HLS in the same app session. Ether independently found three
+upstream reads waiting 8.5 s without obtaining a connection: an admission
+regression, subsequently fixed for lab.26. The core's bounded source wait was
+not widened. Lab.26 also joins overlapping forward read-ahead instead of
+cancelling/redialing it and suppresses resume warming beside active playback.
+These producer changes require another measured run; no result is inferred.
+
+The new diagnostic established the HLS failure precisely. Both the automatic
+fallback and the later explicit 720p switch rejected **fragment 0**:
+
+- fallback: 1,680,537 bytes, `free,free,styp,moof,mdat`;
+- 720p: 181,550 bytes, `free,styp,moof,mdat`.
+
+These are valid padded MP4 objects. The pinned library's MP4 probe checks for
+`styp` at byte zero, then uses a separate bounded box walk that skips `free` but
+only recognizes `moof/sidx/moov/mdat`. A `styp` following the skipped padding
+therefore incorrectly becomes `UnsupportedInputFormatError`. The earlier
+multi-`moof` hypothesis was disproved by the unpadded local EOS pass.
+
+Vela's source-complete build adaptation now recognizes `styp` in that existing
+bounded walk. It preserves box-size validation and all later demux/decoder
+checks; it neither rewrites received bytes nor edits the pinned vendor checkout.
+A generated exact before/after reproduction fails with the unmodified probe and
+then reads **156 video / 281 AAC packets** with the adaptation. Its segments cover
+single `free`, consecutive `free`, extended-size `free`, and an unpadded control.
+Full browser EOS/seek and a fresh real-app candidate including the PGS compression
+fix remain the next gates before declaring this repaired on the lab.
+
+The lab.25 test ended with UI Stop 200 / `ended`, auth revoke 200 / accepted,
+unmounted player and closed dedicated Chrome. The coordinator removed the pin
+(DELETE 204, independent GET empty) and confirmed zero sessions/FFmpeg processes.
+Production remained on the wrapper. Scalar evidence is in
+`client/.exact/core-lab25-{direct-output,hls-output,all-failures,cleanup-output}.txt`;
+no provider media bytes or private headers were captured.
