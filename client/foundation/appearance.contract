@@ -64,7 +64,16 @@ members Client
   // Hand-off waits for the appearance answer (or its failure): before it, a document pick is unknown.
   derive engineSettled = (current(appearanceBase) or failed(appearanceBase)) and playingId == ""
   // A skin document the viewer or server wants, drawn by the doc engine once it has loaded.
-  derive activeDocUrl = match first(appearance.docs.filter(d => d.id == requestedSkin)) { case some(d) => d.url, case none => "" }
+  // Until the server's appearance answers, the last applied document (kept with its source in
+  // the data module), so a cold start draws the document's splash, loading and failure states.
+  state lastDocUrl = "" persist
+  derive appearanceKnown = current(appearanceLive) or current(appearanceBase)
+  derive serverDocUrl = match first(appearance.docs.filter(d => d.id == requestedSkin)) { case some(d) => d.url, case none => "" }
+  derive activeDocUrl = (appearanceKnown ? serverDocUrl : lastDocUrl)
+  task rememberDoc when appearanceKnown and serverDocUrl != lastDocUrl and (serverDocUrl == "" or current(skinDocument))
+    after(1, keepDoc)
+  action keepDoc
+    lastDocUrl = serverDocUrl
   derive docWidth = (viewport.width < 640 ? 400 : viewport.width >= 1200 ? 1300 : 900)
   resource skinDocument = uiSkinDoc(activeDocUrl, docWidth) with localeJSON when activeDocUrl != "" as shape SkinDoc
   derive docReady = activeDocUrl != "" and current(skinDocument)
