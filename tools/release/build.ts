@@ -9,6 +9,8 @@ import { finalizeEngineRoot } from './engine-root';
 import { writePwaAssets, pwaIcons } from './pwa-assets';
 const root = resolve(import.meta.dir, '../..'), output = join(root, '.artifacts/release');
 const assetArgument = process.argv.find(arg => arg.startsWith('--universal-assets='));
+const excludedSkinDocuments = process.argv.filter(arg => arg.startsWith('--exclude-document=')).map(arg => arg.slice('--exclude-document='.length));
+if (excludedSkinDocuments.some(id => !/^[a-z][a-z0-9-]{0,31}$/.test(id))) throw new Error('Invalid excluded skin document id');
 if (!assetArgument || assetArgument === '--universal-assets=' || process.argv.includes('--universal-assets')) throw new Error('Production releases require --universal-assets=<verified player payload directory>');
 const version = (await readFile(join(import.meta.dir, 'VERSION'), 'utf8')).trim();
 const hash = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex');
@@ -22,6 +24,12 @@ try {
   const dist = join(work,'dist'); await mkdir(dist);
   const universalAssets = await stageUniversalAssets(assetArgument.slice('--universal-assets='.length), dist);
   await run([process.execPath, join(root, 'tools/skin.ts'), 'documents', join(dist, 'skins')]);
+  if (excludedSkinDocuments.length) {
+    const catalogFile = join(dist, 'skins/catalog.json');
+    const catalog = JSON.parse(await readFile(catalogFile, 'utf8'));
+    catalog.documents = catalog.documents.filter((doc: { id: string; version: string }) => !excludedSkinDocuments.includes(doc.id));
+    await writeFile(catalogFile, JSON.stringify(catalog, null, 2) + '\n');
+  }
   const engines: Record<string,{base:string;appBytes:number;appGzipBytes:number}> = {};
   for (const engine of await installedEngines(join(root, 'client'))) {
     const stem = `vela-${version}-${engine}`, childManifest = join(output,`${stem}.manifest.json`);
@@ -59,7 +67,7 @@ try {
   const archive=await readFile(join(output,archiveName));
   // What skin documents this release draws (docs/distribution.md, "Skin document compatibility").
   const skinRenderer={schema:1,...JSON.parse(await readFile(join(root,'client/renderer/version.json'),'utf8'))};
-  const manifest={schemaVersion:1,version,protocolVersions:[0],skinRenderer,exactRevision:(await readFile(join(root,'EXACT_REVISION'),'utf8')).trim(),buildTime:new Date().toISOString(),sourceRevision:revision,sourceDirty:false,apiOrigin:'same-origin',basePath:'/vela/',serviceWorker:{path:'/vela/sw.js',scope:'/vela',headers:{'Service-Worker-Allowed':'/vela','Cache-Control':'no-cache'}},engines,universalAssets,archive:{file:archiveName,bytes:archive.length,sha256:hash(archive)},files};
+  const manifest={schemaVersion:1,version,protocolVersions:[0],skinRenderer,excludedSkinDocuments,exactRevision:(await readFile(join(root,'EXACT_REVISION'),'utf8')).trim(),buildTime:new Date().toISOString(),sourceRevision:revision,sourceDirty:false,apiOrigin:'same-origin',basePath:'/vela/',serviceWorker:{path:'/vela/sw.js',scope:'/vela',headers:{'Service-Worker-Allowed':'/vela','Cache-Control':'no-cache'}},engines,universalAssets,archive:{file:archiveName,bytes:archive.length,sha256:hash(archive)},files};
   const json=JSON.stringify(manifest,null,2)+'\n';await writeFile(join(output,manifestName),json);
   await writeFile(join(output,`${archiveName}.sha256`),`${hash(archive)}  ${archiveName}\n`);await writeFile(join(output,`${manifestName}.sha256`),`${hash(json)}  ${manifestName}\n`);
   console.log(JSON.stringify({archive:join(output,archiveName),sha256:hash(archive),manifest:join(output,manifestName),manifestSha256:hash(json),engines},null,2));

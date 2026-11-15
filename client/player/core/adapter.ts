@@ -14,10 +14,12 @@ export async function warmup(options:Pick<OriginalRuntimeOptions,'assets'|'signa
 
 /** Same native-view boundary; all orchestration beneath it belongs to Vela. */
 export class UniversalRuntime implements OriginalBackend {
+  readonly implementation='vela-core' as const;
   readonly retainsSource=true;
   get supportsLocalAudioSwitch(){return !this.media?.hls;}
   get supportsSubtitles(){return !!this.options.assets.subtitleBaseURL;}
   get byteReader(){return this.core.byteReader;}
+  get live(){return this.core.live;}
   get sourceContainer(){return this.core.container;}
   get videoSize(){const track=this.core.snapshot().tracks.find(track=>track.kind==='video');return track?{width:track.width,height:track.height}:undefined;}
   private readonly core:PlaybackCore;
@@ -29,6 +31,7 @@ export class UniversalRuntime implements OriginalBackend {
   private volume=1;
   private muted=false;
   private pendingAudio:string|null=null;
+  private audioSelection=0;
   private notes:string[]=[];
   constructor(private readonly options:OriginalRuntimeOptions){
     this.volume=options.surface.video.volume;this.muted=options.surface.video.muted;
@@ -84,7 +87,7 @@ export class UniversalRuntime implements OriginalBackend {
     const state=this.core.snapshot();
     const audioTrackId=[...this.audioAliases].find(([,id])=>id===state.audioTrackId)?.[0]??state.audioTrackId;
     const track=state.tracks.find(track=>track.kind==='video');
-    return {video:track?videoInfo({...track,colorTransfer:track.color.transfer??undefined}):null,bufferAheadSeconds:state.bufferAheadSeconds,throughputBps:state.throughputBps,throughputHistory:state.throughputHistory,state:state.state==='idle'?'loading':state.state,position:state.positionUs/1e6,duration:state.durationUs===null?null:state.durationUs/1e6,
+    return {readAheadSeconds:state.readAheadSeconds,video:track?videoInfo({...track,colorTransfer:track.color.transfer??undefined}):null,bufferAheadSeconds:state.bufferAheadSeconds,throughputBps:state.throughputBps,throughputHistory:state.throughputHistory,state:state.state==='idle'?'loading':state.state,position:state.positionUs/1e6,duration:state.durationUs===null?null:state.durationUs/1e6,
       frames:state.decoded,dropped:state.dropped,presentedFrames:state.presented,decoderReady:state.tracks.some(track=>track.kind==='video'),
       audioTrackId,metadataDiscrepancies:[...this.notes,...state.diagnostics].slice(0,32)};
   }
@@ -94,7 +97,7 @@ export class UniversalRuntime implements OriginalBackend {
     const ordered=[...media.audio].sort((a,b)=>a.streamIndex-b.streamIndex);
     const ordinal=ordered.findIndex(track=>track.id===media.selectedAudioId);
     this.notes=['audio-selection:audio-ordinal'];
-    if(media.hls)await this.core.openHls(media.url,media.position*1e6,Math.round(media.hls.originSeconds*1e6),Math.max(0,ordinal),media.authority);
+    if(media.hls)await this.core.openHls(media.url,media.position*1e6,Math.round(media.hls.originSeconds*1e6),Math.max(0,ordinal),media.authority,media.hls.live);
     else await this.core.open(media.url,media.position*1e6,Math.max(0,ordinal));
     this.core.setVolume(this.volume,this.muted);
   }
@@ -103,10 +106,12 @@ export class UniversalRuntime implements OriginalBackend {
   setVolume(volume:number){this.volume=volume;this.core.setVolume(volume,this.muted);}
   setMuted(muted:boolean){this.muted=muted;this.core.setVolume(this.volume,muted);}
   async setSpeed(value:number){this.core.setRate(value);}
+  private liveRate=1;
+  setLiveTarget(seconds:number,rate:number){this.core.setLiveTarget(seconds);if(rate!==this.liveRate){this.liveRate=rate;this.core.setRate(rate);}}
   async selectAudio(trackId:string){
     const actual=this.audioAliases.get(trackId);if(!actual)throw new Error('Unknown actual audio track');
-    this.pendingAudio=trackId;
-    try{await this.core.selectAudio(actual);}finally{this.pendingAudio=null;}
+    const selection=++this.audioSelection;this.pendingAudio=trackId;this.options.onEvent({type:'statechange'});
+    try{await this.core.selectAudio(actual);}finally{if(selection===this.audioSelection){this.pendingAudio=null;this.options.onEvent({type:'statechange'});}}
   }
   async seek(position:number){await this.core.seek(position*1e6);}
   dispose():Promise<void>{if(this.disposing)return this.disposing;this.disposed=true;this.options.signal.removeEventListener('abort',this.abort);this.disposing=this.core.dispose();return this.disposing;}

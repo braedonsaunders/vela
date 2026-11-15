@@ -4,6 +4,11 @@
 // titles as ruled catalogue entries, and from 900 px a title page split beside a narrow
 // home. Layout that depends on the slot's own width (a split pane is small) is written
 // as `states` on `env.small`, never as window-width variants.
+//
+// Deliberate differences from the compiled Index (agreed with the orchestrator):
+// - Opening a title from 900 px keeps the 360 px home pane where the reader was; compiled
+//   reset it to the top.
+// - The sign-in heading is readable (compiled drew Index's dark ink on the dark sign-in stage).
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index', version = '1.0.0';

@@ -772,7 +772,7 @@ const sources: Sources = {
   },
 
   // Servers. Presentation records only: no credential reaches these answers.
-  uiServers: async ([_revision, localeJSON], store) => {
+  uiServers: async ([_revision, _authRevision, _authenticated, localeJSON], store) => {
     const selected = server(store);
     const list = servers(store).read();
     const rows = await Promise.all(list.servers.map(async record => {
