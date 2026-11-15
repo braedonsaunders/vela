@@ -1,4 +1,4 @@
-# Cold-path trace before scheduling changes
+# Cold-path trace and streaming acquisition repair
 
 Captured after the fixed-host lab.33 pair. No runtime, queue limit, byte-cache
 policy or demux algorithm was changed. Private JavaScript wrappers observed the
@@ -106,4 +106,63 @@ work with configuration, and permit decoding from a proven preceding keyframe
 while acquisition progresses. It must preserve exact target preroll, real track
 identity, bounded memory/read work and epoch cancellation. A realistic shared
 origin-cache/large-index profile is still needed before attributing the full
-Inception gap to these local timings. No such change is included in this report.
+Inception gap to these local timings. The following repair addresses the measured
+serial work; the lab comparison remains the parity gate.
+
+## Streaming acquisition repair
+
+The file demux now obtains H.264/HEVC Matroska packets from bounded block cursors
+over the existing source reader. A preceding Cues entry locates the cluster;
+its first usable key block reaches the decoder without acquiring every later
+block in the lookup span. Lacing, header stripping and codec packet-type
+classification use the pinned library components. Unsupported shapes retain
+the existing library path. In particular, audio without a proven default
+duration retains its duration/lacing inference during playback.
+
+Cues bytes begin prefetching after segment metadata is read, and actual index
+parsing overlaps remaining metadata. Video configure starts as soon as its
+actual descriptor is ready. Independent video/audio cursors then run together;
+the library's mutable parsing operations remain serial. The source reader,
+cache limits, epoch cancellation, read/search deadlines and audio priming
+policy are unchanged. No upstream controller or second byte cache is added.
+
+Repeated the same 4K fixture, 4.5-second resume, aggregate 65-Mbps cap and
+one-time 800-ms ramp with fresh headed profiles for each immutable payload:
+
+| Event or counter | Before | After |
+| --- | ---: | ---: |
+| Metadata ready | 1.657 s | 1.084 s |
+| Video configure interval | 1.657–1.978 s | 1.049–1.124 s |
+| Initial video lookup begins | 1.979 s | 1.124 s |
+| Initial audio lookup begins | 5.269 s | 1.124 s |
+| First native encoded video input | 5.270 s | 1.186 s |
+| Validated reader bytes before that input | 32,290,959 B | 1,095,823 B |
+| Reader requests before that input | 124 | 7 |
+| First decoded video output | 5.288 s | 1.205 s |
+| First presented frame at the requested target | 5.998 s | 4.359 s |
+| Open/playable resolves | 6.641 s | 6.369 s |
+
+Both first inputs contained the same 834,627-byte keyframe. Both first presented
+timestamps were exactly 4,500,000 microseconds: neither run displayed the
+earlier keyframe as if it were the target. Both continued playing with zero
+video drops. The byte counter counts completed, validated source-page bodies;
+it excludes partial in-flight responses. It is not a count of demux caller
+reads, nor a claim that no bytes were in flight at the measurement instant.
+Driver/GPU caches outside the fresh profile were not reset, so configure-time
+variance is not wholly attributable to this change.
+
+Time to first encoded input fell by 4.084 s and bytes before it by 96.6%.
+Target presentation improved by 1.639 s. Real long-GOP preroll and the unchanged
+adaptive audio priming still cost time; the open/playable improvement is only
+0.273 s. These are local results, not a claim of meeting the LAN start target
+or beating the production wrapper on Inception.
+
+The streaming AV cursor also records subtitle block ranges and actual cluster
+timestamps without fetching unselected subtitle payloads. A separate generated
+video-plus-PGS fixture, with no audio/full-cluster fallback, rendered 3,168
+caption pixels at 1.5 s and after a paused seek to 4.5 s (119.4 ms), cleared at
+7.5 s, and removed the overlay on Off. Its Cues-walk methods were made to fail
+if called; none were called. The full-cluster cache was absent in this proof,
+so these pixels exercised the new block stream. All local browsers, profiles
+and temporary servers were closed afterward. The scoped TypeScript check and
+runtime/source-offer build passed.

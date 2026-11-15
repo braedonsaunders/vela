@@ -7,6 +7,7 @@ import {observeFragmentTiming} from './fragment-time';
 import {observeSubtitleClusters,type MatroskaSubtitleStream} from './subtitle-stream';
 import {hasBufferAudit,sourceBufferAudit,type BufferCacheState} from '../../universal/buffer-audit';
 import {clusterCacheAudit} from './cluster-cache';
+import {installMatroskaStreaming,hasStreamingMatroskaBacking,primeMatroskaIndex,finishMatroskaMetadata} from './matroska-stream';
 import type { AudioTrack, ByteReader, EncodedPacket, MediaTrack, VideoTrack } from '../types';
 
 /** Demux only. No upstream controller, decoder, clock or independent HTTP cache. */
@@ -20,9 +21,10 @@ export class PacketDemux {
   private readBytes = 0;
   readonly diagnostics:string[]=[];
   private stopSubtitleClusters?:()=>void;
+  private stopStreaming?:()=>void;
 
   constructor(makeSource:(signal:()=>AbortSignal,count:(bytes:number)=>void)=>Source,
-    sourceSignal:AbortSignal,private readonly originUs=0,private readonly liveEnded?:()=>boolean,subtitleClusters?:MatroskaSubtitleStream,private readonly auditCache?:()=>BufferCacheState) {
+    sourceSignal:AbortSignal,private readonly originUs=0,private readonly liveEnded?:()=>boolean,subtitleClusters?:MatroskaSubtitleStream,private readonly auditCache?:()=>BufferCacheState,streaming?:{reader:ByteReader;startSeconds:number}) {
     this.operationSignal=AbortSignal.any([sourceSignal,this.lifetime.signal]);
     const report=(note:string)=>{if(this.diagnostics.length<16&&!this.diagnostics.includes(note))this.diagnostics.push(note);};
     const source=makeSource(()=>this.operationSignal,bytes=>{
@@ -30,6 +32,7 @@ export class PacketDemux {
       if(this.readBytes>32*1024*1024)throw new Error('Demux operation exceeded its bounded search budget');
     });
     this.auditSource=source;
+    if(streaming)this.stopStreaming=installMatroskaStreaming(source,streaming.reader,AbortSignal.any([sourceSignal,this.lifetime.signal]),streaming.startSeconds,subtitleClusters);
     observeFragmentTiming(source,report);
     if(subtitleClusters)this.stopSubtitleClusters=observeSubtitleClusters(source,subtitleClusters.receive);
     this.input=new Input({source,formats:ALL_FORMATS,formatOptions:{hls:{offsetTimestampsByDateTime:!!liveEnded}}});
@@ -43,7 +46,14 @@ export class PacketDemux {
   get clusterCacheAudit(){return clusterCacheAudit(this.auditSource);}
 
   /** Serial source operations make each cancellation/read budget unambiguous. */
-  private operation<T>(run: () => PromiseLike<T> | T, signal: AbortSignal,stage='metadata'): Promise<T> {
+  private operation<T>(run: () => PromiseLike<T> | T, signal: AbortSignal,stage='metadata',parallel=false): Promise<T> {
+    if(parallel){
+      const operation=AbortSignal.any([signal,this.lifetime.signal,AbortSignal.timeout(8000)]);
+      return abortable(Promise.resolve().then(()=>{operation.throwIfAborted();return run();}),operation).catch(error=>{
+        if(signal.aborted)throw error;
+        throw new Error(`Demux ${stage}: ${error instanceof Error?error.message:'operation failed'}`);
+      });
+    }
     const work = this.serial.then(async () => {
       signal.throwIfAborted(); this.lifetime.signal.throwIfAborted();
       this.operationSignal = AbortSignal.any([signal,this.lifetime.signal,AbortSignal.timeout(8000)]);
@@ -62,11 +72,13 @@ export class PacketDemux {
     return abortable(work,signal);
   }
 
-  async open(signal: AbortSignal): Promise<{tracks: MediaTrack[]; durationUs: number | null; container: string}> {
+  async open(signal: AbortSignal,onVideo?:(track:VideoTrack)=>void): Promise<{tracks: MediaTrack[]; durationUs: number | null; container: string}> {
     return this.operation(async () => {
       const [format,videos,audios,duration] = await Promise.all([
         this.input.getFormat(),this.input.getVideoTracks(),this.input.getAudioTracks(),this.liveEnded?Promise.resolve(null):this.input.getDurationFromMetadata(),
       ]);
+      const indexing=primeMatroskaIndex(videos[0]??audios[0]);
+      void indexing?.catch(()=>{});
       const tracks: MediaTrack[] = [];
       for (const track of videos) {
         const [codec,width,height,rotation,config,color,fieldOrder,language] = await Promise.all([
@@ -77,7 +89,7 @@ export class PacketDemux {
         const actual: VideoTrack = {id,kind:'video',sourceIndex:null,containerTrackId:track.containerTrackId,
           codec:codec === 'avc' ? 'h264' : codec ?? 'unknown',width,height,rotation,fieldOrder,language,color,
           config:config ? {...config,...(config.description ? {description:copyBytes(config.description)} : {})} : null};
-        tracks.push(actual); this.tracks.set(id,track);
+        tracks.push(actual); this.tracks.set(id,track);onVideo?.(actual);
       }
       for (const track of audios) {
         const [codec,internalCodecId,channels,sampleRate,channelMask,config,language] = await Promise.all([
@@ -93,6 +105,7 @@ export class PacketDemux {
           codecPrivate:velaTrackPrivate(track,config),waveFormat:wave?.status === 'read' ? wave.waveFormat.slice() : null};
         tracks.push(actual); this.tracks.set(id,track);
       }
+      await indexing;finishMatroskaMetadata(this.auditSource);
       return {tracks,durationUs:duration === null ? null : Math.round(duration*1e6)+this.originUs,container:format.name};
     },signal);
   }
@@ -102,7 +115,8 @@ export class PacketDemux {
     if (!track) throw new Error('Unknown demux track');
     if (!Number.isFinite(positionUs) || positionUs < 0) throw new Error('Invalid demux seek position');
     const reader = new PacketReader(track);
-    const read=<T>(run:()=>PromiseLike<T>|T)=>this.operation(run,signal,track instanceof InputVideoTrack?'video-packet':'audio-packet');
+    const parallel=hasStreamingMatroskaBacking(track);
+    const read=<T>(run:()=>PromiseLike<T>|T)=>this.operation(run,signal,track instanceof InputVideoTrack?'video-packet':'audio-packet',parallel);
     const querySeconds=Math.max(0,positionUs-this.originUs)/1e6;
     // Container cues/sample tables locate a preceding random-access packet.
     // Decode audio preroll too; the output stage trims PCM at the exact target.
@@ -130,16 +144,16 @@ export class PacketDemux {
     }
   }
 
-  dispose(): void { if(this.lifetime.signal.aborted)return;this.lifetime.abort(); this.detach?.();this.stopSubtitleClusters?.(); this.input.dispose(); this.tracks.clear(); }
+  dispose(): void { if(this.lifetime.signal.aborted)return;this.lifetime.abort(); this.detach?.();this.stopSubtitleClusters?.();this.stopStreaming?.(); this.input.dispose(); this.tracks.clear(); }
 }
 
 /** Original-file transport: the reader and its cache survive demux epochs. */
 export class FileDemux extends PacketDemux {
-  constructor(readonly reader:ByteReader,signal:AbortSignal,subtitleClusters?:MatroskaSubtitleStream,auditCache?:()=>BufferCacheState){
+  constructor(readonly reader:ByteReader,signal:AbortSignal,subtitleClusters?:MatroskaSubtitleStream,auditCache?:()=>BufferCacheState,startSeconds=0){
     super((current,count)=>new CustomSource({
       getSize:()=>reader.size(current()),read:(start,end)=>{count(end-start);return reader.read(start,end-start,current());},
       maxCacheSize:0,prefetchProfile:'none',
-    }),signal,0,undefined,subtitleClusters,auditCache);
+    }),signal,0,undefined,subtitleClusters,auditCache,{reader,startSeconds});
   }
 }
 

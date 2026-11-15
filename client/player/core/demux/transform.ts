@@ -10,7 +10,7 @@ export function transformCoreDemux(path:string,source:string):string|null{
     if([anchor,cues,method,fast,lookup].some(value=>source.split(value).length!==2))throw new Error('Pinned Matroska cluster tap changed');
     const module=JSON.stringify(new URL('./subtitle-stream.ts',import.meta.url).pathname);
     const cache=JSON.stringify(new URL('./cluster-cache.ts',import.meta.url).pathname);
-    return `import {publishSubtitleCluster} from ${module};\nimport {cachedCluster,loadCluster} from ${cache};\n`+source
+    let result = `import {publishSubtitleCluster} from ${module};\nimport {cachedCluster,loadCluster} from ${cache};\n`+source
       .replace(method,method+`
         const cluster = await loadCluster(this,this.input._rootSource,startPos,async()=>{
           const result = new ResultValue<Cluster>();
@@ -33,6 +33,19 @@ export function transformCoreDemux(path:string,source:string):string|null{
           cluster.timestamp / segment.timestampFactor, subtitleClusterEnd / segment.timestampFactor);
         }
         `+anchor);
+    const streamModule=JSON.stringify(new URL('./matroska-stream.ts',import.meta.url).pathname);
+    result=`import {streamingMatroskaTrack,preloadMatroskaStreaming} from ${streamModule};\n`+result;
+    const hooks:[string,string][]=[
+      ['async getFirstPacket(\n\t\tres: ResultValue<PacketRetrievalResult>,\n\t\toptions: PacketRetrievalOptions,\n\t): MaybeRelevantPromise {','const stream=streamingMatroskaTrack(this.internalTrack,(codec,data)=>AUDIO_CODECS_WITH_DELTA_PACKETS.includes(codec as AudioCodec)?null:determineAudioPacketType(codec as AudioCodec,data));if(stream?.firstEnabled)return stream.first(res);'],
+      ['async getPacket(\n\t\tres: ResultValue<PacketRetrievalResult>,\n\t\ttimestamp: number,\n\t\toptions: PacketRetrievalOptions,\n\t): MaybeRelevantPromise {',"const stream=streamingMatroskaTrack(this.internalTrack,(codec,data)=>AUDIO_CODECS_WITH_DELTA_PACKETS.includes(codec as AudioCodec)?null:determineAudioPacketType(codec as AudioCodec,data));if(stream?.sequential&&this.internalTrack.info?.type==='audio')return stream.at(res,timestamp);"],
+      ['async getKeyPacket(\n\t\tres: ResultValue<PacketRetrievalResult>,\n\t\ttimestamp: number,\n\t\toptions: PacketRetrievalOptions,\n\t): MaybeRelevantPromise {','const stream=streamingMatroskaTrack(this.internalTrack,(codec,data)=>AUDIO_CODECS_WITH_DELTA_PACKETS.includes(codec as AudioCodec)?null:determineAudioPacketType(codec as AudioCodec,data));if(stream?.sequential)return stream.key(res,timestamp);'],
+      ['async getNextPacket(\n\t\tres: ResultValue<PacketRetrievalResult>,\n\t\tpacket: EncodedPacket,\n\t\toptions: PacketRetrievalOptions,\n\t): MaybeRelevantPromise {','const stream=streamingMatroskaTrack(this.internalTrack,(codec,data)=>AUDIO_CODECS_WITH_DELTA_PACKETS.includes(codec as AudioCodec)?null:determineAudioPacketType(codec as AudioCodec,data));if(stream?.sequential&&stream.owns(packet))return stream.after(res,packet);'],
+      ['async getNextKeyPacket(\n\t\tres: ResultValue<PacketRetrievalResult>,\n\t\tpacket: EncodedPacket,\n\t\toptions: PacketRetrievalOptions,\n\t): MaybeRelevantPromise {','const stream=streamingMatroskaTrack(this.internalTrack,(codec,data)=>AUDIO_CODECS_WITH_DELTA_PACKETS.includes(codec as AudioCodec)?null:determineAudioPacketType(codec as AudioCodec,data));if(stream?.sequential&&stream.owns(packet))return stream.after(res,packet,true);'],
+    ];
+    for(const [marker,body]of hooks){if(result.split(marker).length!==2)throw new Error('Pinned streaming Matroska packet API changed');result=result.replace(marker,marker+'\n'+body);}
+    const complete='\t\tthis.currentSegment = null;\n\t}\n\n\t/** Gives each';
+    if(result.split(complete).length!==2)throw new Error('Pinned Matroska metadata completion changed');
+    return result.replace(complete,'\t\tconst completedSegment=this.currentSegment;\n\t\tthis.currentSegment = null;\npreloadMatroskaStreaming(this,completedSegment);\n\t}\n\n\t/** Gives each');
   }
   if(normalized.endsWith('/src/input-format.ts')){
     // The pinned MP4 probe recognizes styp only at byte zero. Ether can retain

@@ -163,7 +163,7 @@ export class PlaybackCore {
     if(source.kind==='file')source.reader.beginEpoch(id);
     const signal=AbortSignal.any([source.abort.signal,abort.signal]);
     if(source.kind==='file')source.subtitleClusters.reset(id);
-    const demux:PacketDemux=source.kind==='file'?new FileDemux(source.reader,signal,source.subtitleClusters,()=>source.reader.bufferCache):new HlsDemux(source.segments,signal,source.originUs);
+    const demux:PacketDemux=source.kind==='file'?new FileDemux(source.reader,signal,source.subtitleClusters,()=>source.reader.bufferCache,positionUs/1e6):new HlsDemux(source.segments,signal,source.originUs);
     let resolveFirst!:()=>void,resolvePrimed!:()=>void;
     const firstFrame=new Promise<void>(resolve=>{resolveFirst=resolve;});
     const primed=new Promise<void>(resolve=>{resolvePrimed=resolve;});
@@ -176,7 +176,14 @@ export class PlaybackCore {
     const startup=AbortSignal.any([signal,AbortSignal.timeout(Math.max(0,Math.ceil(deadline-performance.now())))]);
     try{
       playbackMark('metadata:start');
-      const metadata=await abortable(demux.open(startup),startup);
+      let preparedVideo:string|undefined,videoConfiguring:Promise<void>|undefined;
+      const expectedVideo=this.video?.id;
+      const metadata=await abortable(demux.open(startup,track=>{
+        if(!this.current(run)||videoConfiguring||expectedVideo&&track.id!==expectedVideo)return;
+        preparedVideo=track.id;videoConfiguring=run.decoder.configure(track,id,startup);
+        // Audio metadata can still be in flight; retain its sibling failure.
+        void videoConfiguring.catch(()=>{});
+      }),startup);
       playbackMark('metadata:ready');
       if(!this.current(run))return;
       const video=metadata.tracks.find((track):track is VideoTrack=>track.kind==='video'&&track.id===this.video?.id)
@@ -190,7 +197,7 @@ export class PlaybackCore {
       this.clock.reset(positionUs,id,!!audio);
       playbackMark('decode:start');
       await abortable(Promise.all([
-        run.decoder.configure(video,id,startup),
+        preparedVideo===video.id&&videoConfiguring?videoConfiguring:run.decoder.configure(video,id,startup),
         audio?(async()=>{if(!sameAudio)await source.audio.configure(audio,id,startup);if(sameAudio||positionUs!==0)await source.audio.flush(positionUs,id,startup);})():Promise.resolve(),
       ]),startup);
       if(!this.current(run))return;

@@ -16,7 +16,7 @@ export interface SubtitleStreamPacket extends SubtitlePacket {position:number}
 export interface SubtitleCluster {epoch:number;position:number;payloadStart:number;time:number;endTime:number;bytes:Uint8Array}
 export interface SubtitleClusterStream {
   readonly epoch:number;
-  subscribe(receive:(cluster:SubtitleCluster)=>void):()=>void;
+  subscribe(receive:(cluster:SubtitleCluster)=>void,onFailure?:(error:unknown)=>void,trackNumber?:number):()=>void;
   replay(positionSeconds:number,signal:AbortSignal):Promise<void>;
 }
 export interface SubtitleFont {name:string;mime:string;size:number;read(signal:AbortSignal):Promise<Uint8Array>}

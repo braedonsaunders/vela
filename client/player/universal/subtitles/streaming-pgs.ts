@@ -59,7 +59,7 @@ export async function streamingPGS(options:{container:MatroskaSubtitles;trackId:
       }
       void pump();
     }catch(error){failed(error)}
-  });
+  },failed,container.tracks.find(track=>track.id===trackId)?.containerTrackId??undefined);
   const dispose=()=>{if(disposed)return;disposed=true;stop();local.abort();signal.removeEventListener('abort',dispose);reset();surface.canvas.remove()};
   signal.addEventListener('abort',dispose,{once:true});
   try{
