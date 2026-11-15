@@ -93,8 +93,8 @@ const destinations = (mode: Mode, extra: Style = {}): Node => ({ type: 'box', te
     { type: 'repeat', over: 'nav.destinations', item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: library(mode) } },
   ] });
 const sidebar = (mode: Exclude<Mode, 'full'>): Node => ({ type: 'box', role: 'navigation', label: '{s:mainNavigation}', when: when(set('env.viewer'), mode === 'slimFirst' ? unset('flag:flip') : set('flag:flip')),
-  ...by(mode, { width: '72px', 'flex-shrink': '0', 'box-sizing': 'border-box', 'padding-top': px(bar.normal), 'background-color': '$chrome', 'overflow-x': 'hidden', 'overflow-y': 'auto', 'scrollbar-width': 'none' },
-    { width: '232px', 'flex-shrink': '0', 'box-sizing': 'border-box', 'padding-top': px(bar.normal), 'background-color': '$chrome', 'overflow-x': 'hidden', 'overflow-y': 'auto', 'scrollbar-width': 'none' }),
+  ...by(mode, { position: 'absolute', top: '0px', left: '0px', bottom: '0px', width: '72px', 'flex-shrink': '0', 'box-sizing': 'border-box', 'padding-top': px(bar.normal), 'background-color': '$chrome', 'overflow-x': 'hidden', 'overflow-y': 'auto', 'scrollbar-width': 'none' },
+    { position: 'absolute', top: '0px', left: '0px', bottom: '0px', width: '232px', 'flex-shrink': '0', 'box-sizing': 'border-box', 'padding-top': px(bar.normal), 'background-color': '$chrome', 'overflow-x': 'hidden', 'overflow-y': 'auto', 'scrollbar-width': 'none' }),
   small: { display: 'none' }, children: [destinations(mode)] });
 
 // The bar's left end: the menu button and the wordmark, as wide as the rail (at least 200).
@@ -102,7 +102,7 @@ const barStart = (mode: Exclude<Mode, 'full'>): Node => ({ type: 'box', when: [m
   ...by(mode, { display: 'flex', 'flex-direction': 'row', width: '200px', 'flex-shrink': '0', 'box-sizing': 'border-box', 'padding-left': '12px', gap: '10px', 'align-items': 'center', 'pointer-events': 'auto' },
     { display: 'flex', 'flex-direction': 'row', width: '232px', 'flex-shrink': '0', 'box-sizing': 'border-box', 'padding-left': '12px', gap: '10px', 'align-items': 'center', 'pointer-events': 'auto' }),
   small: { width: 'auto', 'padding-left': '4px', gap: '4px' }, children: [
-    { type: 'box', press: { action: 'toggle', arg: 'flip' }, label: '{s:toggleSidebar}', testId: 'marquee-menu', ...round(44), small: { display: 'none' }, children: [glyph('menu', 22)] },
+    { type: 'box', label: '{s:toggleSidebar}', testId: 'marquee-menu', ...round(44), small: { display: 'none' }, children: [glyph('menu', 22)] },
     { type: 'box', press: { action: 'toggle', arg: 'drawer' }, label: '{s:openNavigation}', testId: 'marquee-menu', ...round(44), style: { ...round(44).style, display: 'none' }, small: { display: 'flex' }, children: [glyph('menu', 22)] },
     { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', display: 'flex', 'align-items': 'center', padding: '6px 4px', 'border-radius': '4px' }, children: [wordmark(28)] },
   ] });
@@ -112,7 +112,7 @@ const topBar: Node = { type: 'box', when: [set('env.viewer')], style: { position
     // The bar's ground: glass, except over a wide home, which draws its middle itself.
     { type: 'box', when: [isnt('env.section', 'home')], style: { ...fill, 'background-color': '$chrome-glass', 'backdrop-filter': 'blur(18px)' } },
     { type: 'box', when: [is('env.section', 'home')], style: { display: 'none' }, small: { display: 'flex', ...fill, 'background-color': '$chrome-glass', 'backdrop-filter': 'blur(18px)' } },
-    barStart('slimFirst'), barStart('fullFirst'),
+    barStart('slimFirst'),
     { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1' } },
     { type: 'box', press: { action: 'search' }, label: '{s:search}', ...round(44), style: { ...round(44).style, display: 'none' }, small: { display: 'flex' }, children: [glyph('search', 22)] },
     { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px', 'justify-content': 'center' }, small: { display: 'none' }, children: [
@@ -156,9 +156,9 @@ const drawer: Node[] = [
     ] },
 ];
 
-const shell: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', height: '100%', 'min-height': '0px', 'background-color': '$page', color: '$ink', 'font-family': sans }, children: [
-  sidebar('slimFirst'), sidebar('fullFirst'),
-  { type: 'slot', slot: 'children', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', flex: '1', 'min-width': '0px', 'min-height': '0px' }, inner: { display: 'flex', 'flex-direction': 'column', 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } },
+const shell: Node = { type: 'box', style: { position: 'relative', display: 'block', height: '100%', 'min-height': '0px', 'background-color': '$page', color: '$ink', 'font-family': sans }, children: [
+  { type: 'slot', slot: 'children', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'box-sizing': 'border-box', 'padding-left': '72px' } as Style, wide: { 'padding-left': '232px' } as Style, small: { 'padding-left': '0px' } as Style, inner: { display: 'flex', 'flex-direction': 'column', 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } },
+  sidebar('slimFirst'),
   topBar,
   accountMenu,
   ...drawer,
@@ -222,7 +222,8 @@ const row: Node = { type: 'box', role: 'group', label: '{row.name}', style: { di
   { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '8px', 'min-height': '32px', 'padding-left': '40px', 'padding-right': '28px' }, small: gutterSmall, children: [
     { type: 'text', text: '{row.name}', role: 'heading', level: 2, style: { 'font-size': '19px', 'font-weight': '700', color: '$ink', flex: '1', 'min-width': '0px', ...oneLine }, small: { 'font-size': '17px' } },
   ] },
-  { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
+  // A shelf scrolls sideways: it takes its width from the page, never from its cards.
+  { type: 'box', style: { display: 'flex', width: '0px', 'min-width': '100%', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
     { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'align-items': 'flex-start', 'padding-top': '4px', 'padding-bottom': '4px', ...gutter }, small: { gap: '10px', ...gutterSmall }, children: [
       { type: 'repeat', over: 'row.items', when: [isnt('row.presentation', 'ranked')], item: { type: 'use', template: 'card' } },
       { type: 'repeat', over: 'row.items', when: [is('row.presentation', 'ranked')], item: { type: 'use', template: 'rankedCard' } },
@@ -289,7 +290,7 @@ const heading2Small: Style = { 'font-size': '17px', ...gutterSmall };
 const section = (show: Condition[], title: string, body: Node, pad = { normal: '30px', small: '20px' }): Node => ({ type: 'box', when: show, style: { display: 'flex', 'flex-direction': 'column', gap: '14px', 'padding-bottom': pad.normal }, small: { gap: '10px', 'padding-bottom': pad.small }, children: [
   { type: 'text', text: title, role: 'heading', level: 2, style: heading2, small: heading2Small }, body,
 ] });
-const shelf = (gap: number, gapSmall: number, item: Node, over: string): Node => ({ type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
+const shelf = (gap: number, gapSmall: number, item: Node, over: string): Node => ({ type: 'box', style: { display: 'flex', width: '0px', 'min-width': '100%', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
   { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: px(gap), ...gutter, 'padding-top': '4px', 'padding-bottom': '4px' }, small: { gap: px(gapSmall), ...gutterSmall }, children: [{ type: 'repeat', over, item }] },
 ] });
 
