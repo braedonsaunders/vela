@@ -291,7 +291,7 @@ const sources: Sources = {
         try {
           try { return await api.bootstrap(); }
           catch (error) {
-            if (!(error instanceof VelaError) || error.status !== 409) throw error;
+            if (!(error instanceof VelaError) || error.status !== 409 || error.detail.code !== 'cursor_expired') throw error;
             return await api.bootstrapFresh();
           }
         } catch (error) {
