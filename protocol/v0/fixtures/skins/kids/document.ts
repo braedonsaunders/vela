@@ -6,7 +6,7 @@
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.0.0';
+const version = '1.1.0';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -16,9 +16,6 @@ const gutter = { 'padding-left': 'max(24px, 4vw)', 'padding-right': 'max(24px, 4
 const gutterSmall = { 'padding-left': '16px', 'padding-right': '16px' } as Style;
 // A raised, toy-like button: a flat ledge under a soft drop.
 const ledge = (tint: string) => `0px 6px 0px ${tint}, 0px 16px 28px -12px rgba(27, 37, 80, 0.35)`;
-// A white sticker frame, as longhands: every side's width and colour stated.
-const frame = (w: number): Style => ({ 'border-style': 'solid', 'border-width': `${w}px`, 'border-color': '#FFFFFF',
-  'border-top-width': `${w}px`, 'border-top-color': '#FFFFFF', 'border-bottom-width': `${w}px`, 'border-bottom-color': '#FFFFFF' } as Style);
 const lift = { translate: '0px -3px', transition: `translate 380ms ${bouncy}, scale 380ms ${bouncy}, background-color 160ms linear` } as Style;
 // Keyboard and remote focus: a thick sky ring outside a white gap, readable on any ground.
 const ring = '0px 0px 0px 4px #FFFFFF, 0px 0px 0px 8px #3FA9F5';
@@ -44,12 +41,12 @@ const pill: Style = { position: 'relative', display: 'flex', 'flex-direction': '
 const pillText: Style = { position: 'relative', 'line-clamp': '1', 'max-width': '14rem' };
 
 // Watch is home; Shows and Movies are the server's libraries, each drawn by kind. Live TV stays out.
-const navWatch: Node = { type: 'box', press: { action: 'home' }, label: '{s:watch}', testId: 'kids-nav-watch', style: pill, hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), children: [
+const navWatch: Node = { type: 'box', press: { action: 'home' }, label: '{s:watch}', a11y: { current: [{ test: 'env.section', is: 'eq', value: 'home' }] }, testId: 'kids-nav-watch', style: pill, hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), children: [
   { type: 'box', when: [{ test: 'env.section', is: 'eq', value: 'home' }], style: { ...pillFill, 'background-color': '$sun' } },
   { type: 'image', src: art('watch.svg'), alt: '', style: { width: '40px', height: '40px', position: 'relative' } },
   { type: 'text', text: '{s:watch}', style: pillText },
 ] };
-const navLibrary: Node = { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], item: { type: 'box', press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}', testId: 'kids-nav-{dest.id}', style: pill, hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), children: [
+const navLibrary: Node = { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], item: { type: 'box', press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}', a11y: { current: [{ test: 'dest.on' }] }, testId: 'kids-nav-{dest.id}', style: pill, hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), children: [
   ...kindFill(pillFill), ...kindIcon(40), { type: 'text', text: '{dest.name}', style: pillText },
 ] } };
 
@@ -59,12 +56,12 @@ const dockBubble: Style = { position: 'absolute', top: '4px', left: '50%', width
 const dockText: Style = { position: 'relative', 'line-clamp': '1', 'max-width': '100%', 'text-align': 'center' };
 const dock: Node = { type: 'box', role: 'navigation', label: '{s:mainNav}', when: [{ test: 'env.viewer' }, { test: 'env.small' }], style: { color: '$ink', position: 'absolute', left: '10px', right: '10px', bottom: 'calc(10px + env(safe-area-inset-bottom))', 'z-index': '20', display: 'flex', 'flex-direction': 'row', height: '76px', 'box-sizing': 'border-box', padding: '0px 6px',
   'border-radius': '30px', 'background-color': '$card', 'box-shadow': '0px 6px 0px rgba(27, 37, 80, 0.08), 0px 18px 40px -12px rgba(27, 37, 80, 0.4)' }, children: [
-  { type: 'box', press: { action: 'home' }, label: '{s:watch}', style: dockItem, focus: { 'background-color': '$sky-soft' }, children: [
+  { type: 'box', press: { action: 'home' }, label: '{s:watch}', a11y: { current: [{ test: 'env.section', is: 'eq', value: 'home' }] }, style: dockItem, focus: { 'background-color': '$sky-soft' }, children: [
     { type: 'box', when: [{ test: 'env.section', is: 'eq', value: 'home' }], style: { ...dockBubble, 'background-color': '$sun' } },
     { type: 'image', src: art('watch.svg'), alt: '', style: { width: '34px', height: '34px', position: 'relative' } },
     { type: 'text', text: '{s:watch}', style: dockText },
   ] },
-  { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], item: { type: 'box', press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}', style: dockItem, focus: { 'background-color': '$sky-soft' }, children: [
+  { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], item: { type: 'box', press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}', a11y: { current: [{ test: 'dest.on' }] }, style: dockItem, focus: { 'background-color': '$sky-soft' }, children: [
     ...kindFill(dockBubble), ...kindIcon(34), { type: 'text', text: '{dest.name}', style: dockText },
   ] } },
 ] };
@@ -89,8 +86,8 @@ const bar: Node = { type: 'box', role: 'navigation', label: '{s:mainNav}', when:
   { type: 'box', press: { action: 'search' }, label: '{s:search}', testId: 'kids-search', style: roundButton(60), hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), small: { width: '48px', height: '48px' }, children: [
     { type: 'icon', symbol: 'search', style: { width: '26px', height: '26px', color: '$ink' }, small: { width: '22px', height: '22px' } },
   ] },
-  // The grown-ups corner: small, quiet, behind a gate.
-  { type: 'box', press: { action: 'open', arg: 'gate' }, label: '{s:grownUps}', testId: 'kids-grown-ups', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '40px', height: '40px', 'border-radius': '999px', 'flex-shrink': '0', opacity: '0.5', 'background-color': 'rgba(255, 255, 255, 0.5)', transition: 'opacity 160ms linear' },
+  // The grown-ups corner: small and quiet, behind a gate.
+  { type: 'box', press: { action: 'open', arg: 'gate' }, label: '{s:grownUps}', a11y: { haspopup: 'dialog' }, testId: 'kids-grown-ups', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '40px', height: '40px', 'border-radius': '999px', 'flex-shrink': '0', opacity: '0.5', 'background-color': 'rgba(255, 255, 255, 0.5)', transition: 'opacity 160ms linear' },
     hover: { opacity: '1' }, focus: { opacity: '1', 'box-shadow': ring }, children: [
     { type: 'icon', symbol: 'lock', style: { width: '18px', height: '18px', color: '$ink' } },
   ] },
@@ -175,8 +172,8 @@ const infoButton = (alone: boolean): Node => ({ type: 'box', press: { action: 's
 // Today's pick: a big rounded window onto the featured title, with a star sticker on its corner.
 const hero: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.searching', not: true }], item: { type: 'box', motion: 'rise', style: { position: 'relative', ...gutter, 'padding-top': '112px' }, small: { ...gutterSmall, 'padding-top': '78px' }, children: [
   { type: 'widget', widget: 'observe', params: { receipt: '{hero.receipt}' } },
-  { type: 'box', style: { position: 'relative', height: 'clamp(340px, 54vh, 600px)', 'box-sizing': 'border-box', ...frame(8), 'border-radius': '48px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky',
-    'box-shadow': '0px 12px 0px rgba(27, 37, 80, 0.07), 0px 40px 70px -28px rgba(27, 37, 80, 0.45)' }, small: { height: '440px', 'border-radius': '36px', ...frame(6) }, children: [
+  { type: 'box', style: { position: 'relative', height: 'clamp(340px, 54vh, 600px)', 'box-sizing': 'border-box', border: '8px solid #FFFFFF', 'border-radius': '48px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky',
+    'box-shadow': '0px 12px 0px rgba(27, 37, 80, 0.07), 0px 40px 70px -28px rgba(27, 37, 80, 0.45)' }, small: { height: '440px', 'border-radius': '36px', border: '6px solid #FFFFFF' }, children: [
     { type: 'box', when: [{ test: 'hero.backdrop' }], motion: 'drift', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'transform-origin': '60% 40%' }, small: { display: 'none' }, children: [
       { type: 'image', src: '{hero.backdrop}', alt: '', fade: true, style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '100%', 'object-fit': 'cover', transition: `opacity 420ms ${soft}` } }] },
     // On a phone the window is tall: the poster fills it better than a cropped backdrop.
@@ -192,17 +189,19 @@ const hero: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.sear
   { type: 'image', src: art('star.svg'), alt: '', motion: 'wobble', style: { position: 'absolute', top: '84px', right: 'calc(max(24px, 4vw) - 22px)', width: '96px', height: '96px', rotate: '12' }, small: { top: '58px', right: '2px', width: '64px', height: '64px' } },
 ] } };
 
-const dot = (current: boolean): Node => ({ type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', when: [{ test: 'index.current', not: !current }],
-  style: { position: 'relative', width: current ? '44px' : '16px', height: '16px', 'border-radius': '8px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': current ? 'rgba(27, 37, 80, 0.16)' : '$card',
-    'box-shadow': current ? 'none' : 'inset 0px 0px 0px 2px rgba(27, 37, 80, 0.16)', transition: `width 420ms ${bouncy}` },
-  hover: current ? undefined : { 'background-color': '$sun-soft' },
-  children: current ? [
-    { type: 'box', when: [{ test: 'env.rotating' }], motion: 'heroFill', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'border-radius': '8px', 'background-color': '$sun' } },
-    { type: 'box', when: [{ test: 'env.rotating', not: true }], style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'border-radius': '8px', 'background-color': '$sun' } },
-  ] : [] });
+const dotFill: Style = { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'border-radius': '8px', 'background-color': '$sun' };
+const dot: Node = { type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', a11y: { current: [{ test: 'index.current' }] },
+  style: { position: 'relative', width: '16px', height: '16px', 'border-radius': '8px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$card',
+    'box-shadow': 'inset 0px 0px 0px 2px rgba(27, 37, 80, 0.16)', transition: `width 420ms ${bouncy}, background-color 200ms linear` },
+  hover: { 'background-color': '$sun-soft' }, focus: { 'background-color': '$sun-soft', 'box-shadow': ring },
+  states: [{ when: [{ test: 'index.current' }], style: { width: '44px', 'background-color': 'rgba(27, 37, 80, 0.16)', 'box-shadow': 'none' } }],
+  children: [
+    { type: 'box', when: [{ test: 'index.current' }, { test: 'env.rotating' }], motion: 'heroFill', style: dotFill },
+    { type: 'box', when: [{ test: 'index.current' }, { test: 'env.rotating', not: true }], style: dotFill },
+  ] };
 const dots: Node = { type: 'box', role: 'group', label: '{s:featured}', when: [{ test: 'env.searching', not: true }, { test: 'env.heroCount', is: 'gt', value: '1' }],
   style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'justify-content': 'center', 'padding-top': '26px' }, children: [
-    { type: 'repeat', over: 'home.heroes', item: { type: 'box', style: { display: 'flex' }, children: [dot(true), dot(false)] } }] };
+    { type: 'repeat', over: 'home.heroes', item: dot }] };
 
 // A tile is a sticker: a poster in a thick white frame on a coloured block that shows as it lifts.
 const tileRadius = '30px';
@@ -214,10 +213,11 @@ const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '2 / 3' }, children: [
       ...ledges,
-      { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'box-sizing': 'border-box', ...frame(6), 'border-radius': tileRadius, 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky-soft',
+      { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'box-sizing': 'border-box', border: '6px solid #FFFFFF', 'border-radius': tileRadius, 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky-soft',
         'box-shadow': '0px 14px 30px -16px rgba(27, 37, 80, 0.5)', scale: '1', translate: '0px 0px', rotate: '0', transition: `scale 460ms ${bouncy}, translate 460ms ${bouncy}, rotate 460ms ${bouncy}, box-shadow 300ms ${soft}` },
-        small: { ...frame(5), 'border-radius': '24px' },
-        groupHover: { scale: '1.04', translate: '0px -10px', rotate: '-2', 'box-shadow': '0px 26px 40px -16px rgba(27, 37, 80, 0.55)' }, children: [
+        small: { border: '5px solid #FFFFFF', 'border-radius': '24px' },
+        groupHover: { scale: '1.04', translate: '0px -10px', rotate: '-2', 'box-shadow': '0px 26px 40px -16px rgba(27, 37, 80, 0.55)' },
+        groupFocus: { scale: '1.04', translate: '0px -10px', rotate: '-2', 'box-shadow': `${ring}, 0px 26px 40px -16px rgba(27, 37, 80, 0.55)` }, children: [
           { type: 'image', when: [{ test: 'card.poster' }], src: '{card.poster}', alt: '', fade: true, style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '100%', 'object-fit': 'cover', transition: `opacity 420ms ${soft}` } },
           { type: 'box', when: [{ test: 'card.poster', not: true }], style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', padding: '16px', 'background-image': 'linear-gradient(160deg, #FFE59A 0%, #FFB3C7 100%)' }, children: [
             { type: 'text', text: '{card.name}', style: { 'font-size': '24px', 'font-weight': '800', 'text-align': 'center', 'line-clamp': '4', 'line-height': '1.05' }, small: { 'font-size': '19px' } }] },
@@ -260,10 +260,11 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 // ---------------------------------------------------------------- title
 
 // A friendly full-page state: an illustration, one line, and a way back.
-const restState = (load: string, picture: string, line: string, alert: boolean): Node => ({ type: 'box', when: [{ test: 'env.load', is: 'eq', value: load }], role: alert ? 'alert' : undefined,
+const restState = (load: string, picture: string, line: string, alert: boolean, more: Node[] = []): Node => ({ type: 'box', when: [{ test: 'env.load', is: 'eq', value: load }], role: alert ? 'alert' : undefined,
   style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'justify-content': 'center', gap: '22px', 'min-height': '70vh', padding: '40px 24px', 'text-align': 'center' }, children: [
     { type: 'image', src: art(picture), alt: '', motion: load === 'loading' ? 'hop' : 'floatSlow', style: { width: load === 'loading' ? '96px' : '220px', height: load === 'loading' ? '96px' : '156px' } },
     { type: 'text', text: line, style: { 'font-size': '24px', 'font-weight': '800', 'max-width': '24rem' } },
+    ...more,
   ] });
 
 const backButton: Node = { type: 'box', press: { action: 'back' }, label: '{s:back}', testId: 'detail-close', style: { ...roundButton(64), position: 'absolute', top: 'calc(24px + env(safe-area-inset-top))', left: 'max(24px, 4vw)', 'z-index': '10' },
@@ -297,7 +298,7 @@ const titlePlay: Node = { type: 'box', when: [{ test: 'detail.canPlay' }], press
   ] };
 
 // Seasons as big round chips; the chosen one is sunny.
-const seasonChip: Node = { type: 'repeat', over: 'detail.seasons', item: { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', style: { ...pill, padding: '0px 26px', height: '56px', 'font-size': '18px' },
+const seasonChip: Node = { type: 'repeat', over: 'detail.seasons', item: { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', a11y: { selected: [{ test: 'season.on' }] }, style: { ...pill, padding: '0px 26px', height: '56px', 'font-size': '18px' },
   hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), children: [
     { type: 'box', when: [{ test: 'season.on' }], style: { ...pillFill, 'background-color': '$sun' } },
     { type: 'text', text: '{card.name}', style: pillText },
@@ -305,9 +306,10 @@ const seasonChip: Node = { type: 'repeat', over: 'detail.seasons', item: { type:
 
 // An episode is a wide sticker: its picture, a big number badge and a progress bar.
 const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}: {episode.numberTitle}', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '12px' }, children: [
-  { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'box-sizing': 'border-box', ...frame(6), 'border-radius': '28px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky-soft',
+  { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'box-sizing': 'border-box', border: '6px solid #FFFFFF', 'border-radius': '28px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky-soft',
     'box-shadow': '0px 8px 0px rgba(27, 37, 80, 0.07), 0px 18px 30px -18px rgba(27, 37, 80, 0.5)', scale: '1', translate: '0px 0px', transition: `scale 460ms ${bouncy}, translate 460ms ${bouncy}` },
-    groupHover: { scale: '1.03', translate: '0px -6px', 'box-shadow': `${ring}, 0px 22px 36px -18px rgba(27, 37, 80, 0.55)` }, children: [
+    groupHover: { scale: '1.03', translate: '0px -6px', 'box-shadow': '0px 8px 0px rgba(27, 37, 80, 0.07), 0px 22px 36px -18px rgba(27, 37, 80, 0.55)' },
+    groupFocus: { scale: '1.03', translate: '0px -6px', 'box-shadow': `${ring}, 0px 22px 36px -18px rgba(27, 37, 80, 0.55)` }, children: [
       { type: 'image', when: [{ test: 'card.backdrop' }], src: '{card.backdrop}', alt: '', fade: true, style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
       { type: 'image', when: [{ test: 'card.backdrop', not: true }, { test: 'card.poster' }], src: '{card.poster}', alt: '', fade: true, style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
       { type: 'box', when: [{ test: 'card.episodeNumberLabel' }], style: { position: 'absolute', top: '10px', left: '10px', 'min-width': '44px', height: '44px', 'box-sizing': 'border-box', padding: '0px 10px', 'border-radius': '999px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$sun', 'box-shadow': '0px 3px 0px #E8A419', 'font-size': '20px', 'font-weight': '800' }, children: [
@@ -332,8 +334,8 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
     { type: 'widget', widget: 'observe', params: { receipt: '{detail.receipt}' } },
     // The window onto the title, the same sticker frame as home's.
     { type: 'box', motion: 'rise', style: { position: 'relative' }, children: [
-      { type: 'box', style: { position: 'relative', height: 'clamp(300px, 50vh, 560px)', 'box-sizing': 'border-box', ...frame(8), 'border-radius': '48px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky',
-        'box-shadow': '0px 12px 0px rgba(27, 37, 80, 0.07), 0px 40px 70px -28px rgba(27, 37, 80, 0.45)' }, small: { height: '300px', 'border-radius': '34px', ...frame(6) }, children: [
+      { type: 'box', style: { position: 'relative', height: 'clamp(300px, 50vh, 560px)', 'box-sizing': 'border-box', border: '8px solid #FFFFFF', 'border-radius': '48px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky',
+        'box-shadow': '0px 12px 0px rgba(27, 37, 80, 0.07), 0px 40px 70px -28px rgba(27, 37, 80, 0.45)' }, small: { height: '300px', 'border-radius': '34px', border: '6px solid #FFFFFF' }, children: [
         { type: 'image', when: [{ test: 'detail.backdrop' }], src: '{detail.backdrop}', alt: '', fade: true, style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
         { type: 'image', when: [{ test: 'detail.backdrop', not: true }, { test: 'detail.poster' }], src: '{detail.poster}', alt: '', style: { position: 'absolute', top: '-20%', left: '-20%', width: '140%', height: '140%', 'object-fit': 'cover', filter: 'blur(60px) saturate(1.5)' } },
         { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'background-image': 'linear-gradient(0deg, rgba(12, 20, 52, 0.72) 0%, rgba(12, 20, 52, 0) 52%)' } },
@@ -369,27 +371,29 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
     ] },
   ] };
 
-const title: Node = { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', height: '100%', display: 'flex', 'flex-direction': 'column', 'background-color': '$page', color: '$ink', 'font-family': rounded }, children: [
+const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', 'background-color': '$page', color: '$ink', 'font-family': rounded }, children: [
   backButton,
-  { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{detail.name}', style: { position: 'relative', flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'background-color': '$page' }, children: [
+  { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{detail.name}', style: { position: 'relative', flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden' }, children: [
     { type: 'image', src: art('sky.svg'), alt: '', style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '560px', 'object-fit': 'cover', 'pointer-events': 'none', 'mask-image': 'linear-gradient(180deg, black 0%, black 60%, transparent 100%)' } },
     restState('loading', 'star.svg', '{s:opening}', false),
-    restState('failed', 'sleepy.svg', '{s:failed}', true),
+    restState('failed', 'sleepy.svg', '{s:failed}', true, [
+      { type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, label: '{s:tryAgain}', style: { position: 'relative', display: 'flex', 'align-items': 'center', height: '60px', padding: '0px 30px', 'border-radius': '999px', 'background-color': '$sun', 'box-shadow': '0px 5px 0px #E8A419', 'font-size': '19px', 'font-weight': '800' },
+        hover: lift, focus: ringed('0px 5px 0px #E8A419'), children: [{ type: 'text', text: '{s:tryAgain}' }] }]),
     titleReady,
   ] },
 ] };
 
 const calm = { keyframes: 'dissolve', duration: 220 };
 const kids: SkinDocument = {
-  schema: 1, renderer: 2, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
+  schema: 1, renderer: 4, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
   preview: art('preview.jpg'), swatches: ['#FFF8EE', '#1B2550', '#FFC93C', '#3FA9F5', '#FF6B57'],
   tokens: {
     page: '#FFF8EE', card: '#FFFFFF', cream: '#FFF3DF', ink: '#1B2550', 'ink-soft': '#4A5580',
     sun: '#FFC93C', 'sun-soft': '#FFE59A', sky: '#3FA9F5', 'sky-soft': '#D6EEFF', coral: '#FF6B57', mint: '#3DD6A0', grape: '#9B82FF',
   },
-  fonts: { rounded: { family: 'Kids Nunito', files: [600, 700, 800, 900].map(weight => ({ url: art('nunito.woff2'), weight, style: 'normal' as const })) } },
+  fonts: { rounded: { family: 'Kids Nunito', files: [{ url: art('nunito.woff2'), weight: '200 1000', style: 'normal' }] } },
   strings: { en: {
-    velaHome: 'Vela home', mainNav: 'Main', watch: 'Watch', search: 'Search', grownUps: 'Grown-ups', close: 'Close',
+    velaHome: 'Vela home', mainNav: 'Main', watch: 'Watch', search: 'Search', grownUps: 'Grown-ups', tryAgain: 'Try again', close: 'Close',
     gateOne: 'What is 6 × 3?', gateTwo: 'And 14 − 8?', signedInAs: 'Watching as', changeLook: 'Change the look',
     install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', backToWatching: 'Back to watching',
     moreInfo: 'More info', featured: 'Featured', back: 'Back', opening: 'Getting it ready…', failed: 'Oops, this one won’t open right now.',
