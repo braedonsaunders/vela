@@ -113,9 +113,13 @@ export class PlaybackEngine {
     if (this.pendingSwitch && performance.now() - this.pendingSwitch.startedAt > 15000) { this.pendingSwitch = undefined; this.fail({kind:'network', message:'Source switch authorization timed out', recoverable:true}); return; }
     if (!this.session || !this.source || !this.wantsPlay || ['failed','ended','recovering'].includes(this.status)) return;
     const now = performance.now();
-    if (this.position() > this.lastPosition + 0.02 && (this.original ? this.status === 'playing' : !this.video.paused)) { this.everPlayed = true; this.lastAdvance = now; this.lastPosition = this.position(); return; }
+    if (!this.pendingSeek && this.position() > this.lastPosition + 0.02 && (this.original ? this.status === 'playing' : !this.video.paused)) { this.everPlayed = true; this.lastAdvance = now; this.lastPosition = this.position(); return; }
     const expired = !this.everPlayed ? now - this.waitSince > this.startupDeadlineMs : now - this.lastAdvance > 30000;
     if (expired) void this.recover(new PlaybackFault(this.everPlayed ? 'Playback stalled for 30 seconds' : `Playback did not start within ${this.startupDeadlineMs / 1000} seconds`, 'network'), this.controller.token());
+  }
+  private resetProgress(position: number) {
+    this.waitSince = performance.now(); this.lastAdvance = this.waitSince;
+    this.lastPosition = position; this.everPlayed = false;
   }
   private detachMedia() { for (const remove of this.listeners) remove(); this.listeners = []; }
   private bindMedia(token: Generation) {
@@ -318,6 +322,7 @@ export class PlaybackEngine {
     const token=this.controller.start(session.id,session.sourceGeneration,session.seekGeneration);
     this.originalGeneration=token;this.session=session;this.source=source;this.pendingTracks=undefined;this.pendingSwitch=undefined;
     this.pendingSeek={position:session.position??0,startedAt:performance.now(),authorized:true};
+    this.resetProgress(session.position??0);
     this.status='buffering';this.failure=null;this.lastObservation=-Infinity;
     this.applyServerState(session.serverState,previous);this.publish();
     try{
@@ -326,6 +331,9 @@ export class PlaybackEngine {
       if(this.overlay)void this.overlay.seek(session.position??0,++this.overlayEpoch).catch(()=>{});
       await seeking;
       if(!this.controller.current(token)||this.original!==original)return;
+      // A retained reader has a new clock epoch after a seek. Comparing its
+      // position with the pre-seek high-water mark falsely stalls backward seeks.
+      this.resetProgress(original.position);
       this.pendingSeek=undefined;this.status=original.readout.state;this.lastObservation=-Infinity;this.publish();
     }catch(error){if(this.controller.current(token)&&this.original===original)await this.recover(error,token);}
   }
@@ -412,7 +420,7 @@ export class PlaybackEngine {
   }
   private async activate(source: Source, position: number, recovery = false, initial = false, retry?: DecoderRetry) {
     this.startupDeadlineMs = source.renditions?.some(r => !codecKnown(r)) ? 60000 : 45000;
-    this.resumePosition = position; this.waitSince = performance.now(); this.lastAdvance = this.waitSince; this.lastPosition = position; this.everPlayed = false;
+    this.resumePosition = position; this.resetProgress(position);
     const token = this.controller.changeSource(!initial); this.resetMedia(); this.source = source;
     this.startupFrameSeen=false;playbackMark('source:open',source.delivery);
     this.startupVideoCallback=this.video.requestVideoFrameCallback?.(()=>{if(this.controller.current(token)){this.startupVideoCallback=undefined;if(this.backend!=='webgpu'&&!this.original&&!this.startupFrameSeen){this.startupFrameSeen=true;playbackMark('first-frame',this.backend==='mse'?'mse':'native');}}});
@@ -721,19 +729,21 @@ export class PlaybackEngine {
             if(!bounds)throw new Error('Live source was retired');
             if(command.seconds<bounds.startSeconds||command.seconds>=bounds.edgeSeconds)throw new Error('Seek is outside the retained live window');
             const token=this.controller.token();this.pendingSeek={position:command.seconds,startedAt:performance.now(),authorized:true};this.status='buffering';this.publish(true);
+            this.resetProgress(command.seconds);
             if(this.overlay)void this.overlay.seek(command.seconds,++this.overlayEpoch).catch(()=>{});
             await original.seek(command.seconds);
-            if(this.controller.current(token)&&this.original===original){this.pendingSeek=undefined;this.status=original.readout.state;}
+            if(this.controller.current(token)&&this.original===original){this.resetProgress(original.position);this.pendingSeek=undefined;this.status=original.readout.state;}
             break;
           }
           if (this.session?.serverControlled) { this.requestSeek(command.seconds); break; }
           const token=this.controller.changeSeek();
+          this.resetProgress(command.seconds);
           if(this.original){
             const original=this.original;this.originalGeneration=token;
             this.pendingSeek={position:command.seconds,startedAt:performance.now(),authorized:true};this.publish(true);
             if(this.overlay)void this.overlay.seek(command.seconds,++this.overlayEpoch).catch(()=>{});
             await original.seek(command.seconds);
-            if(this.controller.current(token)&&this.original===original){this.pendingSeek=undefined;this.status=original.readout.state;}
+            if(this.controller.current(token)&&this.original===original){this.resetProgress(original.position);this.pendingSeek=undefined;this.status=original.readout.state;}
           }else if(this.backend==='mse'&&this.source)await this.activate(this.source,command.seconds,false,true);
           else this.video.currentTime=Math.max(0,command.seconds-this.nativeOrigin);
           break;
