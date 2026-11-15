@@ -114,7 +114,12 @@ function sides(raw: string): [string, string, string, string] {
   return [t, r, b, l];
 }
 function value(raw: string, r: Resolve): string {
-  const text = cssVar(raw.replace(/\$([a-z][a-z0-9-]*)/g, (_, name) => r.doc.tokens?.[name] ?? ''));
+  // A token reference is the whole name: `$paperInk` is refused, not read as `$paper` + "Ink".
+  const text = cssVar(raw.replace(/\$([A-Za-z0-9_-]+)/g, (_, name) => {
+    const v = r.doc.tokens?.[name];
+    if (v === undefined) throw new Error(`Unknown token $${name}`);
+    return v;
+  }));
   if (UNSAFE.test(text.replace(/\{[a-zA-Z.:-]+\}/g, ''))) throw new Error(`Unsafe style value: ${raw}`);
   return text;
 }
