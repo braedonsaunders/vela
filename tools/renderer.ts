@@ -375,20 +375,20 @@ ${Array.from({ length: DEPTH }, (_, i) => shape(DEPTH - i)).join('\n')}
 // search field a home holds), so the renderer is inlined at one call site per slot.
 shape DocSlot
   present: bool
-  root: number
-  rootPos: number
-  slotStyle: number
-  slotPos: number
+  rootBase: StateRef
+  rootSts: StateRef[]
+  slotBase: StateRef
+  slotSts: StateRef[]
   slotInner: number
   slotOrder: string
   nodes: N1[]
 
 shape ShellSlot
   present: bool
-  root: number
-  rootPos: number
-  slotStyle: number
-  slotPos: number
+  rootBase: StateRef
+  rootSts: StateRef[]
+  slotBase: StateRef
+  slotSts: StateRef[]
   slotInner: number
   slotOrder: string
   nodes: N${SHELL_FROM}[]
@@ -408,10 +408,10 @@ shape RouteProps
 // A route's tree (the route view draws the one named after the current stack entry).
 shape RouteTree
   name: string
-  root: number
-  rootPos: number
-  slotStyle: number
-  slotPos: number
+  rootBase: StateRef
+  rootSts: StateRef[]
+  slotBase: StateRef
+  slotSts: StateRef[]
   slotInner: number
   slotOrder: string
   nodes: N1[]
@@ -464,7 +464,7 @@ const detailCtxsBody = `match first(e.detail) { case some(d) => (n.rep == "detai
 const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs${d}(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])`;
 
 const noStyleBody = () => `Style(${STYLE.map(([f]) => `${f}=${NUMERIC.has(f) ? ({ opacity: 1, flexShrink: 1, fontWeight: 400, scale: 1 } as Record<string, number>)[f] ?? 0 : '""'}`).join(', ')})`;
-const EMPTY_DOC = `fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none")\n`;
+const EMPTY_DOC = `fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)\nfn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none")\n`;
 
 /**
  * The renderer's compatibility version: a document names the version it needs
