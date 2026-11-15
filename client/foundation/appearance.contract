@@ -75,7 +75,8 @@ members Client
   action keepDoc
     lastDocUrl = serverDocUrl
   derive docWidth = (viewport.width < 640 ? 400 : viewport.width >= 1200 ? 1300 : 900)
-  resource skinDocument = uiSkinDoc(activeDocUrl, docWidth) with localeJSON when activeDocUrl != "" as shape SkinDoc
+  // Cold (the appearance not yet answered): the kept copy draws at once; then the document is read fresh.
+  resource skinDocument = uiSkinDoc(activeDocUrl, docWidth, not appearanceKnown) with localeJSON when activeDocUrl != "" as shape SkinDoc
   derive docReady = activeDocUrl != "" and current(skinDocument)
   derive activeDoc = (docReady ? skinDocument : emptyDoc())
   // The routes the active document draws whole (the route view); others use the slots.

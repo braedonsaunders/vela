@@ -283,7 +283,8 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
         // library.played lists the document's own choices: "value|label;…" (labels may be {s:key}).
         if (over === 'library.played') level.ipaths = String(node.params?.choices ?? '').split(';').filter(Boolean).slice(0, 8).map(c => { const [v, ...l] = c.split('|'); return `${v}|${parts(l.join('|'), r).map(p => p.l).join('')}`; });
         if (!node.params?.action || !ACTIONS.has(node.params.action)) throw new Error(`Unknown select action ${node.params?.action}`);
-        level.t = 'select'; level.sym = over; level.act = node.params.action; level.arg = parts(node.params.arg ?? '{value}', r);
+        // {value} is the select's own placeholder (the chosen id), kept literal for the renderer to fill.
+        level.t = 'select'; level.sym = over; level.act = node.params.action; level.arg = parts((node.params.arg ?? '{value}').replaceAll('{value}', '\u0000'), r).map(p => ({ ...p, l: p.l.replaceAll('\u0000', '{value}') }));
         level.parts = parts(node.params.none, r); level.label = parts(node.params.label, r); level.test = parts(node.testId, r);
       }
       // Asks for the next page of home or of its row when it scrolls into view.
