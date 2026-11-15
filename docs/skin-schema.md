@@ -159,6 +159,10 @@ Renderer 3 is the live home above; a document using anything here names `rendere
   haspopup?, controls?, title?: Template, role? }` on the press button.
 - `escape: "<flag>"` on a node: Escape clears the flag and returns focus to `returnFocus`.
 - Flags named `keep-…` survive navigation actions; shell `reset` clears all others.
+  Shell `only <flag>` opens that flag alone (closing the other non-keep flags); pressed again it closes.
+- Home's `nav.destinations` (and `dest.*`, `env.libraryCount`, `env.hasLiveLibrary`) list the libraries
+  on home too, with actions `library {dest.id}` (a live library opens Live) and `live`.
+- Boxes are never Tab stops (Escape handling no longer makes them focusable); focus goes to press buttons.
 - The slot box takes every style row (position, z-index, background, backdrop…).
 - Rows: `color-scheme`, `column-gap`, `row-gap`, `scroll-behavior`, `scroll-padding-left`,
   `border-left-width/color`. Under reduced motion overlays also drop `rotate` and `animation`.

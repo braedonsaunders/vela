@@ -85,7 +85,7 @@ ${elementProps}
     keying: action
   slot
   view
-    box id=domId hover=hovering pointerdown=pointing key=keying testId=test role=role aria-label=label -exact-layout-transition=lt sharedElement=se -exact-exit-animation=exitAnim ${rows()}
+    box id=domId hover=hovering pointerdown=pointing key=keying tabindex=-1 testId=test role=role aria-label=label -exact-layout-transition=lt sharedElement=se -exact-exit-animation=exitAnim ${rows()}
       children
 `;
 }
