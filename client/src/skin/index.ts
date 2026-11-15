@@ -159,6 +159,9 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
     if (dyn && BINDABLE[row] && raw.includes('{')) { dyn[BINDABLE[row]] = parts(value(raw, r), undefined, row === 'background-image'); continue; }
     merged[row] = value(raw, r);
   }
+  // The renderer binds gap, row-gap and column-gap: an empty bound longhand resets to normal,
+  // so a one-value gap is both longhands.
+  if (merged.gap !== undefined) { merged['row-gap'] ??= merged.gap; merged['column-gap'] ??= merged.gap; }
   // A colour may name a theme token bare (`cinematic.glass-edge`), as font-family may.
   for (const [row, v] of Object.entries(merged)) if (row.endsWith('color') && /^[a-z][\w-]*(\.[\w-]+)+$/.test(v.trim())) merged[row] = `var(--x-${v.trim().replace(/[^A-Za-z0-9_-]/g, '-')})`;
   // Per-side border rows follow the shorthand's width and colour unless set: an empty bound
