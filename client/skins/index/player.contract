@@ -1,6 +1,11 @@
 use PlayerView from "../../foundation/player-models.contract"
 use PlayerProps from "../../foundation/slot-api.contract"
 
+// The waiting ring's turn.
+keyframes indexTurn
+  from rotate=0
+  to rotate=360
+
 component PlayerChrome
   props
     p: PlayerProps
@@ -39,16 +44,16 @@ component PlayerChrome
         column gap=7 max-width=(p.small ? "50%" : "65%")
           image "assets/brand/vela-lockup.svg" alt=t("ui.vela") width=42 height=16
           text p.title font-size=(p.small ? 20 : 30) line-clamp=2
-      if p.model.state == "loading" or p.model.state == "buffering" or p.model.state == "recovering" or p.model.state == "failed" or p.serverError != ""
-        column align-self="center" max-width="28rem" padding=24 gap=14 background-color="surface.glass" role="status" testId="player-status"
-          text (p.model.state == "failed" or p.serverError != "" ? t("ui.playbackInterrupted") : p.model.state == "loading" ? t("ui.preparingPlayback") : p.model.state == "recovering" ? t("ui.recoveringPlayback") : t("ui.buffering")) font-size=26
-          if p.model.preparation != "" and (p.model.state == "loading" or p.model.state == "buffering")
-            text p.model.preparation font-size=13 role="status"
+      if p.model.state == "failed" or p.serverError != ""
+        column align-self="center" max-width="28rem" padding=24 gap=14 background-color="surface.glass" role="alert" testId="player-status"
+          text t("ui.playbackInterrupted") font-size=26
           if failure != ""
             text failure font-size=14 line-height=1.5
-          if p.model.state == "failed" or p.serverError != ""
-            button press=command("retry", "") pointer-events="auto" border="1px solid var(--index.video-line)" background-color="transparent" color="index.on-video" padding="10px 18px"
-              text t("ui.tryAgain")
+          button press=command("retry", "") pointer-events="auto" border="1px solid var(--index.video-line)" background-color="transparent" color="index.on-video" padding="10px 18px"
+            text t("ui.tryAgain")
+      else
+        if p.model.waiting or p.model.state == "loading" or p.model.state == "buffering" or p.model.state == "recovering"
+          column align-self="center" width=40 height=40 box-sizing="border-box" border-radius=20 border="2px solid var(--index.video-line)" border-top-color="index.on-video" animation=(p.still ? "none" : "indexTurn 900ms linear infinite") role="status" aria-label=(p.model.state == "recovering" ? t("ui.recoveringPlayback") : t("ui.preparingPlayback")) testId="player-status"
       column gap=18 padding=(p.small ? "40px 18px 22px" : "64px 36px 30px") background-image="linear-gradient(0deg, var(--index.video-footer), transparent)" opacity=(shown ? 1 : 0) inert=(not shown) pointer-events=(shown ? "auto" : "none") transition=(p.still ? "none" : "opacity 180ms ease")
         if p.model.actionError != "" and failure == ""
           text p.model.actionError role="status" font-size=13

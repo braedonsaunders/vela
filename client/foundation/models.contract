@@ -111,6 +111,9 @@ shape SearchModel
   descriptive: Card[]
   ai: Card[]
   aiStatus: string
+  descriptiveStatus: string
+  descriptiveRetryAllowed: bool
+  descriptiveRetryAfter: number
   liveChannels: LiveChannelHit[]
   liveProgrammes: LiveProgrammeHit[]
 
