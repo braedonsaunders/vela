@@ -1,7 +1,8 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
 use HomeModel, Viewport, LibraryNav from "../../foundation/models.contract"
-use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, V1, V5, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, rootCtx, noStyle from "../../renderer/levels.contract"
+use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, noStyle from "../../renderer/shapes.contract"
+use V1, V5, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, rootCtx from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 
 fn part(s: string, i: number): string = match s.split("|").at(i) { case some(x) => x, case none => "" }
@@ -127,4 +128,3 @@ component Home
           for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
             V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observe)
 
-fn emptyDoc(): SkinDoc = SkinDoc(id="", styles=[], shell=ShellSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, slotStyle=0, slotInner=0, slotOrder="0", nodes=[]), detailWide="fullscreen", detailSmall="fullscreen")
