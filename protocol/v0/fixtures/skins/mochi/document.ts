@@ -4,7 +4,7 @@
 // friend who floats over the search box and hops while things load. Every value is the
 // compiled skin's (client/skins/mochi until it is deleted), so both draw the same pixels.
 // Fonts: Pixelify Sans and Fredoka, SIL Open Font License 1.1 (licences/).
-import type { Condition, Node, SkinDocument, Style } from '../../../skin';
+import type { Action, Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'mochi', version = '1.0.0';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
@@ -28,7 +28,11 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
+// Renderer 6 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
+const r6 = (fields: Record<string, unknown>) => fields as object;
+const active = (style: Style) => r6({ active: style });
 const candy = { hover: { 'background-color': '$pink-hover' }, focus: { 'box-shadow': ring }, active: press94 };
 const puffy = { hover: { 'background-color': '$lavender-soft' }, focus: { 'box-shadow': ring }, active: press94 };
 const bubble = { hover: { 'background-color': '$pink-wash' }, focus: { 'box-shadow': ring }, active: { scale: '0.9' } };
@@ -147,7 +151,7 @@ const pillOn: Style = { ...pillBase, 'border-color': '$ink', 'background-color':
 const pillCompact: Style = { height: '38px', 'border-color': '$ink', 'box-shadow': '0px 3px 0px $ink' };
 const compactC: Condition = { test: 'env.width', is: 'lt', value: COMPACT };
 const navItem = (label: string, iconName: (on: Condition[]) => Node[], on: Condition[], press: { action: 'home' | 'live' | 'library'; arg?: string }, extra: Extra = {}): Node => ({ type: 'box', press, label, testId: `nav-${label}`, ...extra,
-  style: pillBase, below: { [COMPACT]: pillCompact }, states: [{ when: on, style: pillOn }, { when: [compactC], style: { ...pillBase, 'background-color': '$card' } }], a11y: { current: on }, hover: { 'border-color': '$ink' }, focus: { 'box-shadow': ring }, active: press94, children: [
+  style: pillBase, below: { [COMPACT]: pillCompact }, states: [{ when: on, style: pillOn }, { when: [compactC], style: { ...pillBase, 'background-color': '$card' } }], a11y: { current: on }, hover: { 'border-color': '$ink' }, focus: { 'box-shadow': ring }, ...active(press94), children: [
     ...iconName(on),
     { type: 'text', text: label, style: { 'font-size': '15px', 'font-weight': '550', 'white-space': 'nowrap' }, states: [{ when: on, style: { 'font-size': '15px', 'font-weight': '650', 'white-space': 'nowrap' } }] },
   ] } as Node);
@@ -207,7 +211,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
           searchTip,
         ] },
         // The profile button, washed pink while its menu is open.
-        { type: 'box', id: 'profile-menu-trigger', press: { action: 'toggle', arg: 'menu' }, label: '{s:profileAndAppearance}', testId: 'profile-menu', a11y: { expanded: [set('flag:menu')], controls: 'viewer-settings' },
+        { type: 'box', id: 'profile-menu-trigger', press: { action: 'toggle', arg: 'menu' }, label: '{s:profileAndAppearance}', testId: 'profile-menu', a11y: { expanded: [set('flag:menu')], ...r6({ controls: 'viewer-settings' }) },
           style: profileButton, states: [{ when: [set('flag:menu')], style: { ...profileButton, 'background-color': '$pink-wash' } }], below: { [COMPACT]: { 'padding-right': '4px' } }, ...bubble, children: [
             { type: 'text', text: '{env.viewerInitial}', style: { ...sz(32), 'border-radius': '16px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-family': pixelFace, 'font-size': '16px', 'font-weight': '700', color: '$ink', 'background-color': '$pink-soft', border: '2px solid $ink', 'box-sizing': 'border-box' } },
             { type: 'text', text: '{env.viewer}', style: { 'font-size': '15px', 'font-weight': '600', 'max-width': '140px', 'white-space': 'nowrap', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis' }, below: { [COMPACT]: { display: 'none' } } },
@@ -232,7 +236,7 @@ const menu: Node = { type: 'box', id: 'viewer-settings', role: 'dialog', label: 
     { type: 'box', style: { height: '0px', 'border-style': 'dashed', 'border-width': '0px', 'border-top-width': '2.5px', 'border-top-color': '$line-strong' } },
     { type: 'box', press: { action: 'openPicker' }, label: '{s:appearance}', testId: 'skin-picker', when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
       style: { ...row, position: 'relative', gap: '12px', 'align-items': 'center', 'box-sizing': 'border-box', width: '100%', padding: '10px 12px', border: '2.5px solid $ink', 'border-radius': '16px', 'background-color': '$page', color: '$ink', cursor: 'pointer' },
-      hover: { 'background-color': '$lavender-soft' }, focus: { 'box-shadow': ring }, active: { scale: '0.97' }, children: [
+      hover: { 'background-color': '$lavender-soft' }, focus: { 'box-shadow': ring }, ...active({ scale: '0.97' }), children: [
         { type: 'box', style: { ...col, gap: '2px', flex: '1', 'min-width': '0px', 'text-align': 'left' }, children: [
           { type: 'text', text: '{s:appearance}', style: { ...Label, 'font-size': '10px', color: '$ink-soft' } },
           { type: 'text', text: '{s:name}', style: { 'font-size': '16px', 'font-weight': '600', color: '$ink' } },
@@ -388,7 +392,7 @@ const badge: Style = { ...row, ...sz(40), 'border-radius': '20px', 'align-items'
 const searchField: Node = { type: 'box', style: field, states: [{ when: [set('env.searchFocused')], style: { ...field, 'box-shadow': '0px 6px 0px $ink, 0px 0px 0px 6px $lavender-soft' } }], children: [
   { type: 'box', style: badge, states: [{ when: [set('env.searchFocused')], style: { ...badge, 'background-color': '$pink' } }], children: [icon('search', 16)] },
   { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:searchPlaceholder}', label: '{s:searchYourLibrary}', ink: '$ink', placeholderInk: '$ink-quiet', font: fredoka, size: '17px', weight: '500' }, style: { flex: '1', 'min-width': '0px', height: '100%' } },
-  { type: 'box', when: [set('env.searching')], press: { action: 'clearSearch' }, label: '{s:clearSearch}', style: { ...Bubble, ...sz(40) }, ...bubble, children: [icon('close', 12)] },
+  { type: 'box', when: [set('env.searching')], press: { action: 'clearSearch' as Action }, label: '{s:clearSearch}', style: { ...Bubble, ...sz(40) }, ...bubble, children: [icon('close', 12)] },
 ] };
 
 // Mochi perched on the search box: the field and Mochi slide together while searching.
@@ -559,13 +563,13 @@ const episodesBody: Node[] = [
     { type: 'box', role: 'group', label: '{s:season}', testId: 'season-picker', style: { ...row, gap: '10px', padding: '4px 16px 8px' }, children: [
       { type: 'repeat', over: 'detail.seasons', item: { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', a11y: { pressed: [set('season.on')] },
         style: seasonPill, states: [{ when: [set('season.on')], style: { ...seasonPill, 'background-color': '$pink', 'box-shadow': '0px 4px 0px $ink' } }],
-        hover: { scale: '1.05' }, focus: { 'box-shadow': ring }, active: press94, children: [
+        hover: { scale: '1.05' }, focus: { 'box-shadow': ring }, ...active(press94), children: [
           { type: 'text', text: '{card.name}', style: { 'font-size': '15px' } },
         ] } },
     ] },
   ] },
   upNext,
-  { type: 'box', style: episodeList, small: { gap: '12px' }, states: [{ when: [set('detail.seasonPending')], style: { ...episodeList, opacity: '0.5' } }], a11y: { busy: [set('detail.seasonPending')] }, children: [
+  { type: 'box', style: episodeList, small: { gap: '12px' }, states: [{ when: [set('detail.seasonPending')], style: { ...episodeList, opacity: '0.5' } }], ...r6({ a11y: { busy: [set('detail.seasonPending')] } }), children: [
     { type: 'repeat', over: 'detail.episodes', item: episodeCard },
   ] },
 ];
@@ -651,7 +655,7 @@ const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds 
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
 export default {
-  schema: 1, renderer: 4, id, name: 'Mochi', version,
+  schema: 1, renderer: 6, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true, flatDetail: false },
