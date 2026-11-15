@@ -183,6 +183,10 @@ const shell: Node = { type: 'box', style: { position: 'relative', display: 'flex
 ] };
 
 // ---------------------------------------------------------------- cards and hubs
+// A loading block in the shape of what is coming, with a passing sheen.
+const block = (w: string, h: string, radius: number, extra: Partial<Node> = {}): Node => ({ type: 'box', ...extra, style: { width: w, height: h, 'flex-shrink': '0', 'border-radius': px(radius), 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$skeleton', ...(extra.style ?? {}) }, children: [
+  { type: 'box', when: [unset('env.still')], motion: 'sheen', style: { width: '100%', height: '100%', 'background-image': 'linear-gradient(90deg, transparent 0%, $skeleton-sheen 50%, transparent 100%)' } },
+] } as Node);
 const art = (src: string): Node => ({ type: 'image', src, alt: '', fade: true, style: { ...fill, width: '100%', height: '100%', 'object-fit': 'cover', transition: 'opacity 260ms linear' } });
 const progress = (h: number, pct: string, show: Condition[]): Node => ({ type: 'box', when: show, style: { position: 'absolute', left: '0px', right: '0px', bottom: '0px', height: px(h), 'background-color': '$scrim' }, children: [
   { type: 'box', style: { height: px(h), width: `${pct}%`, 'background-color': '$amber' } },
@@ -242,19 +246,30 @@ const rankedCard: Node = { type: 'box', style: { display: 'flex', 'flex-directio
 ] };
 
 // A hub: its heading over a shelf of cards in server order.
-const row: Node = { type: 'box', role: 'group', label: '{row.name}', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', 'padding-bottom': '30px' }, small: { gap: '6px', 'padding-bottom': '20px' }, children: [
+// A hub: its heading (with paging arrows on wide screens) over a shelf of cards in server
+// order. On home the shelf is the row's pager and ends in a cell that asks for more.
+const spinner = (size: number, extra: Partial<Node> = {}): Node => ({ type: 'box', ...extra, motion: 'spin', style: { width: px(size), height: px(size), 'flex-shrink': '0', 'box-sizing': 'border-box', 'border-radius': '999px', border: `${size > 30 ? 3 : 2}px solid $track`, 'border-top-color': '$amber' } } as Node);
+const pageButton = (dir: 'pagePrev' | 'pageNext'): Node => ({ type: 'box', press: { action: dir, arg: '{row.id}' }, label: dir === 'pagePrev' ? '{s:scrollBack}' : '{s:scrollOn}', ...round(32),
+  disabled: [set(dir === 'pagePrev' ? 'pager.atStart' : 'pager.atEnd')], disabledStyle: { opacity: '0.35' }, children: [glyph(dir === 'pagePrev' ? 'left' : 'right', 18)] } as Node);
+const shelfStyle = (gap: number, pad: Style, inset: string, still: boolean): Style => ({ display: 'flex', 'flex-direction': 'row', gap: px(gap), 'align-items': 'flex-start', 'box-sizing': 'border-box', width: '0px', 'min-width': '100%',
+  'padding-top': '4px', 'padding-bottom': '4px', ...pad, 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'scroll-behavior': still ? 'auto' : 'smooth', 'scroll-padding-left': inset });
+const rowOf = (paged: boolean): Node => ({ type: 'box', role: 'group', label: '{row.name}', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', 'padding-bottom': '30px' }, small: { gap: '6px', 'padding-bottom': '20px' }, children: [
   { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '8px', 'min-height': '32px', 'padding-left': '40px', 'padding-right': '28px' }, small: gutterSmall, children: [
     { type: 'text', text: '{row.name}', role: 'heading', level: 2, style: { 'font-size': '19px', 'font-weight': '700', color: '$ink', flex: '1', 'min-width': '0px', ...oneLine }, small: { 'font-size': '17px' } },
+    ...(paged ? [{ ...pageButton('pagePrev'), when: [notSmall, set('pager.overflows')] }, { ...pageButton('pageNext'), when: [notSmall, set('pager.overflows')] }] as Node[] : []),
   ] },
   // A shelf scrolls sideways: it takes its width from the page, never from its cards.
-  { type: 'box', style: { display: 'flex', width: '0px', 'min-width': '100%', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
-    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'align-items': 'flex-start', 'padding-top': '4px', 'padding-bottom': '4px', ...gutter }, small: { gap: '10px', ...gutterSmall }, children: [
-      { type: 'repeat', over: 'row.items', when: [isnt('row.presentation', 'ranked'), unset('row.resume')], item: { type: 'use', template: 'card' } },
-      { type: 'repeat', over: 'row.items', when: [isnt('row.presentation', 'ranked'), set('row.resume')], item: { type: 'use', template: 'wideCard' } },
-      { type: 'repeat', over: 'row.items', when: [is('row.presentation', 'ranked')], item: { type: 'use', template: 'rankedCard' } },
-    ] },
-  ] },
-] };
+  { type: 'box', ...(paged ? { pager: { inset: 40, peek: 60 } } : {}), style: shelfStyle(16, gutter, '40px', false), small: { gap: '10px', ...gutterSmall, 'scroll-padding-left': '14px' }, states: [{ when: [set('env.still')], style: shelfStyle(16, gutter, '40px', true) }], children: [
+    { type: 'repeat', over: 'row.items', when: [isnt('row.presentation', 'ranked'), unset('row.resume')], item: { type: 'use', template: 'card' } },
+    { type: 'repeat', over: 'row.items', when: [isnt('row.presentation', 'ranked'), set('row.resume')], item: { type: 'use', template: 'wideCard' } },
+    { type: 'repeat', over: 'row.items', when: [is('row.presentation', 'ranked')], item: { type: 'use', template: 'rankedCard' } },
+    ...(paged ? [{ type: 'box', when: [set('row.hasMore')], style: { position: 'relative', display: 'flex', width: '72px', 'align-self': 'stretch', 'flex-shrink': '0', 'align-items': 'center', 'justify-content': 'center' }, small: { width: '48px' }, children: [
+      { type: 'widget', widget: 'sentinel', params: { on: 'row' }, style: { ...fill } },
+      spinner(24, { when: [set('row.loadingMore')] }),
+    ] }] as Node[] : []),
+  ] } as Node,
+] } as Node);
+const row = rowOf(false), homeRow = rowOf(true);
 
 // ---------------------------------------------------------------- home
 const heroCopy: Node = { type: 'box', style: { position: 'absolute', left: '0px', bottom: '0px', 'box-sizing': 'border-box', width: 'min(620px, 62%)', padding: '0px 36px 32px', display: 'flex', 'flex-direction': 'column', gap: '10px' },
@@ -298,13 +313,36 @@ const empty = (icon: string, title: string, message: string, extra: Partial<Node
   { type: 'text', text: message, style: { 'font-size': '15px', color: '$ink-dim', 'line-height': '1.5', 'max-width': '30rem' } },
 ] } as Node);
 
+// The search field: in a sticky strip at the top of a wide home (the bar's middle, in the
+// bar's colour), under the bar on phones.
+const fieldStyle = (focused: boolean): Style => ({ position: 'relative', display: 'flex', 'flex-direction': 'row', width: '100%', 'max-width': '560px', 'align-items': 'center', gap: '10px', height: '38px', 'box-sizing': 'border-box', padding: '0px 4px 0px 12px', 'border-radius': '6px',
+  'background-color': focused ? '$field-focus' : '$field', 'box-shadow': focused ? '0px 0px 0px 1px $line-strong' : 'none', transition: 'background-color 120ms linear, box-shadow 120ms linear' });
+const searchStrip: Node = { type: 'box', style: { position: 'sticky', top: '0px', 'z-index': '16', display: 'flex', 'flex-direction': 'row', 'flex-shrink': '0', height: px(bar.normal), 'box-sizing': 'border-box', padding: '0px 76px 0px 24px', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$chrome-glass', 'backdrop-filter': 'blur(18px)' },
+  small: { position: 'relative', top: 'auto', height: 'auto', 'margin-top': px(bar.small), padding: '10px 14px 16px', 'background-color': 'transparent', 'backdrop-filter': 'none' }, children: [
+    { type: 'box', style: fieldStyle(false), states: [{ when: [set('env.searchFocused')], style: fieldStyle(true) }], children: [
+      glyph('search', 18, { style: { color: '$ink-faint' }, states: [{ when: [set('env.searchFocused')], style: { width: '18px', height: '18px', 'flex-shrink': '0', color: '$ink' } }] } as Partial<Node>),
+      { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:search}', label: '{s:searchYourLibrary}', placeholderColor: '$ink-faint' }, style: { flex: '1', 'min-width': '0px', height: '100%', color: '$ink', 'font-size': '15px', 'font-family': sans } },
+      { type: 'box', when: [set('env.searching')], press: { action: 'clearSearch' }, label: '{s:clearSearch}', ...round(30), children: [glyph('close', 16)] },
+    ] } as Node,
+  ] };
+// Home's next rows load as its end scrolls into view, shaped like what is coming.
+const shelfBlocks: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '12px', 'padding-bottom': '30px' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', ...gutter }, small: gutterSmall, children: [block('200px', '20px', 4)] },
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'padding-left': '40px' }, small: { gap: '10px', 'padding-left': '14px' }, children: Array.from({ length: 10 }, (): Node => (
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', 'flex-shrink': '0' }, children: [block('152px', '228px', 4, { small: { width: '112px', height: '168px' } }), block('70%', '12px', 3)] })) },
+] };
+const homeEnd: Node = { type: 'box', when: [unset('env.searching'), set('env.homeHasMore')], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'min-height': '120px' }, children: [
+  { type: 'widget', widget: 'sentinel', params: { on: 'home' }, style: { ...fill } },
+  { ...shelfBlocks, when: [set('env.homeMoreLoading')] },
+] };
+
+const contentStyle = (searching: boolean): Style => ({ display: 'flex', 'flex-direction': 'column', 'padding-top': searching ? '0px' : '24px', 'padding-bottom': searching ? '0px' : '48px' });
 const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column' }, children: [
-  // Phones: the field sits under the bar. Wide: a sticky strip at the top of the page, in the bar's colour.
-  { type: 'slot', slot: 'searchField', style: { position: 'sticky', top: '0px', 'z-index': '16', 'flex-shrink': '0', height: px(bar.normal), 'box-sizing': 'border-box', padding: '0px 76px 0px 24px', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$chrome-glass', 'backdrop-filter': 'blur(18px)' } as Style,
-    small: { position: 'relative', top: 'auto', height: 'auto', 'margin-top': px(bar.small), padding: '10px 14px 16px', 'background-color': 'transparent', 'backdrop-filter': 'none' } as Style, inner: { width: '100%', 'max-width': '560px' } },
-  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '24px', 'padding-bottom': '48px' }, small: { 'padding-top': '0px' }, states: [{ when: [set('env.searching')], style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '0px', 'padding-bottom': '0px' } }], children: [
+  searchStrip,
+  { type: 'box', style: contentStyle(false), small: { 'padding-top': '0px' }, states: [{ when: [set('env.searching')], style: contentStyle(true) }], children: [
     spotlight,
-    { type: 'repeat', over: 'home.rows', when: [unset('env.searching')], item: { type: 'box', motion: 'arrive', stagger: { step: 40, cap: 5 }, children: [{ type: 'use', template: 'row' }] } },
+    { type: 'repeat', over: 'home.rows', when: [unset('env.searching')], item: { type: 'box', motion: 'arrive', stagger: { step: 40, cap: 5 }, children: [{ type: 'use', template: 'homeRow' }] } },
+    homeEnd,
     empty('stack', '{s:nothingHereYet}', '{s:noRowsYet}', { when: [unset('env.searching'), is('env.rowCount', '0'), is('env.heroCount', '0')] }),
   ] },
 ] };
@@ -468,10 +506,6 @@ const titleHeadSmall: Node = { type: 'box', motion: 'arrive', style: { display: 
   facts,
 ] };
 
-// A loading block in the shape of what is coming, with a passing sheen.
-const block = (w: string, h: string, radius: number, extra: Partial<Node> = {}): Node => ({ type: 'box', ...extra, style: { width: w, height: h, 'flex-shrink': '0', 'border-radius': px(radius), 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$skeleton', ...(extra.style ?? {}) }, children: [
-  { type: 'box', when: [unset('env.still')], motion: 'sheen', style: { width: '100%', height: '100%', 'background-image': 'linear-gradient(90deg, transparent 0%, $skeleton-sheen 50%, transparent 100%)' } },
-] } as Node);
 const detailLoading: Node = { type: 'box', role: 'status', label: '{s:openingTitle}', when: [is('env.load', 'loading')], style: { display: 'flex', 'flex-direction': 'row', gap: '36px', padding: '48px 48px', 'align-items': 'flex-start' }, small: { padding: '24px 16px' }, children: [
   block('260px', '390px', 4, { small: { display: 'none' } }),
   { type: 'box', style: { display: 'flex', 'flex-direction': 'column', flex: '1', gap: '16px' }, children: [block('60%', '34px', 4), block('30%', '16px', 3), block('200px', '44px', 6), block('100%', '72px', 4)] },
@@ -517,7 +551,7 @@ const title: Node = { type: 'box', style: { position: 'relative', height: '100%'
 const rise = { keyframes: 'doc:rise', duration: 420, easing: ease, fill: 'both' as const, still: { keyframes: 'dissolve', duration: 160 } };
 
 export default {
-  schema: 1, renderer: 4, id, name: 'Marquee', version,
+  schema: 1, renderer: 7, id, name: 'Marquee', version,
   tagline: 'Your media server at home: charcoal hubs, a sidebar and amber accents.',
   preview: asset('preview.jpg'), swatches: ['#1f2023', '#eeeeee', '#e9a31b', '#121315', '#2c2e32'],
   tokens: {
@@ -534,13 +568,14 @@ export default {
   strings: { en: {
     mainNavigation: 'Main navigation', velaHome: 'Vela home', home: 'Home', libraries: 'Libraries', live: 'Live TV',
     toggleSidebar: 'Collapse or expand the sidebar', openNavigation: 'Open navigation', closeNavigation: 'Close navigation',
-    search: 'Search', searchYourLibrary: 'Search your library', profile: 'Profile and appearance', changeAppearance: 'Change appearance',
+    clearSearch: 'Clear search', search: 'Search', searchYourLibrary: 'Search your library', profile: 'Profile and appearance', changeAppearance: 'Change appearance',
     install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out',
     featured: 'FEATURED', featuredTitles: 'Featured titles', featuredNumber: 'Featured title {index.label} of {env.heroCount}', moreInfo: 'More info',
     episodeNumber: 'Episode {card.episodeNumberLabel}', seasonEpisode: 'S{card.seasonNumberLabel} · E{card.episodeNumberLabel}',
     detailSeasonEpisode: 'S{detail.seasonNumberLabel} · E{detail.episodeNumberLabel}', detailEpisodeNumber: 'Episode {detail.episodeNumberLabel}',
     resumeFrom: 'Resume from {detail.resumePosition}', resumeTitle: 'Resume {card.name}', playTitle: 'Play {card.name}', watchTrailer: 'Watch trailer', watchProgress: 'Watch progress', watched: 'Watched', genres: 'Genres', nothingHereYet: 'Nothing here yet', noRowsYet: "Your library hasn't offered any rows yet. Titles appear here as your server adds them.",
     closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', titleFailed: "This title couldn't be opened. It may no longer be available.",
+    scrollBack: 'Earlier in {row.name}', scrollOn: 'More in {row.name}',
     season: 'Season', seasons: 'Seasons', episodes: 'Episodes', extras: 'Extras', cast: 'Cast', media: 'Media', play: 'Play', trailer: 'Trailer', clip: 'Clip', featurette: 'Featurette', extra: 'Extra', notAvailableYet: 'Not available yet',
   } },
   motion: {
@@ -549,6 +584,7 @@ export default {
     gone100: { keyframes: 'vanish', duration: 100, easing: 'linear' },
     gone120: { keyframes: 'vanish', duration: 120, easing: 'linear' },
     fade: { keyframes: 'dissolve', duration: 160, easing: 'linear' },
+    spin: { keyframes: 'spin', duration: 900, easing: 'linear', iterations: 'infinite', fill: 'none', still: { keyframes: 'none', duration: 0 } },
     sheen: { keyframes: 'shimmer', duration: 1500, easing: 'ease-in-out', iterations: 'infinite', fill: 'none' },
     slide: { keyframes: 'doc:slide', duration: 220, easing: ease, still: { keyframes: 'dissolve', duration: 120 } },
   },
@@ -558,7 +594,7 @@ export default {
     drop: { '0%': { opacity: 0, translate: '0px -6px' } },
     slide: { '0%': { translate: '-100% 0px' } },
   },
-  templates: { card, wideCard, rankedCard, row },
+  templates: { card, wideCard, rankedCard, row, homeRow },
   slots: { shell, home },
   routes: { title },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
