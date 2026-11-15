@@ -10,11 +10,13 @@ export async function command(cmd: string[], capture = false): Promise<string> {
   return result.trim();
 }
 export async function keychain(operation: 'init'|'public'|'sign', identity: string, file?: string): Promise<string> {
-  if (!['production-v1','lab-test-v1'].includes(identity)) throw new Error('Unknown signing identity');
+  if (!['production-v1','production-v2','lab-test-v1'].includes(identity)) throw new Error('Unknown signing identity');
+  const pinnedHelper = process.env.VELA_SIGNING_HELPER;
+  if (pinnedHelper) return command([resolve(pinnedHelper), operation, identity, ...file ? [file] : []], true);
   const source = join(import.meta.dir, 'keychain.swift');
   const dir = join(output, '.signing'); await mkdir(dir, {recursive:true});
   const executable = join(dir, `keychain-${sha256(await readFile(source)).slice(0,16)}`);
-  if (!await Bun.file(executable).exists()) await command(['/Users/braedonsaunders/.bb/thread-storage/vela-orch/locked.sh', 'swiftc', source, '-o', executable]);
+  if (!await Bun.file(executable).exists()) await command(['swiftc', source, '-o', executable]);
   return command([executable, operation, identity, ...file ? [file] : []], true);
 }
 export function verifySignature(bytes: Uint8Array, signature: string, publicKey: string) {

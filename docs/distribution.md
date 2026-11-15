@@ -407,7 +407,8 @@ Ed25519 identity in the macOS login keychain, service
 pin. The helper has no private-key export operation; private bytes never enter
 command arguments, files, repo, logs or chat. Keychain access failures stop signing.
 Back up/rotate through an approved secure-store procedure; losing this key requires
-shipping a new Ether public pin. Pin current and next before switching signing keys.
+shipping a new Ether public pin. Initialize `production-v2` and pin its public key as next before switching signing
+keys; `sign.ts` and `publish.ts` take `--next-key` for that rotation.
 The independent `lab-test-v1` identity is never accepted by production builds.
 
 After an approved clean build:
@@ -436,3 +437,15 @@ The owner console shows installed version, available version, Install/Update and
 Roll back; an installer bundle may pin a specific signed descriptor and version
 instead of following stable. Check expiry/signature/compatibility even when pinned.
 All public publishing waits for the owner's approval after the lab result.
+
+Use `--output-dir=<directory>` on signing and publish dry runs to stage a lab bundle
+in a directory named by its file URLs; no descriptor edit is allowed after signing.
+
+The helper executable is source-hashed and cached under release scratch output.
+macOS may ask for Keychain permission when a newly compiled helper first accesses
+an existing key; allow only the expected local signing helper. An operator may set
+`VELA_SIGNING_HELPER=/absolute/path/to/already-authorized-helper` to keep using the
+original trusted executable during a dry run. This changes no Keychain ACL and
+never exports the private key. Do not delete the authorized helper while a release
+is pending. The same key remains in the login keychain if scratch output is lost;
+recompiling the helper may require normal macOS authorization again.

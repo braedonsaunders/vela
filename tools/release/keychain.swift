@@ -7,7 +7,7 @@ func fail(_ message: String) -> Never { fputs(message + "\n", stderr); exit(1) }
 let args = CommandLine.arguments
 if args.count < 3 { fail("Usage: keychain <init|public|sign> <production-v1|lab-test-v1> [file]") }
 let operation = args[1], account = args[2]
-if !["production-v1", "lab-test-v1"].contains(account) { fail("Unknown signing identity") }
+if !["production-v1", "production-v2", "lab-test-v1"].contains(account) { fail("Unknown signing identity") }
 let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
     kSecAttrService as String: "app.vela.release-signing.ed25519", kSecAttrAccount as String: account,
     kSecAttrSynchronizable as String: false]

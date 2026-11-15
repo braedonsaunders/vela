@@ -1,14 +1,14 @@
 /** Deliberate public release operation. Never called by build.ts or sign.ts. */
 import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { command, keychain, output, sha256, verifySignature } from './signing';
 const version = process.argv[2], dryRun = process.argv.includes('--dry-run'), testKey = process.argv.includes('--test-key');
 if (!/^\d+\.\d+\.\d+$/.test(version ?? '') || testKey && !dryRun) throw new Error('Usage: publish.ts <version> --dry-run [--test-key] OR --approved=<version>');
 if (!dryRun && !process.argv.includes(`--approved=${version}`)) throw new Error('Public publication requires the owner go for this version, then --approved=<version>. Use --dry-run to validate locally.');
-const dir = join(output, `signed-${version}${testKey ? '-test' : ''}`);
+const dir = resolve(process.argv.find(a=>a.startsWith('--output-dir='))?.slice(13) ?? join(output, `signed-${version}${testKey ? '-test' : ''}`));
 const descriptorName = `vela-${version}.release.json`, descriptorFile = join(dir,descriptorName);
 const bytes = await readFile(descriptorFile), descriptor = JSON.parse(bytes.toString('utf8'));
-verifySignature(bytes,await readFile(descriptorFile+'.sig','utf8'),await keychain('public',testKey?'lab-test-v1':'production-v1'));
+verifySignature(bytes,await readFile(descriptorFile+'.sig','utf8'),await keychain('public',testKey?'lab-test-v1':process.argv.includes('--next-key')?'production-v2':'production-v1'));
 if (descriptor.schemaVersion !== 1 || descriptor.kind !== 'vela-release' || descriptor.channel !== 'stable' || descriptor.version !== version || descriptor.sourceDirty !== false || Date.parse(descriptor.expiresAt) <= Date.now() || !Number.isFinite(Date.parse(descriptor.publishedAt))) throw new Error('Invalid/expired signed descriptor');
 const base = `https://github.com/braedonsaunders/vela/releases/download/v${version}/`;
 const refs = [descriptor.archive, descriptor.manifest, ...Object.values(descriptor.engines).map((e:any)=>e.manifest)];
