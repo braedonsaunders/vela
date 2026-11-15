@@ -8,6 +8,7 @@ export class VideoBuffer<T extends DecodedVideoFrame> {
   }
   get length(): number { return this.frames.length; }
   get full(): boolean { return this.length >= this.capacity; }
+  get nextTimestampUs(): number | null { return this.frames[0]?.timestampUs ?? null; }
   push(frame: T, epoch: number): boolean {
     if (frame.epoch !== epoch || !Number.isFinite(frame.timestampUs) || !Number.isFinite(frame.durationUs) || frame.durationUs < 0) {
       frame.release(); return false;

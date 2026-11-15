@@ -109,7 +109,7 @@ export class FileDemux {
     }
   }
 
-  dispose(): void { this.lifetime.abort(); this.detach?.(); this.input.dispose(); this.tracks.clear(); }
+  dispose(): void { if(this.lifetime.signal.aborted)return;this.lifetime.abort(); this.detach?.(); this.input.dispose(); this.tracks.clear(); }
 }
 
 function copyBytes(value: AllowSharedBufferSource): Uint8Array<ArrayBuffer> {

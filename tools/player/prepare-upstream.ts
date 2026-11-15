@@ -63,7 +63,10 @@ const { getWorkerEntryPoints } = await import(pathToFileURL(join(upstream, 'scri
 for (const [target, entry] of getWorkerEntryPoints()) {
   await build({...common, entryPoints:[entry], format:'iife', outfile:join(libraries,target)});
 }
-await build({...common, entryPoints:[join(root,'client/player/universal/runtime.ts')], format:'esm', outfile:join(destination,'runtime.js')});
+// Explicit local migration candidate. Production stays on the qualified entry
+// until the Vela-owned core passes its direct H.264/HEVC parity gate.
+const runtimeEntry=Bun.argv.includes('--core')?'client/player/core/adapter.ts':'client/player/universal/runtime.ts';
+await build({...common, entryPoints:[join(root,runtimeEntry)], format:'esm', outfile:join(destination,'runtime.js')});
 await cp(join(root,'client/player/universal/audio/ffmpeg'), join(sourceDir,'vela-audio-hooks'), {recursive:true});
 await copyFile(join(root,'client/player/universal/video/upstream-transform.ts'), join(sourceDir,'vela-video-transform.ts'));
 const audioDirectory = Bun.argv.find(arg => arg.startsWith('--audio-dir='))?.slice(12);

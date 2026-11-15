@@ -1,5 +1,4 @@
-import type { SessionCommand, AudioRendition, OriginalVideo, Chapter } from '../wire/v0/types';
-import type { SubtitleDelivery } from '../../protocol/v0/types';
+import type { SessionCommand, AudioRendition, OriginalVideo, Chapter, SubtitleDelivery } from '../wire/v0/types';
 /** Local engine input. protocol.ts translates the versioned server plan here. */
 export interface Track { id: string; label: string; language?: string; url?: string; codec?: string; channels?: number; streamIndex?: number; delivery?: SubtitleDelivery; forced?: boolean; hearingImpaired?: boolean }
 export interface Rendition { id: string; url: string; bandwidth: number; mime: string; height?: number; audioGroupId?: string; codecStatus?: 'pending' | 'verified' }
@@ -10,6 +9,7 @@ export interface Source {
   id: string; strategy: 'direct' | 'remux' | 'transcode'; delivery: 'file' | 'hls';
   url: string; mime: string; timeline: string; edition: string; audioTrackId?: string; recoveryAllowed?: boolean; boundaries?: number[];
   original?: boolean; originalVideo?: OriginalVideo;
+  sourceRevision?: string;
   timelineOriginSeconds?: number; audioRenditions?: AudioRendition[]; initialRenditionId?: string; renditions?: Rendition[];
 }
 export interface OnDemandSource { id: string; onDemand: true }
