@@ -7,6 +7,7 @@ const PAGE = 256 * 1024;
 const MAX_READ = 16 * 1024 * 1024;
 const CACHE = 32 * 1024 * 1024;
 class RangeFailure extends Error {}
+interface ReadEpoch {id:number;seen:Uint8Array|null|undefined;unique:number;repeated:number}
 
 /** One pinned original, shared by AV and subtitles. No whole-file fallback. */
 export class RangeReader implements ByteReader {
@@ -20,10 +21,23 @@ export class RangeReader implements ByteReader {
   private etag: string | null = null;
   private modified: string | null = null;
   private hasRevision = false;
+  private readEpoch:ReadEpoch={id:0,seen:undefined,unique:0,repeated:0};
   private readonly url: string;
   readonly bandwidth=new BandwidthEstimator();
   readonly delivery=new DeliveryMeter();
-  readonly metrics = { requests: 0, bytes: 0, cacheHits: 0, milliseconds: 0 };
+  readonly metrics = { requests: 0, bytes: 0, cacheHits: 0, milliseconds: 0,
+    sourceEpoch:0,uniquePageRequests:0 as number|null,repeatedPageRequests:0 as number|null };
+  /** A bounded bitmap counts repeat physical acquisitions without retaining URLs
+   * or a list of file offsets. Old pending reads retain their requesting epoch. */
+  beginEpoch(id:number){
+    this.readEpoch={id,seen:undefined,unique:0,repeated:0};
+    this.metrics.sourceEpoch=id;this.metrics.uniquePageRequests=0;this.metrics.repeatedPageRequests=0;
+  }
+  private notePage(scope:ReadEpoch,index:number,total:number){
+    if(scope.seen===undefined){const length=Math.ceil(Math.ceil(total/PAGE)/8);scope.seen=length<=1024*1024?new Uint8Array(length):null;}
+    if(scope.seen){const byte=index>>>3,bit=1<<(index&7);if(scope.seen[byte]&bit)scope.repeated++;else{scope.seen[byte]|=bit;scope.unique++;}}
+    if(scope===this.readEpoch){this.metrics.uniquePageRequests=scope.seen?scope.unique:null;this.metrics.repeatedPageRequests=scope.seen?scope.repeated:null;}
+  }
   /** Scalar metadata only, sampled by an explicit buffer-audit payload. */
   get bufferCache(){return {ranges:[...this.pages].map(([index,bytes])=>({start:index*PAGE,end:index*PAGE+bytes.length})).sort((a,b)=>a.start-b.start),
     bytes:this.cachedBytes,limit:CACHE,readAhead:0,offset:0};}
@@ -70,7 +84,7 @@ export class RangeReader implements ByteReader {
     const cached = this.pages.get(index);
     if (cached) { this.pages.delete(index); this.pages.set(index,cached); this.metrics.cacheHits++; return Promise.resolve(cached); }
     const pending = this.pending.get(index); if (pending) return pending;
-    const work = this.load(index).then(bytes => {
+    const work = this.load(index,this.readEpoch).then(bytes => {
       this.lifetime.signal.throwIfAborted();
       this.pages.set(index,bytes); this.cachedBytes += bytes.length;
       while (this.cachedBytes > CACHE) {
@@ -82,14 +96,14 @@ export class RangeReader implements ByteReader {
     this.pending.set(index,work); return work;
   }
 
-  private async load(index: number): Promise<Uint8Array> {
+  private async load(index: number,scope:ReadEpoch): Promise<Uint8Array> {
     const signal = this.lifetime.signal;
     while (this.active >= 3) await abortable(new Promise<void>(resolve => this.waiters.push(resolve)),signal);
     signal.throwIfAborted(); this.active++;
     try {
       for (let attempt = 0;; attempt++) {
         signal.throwIfAborted();
-        try { return await this.request(index,AbortSignal.any([signal,AbortSignal.timeout(10000)])); }
+        try { return await this.request(index,AbortSignal.any([signal,AbortSignal.timeout(10000)]),scope); }
         catch (error) {
           signal.throwIfAborted();
           if (error instanceof RangeFailure || attempt >= 2) throw error;
@@ -99,7 +113,7 @@ export class RangeReader implements ByteReader {
     } finally { this.active--; this.waiters.shift()?.(); }
   }
 
-  private async request(index: number, signal: AbortSignal): Promise<Uint8Array> {
+  private async request(index: number, signal: AbortSignal,scope:ReadEpoch): Promise<Uint8Array> {
     const start = index * PAGE;
     const end = Math.min(start+PAGE-1,this.total === null ? Number.MAX_SAFE_INTEGER : this.total-1);
     if (end < start) throw new RangeFailure('Original page exceeds source length');
@@ -121,6 +135,7 @@ export class RangeReader implements ByteReader {
       const etag = response.headers.get('ETag'), modified = response.headers.get('Last-Modified');
       if (this.hasRevision && (this.etag !== etag || this.modified !== modified)) throw new RangeFailure('Original revision changed');
       this.total = total; this.etag = etag; this.modified = modified; this.hasRevision = true;
+      this.notePage(scope,index,total);
       const expected = last-first+1;
       const body = response.body?.getReader(); if (!body) throw new RangeFailure('Original range response has no body');
       const bytes = new Uint8Array(expected); let written = 0;
