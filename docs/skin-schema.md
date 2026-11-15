@@ -260,7 +260,20 @@ it), `librarySortFlip`, `libraryFilter "kind|{opt.id}"` (`genre|…`, `played|tr
 `favorite|true`/``), `select` for a title; widget `sentinel` with `on: "library"` loads more.
 Without `routes.library` the foundation's library page shows.
 
-## Next (renderer 10, names final)
+## Renderer 10
+
+- `library.kindCount`, `library.genreCount`, `library.sortCount`; action `libraryMore`.
+- **select** widget: the platform's select over `params.options` (`library.genres`,
+  `library.sorts`, `library.kinds`), its value the current filter or sort; on change it runs
+  `params.action` with `params.arg` (`{value}` is the chosen id, e.g. `genre|{value}`).
+  `library.played` takes `params.choices`: `"|Any status;false|Unwatched;true|Watched"`
+  (value|label pairs; labels may be `{s:key}`).
+  `params.none` adds a leading empty option (e.g. "Any genre"); `params.label` names it. The
+  node's style sets its height, padding, border, radius, ground, ink and font.
+- Fixes: the platform focus ring is no longer overridden by an empty bound outline (`outline:
+  auto` works); the control hover wash follows the page's colour scheme (Exact's variable).
+
+## Next (renderer 11, names final)
 
 - Per-document `traits`: `page`, `ink`, `splashOnPaper`. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 
