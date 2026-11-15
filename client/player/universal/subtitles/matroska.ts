@@ -1,7 +1,7 @@
 import type {ByteReader} from '../../core/types';
 import {SubtitleReadScope,integer,text,vint,type Element} from './binary';
 import {subtitleIdentity} from './identity';
-import type {SubtitleContainer,SubtitleDescription,SubtitleFont,SubtitlePacket,SubtitlePacketWindow,SubtitleTrack,SubtitleCodec} from './types';
+import type {SubtitleContainer,SubtitleDescription,SubtitleFont,SubtitlePacket,SubtitlePacketWindow,SubtitleTrack,SubtitleCodec,SubtitleStreamPacket} from './types';
 const ID={segment:0x18538067,info:0x1549a966,tracks:0x1654ae6b,cluster:0x1f43b675,cues:0x1c53bb6b,attachments:0x1941a469,seekHead:0x114d9b74};
 interface ContentEncoding {order:number;scope:number;algorithm:number;settings:Uint8Array}
 interface Track {public:SubtitleTrack;number:number;configuration:Uint8Array|null;defaultDuration:number|null;encodings:ContentEncoding[];unsupported:string|null}
@@ -9,8 +9,8 @@ interface Cue {time:number;cluster:number;track:number;duration:number|null}
 class UnsupportedContentEncoding extends Error {}
 const codecs:Record<string,SubtitleCodec>={'S_TEXT/UTF8':'srt','S_TEXT/ASS':'ass','S_TEXT/SSA':'ssa','S_HDMV/PGS':'pgs'};
 const MAX_PACKET_BYTES=16*1024*1024;
-/** Cues are a bounded metadata document, not hundreds of thousands of reads. */
-function* cueElements(bytes:Uint8Array,start:number,end:number,budget:{visits:number}):Generator<Element>{
+/** A bounded EBML document in already-acquired bytes, without per-field reads. */
+function* memoryElements(bytes:Uint8Array,start:number,end:number,budget:{visits:number}):Generator<Element>{
   for(let at=start;at<end;){
     if(++budget.visits>1000000)throw new Error('Subtitle cue structure exceeds bound');
     const id=vint(bytes,at,true);if(id.length>4)throw new Error('Invalid subtitle cue ID');
@@ -119,20 +119,47 @@ export class MatroskaSubtitles implements SubtitleContainer {
     });
   }
   configuration(id:string){return this.actual.get(id)?.configuration?.slice()??null}
+  /** Select only this track's blocks from bytes the AV demux already acquired. No Cues access. */
+  streamPackets(id:string,bytes:Uint8Array,payloadStart:number):SubtitleStreamPacket[]{
+    const track=this.actual.get(id);if(!track)throw new Error('Unknown actual subtitle track');if(track.unsupported)throw new Error(track.unsupported);
+    const packets:SubtitleStreamPacket[]=[],budget={visits:0};let timestamp:number|null=null,total=0;
+    const block=(element:Element,duration:number|null)=>{
+      const header=bytes.subarray(element.data,element.end),number=vint(header,0);
+      if(number.value!==track.number)return;if(timestamp===null||header.length<number.length+3)throw new Error('Invalid streaming subtitle block');
+      if(header[number.length+2]&6)throw new Error('Laced subtitle blocks require server rendering');
+      const relative=new DataView(header.buffer,header.byteOffset+number.length,2).getInt16(0),offset=number.length+3;
+      total+=header.length-offset;if(total>16*1024*1024||packets.length>=4096)throw new Error('Streaming subtitle packets exceed bound');
+      packets.push({position:payloadStart+element.data+offset,time:(timestamp+relative)*this.scale,
+        duration:duration===null?track.defaultDuration:duration*this.scale,data:header.slice(offset)});
+    };
+    for(const item of memoryElements(bytes,0,bytes.length,budget)){
+      if(item.id===0xe7)timestamp=integer(bytes.subarray(item.data,item.end));
+      else if(item.id===0xa3)block(item,null);
+      else if(item.id===0xa0){let value:Element|null=null,duration:number|null=null;
+        for(const child of memoryElements(bytes,item.data,item.end,budget)){if(child.id===0xa1)value=child;if(child.id===0x9b)duration=integer(bytes.subarray(child.data,child.end));}
+        if(value)block(value,duration);
+      }
+    }
+    return packets;
+  }
+  async decodeStreamPacket(id:string,packet:SubtitleStreamPacket,signal:AbortSignal):Promise<SubtitleStreamPacket>{
+    const track=this.actual.get(id);if(!track)throw new Error('Unknown actual subtitle track');
+    return {...packet,data:await decodeContent(packet.data,track.encodings,1,MAX_PACKET_BYTES,signal)};
+  }
   private async loadCues(scope:SubtitleReadScope){
     if(this.cues)return;const result:Cue[]=[];const at=this.seeks.get(ID.cues);if(at===undefined){this.cues=[];return}
     const root=await scope.ebml(at,this.segment.end);if(root.id!==ID.cues)throw new Error('Invalid subtitle cue index');
     const bytes=await scope.value(root,16*1024*1024),budget={visits:0};let points=0;
     const number=(element:Element)=>{if(element.end-element.data>8)throw new Error('Subtitle cue integer exceeds bound');return integer(bytes.subarray(element.data,element.end))};
-    for(const point of cueElements(bytes,0,bytes.length,budget)){
+    for(const point of memoryElements(bytes,0,bytes.length,budget)){
       if(point.id!==0xbb)continue;
       // Yield long indexes so a source/track retirement can cancel preparation.
       if(++points%1024===0){await new Promise<void>(resolve=>setTimeout(resolve,0));scope.signal.throwIfAborted();}
       let time=0;const positions:{track:number;cluster:number;duration:number|null}[]=[];
-      for(const item of cueElements(bytes,point.data,point.end,budget)){
+      for(const item of memoryElements(bytes,point.data,point.end,budget)){
         if(item.id===0xb3)time=number(item)*this.scale;
         if(item.id===0xb7){let track=0,cluster=-1,duration:number|null=null;
-          for(const position of cueElements(bytes,item.data,item.end,budget)){
+          for(const position of memoryElements(bytes,item.data,item.end,budget)){
             if(position.id===0xf7)track=number(position);if(position.id===0xf1)cluster=this.segment.data+number(position);if(position.id===0xb2)duration=number(position)*this.scale;
           }
           if(track&&Number.isSafeInteger(cluster)&&cluster>=this.segment.data&&cluster<this.segment.end)positions.push({track,cluster,duration});

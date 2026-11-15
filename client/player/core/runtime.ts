@@ -8,6 +8,7 @@ import { SegmentReader } from './source/segments';
 import type { CoreVideoFrame,VideoBackend,VideoCallbacks } from './decode/video';
 import { VideoScheduler } from './scheduler';
 import { RangeReader } from './source/ranges';
+import {MatroskaSubtitleStream} from './demux/subtitle-stream';
 import type { AudioClockAnchor, AudioOutput, AudioTrack, MediaTrack, VideoTrack } from './types';
 
 export interface CorePresenter {
@@ -33,7 +34,7 @@ interface Epoch {
 }
 
 export interface CoreLiveOptions {windowStartSeconds?:number;targetSeconds:number;startAtEdge:boolean}
-type SourceState={abort:AbortController;audio:AudioOutput}&({kind:'file';reader:RangeReader}|{kind:'hls';segments:SegmentReader;originUs:number;live?:CoreLiveOptions});
+type SourceState={abort:AbortController;audio:AudioOutput}&({kind:'file';reader:RangeReader;subtitleClusters:MatroskaSubtitleStream}|{kind:'hls';segments:SegmentReader;originUs:number;live?:CoreLiveOptions});
 
 /** One packet/decode/clock pipeline; transports never choose a scheduler. */
 export class PlaybackCore {
@@ -88,6 +89,7 @@ export class PlaybackCore {
   }
   get presentationTelemetry(){return {lastPresentationLagUs:this.scheduler.metrics.lastLagUs,maxPresentationLagUs:this.scheduler.metrics.maxLagUs,dropEvents:this.scheduler.dropEvents.map(value=>({...value}))};}
   get byteReader(){return this.source?.kind==='file'?this.source.reader:undefined;}
+  get subtitleClusters(){return this.source?.kind==='file'?this.source.subtitleClusters:undefined;}
   get container(){return this.containerName;}
   get live(){const source=this.source;if(source?.kind!=='hls'||!source.live||!source.segments.liveWindow)return undefined;
     const window=source.segments.liveWindow;return {startSeconds:window.start,edgeSeconds:window.edge,segmentSeconds:window.targetDuration,
@@ -119,7 +121,11 @@ export class PlaybackCore {
       }
     },onFailure:failure=>{if(this.epoch?.id===failure.epoch)this.fail(new Error(`Audio ${failure.stage}: ${failure.message}`));}});
     const allowed=this.mediaRequests?.allows.bind(this.mediaRequests);
-    const source:SourceState=input.kind==='file'?{kind:'file',abort,audio,reader:new RangeReader(input.url,this.mediaRequests?.fetch,allowed)}:{kind:'hls',abort,audio,segments:new SegmentReader(input.url,this.mediaRequests?.fetch,allowed,input.cacheIdentity,!!input.live),originUs:input.originUs,live:input.live};
+    let source:SourceState;
+    if(input.kind==='file'){
+      const reader=new RangeReader(input.url,this.mediaRequests?.fetch,allowed);
+      source={kind:'file',abort,audio,reader,subtitleClusters:new MatroskaSubtitleStream(reader,abort.signal)};
+    }else source={kind:'hls',abort,audio,segments:new SegmentReader(input.url,this.mediaRequests?.fetch,allowed,input.cacheIdentity,!!input.live),originUs:input.originUs,live:input.live};
     this.source=source;this.failure=null;this.tracks=[];this.video=undefined;this.audio=undefined;this.requestedAudioId=undefined;this.durationUs=null;
     this.initialAudioOrdinal=Number.isSafeInteger(audioOrdinal)&&audioOrdinal>=0?audioOrdinal:0;
     try{
@@ -148,7 +154,8 @@ export class PlaybackCore {
     source.audio.pause();
     const abort=new AbortController(),id=++this.nextEpoch;
     const signal=AbortSignal.any([source.abort.signal,abort.signal]);
-    const demux:PacketDemux=source.kind==='file'?new FileDemux(source.reader,signal):new HlsDemux(source.segments,signal,source.originUs);
+    if(source.kind==='file')source.subtitleClusters.reset(id);
+    const demux:PacketDemux=source.kind==='file'?new FileDemux(source.reader,signal,source.subtitleClusters):new HlsDemux(source.segments,signal,source.originUs);
     let resolveFirst!:()=>void,resolvePrimed!:()=>void;
     const firstFrame=new Promise<void>(resolve=>{resolveFirst=resolve;});
     const primed=new Promise<void>(resolve=>{resolvePrimed=resolve;});

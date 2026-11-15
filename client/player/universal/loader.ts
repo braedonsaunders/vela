@@ -22,6 +22,7 @@ export interface OriginalBackend {
   readonly supportsLocalAudioSwitch?:boolean;
   readonly supportsSubtitles?: boolean;
   readonly byteReader?: ByteReader;
+  readonly subtitleClusters?:import('./subtitles/types').SubtitleClusterStream;
   readonly sourceContainer?: string;
   readonly videoSize?: {width:number;height:number};
   position: number; readout: UniversalReadout;

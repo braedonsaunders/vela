@@ -19,6 +19,7 @@ export class UniversalRuntime implements OriginalBackend {
   get supportsLocalAudioSwitch(){return !this.media?.hls;}
   get supportsSubtitles(){return !!this.options.assets.subtitleBaseURL;}
   get byteReader(){return this.core.byteReader;}
+  get subtitleClusters(){return this.core.subtitleClusters;}
   get live(){return this.core.live;}
   get sourceContainer(){return this.core.container;}
   get videoSize(){const track=this.core.snapshot().tracks.find(track=>track.kind==='video');return track?{width:track.width,height:track.height}:undefined;}

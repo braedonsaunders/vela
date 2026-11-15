@@ -11,6 +11,14 @@ export interface SubtitleGenerations {sourceGeneration:number;seekGeneration:num
 export interface SubtitleSource extends SubtitleGenerations {url:string;container:string;sessionId:string}
 export interface SubtitleFailure {trackId:string;serverId?:string;code:string;message:string}
 export interface SubtitlePacket {time:number;duration:number|null;data:Uint8Array}
+export interface SubtitleStreamPacket extends SubtitlePacket {position:number}
+/** Borrowed bytes are valid only during the callback; retain selected packets, not clusters. */
+export interface SubtitleCluster {epoch:number;position:number;payloadStart:number;time:number;endTime:number;bytes:Uint8Array}
+export interface SubtitleClusterStream {
+  readonly epoch:number;
+  subscribe(receive:(cluster:SubtitleCluster)=>void):()=>void;
+  replay(positionSeconds:number,signal:AbortSignal):Promise<void>;
+}
 export interface SubtitleFont {name:string;mime:string;size:number;read(signal:AbortSignal):Promise<Uint8Array>}
 export interface SubtitlePacketWindow {packets:SubtitlePacket[];completeHistory:boolean;fromStart:boolean}
 export interface SubtitleContainer {

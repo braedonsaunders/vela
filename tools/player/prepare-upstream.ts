@@ -80,7 +80,7 @@ await copyFile(join(root,'client/player/media-auth.ts'),join(sourceDir,'vela-med
 await copyFile(join(root,'client/player/universal/video/upstream-transform.ts'), join(sourceDir,'vela-video-transform.ts'));
 if(Bun.argv.includes('--core')){
   await mkdir(join(sourceDir,'vela-core-demux'),{recursive:true});
-  for(const file of ['fragment-time.ts','transform.ts'])await copyFile(join(root,'client/player/core/demux',file),join(sourceDir,'vela-core-demux',file));
+  for(const file of ['fragment-time.ts','subtitle-stream.ts','transform.ts'])await copyFile(join(root,'client/player/core/demux',file),join(sourceDir,'vela-core-demux',file));
 }
 const audioDirectory = Bun.argv.find(arg => arg.startsWith('--audio-dir='))?.slice(12);
 if (audioDirectory) await run([process.execPath, join(root,'client/player/universal/audio/install-packages.ts'), join(libraries,'audio-decoders'), `--from=${resolve(audioDirectory)}`], root);
