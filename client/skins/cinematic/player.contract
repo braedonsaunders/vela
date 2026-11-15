@@ -78,8 +78,6 @@ component PlayerChrome
         if waiting
           column align-self="center" align-items="center" gap=18 role="status" aria-label=(p.model.state == "recovering" ? t("ui.findingAWayForward") : p.model.state == "loading" ? t("ui.preparingYourScreening") : t("ui.buildingALittleBreathingRoom")) testId="player-status" animation=(p.still ? "dissolve 240ms linear both" : "dissolve 400ms ease-out 120ms both")
             Spinner(size=(p.small ? 52 : 64), still=p.still)
-            if p.model.state == "loading" or p.model.state == "recovering"
-              text (p.model.state == "recovering" ? t("ui.findingAWayForward") : t("ui.preparingYourScreening")) class=Display font-size=(p.small ? 22 : 26) color="ink.primary" text-shadow="0px 2px 24px var(--cinematic.shadow)"
       // Bottom: the timeline, then icon transport and screening controls.
       column position="relative" padding=(p.small ? "80px 16px 18px" : "150px 40px 30px") gap=(p.small ? 10 : 14) background-image="linear-gradient(0deg, var(--cinematic.player-bottom) 0%, var(--cinematic.player-upper) 42%, var(--cinematic.player-mid) 72%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or p.still ? "0px 0px" : "0px 18px") transition=chrome(p.still) pointer-events=(shown ? "auto" : "none")
         if p.model.actionError != "" and failure == ""

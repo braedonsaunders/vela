@@ -1,5 +1,5 @@
 use DetailModel from "./models.contract"
-use PlayerView, PlayerCommandReply from "./player-models.contract"
+use PlayerView, PlayerCommandReply, loadingPlayerView from "./player-models.contract"
 
 members Client
   state watchEvent = ""
@@ -17,6 +17,8 @@ members Client
   derive watchPlan = (watchReply.sessionId == playback.sessionId and watchReply.planJson != "" ? watchReply.planJson : currentPlan)
   resource watchModel = uiPlayer(currentPlan, watchEvent, watchReply.planJson, localeJSON) when playingId != "" and watchPlan != "" as shape PlayerView
   resource watchIdentity = uiDetail(playingId) with localeJSON, artWidth when auth.authenticated and top(nav).name == "watch" and playingId != "" as shape DetailModel
+  // What the chrome shows: the engine's view once the session exists, a loading view before.
+  derive watchView = (current(playback) and current(watchModel) ? watchModel : loadingPlayerView())
   derive watchTitle = match first(watchIdentity.title) { case some(item) => (item.kind == "episode" and item.seasonNumber > 0 and item.episodeNumber > 0 ? t("ui.sSeasonEEpisodeTitle", season=item.seasonNumberLabel, episode=item.episodeNumberLabel, title=item.name) : item.name), case none => match first(detail.title) { case some(item) => item.name, case none => t("ui.nowPlaying") } }
   state watchHidden = false
   derive watchChromeVisible = not watchHidden or not watchModel.playing or watchEditing or watchModel.state != "playing"
