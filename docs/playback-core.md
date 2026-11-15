@@ -428,3 +428,28 @@ or errors. First sampled observation TTFB fell from 2,185.5 to 40.4 ms; the firs
 widened. Ether independently confirmed clean source delivery, and after UI
 Stop/revoke 200 and Chrome closure confirmed no pin, session or encoder remained.
 The new streaming-PGS remux and real-live checks still gate the core default.
+
+### Adaptive audio-clock priming
+
+Each epoch measures successful acquisition goodput and TTFB, with parallel
+request intervals sharing wall time, and estimates media bitrate from actual
+encoded packets. In-memory source-cache hits do not create delivery samples.
+When observed headroom is below 1.3x or a first-byte wait is at least 250 ms, the
+core holds its audio clock for a measured reserve: 0.75–1.8 seconds of media,
+scaled to observed latency. The added wait is at most three seconds and also
+fits inside the existing eight-second startup deadline. Pause, EOF and epoch
+cancellation remain authoritative. A target frame can already be visible during
+this hold. Healthy delivery and already-buffered seeks release immediately.
+
+The pinned audio components allowed only eight outstanding output chunks, about
+0.3 seconds at their 40 ms minimum. A core-only source-complete build adaptation
+uses 48 credits. The worker derives maximum chunk frames from the same two-second
+budget: 96,000/48 = 2,000 frames, above its 1,920-frame minimum. Thus the PCM and
+channel-buffer frame bounds remain unchanged; it can actually accumulate the
+requested reserve. Host, audio worker and protocol validators are rebuilt together;
+the production wrapper's credit count is untouched. Telemetry records the reason,
+actual hold, reserve, headroom and whether the deadline capped acquisition.
+
+Local generated-MKV evidence and later real-app qualification are recorded in
+[playback-lab30.md](playback-lab30.md). The paired production-wrapper/core cold-900
+run remains required before proposing a production default change.

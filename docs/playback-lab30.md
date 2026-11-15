@@ -90,3 +90,32 @@ Ether deleted the pin (204 plus independent empty pin list) and confirmed zero
 sessions. Core default remains held: adaptive cold-start/seek buffering and a
 paired production-wrapper comparison are next. Sustained delivery is improved;
 the cold ramp and live startup are not a zero-underrun or latency-target pass.
+
+## Adaptive priming local proof (pending paired lab comparison)
+
+The adaptive implementation measures actual delivery and packet bitrate rather
+than trusting descriptive metadata. A generated H.264/AAC MKV was served with a
+controlled 400 ms delay on range responses, in a fresh headed Chrome for the
+corrected candidate. The source reader, native decoder, output worker and real
+AudioWorklet were used. No lab source was opened for this proof.
+
+| Measurement | Existing core | Adaptive core |
+| --- | --- | --- |
+| First visible target frame | 566.6 ms | 568.7 ms |
+| Open resolves / audio allowed to run | 563.5 ms | 1,737.1 ms |
+| Initial audio underruns | 2 | 0 |
+| Seek to 4.5 s | 3,321.7 ms | 2,892.5 ms |
+| Post-seek audio underruns | 2 | 0 |
+| Video drops / failures | 0 / 0 | 0 / 0 |
+
+The original core exposes presentation just before its open promise resolves;
+the five-millisecond visibility sampler adds quantization to the first-frame
+numbers. These are short local component measurements, not a claimed RD seek
+speed improvement. The corrected adaptive start held 1,170.3 ms, with measured
+TTFB 406.9 ms, requested reserve 0.814 s and reported reserve 1.977 s at release.
+The seek needed no extra hold: 1.847 s was already buffered against a 1.8 s target.
+Neither release hit the cap. The earlier eight-credit attempt prevented underruns
+but could only report 0.3–0.4 s buffered and exhausted its three-second hold; it
+was corrected before the candidate was committed. Both local browsers and the
+owned local server were stopped. Paired, equally cold real-source runs remain
+pending; the production default has not changed.

@@ -1,3 +1,4 @@
+import {DeliveryMeter} from './delivery';
 import {BandwidthEstimator} from '../../abr';
 import { abortable, delay } from '../async';
 import type { ByteReader } from '../types';
@@ -21,6 +22,7 @@ export class RangeReader implements ByteReader {
   private hasRevision = false;
   private readonly url: string;
   readonly bandwidth=new BandwidthEstimator();
+  readonly delivery=new DeliveryMeter();
   readonly metrics = { requests: 0, bytes: 0, cacheHits: 0, milliseconds: 0 };
 
   constructor(url: string, private readonly fetcher: typeof fetch = (...args) => fetch(...args),allowed?:(url:URL)=>boolean) {
@@ -102,6 +104,7 @@ export class RangeReader implements ByteReader {
     if (this.etag && !this.etag.startsWith('W/')) headers.set('If-Range',this.etag);
     const at = performance.now(); this.metrics.requests++;
     const response = await this.fetcher(this.url,{headers,signal,credentials:'same-origin',redirect:'error'});
+    const firstByte=performance.now();
     try {
       if (response.status !== 206) {
         if (response.status === 408 || response.status === 429 || response.status >= 500) throw new TypeError(`Original range HTTP ${response.status}`);
@@ -127,6 +130,7 @@ export class RangeReader implements ByteReader {
       } finally { if (written !== expected) await body.cancel().catch(() => {}); body.releaseLock(); }
       if (written !== expected) throw new TypeError('Original range body was truncated');
       this.bandwidth.sample(written,performance.now()-at,Number(response.headers.get('Age')??0)>0||/hit/i.test(response.headers.get('X-Cache')??''));
+      this.delivery.record(at,firstByte,written);
       this.metrics.bytes += written; this.metrics.milliseconds += performance.now()-at;
       return bytes;
     } catch (error) { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); throw error; }
