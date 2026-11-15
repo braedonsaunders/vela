@@ -79,7 +79,7 @@ export class UniversalRuntime implements OriginalBackend {
       frames:state.decoded,dropped:state.dropped,presentedFrames:state.presented,decoderReady:state.tracks.some(track=>track.kind==='video'),
       audioTrackId,metadataDiscrepancies:this.notes.slice(0,32)};
   }
-  get presentationTelemetry(){return {presentedFrameCount:this.core.snapshot().presented};}
+  get presentationTelemetry(){return {presentedFrameCount:this.core.snapshot().presented,...this.core.presentationTelemetry};}
   async open(media:OriginalMedia){
     this.options.signal.throwIfAborted();this.media=media;
     const ordered=[...media.audio].sort((a,b)=>a.streamIndex-b.streamIndex);

@@ -5,7 +5,7 @@ import type { DecodedVideoFrame } from './types';
 /** Vela's presentation scheduler; no upstream frame loop or playback controller. */
 export class VideoScheduler<T extends DecodedVideoFrame> {
   readonly buffer = new VideoBuffer<T>(8);
-  readonly metrics = {presented:0,dropped:0,preroll:0};
+  readonly metrics = {presented:0,dropped:0,preroll:0,lastLagUs:0,maxLagUs:0};
   private epoch = 0;
   private targetUs = 0;
   private request: number | null = null;
@@ -29,6 +29,7 @@ export class VideoScheduler<T extends DecodedVideoFrame> {
     this.buffer.push(frame,this.epoch);
     if (this.active) this.schedule();
   }
+  setPreview(preview:boolean):void {this.preview=preview;}
   start(): void { this.active = true; this.schedule(); }
   stop(): void { this.active = false; if (this.request !== null) cancelAnimationFrame(this.request); this.request = null; }
   private schedule(): void {
@@ -44,7 +45,7 @@ export class VideoScheduler<T extends DecodedVideoFrame> {
       const selected = this.buffer.takeDue(deadline,this.epoch,this.targetUs);
       this.metrics.dropped += selected.dropped;
       if (selected.frame) {
-        try { if (this.present(selected.frame,position)) { this.hasPresented = true;this.displayedEndUs=selected.frame.timestampUs+selected.frame.durationUs; this.metrics.presented++; this.onPresent(); } }
+        try { if (this.present(selected.frame,position)) { this.hasPresented = true;this.displayedEndUs=selected.frame.timestampUs+selected.frame.durationUs; this.metrics.presented++;this.metrics.lastLagUs=position-selected.frame.timestampUs;this.metrics.maxLagUs=Math.max(this.metrics.maxLagUs,Math.abs(this.metrics.lastLagUs)); this.onPresent(); } }
         finally { selected.frame.release(); }
       }
     } catch (error) { this.stop(); this.onFailure(error); return; }

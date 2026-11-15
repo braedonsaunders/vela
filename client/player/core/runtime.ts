@@ -27,7 +27,7 @@ export interface CoreState {
 }
 interface Epoch {
   id:number; abort:AbortController; demux:PacketDemux; decoder:VideoBackend;
-  firstFrame:Promise<void>; resolveFirst():void; videoEndUs:number; audioEndUs:number;
+  firstFrame:Promise<void>; resolveFirst():void; primed:Promise<void>; resolvePrimed():void; started:boolean; videoEndUs:number; audioEndUs:number;
   videoEnded:boolean; audioEnded:boolean; audioTailReported:boolean; audioBufferedUntilUs:number;
 }
 
@@ -67,7 +67,7 @@ export class PlaybackCore {
     this.scheduler=new VideoScheduler(this.clock,(frame,position)=>presenter.present(frame,position),error=>this.fail(error),()=>{
       const run=this.epoch;if(!run)return;
       run.resolveFirst();
-      this.state=this.playing?'playing':'paused';this.publish();
+      if(run.started){this.state=this.playing?'playing':'paused';this.publish();}
     });
   }
 
@@ -80,6 +80,7 @@ export class PlaybackCore {
       tracks:this.tracks,videoTrackId:this.video?.id??null,audioTrackId:this.audio?.id??null,
       decoded:this.decodedBeforeEpoch+(this.epoch?.decoder.metrics.decoded??0),presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
   }
+  get presentationTelemetry(){return {lastPresentationLagUs:this.scheduler.metrics.lastLagUs,maxPresentationLagUs:this.scheduler.metrics.maxLagUs};}
   get byteReader(){return this.source?.kind==='file'?this.source.reader:undefined;}
   get container(){return this.containerName;}
   private publish(){this.onState(this.snapshot());}
@@ -93,7 +94,7 @@ export class PlaybackCore {
   private async openSource(input:{kind:'file';url:string}|{kind:'hls';url:string;originUs:number},positionUs:number,audioOrdinal:number):Promise<void>{
     if(this.closed)throw new Error('Playback core is disposed');
     await this.closeSource();
-    this.decodedBeforeEpoch=0;Object.assign(this.scheduler.metrics,{presented:0,dropped:0,preroll:0});
+    this.decodedBeforeEpoch=0;Object.assign(this.scheduler.metrics,{presented:0,dropped:0,preroll:0,lastLagUs:0,maxLagUs:0});
     const abort=new AbortController();
     const audio=this.createAudio({signal:abort.signal,onClock:anchor=>{
       if(this.clock.update(anchor)){
@@ -126,10 +127,11 @@ export class PlaybackCore {
     const abort=new AbortController(),id=++this.nextEpoch;
     const signal=AbortSignal.any([source.abort.signal,abort.signal]);
     const demux:PacketDemux=source.kind==='file'?new FileDemux(source.reader,signal):new HlsDemux(source.segments,signal,source.originUs);
-    let resolveFirst!:()=>void;
+    let resolveFirst!:()=>void,resolvePrimed!:()=>void;
     const firstFrame=new Promise<void>(resolve=>{resolveFirst=resolve;});
-    const run:Epoch={id,abort,demux,firstFrame,resolveFirst,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,audioTailReported:false,audioBufferedUntilUs:positionUs,
-      decoder:this.createVideo({output:frame=>{if(this.current(run))this.scheduler.push(frame);else frame.release();},
+    const primed=new Promise<void>(resolve=>{resolvePrimed=resolve;});
+    const run:Epoch={id,abort,demux,firstFrame,resolveFirst,primed,resolvePrimed,started:false,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,audioTailReported:false,audioBufferedUntilUs:positionUs,
+      decoder:this.createVideo({output:frame=>{if(this.current(run)){const eligible=frame.timestampUs+frame.durationUs>positionUs;this.scheduler.push(frame);if(eligible)run.resolvePrimed();}else frame.release();},
         canOutput:()=>!this.scheduler.buffer.full,active:()=>this.playing,
         onFailure:error=>{if(this.current(run))this.fail(error);}})};
     this.epoch=run;this.scheduler.reset(id,positionUs,!this.playing);this.state='loading';this.failure=null;
@@ -157,11 +159,18 @@ export class PlaybackCore {
       if(!this.current(run))return;
       playbackMark('decode:ready');
       source.audio.setVolume(this.volume,this.muted);source.audio.setRate(this.rate);
-      this.scheduler.start();
       void this.videoPackets(run,video,positionUs,signal);
       if(audio)void this.audioPackets(run,audio,positionUs,signal);else run.audioEnded=true;
-      if(this.playing){if(audio)await abortable(source.audio.play(),startup);this.clock.setPlaying(true);}
-      else source.audio.pause();
+      // Decode the target frame before starting the physical audio clock. Otherwise
+      // decoder/pipeline setup latency is mistaken for late video and drops it.
+      await abortable(primed,startup);
+      if(!this.current(run))return;
+      this.scheduler.start();
+      if((this.scheduler.buffer.nextTimestampUs??Infinity)<=positionUs)await abortable(firstFrame,startup);
+      if(this.playing&&audio)await abortable(source.audio.play(),startup);
+      if(!this.current(run))return;
+      if(this.playing)this.clock.setPlaying(true);else source.audio.pause();
+      run.started=true;
       await abortable(firstFrame,startup);
       if(this.current(run)){
         this.state=this.playing?'playing':'paused';this.publish();
@@ -205,8 +214,8 @@ export class PlaybackCore {
     const position=this.clock.time();this.requestedAudioId=track.id;
     await this.startEpoch(position);
   }
-  pause(){this.playing=false;this.clock.setPlaying(false);this.source?.audio.pause();if(this.state==='playing')this.state='paused';this.publish();}
-  async play(){const run=this.epoch;this.playing=true;if(this.audio)await this.source?.audio.play();if(this.epoch!==run||this.closed)return;this.clock.setPlaying(true);this.scheduler.start();if(this.state==='paused')this.state='playing';this.publish();}
+  pause(){this.playing=false;this.scheduler.setPreview(true);this.clock.setPlaying(false);this.source?.audio.pause();if(this.state==='playing')this.state='paused';this.publish();}
+  async play(){const run=this.epoch;this.playing=true;this.scheduler.setPreview(false);if(this.state==='loading'){this.publish();return;}if(this.audio)await this.source?.audio.play();if(this.epoch!==run||this.closed||!this.playing)return;this.clock.setPlaying(true);this.scheduler.start();if(this.state==='paused')this.state='playing';this.publish();}
   setVolume(volume:number,muted:boolean){if(!Number.isFinite(volume)||volume<0||volume>1)throw new Error('Invalid volume');this.volume=volume;this.muted=muted;this.source?.audio.setVolume(volume,muted);}
   setRate(rate:number){if(!Number.isFinite(rate)||rate<0.5||rate>2)throw new Error('Unsupported playback speed');this.rate=rate;this.source?.audio.setRate(rate);this.clock.setRate(rate);}
   private fail(error:unknown){
