@@ -238,10 +238,11 @@ const vocabulary: [string, string][] = [
   ['detail.genresLine', `match first(e.detail) { case some(d) => ${m('d.title', 'x.genres.join(", ")')}, case none => "" }`],
   ['detail.crewLineComma', 'match first(e.detail) { case some(d) => d.crew.join(", "), case none => "" }'],
   ['detail.castLine', 'match first(e.detail) { case some(d) => d.cast.join(" · "), case none => "" }'],
+  ['detail.nameLength', `match first(e.detail) { case some(d) => ${m('d.title', 'x.name.length.toString()')}, case none => "" }`],
   ['detail.seed', `match first(e.detail) { case some(d) => ${m('d.title', 'x.id.length.toString()')}, case none => "" }`],
   ['genre.text', 'match first(c.fact) { case some(x) => x, case none => "" }'],
   ['index', 'c.index.toString()'], ['index.label', '(c.index + 1).toString()'], ['index.current', yes('c.index == e.heroIndex')],
-  ['env.route', 'e.route'], ['env.load', 'e.load'], ['env.entry', 'e.entry'],
+  ['env.route', 'e.route'], ['env.load', 'e.load'], ['env.canRetry', yes('e.load == "failed"')], ['env.entry', 'e.entry'],
   // Detail: the title, its play state, seasons and episodes, extras, cast and crew.
   ...['id', 'kind', 'name', 'summary', 'facts', 'poster', 'backdrop', 'logo', 'accent', 'receipt'].map(f => [`detail.${f}`, `match first(e.detail) { case some(d) => ${m('d.title', `x.${f}`)}, case none => "" }`] as [string, string]),
   ['detail.kindLabel', `match first(e.detail) { case some(d) => ${m('d.title', '(x.kind == "movie" ? t("ui.film") : x.kind == "show" ? t("ui.series") : x.kind == "season" ? t("ui.season") : t("ui.episode"))')}, case none => "" }`],

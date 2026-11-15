@@ -39,6 +39,8 @@ export interface Condition {
 export type Action =
   | 'select' | 'play' | 'pickHero' | 'home' | 'search' | 'live' | 'library'
   | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
+  /** A failed route asks again for what failed (`env.canRetry`). */
+  | 'retry'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
 

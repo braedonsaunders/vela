@@ -183,6 +183,7 @@ component Route
     play: action
     playExtra: action
     leave: action
+    retryFailed: action
   state flags: string[] = []
   action act(name: string, arg: string)
     if name == "select"
@@ -193,6 +194,8 @@ component Route
       playExtra(arg)
     if name == "back"
       leave()
+    if name == "retry"
+      retryFailed()
     if name == "toggle"
       flags = toggled(flags, arg)
   view

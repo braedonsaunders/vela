@@ -177,7 +177,7 @@ detail/extra; `card.seasonNumber`, `card.episodeNumber`, `card.seasonNumberLabel
 hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`, `row.resume`,
 `row.previewOnFocus`, `row.loadingMore`, `row.hasMore`; `dest.backdrop`; `env.width`,
 `env.skinCount`, `env.libraryCount`, `env.hasLiveLibrary`, `env.homeMoreLoading`,
-`env.homeHasMore`, `env.clock`; `detail.hasMediaFacts` beside the other `detail.has*`.
+`env.homeHasMore`, `env.clock`; `detail.hasMediaFacts` beside the other `detail.has*`. `detail.nameLength`; `env.canRetry` with the `retry` action (a failed route asks again).
 
 ## Next (renderer 5, names final)
 
