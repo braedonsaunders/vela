@@ -23,16 +23,17 @@ export interface CoreState {
   state:'idle'|'loading'|'playing'|'paused'|'buffering'|'ended'|'failed';
   epoch:number; positionUs:number; durationUs:number|null;
   tracks:readonly MediaTrack[]; videoTrackId:string|null; audioTrackId:string|null;
-  bufferAheadSeconds:number|null;throughputBps:number|null;throughputHistory:number[];
+  bufferAheadSeconds:number|null;readAheadSeconds:number|null;throughputBps:number|null;throughputHistory:number[];
   decoded:number; presented:number; dropped:number; failure:string|null;diagnostics:string[];
 }
 interface Epoch {
   id:number; abort:AbortController; demux:PacketDemux; decoder:VideoBackend;
-  firstFrame:Promise<void>; resolveFirst():void; primed:Promise<void>; resolvePrimed():void; started:boolean; videoEndUs:number; audioEndUs:number;
+  firstFrame:Promise<void>; resolveFirst():void; primed:Promise<void>; resolvePrimed():void; started:boolean; readAheadEndUs:number;videoEndUs:number; audioEndUs:number;
   videoEnded:boolean; audioEnded:boolean; audioTailReported:boolean; audioBufferedUntilUs:number;
 }
 
-type SourceState={abort:AbortController;audio:AudioOutput}&({kind:'file';reader:RangeReader}|{kind:'hls';segments:SegmentReader;originUs:number});
+export interface CoreLiveOptions {windowStartSeconds?:number;targetSeconds:number;startAtEdge:boolean}
+type SourceState={abort:AbortController;audio:AudioOutput}&({kind:'file';reader:RangeReader}|{kind:'hls';segments:SegmentReader;originUs:number;live?:CoreLiveOptions});
 
 /** One packet/decode/clock pipeline; transports never choose a scheduler. */
 export class PlaybackCore {
@@ -58,6 +59,9 @@ export class PlaybackCore {
   private rate=1;
   private decodedBeforeEpoch=0;
   private timer?:ReturnType<typeof setInterval>;
+  private lastPresentationAt=0;
+  private epochStartedAt=0;
+  private rotating=false;
 
   constructor(private readonly presenter:CorePresenter,
     private readonly createAudio:(options:CoreAudioFactoryOptions)=>AudioOutput,
@@ -68,7 +72,7 @@ export class PlaybackCore {
     private readonly mediaRequests?:import('../media-auth').MediaRequestPolicy) {
     this.scheduler=new VideoScheduler(this.clock,(frame,position)=>presenter.present(frame,position),error=>this.fail(error),()=>{
       const run=this.epoch;if(!run)return;
-      run.resolveFirst();
+      this.lastPresentationAt=performance.now();run.resolveFirst();
       if(run.started){this.state=this.playing?'playing':'paused';this.publish();}
     });
   }
@@ -78,22 +82,27 @@ export class PlaybackCore {
     const videoEnd=this.scheduler.bufferedEnd(position);
     const bufferedEnd=this.audio?Math.min(videoEnd,run?.audioBufferedUntilUs??position):videoEnd;
     const network=this.source?.kind==='file'?this.source.reader.bandwidth:this.source?.segments.bandwidth;
-    return {diagnostics:run?.demux.diagnostics.slice()??[],bufferAheadSeconds:run?Math.max(0,(bufferedEnd-position)/1e6):null,throughputBps:network?.bps??null,throughputHistory:network?.history??[],state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
+    return {readAheadSeconds:run?Math.max(0,(run.readAheadEndUs-position)/1e6):null,diagnostics:run?.demux.diagnostics.slice()??[],bufferAheadSeconds:run?Math.max(0,(bufferedEnd-position)/1e6):null,throughputBps:network?.bps??null,throughputHistory:network?.history??[],state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
       tracks:this.tracks,videoTrackId:this.video?.id??null,audioTrackId:this.audio?.id??null,
       decoded:this.decodedBeforeEpoch+(this.epoch?.decoder.metrics.decoded??0),presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
   }
   get presentationTelemetry(){return {lastPresentationLagUs:this.scheduler.metrics.lastLagUs,maxPresentationLagUs:this.scheduler.metrics.maxLagUs,dropEvents:this.scheduler.dropEvents.map(value=>({...value}))};}
   get byteReader(){return this.source?.kind==='file'?this.source.reader:undefined;}
   get container(){return this.containerName;}
+  get live(){const source=this.source;if(source?.kind!=='hls'||!source.live||!source.segments.liveWindow)return undefined;
+    const window=source.segments.liveWindow;return {startSeconds:window.start,edgeSeconds:window.edge,segmentSeconds:window.targetDuration,
+      ended:window.ended,retries:source.segments.networkRetries,retrying:source.segments.retrying,
+      delivery:window.gap?'upstream-gap' as const:source.segments.retrying?'segment-delayed' as const:this.state==='buffering'?'waiting-for-publication' as const:'available' as const};
+  }
   private publish(){this.onState(this.snapshot());}
   private current(run:Epoch){return this.epoch===run&&!run.abort.signal.aborted&&!this.closed;}
 
   open(url:string,positionUs=0,audioOrdinal=0):Promise<void>{return this.openSource({kind:'file',url},positionUs,audioOrdinal);}
-  openHls(url:string,positionUs:number,originUs:number,audioOrdinal=0,authority?:{sourceGeneration:number;seekGeneration:number}):Promise<void>{
-    if(!Number.isSafeInteger(originUs)||originUs<0||positionUs<originUs)throw new Error('Invalid HLS source timeline');
-    return this.openSource({kind:'hls',url,originUs,cacheIdentity:authority?`${authority.sourceGeneration}:${authority.seekGeneration}`:`local:${this.nextEpoch+1}`},positionUs,audioOrdinal);
+  openHls(url:string,positionUs:number,originUs:number,audioOrdinal=0,authority?:{sourceGeneration:number;seekGeneration:number},live?:CoreLiveOptions):Promise<void>{
+    if(!Number.isSafeInteger(originUs)||originUs<0||!live&&positionUs<originUs)throw new Error('Invalid HLS source timeline');
+    return this.openSource({kind:'hls',url,originUs,cacheIdentity:authority?`${authority.sourceGeneration}:${authority.seekGeneration}`:`local:${this.nextEpoch+1}`,live},positionUs,audioOrdinal);
   }
-  private async openSource(input:{kind:'file';url:string}|{kind:'hls';url:string;originUs:number;cacheIdentity:string},positionUs:number,audioOrdinal:number):Promise<void>{
+  private async openSource(input:{kind:'file';url:string}|{kind:'hls';url:string;originUs:number;cacheIdentity:string;live?:CoreLiveOptions},positionUs:number,audioOrdinal:number):Promise<void>{
     if(this.closed)throw new Error('Playback core is disposed');
     await this.closeSource();
     this.decodedBeforeEpoch=0;this.scheduler.dropEvents.length=0;Object.assign(this.scheduler.metrics,{presented:0,dropped:0,preroll:0,lastLagUs:0,maxLagUs:0});
@@ -107,7 +116,7 @@ export class PlaybackCore {
       }
     },onFailure:failure=>{if(this.epoch?.id===failure.epoch)this.fail(new Error(`Audio ${failure.stage}: ${failure.message}`));}});
     const allowed=this.mediaRequests?.allows.bind(this.mediaRequests);
-    const source:SourceState=input.kind==='file'?{kind:'file',abort,audio,reader:new RangeReader(input.url,this.mediaRequests?.fetch,allowed)}:{kind:'hls',abort,audio,segments:new SegmentReader(input.url,this.mediaRequests?.fetch,allowed,input.cacheIdentity),originUs:input.originUs};
+    const source:SourceState=input.kind==='file'?{kind:'file',abort,audio,reader:new RangeReader(input.url,this.mediaRequests?.fetch,allowed)}:{kind:'hls',abort,audio,segments:new SegmentReader(input.url,this.mediaRequests?.fetch,allowed,input.cacheIdentity,!!input.live),originUs:input.originUs,live:input.live};
     this.source=source;this.failure=null;this.tracks=[];this.video=undefined;this.audio=undefined;this.requestedAudioId=undefined;this.durationUs=null;
     this.initialAudioOrdinal=Number.isSafeInteger(audioOrdinal)&&audioOrdinal>=0?audioOrdinal:0;
     try{
@@ -116,6 +125,10 @@ export class PlaybackCore {
         this.state='loading';this.clock.reset(positionUs,++this.nextEpoch,false);this.publish();
         await source.segments.prepare(AbortSignal.any([abort.signal,AbortSignal.timeout(8000)]));
         if(this.source!==source||this.closed)return;
+        if(source.live&&source.segments.liveWindow){const window=source.segments.liveWindow;
+          positionUs=source.live.startAtEdge?Math.max(window.start,window.edge-source.live.targetSeconds)*1e6:
+            Math.max(window.start,Math.min(window.edge-0.05,positionUs/1e6))*1e6;
+        }
       }
       await this.startEpoch(positionUs,deadline);
     }catch(error){if(this.source===source&&!abort.signal.aborted)this.fail(error);throw error;}
@@ -123,7 +136,10 @@ export class PlaybackCore {
 
   private async startEpoch(positionUs:number,deadline=performance.now()+8000):Promise<void>{
     const source=this.source;if(!source)throw new Error('Playback source is absent');
-    if(!Number.isFinite(positionUs)||positionUs<0)throw new Error('Invalid seek target');
+    // Physical-clock interpolation may contain sub-microsecond fractions.
+    // Decoder/output epoch boundaries use integer media microseconds.
+    positionUs=Math.round(positionUs);
+    if(!Number.isSafeInteger(positionUs)||positionUs<0)throw new Error('Invalid seek target');
     this.decodedBeforeEpoch+=this.epoch?.decoder.metrics.decoded??0;
     this.epoch?.abort.abort();this.epoch?.decoder.dispose();this.epoch?.demux.dispose();
     source.audio.pause();
@@ -133,11 +149,11 @@ export class PlaybackCore {
     let resolveFirst!:()=>void,resolvePrimed!:()=>void;
     const firstFrame=new Promise<void>(resolve=>{resolveFirst=resolve;});
     const primed=new Promise<void>(resolve=>{resolvePrimed=resolve;});
-    const run:Epoch={id,abort,demux,firstFrame,resolveFirst,primed,resolvePrimed,started:false,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,audioTailReported:false,audioBufferedUntilUs:positionUs,
+    const run:Epoch={id,abort,demux,firstFrame,resolveFirst,primed,resolvePrimed,started:false,readAheadEndUs:positionUs,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,audioTailReported:false,audioBufferedUntilUs:positionUs,
       decoder:this.createVideo({output:frame=>{if(this.current(run)){const eligible=frame.timestampUs+frame.durationUs>positionUs;this.scheduler.push(frame);if(eligible)run.resolvePrimed();}else frame.release();},
         canOutput:()=>!this.scheduler.buffer.full,active:()=>this.playing,
-        onFailure:error=>{if(this.current(run))this.fail(error);}})};
-    this.epoch=run;this.scheduler.reset(id,positionUs,!this.playing);this.state='loading';this.failure=null;
+        onFailure:error=>{if(this.current(run))this.fail(new Error(`Video decode: ${error.message}`));}})};
+    this.epoch=run;this.epochStartedAt=performance.now();this.lastPresentationAt=performance.now();this.scheduler.reset(id,positionUs,!this.playing);this.state='loading';this.failure=null;
     this.clock.reset(positionUs,id,!!this.audio);this.clock.setPlaying(false);this.publish();
     const startup=AbortSignal.any([signal,AbortSignal.timeout(Math.max(0,Math.ceil(deadline-performance.now())))]);
     try{
@@ -151,8 +167,8 @@ export class PlaybackCore {
       const audio=metadata.tracks.find((track):track is AudioTrack=>track.kind==='audio'&&track.id===(this.requestedAudioId??this.audio?.id))
         ?? metadata.tracks.filter((track):track is AudioTrack=>track.kind==='audio')[this.initialAudioOrdinal]
         ?? metadata.tracks.find((track):track is AudioTrack=>track.kind==='audio');
-      const sameAudio=!!this.audio&&this.audio.id===audio?.id;
-      this.tracks=metadata.tracks;this.video=video;this.audio=audio;this.durationUs=metadata.durationUs;this.containerName=metadata.container;
+      const sameAudio=!!this.audio&&!!audio&&sameAudioConfiguration(this.audio,audio);
+      this.tracks=metadata.tracks;this.video=video;this.audio=audio;this.durationUs=source.kind==='hls'&&source.live?null:metadata.durationUs;this.containerName=metadata.container;
       this.clock.reset(positionUs,id,!!audio);
       playbackMark('decode:start');
       await abortable(Promise.all([
@@ -177,17 +193,17 @@ export class PlaybackCore {
       await abortable(firstFrame,startup);
       if(this.current(run)){
         this.state=this.playing?'playing':'paused';this.publish();
-        if(!this.timer)this.timer=setInterval(()=>{this.checkEnded();this.publish();},250);
+        if(!this.timer)this.timer=setInterval(()=>{this.checkLive();this.checkEnded();this.publish();},250);
       }
     }catch(error){if(this.current(run))this.fail(error);throw error;}
   }
 
   private async videoPackets(run:Epoch,track:VideoTrack,positionUs:number,signal:AbortSignal){
     try{
-      for await(const packet of bufferedPackets(run.demux.packets(track.id,positionUs,run.id,signal),signal)){
+      for await(const packet of bufferedPackets(run.demux.packets(track.id,positionUs,run.id,signal),signal,end=>{if(this.current(run))run.readAheadEndUs=end;})){
         if(!this.current(run))return;
         run.videoEndUs=Math.max(run.videoEndUs,packet.timestampUs+packet.durationUs);
-        await run.decoder.decode(packet,signal);
+        try{await run.decoder.decode(packet,signal);}catch(error){throw new Error(`Video decode: ${error instanceof Error?error.message:'decoder failed'}`);}
       }
       await run.decoder.drain(signal);if(!this.current(run))return;run.videoEnded=true;this.checkEnded();
     }catch(error){if(this.current(run))this.fail(error);}
@@ -202,6 +218,17 @@ export class PlaybackCore {
       }
       await audio.drain?.(signal);if(!this.current(run))return;run.audioEnded=true;this.checkEnded();
     }catch(error){if(this.current(run))this.fail(error);}
+  }
+  private checkLive(){
+    const source=this.source,run=this.epoch;
+    if(source?.kind!=='hls'||!source.live||!run||!this.playing||this.state==='failed'||this.state==='ended')return;
+    const now=performance.now();
+    if(now-this.lastPresentationAt>10000){this.fail(new Error('Live publication produced no frame for 10 seconds'));return;}
+    // The demux library retains its segment census. Recreate that library-only
+    // epoch periodically over our SAME bounded reader/clock to cap metadata.
+    if(!this.rotating&&this.state==='playing'&&now-this.epochStartedAt>180000){
+      this.rotating=true;void this.seek(this.clock.time()).catch(()=>{}).finally(()=>{this.rotating=false;});
+    }
   }
   private checkEnded(){
     const run=this.epoch;if(!run||!this.current(run)||!run.videoEnded||!run.audioEnded||this.scheduler.buffer.length)return;
@@ -218,7 +245,11 @@ export class PlaybackCore {
     await this.startEpoch(position);
   }
   pause(){this.playing=false;this.scheduler.setPreview(true);this.clock.setPlaying(false);this.source?.audio.pause();if(this.state==='playing')this.state='paused';this.publish();}
-  async play(){const run=this.epoch;this.playing=true;this.scheduler.setPreview(false);if(this.state==='loading'){this.publish();return;}if(this.audio)await this.source?.audio.play();if(this.epoch!==run||this.closed||!this.playing)return;this.clock.setPlaying(true);this.scheduler.start();if(this.state==='paused')this.state='playing';this.publish();}
+  async play(){this.playing=true;
+    const source=this.source,window=source?.kind==='hls'&&source.live?source.segments.liveWindow:undefined;
+    if(window&&this.clock.time()<window.start*1e6){await this.seek(Math.max(window.start,window.edge-(source as Extract<SourceState,{kind:'hls'}>).live!.targetSeconds)*1e6);return;}
+    const run=this.epoch;this.scheduler.setPreview(false);if(this.state==='loading'){this.publish();return;}if(this.audio)await this.source?.audio.play();if(this.epoch!==run||this.closed||!this.playing)return;this.clock.setPlaying(true);this.scheduler.start();if(this.state==='paused')this.state='playing';this.publish();}
+  setLiveTarget(seconds:number){if(this.source?.kind==='hls'&&this.source.live&&Number.isFinite(seconds)&&seconds>0&&seconds<=120)this.source.live.targetSeconds=seconds;}
   setVolume(volume:number,muted:boolean){if(!Number.isFinite(volume)||volume<0||volume>1)throw new Error('Invalid volume');this.volume=volume;this.muted=muted;this.source?.audio.setVolume(volume,muted);}
   setRate(rate:number){if(!Number.isFinite(rate)||rate<0.5||rate>2)throw new Error('Unsupported playback speed');this.rate=rate;this.source?.audio.setRate(rate);this.clock.setRate(rate);}
   private fail(error:unknown){
@@ -243,4 +274,10 @@ export class PlaybackCore {
     this.disposing=(async()=>{await this.closeSource();this.presenter.dispose();this.scheduler.dispose();})();
     return this.disposing;
   }
+}
+
+function sameAudioConfiguration(a:AudioTrack,b:AudioTrack):boolean{
+  if(a.id!==b.id||a.codec!==b.codec||a.sampleRate!==b.sampleRate||a.channels!==b.channels||a.channelMask!==b.channelMask||a.config?.codec!==b.config?.codec)return false;
+  const bytes=(value:AudioTrack)=>value.codecPrivate??(value.config?.description?ArrayBuffer.isView(value.config.description)?new Uint8Array(value.config.description.buffer,value.config.description.byteOffset,value.config.description.byteLength):new Uint8Array(value.config.description):null);
+  const x=bytes(a),y=bytes(b);return x===y||!!x&&!!y&&x.length===y.length&&x.every((value,i)=>value===y[i]);
 }

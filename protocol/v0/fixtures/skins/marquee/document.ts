@@ -114,13 +114,13 @@ const sidebar: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigati
 // The bar's left end: the menu button and the wordmark, as wide as the rail (at least 200).
 // The menu button says whether the rail is expanded: open when flipped on a narrow screen or unflipped on a wide one.
 const never: Condition[] = [flip, unset('flag:keep-flip')];
-const railButton = (cond: Condition[], expanded: boolean): Node => ({ type: 'box', when: cond, press: { action: 'toggle', arg: 'keep-flip' }, label: '{s:toggleSidebar}', testId: 'marquee-menu', id: 'marquee-menu-button',
-  ...round(44), small: { display: 'none' }, a11y: { expanded: expanded ? cond : never }, children: [glyph('menu', 22)] } as Node);
+const railButton = (cond: Condition[], expanded: boolean): Node => ({ type: 'box', when: [notSmall, ...cond], press: { action: 'toggle', arg: 'keep-flip' }, label: '{s:toggleSidebar}', testId: 'marquee-menu', id: 'marquee-menu-button',
+  ...round(44), a11y: { expanded: expanded ? cond : never }, children: [glyph('menu', 22)] } as Node);
 const barStartStyle = (w: number): Style => ({ display: 'flex', 'flex-direction': 'row', width: px(w), 'flex-shrink': '0', 'box-sizing': 'border-box', 'padding-left': '12px', gap: '10px', 'align-items': 'center', 'pointer-events': 'auto' });
 const barStart: Node = { type: 'box', style: barStartStyle(232), states: rail(barStartStyle(232), barStartStyle(200), [notSmall]), layoutTransition: railLayout,
   small: { width: 'auto', 'padding-left': '4px', gap: '4px' }, children: [
     railButton([flip, narrow], true), railButton([flip, wideEnough], false), railButton([unset('flag:keep-flip'), narrow], false), railButton([unset('flag:keep-flip'), wideEnough], true),
-    { type: 'box', press: { action: 'toggle', arg: 'drawer' }, label: '{s:openNavigation}', testId: 'marquee-menu', id: 'marquee-drawer-button', ...round(44), style: { ...round(44).style, display: 'none' }, small: { display: 'flex' }, a11y: { expanded: [set('flag:drawer')] }, children: [glyph('menu', 22)] } as Node,
+    { type: 'box', when: [set('env.small')], press: { action: 'toggle', arg: 'drawer' }, label: '{s:openNavigation}', testId: 'marquee-menu', id: 'marquee-drawer-button', ...round(44), a11y: { expanded: [set('flag:drawer')] }, children: [glyph('menu', 22)] } as Node,
     { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', display: 'flex', 'align-items': 'center', padding: '6px 4px', 'border-radius': '4px' }, children: [wordmark(28)] },
   ] } as Node;
 
@@ -315,8 +315,8 @@ const heading2Small: Style = { 'font-size': '17px', ...gutterSmall };
 const section = (show: Condition[], title: string, body: Node, pad = { normal: '30px', small: '20px' }): Node => ({ type: 'box', when: show, style: { display: 'flex', 'flex-direction': 'column', gap: '14px', 'padding-bottom': pad.normal }, small: { gap: '10px', 'padding-bottom': pad.small }, children: [
   { type: 'text', text: title, role: 'heading', level: 2, style: heading2, small: heading2Small }, body,
 ] });
-const shelf = (gap: number, gapSmall: number, item: Node, over: string): Node => ({ type: 'box', style: { display: 'flex', width: '0px', 'min-width': '100%', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
-  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: px(gap), ...gutter, 'padding-top': '4px', 'padding-bottom': '4px' }, small: { gap: px(gapSmall), ...gutterSmall }, children: [{ type: 'repeat', over, item }] },
+const shelf = (gap: number, gapSmall: number, item: Node, over: string, track: Partial<Node> = {}, top = '0px'): Node => ({ type: 'box', style: { display: 'flex', width: '0px', 'min-width': '100%', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
+  { type: 'box', ...track, style: { display: 'flex', 'flex-direction': 'row', gap: px(gap), ...gutter, 'padding-top': top, 'padding-bottom': '4px' }, small: { gap: px(gapSmall), ...gutterSmall }, children: [{ type: 'repeat', over, item }] } as Node,
 ] });
 
 const poster: Node = { type: 'box', style: { position: 'relative', width: 'clamp(220px, 21vw, 300px)', 'flex-shrink': '0', 'aspect-ratio': '2 / 3', 'border-radius': '6px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised', 'box-shadow': '0px 18px 50px $shadow' }, small: { width: '38%' }, children: [
@@ -480,7 +480,7 @@ const detailLoading: Node = { type: 'box', role: 'status', label: '{s:openingTit
 // The title page scrolls in its own box (navigation restores it); the close button stays put.
 const title: Node = { type: 'box', style: { position: 'relative', height: '100%', 'min-height': '0px', display: 'flex', 'flex-direction': 'column', 'background-color': '$page', color: '$ink', 'font-family': sans }, children: [
   { type: 'box', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', display: 'flex', 'box-sizing': 'border-box', width: '44px', height: '44px', border: '1px solid $close-line', 'border-radius': '22px', padding: '13px', 'background-color': '$close-glass', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: '$close-ink' }, children: [
-    { type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } },
+    { type: 'icon', symbol: 'close', style: { width: '16px', height: '16px' } },
   ] },
   { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{s:titleDetails}', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'auto', 'padding-bottom': '60px' }, children: [
     detailLoading,
@@ -497,12 +497,12 @@ const title: Node = { type: 'box', style: { position: 'relative', height: '100%'
     { ...titleHead, when: [is('env.load', 'ready')] },
     { ...titleHeadSmall, when: [is('env.load', 'ready')] },
     { type: 'box', when: [is('env.load', 'ready')], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '14px', 'padding-top': '28px', 'flex-shrink': '0' }, small: { gap: '8px', 'padding-top': '16px' }, children: [
-      section([{ test: 'detail.seasonCount', is: 'gt', value: '0' }], '{s:seasons}', shelf(16, 10, seasonCard, 'detail.seasons'), { normal: '24px', small: '16px' }),
+      section([{ test: 'detail.seasonCount', is: 'gt', value: '0' }], '{s:seasons}', shelf(16, 10, seasonCard, 'detail.seasons', { role: 'group', label: '{s:season}', testId: 'season-picker' }, '4px'), { normal: '24px', small: '16px' }),
       section([set('detail.hasEpisodes')], '{detail.seasonName}', { type: 'box', style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(260px, 1fr))', gap: '26px 20px', ...gutter }, small: { 'grid-template-columns': '1fr', gap: '14px 20px', ...gutterSmall }, children: [
         { type: 'repeat', over: 'detail.episodes', item: episodeCard },
       ] }),
       section([set('detail.hasExtras')], '{s:extras}', shelf(16, 16, extraCard, 'detail.extras')),
-      section([set('detail.hasCast')], '{s:cast}', shelf(22, 14, person, 'detail.cast')),
+      section([set('detail.hasCast')], '{s:cast}', shelf(22, 14, person, 'detail.cast', { role: 'list' })),
       { type: 'box', when: [set('detail.crewLine')], style: { display: 'flex', 'flex-direction': 'column', gap: '6px', ...gutter, 'padding-bottom': '30px', 'max-width': '60rem' }, small: { ...gutterSmall, 'padding-bottom': '20px' }, children: [
         { type: 'repeat', over: 'detail.crew', item: { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'baseline' }, children: [
           { type: 'text', text: '{person.name}', style: { 'font-size': '14px', 'font-weight': '600' } },
@@ -541,7 +541,7 @@ export default {
     detailSeasonEpisode: 'S{detail.seasonNumberLabel} · E{detail.episodeNumberLabel}', detailEpisodeNumber: 'Episode {detail.episodeNumberLabel}',
     resumeFrom: 'Resume from {detail.resumePosition}', resumeTitle: 'Resume {card.name}', playTitle: 'Play {card.name}', watchTrailer: 'Watch trailer', watchProgress: 'Watch progress', watched: 'Watched', genres: 'Genres', nothingHereYet: 'Nothing here yet', noRowsYet: "Your library hasn't offered any rows yet. Titles appear here as your server adds them.",
     closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', titleFailed: "This title couldn't be opened. It may no longer be available.",
-    seasons: 'Seasons', episodes: 'Episodes', extras: 'Extras', cast: 'Cast', media: 'Media', play: 'Play', trailer: 'Trailer', clip: 'Clip', featurette: 'Featurette', extra: 'Extra', notAvailableYet: 'Not available yet',
+    season: 'Season', seasons: 'Seasons', episodes: 'Episodes', extras: 'Extras', cast: 'Cast', media: 'Media', play: 'Play', trailer: 'Trailer', clip: 'Clip', featurette: 'Featurette', extra: 'Extra', notAvailableYet: 'Not available yet',
   } },
   motion: {
     arrive: rise,
