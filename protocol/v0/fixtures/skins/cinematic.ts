@@ -164,6 +164,24 @@ const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '
     ] },
   ] };
 
+// Waiting marks, as compiled cinematic draws them: three breathing dots (still under
+// reduced motion) and shimmering skeleton blocks.
+const pulse: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '8px' }, children: [0, 180, 360].flatMap(d => [
+  { type: 'box', when: [{ test: 'env.still', not: true }], motion: `pulse${d}`, style: { width: '7px', height: '7px', 'border-radius': '4px', 'background-color': 'brand.warm' } } as Node,
+  { type: 'box', when: [{ test: 'env.still' }], style: { width: '7px', height: '7px', 'border-radius': '4px', 'background-color': 'brand.warm', opacity: '0.8' } } as Node,
+]) };
+const skeleton = (style: Style, small?: Style): Node => ({ type: 'box', style: { 'flex-shrink': '0', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': 'cinematic.skeleton', ...style }, ...(small ? { small } : {}), children: [
+  { type: 'box', when: [{ test: 'env.still', not: true }], motion: 'shimmer', style: { width: '100%', height: '100%', 'background-image': 'linear-gradient(90deg, var(--cinematic.scrim-clear) 0%, var(--cinematic.skeleton-light) 50%, var(--cinematic.scrim-clear) 100%)' } },
+] });
+const rowSkeleton: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '18px', 'padding-bottom': '28px' }, children: [
+  { type: 'box', style: { ...gutter }, small: { ...gutterSmall }, children: [skeleton({ width: '180px', height: '20px', 'border-radius': '6px' })] },
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '18px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', ...gutter }, small: { gap: '12px', ...gutterSmall }, children: Array.from({ length: 8 }, () => ({
+    type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '10px', 'flex-shrink': '0' }, children: [
+      skeleton({ width: 'clamp(150px, 12.4vw, 232px)', height: 'clamp(225px, 18.6vw, 348px)', 'border-radius': '12px' }, { width: '132px', height: '198px' }),
+      skeleton({ width: '70%', height: '12px', 'border-radius': '4px' }),
+    ] } as Node)) },
+] };
+
 // A Top 10 row's numeral: large, outlined, fading toward its foot, the poster overlapping
 // its right edge. "10" sits tighter so both digits fit beside the card.
 const numeral = (ten: boolean): Node => ({ type: 'text', text: '{index.label}', when: [{ test: 'row.presentation', is: 'eq', value: 'ranked' }, { test: 'index', is: ten ? 'eq' : 'lt', value: '9' }],
@@ -173,15 +191,22 @@ const numeral = (ten: boolean): Node => ({ type: 'text', text: '{index.label}', 
   small: { 'font-size': '220px', '-webkit-text-stroke': '3px var(--cinematic.rank-stroke)', 'margin-right': '-30px', 'padding-bottom': '44px' } });
 const rowItem: Node = { type: 'box', motion: 'card', stagger: { step: 45, cap: 8 }, style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end' },
   children: [numeral(false), numeral(true), { type: 'use', template: 'card' }] };
-// Ranked rows space their cards wider, room for the numerals.
-const shelf = (ranked: boolean): Node => ({ type: 'box', when: [{ test: 'row.presentation', is: ranked ? 'eq' : 'ne', value: 'ranked' }],
-  style: { display: 'flex', 'flex-direction': 'row', gap: ranked ? '40px' : '18px', 'align-items': 'flex-start', 'padding-top': '16px', 'padding-bottom': '22px', ...gutter },
-  small: { gap: ranked ? '22px' : '12px', 'padding-top': '14px', 'padding-bottom': '18px', ...gutterSmall }, children: [{ type: 'repeat', over: 'row.items', item: rowItem }] });
-
-const row: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '4px', 'padding-bottom': '28px' }, small: { gap: '2px', 'padding-bottom': '18px' }, children: [
-  { type: 'text', text: '{row.name}', role: 'heading', level: 2, style: { 'font-size': '21px', 'font-weight': '650', 'letter-spacing': '-0.012em', ...gutter }, small: { 'font-size': '18px', ...gutterSmall } },
-  { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 94%, transparent 100%)' }, children: [shelf(false), shelf(true)] },
+// The row's end cell: its next page loads as the end comes near (home rows only).
+const rowEnd: Node = { type: 'box', when: [{ test: 'row.hasMore' }], style: { position: 'relative', display: 'flex', width: '96px', 'align-self': 'stretch', 'flex-shrink': '0', 'align-items': 'center', 'justify-content': 'center' }, small: { width: '60px' }, children: [
+  { type: 'widget', widget: 'sentinel', params: { on: 'row' } },
+  { ...pulse, when: [{ test: 'row.loadingMore' }] } as Node,
 ] };
+// A shelf scrolls sideways; ranked shelves space their cards wider, room for the numerals.
+const shelf = (ranked: boolean, paged: boolean): Node => ({ type: 'box', when: [{ test: 'row.presentation', is: ranked ? 'eq' : 'ne', value: 'ranked' }],
+  style: { display: 'flex', 'flex-direction': 'row', gap: ranked ? '40px' : '18px', 'align-items': 'flex-start', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 94%, transparent 100%)', 'padding-top': '16px', 'padding-bottom': '22px', ...gutter },
+  small: { gap: ranked ? '22px' : '12px', 'padding-top': '14px', 'padding-bottom': '18px', ...gutterSmall }, children: [{ type: 'repeat', over: 'row.items', item: rowItem }, ...(paged ? [rowEnd] : [])] });
+
+const shelfRow = (paged: boolean): Node => ({ type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '4px', 'padding-bottom': '28px' }, small: { gap: '2px', 'padding-bottom': '18px' }, children: [
+  { type: 'text', text: '{row.name}', role: 'heading', level: 2, style: { 'font-size': '21px', 'font-weight': '650', 'letter-spacing': '-0.012em', ...gutter }, small: { 'font-size': '18px', ...gutterSmall } },
+  shelf(false, paged), shelf(true, paged),
+] });
+const row = shelfRow(true);
+const relatedRow = shelfRow(false);
 
 const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column' }, children: [
   stage,
@@ -189,7 +214,12 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
   { type: 'slot', slot: 'searchField', style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '34px', 'padding-bottom': '14px', 'padding-left': 'max(28px, 4vw)', 'padding-right': 'max(28px, 4vw)', 'align-items': 'center' } as Style,
     small: { 'padding-top': '26px', 'padding-bottom': '10px', 'padding-left': '16px', 'padding-right': '16px' } as Style, inner: { width: '100%', 'max-width': '720px', animation: 'vr-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 420ms both' } },
   { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-top': '22px' }, small: { 'padding-top': '14px' }, children: [
-    { type: 'repeat', over: 'home.rows', item: { type: 'box', motion: 'rowIn', stagger: { step: 90, cap: 4 }, children: [{ type: 'use', template: 'row' }] } },
+    { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'row', motion: 'rowIn', stagger: { step: 90, cap: 4 } } },
+    // More rows load as the end of home comes near.
+    { type: 'box', when: [{ test: 'env.homeHasMore' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'min-height': '120px', 'justify-content': 'center' }, children: [
+      { type: 'widget', widget: 'sentinel', params: { on: 'home' } },
+      { ...rowSkeleton, when: [{ test: 'env.homeMoreLoading' }] } as Node,
+    ] },
   ] },
 ] };
 
@@ -357,7 +387,7 @@ const crew: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'r
   { type: 'text', text: '{detail.crewLine}', style: { 'font-size': '15px', color: 'ink.secondary', 'line-height': '1.7', 'max-width': '48rem' } },
 ] };
 
-const related: Node = { type: 'repeat', over: 'detail.related', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], item: { type: 'use', template: 'row', motion: enter(600) } };
+const related: Node = { type: 'repeat', over: 'detail.related', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], item: { type: 'use', template: 'relatedRow', motion: enter(600) } };
 
 const detailSections: Node[] = [band, episodes, extras, cast, crew, related];
 
@@ -376,12 +406,16 @@ const title: Node = { type: 'box', motion: 'frameIn', style: { position: 'absolu
   ] };
 
 export const cinematicDoc: SkinDocument = {
-  schema: 1, renderer: 6, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
+  schema: 1, renderer: 7, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg', swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
   strings: { en: { velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', opening: 'Opening title…', failed: 'This title could not be opened.' , episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
   motion: {
     ...enterPresets,
     frameIn: { keyframes: 'dissolve', duration: 420, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 200 } },
+    pulse0: { keyframes: 'breathe', duration: 1400, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
+    pulse180: { keyframes: 'breathe', duration: 1400, delay: 180, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
+    pulse360: { keyframes: 'breathe', duration: 1400, delay: 360, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
+    shimmer: { keyframes: 'shimmer', duration: 1800, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     episode: { keyframes: 'rise', duration: 640, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both', still: { keyframes: 'dissolve', duration: 240 } },
     navIn: { keyframes: 'dissolve', duration: 900, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 240 } },
     open: { keyframes: 'open', duration: 640, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 240 } },
@@ -392,7 +426,7 @@ export const cinematicDoc: SkinDocument = {
     card: { keyframes: 'rise', duration: 640, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 240 } },
     rowIn: { keyframes: 'rise', duration: 640, delay: 520, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 240 } },
   },
-  templates: { card, row },
+  templates: { card, row, relatedRow },
   slots: { shell, home },
   routes: { title },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
