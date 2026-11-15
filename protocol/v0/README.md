@@ -391,6 +391,19 @@ It is menu metadata, not codec, init-segment or playability evidence. Switching
 to a lazy quality path must return the actual plan and its rendition readiness;
 clients must not turn target metadata into verified `Quality` entries or a URL.
 
+Both the path's `quality` target and its `qualities[]` entries carry pixel
+`width`/`height` and total peak `bitrate` in bits/second. Optional `videoBitrate`
+is the target video rate, `peakVideoBitrate` the video peak budget, and
+`averageBitrate` the estimated total average video-plus-audio rate, all in
+bits/second. Optional `codec` is the intended `h264`/`hevc` family;
+`dynamicRange` is the intended `sdr`/`hdr10`/`hlg`/`dv` output. These intentions
+do not verify the media. `videoCodec` is an exact RFC6381 value only after init
+verification; pending renditions carry an empty value and `codecStatus: "pending"`,
+then publish `"verified"` with the actual codec. The existing rendition URL and
+codec requirements are unchanged. Optional plan `qualityLimitations` lists absent
+rung heights with server-provided `reason` codes; clients must not invent missing
+rungs, interpret unknown codes as readiness, or silently replace a quality choice.
+
 `POST /auth/web-code` requires bearer/device authentication. Its targetOrigin must
 exactly match an advertised trusted HTTPS origin; the server issues a short-lived
 single-use Vela web code bound to the account and target origin. The response echoes that origin.
