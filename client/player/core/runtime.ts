@@ -1,6 +1,7 @@
 import {playbackMark} from '../timing';
 import { abortable,delay } from './async';
 import {StartBuffer,type StartBufferResult} from './start-buffer';
+import {StartupProgress} from './startup-progress';
 import { MediaClock } from './clock';
 import {bufferedPackets,type EncodedBufferAudit} from './packet-buffer';
 import type {SourceBufferAudit} from '../universal/buffer-audit';
@@ -96,6 +97,7 @@ export class PlaybackCore {
   }
   get presentationTelemetry(){return {clusterCache:this.epoch?.demux.clusterCacheAudit??null,lastPresentationLagUs:this.scheduler.metrics.lastLagUs,maxPresentationLagUs:this.scheduler.metrics.maxLagUs,dropEvents:this.scheduler.dropEvents.map(value=>({...value}))};}
   get byteReader(){return this.source?.kind==='file'?this.source.reader:undefined;}
+  get startupPending(){return !!this.source&&this.state!=='failed'&&this.state!=='ended'&&!this.epoch?.started;}
   get subtitleClusters(){return this.source?.kind==='file'?this.source.subtitleClusters:undefined;}
   get container(){return this.containerName;}
   get live(){const source=this.source;if(source?.kind!=='hls'||!source.live||!source.segments.liveWindow)return undefined;
@@ -135,22 +137,28 @@ export class PlaybackCore {
     }else source={kind:'hls',abort,audio,segments:new SegmentReader(input.url,this.mediaRequests?.fetch,allowed,input.cacheIdentity,!!input.live),originUs:input.originUs,live:input.live};
     this.source=source;this.failure=null;this.tracks=[];this.video=undefined;this.audio=undefined;this.requestedAudioId=undefined;this.durationUs=null;
     this.initialAudioOrdinal=Number.isSafeInteger(audioOrdinal)&&audioOrdinal>=0?audioOrdinal:0;
+    const startup=this.startupProgress(source,abort.signal);
     try{
-      const deadline=performance.now()+8000;
       if(source.kind==='hls'){
         this.state='loading';this.clock.reset(positionUs,++this.nextEpoch,false);this.publish();
-        await source.segments.prepare(AbortSignal.any([abort.signal,AbortSignal.timeout(8000)]));
+        await source.segments.prepare(startup.signal);
         if(this.source!==source||this.closed)return;
         if(source.live&&source.segments.liveWindow){const window=source.segments.liveWindow;
           positionUs=source.live.startAtEdge?Math.max(window.start,window.edge-source.live.targetSeconds)*1e6:
             Math.max(window.start,Math.min(window.edge-0.05,positionUs/1e6))*1e6;
         }
       }
-      await this.startEpoch(positionUs,deadline);
+      await this.startEpoch(positionUs,startup);
     }catch(error){if(this.source===source&&!abort.signal.aborted)this.fail(error);throw error;}
+    finally{startup.dispose();}
   }
 
-  private async startEpoch(positionUs:number,deadline=performance.now()+8000):Promise<void>{
+  private startupProgress(source:SourceState,signal:AbortSignal){return new StartupProgress(signal,()=>{
+    const run=this.epoch,pcm=source.audio.bufferState?.();
+    return[(source.kind==='file'?source.reader:source.segments).metrics.receivedBytes,run?.packetBytes.video??0,run?.packetBytes.audio??0,
+      run?.decoder.metrics.decoded??0,pcm?.queuedFrames??0,pcm?.submittedChunks??0];
+  });}
+  private async startEpoch(positionUs:number,admission?:StartupProgress):Promise<void>{
     const source=this.source;if(!source)throw new Error('Playback source is absent');
     // Physical-clock interpolation may contain sub-microsecond fractions.
     // Decoder/output epoch boundaries use integer media microseconds.
@@ -161,7 +169,9 @@ export class PlaybackCore {
     source.audio.pause();
     const abort=new AbortController(),id=++this.nextEpoch;
     if(source.kind==='file')source.reader.beginEpoch(id);
-    const signal=AbortSignal.any([source.abort.signal,abort.signal]);
+    const lifetime=AbortSignal.any([source.abort.signal,abort.signal]);
+    const progress=admission??this.startupProgress(source,lifetime);
+    const signal=AbortSignal.any([lifetime,progress.signal]);
     if(source.kind==='file')source.subtitleClusters.reset(id);
     const demux:PacketDemux=source.kind==='file'?new FileDemux(source.reader,signal,source.subtitleClusters,()=>source.reader.bufferCache,positionUs/1e6):new HlsDemux(source.segments,signal,source.originUs);
     let resolveFirst!:()=>void,resolvePrimed!:()=>void;
@@ -173,15 +183,7 @@ export class PlaybackCore {
         onFailure:error=>{if(this.current(run))this.fail(new Error(`Video decode: ${error.message}`));}})};
     this.epoch=run;this.epochStartedAt=performance.now();this.lastPresentationAt=performance.now();this.scheduler.reset(id,positionUs,!this.playing);this.state='loading';this.failure=null;
     this.clock.reset(positionUs,id,!!this.audio);this.clock.setPlaying(false);this.publish();
-    // This deadline admits a presented frame. Once presentation succeeds, it
-    // must not consume the independent, bounded PCM acquisition/reserve budget.
-    const firstDeadline=new AbortController();
-    const firstTimer=setTimeout(()=>firstDeadline.abort(new Error('Core first-frame deadline exceeded')),
-      Math.max(0,Math.ceil(deadline-performance.now())));
-    const stopFirstDeadline=()=>clearTimeout(firstTimer);
-    void firstFrame.then(stopFirstDeadline);
-    signal.addEventListener('abort',stopFirstDeadline,{once:true});
-    const startup=AbortSignal.any([signal,firstDeadline.signal]);
+    const startup=signal;
     try{
       playbackMark('metadata:start');
       let preparedVideo:string|undefined,videoConfiguring:Promise<void>|undefined;
@@ -230,7 +232,7 @@ export class PlaybackCore {
         if(!this.timer)this.timer=setInterval(()=>{this.checkLive();this.checkEnded();this.publish();},250);
       }
     }catch(error){if(this.current(run))this.fail(error);throw error;}
-    finally{stopFirstDeadline();signal.removeEventListener('abort',stopFirstDeadline);}
+    finally{progress.dispose();}
   }
 
   private async *measuredPackets(run:Epoch,track:MediaTrack,positionUs:number,signal:AbortSignal){
@@ -244,9 +246,9 @@ export class PlaybackCore {
   private async primeStartBuffer(run:Epoch,positionUs:number,signal:AbortSignal){
     const source=this.source;if(!source||!this.current(run))return;
     const delivery=(source.kind==='file'?source.reader:source.segments).delivery;
-    const reserve=new StartBuffer(),began=performance.now(),acquireBy=began+8000;
+    const reserve=new StartBuffer(),began=performance.now();
     const minimum=this.audio?0.08:0;
-    let buffered=0,ended=false,firstPcmAt:number|null=null;
+    let buffered=0,ended=false;
     for(;;){
       signal.throwIfAborted();if(!this.current(run))return;
       let bitrate=0;
@@ -254,18 +256,8 @@ export class PlaybackCore {
       reserve.observe(delivery.since(run.deliveryMark),bitrate||null);
       buffered=Math.max(0,((this.audio?run.audioBufferedUntilUs:run.readAheadEndUs)-positionUs)/1e6);
       ended=this.audio?run.audioEnded&&run.audioTailReported:run.videoEnded;
-      const now=performance.now();
-      // Establishing the first usable PCM is not reserve building. Otherwise a
-      // delayed first audio block spends the entire hold and arms an empty queue.
-      if(firstPcmAt===null&&buffered>=minimum)firstPcmAt=now;
-      const until=firstPcmAt===null?acquireBy:Math.min(acquireBy,firstPcmAt+3000);
       if(!this.playing||buffered>=Math.max(minimum,reserve.targetSeconds)||ended)break;
-      if(now>=until){
-        run.startBuffer=reserve.result(now-began,buffered,true);
-        const pcm=source.audio.bufferState?.();
-        throw new Error(`Cold-start audio reserve deadline: target=${reserve.targetSeconds.toFixed(3)} buffered=${buffered.toFixed(3)} rejectedAnchors=${run.audioAnchorsRejected} pcm=${JSON.stringify(pcm??null)}`);
-      }
-      await delay(Math.min(25,Math.max(1,until-performance.now())),signal);
+      await delay(25,signal);
     }
     if(!this.current(run))return;
     run.startBuffer=reserve.result(performance.now()-began,buffered,false);
@@ -295,7 +287,7 @@ export class PlaybackCore {
   }
   private checkLive(){
     const source=this.source,run=this.epoch;
-    if(source?.kind!=='hls'||!source.live||!run||!this.playing||this.state==='failed'||this.state==='ended')return;
+    if(source?.kind!=='hls'||!source.live||!run||!run.started||!this.playing||this.state==='failed'||this.state==='ended')return;
     const now=performance.now();
     if(now-this.lastPresentationAt>10000){this.fail(new Error('Live publication produced no frame for 10 seconds'));return;}
     // The demux library retains its segment census. Recreate that library-only

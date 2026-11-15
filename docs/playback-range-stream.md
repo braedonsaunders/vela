@@ -191,3 +191,58 @@ Standalone TypeScript and matching core asset assembly passed, key
 `cfa2b02dbd43a214`. Every own local Chrome/profile and fixture server closed.
 Next is one bounded real-app capture under 25 seconds; the alternating lab
 pairs remain uncompleted and production remains the wrapper.
+
+## Progress-based startup, with the reserve retained
+
+The bounded real-app `cfa2b02d` capture (`ZVPAU5A3NB6QWK7FRX74LW2OF4`) still
+failed its wall-clock reserve bound: plan 2.006 s, first image 8.973 s, then only
+0.875 s / 42,000 PCM frames at the failure. Its scalar history confirms both
+tracks used streaming acquisition and a forward range stayed active, unpaused.
+Ether independently identified supply-limited read-ahead: the RD host delivered
+13.1 Mbps, and the server inferred demand from those delivered bytes, selecting
+only two runs instead of sizing from the known 65.6-Mbps title. This is not a
+reason for another reader-size patch. Ether's subsequent bitrate-floor fix is
+separate from the client policy below.
+
+Startup now has one progress clock, from source admission through metadata,
+first presentation and PCM reserve. Incoming body bytes, encoded packet bytes,
+decoded output and actual queued/submitted PCM advance it. Eight seconds with
+none of that progress fails the route; 45 seconds is an unconditional admission
+ceiling. A timestamp initialized to the requested position is not PCM progress.
+The reserve target and output credit/memory bounds are unchanged. The audio
+clock stays stopped until reserve or a real EOF tail is established.
+
+Per-operation wall-clock demux/fragment deadlines no longer override that
+startup policy while bytes flow. Logical search/packet bounds remain. HLS
+requests use byte-inactivity deadlines instead of a ten-second whole-object
+deadline. Startup monitoring is disposed on completion, abort or failure; normal
+playback retains its existing stall handling. A moving live source does not run
+its post-start frame watchdog during admission.
+
+The core exposes the optional `startupPending` backend property. The host
+lets `implementation='vela-core'` own admission while that property is true;
+its eight-second original timer and generic start/position watchdog cannot
+abort a flowing core start. A wrapper or older immutable core without the flag
+keeps its existing policy. Thus this requires the matching host build, not just
+a descriptor change on installed 0.1.42. The production default remains wrapper
+`3c579f70de6e1cfe`; no wrapper payload rebuild is needed.
+
+Local proof used the same generated 4K DTS fixture, cold 48.08-second resume,
+400-ms first byte per request, but an 11-Mbps aggregate body cap:
+
+| Metric | Wall-clock policy | Progress policy |
+| --- | ---: | ---: |
+| First image | 3.113 s | 3.000 s |
+| Playable | Reserve failure | 11.669 s |
+| Reserve at release/failure | 0.625 s / 30,000 frames | 1.916672 s / 92,000 frames |
+| Reserve hold | Old bound expires | 8.668 s |
+| Added drops / underruns in one playing second | No playable interval | 0 / 0 |
+
+The new policy keeps the spinner while data arrives, rather than retrying a
+healthy slow start. Eleven Mbps is below the fixture's media bitrate: the short
+proof establishes priming and admission, not sustained realtime playback on
+such a connection. Independent process/driver warmth makes the small first-image
+difference unimportant. The final compiled counter projection uses actual PCM
+submissions, not the initialized timeline origin. Own browser/profile and
+fixture server closed. A matching-host real-app capture and the alternating
+cold pairs are still required before any default proposal.

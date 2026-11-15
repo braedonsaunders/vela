@@ -69,7 +69,7 @@ function vint(bytes:Uint8Array,at=0,id=false){
 }
 class Step {
  readonly signal:AbortSignal;private requested=0;private visits=0;private pages=new Set<number>();
- constructor(private scope:Scope,readonly size:number,readonly forward=true){this.signal=AbortSignal.any([scope.signal,AbortSignal.timeout(8000)]);}
+ constructor(private scope:Scope,readonly size:number,readonly forward=true){this.signal=scope.signal;}
  async read(offset:number,length:number){
   this.signal.throwIfAborted();if(!Number.isSafeInteger(offset)||!Number.isSafeInteger(length)||offset<0||length<0||offset+length>this.size||length>MAX_PACKET)throw new Error('Invalid Matroska streaming range');
   this.requested+=length;if(this.requested>32*1024*1024||++this.visits>65536)throw new Error('Matroska streaming search exceeds bound');

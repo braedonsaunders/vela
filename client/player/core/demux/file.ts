@@ -51,7 +51,7 @@ export class PacketDemux {
   /** Serial source operations make each cancellation/read budget unambiguous. */
   private operation<T>(run: () => PromiseLike<T> | T, signal: AbortSignal,stage='metadata',parallel=false): Promise<T> {
     if(parallel){
-      const operation=AbortSignal.any([signal,this.lifetime.signal,AbortSignal.timeout(8000)]);
+      const operation=AbortSignal.any([signal,this.lifetime.signal]);
       return abortable(Promise.resolve().then(()=>{operation.throwIfAborted();return run();}),operation).catch(error=>{
         if(signal.aborted)throw error;
         throw new Error(`Demux ${stage}: ${error instanceof Error?error.message:'operation failed'}`);
@@ -60,7 +60,7 @@ export class PacketDemux {
     const work = this.serial.then(async () => {
       signal.throwIfAborted(); this.lifetime.signal.throwIfAborted();
       this.operationStage=stage;
-      this.operationSignal = AbortSignal.any([signal,this.lifetime.signal,AbortSignal.timeout(8000)]);
+      this.operationSignal = AbortSignal.any([signal,this.lifetime.signal]);
       this.readBytes = 0;
       const abort = () => this.dispose();
       this.operationSignal.addEventListener('abort',abort,{once:true});

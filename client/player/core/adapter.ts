@@ -16,6 +16,7 @@ export async function warmup(options:Pick<OriginalRuntimeOptions,'assets'|'signa
 export class UniversalRuntime implements OriginalBackend {
   readonly implementation='vela-core' as const;
   readonly retainsSource=true;
+  get startupPending(){return this.core.startupPending;}
   get supportsLocalAudioSwitch(){return !this.media?.hls;}
   get supportsSubtitles(){return !!this.options.assets.subtitleBaseURL;}
   get byteReader(){return this.core.byteReader;}

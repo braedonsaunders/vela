@@ -44,7 +44,7 @@ export class RangeReader implements ByteReader {
   private readonly url: string;
   readonly bandwidth=new BandwidthEstimator();
   readonly delivery=new DeliveryMeter();
-  readonly metrics = { requests: 0, bytes: 0, cacheHits: 0, milliseconds: 0,
+  readonly metrics = { requests: 0, bytes: 0, receivedBytes:0,cacheHits: 0, milliseconds: 0,
     sourceEpoch:0,uniquePageRequests:0 as number|null,repeatedPageRequests:0 as number|null };
   /** A bounded bitmap counts repeat physical acquisitions without retaining URLs
    * or a list of file offsets. Old pending reads retain their requesting epoch. */
@@ -270,6 +270,7 @@ export class RangeReader implements ByteReader {
         arm();let chunk:ReadableStreamReadResult<Uint8Array>;
         try{chunk=await body.read();}finally{disarm();}
         if(chunk.done){if(run.next!==run.end||filled)throw new TypeError('Original forward range was truncated');complete=true;break;}
+        this.metrics.receivedBytes+=chunk.value.length;
         let cursor=0;
         while(cursor<chunk.value.length){
           signal.throwIfAborted();
@@ -328,6 +329,7 @@ export class RangeReader implements ByteReader {
       try {
         for (;;) {
           const {done,value} = await body.read(); if (done) break;
+          this.metrics.receivedBytes+=value.length;
           if (written+value.length > expected) throw new RangeFailure('Original range body exceeds declared length');
           bytes.set(value,written); written += value.length;
         }
