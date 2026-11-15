@@ -28,7 +28,7 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 6 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// Renderer 7 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
 const r6 = (fields: Record<string, unknown>) => fields as object;
@@ -655,7 +655,7 @@ const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds 
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
 export default {
-  schema: 1, renderer: 6, id, name: 'Mochi', version,
+  schema: 1, renderer: 7, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true, flatDetail: false },
