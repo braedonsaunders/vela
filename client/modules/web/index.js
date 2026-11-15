@@ -2272,15 +2272,28 @@ class PlaybackEngine {
     if (!this.session || !this.source || !this.wantsPlay || ["failed", "ended", "recovering"].includes(this.status))
       return;
     const now = performance.now();
-    if (!this.pendingSeek && this.position() > this.lastPosition + 0.02 && (this.original ? this.status === "playing" : !this.video.paused)) {
-      this.everPlayed = true;
-      this.lastAdvance = now;
-      this.lastPosition = this.position();
+    if (this.recordPlaybackProgress(now))
       return;
-    }
     const expired = !this.everPlayed ? now - this.waitSince > this.startupDeadlineMs : now - this.lastAdvance > 30000;
     if (expired)
       this.recover(new PlaybackFault(this.everPlayed ? "Playback stalled for 30 seconds" : `Playback did not start within ${this.startupDeadlineMs / 1000} seconds`, "network"), this.controller.token());
+  }
+  recordPlaybackProgress(now = performance.now()) {
+    if (this.pendingSeek)
+      return false;
+    const position = this.position();
+    const decoded = (this.frameMetrics().frames ?? 0) > 0 || !this.original && this.video.readyState >= 2;
+    const started = !this.everPlayed && (this.startupFrameSeen || (this.original?.readout.presentedFrames ?? 0) > 0 || position > this.lastPosition && decoded);
+    const advanced = (this.everPlayed || decoded) && position > this.lastPosition + 0.02 && (this.original ? this.status === "playing" : !this.video.paused);
+    if (!started && !advanced)
+      return false;
+    this.everPlayed = true;
+    this.lastAdvance = now;
+    this.lastPosition = position;
+    if (this.originalStartTimer)
+      clearTimeout(this.originalStartTimer);
+    this.originalStartTimer = undefined;
+    return true;
   }
   resetProgress(position) {
     this.waitSince = performance.now();
@@ -2807,7 +2820,10 @@ class PlaybackEngine {
       this.startupDeadlineMs = 8000;
       this.originalStartTimer = setTimeout(() => {
         this.originalStartTimer = undefined;
-        if (this.controller.current(token) && !(this.original?.readout.presentedFrames ?? 0))
+        if (!this.controller.current(token))
+          return;
+        this.recordPlaybackProgress();
+        if (!this.everPlayed)
           this.recover(new PlaybackFault("Original first-frame deadline exceeded (8 seconds)", "decoder"), token);
       }, 8000);
     }
