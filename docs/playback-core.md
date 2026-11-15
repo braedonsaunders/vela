@@ -125,3 +125,14 @@ Native SDR is implemented; WGSL/HDR route integration, subtitles, HLS/live and
 quality continuity are still migration work. The new core is not yet selected by
 the production build. Source-scoped abort jobs retain cache/device across seeks;
 source replacement, stop and failed startup cancel them and bound teardown.
+
+The next local component drive used actual HEVC Main10/PQ+BT.2020 and E-AC-3
+5.1. Vela selected the installed HEVC WGSL decoder and software audio package;
+the GPU colour pipeline tone-mapped the PQ steps to SDR. First GPU frame239ms;
+authorized retained seek136ms including40ms authority delay; EOF7.995s. There
+were212decoded video frames including seek preroll,0presentation drops before
+seek and1at/after it. Three ranges transferred676906bytes across the source.
+The runtime, reader cache and presentation device survived the seek. The parser
+coordinator runs in bounded workers; GPU jobs use the library's decode-session
+component while Vela retains packet credits, presentation queues and clock policy.
+This640×360 local result does not qualify4K lab parity or Dolby Vision processing.
