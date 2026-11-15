@@ -20,7 +20,7 @@ export type StyleProperty =
   | 'grid-template-columns' | 'grid-template-rows' | 'grid-column' | 'grid-row'
   | 'margin' | 'padding' | 'padding-top' | 'padding-right' | 'padding-bottom' | 'padding-left' | 'margin-top' | 'margin-right' | 'margin-bottom' | 'margin-left' | 'overflow' | 'overflow-x' | 'overflow-y' | 'scroll-snap-type' | 'scroll-snap-align' | 'scrollbar-width'
   | 'color' | 'background-color' | 'background-image' | 'opacity'
-  | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'border-left-width' | 'border-left-color' | 'column-gap' | 'row-gap' | 'scroll-behavior' | 'scroll-padding-left' | 'color-scheme' | 'border-top-width' | 'border-top-color' | 'border-bottom-width' | 'border-bottom-color' | 'outline' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
+  | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'corner-shape' | 'border-left-width' | 'border-left-color' | 'column-gap' | 'row-gap' | 'scroll-behavior' | 'scroll-padding-left' | 'color-scheme' | 'border-top-width' | 'border-top-color' | 'border-bottom-width' | 'border-bottom-color' | 'outline' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
   | 'font-family' | 'font-size' | 'font-weight' | 'font-style' | 'line-height' | 'letter-spacing' | 'text-transform'
   | 'text-align' | 'text-shadow' | '-webkit-text-stroke' | 'text-overflow' | 'line-clamp' | 'white-space' | 'font-variant-numeric'
   | 'object-fit' | 'transform-origin' | 'translate' | 'scale' | 'rotate' | 'perspective'
@@ -62,11 +62,11 @@ interface NodeBase extends Breakpoints {
   /** A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`. */
   group?: boolean; groupHover?: Style; groupFocus?: Style;
   /** The first state whose conditions hold replaces `style` on the same element (transitions run). */
-  states?: { when: Condition[]; style: Style; hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style }[];
+  states?: { when: Condition[]; style: Style; hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; /** The press button's name while this state holds. */ label?: Template }[];
   /** A pressable box: disabled while these hold, drawn with `disabledStyle`. */
   disabled?: Condition[]; disabledStyle?: Style;
   /** The press button's accessibility state and role. */
-  a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; haspopup?: string; title?: Template; role?: string };
+  a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; /** aria-checked (menu item radios and checkboxes). */ checked?: Condition[]; haspopup?: string; title?: Template; role?: string };
   /** Escape clears this flag and moves focus to `returnFocus` (an element id). */
   escape?: string; returnFocus?: Template;
   layoutTransition?: string; /** Accepted and ignored for now (docs/skin-schema.md). */ sharedElement?: string;

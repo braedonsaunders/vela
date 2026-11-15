@@ -28,7 +28,7 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 11 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// Renderer 12 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
 const pending = (fields: Record<string, unknown>) => fields as object;
@@ -222,7 +222,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
   ] };
 
 const swatch = (colour: string): Node => ({ type: 'box', style: { ...sz(12), 'border-radius': '6px', 'background-color': colour, border: '2px solid $ink', 'box-sizing': 'border-box' } });
-const menu: Node = { type: 'box', id: 'viewer-settings', role: 'dialog', label: '{s:profileAndAppearance}', when: [set('env.viewer'), set('flag:menu')], motion: 'menuPop', exit: 'menuOut', escape: 'menu', returnFocus: 'profile-menu-trigger',
+const menu: Node = { type: 'box', id: 'viewer-settings', role: 'dialog', label: '{s:profileAndAppearance}', when: [set('env.viewer'), set('flag:menu')], motion: 'menuPop', exit: 'menuOut',
   style: { ...col, position: 'absolute', top: '92px', right: 'max(24px, 3.6vw)', 'z-index': '30', width: '272px', 'box-sizing': 'border-box', padding: '20px', gap: '16px', border: '3px solid $ink', 'border-radius': '24px', 'background-color': '$card', color: '$ink', 'box-shadow': '6px 6px 0px $lavender', 'transform-origin': 'top right' },
   below: { [COMPACT]: { top: '74px', right: '12px' } }, children: [
     { type: 'image', src: asset('tail-up.svg'), alt: '', style: { position: 'absolute', top: '-14px', right: '34px', ...sz(24, 14) } },
@@ -251,7 +251,7 @@ const menu: Node = { type: 'box', id: 'viewer-settings', role: 'dialog', label: 
     ] },
   ] };
 
-const shell: Node = { type: 'box', style: { ...col, position: 'relative', height: '100%', 'min-height': '0px', 'background-color': '$page', color: '$ink', 'color-scheme': 'light', 'font-family': fredoka }, children: [
+const shell: Node = { type: 'box', escape: 'menu', returnFocus: 'profile-menu-trigger', style: { ...col, position: 'relative', height: '100%', 'min-height': '0px', 'background-color': '$page', color: '$ink', 'color-scheme': 'light', 'font-family': fredoka }, children: [
   // The dotted paper, or on Live TV the night's ground, behind everything (the route sits at z 1).
   { type: 'image', when: [{ test: 'env.section', is: 'ne', value: 'live' }], src: asset('dots.svg'), alt: '', style: { ...inset0, width: '100%', height: '100%', 'object-fit': 'fill', 'pointer-events': 'none', 'z-index': '0' } },
   { type: 'box', when: [is('env.section', 'live')], style: { ...inset0, 'background-color': '$night', 'pointer-events': 'none', 'z-index': '0' } },
@@ -520,11 +520,15 @@ const toolbar: Node = { type: 'box', motion: 'hop90', style: { ...row, position:
     { type: 'box', when: [{ test: 'library.sortCount', is: 'gt', value: '1' }], style: { ...row, gap: '8px', 'align-items': 'center', 'flex-shrink': '0' }, children: [
       { type: 'text', text: '{s:sortBy}', style: { ...Label, 'font-size': '11px', color: '$ink-soft' } },
       { type: 'widget', widget: 'select', params: { options: 'library.sorts', action: 'librarySort', label: '{s:sortBy}' }, style: Picker },
-      // The flip names the current direction (one node per direction, so the arrow's turn
-      // is not animated yet: states cannot carry a label).
-      ...(['asc', 'desc'] as const).map(d => ({ type: 'box', when: [set('library.canFlip'), is('library.direction', d)], press: { action: 'librarySortFlip' as Action }, label: d === 'asc' ? '{s:ascending}' : '{s:descending}', style: { ...Bubble, ...sz(44) }, ...bubble, children: [
-        { type: 'box', style: { ...col, rotate: d === 'asc' ? '180' : '0' }, children: [icon('sort', 15)] },
-      ] } as Node)),
+      // The flip turns its arrow over with a bounce; its name says the current direction.
+      { type: 'box', when: [set('library.canFlip')], press: { action: 'librarySortFlip' as Action }, label: '{s:descending}', style: { ...Bubble, ...sz(44) }, ...bubble,
+        states: [{ when: [is('library.direction', 'asc')], style: { ...Bubble, ...sz(44) }, ...pending({ label: '{s:ascending}' }) } as { when: Condition[]; style: Style }], children: [
+          { type: 'box', style: { ...col, rotate: '0', transition: `rotate 320ms ${boing}` }, states: [
+            { when: [stillC, is('library.direction', 'asc')], style: { ...col, rotate: '180', transition: 'none' } },
+            { when: [stillC], style: { ...col, rotate: '0', transition: 'none' } },
+            { when: [is('library.direction', 'asc')], style: { ...col, rotate: '180', transition: `rotate 320ms ${boing}` } },
+          ], children: [icon('sort', 15)] },
+        ] },
     ] },
   ] };
 
@@ -554,6 +558,124 @@ const library: Node = { type: 'box', style: { ...col, position: 'relative', colo
       { type: 'box', when: [not('env.libraryMoreLoading')], press: { action: 'libraryMore' as Action }, label: '{s:loadMore}', style: { ...Candy, height: '52px', 'padding-left': '30px', 'padding-right': '30px', gap: '10px' }, ...candy, children: [
         icon('sparkle', 14),
         { type: 'text', text: '{s:loadMore}', style: { 'font-size': '16px' } },
+      ] },
+    ] },
+  ] },
+] };
+
+// ---------------------------------------------------------------- night sky and sign-in
+
+// A night sky (look.contract NightSky): a gradient, a field of twinkling pixel stars and,
+// unless still, sakura petals drifting down. It fills its positioned parent, behind.
+const STARS = Array.from({ length: 20 }, (_, i) => i);
+const PETALS = Array.from({ length: 6 }, (_, i) => i);
+const nightSky = (petals: boolean): Node => ({ type: 'box', style: { ...inset0, 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'pointer-events': 'none',
+  'background-image': 'radial-gradient(ellipse 80% 60% at 85% -10%, $night-3 0%, $night-clear 70%), radial-gradient(ellipse 70% 50% at 0% 100%, $night-2 0%, $night-clear 70%), linear-gradient(180deg, $night 0%, $night-2 100%)' }, children: [
+    ...STARS.map(i => ({ type: 'box', style: { position: 'absolute', left: `${(i * 37 + 6) % 97}%`, top: `${(i * 53 + 11) % 91}%` }, children: [
+      icon('sparkle', i % 4 === 0 ? 10 : i % 3 === 0 ? 7 : 5, i % 5 === 0 ? 'sakura' : 'star', { motion: `star${i}` }),
+    ] } as Node)),
+    ...(petals ? PETALS.map(i => ({ type: 'box', when: [moving], motion: `petal${i}`, style: { position: 'absolute', left: `${8 + i * 17}%`, top: '0px' }, children: [
+      { type: 'image', src: asset('petal.svg'), alt: '', style: sz(i % 2 === 0 ? 14 : 10) },
+    ] } as Node)) : []),
+  ] });
+
+// Three pixel hearts that hop in turn: the skin's small indeterminate progress (auth.contract Dots).
+const dots: Node = { type: 'box', style: { ...row, gap: '8px' }, children: (['pink', 'lavender', 'mint'] as const).map((c, i) => icon('heart', 14, c, { motion: `dot${i}` })) };
+
+// Mochi's field (look.contract Field) around the bare input.
+const Field: Style = { 'box-sizing': 'border-box', height: '52px', padding: '0px 20px', border: '3px solid $ink', 'border-radius': '18px', 'background-color': '$card', color: '$ink', 'font-family': fredoka, 'font-size': '17px', outline: 'none', 'box-shadow': 'inset 0px 3px 0px $page-deep' };
+const textField = (field: 'username' | 'password', label: string): Node => ({ type: 'box', style: { ...col, gap: '6px' }, children: [
+  { type: 'text', text: label, style: { ...Label, 'font-size': '11px', color: '$ink-soft' } },
+  { type: 'widget', widget: 'textInput', params: { field, label }, style: Field, focus: { 'border-color': '$lavender-deep', 'box-shadow': '0px 0px 0px 4px $lavender-soft' } } as Node,
+] });
+
+const welcome = (title: string, line: string, extra: Style = {}): Node => ({ type: 'box', style: { ...col, gap: '8px', 'align-items': 'center', 'text-align': 'center' }, children: [
+  { type: 'text', text: title, role: 'heading', level: 1, style: { ...Title, 'font-size': '34px' } },
+  { type: 'text', text: line, style: { color: '$ink-soft', 'font-size': '16px', 'line-height': '1.5', ...extra } },
+] });
+const dashed: Node = { type: 'box', style: { flex: '1', height: '0px', 'border-style': 'dashed', 'border-width': '0px', 'border-top-width': '2.5px', 'border-top-color': '$line-strong' } };
+
+// Connecting, redeeming a web code, or offline (auth.contract AuthNotice).
+const authNotice: Node[] = [
+  { type: 'box', when: [is('env.auth', 'offline')], role: 'alert', motion: 'hop0', exit: 'stepOut', style: { ...col, gap: '14px', 'align-items': 'center', 'text-align': 'center', padding: '8px 0px' }, children: [
+    { type: 'box', style: { ...row, ...sz(46), 'border-radius': '23px', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$alert', border: '2.5px solid $ink', 'box-sizing': 'border-box', color: '$pink-deep' }, children: [icon('alert', 20)] },
+    { type: 'text', text: '{s:serverUnreachable}', role: 'heading', level: 1, style: { ...Title, 'font-size': '30px' } },
+    { type: 'text', text: '{s:serverUnreachableHint}', style: { color: '$ink-soft', 'font-size': '15px', 'line-height': '1.55' } },
+  ] },
+  ...(['connecting', 'redeeming'] as const).map(k => ({ type: 'box', when: [is('env.auth', k)], role: 'status', motion: 'hop0', exit: 'stepOut', style: { ...col, gap: '14px', 'align-items': 'center', 'text-align': 'center', padding: '8px 0px' }, children: [
+    dots,
+    { type: 'text', text: k === 'redeeming' ? '{s:signingYouIn}' : '{s:connecting}', style: { ...Pixel, color: '$ink-soft', 'font-size': '16px' } },
+  ] } as Node)),
+];
+
+// Sign in (auth.contract SignIn).
+const signInButton: Style = { ...Candy, height: '54px', 'margin-top': '8px', gap: '10px' };
+const signIn: Node = { type: 'box', when: [is('env.auth', 'signin')], motion: 'hop60', exit: 'stepOut', style: { ...col, gap: '22px' }, children: [
+  welcome('{s:welcome}', '{s:signInHint}'),
+  { type: 'box', when: [set('signin.error')], role: 'alert', motion: 'pop0', style: { ...row, gap: '10px', 'align-items': 'flex-start', padding: '12px 14px', 'border-radius': '18px', 'background-color': '$alert', border: '2.5px solid $pink-deep', color: '$ink' }, children: [
+    icon('alert', 16, 'pink-deep', { style: { 'margin-top': '2px' } }),
+    { type: 'text', text: '{signin.error}', style: { 'font-size': '14px', 'line-height': '1.45' } },
+  ] },
+  { type: 'box', when: [set('signin.canPassword')], style: { ...col, gap: '14px' }, children: [
+    textField('username', '{s:username}'),
+    textField('password', '{s:password}'),
+    { type: 'box', press: { action: 'signIn' as Action }, label: '{s:signIn}', testId: 'sign-in', disabled: [set('signin.busy')], style: signInButton, ...candy,
+      disabledStyle: { 'background-color': '$pink-soft', color: '$ink-soft', 'box-shadow': 'none' }, children: [
+        { ...dots, when: [set('signin.busy')] } as Node,
+        icon('heart', 14, undefined, { when: [not('signin.busy')] }),
+        { type: 'text', text: '{s:signIn}', when: [not('signin.busy')], style: { 'font-size': '17px' } },
+        { type: 'text', text: '{s:signingIn}', when: [set('signin.busy')], style: { 'font-size': '17px' } },
+      ] } as Node,
+  ] },
+  { type: 'box', when: [set('signin.canPassword'), set('signin.canQuick')], style: { ...row, gap: '12px', 'align-items': 'center' }, children: [
+    dashed,
+    { type: 'text', text: '{s:or}', style: { ...Pixel, 'font-size': '13px', color: '$ink-quiet' } },
+    dashed,
+  ] },
+  { type: 'box', when: [set('signin.canQuick')], press: { action: 'startQuick' as Action }, label: '{s:connectWithCode}', testId: 'quick-connect', disabled: [set('signin.busy')], disabledStyle: { opacity: '0.5', 'box-shadow': 'none' }, style: { ...Puffy, height: '52px', gap: '10px' }, ...puffy, children: [
+    icon('phone', 16),
+    { type: 'text', text: '{s:connectWithCode}', style: { 'font-size': '16px' } },
+  ] } as Node,
+  { type: 'box', when: [not('signin.canPassword'), not('signin.canQuick')], role: 'status', style: { ...col, gap: '10px', 'align-items': 'center', 'text-align': 'center' }, children: [
+    mascot('sleepy', 56),
+    { type: 'text', text: '{s:noSignIn}', style: { color: '$ink-soft', 'font-size': '14px', 'line-height': '1.55' } },
+  ] },
+] };
+
+// Quick connect: the code in candy tiles that pop in one by one (auth.contract QuickConnect).
+const codeTile = (i: number): Node => ({ type: 'text', text: '{char.text}', when: [{ test: 'index', is: 'mod', value: `3:${i}` }], motion: 'codePop', stagger: { step: 50, cap: 12 },
+  style: { flex: '1', 'max-width': '46px', height: '58px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'border-radius': '14px', 'background-color': ['$pink-soft', '$lavender-soft', '$mint-soft'][i], border: '2.5px solid $ink', 'box-shadow': '0px 4px 0px $ink', 'font-family': fredoka, 'font-size': '27px', 'font-weight': '650', color: '$ink' } });
+const quick: Node = { type: 'box', when: [is('env.auth', 'quick')], motion: 'hop60', exit: 'stepOut', style: { ...col, gap: '22px', 'align-items': 'center', 'text-align': 'center' }, children: [
+  welcome('{s:easierWayIn}', '{s:approveCode}', { 'font-size': '15px', 'max-width': '300px' }),
+  { type: 'box', testId: 'connect-code', label: '{quick.code}', role: 'text', style: { ...row, width: '100%', gap: '6px', 'justify-content': 'center' }, children: [
+    { type: 'repeat', over: 'quick.chars', item: { type: 'box', style: { display: 'contents' }, children: [0, 1, 2].map(codeTile) } },
+  ] },
+  { type: 'box', style: { ...col, gap: '8px', 'align-items': 'center' }, children: [
+    { type: 'box', role: 'status', style: { ...row, gap: '10px', 'align-items': 'center' }, children: [
+      { ...dots, when: [not('quick.error')] } as Node,
+      { type: 'text', when: [not('quick.error')], text: '{s:waitingForApproval}', style: { color: '$ink-soft', 'font-size': '15px' } },
+      { type: 'text', when: [set('quick.error')], text: '{quick.error}', style: { color: '$pink-deep', 'font-size': '15px' } },
+    ] },
+    { type: 'text', text: '{s:codeExpires} {quick.expires}.', style: { color: '$ink-quiet', 'font-size': '13px' } },
+  ] },
+  { type: 'box', press: { action: 'cancelQuick' as Action }, label: '{s:cancel}', style: { ...Puffy, height: '46px', padding: '0px 28px' }, ...puffy, children: [
+    { type: 'text', text: '{s:cancel}', style: { 'font-size': '15px' } },
+  ] },
+] };
+
+// The stage every signed-out state stands on: the night sky with drifting petals, the
+// wordmark, and a white sticker card with Mochi peeking over its edge (auth.contract AuthStage).
+const auth: Node = { type: 'box', exit: 'stageOut', style: { ...col, position: 'relative', 'z-index': '0', 'min-height': '100dvh', width: '100%', 'box-sizing': 'border-box', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'align-items': 'center', 'justify-content': 'center', padding: 'max(28px, 6vh) 16px', 'background-color': '$night', color: '$ink', 'font-family': fredoka }, children: [
+  { ...nightSky(true), style: { ...(nightSky(true) as { style: Style }).style, 'z-index': '-1' } } as Node,
+  { type: 'box', motion: 'pop0', style: { ...col, position: 'relative', width: '100%', 'max-width': '440px', gap: '26px', 'align-items': 'center' }, children: [
+    { type: 'box', style: { ...row, 'align-items': 'center', gap: `${44 * 0.24}px` }, children: [
+      { type: 'image', src: asset('vela-mark.svg'), alt: '', style: sz(44 * 1.05) },
+      { type: 'text', text: '{s:vela}', style: { 'font-family': pixelFace, 'font-weight': '700', 'font-size': '44px', 'line-height': '1', 'letter-spacing': '0.04em', color: '$night-ink', 'text-shadow': '3px 3px 0px $lavender-deep' } },
+    ] },
+    { type: 'box', style: { ...col, position: 'relative', width: '100%', 'padding-top': '34px' }, children: [
+      mascot('happy', 76, { motion: 'float36', style: { position: 'absolute', top: '0px', left: '50%', 'margin-left': '-38px', 'z-index': '2' } }),
+      { type: 'box', layoutTransition: '480ms ease-out', style: { ...col, width: '100%', 'box-sizing': 'border-box', padding: 'clamp(40px, 6vw, 52px) clamp(22px, 5vw, 38px) clamp(26px, 5vw, 36px)', 'border-radius': '32px', 'background-color': '$card', border: '3px solid $ink', 'box-shadow': '8px 9px 0px $pink' }, children: [
+        ...authNotice, signIn, quick,
       ] },
     ] },
   ] },
@@ -779,10 +901,10 @@ const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds 
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
 export default {
-  schema: 1, renderer: 11, id, name: 'Mochi', version,
+  schema: 1, renderer: 12, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
-  traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true, flatDetail: false },
+  traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true },
   tokens: {
     page: '#fff0f6', 'page-deep': '#ffe2ee', 'page-clear': '#fff0f600',
     ink: '#3b1f4a', 'ink-soft': '#6b4f7d', 'ink-quiet': '#8f789f',
@@ -806,7 +928,11 @@ export default {
     closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', titleFailed: "This title couldn't be opened. It may no longer be available.",
     watchTrailer: 'Watch trailer', watchProgress: 'Watch progress', watchProgressOf: 'Watch progress:', episodes: 'Episodes', season: 'Season', episode: 'Episode',
     extras: 'Extras', featuring: 'Featuring', behindTheStory: 'Behind the story', play: 'Play', resume: 'Resume', watched: 'Watched', notAvailable: 'Not available', notAvailableYet: 'Not available yet', tryAgain: 'Try again',
-    findingYourEvening: 'Finding your evening…', findingTitles: 'Finding titles…', library: 'Library', all: 'All', unwatched: 'Unwatched', watchedFilter: 'Watched', favourites: 'Favourites',
+    findingYourEvening: 'Finding your evening…',
+    serverUnreachable: "Can't reach your server", serverUnreachableHint: 'Your server could not be reached. Reopen Vela when the connection is restored.', signingYouIn: 'Signing you in…', connecting: 'Connecting to your library…',
+    welcome: 'Welcome back, friend!', signInHint: 'Sign in to your library.', username: 'Username', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…', or: 'or', connectWithCode: 'Connect with a code',
+    noSignIn: "This server doesn't offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.", easierWayIn: 'An easier way in.', approveCode: 'Approve this code from a signed-in Ether device.',
+    waitingForApproval: 'Waiting for approval…', codeExpires: 'This code expires at', cancel: 'Cancel', findingTitles: 'Finding titles…', library: 'Library', all: 'All', unwatched: 'Unwatched', watchedFilter: 'Watched', favourites: 'Favourites',
     genre: 'Genre', anyGenre: 'Any genre', sortBy: 'Sort by', ascending: 'Ascending', descending: 'Descending', loadMore: 'Show more', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.',
     libraryFailed: "This library couldn't be opened. Check your connection and try again.", homeFailed: "Your library couldn't be reached. Check your server connection.",
   } },
@@ -824,6 +950,7 @@ export default {
     bubble: { from: { opacity: 0, scale: 0.6, translate: '0px 8px' } },
     bounce: { '0%': { translate: '0px 0px', scale: 0.96, rotate: 0 }, '14%': { translate: '0px -4px', scale: 1.02, rotate: 0 }, '45%': { translate: '0px -22px', scale: 1.04, rotate: -6 }, '72%': { translate: '0px 0px', scale: 1, rotate: 0 }, '86%': { translate: '0px 1px', scale: 0.95, rotate: 0 }, '100%': { translate: '0px 0px', scale: 0.96, rotate: 0 } },
     shadow: { '0%': { scale: 1, opacity: 0.5 }, '45%': { scale: 0.6, opacity: 0.25 }, '72%': { scale: 1, opacity: 0.5 }, '100%': { scale: 1, opacity: 0.5 } },
+    petal: { '0%': { opacity: 0, translate: '0px -40px', rotate: 0 }, '10%': { opacity: 0.9 }, '90%': { opacity: 0.9 }, '100%': { opacity: 0, translate: '90px 1400px', rotate: 300 } },
     burst: { '0%': { opacity: 1, translate: '0px 0px', scale: 0.3 }, '60%': { opacity: 1 }, '100%': { opacity: 0, translate: '0px -54px', scale: 1.1 } },
   },
   motion: {
@@ -838,10 +965,15 @@ export default {
     hopBounce: { keyframes: 'doc:bounce', duration: 900, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     hopShadow: { keyframes: 'doc:shadow', duration: 900, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     blink: { keyframes: 'tick', duration: 1000, easing: 'steps(1)', iterations: 'infinite', fill: 'none' },
+    ...Object.fromEntries(STARS.map(i => [`star${i}`, { keyframes: 'doc:twinkle', duration: 2400, delay: (i * 370) % 2400, easing: 'ease-in-out', iterations: 'infinite', fill: 'none' }])),
+    ...Object.fromEntries(PETALS.map(i => [`petal${i}`, { keyframes: 'doc:petal', duration: (11 + (i * 3) % 6) * 1000, delay: (i * 4300) % 10000, easing: 'linear', iterations: 'infinite', fill: 'none' }])),
+    ...Object.fromEntries([0, 1, 2].map(i => [`dot${i}`, { keyframes: 'doc:float', duration: 900, delay: i * 150, easing: 'ease-in-out', iterations: 'infinite', fill: 'none' }])),
+    codePop: { keyframes: 'doc:pop', duration: 420, delay: 120, easing: boing, fill: 'both', still: fade(200) },
+    stepOut: vanish(260), stageOut: { keyframes: 'vanish', duration: 300, easing: 'ease-in', fill: 'both', still: { keyframes: 'vanish', duration: 160 } },
     heroFill: { keyframes: 'fill', duration: 9000, easing: 'linear', fill: 'both' },
     float36: float(3.6), float50: float(5), float32: float(3.2),
     pop0: popIn(0), pop60: popIn(60), pop120: popIn(120), pop260: popIn(260),
-    hop0: hop(0), hop40: hop(40), hop90: hop(90), hop160: hop(160), hop260: hop(260), hop380: hop(380), hop420: hop(420), hop460: hop(460), hop480: hop(480), hop500: hop(500), hopRow: hop(120),
+    hop0: hop(0), hop60: hop(60), hop40: hop(40), hop90: hop(90), hop160: hop(160), hop260: hop(260), hop380: hop(380), hop420: hop(420), hop460: hop(460), hop480: hop(480), hop500: hop(500), hopRow: hop(120),
     shimmer: { keyframes: 'shimmer', duration: 1600, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     statusIn: { keyframes: 'dissolve', duration: 400, easing: 'ease-out', fill: 'both', still: fade(200) },
     pageOpen: { keyframes: 'open', duration: 680, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both', still: fade(240) },
@@ -850,6 +982,6 @@ export default {
   status: true,
   templates: { card, gridCard, shelf: shelf(true), relatedShelf: shelf(false) },
   slots: { shell, home },
-  routes: { title, library },
+  routes: { title, library, auth },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { scrim: '$scrim' } },
 } as unknown as SkinDocument;

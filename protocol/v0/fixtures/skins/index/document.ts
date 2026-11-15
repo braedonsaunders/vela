@@ -132,15 +132,15 @@ const home: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'c
 
 // ---------------------------------------------------------------- library
 // A plain Contract button with no ground of its own, as Exact draws it ("bordered"): a hairline
-// in the label colour at 45%, the control radius, the label colour at weight 500.
-const bordered: Style = { display: 'block', padding: '16px', border: '1px solid var(--exact-line)', 'border-radius': 'calc(8px * var(--exact-curve-reach))',
+// in the label colour at 45%, the control radius and curve, the label colour at weight 500.
+const bordered: Style = { display: 'block', padding: '16px', border: '1px solid var(--exact-line)', 'border-radius': 'calc(8px * var(--exact-curve-reach))', 'corner-shape': 'var(--exact-control-curve, var(--exact-curve))',
   color: 'var(--exact-label)', 'font-weight': '500', 'line-height': '20px', 'text-align': 'center' };
 
 // A library's titles in the server's order, a way back and a way to load more.
 const library: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: [
   status('{s:findingTitles}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
   status('{s:libraryFailed}', [{ test: 'env.load', is: 'eq', value: 'failed' }]),
-  { type: 'box', when: [ready], press: { action: 'back' }, label: '{s:back}', style: bordered, children: [{ type: 'text', text: '{s:back}' }] },
+  { type: 'box', when: [ready], press: { action: 'home' }, label: '{s:back}', style: bordered, children: [{ type: 'text', text: '{s:back}' }] },
   catalogue('{library.name}', 'library.items', [ready]),
   { type: 'box', when: [ready, { test: 'library.more' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{s:showMore}',
     style: bordered, children: [{ type: 'text', text: '{s:showMore}' }] },
@@ -196,10 +196,10 @@ const title: Node = { type: 'box', style: { width: '100%', height: '100%', displ
 ] };
 
 export default {
-  schema: 1, renderer: 10, status: true, id, name: 'Index', version, tagline: 'A quiet printed catalogue: light paper, serif type, plain lists.',
+  schema: 1, renderer: 11, status: true, id, name: 'Index', version, tagline: 'A quiet printed catalogue: light paper, serif type, plain lists.',
   preview: asset('preview.jpg'), swatches: ['#f3f0e8', '#22221e', '#813b31', '#e3dfd3', '#bcb8ae'],
   // Sections cut rather than slide; nothing fades under a bar.
-  traits: { panSections: false, barMask: false },
+  traits: { panSections: false, barMask: false, page: '$page', ink: '$ink', splashOnPaper: true },
   tokens: {
     page: '#f3f0e8', ink: '#22221e', placeholder: 'rgba(60, 60, 67, 0.3)', rail: '#e3dfd3', field: '#ffffff', secondary: '#55554d', line: '#bcb8ae', accent: '#813b31',
     separator: '#d6d1c6', airing: '#e9e1d3',

@@ -507,15 +507,18 @@ const ascending: Condition = { test: 'library.direction', is: 'eq', value: 'asc'
 // They sit in the toolbar row itself (a select stays near the top of its tree); the label's
 // 4 px and the group's 6 px gap are the row's 10, and the flip draws in 4 px to its 6.
 const sorting: Condition = { test: 'library.sortCount', is: 'gt', value: '1' };
-// The flip names the current direction; its glyph turns over for ascending.
-const flip = (asc: boolean): Node => ({ type: 'box', when: [sorting, { test: 'library.canFlip' }, asc ? ascending : { ...ascending, not: true }], press: { action: 'librarySortFlip' }, label: asc ? '{s:ascending}' : '{s:descending}',
-  style: { position: 'relative', width: '42px', height: '42px', padding: '12px', 'margin-left': '-4px', 'box-sizing': 'border-box', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'background-color': 'cinematic.control', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: 'ink.primary', 'flex-shrink': '0' } as Style,
+// The flip names the current direction; its glyph turns over for ascending (one button,
+// so the turn animates).
+const flipBase: Style = { position: 'relative', width: '42px', height: '42px', padding: '12px', 'margin-left': '-4px', 'box-sizing': 'border-box', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'background-color': 'cinematic.control', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: 'ink.primary', 'flex-shrink': '0' } as Style;
+const turn = 'rotate 360ms cubic-bezier(0.16, 1, 0.3, 1)';
+const flip: Node = { type: 'box', when: [sorting, { test: 'library.canFlip' }], press: { action: 'librarySortFlip' }, label: '{s:descending}',
+  style: flipBase, states: [{ when: [ascending], style: flipBase, label: '{s:ascending}' }],
   hover: { 'background-color': 'cinematic.control-hover' }, focus: { 'box-shadow': focusRing },
-  children: [{ type: 'icon', symbol: 'sort', style: { width: '18px', height: '18px', rotate: asc ? '180' : '0' } }] });
+  children: [{ type: 'icon', symbol: 'sort', style: { width: '18px', height: '18px', rotate: '0', transition: turn }, states: [{ when: [ascending], style: { width: '18px', height: '18px', rotate: '180', transition: turn } }] }] };
 const sortControls: Node[] = [
   { type: 'text', when: [sorting], text: '{s:sortBy}', style: { ...eyebrow, 'font-size': '10px', color: 'ink.quiet', 'flex-shrink': '0' } as Style },
   { type: 'widget', widget: 'select', when: [sorting], params: { options: 'library.sorts', action: 'librarySort', label: '{s:sortBy}' }, style: glassSelect },
-  flip(true), flip(false),
+  flip,
 ];
 const toolbar: Node = { type: 'box', style: { position: 'sticky', top: '0px', 'z-index': '5', display: 'flex', 'flex-direction': 'column', 'padding-top': '84px', 'background-color': 'cinematic.toolbar', 'backdrop-filter': 'blur(20px) saturate(1.3)', 'border-width': '0px', 'border-style': 'solid', 'border-bottom-width': '1px', 'border-bottom-color': 'cinematic.hairline' } as Style,
   small: { 'padding-top': '104px' } as Style, children: [
@@ -586,7 +589,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
   ] };
 
 export const cinematicDoc: SkinDocument = {
-  schema: 1, renderer: 10, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
+  schema: 1, renderer: 11, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg', swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
   strings: { en: { all: 'All', unwatched: 'Unwatched', watched: 'Watched', favorites: 'Favourites', genre: 'Genre', anyGenre: 'Any genre', sortBy: 'Sort by', ascending: 'Ascending', descending: 'Descending', loadMore: 'Show more', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.', findingTitles: 'Finding titles…', libraryFailed: "This library couldn't be opened. Check your connection and try again.", findingYourEvening: 'Finding your evening…', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', homeFailed: "Your library couldn't be reached. Check your server connection.", titleFailed: "This title couldn't be opened. It may no longer be available.", velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
   motion: {
