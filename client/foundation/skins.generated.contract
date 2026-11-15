@@ -226,6 +226,9 @@ component Collection
     p: CollectionProps
   inject
     activeSkin: string
+    moreCollection: action
+  provide
+    more = moreCollection
   view
     if activeSkin == "index"
       IndexCollection(p=p)

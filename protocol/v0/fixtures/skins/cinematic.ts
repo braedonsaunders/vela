@@ -54,7 +54,7 @@ const chipRow: Node = { type: 'box', style: { display: 'none' }, small: { positi
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'background-color': 'surface.page', color: 'ink.primary', 'font-family': sans }, children: [
   { type: 'slot', slot: 'children', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px' }, inner: { display: 'flex', 'flex-direction': 'column', 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } as Style },
   { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], motion: 'navIn', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', 'z-index': '20' }, children: [
-    { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'pointer-events': 'none', 'background-image': 'linear-gradient(180deg, var(--cinematic.nav-scrim) 0%, var(--cinematic.scrim-clear) 100%)', 'backdrop-filter': 'blur(16px)' }, small: { bottom: '-18px' } },
+    { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'pointer-events': 'none', 'background-image': 'linear-gradient(180deg, var(--cinematic.nav-scrim) 0%, var(--cinematic.scrim-clear) 100%)', 'backdrop-filter': 'blur(16px) saturate(1.2)' }, small: { bottom: '-18px' } },
     { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', height: '84px', 'box-sizing': 'border-box', ...gutter, 'align-items': 'center', gap: '10px' }, small: { height: '56px', ...gutterSmall, gap: '8px' }, children: [
       { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', controlStates: false, style: { position: 'relative', 'margin-right': '22px' } as Style, small: { 'margin-right': '0px' } as Style, children: [wordmark(28, 24)] },
       { type: 'box', style: { display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', gap: '2px', 'align-items': 'center', 'mask-image': 'linear-gradient(90deg, black 0%, black 90%, transparent 100%)' },
@@ -63,9 +63,9 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
           { type: 'repeat', over: 'nav.destinations', item: navItem([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}') },
         ] },
       { type: 'box', small: { flex: '1' } },
-      { type: 'box', press: { action: 'search', focus: 'vela-search' }, label: '{s:search}', style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '10px', 'border-radius': '999px', border: '1px solid var(--cinematic.glass-edge)', 'background-color': 'cinematic.control', 'flex-shrink': '0' }, hover: { 'background-color': 'cinematic.control-hover' }, focus: { 'box-shadow': focusRing },
+      { type: 'box', press: { action: 'search', focus: 'vela-search' }, label: '{s:search}', style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '10px', 'border-radius': '999px', border: '1px solid var(--cinematic.glass-edge)', 'background-color': 'cinematic.control', 'backdrop-filter': 'blur(20px) saturate(1.3)', 'flex-shrink': '0' }, hover: { 'background-color': 'cinematic.control-hover' }, focus: { 'box-shadow': focusRing },
         children: [{ type: 'icon', symbol: 'search', style: { width: '18px', height: '18px' } }] },
-      { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', padding: '4px 14px 4px 4px', 'border-radius': '999px', 'flex-shrink': '0', color: 'ink.secondary', 'font-weight': '550' },
+      { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', id: 'profile-menu-trigger', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', height: '40px', 'box-sizing': 'content-box', padding: '4px 14px 4px 4px', 'border-radius': '999px', 'flex-shrink': '0', color: 'ink.secondary', 'font-weight': '550' },
         hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus, small: { padding: '4px' }, children: [
           { type: 'text', text: '{env.viewerInitial}', style: { width: '32px', height: '32px', 'border-radius': '16px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': '14px', 'font-weight': '650', color: 'ink.primary', 'background-image': 'linear-gradient(135deg, var(--cinematic.ember) 0%, var(--cinematic.dusk) 100%)' } },
           { type: 'text', text: '{env.viewer}', style: { 'font-size': '14px', 'font-weight': '550' }, small: { display: 'none' } },
@@ -73,14 +73,15 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
     ] },
     chipRow,
   ] },
-  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'pop', style: { position: 'absolute', top: '78px', right: 'max(28px, 4vw)', 'z-index': '30', width: '260px', 'box-sizing': 'border-box', padding: '20px', display: 'flex', 'flex-direction': 'column', gap: '16px', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '20px', 'background-color': 'cinematic.popover', 'backdrop-filter': 'blur(24px)', 'box-shadow': '0px 24px 70px var(--cinematic.shadow)' },
+  // Escape closes the menu and returns to its trigger, as compiled's menuKey does.
+  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], escape: 'menu', returnFocus: 'profile-menu-trigger', motion: 'pop', style: { position: 'absolute', top: '78px', right: 'max(28px, 4vw)', 'z-index': '30', width: '260px', 'box-sizing': 'border-box', padding: '20px', display: 'flex', 'flex-direction': 'column', gap: '16px', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '20px', 'background-color': 'cinematic.popover', 'backdrop-filter': 'blur(24px)', 'box-shadow': '0px 24px 70px var(--cinematic.shadow)' },
     small: { top: '104px', right: '12px' }, children: [
       { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center' }, children: [
         { type: 'text', text: '{env.viewerInitial}', style: { width: '40px', height: '40px', 'border-radius': '20px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': '17px', 'font-weight': '650', 'background-image': 'linear-gradient(135deg, var(--cinematic.ember) 0%, var(--cinematic.dusk) 100%)' } },
         { type: 'text', text: '{env.viewer}', style: { 'font-size': '16px', 'font-weight': '600', flex: '1', 'line-clamp': '1' } },
       ] },
       { type: 'box', style: { height: '1px', 'background-color': 'cinematic.glass-edge' } },
-      { type: 'box', press: { action: 'openPicker' }, label: '{s:appearance}', testId: 'skin-picker', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'justify-content': 'space-between', 'align-items': 'center', padding: '8px 10px', margin: '0px -10px', 'border-radius': '12px', color: 'ink.primary' }, hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus, children: [
+      { type: 'box', press: { action: 'openPicker' }, label: '{s:appearance}', testId: 'skin-picker', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'justify-content': 'space-between', 'align-items': 'center', height: '40px', 'box-sizing': 'content-box', padding: '8px 10px', margin: '0px -10px', 'border-radius': '12px', color: 'ink.primary' }, hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus, children: [
         { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '2px' }, children: [
           { type: 'text', text: '{s:appearance}', style: { 'font-size': '10px', 'font-weight': '600', 'letter-spacing': '0.18em', 'text-transform': 'uppercase', color: 'ink.quiet' } },
           { type: 'text', text: '{s:skinName}', style: { 'font-size': '14px' } },
@@ -89,7 +90,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       ] },
       { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
       { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-      { type: 'box', press: { action: 'signOut' }, label: '{s:signOut}', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', padding: '8px 10px', margin: '0px -10px', 'border-radius': '12px', 'font-size': '14px' }, hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus, children: [
+      { type: 'box', press: { action: 'signOut' }, label: '{s:signOut}', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', height: '40px', 'box-sizing': 'content-box', padding: '8px 10px', margin: '0px -10px', 'border-radius': '12px', 'font-size': '14px' }, hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus, children: [
         { type: 'icon', symbol: 'sign-out', style: { width: '16px', height: '16px' } },
         { type: 'text', text: '{s:signOut}' },
       ] },
@@ -542,6 +543,9 @@ const toolbar: Node = { type: 'box', style: { position: 'sticky', top: '0px', 'z
       ] },
     ] },
   ] };
+// The browse grid (compiled cinematic's TitleGrid); library and collection pages fill it.
+const titleGrid: Node = { type: 'box', style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(190px, 1fr))', 'column-gap': '20px', 'row-gap': '34px', ...gutter } as Style,
+  small: { 'grid-template-columns': 'repeat(auto-fill, minmax(140px, 1fr))', 'column-gap': '12px', 'row-gap': '22px', ...gutterSmall } as Style, children: [] };
 const gridCard: Node = { ...card, style: { ...(card as BoxNode).style, width: '100%' }, small: { width: '100%' } } as Node;
 const libraryLoading: Node = { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:findingTitles}', motion: 'statusOpen', style: { display: 'flex', 'flex-direction': 'column', gap: '28px', 'padding-top': '128px' }, small: { 'padding-top': '120px' }, children: [
   { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '16px', ...gutter } as Style, small: { ...gutterSmall }, children: [
@@ -561,10 +565,7 @@ const library: Node = { type: 'box', style: { position: 'relative', display: 'fl
     toolbar,
     { type: 'box', when: [{ test: 'env.libraryLoading' }, noItems], role: 'status', label: '{s:findingTitles}', style: { display: 'flex', 'flex-direction': 'column' }, children: [rowSkeleton, rowSkeleton] },
     { ...emptyState('filter', '{s:libraryEmpty}', '{s:libraryEmptyHint}'), when: [{ test: 'env.libraryLoading', not: true }, noItems] } as Node,
-    { type: 'box', when: [{ ...noItems, not: true }], style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(190px, 1fr))', 'column-gap': '20px', 'row-gap': '34px', ...gutter } as Style,
-      small: { 'grid-template-columns': 'repeat(auto-fill, minmax(140px, 1fr))', 'column-gap': '12px', 'row-gap': '22px', ...gutterSmall } as Style, children: [
-        { type: 'repeat', over: 'library.items', item: { ...gridCard, motion: 'card', stagger: { step: 30, cap: 18 } } as Node },
-      ] },
+    { ...titleGrid, when: [{ ...noItems, not: true }], children: [{ type: 'repeat', over: 'library.items', item: { ...gridCard, motion: 'card', stagger: { step: 30, cap: 18 } } as Node }] } as Node,
     { type: 'box', when: [{ ...noItems, not: true }, { test: 'library.more' }], style: { display: 'flex', 'flex-direction': 'row', 'justify-content': 'center', 'padding-top': '12px' }, children: [
       { ...pulse, when: [{ test: 'env.libraryMoreLoading' }] } as Node,
       { type: 'box', when: [{ test: 'env.libraryMoreLoading', not: true }], press: { action: 'libraryMore' }, label: '{s:loadMore}', style: { ...pill(false), position: 'relative', height: '48px', 'padding-left': '28px', 'padding-right': '28px' },
@@ -686,6 +687,33 @@ const auth: Node = { type: 'box', exit: authLeave, style: { position: 'relative'
   ] },
 ] };
 
+// A collection page (compiled cinematic's Collection: BrowsePage under a Collection
+// eyebrow): a way back and the name over a faint aura, the titles in a grid, and more as
+// the end comes near.
+const collection: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column' }, children: [
+  { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:openingCollection}', style: { display: 'flex', 'flex-direction': 'column', padding: '96px 24px', 'align-items': 'center', gap: '16px' }, children: [
+    pulse,
+    { type: 'text', text: '{s:openingCollection}', style: { color: 'ink.secondary', 'font-size': '15px' } },
+  ] },
+  failure('{s:collectionFailed}'),
+  { type: 'box', when: [ready], style: { display: 'flex', 'flex-direction': 'column', gap: '32px', 'padding-bottom': '80px' }, small: { gap: '22px' }, children: [
+    { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '12px', 'padding-top': '112px', 'padding-bottom': '8px', ...gutter, 'background-image': 'radial-gradient(ellipse 70% 120% at 15% 0%, var(--cinematic.guide-aura) 0%, var(--cinematic.scrim-clear) 70%)' } as Style,
+      small: { gap: '10px', 'padding-top': '120px', 'padding-bottom': '4px', ...gutterSmall } as Style, children: [
+        { type: 'box', motion: enter(60), style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '14px', 'align-items': 'center' }, children: [
+          { type: 'box', press: { action: 'back' }, label: '{s:back}', style: { position: 'relative', width: '40px', height: '40px', padding: '11px', 'box-sizing': 'border-box', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'background-color': 'cinematic.control', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: 'ink.primary', 'flex-shrink': '0' } as Style,
+            hover: { 'background-color': 'cinematic.control-hover' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'icon', symbol: 'back', style: { width: '18px', height: '18px' } }] },
+          { type: 'text', text: '{s:collectionEyebrow}', style: { ...eyebrow, 'font-size': '10px', color: 'brand.warm' } as Style },
+        ] },
+        { type: 'text', text: '{collection.name}', role: 'heading', level: 1, motion: enter(120), style: { ...display, position: 'relative', 'font-size': '44px' } as Style, small: { 'font-size': '34px' } },
+      ] },
+    { ...titleGrid, children: [{ type: 'repeat', over: 'collection.items', item: { ...gridCard, motion: 'card', stagger: { step: 30, cap: 18 } } as Node }] } as Node,
+  ] },
+  { type: 'box', when: [ready, { test: 'collection.more' }], style: { display: 'flex', 'flex-direction': 'column', height: '120px', 'align-items': 'center', 'justify-content': 'center' }, children: [
+    { type: 'widget', widget: 'sentinel', params: { on: 'collection' } },
+    { ...pulse, when: [{ test: 'env.collectionMoreLoading' }] } as Node,
+  ] },
+] };
+
 // The page frame; the scrim, blur and dissolve behind it are the route column's (the foundation's).
 const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', padding: '4vh 4vw', 'box-sizing': 'border-box' },
   small: { padding: '0px' }, children: [
@@ -702,9 +730,9 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
   ] };
 
 export const cinematicDoc: SkinDocument = {
-  schema: 1, renderer: 12, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
+  schema: 1, renderer: 13, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg', swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
-  strings: { en: { secureTitle: 'A secure address is available', secureBodyA: 'Your server also answers at ', secureBodyB: '. Continue there so your password and viewing stay private.', secureAction: 'Switch to the secure address', serverUnreachable: "Can't reach your server", serverUnreachableBody: 'Your server could not be reached. Reopen Vela when the connection is restored.', signingYouIn: 'Signing you in…', connectingToYourLibrary: 'Connecting to your library…', welcome: 'Welcome to your evening.', signInToYourLibrary: 'Sign in to your library.', username: 'Username', password: 'Password', signingIn: 'Signing in…', signIn: 'Sign in', or: 'or', connectWithACode: 'Connect with a code', noSignInMethods: "This server doesn't offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.", anEasierWayIn: 'An easier way in.', approveThisCode: 'Approve this code from a signed-in Ether device.', waitingForApproval: 'Waiting for approval…', codeExpiresAt: 'This code expires at', cancel: 'Cancel', all: 'All', unwatched: 'Unwatched', watched: 'Watched', favorites: 'Favourites', genre: 'Genre', anyGenre: 'Any genre', sortBy: 'Sort by', ascending: 'Ascending', descending: 'Descending', loadMore: 'Show more', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.', findingTitles: 'Finding titles…', libraryFailed: "This library couldn't be opened. Check your connection and try again.", findingYourEvening: 'Finding your evening…', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', homeFailed: "Your library couldn't be reached. Check your server connection.", titleFailed: "This title couldn't be opened. It may no longer be available.", velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
+  strings: { en: { openingCollection: 'Opening collection…', collectionFailed: "This collection couldn't be opened.", back: 'Back', collectionEyebrow: 'Collection', secureTitle: 'A secure address is available', secureBodyA: 'Your server also answers at ', secureBodyB: '. Continue there so your password and viewing stay private.', secureAction: 'Switch to the secure address', serverUnreachable: "Can't reach your server", serverUnreachableBody: 'Your server could not be reached. Reopen Vela when the connection is restored.', signingYouIn: 'Signing you in…', connectingToYourLibrary: 'Connecting to your library…', welcome: 'Welcome to your evening.', signInToYourLibrary: 'Sign in to your library.', username: 'Username', password: 'Password', signingIn: 'Signing in…', signIn: 'Sign in', or: 'or', connectWithACode: 'Connect with a code', noSignInMethods: "This server doesn't offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.", anEasierWayIn: 'An easier way in.', approveThisCode: 'Approve this code from a signed-in Ether device.', waitingForApproval: 'Waiting for approval…', codeExpiresAt: 'This code expires at', cancel: 'Cancel', all: 'All', unwatched: 'Unwatched', watched: 'Watched', favorites: 'Favourites', genre: 'Genre', anyGenre: 'Any genre', sortBy: 'Sort by', ascending: 'Ascending', descending: 'Descending', loadMore: 'Show more', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.', findingTitles: 'Finding titles…', libraryFailed: "This library couldn't be opened. Check your connection and try again.", findingYourEvening: 'Finding your evening…', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', homeFailed: "Your library couldn't be reached. Check your server connection.", titleFailed: "This title couldn't be opened. It may no longer be available.", velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
   motion: {
     ...enterPresets,
     pulse0: { keyframes: 'breathe', duration: 1400, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
@@ -730,7 +758,7 @@ export const cinematicDoc: SkinDocument = {
   },
   templates: { card, row, relatedRow },
   slots: { shell, home },
-  routes: { title, library, auth },
+  routes: { title, library, auth, collection },
   // Home and the title page draw their own loading and failure; home fades under the floating bar.
   status: true,
   traits: { barMask: true },
@@ -747,7 +775,13 @@ const pressScale = (node: BoxNode): string | undefined => {
   if (st.width && st.width === st.height) return '0.94';
   return parseFloat(st.height ?? '0') >= 42 ? '0.97' : undefined;
 };
+// Compiled controls keep the platform focus ring beside their own :focus-visible shadow
+// unless they set outline themselves, so a focus overlay keeps it too.
+const keepRing = (node: Node): void => {
+  if (node.type === 'box' || node.type === 'widget') { const f = (node as BoxNode).focus; if (f && f.outline === undefined) (node as BoxNode).focus = { ...f, outline: 'auto' }; }
+};
 const ownHover = (node: Node): void => {
+  keepRing(node);
   if ('press' in node && node.press && node.hover && node.controlStates === undefined) node.controlStates = false;
   if (node.type === 'box' && node.press && !node.active) { const scale = pressScale(node); if (scale) node.active = { scale }; }
   if ('children' in node) node.children?.forEach(ownHover);

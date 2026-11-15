@@ -27,7 +27,7 @@ export const SLOTS: SlotSpec[] = [
   { name: 'SearchField', record: 'SearchFieldProps', actions: { edit: 'edit' } },
   { name: 'Detail', record: 'DetailProps', actions: { play: 'play', playExtra: 'playExtra', selectTitle: 'selectTitle', observe: 'observeDetail', toggleTheme: 'toggleThemeMusic' } },
   { name: 'Status', record: 'StatusProps', actions: { retry: 'retryFailed' } },
-  { name: 'Collection', record: 'CollectionProps', actions: { close: 'close', selectTitle: 'selectTitle', observe: 'observe' } },
+  { name: 'Collection', record: 'CollectionProps', actions: { close: 'close', selectTitle: 'selectTitle', observe: 'observe', more: 'moreCollection' } },
   { name: 'Library', record: 'LibraryProps', actions: { close: 'goHome', setSort: 'setLibrarySort', setFilter: 'setLibraryFilter', more: 'moreLibrary', selectTitle: 'selectTitle', observe: 'observe' } },
   { name: 'Guide', record: 'GuideProps', frame: 'column flex=1 min-height=0', actions: { watch: 'watchChannel', previous: 'earlierGuide', next: 'laterGuide', chooseDay: 'chooseGuideDay', setZoom: 'setGuideZoom', tileMessage: 'tileMessage', tileUnmute: 'tileUnmute', tileTuneIn: 'tileTuneIn', retune: 'retuneTile', retryPreviewStop: 'retryTileStop' } },
   { name: 'LiveControls', record: 'LiveControlsProps', actions: { catchUp: 'catchUpLive', zap: 'zap' } },
