@@ -1,6 +1,6 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
-use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, noStyle from "../../renderer/shapes.contract"
+use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, RouteProps, noStyle from "../../renderer/shapes.contract"
 use V1, V5, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, rootCtx from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use HomeProps, ShellProps from "../../foundation/slot-api.contract"
@@ -61,6 +61,8 @@ component Shell
       openLibrary(arg)
     if name == "toggle"
       flags = toggled(flags, arg)
+    if name == "reset"
+      flags = []
     if name == "open"
       flags = (flags.includes(arg) ? flags : flags.concat([arg]))
     if name == "close"
@@ -80,7 +82,7 @@ component Shell
     pickerOpen = false
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query="", heroIndex=0, small=p.viewport.width < 640, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags)] key="env"
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route="shell", entry="", load="ready", detail=[], season="", home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query="", heroIndex=0, small=p.viewport.width < 640, tv=p.viewport.width >= 1600, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags)] key="env"
       Root(s=styleAt(env, doc.shell.root))
         SlotBox(order=doc.shell.slotOrder, s=styleAt(env, doc.shell.slotStyle), inner=styleAt(env, doc.shell.slotInner), e=env)
           children
@@ -112,7 +114,7 @@ component Home
       flags = toggled(flags, arg)
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), home=[p.model], libraries=[], viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, still=p.still, canLive=p.model.liveAvailable, flags=flags)] key="env"
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route="home", entry="", load="ready", detail=[], season="", home=[p.model], libraries=[], viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, tv=false, still=p.still, canLive=p.model.liveAvailable, flags=flags)] key="env"
       Root(s=styleAt(env, doc.home.root))
         SlotBox(order=doc.home.slotOrder, s=styleAt(env, doc.home.slotStyle), inner=styleAt(env, doc.home.slotInner), e=env)
           children
@@ -120,3 +122,35 @@ component Home
           for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
             V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observe)
 
+// The route view: the one place the renderer draws a whole route (docs/skin-distribution.md,
+// "End state"). It draws the document's tree named after the stack entry's route, with
+// that route's models; routes move here from the compiled slots one by one.
+component Route
+  props
+    p: RouteProps
+  inject
+    doc: SkinDoc
+    selectTitle: action
+    observeDetail: action
+    play: action
+    playExtra: action
+    leave: action
+  state flags: string[] = []
+  action act(name: string, arg: string)
+    if name == "select"
+      selectTitle(part(arg, 0), part(arg, 1), part(arg, 2))
+    if name == "play"
+      play(arg)
+    if name == "playExtra"
+      playExtra(arg)
+    if name == "back"
+      leave()
+    if name == "toggle"
+      flags = toggled(flags, arg)
+  view
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=p.season, home=[], libraries=[], viewer="", section=p.route, query="", heroIndex=0, small=p.small, tv=p.tv, still=p.still, canLive=false, flags=flags)] key="env"
+      for tree in doc.routes.filter(t => t.name == p.route) key=tree.name
+        Root(s=styleAt(env, tree.root))
+          for n, i in tree.nodes key=`${i}`
+            for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
+              V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observeDetail)

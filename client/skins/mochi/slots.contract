@@ -484,10 +484,17 @@ component SearchField
 component Status
   props
     p: StatusProps
+  inject
+    retry: action
   view
     if p.kind == "failure"
       column padding-top=(p.small ? 24 : 48)
-        EmptyState(mood="sad", title=t("ui.somethingWentQuiet"), message=p.message, still=p.still)
+        column gap=4
+          EmptyState(mood="sad", title=t("ui.somethingWentQuiet"), message=p.message, still=p.still)
+          if p.canRetry
+            row justify-content="center"
+              button press=retry() class=Candy height=46 padding="0px 24px"
+                text t("ui.tryAgain")
     else
       column role="status" aria-label=p.message padding-top=(p.kind == "home" ? (p.small ? 6 : 10) : p.kind == "detail" ? 0 : (p.small ? 48 : 72)) gap=(p.small ? 26 : 34) animation=(p.still ? "mochiFade 200ms linear both" : "mochiFade 400ms ease-out both")
         column position="relative" margin-left=(p.kind == "home" ? gutter(p.small) : "0px") margin-right=(p.kind == "home" ? gutter(p.small) : "0px") height=(p.kind == "home" ? (p.small ? "440px" : "clamp(380px, 54vh, 560px)") : p.kind == "detail" ? "70vh" : "auto") border=(p.kind == "home" ? "3px dashed var(--mochi.shadow)" : "none") border-radius=(p.small ? 26 : 34) align-items="center" justify-content="center" background-color=(p.kind == "home" ? "mochi.lavender-soft" : "mochi.page-clear") box-sizing="border-box"

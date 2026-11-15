@@ -16,14 +16,22 @@ members Client
   derive watchReply = match watchAuthorized { case some(r) => (r.sessionId == playback.sessionId ? r : PlayerCommandReply(planJson="", sessionId="", error="")), case none => PlayerCommandReply(planJson="", sessionId="", error="") }
   derive watchPlan = (watchReply.sessionId == playback.sessionId and watchReply.planJson != "" ? watchReply.planJson : currentPlan)
   resource watchModel = uiPlayer(currentPlan, watchEvent, watchReply.planJson, localeJSON) when playingId != "" and watchPlan != "" as shape PlayerView
-  resource watchIdentity = uiDetail(playingId) with localeJSON, artWidth when auth.authenticated and top(nav).name == "watch" and playingId != "" as shape DetailModel
-  // What the chrome shows: the engine's view once the session exists, a loading view before.
-  derive watchView = (current(playback) and current(watchModel) ? watchModel : loadingPlayerView())
+  resource watchIdentity = uiDetail(playingId, `${top(nav).id}`) with localeJSON, artWidth when auth.authenticated and top(nav).name == "watch" and playingId != "" as shape DetailModel
+  // A playback that could not start, in words for the viewer ("" while it can).
+  derive watchFailure = (failed(playback) ? t("ui.playbackCouldnTBeStarted") : current(playback) and playback.errorCode == "playback_capacity" ? t("player.capacity") : current(playback) and playback.errorCode != "" ? (playback.errorMessage != "" ? playback.errorMessage : t("ui.playbackCouldnTBeStarted")) : "")
+  // What the chrome shows: a failed view when the start failed, the engine's view once the
+  // session exists, a loading view before. The chrome (and its Close) stands throughout.
+  derive watchView = (watchFailure != "" ? PlayerView(loadingPlayerView(), state="failed", waiting=false, reason=watchFailure) : current(playback) and current(watchModel) ? watchModel : loadingPlayerView())
   derive watchTitle = match first(watchIdentity.title) { case some(item) => (item.kind == "episode" and item.seasonNumber > 0 and item.episodeNumber > 0 ? t("ui.sSeasonEEpisodeTitle", season=item.seasonNumberLabel, episode=item.episodeNumberLabel, title=item.name) : item.name), case none => match first(detail.title) { case some(item) => item.name, case none => t("ui.nowPlaying") } }
   state watchHidden = false
   derive watchChromeVisible = not watchHidden or not watchModel.playing or watchEditing or watchModel.state != "playing"
   task resetWatch when playingId != "" key=playingId
     change(clearWatch)
+  // The live playback info card, toggled with "i" or from the Quality menu; kept per device.
+  state watchInfo = false persist
+  action toggleWatchInfo
+    watchInfo = not watchInfo
+    touchWatch()
   action clearWatch
     watchEvent = ""
     watchCommandJson = ""
@@ -60,6 +68,9 @@ members Client
   action watchControl(kind: string, value: string)
     if kind == "retry"
       watchAuthorized = none
+      // A start that failed (capacity, a server refusal) is asked again, with a new key.
+      if watchFailure != ""
+        retryPlayback()
     if not pending(watchAuthorized) or (kind != "seek" and kind != "seekBy" and kind != "switchPath")
       let next = watchCommandId + 1
       watchCommandId = next
@@ -82,6 +93,9 @@ members Client
       if k == "m" or k == "M"
         preventDefault()
         watchControl("mute", "")
+      if k == "i" or k == "I"
+        preventDefault()
+        toggleWatchInfo()
       if k == "ArrowUp" or k == "ArrowDown"
         preventDefault()
         watchControl("volume", `${max(0, min(1, watchModel.volume + (k == "ArrowUp" ? 0.05 : -0.05)))}`)

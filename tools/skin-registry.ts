@@ -25,14 +25,14 @@ export const SLOTS: SlotSpec[] = [
   { name: 'Home', record: 'HomeProps', children: true, actions: { selectTitle: 'selectTitle', observe: 'observe', pickHero: 'pickHero', reachEnd: 'loadMoreHome', reachRowEnd: 'loadMoreRow', previewIntent: 'previewIntent', playHero: 'playHero', openLibrary: 'openLibrary', live: 'openLive' } },
   { name: 'SearchSurface', record: 'SearchProps', actions: { openLiveProgramme: 'openLiveProgramme', retryDescriptive: 'retryDescriptive', selectTitle: 'selectTitle', observe: 'observe' } },
   { name: 'SearchField', record: 'SearchFieldProps', actions: { edit: 'edit' } },
-  { name: 'Detail', record: 'DetailProps', actions: { play: 'play', playExtra: 'playExtra', selectTitle: 'selectTitle', observe: 'observeDetail' } },
-  { name: 'Status', record: 'StatusProps', actions: {} },
+  { name: 'Detail', record: 'DetailProps', actions: { play: 'play', playExtra: 'playExtra', selectTitle: 'selectTitle', observe: 'observeDetail', toggleTheme: 'toggleThemeMusic' } },
+  { name: 'Status', record: 'StatusProps', actions: { retry: 'retryFailed' } },
   { name: 'Collection', record: 'CollectionProps', actions: { close: 'close', selectTitle: 'selectTitle', observe: 'observe' } },
   { name: 'Library', record: 'LibraryProps', actions: { close: 'goHome', setSort: 'setLibrarySort', setFilter: 'setLibraryFilter', more: 'moreLibrary', selectTitle: 'selectTitle', observe: 'observe' } },
   { name: 'Guide', record: 'GuideProps', frame: 'column flex=1 min-height=0', actions: { watch: 'watchChannel', previous: 'earlierGuide', next: 'laterGuide', chooseDay: 'chooseGuideDay', setZoom: 'setGuideZoom', tileMessage: 'tileMessage', tileUnmute: 'tileUnmute', tileTuneIn: 'tileTuneIn', retune: 'retuneTile' } },
   { name: 'LiveControls', record: 'LiveControlsProps', actions: { toggleLowDelay: 'toggleLowDelay', catchUp: 'catchUpLive', zap: 'zap' } },
   { name: 'MiniGuide', record: 'MiniGuideProps', actions: { tune: 'tuneZap' } },
-  { name: 'PlayerChrome', record: 'PlayerProps', actions: { command: 'watchControl', seek: 'watchSeek', editing: 'editWatch', close: 'closeWatch' } },
+  { name: 'PlayerChrome', record: 'PlayerProps', actions: { command: 'watchControl', seek: 'watchSeek', editing: 'editWatch', close: 'closeWatch', toggleInfo: 'toggleWatchInfo' } },
   { name: 'AuthStage', record: 'AuthStageProps', children: true, actions: {} },
   { name: 'AuthNotice', record: 'AuthNoticeProps', actions: {} },
   { name: 'SignIn', record: 'SignInProps', actions: { editUsername: 'editUsername', editPassword: 'editPassword', submit: 'submitSignIn', quick: 'startCode', goSecure: 'goSecure' } },
@@ -204,6 +204,18 @@ export async function generateRegistry(client: string, only?: string): Promise<s
       own.forEach((f, i) => lines.push(`${at}${i ? 'else if' : 'if'} activeSkin == ${str(f.skin.id)}`, ...draw(f, `${at}  `)));
       lines.push(`${at}else`, ...draw(fallback, `${at}  `));
     }
+  }
+  // The route view (docs/skin-distribution.md, "End state"): the documents skin's Route,
+  // when that skin is part of this build; otherwise a route is never handed to it.
+  const docs = engines.find(f => f.skin.documents);
+  // `close` is a host command too: the route view gets the app's close as `leave`.
+  lines.push('', '// The route view: the one place the renderer draws a whole route.', 'component DocRoute', '  props', '    p: RouteProps', '  inject', '    close: action', '  provide', '    leave = close', '  view');
+  if (docs) {
+    lines.splice(lines.indexOf('use SkinDoc from "../renderer/shapes.contract"'), 1, 'use SkinDoc, RouteProps from "../renderer/shapes.contract"', `use Route as DocumentsRoute from "../skins/${docs.skin.id}/slots.contract"`);
+    lines.push('    DocumentsRoute(p=p)');
+  } else {
+    lines.splice(lines.indexOf('use SkinDoc from "../renderer/shapes.contract"'), 1, 'use SkinDoc, RouteProps from "../renderer/shapes.contract"');
+    lines.push('    column display="none" aria-hidden=true');
   }
   const text = lines.join('\n') + '\n';
   await writeFile(join(client, 'foundation/skins.generated.contract'), text);
