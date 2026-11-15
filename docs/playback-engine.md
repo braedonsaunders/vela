@@ -1889,3 +1889,71 @@ installed foundation wiring. The current production wrapper and narrow internal
 native/MSE fallback remain available while those paths migrate. DV7 enhancement,
 a genuine HDR10+DTS sample, long-run/physical lip-sync and network-interruption
 qualification are not claimed by this run.
+
+### lab.24: self-contained real-app core qualification (not production ready)
+
+The combined run used the **actual cinematic app**, not the diagnostic playback
+harness: clean source `89bed67`, candidate `0.1.37-core-89bed67`, matching compiled
+data realm/native host, and verified core payload `a33b87aee7e61aa9`. The additive
+bootstrap and engine assets were staged beside production. Its descriptor was
+set before app import; no service worker controlled the candidate. Production
+0.1.37 and its qualified wrapper `3c579f70de6e1cfe` remained unchanged.
+
+All actions below were actual Play/scrubber/audio/quality/subtitle controls through
+the foundation, normal negotiation, commands, SSE and observations. Pins were set
+and independently GET-confirmed by the authorized Ether operator, then removed
+and independently checked after each case. The candidate's bounded audit retained
+scalar plans, snapshots and command kinds; it did not retain media bodies,
+credentials, grants or private headers.
+
+| Target actually requested | Result through the real watch view | Verdict |
+| --- | --- | --- |
+| Pinned 1917 FraMeSToR 2160p DV7 / TrueHD Atmos 7.1, `dcec927c…` | No plan or media: `503 capacity/preparation_pending`, first request 8,033 ms, two bounded retries 19/7 ms, then error chrome with Try again | Source preparation blocked; no core/TrueHD qualification |
+| Pinned Inception jennaortegaUHD, `525f3640…`, HEVC Main10 3840×2160 PQ / DV8 compatibility 1, DTS-HD MA 5.1 | UI Play → first core frame **348.5 ms**; plan received 131.2 ms, metadata ready 295.9 ms, decoder ready 318.4 ms. Direct original confirmed independently; no FFmpeg until a lower quality was requested | Real-app startup works, sustained parity fails |
+| Same Inception original, scrub to 61.4 s | Scrubber immediately displayed 61.4; target resumed after **2,683.9 ms**. Seek authorization 35 ms; 19 preroll frames discarded. No video drops | Slower than the short harness proofs; investigate source acquisition/scheduling |
+| Same original, audio DTS-HD MA → AC-3 | Selected actual audio id 3 with no pending selection after **156.9 ms**, same source/seek generation | Local track switch works; not a sustained audio pass |
+| Same title, 720p 4 Mbps lower path | Real tracks authorization followed by path switch; first core 1280×720 H.264 frame after **1,460.7 ms**. About 1.6 s later core reports `Input has an unsupported or unrecognizable format.`; internal MSE resumes ~104 ms after recovery starts | Automatic fallback works; core HLS transition fails |
+| Pinned Inception DDB, `a7e6928e…`, VC-1 1080p / DTS-HD MA | Ether converts VC-1 to H.264 1080p with AAC. First core frame **723.2 ms**; same format error at 2,374 ms; first MSE frame at **2,476.1 ms** and playback continues | Honest conversion + internal fallback, **no client VC-1 decoder** |
+| DDB English PGS on / Off at nonzero position | Server tracks commands advance generations; selected PGS returns to playing in **2,575 ms**, Off in **8,986.6 ms**. Both routes end on MSE after core demux failure | Selection/burn authorization works; no core subtitle parity or visible-caption claim |
+| CHROMA 80 through actual Live TV → Watch live | Core fails configure with `Actual video colour needs a qualified presentation route`. Native fallback shows five frames, then `PipelineStatus::DEMUXER_ERROR_COULD_NOT_PARSE`; terminal error, not endless loading | Live parity fails; no moving-edge/catch-up pass |
+
+These are sequential LAN/HTTPS numbers with already-loaded app/runtime assets and
+potentially warmed source resolution, not controlled cold-cache comparisons.
+Inception's Dolby Vision source is rendered through its HDR10-compatible base
+layer; no RPU enhancement, HDR10+ dynamic metadata application, Atmos object
+rendering or physical HDR/7.1/lip-sync qualification is claimed.
+
+The short initial Inception sample had 54 decoded / 49 presented frames, zero
+video drops and zero AudioWorklet underruns. **That is not a sustained pass**:
+the following real-app interval repeatedly alternated playing/buffering. By title
+position 67.4 s the counter reached **19 underruns**, 513 decoded / 458 presented
+frames, still zero video drops. Maximum scheduler clock/frame age reached 172 ms
+including seek preview. The 720p MSE recovery sample later reported 321 frames and
+seven drops. Metrics reset with backend replacement, so they cannot be summed as
+one continuous core counter. Audio underruns and buffering must be resolved before
+using the startup number to justify a production switch.
+
+Ether independently confirmed the exact two Inception releases. VC-1 conversion
+used VideoToolbox H.264 plus AAC; no unsupported client decoding is implied. The
+1917 pin was honored but its Usenet pre-play health sampling hit the ~8 s deadline
+on slow article bodies before admission. That was routed to Ether; substituting
+another film/release would not prove this target. The opening PGS screenshot shows
+normal programme/logo pictures and the checked English PGS choice, **no caption
+pixels**, so it proves the menu state only. Auto and return-to-Original were not
+completed in this batch; they remain required coverage.
+
+Cleanup was explicit: DDB and live Stop each returned HTTP 200 / `ended`; all
+three admitted/failed watch cases were unmounted and UI auth revoke returned
+HTTP 200 / `accepted: true`. Ether confirmed zero sessions/encoders after the
+Inception cases; live cleanup was reported for independent confirmation. The pin
+operator confirmed no remaining 1917 or Inception pins. The dedicated
+`vela-core-app` Chrome was closed; no candidate server or build remained running.
+
+Safe local evidence: `client/.exact/core-real-inception-uhd-{start,seek,audio,quality}-output.txt`,
+`core-real-inception-uhd-transition-errors.txt`,
+`core-real-inception-vc1-{start,pgs,pgs-off,cleanup}-output.txt`, and
+`core-real-live-{output,cleanup-output}.txt`. These ignored qualification artifacts
+are not release assets. The core **must stay gated**. Next blockers are sustained
+original audio/read scheduling, the HLS subsequent-fragment format failure,
+qualified live colour admission and live fallback parsing, then completed
+Original/Auto/PGS/TrueHD transitions through this same real-app path.
