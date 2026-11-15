@@ -2059,6 +2059,29 @@ class LiveLatency {
   }
 }
 
+// client/player/recovery-history.ts
+function recoveryMessage(message) {
+  return redactMediaError(message).replace(/https?:\/\/[^\s<>"']+/gi, "[media URL]").replace(/\/(?:vela\/v0\/)?sessions\/media\/[^\s<>"']+/gi, "[media path]").slice(0, 512);
+}
+
+class RecoveryHistory {
+  entries = [];
+  record(entry) {
+    this.entries.push({ ...entry, message: recoveryMessage(entry.message) });
+    if (this.entries.length > 8)
+      this.entries.shift();
+  }
+  snapshot() {
+    return this.entries.map((entry) => ({ ...entry }));
+  }
+  get length() {
+    return this.entries.length;
+  }
+  clear() {
+    this.entries = [];
+  }
+}
+
 // client/player/engine.ts
 class PlaybackEngine {
   video;
@@ -2096,6 +2119,7 @@ class PlaybackEngine {
   failure = null;
   audio = null;
   subtitle = null;
+  recoveryHistory = new RecoveryHistory;
   timer;
   listeners = [];
   attempted = new Set;
@@ -2157,6 +2181,7 @@ class PlaybackEngine {
     } : event);
   }
   retireMediaAuthorization() {
+    this.recoveryHistory.clear();
     this.controller.stop();
     this.detachMedia();
     this.resetMedia();
@@ -2341,7 +2366,7 @@ class PlaybackEngine {
       state: this.pendingSeek ? "buffering" : this.status,
       sourceId: this.source?.id ?? null,
       strategy: this.source?.strategy ?? null,
-      diagnostics: this.original || this.subtitleFailureNotes.length ? { implementation: this.original?.implementation, metadataDiscrepancies: this.original?.readout.metadataDiscrepancies ?? [], subtitleFailures: [...this.subtitleFailureNotes] } : undefined,
+      diagnostics: this.original || this.subtitleFailureNotes.length || this.recoveryHistory.length ? { implementation: this.original?.implementation, metadataDiscrepancies: this.original?.readout.metadataDiscrepancies ?? [], subtitleFailures: [...this.subtitleFailureNotes], recoveryHistory: this.recoveryHistory.snapshot() } : undefined,
       backend: this.backend,
       renditionId: this.pipeline?.current?.id ?? (this.backend === "webgpu" ? this.coreQuality.id : this.backend === "native-hls" ? this.manualQuality ?? this.source?.initialRenditionId ?? null : null),
       qualityIds: this.pipeline?.qualityIds ?? (this.backend === "webgpu" ? this.source?.renditions?.map((r) => r.id) ?? [] : []),
@@ -2509,6 +2534,7 @@ class PlaybackEngine {
       this.coreQuality.reset();
     }
     if (session.id !== this.session?.id) {
+      this.recoveryHistory.clear();
       this.browserFallbacks.clear();
       this.subtitleFailures.clear();
       this.subtitleFailureNotes = [];
@@ -3022,6 +3048,19 @@ class PlaybackEngine {
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError" ? "network" : "source";
     const position = this.position();
     const failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
+    const readout = this.original?.readout;
+    this.recoveryHistory.record({
+      atMilliseconds: performance.now(),
+      sourceGeneration: this.controller.source,
+      seekGeneration: this.controller.seek,
+      positionSeconds: position,
+      delivery: this.source?.delivery ?? null,
+      backend: this.backend,
+      kind,
+      message: failure.message,
+      bufferAheadSeconds: readout?.bufferAheadSeconds ?? null,
+      readAheadSeconds: readout?.readAheadSeconds ?? null
+    });
     if (this.originalStartTimer)
       clearTimeout(this.originalStartTimer);
     this.originalStartTimer = undefined;

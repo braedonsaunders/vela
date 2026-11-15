@@ -118,4 +118,55 @@ Neither release hit the cap. The earlier eight-credit attempt prevented underrun
 but could only report 0.3–0.4 s buffered and exhausted its three-second hold; it
 was corrected before the candidate was committed. Both local browsers and the
 owned local server were stopped. Paired, equally cold real-source runs remain
-pending; the production default has not changed.
+completed below; the production default has not changed.
+
+## Equally cold wrapper/core comparison: core fails direct parity
+
+Ether stopped the lab, purged only release 525f3640's disk cache and restarted
+the unchanged lab.30 binary before each run, clearing its memory cache too.
+Both runs used fresh headed Chrome contexts, blocked service workers, disabled
+browser HTTP caching and the same viewport. No title detail prewarm was used.
+RD CDN-side cache warmth is outside our control. The initial playing intervals
+before the 900-second seek differed (wrapper about 56.5 s, core about 93.1 s),
+so this is not an identical initial-region exposure or scheduling experiment.
+The 900-second region was cold in Ether for both runs.
+
+| Measurement | Installed production wrapper | Adaptive core 9eab7ad / b081f4c80be6069d |
+| --- | --- | --- |
+| POST /playback | 1,946 ms | 1,858 ms |
+| Cold server probe | 1.81 s | 1.77 s |
+| First visible frame | 10,692.2 ms, after internal startup retry | 7,406.9 ms |
+| Audio/playable start | 10,705.1 ms | 9,854.0 ms |
+| Initial-region underruns / drops before seek | 0 / 1 | 9 / 5 |
+| Cold seek to 900 | 7,041.2 ms | 6,354.1 ms |
+| Direct post-seek sample | 480.005 s | 23.660 s, then recovery |
+| Wrapper sample decoded / presented | 11,533 / 11,507 | Not comparable after recovery |
+| Wrapper sample drops / underruns / buffering | 0 / 0 / 0 | Direct route failed |
+| Delivery after sample | Direct original, no transcode | Automatic HLS transcode |
+
+Wrapper first playing at 900 was 05:12:49.959 EST. It advanced to 1379.947 s
+over the eight-minute window. Core first playing at 900 was 05:28:17.134 EST.
+At +23.660 s (position 923.668 s), it entered recovery and authorized fallback
+HLS; Ether started the H.264 2160p conversion at 05:28:41.103 EST. Playback
+resumed after about 3,560.8 ms and stayed healthy through later HLS sampling.
+That recovery is a failure of direct-play parity, not a successful direct sample.
+Counters reset with the replacement source and cannot be subtracted from the
+old direct-source baseline. The late automated sampler checked the core backend
+but missed the source-generation change; its later HLS measurements are excluded.
+
+The exact original exception was lost: successful recovery cleared the active
+failure, and the browser audit's bounded rolling records had overwritten it.
+Ether independently found no range failures, slow responses over one second or
+early ends before recovery. Neither that fact nor the remaining brief dial waits
+identifies the client exception. No decoder, network or bound failure is claimed
+as its cause. Session-local `diagnostics.recoveryHistory` now retains up to eight
+recovery reasons and scalar context across successful backend/source replacement;
+new session or media authorization retirement clears it. URLs and credentials
+are removed before storage, and no private source identifiers or packet bytes
+are retained.
+
+Both runs were stopped, revoked and their dedicated browsers closed. Ether
+confirmed no pins, sessions or FFmpeg processes. The comparison is closed as a
+failure; the core remains gated. Before more tuning, measure actual encoded and
+source-byte reserves separately from decoded AV: the wrapper's roughly 0.36 s
+decoded buffer telemetry does not include its time-sized source read-ahead.
