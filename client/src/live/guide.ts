@@ -24,6 +24,8 @@ export interface GuideChannel {
   /** The owner-defined Guides this channel belongs to, by id; empty when none or unknown. */
   guideIds: string[];
   now: string; next: string; nowId: string; nowProgress: number; nowRemaining: string; nextLabel: string;
+  /** The airing programme's still, episode line and first genre (a live home shows them without the day's grid). */
+  nowArt: string; nowEpisode: string; nowGenre: string;
   programmes: GuideProgramme[];
 }
 export interface GuideModel {
@@ -148,6 +150,8 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
   return withLocale(localeJSON, () => {
     const minutes = Math.round((end - start) / MINUTE);
     const span = (a: number, b: number) => msg('ui.startEnd', { start: time(a), end: time(b) });
+    const episodeLine = (p: { seasonNumber?: number; episodeNumber?: number; episodeTitle?: string }) =>
+      [p.seasonNumber && p.episodeNumber ? msg('live.seasonEpisode', { season: number(p.seasonNumber), episode: number(p.episodeNumber) }) : '', p.episodeTitle ?? ''].filter(Boolean).join(' · ');
     const left = (ms: number) => msg('live.minutesLeft', { minutes: number(Math.max(1, Math.ceil(ms / MINUTE))) });
     const weekday = new Intl.DateTimeFormat(localeContext().formatLocale, { timeZone: localeContext().timeZone, weekday: 'short' });
     const date = new Intl.DateTimeFormat(localeContext().formatLocale, { timeZone: localeContext().timeZone, month: 'short', day: 'numeric' });
@@ -172,12 +176,13 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
         nowProgress: airing ? Math.round((now - airingStart) / (airingEnd - airingStart) * 1000) / 10 : 0,
         nowRemaining: airing ? left(airingEnd - now) : '',
         nextLabel: next ? msg('live.nextAt', { time: time(Date.parse(next.start)), programme: next.name }) : '',
+        nowArt: airing ? picture(airing.artwork, ['still', 'backdrop', 'poster'], 640, 360, origin) : '',
+        nowEpisode: airing ? episodeLine(airing) : '', nowGenre: airing?.genres?.[0] ?? '',
         programmes: entries.map(p => {
           const a = Date.parse(p.start), b = Date.parse(p.end);
           const onAir = a <= now && now < b;
           const genre = p.genres?.[0] ?? '';
-          const episode = [p.seasonNumber && p.episodeNumber ? msg('live.seasonEpisode', { season: number(p.seasonNumber), episode: number(p.episodeNumber) }) : '', p.episodeTitle ?? '']
-            .filter(Boolean).join(' · ');
+          const episode = episodeLine(p);
           return {
             id: p.id, name: p.name, summary: p.summary, airing: onAir, ended: b <= now,
             startsInLabel: number(Math.max(0, Math.ceil((a - now) / MINUTE))), startLabel: time(a), endLabel: time(b),

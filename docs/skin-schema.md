@@ -33,7 +33,8 @@ fidelity proof, cinematic as a document: `protocol/v0/fixtures/skins/cinematic.t
   templates?: { name: Node },             // `{ type: "use", template: name }`, inlined
   slots: { shell?: Node, home?: Node },    // a slot left out uses cinematic's compiled one
   routes: { title?: Node, … },             // a route drawn whole by the route view (one call site)
-  detail?: { wide?, small?: "fullscreen" | "modal" | "stack" } }
+  detail?: { wide?, small?: "fullscreen" | "modal" | "stack" },
+  live?: { home?: boolean } }
 ```
 
 Colour values may be CSS, a Tamber token name (`surface.page`, `cinematic.glass`) or
@@ -88,6 +89,26 @@ Actions: shell `home`, `search`, `live`, `library {dest.id}`, `toggle/open/close
 `openPicker`, `signOut`; home `select {card.kindId}`, `play {hero.id}`,
 `pickHero {index}`, `toggle <flag>`; routes `select`, `play {card.id | detail.id}`,
 `playExtra {extra.id}`, `back`, `toggle`. A season tab selects with `select {season.pick}`. Flags are the slot's own UI state (a menu open).
+
+## Live home
+
+A document may make home itself a live surface: `live: { home: true }`. Home then holds
+the guide's listings and minute clock, and the same single preview tile the guide uses
+(one muted ambient session; released when home is not the visible route, the tab is
+hidden, a query is open or full watch starts; Save-Data and reduced motion wait for
+`tuneIn`; the viewer's current channel is remembered). Without it, nothing live loads on
+home.
+
+| Vocabulary | Meaning |
+| --- | --- |
+| `live.channels`, `live.favorites` | Collections: the guide's channels in its order (favourites first), and the favourites alone. Use `limit` on large lineups. |
+| `ch.*` | `id`, `number`, `name`, `logo`, `group`, `favorite`, `now`, `next`, `nowProgress` (0-100), `nowRemaining`, `nextLabel`, `nowArt`, `nowEpisode`, `nowGenre`, `tuned` (it is on the monitor). |
+| `tile.*` | The monitor: `state` (`off`, `tune-in`, `connecting`, `playing`, `unavailable`), `muted`, `zapping` (the number being dialled while flicking), and the tuned channel's `channelId`, `channelName`, `channelNumber`, `logo`, `now`, `next`, `nowProgress`, `nowRemaining`, `nextLabel`, `nowArt`, `nowEpisode`, `nowGenre`. |
+| `env.clock`, `env.liveReady`, `env.channelCount`, `env.favoriteCount` | The guide's minute clock (locale-formatted; shell and home), listings loaded, lineup and favourites sizes. |
+| widget `liveTile` | The tile's picture, filling its box (top three levels only). The document draws every state, bug and caption over it from `tile.*`. |
+| actions | `watch {ch.id}` full-screen watch (after the tile's stop), `preview {ch.id}` put a channel on the monitor, `zap {1|-1}` flick the monitor (it retunes once the viewer pauses), `tuneIn`, `unmute` (toggles), `guide` open the full guide. |
+
+ChannelUp/ChannelDown keys flick the monitor on a live home, as they flick full watch.
 
 ## Motion
 

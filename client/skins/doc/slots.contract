@@ -4,6 +4,7 @@ use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, RouteProps, noStyle from "../.
 use V1, V5, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, rootCtx, selectedSeason from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use HomeProps, ShellProps from "../../foundation/slot-api.contract"
+use GuideModel, GuideChannel, LiveTile from "../../live/models.contract"
 
 fn part(s: string, i: number): string = match s.split("|").at(i) { case some(x) => x, case none => "" }
 fn toggled(flags: string[], f: string): string[] = (flags.includes(f) ? flags.filter(x => x != f) : flags.concat([f]))
@@ -43,6 +44,7 @@ component Shell
     search: action
     live: action
     openLibrary: action
+    homeGuide: GuideModel[]
   slot
   state flags: string[] = []
   state pickerOpen = false
@@ -86,7 +88,7 @@ component Shell
     pickerOpen = false
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route="shell", entry="", load="ready", detail=[], season="", home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query="", heroIndex=0, small=p.viewport.width < 640, tv=p.viewport.width >= 1600, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags)] key="env"
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route="shell", entry="", load="ready", detail=[], season="", home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query="", heroIndex=0, small=p.viewport.width < 640, tv=p.viewport.width >= 1600, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags, guide=homeGuide, tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0)] key="env"
       Root(s=styleAt(env, doc.shell.root))
         SlotBox(order=doc.shell.slotOrder, s=styleAt(env, doc.shell.slotStyle), inner=styleAt(env, doc.shell.slotInner), e=env)
           children
@@ -105,11 +107,33 @@ component Home
     observe: action
     pickHero: action
     playHero: action
+    openLive: action
+    watchChannel: action
+    previewChannel: action
+    zapTile: action
+    tileTuneIn: action
+    tileUnmute: action
+    homeGuide: GuideModel[]
+    homeTile: LiveTile[]
+    homeTuned: GuideChannel[]
+    homeZapping: string
   slot
   state flags: string[] = []
   action act(name: string, arg: string)
     if name == "select"
       selectTitle(part(arg, 0), part(arg, 1), part(arg, 2))
+    if name == "watch" and arg != ""
+      watchChannel(arg)
+    if name == "preview" and arg != ""
+      previewChannel(arg)
+    if name == "zap"
+      zapTile(num(arg) < 0 ? -1 : 1)
+    if name == "tuneIn"
+      tileTuneIn()
+    if name == "unmute"
+      tileUnmute()
+    if name == "guide"
+      openLive()
     if name == "play"
       playHero(heroActFor(p.model, arg).map(a => a.targetId).join(""), num(heroActFor(p.model, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(p.model, arg).map(a => a.hasPosition).includes(true))
     if name == "pickHero"
@@ -118,7 +142,7 @@ component Home
       flags = toggled(flags, arg)
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route="home", entry="", load="ready", detail=[], season="", home=[p.model], libraries=[], viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, tv=false, still=p.still, canLive=p.model.liveAvailable, flags=flags)] key="env"
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route="home", entry="", load="ready", detail=[], season="", home=[p.model], libraries=[], viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, tv=false, still=p.still, canLive=p.model.liveAvailable, flags=flags, guide=homeGuide, tile=homeTile, tuned=homeTuned, tunedId=homeTuned.map(c => c.id).join(""), zapping=homeZapping, favoriteCount=match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 })] key="env"
       Root(s=styleAt(env, doc.home.root))
         SlotBox(order=doc.home.slotOrder, s=styleAt(env, doc.home.slotStyle), inner=styleAt(env, doc.home.slotInner), e=env)
           children
@@ -152,7 +176,7 @@ component Route
     if name == "toggle"
       flags = toggled(flags, arg)
   view
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=[], libraries=[], viewer="", section=p.route, query="", heroIndex=0, small=p.small, tv=p.tv, still=p.still, canLive=false, flags=flags)] key="env"
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=[], libraries=[], viewer="", section=p.route, query="", heroIndex=0, small=p.small, tv=p.tv, still=p.still, canLive=false, flags=flags, guide=[], tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0)] key="env"
       for tree in doc.routes.filter(t => t.name == p.route) key=tree.name
         Root(s=styleAt(env, tree.root))
           for n, i in tree.nodes key=`${i}`
