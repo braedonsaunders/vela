@@ -15,6 +15,7 @@
  */
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { FIXED_TOKENS } from '../client/src/skin/vocabulary';
 
 /** The slot ABI: each slot's record prop and the app actions it offers, by the names a skin injects. */
 /** `frame`: the element the foundation lays every skin's slot out in (a skin draws inside it). */
@@ -118,10 +119,14 @@ export async function installed(client: string): Promise<Found[]> {
   return found.sort((a, b) => (a.skin.order ?? 100) - (b.skin.order ?? 100) || a.skin.id.localeCompare(b.skin.id));
 }
 
+// A trait reaches CSS at runtime, where Contract no longer rewrites token references (it does
+// so only for literals in a view), so `var(--media.ground)` becomes the page's own property or
+// its folded value here, as the document resolver does for bound values.
+const runtimeTokens = (text: string) => text.replace(/var\(--([a-zA-Z][\w-]*(?:\.[\w-]+)+)\)/g, (_, name: string) => FIXED_TOKENS[name] ?? `var(--x-${name.replace(/[^A-Za-z0-9_-]/g, '-')})`);
 function traitsOf(f: Found, base: SkinTraits): string {
   const t = { ...base, ...f.skin.traits };
   for (const key of TRAIT_KEYS) if (t[key] === undefined) throw new Error(`${f.skin.id}: trait ${key} has no value (the default skin must set every trait)`);
-  return `SkinTraits(${TRAIT_KEYS.map(k => `${k}=${typeof t[k] === 'string' ? str(t[k] as string) : t[k]}`).join(', ')})`;
+  return `SkinTraits(${TRAIT_KEYS.map(k => `${k}=${typeof t[k] === 'string' ? str(runtimeTokens(t[k] as string)) : t[k]}`).join(', ')})`;
 }
 const manifestOf = (s: InstalledSkin) =>
   `SkinManifest(id=${str(s.id)}, name=${s.nameKey ? `t(${str(s.nameKey)})` : str(s.name)}, tagline=${s.taglineKey ? `t(${str(s.taglineKey)})` : str(s.tagline)}, preview=${str(s.preview)}, swatches=${JSON.stringify(s.swatches)})`;
