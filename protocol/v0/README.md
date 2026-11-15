@@ -36,6 +36,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /rows/:id | cursor, limit (query) | Row |
 | GET | /collections/:id | cursor, limit (query) | CollectionContents |
 | GET | /titles/:id | — | TitleDetail |
+| GET, HEAD | /themes/:grant/theme.m4a | opaque URL grant; optional Range header | theme audio bytes |
 | GET | /titles/:id/children | cursor, limit (query) | Page<Title> |
 | GET | /titles/:id/extras | — | ExtrasResponse |
 | POST | /titles/:id/trailer-preview | TrailerPreviewRequest | TrailerPreviewResponse |
@@ -73,6 +74,23 @@ uses `from_ms` in absolute title milliseconds; cue timestamps also remain absolu
 title time, including after seeking. These resources use the same broker grants
 and policy checks as other media. This field does not change quality codec
 readiness, audio selection or client capability declarations.
+
+### Theme music
+
+`features.themeMusic` is optional; absence means unavailable. Optional
+`Title.themeMusic` supplies a ready audio grant with required `url` and
+`expiresAt`. Omission makes no availability claim for that title. Optional
+`durationSeconds` is omitted when unknown; `loudness` is measured integrated LUFS,
+omitted when unmeasured. Neither value is estimated by the client.
+
+The relative `/vela/v0/themes/<64hex>/theme.m4a` URL is an opaque secret
+capability; do not log or persist it. Native audio GET/HEAD needs no bearer or
+device headers and supports byte ranges. Grants last ten minutes, are bound to
+the host, issuing grant family and device, and recheck the current viewer/item
+policy on every read. Missing, expired or revoked grants return 404. Fetch title
+detail again for a refreshed grant. Responses use `Cache-Control: private,
+no-store`; service workers and API/media caches must bypass these resources.
+Theme audio creates no playback session, watch progress or interaction receipt.
 
 ## Identity and Ether mapping
 
@@ -372,6 +390,19 @@ output (pixel dimensions and bits per second), including for on-demand paths.
 It is menu metadata, not codec, init-segment or playability evidence. Switching
 to a lazy quality path must return the actual plan and its rendition readiness;
 clients must not turn target metadata into verified `Quality` entries or a URL.
+
+Both the path's `quality` target and its `qualities[]` entries carry pixel
+`width`/`height` and total peak `bitrate` in bits/second. Optional `videoBitrate`
+is the target video rate, `peakVideoBitrate` the video peak budget, and
+`averageBitrate` the estimated total average video-plus-audio rate, all in
+bits/second. Optional `codec` is the intended `h264`/`hevc` family;
+`dynamicRange` is the intended `sdr`/`hdr10`/`hlg`/`dv` output. These intentions
+do not verify the media. `videoCodec` is an exact RFC6381 value only after init
+verification; pending renditions carry an empty value and `codecStatus: "pending"`,
+then publish `"verified"` with the actual codec. The existing rendition URL and
+codec requirements are unchanged. Optional plan `qualityLimitations` lists absent
+rung heights with server-provided `reason` codes; clients must not invent missing
+rungs, interpret unknown codes as readiness, or silently replace a quality choice.
 
 `POST /auth/web-code` requires bearer/device authentication. Its targetOrigin must
 exactly match an advertised trusted HTTPS origin; the server issues a short-lived

@@ -4,7 +4,7 @@
 import type * as V from '../protocol/v0/types';
 import type { SkinDocument } from '../protocol/v0/skin';
 import { cinematicDoc } from '../protocol/v0/fixtures/skins/cinematic';
-import { kidsDoc } from '../protocol/v0/fixtures/skins/kids';
+import { existsSync, readdirSync } from 'node:fs';
 
 const harbor: V.SkinPack = {
   schema: 1, id: 'harbor', version: '1.0.0', name: 'Harbor', tagline: 'Sea-glass light over a night harbour.', engine: 'cinematic',
@@ -18,12 +18,20 @@ const harbor: V.SkinPack = {
 const packs = [harbor];
 const engines = ['cinematic', 'index', 'jellytwin', 'mochi', 'marquee', 'example'];
 // Skin documents (protocol/v0/skin.ts): whole skins as data, drawn by the client's doc engine.
-// Each document's own assets live in protocol/v0/fixtures/skins/<id>/ and are served under
-// /vela/v0/appearance/skins/<id>/<version>/<file>, as Ether serves an installed document.
-const skinDocs: SkinDocument[] = [cinematicDoc, kidsDoc];
-const documents: V.SkinDocumentRef[] = skinDocs.map(d => ({ id: d.id, name: d.name, version: d.version, tagline: d.tagline,
-  url: `/vela/v0/appearance/skins/${d.id}/${d.version}.json`, preview: d.preview, swatches: d.swatches }));
-let state: V.Appearance = { revision: 1, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs, documents };
+// Besides cinematic, every `protocol/v0/fixtures/skins/<id>/document.ts` (default export) is
+// installed, its files in `<id>/assets/` served at `/vela/v0/appearance/skins/<id>/<version>/<file>`.
+const skinsDir = new URL('../protocol/v0/fixtures/skins/', import.meta.url);
+const packaged: { doc: SkinDocument; assets?: URL }[] = [{ doc: cinematicDoc }];
+for (const entry of readdirSync(skinsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)))
+  if (entry.isDirectory() && existsSync(new URL(`${entry.name}/document.ts`, skinsDir)))
+    packaged.push({ doc: (await import(new URL(`${entry.name}/document.ts`, skinsDir).href)).default as SkinDocument, assets: new URL(`${entry.name}/assets/`, skinsDir) });
+const docUrl = (d: SkinDocument) => `/vela/v0/appearance/skins/${d.id}/${d.version}.json`;
+const documents: V.SkinDocumentRef[] = packaged.map(({ doc }) => ({ id: doc.id, name: doc.name, version: doc.version, tagline: doc.tagline, url: docUrl(doc), preview: doc.preview, swatches: doc.swatches }));
+// `VELA_MOCK_SKIN=<id>` starts the mock with that engine, pack or document as the server default.
+const startSkin = process.env.VELA_MOCK_SKIN ?? 'cinematic';
+const startDoc = documents.find(d => d.id === startSkin), startPack = packs.find(p => p.id === startSkin);
+let state: V.Appearance = { revision: 1, defaultSkinId: startDoc || startPack || engines.includes(startSkin) ? startSkin : 'cinematic',
+  defaultEngineId: startDoc ? 'doc' : startPack ? startPack.engine : engines.includes(startSkin) ? startSkin : 'cinematic', force: false, packs, documents };
 const listeners = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const encode = (a: V.Appearance) => new TextEncoder().encode(`id: ${a.revision}\ndata: ${JSON.stringify({ type: 'appearance', cursor: String(a.revision), appearance: a } satisfies V.ServerEvent)}\n\n`);
 
@@ -57,17 +65,16 @@ const fontFile = new URL('../client/assets/fonts/mochi/Fredoka.ttf', import.meta
 const svg = (body: string, w: number, h: number) => new Response(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${body}</svg>`, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=31536000, immutable' } });
 const sea = `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b2a3a"/><stop offset="1" stop-color="#06121a"/></linearGradient><radialGradient id="m" cx=".72" cy=".22" r=".5"><stop offset="0" stop-color="#7fd6cb" stop-opacity=".55"/><stop offset="1" stop-color="#7fd6cb" stop-opacity="0"/></radialGradient></defs><rect width="1600" height="1000" fill="url(#g)"/><rect width="1600" height="1000" fill="url(#m)"/>${[0, 1, 2, 3, 4].map(i => `<path d="M0 ${620 + i * 70} C 300 ${580 + i * 70}, 500 ${680 + i * 70}, 800 ${630 + i * 70} S 1300 ${590 + i * 70}, 1600 ${640 + i * 70} V 1000 H 0 Z" fill="#139c8f" fill-opacity="${0.08 + i * 0.05}"/>`).join('')}`;
 
-const assetType: Record<string, string> = { svg: 'image/svg+xml', jpg: 'image/jpeg', png: 'image/png', woff2: 'font/woff2', ttf: 'font/ttf' };
 /** Pack and skin-document assets: immutable per version, public like the appearance itself. */
 export async function packAsset(path: string): Promise<Response | undefined> {
-  const docAt = documents.findIndex(d => d.url === path);
-  if (docAt >= 0) return new Response(JSON.stringify(skinDocs[docAt]), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=31536000, immutable' } });
+  const immutable = (body: BodyInit, type: string) => new Response(body, { headers: { 'Content-Type': type, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' } });
+  const json = packaged.find(p => docUrl(p.doc) === path);
+  if (json) return immutable(JSON.stringify(json.doc), 'application/json');
+  const file = /^\/vela\/v0\/appearance\/skins\/([a-z0-9-]+)\/([0-9.]+)\/([a-z0-9-]+\.(svg|png|jpg|webp|woff2|ttf|otf))$/.exec(path);
+  const owner = file && packaged.find(p => p.assets && p.doc.id === file[1] && p.doc.version === file[2]);
+  if (file && owner?.assets && existsSync(new URL(file[3], owner.assets)))
+    return immutable(Bun.file(new URL(file[3], owner.assets)), ({ svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf' } as Record<string, string>)[file[4]]);
   if (path === cinematicDoc.preview) return new Response(Bun.file(new URL('../client/assets/skins/cinematic.jpg', import.meta.url)), { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable' } });
-  const asset = /^\/vela\/v0\/appearance\/skins\/([a-z0-9-]+)\/([0-9.]+)\/([a-z0-9-]+\.(svg|jpg|png|woff2|ttf))$/.exec(path);
-  if (asset && skinDocs.some(d => d.id === asset[1] && d.version === asset[2])) {
-    const file = Bun.file(new URL(`../protocol/v0/fixtures/skins/${asset[1]}/${asset[3]}`, import.meta.url));
-    if (await file.exists()) return new Response(file, { headers: { 'Content-Type': assetType[asset[4]], 'Cache-Control': 'public, max-age=31536000, immutable' } });
-  }
   const m = /^\/vela\/v0\/appearance\/packs\/([a-z0-9-]+)\/([0-9.]+)\/([a-z]+\.(?:svg|ttf))$/.exec(path);
   const pack = m && packs.find(p => p.id === m[1] && p.version === m[2]);
   if (!m || !pack) return undefined;
