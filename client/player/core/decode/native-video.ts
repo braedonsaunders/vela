@@ -1,4 +1,5 @@
 import { abortable } from '../async';
+import {prepareNativeHEVC} from './hevc';
 import type { DecodedVideoFrame, EncodedPacket, VideoTrack } from '../types';
 
 export interface NativeVideoFrame extends DecodedVideoFrame { kind: 'native'; frame: VideoFrame }
@@ -13,13 +14,16 @@ export class NativeVideoDecoder {
   private waiters = new Set<() => void>();
   private generation = 0;
   private durations = new Map<number,number>();
+  private hevc:ReturnType<typeof prepareNativeHEVC>;
   constructor(private readonly output: (frame: NativeVideoFrame) => void, private readonly onFailure: (error: Error) => void,
     private readonly acceleration:HardwareAcceleration='prefer-hardware') {}
 
   async configure(track: VideoTrack, epoch: number, signal: AbortSignal): Promise<void> {
     this.dispose();
     if (!track.config || typeof VideoDecoder !== 'function') throw new Error('Native video decoder is unavailable for this actual configuration');
-    const generation = this.generation, config: VideoDecoderConfig = {...track.config,hardwareAcceleration:this.acceleration};
+    const generation = this.generation;
+    this.hevc=prepareNativeHEVC(track,{...track.config,hardwareAcceleration:this.acceleration});
+    const config:VideoDecoderConfig=this.hevc?.configuration??{...track.config,hardwareAcceleration:this.acceleration};
     const support = await abortable(VideoDecoder.isConfigSupported(config),AbortSignal.any([signal,AbortSignal.timeout(1500)]));
     signal.throwIfAborted();
     if (generation !== this.generation) throw new DOMException('Decoder configuration superseded','AbortError');
@@ -28,6 +32,7 @@ export class NativeVideoDecoder {
     this.decoder = new VideoDecoder({
       output: frame => {
         if (generation !== this.generation) { frame.close(); return; }
+        try{this.hevc?.validateFrame(frame);}catch(error){frame.close();this.held=Math.max(0,this.held-1);this.wake();this.fail(error instanceof Error?error:new Error(String(error)));return;}
         this.metrics.decoded++;
         let released = false;
         const release = () => {
@@ -54,9 +59,10 @@ export class NativeVideoDecoder {
     if (this.failure) throw this.failure;
     if (!this.decoder || this.decoder.state !== 'configured') throw new Error('Video decoder is not configured');
     if (packet.data.length > 16*1024*1024) throw new Error('Video packet exceeds decoder input bound');
+    const data=this.hevc?this.hevc.packet(packet.data):packet.data;if(!data)return;
     this.held++;
     this.durations.set(packet.timestampUs,packet.durationUs);
-    try { this.decoder.decode(new EncodedVideoChunk({type:packet.key?'key':'delta',timestamp:packet.timestampUs,duration:packet.durationUs,data:packet.data})); }
+    try { this.decoder.decode(new EncodedVideoChunk({type:packet.key?'key':'delta',timestamp:packet.timestampUs,duration:packet.durationUs,data})); }
     catch (error) { this.held--; this.durations.delete(packet.timestampUs); throw error; }
   }
 
@@ -78,6 +84,6 @@ export class NativeVideoDecoder {
   private wake() { for (const wake of [...this.waiters]) wake(); }
   private fail(error: Error) { if (this.failure) return; this.failure = error; this.wake(); this.onFailure(error); }
   dispose(): void {
-    this.generation++; if (this.decoder && this.decoder.state !== 'closed') this.decoder.close(); this.decoder = undefined; this.held = 0; this.failure = null; this.durations.clear(); this.wake();
+    this.generation++; if (this.decoder && this.decoder.state !== 'closed') this.decoder.close(); this.decoder = undefined; this.held = 0; this.failure = null;this.hevc=undefined; this.durations.clear(); this.wake();
   }
 }

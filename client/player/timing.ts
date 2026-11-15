@@ -1,7 +1,7 @@
 /** Bounded, content-free host timing. Network timings (including the data worker)
  * are correlated separately by the browser inspector; no URL/grant enters here. */
 export type PlaybackStage='play'|'probe:start'|'probe:ready'|'probe:cached'|'assets:start'|'assets:ready'|
-  'runtime:start'|'runtime:ready'|'metadata:start'|'metadata:ready'|'audio:start'|'audio:ready'|'decode:start'|'decode:ready'|'plan:received'|'source:open'|'first-frame'|'source:failed';
+  'runtime:start'|'runtime:ready'|'metadata:start'|'metadata:ready'|'audio:start'|'audio:ready'|'decode:start'|'decode:ready'|'plan:received'|'source:open'|'first-frame'|'source:failed'|'warmup:start'|'warmup:ready'|'warmup:failed'|'warmup:skipped';
 interface Point {attempt:number;source:number;stage:PlaybackStage;at:number;detail?:'file'|'hls'|'webgpu'|'native'|'mse'}
 interface TimingState {points:Point[];attempt:number;mounted:number;source:number;firstSource:number}
 const key=Symbol.for('vela.playback.timing');

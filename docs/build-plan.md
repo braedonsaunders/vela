@@ -10,7 +10,7 @@ Status: working plan for the first implementation. The orchestrator thread
 |---|---|---|
 | `client/` | The Exact app (`exact new client --name Vela`). `app.contract` is the root: routes, shell, skin selection. `app.ts` is the data-module entry and only re-exports from `client/src/`. | bootstrap, then shared |
 | `client/src/protocol/` | Typed Vela v0 client: HTTP, SSE events, auth/session, cache validation | data |
-| `client/src/adapter/` | `ServerAdapter` boundary; `ether/` is the only implementation | data |
+| `client/src/adapter/` | `ServerAdapter` boundary and the server registry; one adapter per server protocol (`ether/`, `jellyfin/`, `plex/`) | data (boundary), adapter workers (`jellyfin/`, `plex/`) |
 | `client/src/discovery/`, `search/`, `telemetry/` | Bootstrap/home rows, search generations and AI lane, impression/interaction receipts | data |
 | `client/foundation/*.contract` | Shared, skin-independent Contract: search behaviour, detail state, playback chrome state, accessibility semantics | ui |
 | `client/skins/cinematic/*.contract` | The official skin | ui |
@@ -61,6 +61,14 @@ Status: working plan for the first implementation. The orchestrator thread
    (`tools/engine.ts`, `client/player/engine-handoff.ts`, the engine loader), the
    per-skin tokens, icons and strings in `app.tamber`/`strings/`, and the docs that
    describe compiled skins. Order and sizes: `docs/skin-distribution.md`, "End state".
+
+8. **Vela is a client for any server protocol (owner directive).** Ether is one server
+   that speaks every client protocol; Vela is the reverse, one client that speaks every
+   server protocol. Ether (the v0 protocol) is the default and the reference; Jellyfin/Emby
+   and Plex are first-class adapters behind the same `ServerAdapter`, not a degraded mode.
+   Foundation, renderer and skins never know which server they talk to: they see v0
+   shapes and the capabilities the adapter declares. Media credentials never reach skins,
+   logs, diagnostics or URLs on header-capable paths (`docs/data-module.md`).
 
 ## Order of work
 
