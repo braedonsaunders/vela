@@ -1,3 +1,8 @@
+import NativeAudioBridge from '../../../vendor/webgpu-player/src/audio/native/CustomDecodeNativeAudioBridge';
+import NativeAudioBackend from '../../../vendor/webgpu-player/src/audio/native/OwnedNativeMediaAudioBackend';
+import {videoInfo} from '../video-info';
+import type {NetworkReadout} from './transport';
+import {playbackMark} from '../timing';
 import { abortable } from './abortable';
 import { QUALIFIED_ORIGINAL_VIDEO } from './qualified';
 import { configureEngineAssets } from '../../../vendor/webgpu-player/src/EngineAssets';
@@ -32,9 +37,18 @@ export interface RuntimeOptions {
   onEvent: (event: CustomPlaybackControllerEvent) => void;
   onFailure: (reason: string, position: number) => void;
 }
+/** Observe successful component presentation, rather than the later 250ms UI sample. */
+class TimedPresenter extends Presenter {
+  override presentDecodedFrame(...args:Parameters<Presenter['presentDecodedFrame']>){
+    const drawn=super.presentDecodedFrame(...args);
+    if(drawn)playbackMark('first-frame','webgpu');
+    return drawn;
+  }
+}
 /** One original file/session. This module is loaded separately from Contract and
  * the legacy media engine; workers and decoder packages remain separate assets. */
 export class UniversalRuntime {
+  private nativeAudio?:HTMLAudioElement;
   private presenter: Presenter;
   private controller?: Controller;
   private loop?: FrameLoop;
@@ -59,7 +73,7 @@ export class UniversalRuntime {
   private readonly visibility = () => this.loop?.synchronizePageVisibility(!document.hidden);
   constructor(private options: RuntimeOptions) {
     configureEngineAssets({ baseURL: options.assets.baseURL, cacheKey: options.assets.assetKey });
-    this.presenter = new Presenter((_generation, reason) => this.failed(`WebGPU presentation: ${reason}`), () => this.loop?.schedule(false), () => this.failed('WebGPU device lost'));
+    this.presenter = new TimedPresenter((_generation, reason) => this.failed(`WebGPU presentation: ${reason}`), () => this.loop?.schedule(false), () => this.failed('WebGPU device lost'));
     options.signal.addEventListener('abort', this.abort, { once: true });
     document.addEventListener('visibilitychange', this.visibility);
   }
@@ -80,7 +94,22 @@ export class UniversalRuntime {
       this.decodedFrames = Math.max(this.decodedFrames, telemetry?.videoDecode.receivedFrameCount ?? 0);
       this.droppedFrames = Math.max(this.droppedFrames, telemetry?.videoDecode.droppedFrameCount ?? 0);
     }
-    return { state: state === 'playing' || state === 'paused' || state === 'ended' ? state : state === 'seeking' ? 'buffering' : state === 'error' || state === 'fallback' ? 'failed' : 'loading',
+    const decode=telemetry?.videoDecode;
+    const videoEnd=decode?.lastFrameEndMediaTimeMicroseconds;
+    const first=decode?.earliestQueuedFrameMediaTimeMicroseconds;
+    const now=telemetry?.currentTimeMicroseconds??0;
+    const videoAhead=videoEnd==null?null:first!==null&&first!==undefined&&first>now+100000?0:Math.max(0,(videoEnd-now)/1e6);
+    const audioEnd=telemetry?.audioBridge?.submittedEndMediaTimeMicroseconds;
+    let audioAhead=this.media?.audio.length?audioEnd==null?null:Math.max(0,(audioEnd-now)/1e6):Infinity;
+    if(decode?.nativeAudioClockReady&&this.nativeAudio){
+      const element=this.nativeAudio;audioAhead=0;
+      for(let index=0;index<element.buffered.length;index++)if(element.currentTime>=element.buffered.start(index)-0.002&&element.currentTime<element.buffered.end(index)){
+        audioAhead=element.buffered.end(index)-element.currentTime;break;
+      }
+    }
+    const network=(decode as typeof decode & {velaNetwork?:NetworkReadout})?.velaNetwork;
+    return {video:this.media?videoInfo(this.media.video):null,bufferAheadSeconds:videoAhead===null||audioAhead===null?null:Math.min(videoAhead,audioAhead),
+      throughputBps:network?.throughputBps??null,throughputHistory:network?.history??[],state: state === 'playing' || state === 'paused' || state === 'ended' ? state : state === 'seeking' ? 'buffering' : state === 'error' || state === 'fallback' ? 'failed' : 'loading',
       position: this.position, duration: telemetry?.durationMicroseconds == null ? null : microsecondsToSeconds(telemetry.durationMicroseconds),
       audioTrackId:this.media?.selectedAudioId ?? null, metadataDiscrepancies:this.media?.discrepancies ?? [], presentedFrames:this.presenter.getTelemetry().presentedFrameCount, decoderReady:!!this.controller,
       frames: this.carriedFrames + this.decodedFrames, dropped: this.carriedDropped + this.droppedFrames };
@@ -105,15 +134,19 @@ export class UniversalRuntime {
     // Capture audio activation before asynchronous capability/package work.
     const prewarm = prewarmBrowserAudioContext(48000);
     try {
+      playbackMark('metadata:start');
       media = this.media = await abortable(probeOriginal(media,signal),signal);
+      playbackMark('metadata:ready');
       if (!QUALIFIED_ORIGINAL_VIDEO.includes(media.video.codec)) throw new Error(`Original video ${media.video.codec} is not yet qualified; using compatible fallback`);
       // Only the proven HDR10-compatible DV8 base is normalized by the probe.
       // Full DV reconstruction (including profile7) has not passed its gate.
       if (media.video.dvProfile !== undefined) throw new Error('Original Dolby Vision reconstruction is not yet qualified; using compatible fallback');
       const registry = this.audioRegistry = createAudioPackages(this.options.assets.audioDecoderURL);
       const maximumChannels = this.maximumChannels = prewarm?.audioContext.destination.maxChannelCount ?? null;
+      playbackMark('audio:start');
       const preparedAudio = (media.audioTrackCount ?? media.audio.length) > 0 ? await abortable(prepareOriginalAudioSwitch({url:media.url,
         tracks:media.audio, trackId:media.selectedAudioId ?? media.audio[0]?.id ?? '', registry, maximumOutputChannels:maximumChannels, signal, forceSoftware:this.options.retry?.audio}),signal) : null;
+      playbackMark('audio:ready');
       if (preparedAudio) audioDifferences(preparedAudio.discrepancies,media.audio.find(track => track.id === media.selectedAudioId),preparedAudio.actualTrack);
       media = this.media = preparedAudio ? {...media, selectedAudioId:preparedAudio.actualTrack.id,
         audio:[...media.audio.filter(track => track.id !== preparedAudio.actualTrack.id),preparedAudio.actualTrack],
@@ -125,6 +158,7 @@ export class UniversalRuntime {
       signal.throwIfAborted();
       this.presenter.startSession(this.generation);
       const input = readPresentationInput(options);
+      playbackMark('decode:start');
       const [probedCapabilities, presentation] = await abortable(Promise.all([
         probeCustomDecodeCapabilities(options.mediaSource),
         getCustomPresentationEligibilityOptions(this.presenter, { input, options, isCurrent: this.current, isHDRToneMappingEnabled: async () => true }),
@@ -162,8 +196,11 @@ export class UniversalRuntime {
       }),signal);
       signal.throwIfAborted();
       if (!configured) throw new Error('Original colour pipeline could not be configured');
+      playbackMark('decode:ready');
       const audioOptions = preparedAudio?.audioOptions ?? {};
       const controller = this.controller = new Controller({
+        nativeAudioBridgeFactory:()=>new NativeAudioBridge(eventHandler=>new NativeAudioBackend({eventHandler,
+          createAudioElement:()=>{const audio=document.createElement('audio');this.nativeAudio=audio;return audio;}})),
         audioOutputFactory: audio ? createBrowserCustomAudioOutputFactory(prewarm, getWebGPUAudioOutputManager()) : undefined,
         gpuVideoDecodeSessionFactory: createGPUVideoDecodeSessionFactory(this.presenter, { slicing: true }),
         eventHandler: event => { if (this.current()) { this.options.onEvent(event); this.loop?.schedule(this.controller?.playbackState === 'playing'); } },
@@ -235,7 +272,7 @@ export class UniversalRuntime {
     this.disposed = true; this.lifetime.abort(); this.audioSwitch?.abort(); this.options.signal.removeEventListener('abort', this.abort);
     document.removeEventListener('visibilitychange', this.visibility);
     this.loop?.destroy();
-    this.disposing = (async () => { try { await this.controller?.destroy(); } finally { this.presenter.destroy(); } })();
+    this.disposing = (async () => { try { await this.controller?.destroy(); } finally { this.nativeAudio=undefined;this.presenter.destroy(); } })();
     return this.disposing;
   }
 }

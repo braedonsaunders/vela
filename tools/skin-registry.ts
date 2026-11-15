@@ -23,7 +23,7 @@ export const SLOT_API = 2;
 export const SLOTS: SlotSpec[] = [
   { name: 'Shell', record: 'ShellProps', children: true, actions: { chooseSkin: 'chooseSkin', signOut: 'logout', home: 'goHome', search: 'openSearch', live: 'openLive', library: 'goHome', openLibrary: 'openLibrary', goSecure: 'goSecure' } },
   { name: 'Home', record: 'HomeProps', children: true, actions: { selectTitle: 'selectTitle', observe: 'observe', pickHero: 'pickHero', reachEnd: 'loadMoreHome', reachRowEnd: 'loadMoreRow', previewIntent: 'previewIntent', playHero: 'playHero', openLibrary: 'openLibrary', live: 'openLive' } },
-  { name: 'SearchSurface', record: 'SearchProps', actions: { openLiveProgramme: 'openLiveProgramme', selectTitle: 'selectTitle', observe: 'observe' } },
+  { name: 'SearchSurface', record: 'SearchProps', actions: { openLiveProgramme: 'openLiveProgramme', retryDescriptive: 'retryDescriptive', selectTitle: 'selectTitle', observe: 'observe' } },
   { name: 'SearchField', record: 'SearchFieldProps', actions: { edit: 'edit' } },
   { name: 'Detail', record: 'DetailProps', actions: { play: 'play', playExtra: 'playExtra', selectTitle: 'selectTitle', observe: 'observeDetail' } },
   { name: 'Status', record: 'StatusProps', actions: {} },
@@ -144,13 +144,16 @@ export async function generateRegistry(client: string, only?: string): Promise<s
     'use SkinDoc from "../renderer/shapes.contract"',
   ];
   const local = (f: Found, name: string) => `${pascal(f.skin.id)}${name[0].toUpperCase()}${name.slice(1)}`;
+  const onlySkin = only ? skins.find(f => f.skin.id === only)! : undefined;
   for (const f of engines) {
     const byFile = new Map<string, string[]>();
     for (const slot of SLOTS) {
       const file = f.slots.get(slot.name);
-      if (file) byFile.set(file, [...(byFile.get(file) ?? []), `${slot.name} as ${local(f, slot.name)}`]);
+      // In a single-engine build the default skin supplies only the slots the engine lacks.
+      const drawn = !onlySkin || f === onlySkin || !onlySkin.slots.has(slot.name);
+      if (file && drawn) byFile.set(file, [...(byFile.get(file) ?? []), `${slot.name} as ${local(f, slot.name)}`]);
     }
-    for (const [name, fn] of f.functions) byFile.set(fn.file, [...(byFile.get(fn.file) ?? []), `${name} as ${local(f, name)}`]);
+    for (const [name, fn] of f.functions) if (!onlySkin || f === onlySkin || !onlySkin.functions.has(name)) byFile.set(fn.file, [...(byFile.get(fn.file) ?? []), `${name} as ${local(f, name)}`]);
     for (const [file, items] of [...byFile].sort()) lines.push(`use ${items.join(', ')} from "../skins/${f.skin.id}/${file}"`);
   }
   const offered = skins.filter(f => (f.skin.offer ?? 'server') !== 'never');
@@ -176,22 +179,31 @@ export async function generateRegistry(client: string, only?: string): Promise<s
   for (const [name, otherwise] of Object.entries(FUNCTIONS)) {
     const call = (f: Found) => { const fn = f.functions.get(name)!; return `${local(f, name)}(${fn.params.map(p => FUNCTION_ARGS[p]).join(', ')})`; };
     const branches = others.filter(f => f.functions.has(name)).map(f => [f.skin.id, call(f)] as [string, string]);
-    lines.push(`fn skin${name[0].toUpperCase()}${name.slice(1)}(skin: string, width: number, doc: SkinDoc): string = ${chain('skin', branches, fallback.functions.has(name) ? call(fallback) : otherwise)}`);
+    const base = fallback.functions.has(name) ? call(fallback) : otherwise;
+    // A single-engine build has one answer; a runtime chain would compile every branch.
+    const body = only ? (branches.length ? branches[0][1] : base) : chain('skin', branches, base);
+    lines.push(`fn skin${name[0].toUpperCase()}${name.slice(1)}(skin: string, width: number, doc: SkinDoc): string = ${body}`);
   }
   for (const slot of SLOTS) {
     const aliased = Object.entries(slot.actions).filter(([local, app]) => local !== app);
-    lines.push('', `component ${slot.name}`, '  props', `    p: ${slot.record}`, '  inject', '    activeSkin: string');
+    const own = others.filter(f => f.slots.has(slot.name));
+    // A single-engine build draws exactly one implementation: the engine's own, else the
+    // default's. No runtime test, so no other skin's slot is compiled into it.
+    const branching = !only && own.length > 0;
+    lines.push('', `component ${slot.name}`, '  props', `    p: ${slot.record}`, '  inject', ...(branching ? ['    activeSkin: string'] : []));
     for (const app of [...new Set(aliased.map(([, app]) => app))]) lines.push(`    ${app}: action`);
+    if (lines[lines.length - 1] === '  inject') lines.pop();
     if (aliased.length) { lines.push('  provide'); for (const [name, app] of aliased) lines.push(`    ${name} = ${app}`); }
     if (slot.children) lines.push('  slot');
     lines.push('  view');
     const at = slot.frame ? '      ' : '    ';
     if (slot.frame) lines.push(`    ${slot.frame}`);
     const draw = (f: Found, depth: string) => [`${depth}${local(f, slot.name)}(p=p)`, ...(slot.children ? [`${depth}  children`] : [])];
-    const own = others.filter(f => f.slots.has(slot.name));
-    own.forEach((f, i) => lines.push(`${at}${i ? 'else if' : 'if'} activeSkin == ${str(f.skin.id)}`, ...draw(f, `${at}  `)));
-    if (own.length) lines.push(`${at}else`, ...draw(fallback, `${at}  `));
-    else lines.push(...draw(fallback, at));
+    if (!branching) lines.push(...draw(own[0] ?? fallback, at));
+    else {
+      own.forEach((f, i) => lines.push(`${at}${i ? 'else if' : 'if'} activeSkin == ${str(f.skin.id)}`, ...draw(f, `${at}  `)));
+      lines.push(`${at}else`, ...draw(fallback, `${at}  `));
+    }
   }
   // The route view (docs/skin-distribution.md, "End state"): the documents skin's Route,
   // when that skin is part of this build; otherwise a route is never handed to it.

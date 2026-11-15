@@ -161,3 +161,40 @@ Subtitle assets, fonts, exact corresponding sources and notices are optional,
 verified payload components; embedded families are declared only by a core
 payload containing them. The production wrapper remains selected until the
 core migration gates pass.
+
+## HLS/CMAF packet-source milestone
+
+SegmentReader now owns scoped same-origin acquisition, two-request concurrency,
+16MiB object/1MiB playlist limits,32MiB LRU cache, bounded retries and aborts.
+It resolves and pins the first master variant without opening any other rung.
+Mediabunny supplies HLS/CMAF/TS packet demux only: the same Vela video decoder,
+AudioOutput, clock and scheduler consume those packets. HLS library timestamps
+are playlist-relative and mapped once to the authoritative title origin; raw
+fMP4 decode timestamps are not rewritten. Clear, muxed, finite VOD is implemented;
+separate audio groups, encrypted media and moving live windows fail explicitly
+until their adapters exist. This is still an unshipped core component.
+
+One local generated eight-second AVC/AAC drive started from an offset4s playlist:
+
+| Input | First presented frame | Seek to6s | End | Presentation drops |
+| --- | ---: | ---: | ---: | ---: |
+| CMAF, selected from a two-rung master |181.6ms |14.7ms |8.010894s |0 |
+| MPEG-TS, same core and output modules |38.5ms |not driven |8.010896s |0 |
+
+Only segment002/003 were requested; neither segment000 nor the unselected master
+variant was fetched. The CMAF reader cache survived the seek. A CLI request
+listener initially crashed because URL is absent from its outer sandbox; after
+correcting that drive script, both media paths passed. No test suite was added.
+Chrome and the local asset server were closed. These640×360 loopback measurements
+exclude broker planning and do not establish4K or lab parity.
+
+The explicit core payload now enables finite HLS in the same `vela-player` view
+via its verified manifest, without changing the production wrapper's admission.
+A local native-view remux plan at4s selected WebGPU, first GPU frame255.9ms,
+active audio IDa2, and both server-offered audio choices. An authorized seek to6s
+immediately exposed target6/buffering, then resumed in68.5ms including40ms
+simulated authority latency. The exact runtime/cache survived, no earlier segment
+was fetched, and presentation drops stayed0. Selecting audioa1 emitted the normal
+server tracks command rather than attempting a nonexistent local HLS track.
+Chrome and the local server were closed. Finite HLS remains a migration candidate;
+live-window, alternate-group and cross-rendition continuity gates are outstanding.

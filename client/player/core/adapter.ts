@@ -1,3 +1,4 @@
+import {videoInfo} from '../video-info';
 import { configureEngineAssets } from '../../../vendor/webgpu-player/src/EngineAssets';
 import { createCoreAudioOutput } from '../universal/audio/core-output';
 import type { OriginalBackend, OriginalRuntimeOptions, UniversalReadout } from '../universal/loader';
@@ -13,6 +14,7 @@ export {SubtitleSession} from '../universal/subtitles/session';
 /** Same native-view boundary; all orchestration beneath it belongs to Vela. */
 export class UniversalRuntime implements OriginalBackend {
   readonly retainsSource=true;
+  get supportsLocalAudioSwitch(){return !this.media?.hls;}
   get supportsSubtitles(){return !!this.options.assets.subtitleBaseURL;}
   get byteReader(){return this.core.byteReader;}
   get sourceContainer(){return this.core.container;}
@@ -43,7 +45,7 @@ export class UniversalRuntime implements OriginalBackend {
   private failed(error:Error){if(!this.disposed)this.options.onFailure(error.message,this.position);}
   private publish(state:CoreState){
     const audio=state.tracks.filter((track):track is AudioTrack=>track.kind==='audio');
-    const descriptions=[...(this.media?.audio??[])].sort((a,b)=>a.streamIndex-b.streamIndex);
+    const descriptions=[...(this.media?.audio??[])].filter(track=>!this.media?.hls||track.id===this.media.selectedAudioId).sort((a,b)=>a.streamIndex-b.streamIndex);
     this.audioAliases.clear();
     audio.forEach((track,index)=>this.audioAliases.set(descriptions[index]?.id??track.id,track.id));
     const note=(value:string)=>{if(this.notes.length<32&&!this.notes.includes(value))this.notes.push(value);};
@@ -61,7 +63,7 @@ export class UniversalRuntime implements OriginalBackend {
   get position(){return this.core.snapshot().positionUs/1e6;}
   get audioTrackIds(){return [...this.audioAliases.keys()];}
   get audioTracks(){
-    const descriptions=[...(this.media?.audio??[])].sort((a,b)=>a.streamIndex-b.streamIndex);
+    const descriptions=[...(this.media?.audio??[])].filter(track=>!this.media?.hls||track.id===this.media.selectedAudioId).sort((a,b)=>a.streamIndex-b.streamIndex);
     return this.core.snapshot().tracks.filter((track):track is AudioTrack=>track.kind==='audio').map((track,index)=>({
       id:[...this.audioAliases].find(([,actual])=>actual===track.id)?.[0]??track.id,
       label:descriptions[index]?.label??[track.language,track.codec.toUpperCase(),`${track.channels} ch`].filter(Boolean).join(' · '),
@@ -72,7 +74,8 @@ export class UniversalRuntime implements OriginalBackend {
   get readout():UniversalReadout{
     const state=this.core.snapshot();
     const audioTrackId=[...this.audioAliases].find(([,id])=>id===state.audioTrackId)?.[0]??state.audioTrackId;
-    return {state:state.state==='idle'?'loading':state.state,position:state.positionUs/1e6,duration:state.durationUs===null?null:state.durationUs/1e6,
+    const track=state.tracks.find(track=>track.kind==='video');
+    return {video:track?videoInfo({...track,colorTransfer:track.color.transfer??undefined}):null,bufferAheadSeconds:state.bufferAheadSeconds,throughputBps:state.throughputBps,throughputHistory:state.throughputHistory,state:state.state==='idle'?'loading':state.state,position:state.positionUs/1e6,duration:state.durationUs===null?null:state.durationUs/1e6,
       frames:state.decoded,dropped:state.dropped,presentedFrames:state.presented,decoderReady:state.tracks.some(track=>track.kind==='video'),
       audioTrackId,metadataDiscrepancies:this.notes.slice(0,32)};
   }
@@ -82,7 +85,8 @@ export class UniversalRuntime implements OriginalBackend {
     const ordered=[...media.audio].sort((a,b)=>a.streamIndex-b.streamIndex);
     const ordinal=ordered.findIndex(track=>track.id===media.selectedAudioId);
     this.notes=['audio-selection:audio-ordinal'];
-    await this.core.open(media.url,media.position*1e6,Math.max(0,ordinal));
+    if(media.hls)await this.core.openHls(media.url,media.position*1e6,Math.round(media.hls.originSeconds*1e6),Math.max(0,ordinal));
+    else await this.core.open(media.url,media.position*1e6,Math.max(0,ordinal));
     this.core.setVolume(this.volume,this.muted);
   }
   pause(){this.core.pause();}

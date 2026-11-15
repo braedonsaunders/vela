@@ -1451,3 +1451,130 @@ offered track IDs and current generations. That command check does not claim PGS
 glyph rendering. Core TypeScript and host builds passed; the redundant full
 Contract build was stopped after10minutes without a result, with UI integration
 compile delegated to the UI owner. No new core code is in this shipping payload.
+
+### Startup latency audit: client marks and detail prewarm
+
+The existing data source retains successful negotiation by authentication version
+and exact serialized capability declaration. Reopening a title does not send
+another negotiate request unless authentication or that declaration changed.
+The root media-context probe runs before authentication and detail Play becomes
+available. It is not newly started by each playback request.
+
+The host now retains one page-local capability result per immutable asset
+identity. GPU-adapter discovery, manifest fetch and subtitle capability checks
+run concurrently, and probing/runtime loading share one manifest promise. Caller
+cancellation detaches from shared work; bounded shared requests continue for
+other consumers. Failed manifest loads clear their cache entry. No session or
+original-file grant is prefetched from detail: POST/playback allocates playback
+resources, and the protocol currently has no read-only prepare token endpoint.
+
+`window.velaPlaybackTimings()` exposes copies of at most200content-free native
+marks: Play, probe/assets start and completion, plan arrival, source open, runtime
+import, metadata/audio/decode preparation, first successful frame presentation
+and recovery. Attempt/source counters distinguish retries. It contains no title,
+session ID, URL, grant or credential. GPU first-frame marks come from successful
+presentation, not the later250ms snapshot sample. Native uses its video frame
+callback. Browser network timing must be collected separately, including the
+data worker's negotiate, POST/playback, snapshot and SSE requests; main-window
+resource entries alone do not include all worker requests.
+
+One local generated AVC/AAC drive of the qualified wrapper measured:
+
+| Stage | Measured duration |
+| --- | ---: |
+| Root capability probe, before Play |3.0ms |
+| Second media-context probe |cached identical result |
+| Manifest requests across both probes and playback |1 |
+| Play → first GPU-presented frame |714.8ms |
+| Runtime import |32.4ms |
+| Original metadata probe |17.3ms |
+| Selected audio preparation |3.2ms |
+| Capability/presentation/decode setup |121.9ms |
+| Setup complete → first presented frame |456.2ms |
+
+The plan in this loopback drive was supplied locally, so it does not measure
+negotiation, server resolution or SSE latency. This is not a before/after LAN
+startup comparison. Chrome and the owned local server were closed.
+
+Ether's read-only comparison explains a likely server-side gap: Vela detail does
+not call the owner-setting-gated prewarmer that Plex detail uses. The previously
+captured Vela cold plan took3.39s, including a1.21s uncached probe, provider
+acquisition and losing-candidate waits. The owner's latest AppleTV session had
+resolved on detail beforehand; candidate open took2.2ms, native probe452.6ms,
+augment0.6ms, and session start roughly0.46s after candidate open. That is a
+Plex measurement, not a Vela POST measurement. Ether worker's detail-prewarm
+change and one actual Vela click-to-frame lab breakdown are pending; the lab is
+held while the owner is watching. No under1.5s cold-LAN claim is made.
+
+### Installed0.1.32 startup attempt: capacity and resource failure
+
+The real app was driven over HTTPS with fresh viewer authentication. This did
+not produce a valid first-frame timing comparison:
+
+| Phase | Measured result |
+| --- | --- |
+| Root media probe, before sign-in/Play |45.2ms |
+| Negotiate, before Play |200 /9.589ms; exactly one, no renegotiation on Play |
+| Movie detail |200 /933.844ms initially |
+| First POST/playback after one Play |503 /609.485ms; first byte607.635ms |
+| Plan, SSE, source open, first frame |Never started; no plan/source marks |
+| Server refusal |Coordinator confirmed capacity/playback_capacity, retry.allowed=false, two slots occupied |
+| Cleanup |No broker session created; coordinator revoked this exact test device200; Chrome closed |
+
+The app incorrectly repeated the typed, nonretryable playback refusal and detail
+reads. This was handed to the data owner with the stable watch-stage key2 and
+single native Play mark; request argument/idempotency values were not captured.
+No successful stop is claimed for a session that never existed. Screenshot
+`lab-33-startup-failed-032.png` retains the failure state.
+
+A later lab.16 comparison attempt made zero playback requests: Home initially
+loaded, then bootstrap409 and repeated503 removed the hero before a Play could
+be issued. The exact bootstrap ProtocolError body was not retained, and no class
+or retry policy is inferred from its HTTP status. Own-family revoke returned200;
+Chrome closed. `lab-34-home-failure-032.png` records that separate blocker. The
+data owner is adding bounded memo/retry handling; Ether is correlating the server
+errors. No cold-versus-prewarmed first-frame result is claimed from these attempts.
+
+### Quality diagnostics and bandwidth policy
+
+Both the qualified wrapper and the Vela core now populate the same snapshot
+fields: `video:{width,height,codec,dynamicRange}`, `currentBitrateBps`,
+`requiredBandwidthBps`, `bufferAheadSeconds`, `throughputBps`,
+`throughputHistory`, and existing decoded/dropped frame counts and path strategy.
+Each URL-free rendition carries `bitrateBps` and `requiredBandwidthBps` alongside
+its dimensions/codec/range and pending/verified status. Lazy-path menu metadata
+comes from the authoritative plan; it does not manufacture an initialized rung.
+
+The active bitrate is a declared rendition peak/target, not a measured encoder
+output rate. The menu's `needs ~` recommendation is that rate times1.25, a
+conservative client margin rather than a no-stall guarantee. Actual resolution,
+codec and input HDR classification come from the container/decode route. HDR10
+here identifies the input; it does not claim HDR-display output or DV processing.
+
+Throughput is the lower of3s/10s EWMAs. Cached responses, samples under16KiB and
+under50ms are excluded. The wrapper's pinned-library adaptation reports only
+completed browser ResourceTiming byte/time samples through a generation-checked
+message; private response bodies are not cloned or intercepted and URLs do not
+leave that measurement scope. Core readers use their own completed acquisitions.
+Native/MSE retains its existing measurements; a browser-managed path without a
+measurement reports unknown. History retains at most30samples.
+
+Universal buffer ahead is conservative decoded-video coverage intersected with
+queued PCM or actual native-audio buffered ranges. It does not guess time from
+original-file byte-cache size. Native/MSE uses actual media ranges. The future
+core encoded read-ahead queue must expose indexed packet coverage separately.
+
+The display-ready `PlayerView.stats` record supplies localized labels, raw
+buffer seconds, measured/required headroom, and history normalized0..1 against
+its own maximum. Unknown labels are empty, numeric buffer/drop counts are-1,
+headroom0 and historyempty. Original and lower choices include actual offered
+resolution/range, declared bitrate and the client-margin recommendation; duplicate
+Original entries are removed. Pending codec descriptors remain marked Starting.
+
+A local generated AVC/AAC fixture with80ms delayed range responses reached
+playing with actual640×360H.264/SDR, decoded buffer0.180785s, measured worker
+throughput91.939Mbps, normalized history[1], and0drops/15decoded frames. Its
+synthetic declared target1Mbps projected as1Mbps / needs~1.3Mbps (1.25Mbps before
+rounding), distinct from that transfer-rate measurement. Only one Original choice
+was produced. Chrome and the owned asset server were closed. This validates the
+pipeline/labels locally, not the lab's current throughput or available ladder.

@@ -74,7 +74,7 @@ component Shell
             column position="relative" flex-shrink=0
               button press=findSomething hover=hint("search") focus=hint("search", true) blur=hint("search", false) aria-label=t("ui.search") class=Bubble width=44 height=44 padding=0 display="flex" align-items="center" justify-content="center" background-color="mochi.butter-soft"
                 PixelIcon(name="search", size=18)
-              SpeechBubble(message=t("ui.search"), shown=(tip == "search" and not menuOpen and not compact), still=still, night=false)
+              SpeechBubble(message=t("ui.search"), shown=(tip == "search" and not menuOpen and not compact), still=still, night=false, side="below")
             button id="profile-menu-trigger" press=toggleMenu aria-expanded=menuOpen aria-controls="viewer-settings" aria-label=t("ui.profileAndAppearance") testId="profile-menu" class=Bubble height=44 flex-shrink=0 padding-left=4 padding-right=(compact ? 4 : 16) display="flex" align-items="center" gap=8 background-color=(menuOpen ? "mochi.pink-wash" : "mochi.card")
               text p.viewer.slice(0, 1).toUpperCase() width=32 height=32 border-radius=16 display="flex" align-items="center" justify-content="center" font-family="\"Pixelify Sans\", ui-monospace, monospace" font-size=16 font-weight=700 color="mochi.ink" background-color="mochi.pink-soft" border="2px solid var(--mochi.ink)" box-sizing="border-box" aria-hidden=true
               if not compact

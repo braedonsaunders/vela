@@ -416,11 +416,13 @@ component SearchSurface
   inject
     selectTitle: action
     openLiveProgramme: action
+    retryDescriptive: action
     observe: action
   // Several words read as a description, not a name: an empty answer is then about the
   // mood, never "nothing by that name".
   derive describing = p.query.trim().split(" ").filter(w => w != "").length > 1 and p.descriptiveState != "off"
-  derive vibes = (p.descriptiveState == "ready" ? p.descriptive.items : [])
+  // A failed answer keeps whatever candidates it found.
+  derive vibes = (p.descriptiveState == "ready" or p.descriptiveState == "failed" ? p.descriptive.items : [])
   derive titlesFound = not p.loading and not p.error and p.model.items.length > 0
   // Live hits come with the fast lane: channels and programmes airing now, then what's coming up on the guide.
   derive airing = (p.loading or p.error ? [] : p.model.liveProgrammes.filter(entry => entry.airing))
@@ -446,7 +448,12 @@ component SearchSurface
       else if p.error
         EmptyState(icon="symbol:alert", title=t("ui.searchUnavailable"), message=t("ui.searchIsUnavailableTryAnotherQuery"), still=p.still)
       else if describing and p.descriptiveState == "failed"
-        EmptyState(icon="symbol:alert", title=t("search.moodUnavailable"), message=t("search.moodUnavailableMessage"), still=p.still)
+        column gap=4
+          EmptyState(icon="symbol:alert", title=t("search.moodUnavailable"), message=t("search.moodUnavailableMessage"), still=p.still)
+          if p.descriptiveCanRetry
+            row justify-content="center"
+              button press=retryDescriptive() class=GhostPill height=44 padding="0px 22px"
+                text t("ui.tryAgain") font-size=14
       else if describing
         EmptyState(icon="symbol:search", title=t("search.noMood"), message=t("search.noMoodMessage"), still=p.still)
       else
@@ -468,8 +475,12 @@ component SearchSurface
       if vibes.length > 0
         column animation=enter(p.still, 120)
           Row(row=FeedRow(id="vibe", name=t("ui.theFeelingYouReLookingFor"), receipt="", items=vibes, nextCursor="", continuation="exhausted", previewOnFocus=false, presentation=""), small=p.small, still=p.still, selectTitle=selectTitle, observe=observe)
-      if p.descriptiveState == "failed" and titlesFound
-        text t("search.moodUnavailableBelowTitles") color="ink.secondary" font-size=14 padding-left=gutter(p.small) padding-right=gutter(p.small)
+      if p.descriptiveState == "failed" and (titlesFound or vibes.length > 0)
+        row gap=14 align-items="center" flex-wrap="wrap" padding-left=gutter(p.small) padding-right=gutter(p.small)
+          text (vibes.length > 0 ? t("search.moodPartial") : t("search.moodUnavailableBelowTitles")) color="ink.secondary" font-size=14
+          if p.descriptiveCanRetry
+            button press=retryDescriptive() class=GhostPill height=36 padding="0px 16px"
+              text t("ui.tryAgain") font-size=13
       if aiShown
         column gap=10 animation=enter(p.still, 160)
           row gap=10 align-items="center" padding-left=gutter(p.small) padding-right=gutter(p.small)

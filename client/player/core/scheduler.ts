@@ -12,6 +12,8 @@ export class VideoScheduler<T extends DecodedVideoFrame> {
   private active = false;
   private preview = false;
   private hasPresented = false;
+  private displayedEndUs=0;
+  bufferedEnd(positionUs:number){return this.buffer.bufferedEnd(positionUs,this.displayedEndUs);}
   constructor(readonly clock: MediaClock,
     private readonly present: (frame: T, positionUs: number) => boolean,
     private readonly onFailure: (error: unknown) => void,
@@ -19,7 +21,7 @@ export class VideoScheduler<T extends DecodedVideoFrame> {
 
   reset(epoch: number, targetUs: number, preview = false): void {
     this.stop(); this.buffer.clear(); this.epoch = epoch; this.targetUs = targetUs;
-    this.preview = preview; this.hasPresented = false;
+    this.preview = preview; this.hasPresented = false;this.displayedEndUs=targetUs;
   }
   push(frame: T): void {
     if (frame.epoch !== this.epoch) { frame.release(); return; }
@@ -42,7 +44,7 @@ export class VideoScheduler<T extends DecodedVideoFrame> {
       const selected = this.buffer.takeDue(deadline,this.epoch,this.targetUs);
       this.metrics.dropped += selected.dropped;
       if (selected.frame) {
-        try { if (this.present(selected.frame,position)) { this.hasPresented = true; this.metrics.presented++; this.onPresent(); } }
+        try { if (this.present(selected.frame,position)) { this.hasPresented = true;this.displayedEndUs=selected.frame.timestampUs+selected.frame.durationUs; this.metrics.presented++; this.onPresent(); } }
         finally { selected.frame.release(); }
       }
     } catch (error) { this.stop(); this.onFailure(error); return; }

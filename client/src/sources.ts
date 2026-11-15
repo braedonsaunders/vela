@@ -83,7 +83,7 @@ let redemption: { code: string; idempotencyKey: string; pending?: Promise<Tokens
 let negotiation: { version: number; context: string; pending: Promise<void> } | undefined;
 let features: ServerCapabilities['features'] | undefined;
 let ai: { epoch: number; generation: number; query: string; job?: AISearchJob; starting?: Promise<AISearchJob> } | undefined;
-const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable', liveChannels: [], liveProgrammes: [] });
+const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable', descriptiveStatus: 'ready', descriptiveRetryAllowed: false, descriptiveRetryAfter: 0, liveChannels: [], liveProgrammes: [] });
 function server(store: Parameters<Sources['uiBootstrap']>[1], media?: MediaCapabilities): EtherAdapter {
   if (!API) throw new Error('Server origin is unavailable');
   if (!adapter) {
@@ -388,13 +388,15 @@ const sources: Sources = {
   uiSearch: async ([query, generation, epoch, at, localeJSON, artWidth], store) => {
     const api = await session(store);
     const result = await api.search({ query, generation, mode: 'fast', idempotencyKey: `search-${epoch}-${generation}` });
-    return withLocale(localeJSON, () => ({ query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API, artWidth)), descriptive: [], ai: [], aiStatus: 'unavailable', ...liveSearch(result.live, API, at) }));
+    return withLocale(localeJSON, () => ({ query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', API, artWidth)), descriptive: [], ai: [], aiStatus: 'unavailable', descriptiveStatus: 'ready', descriptiveRetryAllowed: false, descriptiveRetryAfter: 0, ...liveSearch(result.live, API, at) }));
   },
   uiDescriptive: async ([query, generation, epoch, localeJSON, artWidth], store) => {
     const api = await session(store);
     if (!features?.descriptiveSearch.available) return lane(query, generation);
-    const result = await api.search({ query, generation, mode: 'descriptive', idempotencyKey: `descriptive-${epoch}-${generation}` });
-    return withLocale(localeJSON, () => ({ ...lane(result.query, result.generation), items: result.items.map(t => card(t, '', API, artWidth)) }));
+    const result = await api.search({ query, generation, mode: 'descriptive', idempotencyKey: key(store) });
+    const status = result.descriptive?.state ?? 'ready';
+    const retry = result.descriptive?.retry;
+    return withLocale(localeJSON, () => ({ ...lane(result.query, result.generation), items: result.items.map(t => card(t, '', API, artWidth)), descriptiveStatus: status, descriptiveRetryAllowed: retry?.allowed === true, descriptiveRetryAfter: Number.isFinite(retry?.afterSeconds) ? Math.max(1, Math.ceil(retry!.afterSeconds!)) : 1 }));
   },
   uiAI: async ([query, generation, epoch, localeJSON, artWidth], store) => {
     const api = await session(store);

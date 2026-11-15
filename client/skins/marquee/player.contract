@@ -55,8 +55,6 @@ component PlayerChrome
         if waiting
           column align-self="center" align-items="center" gap=14 role="status" aria-label=(p.model.state == "recovering" ? t("ui.recoveringPlayback") : p.model.state == "loading" ? t("ui.preparingPlayback") : t("ui.buffering")) testId="player-status" animation=(p.still ? "none" : "mqFade 300ms linear 150ms both")
             Spinner(size=(p.small ? 48 : 64), still=p.still)
-            if p.model.state == "loading" or p.model.state == "recovering"
-              text (p.model.state == "recovering" ? t("ui.recoveringPlayback") : p.model.preparation != "" ? p.model.preparation : t("ui.preparingPlayback")) font-size=14 color="marquee.ink-dim" text-shadow="0px 1px 8px var(--marquee.shadow)"
       column padding=(p.small ? "56px 12px 10px" : "96px 24px 16px") gap=(p.small ? 4 : 6) background-image="linear-gradient(0deg, var(--marquee.scrim) 0%, var(--marquee.scrim-soft) 55%, var(--marquee.scrim-clear) 100%)" opacity=(shown ? 1 : 0) transition=fade pointer-events=(shown ? "auto" : "none")
         if p.model.actionError != "" and failure == ""
           text p.model.actionError color="marquee.amber" font-size=13 role="status"

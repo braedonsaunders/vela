@@ -47,6 +47,7 @@ component Client
     previewIntent
     playHero
     openLiveProgramme
+    retryDescriptive
     edit
     play
     playExtra
@@ -113,21 +114,20 @@ component Client
                   column flex=1 min-height=0 position="relative" z-index=0 overflow="hidden"
                     row height="100%" translate=`${sectionIndex * -100}% 0px` transition=(not traits.panSections or still ? "none" : "translate 640ms cubic-bezier(0.65, 0, 0.35, 1)")
                       scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") scroll=cancelPreviewOnScroll mask-image=(traits.barMask ? (small ? "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 64px, black 118px)" : "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 48px, black 96px)") : "none") width="100%" height="100%" flex-shrink=0 inert=(sectionIndex != 0) aria-hidden=(sectionIndex != 0) opacity=(sectionIndex == 0 or not still ? 1 : 0) transition=(not traits.panSections ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
-                        if failed(home)
+                        if homeKnown
+                          for slotProps in [HomeProps(model=homeSurface, active=(top(nav).name == "home" and sectionIndex == 0 and page.visibilityState == "visible"), query=query, small=homeSmall, still=still, heroIndex=heroAt, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, cardPreview=cardPreview, libraries=(current(libraries) ? libraries : []), canLive=home.liveAvailable)] key="home"
+                            Home(p=slotProps)
+                              for slotProps in [SearchFieldProps(query=query)] key="searchField"
+                                SearchField(p=slotProps)
+                          if query != ""
+                            for slotProps in [SearchProps(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(searchTimeQuery != query or searchTimeGeneration != generation or pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results) and searchTimeQuery == query and searchTimeGeneration == generation), aiAvailable=home.aiAvailable, descriptiveState=descriptiveState, descriptiveCanRetry=descriptiveCanRetry, aiState=aiState, small=homeSmall, still=still)] key="searchSurface"
+                              SearchSurface(p=slotProps)
+                        else if failed(home)
                           for slotProps in [StatusProps(kind="failure", message=t("ui.yourLibraryCouldnTBeReachedCheckYourServerConnection"), small=homeSmall, still=still)] key="status"
                             Status(p=slotProps)
                         else
-                          if not current(home)
-                            for slotProps in [StatusProps(kind="home", message=t("ui.findingYourEvening"), small=homeSmall, still=still)] key="status"
-                              Status(p=slotProps)
-                          else
-                            for slotProps in [HomeProps(model=homeSurface, active=(top(nav).name == "home" and sectionIndex == 0 and page.visibilityState == "visible"), query=query, small=homeSmall, still=still, heroIndex=heroAt, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, cardPreview=cardPreview, libraries=(current(libraries) ? libraries : []), canLive=home.liveAvailable)] key="home"
-                              Home(p=slotProps)
-                                for slotProps in [SearchFieldProps(query=query)] key="searchField"
-                                  SearchField(p=slotProps)
-                            if query != ""
-                              for slotProps in [SearchProps(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(searchTimeQuery != query or searchTimeGeneration != generation or pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results) and searchTimeQuery == query and searchTimeGeneration == generation), aiAvailable=home.aiAvailable, descriptiveState=descriptiveState, aiState=aiState, small=homeSmall, still=still)] key="searchSurface"
-                                SearchSurface(p=slotProps)
+                          for slotProps in [StatusProps(kind="home", message=t("ui.findingYourEvening"), small=homeSmall, still=still)] key="status"
+                            Status(p=slotProps)
                       for sid in sectionIds.slice(1) key=sid
                         if sid == "@live"
                           // Live TV: the guide owns its scrolling; it mounts on first visit and stays (inert) so it keeps its place.
@@ -206,15 +206,17 @@ component Client
                 button press=close
                   text t("ui.backToTitle")
             else
-              if not current(playback)
-                text t("ui.requestingPlaybackSession") role="status" margin="auto"
-              else
+              // The chrome stands from the moment Play is pressed (a loading view until the session
+              // and its plan exist, however long the server prepares), so its spinner runs on
+              // without a swap; the picture joins beneath it.
+              if current(playback) and watchPlan != ""
                 vela-player plan=(watchModel.planJson != "" ? watchModel.planJson : currentPlan) playerCommand=watchCommandJson serverError=watchReply.error message=liveWatchMessage position="absolute" inset=0 width="100%" height="100%" z-index=0
-                // The chrome is its own layer above the picture: whatever the engine composites
-                // (a video element or a GPU canvas) stays under it, and pointer events bubble to the stage.
-                column position="absolute" inset=0 z-index=1
-                  for slotProps in [PlayerProps(model=watchModel, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : t("ui.liveTelevisionTitle")) : watchTitle), busy=pending(watchAuthorized), visible=watchChromeVisible, small=small, still=still, serverError=watchReply.error)] key="playerChrome"
-                    PlayerChrome(p=slotProps)
+              // The chrome is its own layer above the picture: whatever the engine composites
+              // (a video element or a GPU canvas) stays under it, and pointer events bubble to the stage.
+              column position="absolute" inset=0 z-index=1
+                for slotProps in [PlayerProps(model=watchView, title=(e.name == "liveWatch" ? (current(liveIdentity) ? liveIdentity.title : t("ui.liveTelevisionTitle")) : watchTitle), busy=(pending(watchAuthorized) or not current(playback) or watchPlan == ""), visible=watchChromeVisible, small=small, still=still, serverError=watchReply.error)] key="playerChrome"
+                  PlayerChrome(p=slotProps)
+              if current(playback)
                 if e.name == "liveWatch"
                   column position="absolute" top=88 right=(small ? 12 : 36) z-index=2 max-width=(small ? "calc(100% - 24px)" : "none") opacity=(liveControlsVisible ? 1 : 0) pointer-events=(liveControlsVisible ? "auto" : "none") inert=(not liveControlsVisible) transition=(still ? "none" : "opacity 180ms ease")
                     for slotProps in [LiveControlsProps(lowDelay=lowDelay, reconnecting=(liveView.sessionId == playback.sessionId and liveView.reconnecting), delivery=(liveView.sessionId == playback.sessionId ? liveView.delivery : "unknown"), drift=(liveView.sessionId == playback.sessionId ? liveView.drift : -1), driftLabel=(liveView.sessionId == playback.sessionId ? liveView.driftLabel : ""), canCatchUp=(liveView.sessionId == playback.sessionId and liveView.canCatchUp))] key="liveControls"
