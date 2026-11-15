@@ -1,6 +1,8 @@
 import { abortable } from './async';
 import { MediaClock } from './clock';
-import { FileDemux } from './demux/file';
+import { FileDemux,type PacketDemux } from './demux/file';
+import { HlsDemux } from './demux/hls';
+import { SegmentReader } from './source/segments';
 import type { CoreVideoFrame,VideoBackend,VideoCallbacks } from './decode/video';
 import { VideoScheduler } from './scheduler';
 import { RangeReader } from './source/ranges';
@@ -22,16 +24,18 @@ export interface CoreState {
   decoded:number; presented:number; dropped:number; failure:string|null;
 }
 interface Epoch {
-  id:number; abort:AbortController; demux:FileDemux; decoder:VideoBackend;
+  id:number; abort:AbortController; demux:PacketDemux; decoder:VideoBackend;
   firstFrame:Promise<void>; resolveFirst():void; videoEndUs:number; audioEndUs:number;
   videoEnded:boolean; audioEnded:boolean; audioTailReported:boolean; audioBufferedUntilUs:number;
 }
 
-/** Vela's direct-file orchestration. It deliberately has no upstream controller. */
+type SourceState={abort:AbortController;audio:AudioOutput}&({kind:'file';reader:RangeReader}|{kind:'hls';segments:SegmentReader;originUs:number});
+
+/** One packet/decode/clock pipeline; transports never choose a scheduler. */
 export class PlaybackCore {
   readonly clock = new MediaClock();
   private readonly scheduler: VideoScheduler<CoreVideoFrame>;
-  private source?: {abort:AbortController;reader:RangeReader;audio:AudioOutput};
+  private source?:SourceState;
   private epoch?:Epoch;
   private nextEpoch = 0;
   private state:CoreState['state']='idle';
@@ -70,16 +74,21 @@ export class PlaybackCore {
       tracks:this.tracks,videoTrackId:this.video?.id??null,audioTrackId:this.audio?.id??null,
       decoded:this.decodedBeforeEpoch+(this.epoch?.decoder.metrics.decoded??0),presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
   }
-  get byteReader(){return this.source?.reader;}
+  get byteReader(){return this.source?.kind==='file'?this.source.reader:undefined;}
   get container(){return this.containerName;}
   private publish(){this.onState(this.snapshot());}
   private current(run:Epoch){return this.epoch===run&&!run.abort.signal.aborted&&!this.closed;}
 
-  async open(url:string,positionUs=0,audioOrdinal=0):Promise<void>{
+  open(url:string,positionUs=0,audioOrdinal=0):Promise<void>{return this.openSource({kind:'file',url},positionUs,audioOrdinal);}
+  openHls(url:string,positionUs:number,originUs:number,audioOrdinal=0):Promise<void>{
+    if(!Number.isSafeInteger(originUs)||originUs<0||positionUs<originUs)throw new Error('Invalid HLS source timeline');
+    return this.openSource({kind:'hls',url,originUs},positionUs,audioOrdinal);
+  }
+  private async openSource(input:{kind:'file';url:string}|{kind:'hls';url:string;originUs:number},positionUs:number,audioOrdinal:number):Promise<void>{
     if(this.closed)throw new Error('Playback core is disposed');
     await this.closeSource();
     this.decodedBeforeEpoch=0;Object.assign(this.scheduler.metrics,{presented:0,dropped:0,preroll:0});
-    const abort=new AbortController(),reader=new RangeReader(url);
+    const abort=new AbortController();
     const audio=this.createAudio({signal:abort.signal,onClock:anchor=>{
       if(this.clock.update(anchor)){
         const run=this.epoch;
@@ -88,12 +97,21 @@ export class PlaybackCore {
         this.checkEnded();
       }
     },onFailure:failure=>{if(this.epoch?.id===failure.epoch)this.fail(new Error(`Audio ${failure.stage}: ${failure.message}`));}});
-    this.source={abort,reader,audio};this.failure=null;this.tracks=[];this.video=undefined;this.audio=undefined;this.requestedAudioId=undefined;this.durationUs=null;
+    const source:SourceState=input.kind==='file'?{kind:'file',abort,audio,reader:new RangeReader(input.url)}:{kind:'hls',abort,audio,segments:new SegmentReader(input.url),originUs:input.originUs};
+    this.source=source;this.failure=null;this.tracks=[];this.video=undefined;this.audio=undefined;this.requestedAudioId=undefined;this.durationUs=null;
     this.initialAudioOrdinal=Number.isSafeInteger(audioOrdinal)&&audioOrdinal>=0?audioOrdinal:0;
-    await this.startEpoch(positionUs);
+    try{
+      const deadline=performance.now()+8000;
+      if(source.kind==='hls'){
+        this.state='loading';this.clock.reset(positionUs,++this.nextEpoch,false);this.publish();
+        await source.segments.prepare(AbortSignal.any([abort.signal,AbortSignal.timeout(8000)]));
+        if(this.source!==source||this.closed)return;
+      }
+      await this.startEpoch(positionUs,deadline);
+    }catch(error){if(this.source===source&&!abort.signal.aborted)this.fail(error);throw error;}
   }
 
-  private async startEpoch(positionUs:number):Promise<void>{
+  private async startEpoch(positionUs:number,deadline=performance.now()+8000):Promise<void>{
     const source=this.source;if(!source)throw new Error('Playback source is absent');
     if(!Number.isFinite(positionUs)||positionUs<0)throw new Error('Invalid seek target');
     this.decodedBeforeEpoch+=this.epoch?.decoder.metrics.decoded??0;
@@ -101,7 +119,7 @@ export class PlaybackCore {
     source.audio.pause();
     const abort=new AbortController(),id=++this.nextEpoch;
     const signal=AbortSignal.any([source.abort.signal,abort.signal]);
-    const demux=new FileDemux(source.reader,signal);
+    const demux:PacketDemux=source.kind==='file'?new FileDemux(source.reader,signal):new HlsDemux(source.segments,signal,source.originUs);
     let resolveFirst!:()=>void;
     const firstFrame=new Promise<void>(resolve=>{resolveFirst=resolve;});
     const run:Epoch={id,abort,demux,firstFrame,resolveFirst,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,audioTailReported:false,audioBufferedUntilUs:positionUs,
@@ -110,7 +128,7 @@ export class PlaybackCore {
         onFailure:error=>{if(this.current(run))this.fail(error);}})};
     this.epoch=run;this.scheduler.reset(id,positionUs,!this.playing);this.state='loading';this.failure=null;
     this.clock.reset(positionUs,id,!!this.audio);this.clock.setPlaying(false);this.publish();
-    const startup=AbortSignal.any([signal,AbortSignal.timeout(8000)]);
+    const startup=AbortSignal.any([signal,AbortSignal.timeout(Math.max(0,Math.ceil(deadline-performance.now())))]);
     try{
       const metadata=await abortable(demux.open(startup),startup);
       if(!this.current(run))return;
@@ -194,7 +212,7 @@ export class PlaybackCore {
     const source=this.source;this.source=undefined;
     this.epoch?.abort.abort();this.epoch?.decoder.dispose();this.epoch?.demux.dispose();this.epoch=undefined;
     this.scheduler.stop();this.scheduler.buffer.clear();this.clock.setPlaying(false);
-    source?.abort.abort();source?.reader.dispose();
+    source?.abort.abort();if(source?.kind==='file')source.reader.dispose();else source?.segments.dispose();
     if(source)await abortable(source.audio.dispose(),AbortSignal.timeout(3500)).catch(()=>{});
   }
   dispose():Promise<void>{
