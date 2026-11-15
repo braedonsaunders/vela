@@ -797,9 +797,9 @@ const sources: Sources = {
     return { servers: rows, selectedId: list.selectedId };
   },
   detectServer: async ([url, generation, localeJSON], store) => {
-    const probe = await probeServer(url, deviceFor(store).id);
+    const probe = await probeServer(url, deviceFor(store).id, pageOriginBound.startsWith('https:'));
     return withLocale(localeJSON, () => ({ url, generation, state: probe.state, kind: probe.kind, kindLabel: kindLabel(probe.kind), name: probe.name, version: probe.version, normalizedUrl: probe.url,
-      message: probe.state === 'found' ? '' : probe.kind === 'ether' ? msg('server.probe.vela') : msg(`server.probe.${probe.state}`) }));
+      message: probe.state === 'found' ? '' : probe.kind === 'ether' ? msg('server.probe.vela') : probe.state === 'insecure' ? msg('server.probe.insecure', { url: probe.url }) : msg(`server.probe.${probe.state}`) }));
   },
   setSelectedServer: async ([id], store) => {
     try { selectServer(store, id); return { id, error: '' }; }
@@ -808,6 +808,7 @@ const sources: Sources = {
   addServerRecord: async ([kind, name, url], store) => {
     try {
       if (kind !== 'jellyfin' && kind !== 'emby' && kind !== 'plex') throw new Error(msg('server.probe.unsupported'));
+      if (pageOriginBound.startsWith('https:') && /^http:/i.test(url.trim())) throw new Error(msg('server.probe.insecure', { url: url.trim() }));
       return { id: servers(store).add(kind, name.trim() || kindLabel(kind), url).id, error: '' };
     } catch (error) { return { id: '', error: error instanceof Error ? error.message : 'Server could not be added' }; }
   },

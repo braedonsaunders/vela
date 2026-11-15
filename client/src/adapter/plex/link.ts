@@ -55,9 +55,10 @@ export class PlexLink {
     const pick = usable.find(x => x.r.owned && secure(x.connections[0].uri) && !x.connections[0].relay) ?? usable[0];
     return usable.map(x => ({ id: x.r.clientIdentifier, name: x.r.name, owned: x.r.owned, connection: kind(x.connections[0]), recommended: x === pick }));
   }
-  /** A secure page cannot read plain-HTTP servers; relays are a last resort. */
+  /** A secure page cannot read plain-HTTP servers. plex.direct HTTPS first, relays last. */
   private reachable(resource: PlexResource, pageSecure: boolean) {
-    return resource.connections.filter(c => !pageSecure || secure(c.uri));
+    const rank = (c: PlexResource['connections'][number]) => c.relay ? 3 : secure(c.uri) ? (direct(c.uri) ? 0 : 1) : 2;
+    return resource.connections.filter(c => !pageSecure || secure(c.uri)).sort((a, b) => rank(a) - rank(b));
   }
   /**
    * The chosen server's first connection that proves it is that server: its own `/identity`

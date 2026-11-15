@@ -297,7 +297,8 @@ shape ServerList
   servers: ServerOption[]
   selectedId: string
 
-// state: "" (nothing asked) | "checking" | "found" | "invalid" | "unreachable" | "unsupported".
+// state: "" (nothing asked) | "checking" | "found" | "invalid" | "unreachable" | "unsupported"
+// | "insecure" (plain HTTP from an HTTPS page: the browser forbids it; message says how to proceed).
 shape ServerProbe
   url: string
   generation: number
