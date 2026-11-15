@@ -402,5 +402,9 @@
   "search.discoveryEmpty": "Nothing further afield for that description yet.",
   "search.live.comingUp": "Coming up",
   "search.live.until": "{channel} · until {time}",
-  "search.live.channel": "Channel {number}"
+  "search.live.channel": "Channel {number}",
+  "player.audioDefault": "Default track",
+  "player.auto": "Auto",
+  "player.speed": "Speed",
+  "player.normal": "Normal"
 }

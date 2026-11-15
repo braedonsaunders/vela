@@ -1,7 +1,8 @@
+import type {AssEventInput} from './cues';
 import {loadAssAssets,type AssAssets,type AssRendererPort} from './assets';
 export interface AssOutput {render(time:number):void;resize(width:number,height:number):void;dispose():void}
 /** Canvas is owned by this selection. Retiring it prevents stale worker renders reaching a new selection. */
-export async function createAssOutput(options:{canvas:HTMLCanvasElement;content:string;fonts:readonly Uint8Array[];assetBaseURL:string;signal:AbortSignal;onFailure:()=>void}):Promise<AssOutput>{
+export async function createAssOutput(options:{canvas:HTMLCanvasElement;content:string;events?:readonly AssEventInput[];fonts:readonly Uint8Array[];assetBaseURL:string;signal:AbortSignal;onFailure:()=>void}):Promise<AssOutput>{
   if(options.content.length>8*1024*1024||options.fonts.reduce((n,font)=>n+font.length,0)>32*1024*1024)throw new Error('ASS document/fonts exceed bounds');
   const signal=AbortSignal.any([options.signal,AbortSignal.timeout(10000)]);let assets:AssAssets|undefined,renderer:AssRendererPort|undefined;
   try{
@@ -19,6 +20,16 @@ export async function createAssOutput(options:{canvas:HTMLCanvasElement;content:
       const ready=()=>{clean();resolve()},error=()=>{clean();reject(new Error('ASS renderer initialization failed'))},abort=()=>{clean();reject(signal.reason)};
       output.addEventListener('ready',ready,{once:true});output.addEventListener('error',error,{once:true});signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();
     });
+    if(options.events){
+      if(options.events.length>8192)throw new Error('ASS event window exceeds bound');
+      const styles=await new Promise<{Name:string}[]>((resolve,reject)=>{
+        const abort=()=>{clearTimeout(timer);reject(signal.reason)},timer=setTimeout(()=>{signal.removeEventListener('abort',abort);reject(new Error('ASS styles exceeded deadline'))},2000);
+        signal.addEventListener('abort',abort,{once:true});
+        output.getStyles((error,value)=>{clearTimeout(timer);signal.removeEventListener('abort',abort);if(error)reject(new Error('ASS styles unavailable'));else resolve(value)});if(signal.aborted)abort();
+      });
+      const names=new Map<string,number>();styles.forEach((style,index)=>names.set(style.Name,index));if(!styles.length)throw new Error('ASS header has no usable styles');
+      for(const event of options.events){signal.throwIfAborted();output.createEvent({...event,Style:names.get(event.Style)??names.get('Default')??0})}
+    }
     let disposed=false;const failed=()=>{if(!disposed)options.onFailure()};output.addEventListener('error',failed);
     const dispose=()=>{if(disposed)return;disposed=true;options.signal.removeEventListener('abort',dispose);output.removeEventListener('error',failed);output.destroy();assets?.dispose()};
     options.signal.addEventListener('abort',dispose,{once:true});if(options.signal.aborted){dispose();throw options.signal.reason}
