@@ -77,7 +77,7 @@ theme
     when pack=installed: #191d24fe
   cinematic.guide-ruler = #0d1015f0  scheme=fixed
     when pack=installed: #0d1015ef
-  cinematic.guide-logo = #ffffff0a  scheme=fixed
+  cinematic.guide-logo = #a0a6b047  scheme=fixed
     when pack=installed: #ffffff09
   cinematic.guide-cell = #ffffff0b  scheme=fixed
     when pack=installed: #ffffff0a

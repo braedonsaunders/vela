@@ -30,6 +30,7 @@ export async function prepareOriginalAudioSwitch(options: {
   url: string; tracks: readonly OriginalAudioIdentity[]; trackId: string;
   registry: ReturnType<typeof createAudioPackages>; maximumOutputChannels: number | null;
   signal: AbortSignal; nightMode?: boolean; forceSoftware?: boolean;
+  fetcher?:typeof fetch;
 }): Promise<PreparedOriginalAudioSwitch> {
   const discrepancies: string[] = [];
   // Notes deliberately use fixed vocabulary, never source labels, URLs or codec bytes.
@@ -64,7 +65,7 @@ export async function prepareOriginalAudioSwitch(options: {
         reservedBytes += end - start + 1;
         if (reservedBytes > 32 * 1024 * 1024) throw new MetadataReadError('Original audio metadata exceeded its read budget');
         headers.set('Range', `bytes=${start}-${end}`);
-        const response = await fetch(url, { ...init, headers, redirect: 'error', credentials: 'same-origin',
+        const response = await (options.fetcher??fetch)(url, { ...init, headers, redirect: 'error', credentials: 'same-origin',
           signal: AbortSignal.any([signal, ...(init?.signal ? [init.signal] : []), AbortSignal.timeout(10_000)]) });
         try {
           requireSuccessfulMediaHTTPResponse(response);

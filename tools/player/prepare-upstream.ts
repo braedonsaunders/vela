@@ -76,6 +76,7 @@ await build({...common, entryPoints:[join(root,runtimeEntry)], format:'esm', out
 await cp(join(root,'client/player/universal/audio/ffmpeg'), join(sourceDir,'vela-audio-hooks'), {recursive:true});
 await copyFile(join(root,'client/player/universal/transport-transform.ts'),join(sourceDir,'vela-transport-transform.ts'));
 await copyFile(join(root,'client/player/universal/transport.ts'),join(sourceDir,'vela-transport.ts'));
+await copyFile(join(root,'client/player/media-auth.ts'),join(sourceDir,'vela-media-auth.ts'));
 await copyFile(join(root,'client/player/universal/video/upstream-transform.ts'), join(sourceDir,'vela-video-transform.ts'));
 if(Bun.argv.includes('--core')){
   await mkdir(join(sourceDir,'vela-core-demux'),{recursive:true});

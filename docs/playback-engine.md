@@ -1677,3 +1677,44 @@ reads up to 100 ms before a seek target for decoder/output trimming. These small
 fixtures establish mechanism and cleanup, **not 4K lab parity or physical A/V
 lipsync**. The earlier four-drop warmup race did not recur. Dedicated Chrome and
 the owned local fixture server were closed after the drive.
+
+### Lab.20 HLS requalification: startup pass, seek blocked
+
+Core39a841 on real 1917 H.264-copy/AAC fMP4 started in **1,400 ms**
+including a71 ms plan. Native AVC/AAC decode presented72frames/drop0 with
+zero audio underruns after3s; maximum physical-clock frame age5.59ms.
+The first4.2MB segment waited661ms for its first byte. No priming failure
+occurred. Idle warmup was claimed before completion and yielded, taking
+416ms of the startup window before metadata acquisition.
+
+The authorized60s seek returned HTTP200 in28ms and a new source generation,
+so the core correctly opened the new HLS source. It presented a preview, but
+subsequent segment acquisition failed with `Invalid segment byte request`.
+Automatic fallback recovered playback near the beginning (6.31s), not the
+requested60s. **Seek fails parity; no production core switch.** The successful
+local same-source seek does not establish offset-HLS seek support. This run
+needs numeric segment-length/read-bound diagnostics before a new qualification.
+Ether correlated this same playback and confirmed a60s encoder restart reused
+`00000.m4s` and `init.mp4` from the preceding epoch with different bytes. Segment0
+was ready640ms after fetch. The public timeline is60s plus the plan's segment
+start, not a segment number inferred from a fixed duration. The confirmed mux
+target was250ms;4s was a code default, not a captured playlist measurement.
+Its worker is adding generation-unique media URLs.
+The measured HTTP seek was28.4ms; the earlier proposed20s authorization diagnosis
+was withdrawn. The driver's15s wait used a too-strict local-epoch comparison
+across replaced runtimes, so it is not a seek-latency measurement.
+
+Session7OV3767GLKYOJSRTTUDXL7GM7F, test device9f2c223b-171d-4df1-9acb-919ae33ff42e:
+Stop returned ended, auth revoke accepted, native view removed all video/canvas
+nodes, and the dedicated Chrome was closed. One stream, no captured media bytes
+or headers.
+
+The follow-up HLS guard explicitly disallows retained HLS readers/demux indexes
+across authoritative seek generations. Every segment cache/in-flight entry is
+keyed by `(sourceGeneration,seekGeneration,url)` inside a newly scoped reader;
+HTTP reads use `cache:no-store`. A repeated filename changing length within one
+generation fails with numeric requested/indexed/available sizes, with no URL or
+headers. Immutable original-file readers still validate ranges/revisions and
+retain their same-source cache for direct seeks. This is client containment;
+it cannot turn a reused server resource into the correct seek-generation bytes.
+A new 1917 seek qualification waits for Ether's generation-unique producer fix.

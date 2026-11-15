@@ -5,7 +5,8 @@ import type {NetworkReadout} from './transport';
 import {playbackMark} from '../timing';
 import { abortable } from './abortable';
 import { QUALIFIED_ORIGINAL_VIDEO } from './qualified';
-import { configureEngineAssets } from '../../../vendor/webgpu-player/src/EngineAssets';
+import { configureEngineAssets,createEngineWorker } from '../../../vendor/webgpu-player/src/EngineAssets';
+import CustomDecodeSession from '../../../vendor/webgpu-player/src/pipeline/CustomDecodeSession';
 import { getCustomPlaybackRuntimeAvailability } from '../../../vendor/webgpu-player/src/capability/CustomPlaybackRuntime';
 import { probeCustomDecodeCapabilities, type CustomDecodeCapabilities } from '../../../vendor/webgpu-player/src/capability/CustomDecodeCapabilities';
 import { getCustomPlaybackEligibility, getAudioMetadataLayout } from '../../../vendor/webgpu-player/src/capability/CustomPlaybackEligibility';
@@ -30,6 +31,7 @@ import { upstreamOptions, type OriginalMedia } from './source';
 export {SubtitleSession} from './subtitles/session';
 
 export interface RuntimeOptions {
+  mediaRequests?:import('../media-auth').MediaRequestPolicy;
   surface: { container: HTMLDivElement; video: HTMLVideoElement };
   assets: { baseURL: string; assetKey: string; audioDecoderURL: string; videoDecoderURL: string };
   retry?: DecoderRetry;
@@ -51,6 +53,7 @@ export class UniversalRuntime {
   private nativeAudio?:HTMLAudioElement;
   private presenter: Presenter;
   private controller?: Controller;
+  private readonly credentialWorkers=new Set<Worker>();
   private loop?: FrameLoop;
   private disposed = false;
   private readonly lifetime = new AbortController();
@@ -135,7 +138,7 @@ export class UniversalRuntime {
     const prewarm = prewarmBrowserAudioContext(48000);
     try {
       playbackMark('metadata:start');
-      media = this.media = await abortable(probeOriginal(media,signal),signal);
+      media = this.media = await abortable(probeOriginal(media,signal,this.options.mediaRequests?.fetch),signal);
       playbackMark('metadata:ready');
       if (!QUALIFIED_ORIGINAL_VIDEO.includes(media.video.codec)) throw new Error(`Original video ${media.video.codec} is not yet qualified; using compatible fallback`);
       // Only the proven HDR10-compatible DV8 base is normalized by the probe.
@@ -145,7 +148,7 @@ export class UniversalRuntime {
       const maximumChannels = this.maximumChannels = prewarm?.audioContext.destination.maxChannelCount ?? null;
       playbackMark('audio:start');
       const preparedAudio = (media.audioTrackCount ?? media.audio.length) > 0 ? await abortable(prepareOriginalAudioSwitch({url:media.url,
-        tracks:media.audio, trackId:media.selectedAudioId ?? media.audio[0]?.id ?? '', registry, maximumOutputChannels:maximumChannels, signal, forceSoftware:this.options.retry?.audio}),signal) : null;
+        tracks:media.audio, trackId:media.selectedAudioId ?? media.audio[0]?.id ?? '', registry, maximumOutputChannels:maximumChannels, signal, forceSoftware:this.options.retry?.audio,fetcher:this.options.mediaRequests?.fetch}),signal) : null;
       playbackMark('audio:ready');
       if (preparedAudio) audioDifferences(preparedAudio.discrepancies,media.audio.find(track => track.id === media.selectedAudioId),preparedAudio.actualTrack);
       media = this.media = preparedAudio ? {...media, selectedAudioId:preparedAudio.actualTrack.id,
@@ -199,6 +202,14 @@ export class UniversalRuntime {
       playbackMark('decode:ready');
       const audioOptions = preparedAudio?.audioOptions ?? {};
       const controller = this.controller = new Controller({
+        // Credential-bearing workers are never put in a shared idle pool for a
+        // later principal. Ordinary Ether sessions keep the library's factory.
+        videoDecodeSessionFactory:this.options.mediaRequests?.authorization()?(handler,audioFactory,nativeFactory,gpuFactory)=>{
+          const factory=()=>{const worker=createEngineWorker('webgpu-player/CustomDecode.worker.js');this.credentialWorkers.add(worker);return worker;};
+          const session=new CustomDecodeSession(handler,factory,null,audioFactory,nativeFactory,gpuFactory);
+          const destroy=session.destroy.bind(session);session.destroy=()=>{try{destroy();}finally{for(const worker of this.credentialWorkers)worker.terminate();this.credentialWorkers.clear();}};
+          return session;
+        }:undefined,
         nativeAudioBridgeFactory:()=>new NativeAudioBridge(eventHandler=>new NativeAudioBackend({eventHandler,
           createAudioElement:()=>{const audio=document.createElement('audio');this.nativeAudio=audio;return audio;}})),
         audioOutputFactory: audio ? createBrowserCustomAudioOutputFactory(prewarm, getWebGPUAudioOutputManager()) : undefined,
@@ -214,7 +225,11 @@ export class UniversalRuntime {
       this.loop = new FrameLoop({ controller, presenter: this.presenter, presentationGeneration: this.generation,
         isCurrent: this.current, onFailure: () => this.failed('Original frame presentation failed') });
       this.visibility();
-      const starting = controller.play({ ...eligibility, ...audioOptions, audioTrackIndex:preparedAudio?.ordinal ?? null, audioMetadataLayout: preparedAudio?.audioMetadataLayout ?? getAudioMetadataLayout(eligibility),
+      // Attach only after eligibility normalizes its source DTO; that parser
+      // deliberately drops unknown fields. Credentials belong solely to the
+      // private worker transport, never to metadata or capability caches.
+      const privateSource={...eligibility.source,velaMediaAuthorization:this.options.mediaRequests?.authorization()};
+      const starting = controller.play({ ...eligibility, ...audioOptions,source:privateSource, audioTrackIndex:preparedAudio?.ordinal ?? null, audioMetadataLayout: preparedAudio?.audioMetadataLayout ?? getAudioMetadataLayout(eligibility),
         audioOutputMode: audio ? 'decoded-pcm' : undefined, startTimeMicroseconds: secondsToMicroseconds(media.position),
         nativeHDRTransfer: eligibility.nativeHDRTransfer ?? null });
       if (!this.wantsPlaying) controller.pause();
@@ -237,7 +252,7 @@ export class UniversalRuntime {
     const signal = AbortSignal.any([this.options.signal, job.signal]);
     try {
       const prepared = await prepareOriginalAudioSwitch({url:this.media.url, tracks:this.media.audio, trackId,
-        registry:this.audioRegistry, maximumOutputChannels:this.maximumChannels, signal});
+        registry:this.audioRegistry, maximumOutputChannels:this.maximumChannels, signal,fetcher:this.options.mediaRequests?.fetch});
       signal.throwIfAborted();
       void this.readout; // Capture the retiring decode generation before restart.
       this.advancePresentation();
@@ -272,6 +287,7 @@ export class UniversalRuntime {
     this.disposed = true; this.lifetime.abort(); this.audioSwitch?.abort(); this.options.signal.removeEventListener('abort', this.abort);
     document.removeEventListener('visibilitychange', this.visibility);
     this.loop?.destroy();
+    for(const worker of this.credentialWorkers)worker.terminate();this.credentialWorkers.clear();
     this.disposing = (async () => { try { await this.controller?.destroy(); } finally { this.nativeAudio=undefined;this.presenter.destroy(); } })();
     return this.disposing;
   }

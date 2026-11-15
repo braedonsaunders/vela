@@ -2,11 +2,22 @@
 export function transformUpstreamTransport(path:string,source:string):string|null{
   const normalized=path.replaceAll('\\','/');
   const module=JSON.stringify(new URL('./transport.ts',import.meta.url).pathname);
+  const authModule=JSON.stringify(new URL('../media-auth.ts',import.meta.url).pathname);
   if(normalized.endsWith('/pipeline/CustomDecode.worker.ts')){
     const begin='        const fetchStartedAt = startTimingWait();';
     const end="        requireValidByteRangeResponse(requestHeaders.get('Range'), response, hiddenContentRangePathPattern);\n        return response;";
     if(source.split(begin).length!==2||source.split(end).length!==2)throw new Error('Pinned decode transport hook changed');
-    return `import {measureDecodeResponse} from ${module};\n`+source.replace(begin,
+    const signature='function createValidatedRangeFetch(hiddenContentRangePathPattern: RegExp | null): typeof fetch {';
+    const read='            response = await fetch(input, requestInit);';
+    const call='createValidatedRangeFetch(source.hiddenContentRangePathPattern ?? null)';
+    const retain='return JSON.stringify([ source.url, hiddenContentRangePathPattern?.source ?? null, hiddenContentRangePathPattern?.flags ?? null ]);';
+    if(source.split(signature).length!==2||source.split(read).length!==2||source.split(call).length!==3||source.split(retain).length!==2)throw new Error('Pinned private media authorization hook changed');
+    const privateValue='(source as typeof source & {velaMediaAuthorization?:MediaAuthorization}).velaMediaAuthorization';
+    source=source.replace(signature,'function createValidatedRangeFetch(hiddenContentRangePathPattern: RegExp | null, authorization?:MediaAuthorization): typeof fetch {\n    const velaFetch=authorizedMediaFetch(authorization);')
+      .replace(read,'            response = await velaFetch(input, requestInit);')
+      .replaceAll(call,`createValidatedRangeFetch(source.hiddenContentRangePathPattern ?? null,${privateValue})`)
+      .replace(retain,`return JSON.stringify([source.url,hiddenContentRangePathPattern?.source??null,hiddenContentRangePathPattern?.flags??null,${privateValue}?.handle??null]);`);
+    return `import {measureDecodeResponse} from ${module};\nimport {authorizedMediaFetch,type MediaAuthorization} from ${authModule};\n`+source.replace(begin,
       begin+'\n        const velaRun=currentRun,velaStarted=performance.now();').replace(end,
       "        requireValidByteRangeResponse(requestHeaders.get('Range'), response, hiddenContentRangePathPattern);\n"+
       "        return measureDecodeResponse(response,velaStarted,sample=>{if(velaRun&&!velaRun.cancelled&&currentRun===velaRun)postResponse({type:'source-progress',generation:velaRun.generation,byteCount:1,velaTransfer:sample} as DecodeWorkerResponse & {velaTransfer:typeof sample});});");
