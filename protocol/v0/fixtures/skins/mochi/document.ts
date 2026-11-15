@@ -28,10 +28,10 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 8 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// Renderer 9 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
-const r6 = (fields: Record<string, unknown>) => fields as object;
+const pending = (fields: Record<string, unknown>) => fields as object;
 const active = (style: Style) => r6({ active: style });
 const candy = { hover: { 'background-color': '$pink-hover' }, focus: { 'box-shadow': ring }, active: press94 };
 const puffy = { hover: { 'background-color': '$lavender-soft' }, focus: { 'box-shadow': ring }, active: press94 };
@@ -197,7 +197,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
   style: { ...col, position: 'relative', 'z-index': '20', 'flex-shrink': '0', 'padding-top': '14px', ...gutter, 'padding-bottom': '8px' }, below: { [COMPACT]: { 'padding-top': '10px', ...gutterSmall, 'padding-bottom': '4px' } }, children: [
     { type: 'box', style: { ...row, height: '66px', 'box-sizing': 'border-box', 'padding-left': '22px', 'padding-right': '10px', 'align-items': 'center', gap: '10px', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$card', 'box-shadow': '0px 5px 0px $ink' },
       below: { [COMPACT]: { height: '56px', 'padding-left': '14px', 'padding-right': '8px', gap: '6px' } }, children: [
-        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { ...row, position: 'relative', 'align-items': 'center', gap: `${26 * 0.24}px`, 'margin-right': '18px', 'flex-shrink': '0', color: '$ink' },
+        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', ...r6({ controlStates: false }), style: { ...row, position: 'relative', 'align-items': 'center', gap: `${26 * 0.24}px`, 'margin-right': '18px', 'flex-shrink': '0', color: '$ink' },
           below: { [COMPACT]: { gap: `${22 * 0.24}px`, 'margin-right': '0px' } }, children: [
             { type: 'box', style: { ...row, 'align-items': 'center', gap: `${26 * 0.24}px` }, below: { [COMPACT]: { display: 'none' } }, children: wordmark(26) },
             { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { ...row, 'align-items': 'center', gap: `${22 * 0.24}px` } }, children: wordmark(22) },
@@ -397,7 +397,7 @@ const searchField: Node = { type: 'box', style: field, states: [{ when: [set('en
   ] },
   { type: 'box', style: badge, states: [{ when: [set('env.searchFocused')], style: { ...badge, 'background-color': '$pink' } }], children: [icon('search', 16)] },
   { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:searchPlaceholder}', label: '{s:searchYourLibrary}', placeholderColor: '$ink-quiet' },
-    style: { flex: '1', 'min-width': '0px', height: '100%', color: '$ink', 'font-family': fredoka, 'font-size': '17px', 'font-weight': '500' } },
+    style: { flex: '1', 'min-width': '0px', height: '100%', color: '$ink', 'font-family': fredoka, 'font-size': '17px', 'font-weight': '500', outline: 'none' } },
   { type: 'box', when: [set('env.searching')], press: { action: 'clearSearch' as Action }, label: '{s:clearSearch}', style: { ...Bubble, ...sz(40) }, ...bubble, children: [icon('close', 12)] },
 ] };
 
@@ -611,11 +611,12 @@ const crew: Node = { type: 'box', when: [ready, set('detail.crewLine')], motion:
 
 const related: Node = { type: 'repeat', over: 'detail.related', when: [ready], item: { type: 'use', template: 'relatedShelf', motion: 'hop500' } as Node };
 
-// The title page opens as a framed page over a blurred scrim, with an ink-ringed close button.
+// The title page opens as a framed page over the route frame's blurred scrim (detail.frame),
+// with an ink-ringed close button.
 // (The compiled trait's frame shadow named `var(--mochi.ink)` in a bound row, which never
 // resolved, so the frame draws without one; matched here.)
 const title: Node = { type: 'box', style: { ...col, position: 'relative', height: '100%' }, children: [
-  { type: 'box', motion: 'scrimIn', style: { ...col, ...inset0, 'box-sizing': 'border-box', padding: '4vh 4vw', 'background-color': '$scrim', 'backdrop-filter': 'blur(18px) saturate(1.1)', color: '$ink' }, small: { padding: '0px' }, children: [
+  { type: 'box', style: { ...col, ...inset0, 'box-sizing': 'border-box', padding: '4vh 4vw', color: '$ink' }, small: { padding: '0px' }, children: [
     { type: 'box', motion: 'pageOpen', style: { ...col, position: 'relative', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': '$page' },
       small: { 'border-radius': '0px' }, children: [
         { type: 'box', id: 'back', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', ...sz(44), 'box-sizing': 'border-box', padding: '13px', border: '3px solid $ink', 'border-radius': '22px', 'background-color': '$card', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: '$ink' },
@@ -654,7 +655,7 @@ const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds 
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
 export default {
-  schema: 1, renderer: 8, id, name: 'Mochi', version,
+  schema: 1, renderer: 9, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true, flatDetail: false },
@@ -715,11 +716,10 @@ export default {
     pop0: popIn(0), pop60: popIn(60), pop120: popIn(120), pop260: popIn(260),
     hop0: hop(0), hop160: hop(160), hop260: hop(260), hop380: hop(380), hop420: hop(420), hop460: hop(460), hop480: hop(480), hop500: hop(500), hopRow: hop(120),
     statusIn: { keyframes: 'dissolve', duration: 400, easing: 'ease-out', fill: 'both', still: fade(200) },
-    scrimIn: { keyframes: 'dissolve', duration: 420, easing: 'ease-out', fill: 'both', still: fade(200) },
     pageOpen: { keyframes: 'open', duration: 680, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both', still: fade(240) },
   },
   templates: { card, shelf: shelf(true), relatedShelf: shelf(false) },
   slots: { shell, home },
   routes: { title },
-  detail: { wide: 'fullscreen', small: 'fullscreen' },
+  detail: { wide: 'fullscreen', small: 'fullscreen', frame: { scrim: '$scrim' } },
 } as unknown as SkinDocument;
