@@ -260,6 +260,16 @@ let plexLink: PlexLink | undefined;
 let plexCode = '';
 let jellyQuick: { handle: string; serverId: string; secret: string; expiresAt: number } | undefined;
 let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift: -1, driftLabel: '', canCatchUp: false };
+/** The last applied skin document (raw, by path): one entry, at most a document's own limit. */
+const SKIN_DOC_KEY = 'vela.skin-doc';
+const SKIN_DOC_MAX = 600 * 1024;
+function keptSkinDoc(store: { get(key: string): string | null }, path: string): unknown {
+  try {
+    const kept = JSON.parse(store.get(SKIN_DOC_KEY) || 'null') as { path?: string; doc?: unknown } | null;
+    return kept?.path === path ? kept.doc : undefined;
+  } catch { return undefined; }
+}
+
 const sources: Sources = {
   uiGuideFocus: async ([at, epoch, localeJSON]) => guideFocus(at, epoch, localeJSON),
   uiLiveIdentity: async ([channelId, epoch, localeJSON], store) => liveIdentity((await session(store)).adapter, channelId, epoch, localeJSON),
@@ -660,17 +670,31 @@ const sources: Sources = {
   },
   uiSkinDoc: async ([url, width, localeJSON], store) => {
     const path = new URL(url).pathname;
+    const locale = String(JSON.parse(localeJSON).locale ?? 'en');
+    const resolve = (doc: unknown) => skinDoc(doc as Parameters<typeof skinDoc>[0], width, API, locale) as unknown as Awaited<ReturnType<Sources['uiSkinDoc']>>;
+    // The last applied document, kept so a cold start draws it before the server answers
+    // (document URLs are versioned, so a kept copy of the same URL is the same document).
+    const kept = keptSkinDoc(store, path);
+    if (kept !== undefined) {
+      try { return resolve(kept); } catch { store.set(SKIN_DOC_KEY, ''); }
+    }
+    let raw: unknown;
     // A built-in document is a static file of this release; a server document lives in the appearance tree.
     if (path.startsWith('/vela/skins/') && path.endsWith('/document.json')) {
       const response = await fetch(`${API}${path}`);
       if (!response.ok) throw new Error(`Built-in skin document ${path}: ${response.status}`);
-      return skinDoc(await response.json(), width, API, String(JSON.parse(localeJSON).locale ?? 'en')) as unknown as Awaited<ReturnType<Sources['uiSkinDoc']>>;
+      raw = await response.json();
+    } else {
+      if (!path.startsWith('/vela/v0/appearance/skins/')) throw new Error('Skin document outside the appearance tree');
+      const ether = server(store).ether;
+      if (!ether) throw new Error('This server publishes no skin documents');
+      raw = await ether.skinDocument(path.slice('/vela/v0'.length));
     }
-    if (!path.startsWith('/vela/v0/appearance/skins/')) throw new Error('Skin document outside the appearance tree');
-    const ether = server(store).ether;
-    if (!ether) throw new Error('This server publishes no skin documents');
     // The model is built from the same tables tools/renderer.ts generates its shapes from.
-    return skinDoc(await ether.skinDocument(path.slice('/vela/v0'.length)), width, API, String(JSON.parse(localeJSON).locale ?? 'en')) as unknown as Awaited<ReturnType<Sources['uiSkinDoc']>>;
+    const model = resolve(raw);
+    const text = JSON.stringify({ path, doc: raw });
+    if (text.length <= SKIN_DOC_MAX) store.set(SKIN_DOC_KEY, text);
+    return model;
   },
   uiAppearance: async (_args, store) => {
     // Appearance is an Ether feature; any other server uses the local built-in appearance.

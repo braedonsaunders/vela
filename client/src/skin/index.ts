@@ -47,8 +47,8 @@ function keyframesCss(doc: SkinDocument): string {
     return `@keyframes dk-${docId}-${name}{${body}}`;
   }).join('');
 }
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
-const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'librarySort', 'librarySortFlip', 'libraryFilter', 'libraryMore', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
+const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites', 'library.items', 'library.kinds', 'library.genres', 'library.sorts']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
 type Part = { l: string; k: number; f: string };
@@ -59,7 +59,7 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
 type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; holds: boolean; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
-export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string; drawsStatus: boolean }
+export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string; drawsStatus: boolean; wash: string; ring: string }
 interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
@@ -275,8 +275,19 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
         level.t = 'searchInput'; level.parts = parts(node.params?.placeholder, r); level.label = parts(node.params?.label ?? node.params?.placeholder, r);
         level.sym = value(node.params?.placeholderColor ?? 'inherit', r);
       }
+      // A native select over a library's options (the platform's control and menu), styled by its node.
+      else if (node.widget === 'select') {
+        if (depth > PAGER_DEPTH) throw new Error(`A select must sit within ${PAGER_DEPTH} levels of its slot`);
+        const over = node.params?.options ?? '';
+        if (!['library.genres', 'library.sorts', 'library.kinds', 'library.played'].includes(over)) throw new Error(`select options: library.genres, library.sorts, library.kinds or library.played, not ${over}`);
+        // library.played lists the document's own choices: "value|label;…" (labels may be {s:key}).
+        if (over === 'library.played') level.ipaths = String(node.params?.choices ?? '').split(';').filter(Boolean).slice(0, 8).map(c => { const [v, ...l] = c.split('|'); return `${v}|${parts(l.join('|'), r).map(p => p.l).join('')}`; });
+        if (!node.params?.action || !ACTIONS.has(node.params.action)) throw new Error(`Unknown select action ${node.params?.action}`);
+        level.t = 'select'; level.sym = over; level.act = node.params.action; level.arg = parts(node.params.arg ?? '{value}', r);
+        level.parts = parts(node.params.none, r); level.label = parts(node.params.label, r); level.test = parts(node.testId, r);
+      }
       // Asks for the next page of home or of its row when it scrolls into view.
-      else if (node.widget === 'sentinel') { if (depth > PAGER_DEPTH) throw new Error(`A sentinel must sit within ${PAGER_DEPTH} levels of its slot`); level.t = 'sentinel'; level.sym = node.params?.on === 'home' ? 'home' : 'row'; }
+      else if (node.widget === 'sentinel') { if (depth > PAGER_DEPTH) throw new Error(`A sentinel must sit within ${PAGER_DEPTH} levels of its slot`); level.t = 'sentinel'; level.sym = node.params?.on === 'home' ? 'home' : node.params?.on === 'library' ? 'library' : 'row'; }
       else throw new Error(`Unknown widget ${node.widget}`);
       break;
     case 'repeat': {
@@ -369,5 +380,9 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
     // The framed title's surround, drawn by the route frame: scrim (colour or token), blur, or flat.
     ...detailFrame(doc, r),
     // Foundation traits the document sets ("" leaves the doc engine's).
-    barMask: tri(doc.traits?.barMask), panSections: tri(doc.traits?.panSections), drawsStatus: doc.status === true };
+    barMask: tri(doc.traits?.barMask), panSections: tri(doc.traits?.panSections), drawsStatus: doc.status === true,
+    // Exact's control hover wash, carried as data (a literal would be checked as an app token).
+    wash: 'linear-gradient(var(--exact-quaternary-fill) 0 0)',
+    // The platform focus ring kept: outline-style reverts to the browser's (Exact's own :focus-visible rule).
+    ring: 'revert' };
 }

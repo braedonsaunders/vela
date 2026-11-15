@@ -157,31 +157,8 @@ component Client
                   // otherwise scroll this sideways and slide the whole page off its section.
                   column flex=1 min-height=0 position="relative" z-index=0 overflow="clip"
                     row height="100%" translate=`${e.name == "home" ? sectionIndex * -100 : 0}% 0px` transition=(not traits.panSections or still ? "none" : "translate 640ms cubic-bezier(0.65, 0, 0.35, 1)")
-                      scroll id=(e.name == "home" ? "home-scroll" : `page-${e.id}`) role=(e.name == "home" ? "region" : "") aria-label=(e.name == "home" ? t("ui.browseAndSearch") : "") scroll=cancelPreviewOnScroll mask-image=(e.name == "home" and traits.barMask ? (small ? "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 64px, black 118px)" : "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 48px, black 96px)") : "none") width="100%" height="100%" flex-shrink=0 inert=(e.name == "home" and sectionIndex != 0) aria-hidden=(e.name == "home" and sectionIndex != 0) opacity=(e.name != "home" or sectionIndex == 0 or not still ? 1 : 0) transition=(not traits.panSections ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
-                        if e.name == "home" and homeKnown
-                          for slotProps in [HomeProps(model=homeSurface, active=(top(nav).name == "home" and sectionIndex == 0 and page.visibilityState == "visible"), query=query, small=homeSmall, still=still, heroIndex=heroAt, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, cardPreview=cardPreview, libraries=(current(libraries) ? libraries : []), canLive=home.liveAvailable)] key="home"
-                            Home(p=slotProps)
-                              for slotProps in [SearchFieldProps(query=query)] key="searchField"
-                                SearchField(p=slotProps)
-                        // The route view: home's tree when a document draws home, else the route's; one call site.
-                        // A document that draws its own status (activeDoc.drawsStatus) gets home while it loads or fails.
-                        if (e.name != "home" or homeKnown or activeDoc.drawsStatus) and docRoutes.includes(e.name)
-                          for routeProps in [RouteProps(route=e.name, entry=`${e.id}`, load=(e.name == "title" ? (failed(detail) ? "failed" : current(detail) ? "ready" : "loading") : e.name == "home" and not homeKnown ? (failed(home) ? "failed" : "loading") : "ready"), detail=(e.name == "title" and current(detail) ? [detailSurface] : []), season=detailSeason, small=(e.name == "home" ? homeSmall : small), tv=(viewport.width >= 1600), width=viewport.width, still=still, home=(e.name == "home" and homeKnown ? [homeSurface] : []), query=query, heroIndex=heroAt, rowMoreLoading=rowMoreLoading, homeMoreLoading=homeMoreLoading, libraries=(current(libraries) ? libraries : []))] key="route"
-                            DocRoute(p=routeProps)
-                              if e.name == "home"
-                                for slotProps in [SearchFieldProps(query=query)] key="searchField"
-                                  SearchField(p=slotProps)
-                        if e.name == "home" and homeKnown and query != ""
-                          for slotProps in [SearchProps(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(searchTimeQuery != query or searchTimeGeneration != generation or pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results) and searchTimeQuery == query and searchTimeGeneration == generation), aiAvailable=home.aiAvailable, descriptiveState=descriptiveState, descriptiveCanRetry=descriptiveCanRetry, aiState=aiState, small=homeSmall, still=still)] key="searchSurface"
-                            SearchSurface(p=slotProps)
-                        if e.name == "home" and not homeKnown and not (activeDoc.drawsStatus and docRoutes.includes("home"))
-                          if failed(home)
-                            for slotProps in [StatusProps(kind="failure", message=t("ui.yourLibraryCouldnTBeReachedCheckYourServerConnection"), canRetry=true, small=homeSmall, still=still)] key="status"
-                              Status(p=slotProps)
-                          else
-                            for slotProps in [StatusProps(kind="home", canRetry=false, message=t("ui.findingYourEvening"), small=homeSmall, still=still)] key="status"
-                              Status(p=slotProps)
-                      for sid in (e.name == "home" ? sectionIds.slice(1) : []) key=sid
+                      // Home (or a route page), then its libraries and Live TV: one loop, one scroll per page, one route view.
+                      for sid in (e.name == "home" ? sectionIds : ["home"]) key=sid
                         if sid == "@live"
                           // Live TV: the guide owns its scrolling; it mounts on first visit and stays (inert) so it keeps its place.
                           column role="region" aria-label=t("ui.live") width="100%" height="100%" flex-shrink=0 min-height=0 inert=(libraryId != "@live") aria-hidden=(libraryId != "@live") opacity=(libraryId == "@live" or not still ? 1 : 0) transition=(not traits.panSections ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
@@ -195,14 +172,37 @@ component Client
                                 else
                                   text t("ui.loadingTheGuide") role="status" padding=32 padding-top=(small ? 120 : 112)
                         else
-                          for lib in libraries.filter(l => l.id == sid) key=lib.id
-                            scroll id=`library-scroll-${lib.id}` role="region" aria-label=lib.name width="100%" height="100%" flex-shrink=0 inert=(lib.id != libraryId) aria-hidden=(lib.id != libraryId) opacity=(lib.id == libraryId or not still ? 1 : 0) transition=(not traits.panSections ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
+                          scroll id=(sid == "home" ? (e.name == "home" ? "home-scroll" : `page-${e.id}`) : `library-scroll-${sid}`) role=(sid == "home" and e.name != "home" ? "" : "region") aria-label=(sid == "home" ? (e.name == "home" ? t("ui.browseAndSearch") : "") : libraries.filter(l => l.id == sid).map(l => l.name).join("")) scroll=cancelPreviewOnScroll mask-image=(sid == "home" and e.name == "home" and traits.barMask ? (small ? "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 64px, black 118px)" : "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 48px, black 96px)") : "none") width="100%" height="100%" flex-shrink=0 inert=(sid == "home" ? e.name == "home" and sectionIndex != 0 : sid != libraryId) aria-hidden=(sid == "home" ? e.name == "home" and sectionIndex != 0 : sid != libraryId) opacity=((sid == "home" ? e.name != "home" or sectionIndex == 0 : sid == libraryId) or not still ? 1 : 0) transition=(not traits.panSections ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
+                            if sid == "home" and e.name == "home" and homeKnown
+                              for slotProps in [HomeProps(model=homeSurface, active=(top(nav).name == "home" and sectionIndex == 0 and page.visibilityState == "visible"), query=query, small=homeSmall, still=still, heroIndex=heroAt, homeMoreLoading=homeMoreLoading, rowMoreLoading=rowMoreLoading, cardPreview=cardPreview, libraries=(current(libraries) ? libraries : []), canLive=home.liveAvailable)] key="home"
+                                Home(p=slotProps)
+                                  for slotProps in [SearchFieldProps(query=query)] key="searchField"
+                                    SearchField(p=slotProps)
+                            // The route view (one call site): home's tree, a route's, or a library page's, when the document draws it.
+                            for shown in [(sid == "home" ? [] : [libraryModel].filter(m => m.id == sid).concat(librarySnapshots.filter(m => m.id == sid)).slice(0, 1))] key="shown"
+                              if (sid == "home" and (e.name != "home" or homeKnown or activeDoc.drawsStatus) and docRoutes.includes(e.name)) or (sid != "home" and docRoutes.includes("library"))
+                                for routeProps in [RouteProps(route=(sid == "home" ? e.name : "library"), entry=(sid == "home" ? `${e.id}` : sid), load=(sid == "home" ? (e.name == "title" ? (failed(detail) ? "failed" : current(detail) ? "ready" : "loading") : e.name == "home" and not homeKnown ? (failed(home) ? "failed" : "loading") : "ready") : shown.length > 0 ? "ready" : sid == libraryId and failed(libraryModel) ? "failed" : "loading"), detail=(e.name == "title" and current(detail) ? [detailSurface] : []), season=detailSeason, small=(e.name == "home" ? homeSmall : small), tv=(viewport.width >= 1600), width=viewport.width, still=still, home=(e.name == "home" and homeKnown ? [homeSurface] : []), query=query, heroIndex=heroAt, rowMoreLoading=rowMoreLoading, homeMoreLoading=homeMoreLoading, libraries=(current(libraries) ? libraries : []), library=(sid == "home" ? [] : shown), libraryLoading=(sid != "home" and sid == libraryId and libraryLoading), libraryMoreLoading=(sid != "home" and sid == libraryId and libraryMoreLoading))] key="route"
+                                  DocRoute(p=routeProps)
+                                    if sid == "home" and e.name == "home"
+                                      for slotProps in [SearchFieldProps(query=query)] key="searchField"
+                                        SearchField(p=slotProps)
+                            if sid == "home" and e.name == "home" and homeKnown and query != ""
+                              for slotProps in [SearchProps(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(searchTimeQuery != query or searchTimeGeneration != generation or pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results) and searchTimeQuery == query and searchTimeGeneration == generation), aiAvailable=home.aiAvailable, descriptiveState=descriptiveState, descriptiveCanRetry=descriptiveCanRetry, aiState=aiState, small=homeSmall, still=still)] key="searchSurface"
+                                SearchSurface(p=slotProps)
+                            if sid == "home" and e.name == "home" and not homeKnown and not (activeDoc.drawsStatus and docRoutes.includes("home"))
+                              if failed(home)
+                                for slotProps in [StatusProps(kind="failure", message=t("ui.yourLibraryCouldnTBeReachedCheckYourServerConnection"), canRetry=true, small=homeSmall, still=still)] key="status"
+                                  Status(p=slotProps)
+                              else
+                                for slotProps in [StatusProps(kind="home", canRetry=false, message=t("ui.findingYourEvening"), small=homeSmall, still=still)] key="status"
+                                  Status(p=slotProps)
+                            if sid != "home" and not docRoutes.includes("library")
                               // One page per library: the live answer when it is this library's, else this
                               // session's last answer for it, so switching source never remounts the page.
-                              for shown in [libraryModel].filter(m => m.id == lib.id).concat(librarySnapshots.filter(m => m.id == lib.id)).slice(0, 1) key=lib.id
-                                for slotProps in [LibraryProps(model=shown, loading=(lib.id == libraryId and libraryLoading), moreLoading=(lib.id == libraryId and libraryMoreLoading), small=small, still=still)] key="library"
+                              for shown in [libraryModel].filter(m => m.id == sid).concat(librarySnapshots.filter(m => m.id == sid)).slice(0, 1) key=sid
+                                for slotProps in [LibraryProps(model=shown, loading=(sid == libraryId and libraryLoading), moreLoading=(sid == libraryId and libraryMoreLoading), small=small, still=still)] key="library"
                                   Library(p=slotProps)
-                              if lib.id == libraryId and libraryModel.id != lib.id and librarySnapshots.filter(m => m.id == lib.id).length == 0
+                              if sid == libraryId and libraryModel.id != sid and librarySnapshots.filter(m => m.id == sid).length == 0
                                 if failed(libraryModel)
                                   for slotProps in [StatusProps(kind="failure", message=t("library.couldNotOpen"), canRetry=true, small=small, still=still)] key="status"
                                     Status(p=slotProps)
@@ -210,7 +210,7 @@ component Client
                                   for slotProps in [StatusProps(kind="library", canRetry=false, message=t("ui.findingTitles"), small=small, still=still)] key="status"
                                     Status(p=slotProps)
                               // Panels not yet visited show their shape (still) so a long pan passes over content.
-                              if lib.id != libraryId and libraryModel.id != lib.id and librarySnapshots.filter(m => m.id == lib.id).length == 0
+                              if sid != libraryId and libraryModel.id != sid and librarySnapshots.filter(m => m.id == sid).length == 0
                                 for slotProps in [StatusProps(kind="library", canRetry=false, message=t("ui.findingTitles"), small=small, still=true)] key="status"
                                   Status(p=slotProps)
         if e.name == "live"

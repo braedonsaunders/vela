@@ -47,6 +47,8 @@ export type Action =
   | 'clearSearch' | 'focusSearch'
   /** Page a row's pager by one page (arg: the row id). */
   | 'pageNext' | 'pagePrev'
+  /** A library page: sort by an option, flip the direction, filter name|value, load more titles. */
+  | 'librarySort' | 'librarySortFlip' | 'libraryFilter' | 'libraryMore'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
 
@@ -99,7 +101,9 @@ export interface UseNode extends NodeBase { type: 'use'; template: string }
 export interface SlotNode extends NodeBase { type: 'slot'; slot: 'children' | 'searchField'; /** The inner box around the content (`style` is the outer). */ inner?: Style }
 /** A compiled interactive part, styled by `params`: `skinPicker`, `install`, `heroPreview`, `cardPreview`. */
 /** Widgets: `install`, `observe`, `liveTile`; `searchInput` (params placeholder, label, placeholderColor; its node style sets the
- *  text's colour and font) within 3 levels of home or the shell; `sentinel` (params.on: `row` | `home`) asks for the next page. */
+ *  text's colour and font) within 3 levels of home or the shell; `sentinel` (params.on: `row` | `home` | `library`) asks for
+ *  the next page; `select` (params options: library.genres | library.sorts | library.kinds, action, arg with {value},
+ *  none: a leading empty option's label, label) is the platform select styled by its node. */
 export interface WidgetNode extends NodeBase { type: 'widget'; widget: string; params?: Record<string, string> }
 export type Node = BoxNode | TextNode | ImageNode | IconNode | RepeatNode | UseNode | SlotNode | WidgetNode;
 
