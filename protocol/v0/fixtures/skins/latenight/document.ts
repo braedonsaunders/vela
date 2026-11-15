@@ -1,0 +1,348 @@
+// Late Night: the home as an old television set, as a skin document (protocol/v0/skin.ts).
+// The retro lives in the frame and the transitions: a bezel with a curved, vignetted
+// screen, faint scanlines, an on-screen display (channel bug, preset buttons, tape
+// counter) and a burst of static when a channel (section, row, featured title) tunes in.
+// Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
+import type { Node, SkinDocument, Style } from '../../../skin';
+
+const id = 'latenight', version = '1.0.0';
+const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
+
+// Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
+// printed tape-box type, Permanent Marker for hand-written tape labels. System sans
+// carries summaries so long text reads cleanly.
+const osd = '"Late Night OSD", "VT323", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+const print = '"Late Night Print", "Michroma", "Eurostile", "Microgramma", system-ui, sans-serif';
+const marker = '"Late Night Marker", "Permanent Marker", "Marker Felt", "Comic Sans MS", cursive';
+const sans = 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif';
+
+// The screen sits inside the bezel; the route is padded by the same amount.
+const bezel = { normal: '12px', wide: '18px', small: '0px' };
+const radius = { normal: '30px', wide: '38px', small: '0px' };
+const inset = (b: string): Style => ({ top: b, right: b, bottom: b, left: b });
+const gutter: Style = { 'padding-left': 'max(30px, 3.6vw)', 'padding-right': 'max(30px, 3.6vw)' };
+const gutterSmall: Style = { 'padding-left': '16px', 'padding-right': '16px' };
+
+// The OSD look: phosphor text with a hard black drop so it reads over any picture.
+const osdText = (size: string, colour = '$osd'): Style => ({ 'font-family': osd, 'font-size': size, 'line-height': '1', color: colour, 'text-transform': 'uppercase', 'letter-spacing': '0.04em', 'text-shadow': '2px 2px 0px $shadow, 0px 0px 10px $osd-glow' });
+// RGB misregistration, the one glitch content is allowed: only on hover/focus rings and big titles.
+const split = (px: number) => `${-px}px 0px 0px $chroma-red, ${px}px 0px 0px $chroma-cyan`;
+
+// One burst of snow: drawn only when motion is allowed, gone (opacity 0) once it has played.
+const snow = (motion: string, extra: Partial<Node> = {}): Node => ({ type: 'box', motion, when: [{ test: 'env.still', not: true }], ...extra,
+  style: { position: 'absolute', ...inset('0px'), 'pointer-events': 'none', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$snow-ground', ...(extra.style ?? {}) } as Style,
+  children: [{ type: 'image', src: asset('static.svg'), alt: '', style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover', opacity: '0.9' } }] } as Node);
+
+// ---------------------------------------------------------------- shell
+// The brand lockup (two-tone, as an asset), one image node.
+const wordmark = (h: number): Node => ({ type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: `${Math.round(h * 2.629)}px`, height: `${h}px` } });
+
+// A channel on the dial: number, then name. The current one is lit like a VCR menu row.
+const channel = (num: string, name: string, on: Node['when'], press: { action: 'home' | 'library'; arg?: string }, testId?: string): Node => ({
+  type: 'box', group: true, press, label: name, testId,
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '7px', height: '36px', 'box-sizing': 'border-box', padding: '9px 12px 0px 10px', 'border-radius': '3px', color: '$ink-dim', 'white-space': 'nowrap', 'flex-shrink': '0', transition: 'background-color 120ms linear, color 120ms linear' },
+  hover: { color: '$ink', 'background-color': '$glass' }, focus: { color: '$ink', 'background-color': '$vcr-blue' },
+  children: [
+    { type: 'text', text: num, style: { ...osdText('19px', 'inherit'), 'text-shadow': 'none', opacity: '0.7', 'font-variant-numeric': 'tabular-nums' } },
+    { type: 'text', text: name, style: { 'font-family': print, 'font-size': '11.5px', 'letter-spacing': '0.14em', 'text-transform': 'uppercase', 'line-height': '1' } },
+    { type: 'box', when: on, style: { position: 'absolute', left: '10px', right: '12px', bottom: '3px', height: '2px', 'background-color': '$osd', 'box-shadow': '0px 0px 8px $osd-glow' } },
+  ] });
+
+const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], motion: 'navIn',
+  style: { position: 'absolute', ...inset(bezel.normal), bottom: 'auto', 'z-index': '20', 'pointer-events': 'none' },
+  wide: { ...inset(bezel.wide), bottom: 'auto' }, small: { ...inset(bezel.small), bottom: 'auto' }, children: [
+    { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', height: '150px', 'pointer-events': 'none', 'border-radius': `${radius.normal} ${radius.normal} 0px 0px`, 'background-image': 'linear-gradient(180deg, $scrim-top 0%, $scrim-clear 100%)' },
+      wide: { 'border-radius': `${radius.wide} ${radius.wide} 0px 0px` }, small: { height: '120px', 'border-radius': '0px' } },
+    { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '8px', height: '78px', 'box-sizing': 'border-box', ...gutter, 'pointer-events': 'auto' },
+      small: { height: '58px', ...gutterSmall, gap: '6px', 'padding-top': 'env(safe-area-inset-top)' } as Style, children: [
+        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', 'margin-right': '18px', 'flex-shrink': '0' }, small: { 'margin-right': '6px' }, children: [wordmark(26)] },
+        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '2px', flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 92%, transparent 100%)' },
+          small: { display: 'none' }, children: [
+            channel('03', '{s:home}', [{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }, 'channel-home'),
+            { type: 'repeat', over: 'nav.destinations', item: channel('1{index.label}', '{dest.name}', [{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }) },
+          ] },
+        { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1' } },
+        // The channel bug: always on, the way a set shows what it is tuned to.
+        { type: 'box', role: 'status', label: '{s:tunedTo}', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'baseline', gap: '6px', 'margin-right': '10px', 'flex-shrink': '0' }, small: { 'margin-right': '2px' }, children: [
+          { type: 'text', text: 'CH', style: osdText('18px') },
+          { type: 'text', when: [{ test: 'env.section', is: 'eq', value: 'home' }], text: '03', style: { ...osdText('32px'), 'font-variant-numeric': 'tabular-nums' } },
+          { type: 'text', when: [{ test: 'env.section', is: 'eq', value: 'live' }], text: '{s:live}', style: osdText('32px', '$rec') },
+          { type: 'repeat', over: 'nav.destinations', item: { type: 'text', when: [{ test: 'dest.on' }], text: '1{index.label}', style: { ...osdText('32px'), 'font-variant-numeric': 'tabular-nums' } } },
+        ] },
+        { type: 'box', press: { action: 'search' }, label: '{s:search}', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '40px', height: '40px', 'box-sizing': 'border-box', 'border-radius': '4px', border: '1px solid $edge', 'background-color': '$glass', color: '$ink', 'flex-shrink': '0' },
+          hover: { 'background-color': '$glass-hi' }, focus: { 'background-color': '$vcr-blue', 'border-color': '$ink' },
+          children: [{ type: 'icon', symbol: 'search', style: { width: '18px', height: '18px' } }] },
+        { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '9px', height: '40px', 'box-sizing': 'border-box', padding: '0px 12px 0px 4px', 'border-radius': '4px', border: '1px solid $edge', 'background-color': '$glass', color: '$ink-dim', 'flex-shrink': '0' },
+          hover: { 'background-color': '$glass-hi', color: '$ink' }, focus: { 'background-color': '$vcr-blue', color: '$ink' }, small: { padding: '0px 4px' }, children: [
+            { type: 'text', text: '{env.viewerInitial}', style: { width: '30px', height: '30px', 'border-radius': '2px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', ...osdText('22px', '$ink-on-label'), 'text-shadow': 'none', 'background-image': 'linear-gradient(180deg, $tape-red 0%, $tape-red 33%, $tape-orange 33%, $tape-orange 66%, $tape-yellow 66%, $tape-yellow 100%)' } },
+            { type: 'text', text: '{env.viewer}', style: { 'font-family': print, 'font-size': '11px', 'letter-spacing': '0.12em', 'text-transform': 'uppercase' }, small: { display: 'none' } },
+          ] },
+      ] },
+    // Phones: the dial is a strip of channel buttons under the bar.
+    { type: 'box', style: { display: 'none' }, small: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '2px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', ...gutterSmall, 'padding-left': '8px', 'pointer-events': 'auto', 'mask-image': 'linear-gradient(90deg, black 0%, black 88%, transparent 100%)' } as Style, children: [
+      channel('03', '{s:home}', [{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }),
+      { type: 'repeat', over: 'nav.destinations', item: channel('1{index.label}', '{dest.name}', [{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }) },
+    ] },
+  ] };
+
+const menuRow = (label: string, icon: string, press: { action: 'openPicker' | 'signOut' }, testId?: string): Node & { type: 'box' } => ({ type: 'box', press, label, testId,
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center', padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', color: '$ink', ...osdText('22px', '$ink'), 'text-shadow': 'none' },
+  hover: { 'background-color': '$glass-hi' }, focus: { 'background-color': '$vcr-blue' }, children: [
+    { type: 'icon', symbol: icon, style: { width: '16px', height: '16px', color: '$osd' } },
+    { type: 'text', text: label, style: { flex: '1' } },
+  ] });
+
+// The profile menu, drawn as a VCR setup menu on the classic blue.
+const menu: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'pop', role: 'dialog', label: '{s:menu}',
+  style: { position: 'absolute', top: 'calc(12px + 74px)', right: 'calc(12px + max(30px, 3.6vw))', 'z-index': '30', width: '290px', 'box-sizing': 'border-box', padding: '18px 22px 16px', display: 'flex', 'flex-direction': 'column', gap: '10px', 'border-radius': '4px', border: '2px solid $ink', 'background-color': '$vcr-menu', 'box-shadow': '8px 8px 0px $shadow, 0px 30px 80px $shadow' },
+  wide: { top: 'calc(18px + 74px)', right: 'calc(18px + max(30px, 3.6vw))' }, small: { top: '62px', right: '10px', width: 'calc(100% - 20px)', 'max-width': '320px' }, children: [
+    { type: 'text', text: '{s:menuTitle}', style: { ...osdText('20px', '$ink'), 'text-shadow': 'none', 'letter-spacing': '0.16em', opacity: '0.75' } },
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center' }, children: [
+      { type: 'text', text: '{env.viewerInitial}', style: { width: '40px', height: '40px', 'border-radius': '3px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', ...osdText('28px', '$ink-on-label'), 'text-shadow': 'none', 'background-image': 'linear-gradient(180deg, $tape-red 0%, $tape-red 33%, $tape-orange 33%, $tape-orange 66%, $tape-yellow 66%, $tape-yellow 100%)' } },
+      { type: 'text', text: '{env.viewer}', style: { 'font-family': print, 'font-size': '13px', 'letter-spacing': '0.1em', 'text-transform': 'uppercase', flex: '1', 'line-clamp': '1' } },
+    ] },
+    { type: 'box', style: { height: '0px', border: '1px dashed $edge', 'margin-top': '4px' } },
+    { ...menuRow('{s:appearance}', 'forward-chevron', { action: 'openPicker' }, 'skin-picker'), children: [
+      { type: 'icon', symbol: 'play-fill', style: { width: '12px', height: '12px', color: '$osd' } },
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px', flex: '1' }, children: [
+        { type: 'text', text: '{s:appearance}' },
+        { type: 'text', text: '{s:skinName}', style: { 'font-family': print, 'font-size': '10px', 'letter-spacing': '0.14em', opacity: '0.7' } },
+      ] },
+      { type: 'icon', symbol: 'forward-chevron', style: { width: '12px', height: '12px' } },
+    ] },
+    { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
+    { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
+    menuRow('{s:signOut}', 'sign-out', { action: 'signOut' }),
+  ] };
+
+// The glass: bezel and curved corners, vignette, faint scanlines, a sheen, and now and
+// then a tracking band rolling down. Nothing here takes pointer input.
+const glass: Node = { type: 'box', style: { position: 'absolute', ...inset('0px'), 'z-index': '40', 'pointer-events': 'none', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
+  { type: 'box', style: { position: 'absolute', ...inset(bezel.normal), 'border-radius': radius.normal, 'overflow-x': 'hidden', 'overflow-y': 'hidden',
+      'box-shadow': '0px 0px 0px 80px $bezel, inset 0px 0px 0px 1px $bezel-lip, inset 0px 0px 140px $vignette, inset 0px 0px 40px $vignette-edge' },
+    wide: { ...inset(bezel.wide), 'border-radius': radius.wide }, small: { ...inset(bezel.small), 'border-radius': radius.small, 'box-shadow': 'inset 0px 0px 90px $vignette' }, children: [
+      // Scanlines, at device pixels, light enough that posters stay sharp.
+      { type: 'box', style: { position: 'absolute', ...inset('0px'), 'background-image': 'repeating-linear-gradient(180deg, $scanline 0px, $scanline 1px, transparent 1px, transparent 3px)', opacity: '0.55' } },
+      // The tube's curvature: a soft hot spot and darker corners.
+      { type: 'box', style: { position: 'absolute', ...inset('0px'), 'background-image': 'radial-gradient(ellipse 85% 75% at 50% 45%, $scrim-clear 55%, $corner-shade 100%)' } },
+      { type: 'box', style: { position: 'absolute', top: '-30%', left: '-10%', width: '70%', height: '70%', 'background-image': 'radial-gradient(closest-side, $sheen 0%, $scrim-clear 100%)', opacity: '0.7' }, small: { display: 'none' } },
+      // A tracking band, now and then (the easing holds it off screen most of the cycle).
+      { type: 'box', when: [{ test: 'env.still', not: true }], motion: 'tracking', style: { position: 'absolute', left: '0px', right: '0px', top: '0px', height: '100%' }, children: [
+        { type: 'box', style: { position: 'absolute', left: '0px', right: '0px', bottom: '0px', height: '64px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'mask-image': 'linear-gradient(180deg, transparent 0%, black 35%, black 65%, transparent 100%)', 'background-image': 'linear-gradient(180deg, $scrim-clear 0%, $band 50%, $scrim-clear 100%)' }, children: [
+          { type: 'image', src: asset('static.svg'), alt: '', style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover', opacity: '0.18' } },
+        ] },
+      ] },
+    ] },
+] };
+
+// Changing channel: snow across the screen, then the bug says where you are. One per
+// section, so each mounts (and plays) when that section comes on.
+const flipLayer = (when: Node['when'], extra: Node[] = []): Node => ({ type: 'box', when, style: { position: 'absolute', ...inset(bezel.normal), 'z-index': '35', 'pointer-events': 'none', 'border-radius': radius.normal, 'overflow-x': 'hidden', 'overflow-y': 'hidden' },
+  wide: { ...inset(bezel.wide), 'border-radius': radius.wide }, small: { ...inset(bezel.small), 'border-radius': radius.small }, children: [snow('flip'), ...extra] });
+const bigBug = (text: string, name: string): Node => ({ type: 'box', when: [{ test: 'env.still', not: true }], motion: 'bugOut',
+  style: { position: 'absolute', top: '108px', right: 'max(34px, 4vw)', display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-end', gap: '4px' }, small: { top: '112px', right: '18px' }, children: [
+    { type: 'text', text, style: { ...osdText('84px'), 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '60px' } },
+    { type: 'text', text: name, style: osdText('26px') },
+  ] });
+const flips: Node[] = [
+  flipLayer([{ test: 'env.viewer' }, { test: 'env.section', is: 'eq', value: 'home' }], [bigBug('CH 03', '{s:home}')]),
+  flipLayer([{ test: 'env.viewer' }, { test: 'env.section', is: 'eq', value: 'live' }], [bigBug('{s:live}', '{s:liveTv}')]),
+  { type: 'repeat', over: 'nav.destinations', item: flipLayer([{ test: 'dest.on' }], [bigBug('CH 1{index.label}', '{dest.name}')]) },
+];
+
+const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$page', color: '$ink', 'font-family': sans }, children: [
+  { type: 'slot', slot: 'children', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', ...inset('0px'), 'padding-top': bezel.normal, 'padding-right': bezel.normal, 'padding-bottom': bezel.normal, 'padding-left': bezel.normal, 'box-sizing': 'border-box' } as Style,
+    wide: { 'padding-top': bezel.wide, 'padding-right': bezel.wide, 'padding-bottom': bezel.wide, 'padding-left': bezel.wide } as Style,
+    small: { 'padding-top': bezel.small, 'padding-right': bezel.small, 'padding-bottom': bezel.small, 'padding-left': bezel.small } as Style,
+    inner: { display: 'flex', 'flex-direction': 'column', 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } as Style },
+  ...flips,
+  nav,
+  menu,
+  glass,
+] };
+
+// ---------------------------------------------------------------- home
+// The broadcast: the featured title's picture, crisp, behind the first rows.
+const stage: Node = { type: 'repeat', over: 'home.hero', item: { type: 'box', motion: 'tuneIn', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', height: 'max(640px, 88vh)', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'pointer-events': 'none', 'mask-image': 'linear-gradient(180deg, black 0%, black 66%, transparent 100%)' },
+  small: { height: '600px' }, children: [
+    { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'absolute', ...inset('0px') }, children: [
+      { type: 'image', when: [{ test: 'hero.backdrop' }], src: '{hero.backdrop}', alt: '', fade: true, style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover', transition: 'opacity 300ms linear' } },
+      { type: 'image', when: [{ test: 'hero.backdrop', not: true }, { test: 'hero.poster' }], src: '{hero.poster}', alt: '', style: { position: 'absolute', top: '-20%', left: '-20%', width: '140%', height: '140%', 'object-fit': 'cover', filter: 'blur(80px) saturate(1.4)', opacity: '0.6' } },
+    ] },
+    { type: 'image', when: [{ test: 'env.searching' }, { test: 'hero.backdrop' }], src: '{hero.backdrop}', alt: '', style: { position: 'absolute', top: '-12%', left: '-12%', width: '124%', height: '124%', 'object-fit': 'cover', filter: 'blur(60px) saturate(1.3)', opacity: '0.35' } },
+    { type: 'box', style: { position: 'absolute', ...inset('0px'), 'background-image': 'linear-gradient(90deg, $scrim-deep 0%, $scrim-mid 34%, $scrim-clear 70%), linear-gradient(0deg, $page 0%, $scrim-strong 22%, $scrim-clear 56%), linear-gradient(180deg, $scrim-top 0%, $scrim-clear 24%)' } },
+    // The picture tunes in: one burst of snow every time the featured title changes.
+    snow('tune'),
+  ] } };
+
+const vcrButton = (primary: boolean): Style => ({ position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '12px', height: '54px', 'box-sizing': 'border-box', padding: primary ? '0px 26px 0px 20px' : '0px 22px 0px 18px', 'border-radius': '4px',
+  border: primary ? '2px solid $ink' : '2px solid $edge-strong', 'background-color': primary ? '$ink' : '$osd-plate', color: primary ? '$ink-on-label' : '$ink', 'box-shadow': '4px 4px 0px $shadow', transition: 'translate 120ms steps(2), box-shadow 120ms steps(2), background-color 120ms linear' });
+const pressed: Style = { translate: '2px 2px', 'box-shadow': `2px 2px 0px $shadow, ${split(2)}` };
+
+const heroPlay: Node = { type: 'box', press: { action: 'play', arg: '{hero.id}' }, label: '{heroAct.actionLabel}', testId: 'hero-primary', when: [{ test: 'heroAct.playable' }],
+  style: vcrButton(true), hover: { ...pressed, 'background-color': '$ink-bright' }, focus: { ...pressed, 'background-color': '$ink-bright' }, small: { height: '50px' }, children: [
+    { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' } },
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '2px' }, children: [
+      { type: 'text', text: '{heroAct.actionLabel}', style: { ...osdText('28px', 'inherit'), 'text-shadow': 'none' } },
+      { type: 'text', when: [{ test: 'heroAct.actionDetail' }], text: '{heroAct.actionDetail}', style: { 'font-family': print, 'font-size': '9.5px', 'letter-spacing': '0.12em', 'text-transform': 'uppercase', opacity: '0.7' } },
+    ] },
+    // The tape counter: how much of it you have already watched.
+    { type: 'box', when: [{ test: 'heroAct.hasProgress' }], style: { width: '54px', height: '8px', 'box-sizing': 'border-box', border: '1px solid $ink-on-label', padding: '1px' }, children: [
+      { type: 'box', style: { height: '100%', width: '{heroAct.progressPct}%', 'background-image': 'repeating-linear-gradient(90deg, $ink-on-label 0px, $ink-on-label 4px, transparent 4px, transparent 6px)' } },
+    ] },
+  ] };
+const heroInfo = (primary: boolean): Node => ({ type: 'box', press: { action: 'select', arg: '{hero.kindId}' }, label: '{s:moreInfo}', testId: 'hero-more', when: [{ test: 'heroAct.playable', not: primary }],
+  style: vcrButton(primary), hover: pressed, focus: { ...pressed, 'background-color': '$vcr-blue', 'border-color': '$ink', color: '$ink' }, small: { height: '50px' }, children: [
+    { type: 'icon', symbol: 'info', style: { width: '17px', height: '17px' } },
+    { type: 'text', text: '{s:moreInfo}', style: { ...osdText('26px', 'inherit'), 'text-shadow': 'none' } },
+  ] });
+
+const heroCopy: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.searching', not: true }], item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', ...gutter, gap: '14px', 'max-width': '50rem' }, small: { ...gutterSmall, gap: '12px', 'max-width': 'none' }, children: [
+  { type: 'widget', widget: 'observe', params: { receipt: '{hero.receipt}' } },
+  { type: 'box', motion: 'osd1', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
+    { type: 'text', text: '▶ {s:play}', style: { ...osdText('22px'), padding: '3px 8px 1px', 'background-color': '$osd-plate', 'text-shadow': 'none', 'white-space': 'nowrap', 'flex-shrink': '0' }, small: { 'font-size': '18px' } },
+    { type: 'text', text: '{heroAct.reasonLabel}', style: { ...osdText('22px', '$ink'), padding: '3px 8px 1px', 'background-color': '$osd-plate', 'text-shadow': 'none', 'white-space': 'nowrap', 'line-clamp': '1', 'min-width': '0px' }, small: { 'font-size': '18px' } },
+  ] },
+  { type: 'image', when: [{ test: 'hero.logo' }], src: '{hero.logo}', alt: '{hero.name}', role: 'heading', level: 1, motion: 'osd2', style: { height: '140px', width: 'auto', 'max-width': 'min(520px, 72%)', 'object-fit': 'contain', 'align-self': 'flex-start', filter: 'drop-shadow(-2px 0px 0px $chroma-red) drop-shadow(2px 0px 0px $chroma-cyan)' }, small: { height: '92px', 'max-width': '80%' } },
+  { type: 'text', when: [{ test: 'hero.logo', not: true }], text: '{hero.name}', role: 'heading', level: 1, motion: 'osd2', style: { 'font-family': print, 'font-size': '58px', 'line-height': '1.04', 'letter-spacing': '0.01em', 'text-transform': 'uppercase', 'line-clamp': '3', 'text-shadow': `${split(2)}, 0px 6px 40px $shadow` }, wide: { 'font-size': '66px' }, small: { 'font-size': '32px' } },
+  { type: 'text', text: '{hero.factsLine}', motion: 'osd3', style: { ...osdText('24px', '$ink-dim'), 'text-transform': 'none', 'letter-spacing': '0.02em', 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '20px' } },
+  { type: 'text', when: [{ test: 'hero.summary' }], text: '{hero.summary}', motion: 'osd3', style: { 'font-size': '16px', color: '$ink-dim', 'line-height': '1.55', 'line-clamp': '3', 'max-width': '36rem', 'text-shadow': '0px 1px 14px $shadow' }, small: { 'font-size': '14px', 'line-clamp': '2' } },
+  { type: 'box', motion: 'osd4', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'align-items': 'center', 'flex-wrap': 'wrap', 'margin-top': '10px' } as Style, small: { 'margin-top': '4px', gap: '10px' } as Style, children: [heroPlay, heroInfo(false), heroInfo(true)] },
+] } };
+
+// The featured titles are preset buttons: 01, 02, 03... The tuned one is lit, and its
+// timer fills while the set rotates to the next.
+const preset = (current: boolean): Node => ({ type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', when: [{ test: 'index.current', not: !current }],
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '4px', width: '44px', 'box-sizing': 'border-box', 'padding-top': '5px', 'padding-bottom': '6px', 'border-radius': '3px', border: current ? '2px solid $osd' : '2px solid $edge',
+    'background-color': current ? '$osd-plate' : '$glass', color: current ? '$osd' : '$ink-dim', transition: 'background-color 120ms linear, color 120ms linear' },
+  hover: { color: '$ink', 'border-color': '$ink' }, focus: { color: '$ink', 'border-color': '$ink', 'background-color': '$vcr-blue' }, children: [
+    { type: 'text', text: '0{index.label}', style: { ...osdText('22px', 'inherit'), 'text-shadow': 'none', 'font-variant-numeric': 'tabular-nums' } },
+    { type: 'box', style: { position: 'relative', width: '28px', height: '3px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$edge' }, children: current ? [
+      { type: 'box', when: [{ test: 'env.rotating' }], motion: 'presetFill', style: { position: 'absolute', ...inset('0px'), 'background-color': '$osd' } },
+      { type: 'box', when: [{ test: 'env.rotating', not: true }], style: { position: 'absolute', ...inset('0px'), 'background-color': '$osd' } },
+    ] : [] },
+  ] });
+const presets: Node = { type: 'box', role: 'group', label: '{s:featured}', motion: 'osd4', when: [{ test: 'env.searching', not: true }, { test: 'env.heroCount', is: 'gt', value: '1' }],
+  style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', ...gutter, 'padding-top': '26px' } as Style, small: { ...gutterSmall, 'padding-top': '18px', gap: '6px' } as Style, children: [
+    { type: 'text', text: '{s:presets}', style: { ...osdText('18px', '$ink-quiet'), 'text-shadow': 'none', 'margin-right': '6px' }, small: { display: 'none' } },
+    { type: 'repeat', over: 'home.heroes', item: { type: 'box', style: { display: 'flex' }, children: [preset(true), preset(false)] } },
+  ] };
+
+const copyColumn: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'box-sizing': 'border-box', 'min-height': 'calc(clamp(500px, 62vh, 700px) - 90px)', 'padding-top': 'calc(78px + 40px)' },
+  small: { 'min-height': '420px', 'padding-top': 'calc(98px + 30px + env(safe-area-inset-top))' }, children: [heroCopy, presets] };
+
+// A title on the shelf: the poster, crisp. Hover or focus lights an OSD frame with a hint
+// of RGB misregistration; progress is a segmented tape counter.
+const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}',
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'column', width: 'clamp(148px, 12vw, 224px)', 'flex-shrink': '0', gap: '10px' }, small: { width: '128px' }, children: [
+    { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
+    { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '2 / 3', 'background-color': '$raised', 'border-radius': '4px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', translate: '0px 0px',
+        'box-shadow': '0px 0px 0px 1px $hairline, 0px 14px 28px -16px $shadow', transition: 'translate 160ms steps(3), box-shadow 160ms steps(3)' },
+      groupHover: { translate: '0px -5px', 'box-shadow': `0px 0px 0px 2px $ink, ${split(4)}, 0px 22px 40px -14px $shadow` }, children: [
+        { type: 'image', when: [{ test: 'card.poster' }], src: '{card.poster}', alt: '', fade: true, style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover', transition: 'opacity 260ms linear' } },
+        // No poster: a hand-labelled tape.
+        { type: 'box', when: [{ test: 'card.poster', not: true }], style: { position: 'absolute', ...inset('0px'), display: 'flex', 'flex-direction': 'column', 'justify-content': 'center', padding: '12px', 'background-image': 'linear-gradient(180deg, $tape-shell 0%, $tape-shell-deep 100%)' }, children: [
+          { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '6px', padding: '10px 10px 12px', 'background-color': '$label', 'border-radius': '2px', 'box-shadow': 'inset 0px 6px 0px $tape-red, inset 0px 10px 0px $tape-orange, inset 0px 14px 0px $tape-yellow', 'padding-top': '22px' }, children: [
+            { type: 'text', text: '{card.name}', style: { 'font-family': marker, 'font-size': '20px', 'line-height': '1.05', color: '$ink-on-label', 'line-clamp': '4' }, small: { 'font-size': '17px' } },
+          ] },
+        ] },
+        { type: 'box', when: [{ test: 'card.played' }], style: { position: 'absolute', top: '7px', left: '7px', padding: '2px 6px 0px', 'background-color': '$osd-plate', ...osdText('17px'), 'text-shadow': 'none' }, children: [
+          { type: 'text', text: '✓ {s:watched}' },
+        ] },
+        { type: 'box', when: [{ test: 'card.hasProgress' }], style: { position: 'absolute', left: '0px', right: '0px', bottom: '0px', height: '30px', 'background-image': 'linear-gradient(0deg, $scrim-strong 0%, $scrim-clear 100%)' } },
+        { type: 'box', when: [{ test: 'card.hasProgress' }], style: { position: 'absolute', left: '8px', right: '8px', bottom: '8px', height: '7px', 'box-sizing': 'border-box', border: '1px solid $osd', padding: '1px', 'background-color': '$osd-plate' }, children: [
+          { type: 'box', style: { height: '100%', width: '{card.progressPct}%', 'background-image': 'repeating-linear-gradient(90deg, $osd 0px, $osd 4px, transparent 4px, transparent 6px)' } },
+        ] },
+      ] },
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px', padding: '0px 1px' }, children: [
+      { type: 'text', text: '{card.name}', style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1', color: '$ink' }, groupHover: { color: '$ink-bright' }, small: { 'font-size': '13px' } },
+      { type: 'text', text: '{card.facts}', style: { ...osdText('17px', '$ink-quiet'), 'text-transform': 'none', 'text-shadow': 'none', 'letter-spacing': '0.02em', 'line-clamp': '1', 'font-variant-numeric': 'tabular-nums' } },
+    ] },
+  ] };
+
+// Ranked rows get a big outlined OSD number beside each poster.
+const rankedCard: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end', gap: '2px' }, children: [
+  { type: 'text', text: '{index.label}', style: { 'font-family': osd, 'font-size': '150px', 'line-height': '0.78', color: 'transparent', '-webkit-text-stroke': '2px $osd', 'margin-right': '-6px', 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '104px' } },
+  { type: 'use', template: 'card' },
+] };
+
+// A row is a tape on the shelf: its label, hand-written, with the tape's stripes.
+const row: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '2px', 'padding-bottom': '22px' }, small: { 'padding-bottom': '14px' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '12px', ...gutter }, small: gutterSmall, children: [
+    { type: 'text', text: 'CH {index.label}', style: { ...osdText('22px'), 'font-variant-numeric': 'tabular-nums', 'flex-shrink': '0' }, small: { 'font-size': '19px' } },
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'min-width': '0px', 'max-width': '100%', height: '38px', 'box-sizing': 'border-box', 'padding-left': '22px', 'padding-right': '16px', 'background-color': '$label', 'border-radius': '2px',
+        'background-image': 'linear-gradient(90deg, $tape-red 0px, $tape-red 5px, $tape-orange 5px, $tape-orange 10px, $tape-yellow 10px, $tape-yellow 15px, transparent 15px)', 'box-shadow': '3px 3px 0px $shadow' } as Style,
+      small: { height: '32px', 'padding-left': '20px', 'padding-right': '12px' }, children: [
+        { type: 'text', text: '{row.name}', role: 'heading', level: 2, style: { 'font-family': marker, 'font-size': '21px', 'line-height': '1', color: '$ink-on-label', 'white-space': 'nowrap', 'line-clamp': '1', 'padding-top': '3px' }, small: { 'font-size': '17px' } },
+      ] },
+  ] },
+  { type: 'box', style: { position: 'relative', display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'align-items': 'flex-start', 'padding-top': '16px', 'padding-bottom': '18px', ...gutter }, small: { gap: '12px', 'padding-top': '12px', 'padding-bottom': '14px', ...gutterSmall }, children: [
+      { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'ne', value: 'ranked' }], item: { type: 'use', template: 'card' } },
+      { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'eq', value: 'ranked' }], limit: 10, item: { type: 'use', template: 'rankedCard' } },
+    ] },
+    // The row tunes in with a burst of snow, rows one after another down the page.
+    snow('rowFlip', { stagger: { step: 120, cap: 5 } }),
+  ] },
+] };
+
+const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'background-color': '$page', 'min-height': '100%' }, children: [
+  stage,
+  copyColumn,
+  { type: 'slot', slot: 'searchField', style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '34px', 'padding-bottom': '14px', 'padding-left': 'max(30px, 3.6vw)', 'padding-right': 'max(30px, 3.6vw)', 'align-items': 'center' } as Style,
+    small: { 'padding-top': '24px', 'padding-bottom': '8px', 'padding-left': '16px', 'padding-right': '16px' } as Style, inner: { width: '100%', 'max-width': '720px', animation: 'vr-dissolve 300ms steps(3) 360ms both' } },
+  // Rows sit in one container: a repeat's own style (and so its flex order) belongs to its item.
+  { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-top': '26px', 'padding-bottom': '40px' }, small: { 'padding-top': '16px' }, children: [
+    { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'row' } },
+  ] },
+] };
+
+// Motion. `still` is what plays under reduced motion: a plain fade, or nothing.
+const fadeStill = { keyframes: 'dissolve', duration: 200 };
+const osdIn = (delay: number) => ({ keyframes: 'dissolve', duration: 240, delay, easing: 'steps(3, jump-end)', fill: 'both' as const, still: fadeStill });
+
+export default {
+  schema: 1, renderer: 1, id, name: 'Late Night', version,
+  tagline: 'Your library on an old TV set: channel flips, tape labels and a glowing on-screen display.',
+  preview: asset('preview.svg'), swatches: ['#07080b', '#f3eee0', '#7dffa1', '#e8452c', '#f4cf3a'],
+  tokens: {
+    page: '#07080b', raised: '#16171b', bezel: '#0d0d0f', 'bezel-lip': 'rgba(255, 255, 255, 0.06)',
+    ink: '#f3eee0', 'ink-bright': '#ffffff', 'ink-dim': 'rgba(243, 238, 224, 0.72)', 'ink-quiet': 'rgba(243, 238, 224, 0.5)', 'ink-on-label': '#15120d',
+    osd: '#7dffa1', 'osd-glow': 'rgba(125, 255, 161, 0.35)', 'osd-plate': 'rgba(4, 6, 8, 0.82)', rec: '#ff4b3e',
+    'vcr-blue': '#1d33c9', 'vcr-menu': 'rgba(18, 36, 168, 0.96)',
+    'tape-red': '#e8452c', 'tape-orange': '#f59a23', 'tape-yellow': '#f4cf3a', label: '#efe7d2', 'tape-shell': '#1b1b1f', 'tape-shell-deep': '#0b0b0d',
+    'chroma-red': 'rgba(255, 46, 99, 0.75)', 'chroma-cyan': 'rgba(34, 225, 238, 0.75)',
+    glass: 'rgba(255, 255, 255, 0.06)', 'glass-hi': 'rgba(255, 255, 255, 0.13)', edge: 'rgba(243, 238, 224, 0.22)', 'edge-strong': 'rgba(243, 238, 224, 0.55)', hairline: 'rgba(255, 255, 255, 0.08)',
+    shadow: 'rgba(0, 0, 0, 0.75)', scanline: 'rgba(0, 0, 0, 0.32)', vignette: 'rgba(0, 0, 0, 0.62)', 'vignette-edge': 'rgba(0, 0, 0, 0.5)', 'corner-shade': 'rgba(0, 0, 0, 0.38)', sheen: 'rgba(255, 255, 255, 0.05)', band: 'rgba(230, 240, 255, 0.10)',
+    'snow-ground': '#2a2c30',
+    'scrim-top': 'rgba(7, 8, 11, 0.86)', 'scrim-deep': 'rgba(7, 8, 11, 0.9)', 'scrim-mid': 'rgba(7, 8, 11, 0.55)', 'scrim-strong': 'rgba(7, 8, 11, 0.78)', 'scrim-clear': 'rgba(7, 8, 11, 0)',
+  },
+  strings: { en: {
+    velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', menu: 'Profile menu', menuTitle: 'Setup menu',
+    appearance: 'Appearance', skinName: 'Late Night', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out',
+    moreInfo: 'Info', play: 'Play', featured: 'Featured titles', presets: 'Preset', watched: 'Watched', live: 'Live', liveTv: 'Live TV', tunedTo: 'Tuned channel',
+  } },
+  fonts: {
+    osd: { family: 'Late Night OSD', files: [{ url: asset('vt323.ttf'), weight: 400, style: 'normal' }] },
+    print: { family: 'Late Night Print', sizeAdjust: 92, files: [{ url: asset('michroma.ttf'), weight: 400, style: 'normal' }] },
+    marker: { family: 'Late Night Marker', files: [{ url: asset('permanent-marker.ttf'), weight: 400, style: 'normal' }] },
+  },
+  motion: {
+    navIn: { keyframes: 'dissolve', duration: 420, delay: 380, easing: 'steps(4, jump-end)', fill: 'both', still: fadeStill },
+    pop: { keyframes: 'dissolve', duration: 160, easing: 'steps(2, jump-end)', still: { keyframes: 'dissolve', duration: 120 } },
+    // Section change: snow for a moment, then the channel number shows and fades.
+    flip: { keyframes: 'vanish', duration: 420, easing: 'steps(5, jump-end)', fill: 'both' },
+    bugOut: { keyframes: 'vanish', duration: 2600, easing: 'linear(0, 0 72%, 1)', fill: 'both' },
+    // The featured picture tunes in (and its snow clears) whenever the title changes.
+    tuneIn: { keyframes: 'dissolve', duration: 300, easing: 'steps(3, jump-end)', fill: 'both', still: { keyframes: 'dissolve', duration: 300 } },
+    tune: { keyframes: 'vanish', duration: 340, easing: 'steps(4, jump-end)', fill: 'both' },
+    osd1: osdIn(260), osd2: osdIn(330), osd3: osdIn(400), osd4: osdIn(470),
+    presetFill: { keyframes: 'fill', duration: 9000, easing: 'linear', still: { keyframes: 'none', duration: 0 } },
+    rowFlip: { keyframes: 'vanish', duration: 300, delay: 480, easing: 'steps(4, jump-end)', fill: 'both' },
+    // A tracking band rolls down about every 19 s, for under two seconds.
+    tracking: { keyframes: 'scan', duration: 19000, delay: 6000, easing: 'linear(0, 0 91%, 1)', iterations: 'infinite', fill: 'both' },
+  },
+  templates: { card, rankedCard, row },
+  slots: { shell, home },
+  detail: { wide: 'fullscreen', small: 'fullscreen' },
+} satisfies SkinDocument;

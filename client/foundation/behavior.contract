@@ -212,6 +212,9 @@ members Client
   state rowMoreLoading: string[] = []
   derive allHomeRows = home.rows.concat(homeExtraRows).map(r => match first(homeUpdatedRows.filter(u => u.id == r.id)) { case some(u) => u, case none => r })
   derive homeMoreCursor = (homeRowsLoaded ? homeRowsCursor : home.nextCursor)
+  // Home has been answered at least once (a failed or revalidating request keeps its last
+  // answer): the page stays drawn from it; only a home never answered shows a failure.
+  derive homeKnown = current(home) or home.viewer != ""
   derive homeSurface = HomeModel(home, rows=allHomeRows, nextCursor=homeMoreCursor, previews=(previewRow == "@hero" and cardPreview.cardId != "" ? [HeroPreview(id=cardPreview.cardId, url=cardPreview.url, expiresAt=cardPreview.expiresAt)] : []))
   state previewTarget = ""
   state previewRow = ""

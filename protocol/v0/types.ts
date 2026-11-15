@@ -72,10 +72,12 @@ export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; d
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID }
 export interface SearchRequest extends Mutation { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
 export interface LiveSearchResults { channels: Channel[]; programmes: Programme[]; programmeChannels?: Channel[] }
-export interface DescriptiveSearchState { state: 'ready' | 'pending' | 'busy' | 'failed'; retry?: { allowed: boolean; afterSeconds?: number } }
+export interface DescriptiveSearchState { state: 'ready' | 'pending' | 'partial' | 'busy' | 'failed'; retry?: { allowed: boolean; afterSeconds?: number } }
 export interface SearchResponse extends Page<Title> { query: string; generation: number; receiptToken?: string; live?: LiveSearchResults; descriptive?: DescriptiveSearchState }
 export interface AISearchRequest extends Mutation { query: string; generation: number; previousJobId?: ID }
-export interface AISearchJob { id: ID; generation: number; status: 'queued' | 'running' | 'complete' | 'cancelled' | 'failed'; results?: SearchResponse; error?: ProtocolError }
+export interface AISearchJob { id: ID; generation: number; status: 'queued' | 'running' | 'partial' | 'complete' | 'cancelled' | 'failed';
+  /** Required for partial: provisional results replaced by the final response. */
+  results?: SearchResponse; error?: ProtocolError }
 export interface CancelRequest extends Mutation { generation: number }
 export interface Interaction { receiptToken: string; kind: 'visible' | 'selected' | 'played'; occurredAt: Timestamp;
   /** Visible means actually in the visible viewport; never merely prefetched. */
@@ -88,7 +90,15 @@ export interface Track { streamIndex?: number; id: ID; kind: 'audio' | 'subtitle
   /** Subtitle delivery only; streamIndex remains the full source stream index. */
   delivery?: SubtitleDelivery }
 export interface AudioRendition { trackId: ID; groupId: ID; url: string; mimeType: string; bitrate?: number }
-export interface Quality { id: ID; width: number; height: number; bitrate: number; videoCodec: string; audioCodec?: string; url: string; codecStatus?: 'pending' | 'verified'; audioGroupId?: ID }
+export interface QualityTarget { width: number; height: number;
+  /** Total peak bits/second, including audio. */ bitrate: number;
+  /** Target video rate and peak video budget, in bits/second. */
+  videoBitrate?: number; peakVideoBitrate?: number;
+  /** Estimated total average video + audio bits/second. */ averageBitrate?: number;
+  codec?: 'h264' | 'hevc'; videoCodec?: string; codecStatus?: 'pending' | 'verified';
+  /** Intended output, not proof of decoded source colour characteristics. */
+  dynamicRange?: 'sdr' | 'hdr10' | 'hlg' | 'dv' }
+export interface Quality extends QualityTarget { id: ID; videoCodec: string; audioCodec?: string; url: string; audioGroupId?: ID }
 export interface Generations { sourceGeneration: number; seekGeneration: number }
 export interface TrailerPreviewRequest extends Mutation { client: ClientCapabilities }
 export interface PreviewGrant extends Generations { sessionId: ID; url: string; mimeType: string; expiresAt: Timestamp; purpose: 'preview' }
@@ -101,8 +111,8 @@ export interface OriginalVideo { isInterlaced?: boolean; fieldOrder?: 'progressi
 export interface PlaybackPathBase { originalVideo?: OriginalVideo; original?: boolean; range?: boolean; byteLength?: number; id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
   mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
   timelineOriginSeconds?: number; initialRenditionId?: ID; audioRenditions?: AudioRendition[];
-  /** Target output dimensions and bits/second; no codec or readiness claim. */
-  quality?: { width: number; height: number; bitrate: number };
+  /** Output target metadata; readiness remains independent. */
+  quality?: QualityTarget;
   qualities: Quality[]; boundaries: SwitchBoundary[] }
 export type PlaybackPath = PlaybackPathBase & ({ readiness: 'on-demand'; url?: never } | { readiness: 'ready' | 'preparing' | 'unavailable'; url: string });
 export interface Fallback { state: 'unsupported' | 'idle' | 'preparing' | 'ready' | 'unavailable' | 'capacity'; pathId?: ID; reason?: string }
@@ -110,6 +120,7 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   state: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended'; positionSeconds: number; durationSeconds?: number;
   paths: PlaybackPath[]; selectedPathId: ID; audioTracks: Track[]; subtitleTracks: Track[];
   selectedAudioTrackId?: ID; selectedSubtitleTrackId: ID | null; chapters: Chapter[]; fallback: Fallback;
+  qualityLimitations?: { height: number; reason: string }[];
   live?: { mode: 'adaptive' | 'low-delay'; windowStartSeconds?: number; liveEdgeSeconds?: number; maxDriftSeconds?: number } }
 export type PlaybackTarget = { titleId: ID; channelId?: never; extraId?: never } |
   { channelId: ID; titleId?: never; extraId?: never } | { extraId: ID; titleId?: never; channelId?: never };

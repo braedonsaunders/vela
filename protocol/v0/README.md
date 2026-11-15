@@ -202,6 +202,22 @@ without upscaling. Ether's Vela image grants use canonical w/h parameters (not
 width/height aliases), capped at4000; explicit w=0 requests the source/default
 image and preserves an unmeasured-source URL against client sizing fallbacks.
 
+## Partial search results
+
+Descriptive search may return `descriptive.state: "partial"` with early `items`
+and `retry: {allowed: true, afterSeconds: 2}`. AI jobs expose the same stage as
+`status: "partial"`, with a required `results: SearchResponse` whose
+`descriptive.state` is `"partial"`. This is nonterminal: keep polling the existing
+AI job ID, or repeat descriptive search after its retry delay. Do not start a new
+AI job merely because the current one has early results. Cancellation also applies
+to partial jobs.
+
+Present early results only for the current query/generation. A subsequent partial
+or final result replaces that generation's provisional list, rather than appending
+to it. `status: "complete"` supplies the final AI result; descriptive `"ready"`
+supplies the final descriptive result. Early items are real viewer-authorized
+matches, but do not imply completion, a total count or stable final ranking.
+
 ## Appearance and server events
 
 `GET /appearance` is public: it names the server default skin (an engine id or an
@@ -390,6 +406,19 @@ output (pixel dimensions and bits per second), including for on-demand paths.
 It is menu metadata, not codec, init-segment or playability evidence. Switching
 to a lazy quality path must return the actual plan and its rendition readiness;
 clients must not turn target metadata into verified `Quality` entries or a URL.
+
+Both the path's `quality` target and its `qualities[]` entries carry pixel
+`width`/`height` and total peak `bitrate` in bits/second. Optional `videoBitrate`
+is the target video rate, `peakVideoBitrate` the video peak budget, and
+`averageBitrate` the estimated total average video-plus-audio rate, all in
+bits/second. Optional `codec` is the intended `h264`/`hevc` family;
+`dynamicRange` is the intended `sdr`/`hdr10`/`hlg`/`dv` output. These intentions
+do not verify the media. `videoCodec` is an exact RFC6381 value only after init
+verification; pending renditions carry an empty value and `codecStatus: "pending"`,
+then publish `"verified"` with the actual codec. The existing rendition URL and
+codec requirements are unchanged. Optional plan `qualityLimitations` lists absent
+rung heights with server-provided `reason` codes; clients must not invent missing
+rungs, interpret unknown codes as readiness, or silently replace a quality choice.
 
 `POST /auth/web-code` requires bearer/device authentication. Its targetOrigin must
 exactly match an advertised trusted HTTPS origin; the server issues a short-lived

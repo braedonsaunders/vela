@@ -1,3 +1,4 @@
+import {videoInfo} from '../video-info';
 import { configureEngineAssets } from '../../../vendor/webgpu-player/src/EngineAssets';
 import { createCoreAudioOutput } from '../universal/audio/core-output';
 import type { OriginalBackend, OriginalRuntimeOptions, UniversalReadout } from '../universal/loader';
@@ -73,11 +74,12 @@ export class UniversalRuntime implements OriginalBackend {
   get readout():UniversalReadout{
     const state=this.core.snapshot();
     const audioTrackId=[...this.audioAliases].find(([,id])=>id===state.audioTrackId)?.[0]??state.audioTrackId;
-    return {state:state.state==='idle'?'loading':state.state,position:state.positionUs/1e6,duration:state.durationUs===null?null:state.durationUs/1e6,
+    const track=state.tracks.find(track=>track.kind==='video');
+    return {video:track?videoInfo({...track,colorTransfer:track.color.transfer??undefined}):null,bufferAheadSeconds:state.bufferAheadSeconds,throughputBps:state.throughputBps,throughputHistory:state.throughputHistory,state:state.state==='idle'?'loading':state.state,position:state.positionUs/1e6,duration:state.durationUs===null?null:state.durationUs/1e6,
       frames:state.decoded,dropped:state.dropped,presentedFrames:state.presented,decoderReady:state.tracks.some(track=>track.kind==='video'),
       audioTrackId,metadataDiscrepancies:this.notes.slice(0,32)};
   }
-  get presentationTelemetry(){return {presentedFrameCount:this.core.snapshot().presented};}
+  get presentationTelemetry(){return {presentedFrameCount:this.core.snapshot().presented,...this.core.presentationTelemetry};}
   async open(media:OriginalMedia){
     this.options.signal.throwIfAborted();this.media=media;
     const ordered=[...media.audio].sort((a,b)=>a.streamIndex-b.streamIndex);

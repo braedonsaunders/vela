@@ -1,12 +1,15 @@
 import type { Rendition } from './model';
 export class BandwidthEstimator {
   private fast = 0; private slow = 0;
+  private samples:number[]=[];
+  get history(){return [...this.samples];}
   get bps(): number | null { return this.fast ? Math.min(this.fast, this.slow) : null; }
   sample(bytes: number, elapsedMs: number, cached: boolean) {
     if (cached || bytes < 16384 || elapsedMs < 50) return;
     const rate = bytes * 8000 / elapsedMs, seconds = elapsedMs / 1000;
     const blend = (old: number, halfLife: number) => old ? old + (rate - old) * (1 - 2 ** (-seconds / halfLife)) : rate;
     this.fast = blend(this.fast, 3); this.slow = blend(this.slow, 10);
+    this.samples.push(this.bps!);if(this.samples.length>30)this.samples.shift();
   }
 }
 export class AdaptiveBitrate {
