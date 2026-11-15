@@ -4,6 +4,13 @@ use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, chrome, enter, base, g
 // A screening's controls: a top bar with the title, a centred spinner while the
 // engine waits, a failure card, and a bottom bar with the timeline and icon
 // transport. Chrome fades and slides with the foundation's visibility.
+// A track or rendition label from the engine reads "English · 5.1 · TrueHD": the first
+// part is the item's name, the rest its muted detail.
+fn itemName(label: string): string = match label.split(" · ").at(0) { case some(head) => head, case none => label }
+fn itemDetail(label: string): string = label.split(" · ").slice(1).join(" · ")
+// Seconds as a clock: 4:05, 1:02:09.
+fn clock(total: number): string = `${floor(total / 3600) > 0 ? `${floor(total / 3600)}:${floor(total / 60) % 60 < 10 ? "0" : ""}` : ""}${floor(total / 60) % 60}:${floor(total) % 60 < 10 ? "0" : ""}${floor(total) % 60}`
+
 component PlayerChrome
   props
     model: PlayerView
@@ -18,13 +25,18 @@ component PlayerChrome
     editing: action
     close: action
   state scrubbing = false
-  action menuChanged(e: ToggleEvent)
+  // Opening a menu holds the controls up and puts focus on its active item.
+  action opened(menu: string, e: ToggleEvent)
     editing(e.newState == "open")
+    if e.newState == "open"
+      focus(`${menu}-${(menu == "player-cc" ? (model.subtitleId == "" ? 0 : 1 + model.subtitles.map(x => x.id).indexOf(model.subtitleId)) : menu == "player-audio" ? max(0, model.audio.map(x => x.id).indexOf(model.audioId)) : menu == "player-quality" ? (model.qualityAuto ? (model.lockedQuality == "" ? 0 : 1 + model.qualities.map(x => x.id).indexOf(model.lockedQuality)) : max(0, model.qualities.map(x => x.id).indexOf(model.lockedQuality))) : menu == "player-speed" ? max(0, speeds.indexOf(model.speeds.length > 0 ? model.speed : 1)) : chapterIndex)}`)
   action scrubFocus(on: bool)
     scrubbing = on
     editing(on)
   derive blocked = busy or model.state == "ended"
-  derive hasSettings = model.audio.length > 1 or model.subtitles.length > 0 or model.qualities.length > 1 or model.paths.length > 1 or model.chapters.length > 0
+  // The standard rates are always listed; they are live only when the engine can change speed.
+  derive speeds = (model.speeds.length > 0 ? model.speeds : [0.5, 0.75, 1, 1.25, 1.5, 2])
+  derive chapterIndex = max(0, model.chapters.filter(c => c.seconds <= model.position).length - 1)
   derive failure = (serverError != "" ? serverError : model.reason)
   derive failed = model.state == "failed" or serverError != ""
   derive waiting = not failed and (model.waiting or model.state == "loading" or model.state == "buffering" or model.state == "recovering")
@@ -41,14 +53,8 @@ component PlayerChrome
     command("subtitle", v)
   action quality(v: string)
     command("quality", v)
-  action path(v: string)
-    command("switchPath", v)
-  action chapter(v: string)
-    match first(model.chapters.filter(c => c.id == v))
-      case some(c)
-        seek(c.seconds)
-      case none
-        editing(false)
+  action speed(rate: number)
+    command("speed", `${rate}`)
   view
     column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="ink.primary"
       // Top: close, and the title being screened.
@@ -111,67 +117,117 @@ component PlayerChrome
           row flex=1 min-width=0 justify-content="flex-end"
             if not small
               text (model.quality != "" ? model.quality : model.path) testId="player-quality" font-size=11 font-weight=600 color="ink.secondary" letter-spacing="0.04em" line-clamp=1 padding="4px 10px" border="1px solid var(--cinematic.glass-edge)" border-radius=6 margin-right=6
-          if hasSettings
-            button popovertarget="player-settings" aria-label=t("ui.playbackSettings") testId="player-settings-button" class=Bare width=44 height=44 padding=11 flex-shrink=0
-              image "symbol:adjust" width=22 height=22
+          button popovertarget="player-cc" aria-label=t("ui.subtitles") testId="player-cc-button" class=Bare width=44 height=44 padding=10 flex-shrink=0
+            CaptionsIcon(on=(model.subtitleId != ""))
+          button popovertarget="player-audio" aria-label=t("ui.audio") testId="player-audio-button" class=Bare width=44 height=44 padding=10 flex-shrink=0
+            image "symbol:waveform" width=22 height=22
+          button popovertarget="player-quality" aria-label=t("ui.quality") testId="player-quality-button" class=Bare width=44 height=44 padding=10 flex-shrink=0
+            image "symbol:settings" width=22 height=22
+          button popovertarget="player-speed" aria-label=t("player.speed") testId="player-speed-button" class=Bare width=44 height=44 padding=10 flex-shrink=0
+            SpeedIcon()
+          button popovertarget="player-chapters" aria-label=t("ui.chapters") testId="player-chapters-button" disabled=(model.chapters.length == 0) class=Bare width=44 height=44 padding=10 flex-shrink=0
+            image "symbol:list" width=22 height=22
           if model.pip
             button press=command("pip", "") aria-label=t("ui.pictureInPicture") class=Bare width=44 height=44 padding=10 flex-shrink=0
               PipIcon()
           if model.fullscreen
             button press=command("fullscreen", "") aria-label=t("ui.fullscreen") class=Bare width=44 height=44 padding=10 flex-shrink=0
               FullscreenIcon()
-      if hasSettings
-        column id="player-settings" popover="auto" position="absolute" position-area="top span-left" margin-bottom=12 toggle=menuChanged pointer-events="auto" role="dialog" aria-label=t("ui.playbackSettings") width=(small ? "calc(100vw - 32px)" : 340) max-height="70vh" overflow-y="auto" box-sizing="border-box" padding=24 gap=18 border="1px solid var(--cinematic.glass-edge)" border-radius=22 background-color="cinematic.popover" backdrop-filter="blur(30px) saturate(1.4)" color="ink.primary" box-shadow="0px 30px 90px var(--cinematic.shadow), inset 0px 1px 0px var(--cinematic.ring)"
-          column gap=6
-            text t("ui.yourScreening") class=Eyebrow font-size=10 color="ink.quiet"
-            text t("ui.playbackSettings") class=Display font-size=26
-            text (model.backend == "file" ? t("ui.originalQuality") : model.backend == "native-hls" ? t("ui.browserManaged") : model.qualities.length <= 1 ? t("ui.fixedQuality") : model.lockedQuality == "" ? t("ui.autoQuality") : t("ui.qualityLocked")) class=Eyebrow font-size=9 color="brand.warm"
-          if model.chapters.length > 0
-            SettingLabel(label=t("ui.chapters"))
-            select focus=editing(true) blur=editing(false) disabled=blocked value="" change=chapter aria-label=t("ui.chapters") class=MenuSelect
-              option value=""
-                text t("ui.chapters")
-              for chapter in model.chapters key=chapter.id
-                option value=chapter.id
-                  text chapter.label
-          if model.audio.length > 1
-            SettingLabel(label=t("ui.audio"))
-            select disabled=blocked value=(model.pendingAudioId != "" ? model.pendingAudioId : model.audioId) change=audio aria-label=t("ui.audioTrack") aria-busy=(model.pendingAudioId != "") class=MenuSelect
-              for track in model.audio key=track.id
-                option value=track.id
-                  text track.label
-            if model.pendingAudioId != ""
-              row gap=8 align-items="center" role="status"
-                Spinner(size=14, still=still)
-                text t("ui.switchingAudioSoon") font-size=12 color="ink.secondary"
-          else
-            if model.audioLabel != ""
-              SettingLabel(label=t("ui.audio"))
-              text model.audioLabel font-size=13 color="ink.secondary"
-          if model.subtitles.length > 0
-            SettingLabel(label=t("ui.subtitles"))
-            select disabled=blocked value=model.subtitleId change=subtitles aria-label=t("ui.subtitles") testId="player-subtitles" class=MenuSelect
-              option value=""
-                text t("ui.off")
-              for track in model.subtitles key=track.id
-                option value=track.id
-                  text track.label
-          if model.qualities.length > 1
-            SettingLabel(label=t("ui.quality"))
-            select disabled=blocked value=model.lockedQuality change=quality aria-label=t("ui.quality") testId="player-quality-select" class=MenuSelect
-              option value=""
-                text t("ui.autoAdaptToYourConnection")
-              for quality in model.qualities key=quality.id
-                option value=quality.id
-                  text quality.label
-          if model.paths.length > 1
-            SettingLabel(label=t("ui.delivery"))
-            select disabled=blocked value=model.pathId change=path aria-label=t("ui.playbackPath") testId="player-path" class=MenuSelect
-              for path in model.paths key=path.id
-                option value=path.id
-                  text path.label
-          text t("ui.pathQuality", path=model.path, quality=model.quality) font-size=12 color="ink.secondary"
-          text t("ui.spacePlayPauseSeekFFullscreen") font-size=10 line-height=1.5 letter-spacing="0.04em" color="ink.quiet"
+      // One compact menu per control: the menu's name, then a radio list (arrow keys move, Escape closes).
+      MenuPanel(menu="player-cc", name=t("ui.subtitles"), small=small, opened=opened)
+        ChoiceRow(menu="player-cc", index=0, count=model.subtitles.length + 1, label=t("ui.off"), detail="", selected=(model.subtitleId == "" and model.pendingSubtitleId == ""), pending=false, enabled=not blocked, still=still, choose=subtitles(""))
+        for track, i in model.subtitles key=track.id
+          ChoiceRow(menu="player-cc", index=i + 1, count=model.subtitles.length + 1, label=itemName(track.label), detail=itemDetail(track.label), selected=(model.subtitleId == track.id), pending=(model.pendingSubtitleId == track.id), enabled=not blocked, still=still, choose=subtitles(track.id))
+      MenuPanel(menu="player-audio", name=t("ui.audio"), small=small, opened=opened)
+        if model.audio.length > 0
+          for track, i in model.audio key=track.id
+            ChoiceRow(menu="player-audio", index=i, count=model.audio.length, label=itemName(track.label), detail=itemDetail(track.label), selected=(model.audioId == track.id), pending=(model.pendingAudioId == track.id), enabled=not blocked, still=still, choose=audio(track.id))
+        else
+          ChoiceRow(menu="player-audio", index=0, count=1, label=itemName(model.audioLabel != "" ? model.audioLabel : t("player.audioDefault")), detail=itemDetail(model.audioLabel), selected=true, pending=false, enabled=false, still=still, choose=audio(""))
+      MenuPanel(menu="player-quality", name=t("ui.quality"), small=small, opened=opened)
+        if model.qualityAuto
+          ChoiceRow(menu="player-quality", index=0, count=model.qualities.length + 1, label=t("player.auto"), detail=(model.lockedQuality == "" ? model.quality : ""), selected=(model.lockedQuality == ""), pending=false, enabled=not blocked, still=still, choose=quality(""))
+        for option, i in model.qualities key=option.id
+          ChoiceRow(menu="player-quality", index=(model.qualityAuto ? i + 1 : i), count=(model.qualityAuto ? model.qualities.length + 1 : model.qualities.length), label=itemName(option.label), detail=itemDetail(option.label), selected=(model.lockedQuality == option.id or (model.lockedQuality == "" and not model.qualityAuto and option.label == model.quality)), pending=false, enabled=not blocked, still=still, choose=quality(option.id))
+        if model.qualities.length == 0 and not model.qualityAuto
+          ChoiceRow(menu="player-quality", index=0, count=1, label=itemName(model.quality != "" ? model.quality : model.path), detail=itemDetail(model.quality != "" ? model.quality : model.path), selected=true, pending=false, enabled=false, still=still, choose=quality(""))
+      MenuPanel(menu="player-speed", name=t("player.speed"), small=small, opened=opened)
+        for rate, i in speeds key=`${rate}`
+          ChoiceRow(menu="player-speed", index=i, count=speeds.length, label=`${formatNumber(rate, "decimal")}×`, detail=(rate == 1 ? t("player.normal") : ""), selected=(model.speeds.length == 0 ? rate == 1 : model.speed == rate), pending=false, enabled=(model.speeds.length > 0 and not blocked), still=still, choose=speed(rate))
+      if model.chapters.length > 0
+        MenuPanel(menu="player-chapters", name=t("ui.chapters"), small=small, opened=opened)
+          for chapter, i in model.chapters key=chapter.id
+            ChoiceRow(menu="player-chapters", index=i, count=model.chapters.length, label=chapter.label, detail=clock(chapter.seconds), selected=(i == chapterIndex), pending=false, enabled=not blocked, still=still, choose=seek(chapter.seconds))
+
+// A control's menu: a compact glass popover over its button, the menu's name above a radio list.
+component MenuPanel
+  props
+    menu: string
+    name: string
+    small: bool
+    opened: action
+  slot
+  view
+    column id=menu popover="auto" position="absolute" position-area="top span-left" margin-bottom=12 toggle=opened(menu) pointer-events="auto" role="dialog" aria-label=name width=(small ? "calc(100vw - 32px)" : 300) max-height="min(60vh, 520px)" overflow-y="auto" box-sizing="border-box" padding="14px 8px 8px" gap=2 border="1px solid var(--cinematic.glass-edge)" border-radius=18 background-color="cinematic.popover" backdrop-filter="blur(30px) saturate(1.4)" color="ink.primary" box-shadow="0px 30px 90px var(--cinematic.shadow), inset 0px 1px 0px var(--cinematic.ring)"
+      text name font-size=11 font-weight=650 letter-spacing="0.1em" text-transform="uppercase" color="ink.quiet" padding="0px 12px 8px"
+      column role="radiogroup" aria-label=name gap=2
+        children
+
+// One choice in a player menu: the check on the active item (a spinner while the engine
+// switches to it), the item's name and one muted detail. Unavailable items stay, dimmed.
+component ChoiceRow
+  props
+    menu: string
+    index: number
+    count: number
+    label: string
+    detail: string
+    selected: bool
+    pending: bool
+    enabled: bool
+    still: bool
+    choose: action
+  action pick
+    if enabled
+      choose()
+  action keys(k: string)
+    if k == "ArrowDown"
+      preventDefault()
+      focus(`${menu}-${(index + 1) % count}`)
+    if k == "ArrowUp"
+      preventDefault()
+      focus(`${menu}-${(index + count - 1) % count}`)
+    if k == "Home"
+      preventDefault()
+      focus(`${menu}-0`)
+    if k == "End"
+      preventDefault()
+      focus(`${menu}-${count - 1}`)
+  view
+    button id=`${menu}-${index}` role="radio" aria-checked=selected aria-disabled=(not enabled) press=pick key=keys display="flex" align-items="center" gap=12 box-sizing="border-box" min-height=44 padding="8px 12px" border="none" border-radius=12 background-color=(selected ? "cinematic.control" : "cinematic.scrim-clear") color="ink.primary" text-align="left" opacity=(enabled or selected ? 1 : 0.4) cursor=(enabled ? "pointer" : "default") transition="background-color 180ms linear"
+      :hover
+        background-color = "cinematic.control-hover"
+      :focus-visible
+        box-shadow = "0px 0px 0px 2px var(--brand.warm)"
+      column width=16 height=16 flex-shrink=0 align-items="center" justify-content="center"
+        if pending
+          Spinner(size=14, still=still)
+        else if selected
+          image "symbol:checkmark" width=14 height=14 color="brand.warm"
+      text label flex=1 min-width=0 font-size=14 font-weight=(selected ? 650 : 500) line-clamp=1
+      if detail != ""
+        text detail flex-shrink=0 max-width="55%" font-size=12 color="ink.quiet" line-clamp=1 font-variant-numeric="tabular-nums"
+
+// Closed captions: a rounded frame with two caption lines, tinted while subtitles are on.
+component CaptionsIcon
+  props
+    on: bool
+  view
+    svg width=24 height=24 viewBox="0 0 24 24" aria-hidden=true
+      if on
+        rect x=2.5 y=4.5 width=19 height=15 rx=3 fill="currentcolor" opacity=0.3
+      rect x=2.5 y=4.5 width=19 height=15 rx=3 fill="none" stroke="currentcolor" stroke-width=1.7
+      path d="M6.5 12.5h4M13 12.5h4.5M6.5 15.5h7M15.5 15.5h2" fill="none" stroke="currentcolor" stroke-width=1.7 stroke-linecap="round"
 
 style Bare
   border = "none"
@@ -186,23 +242,6 @@ style Bare
     box-shadow = "0px 0px 0px 2px var(--brand.warm)"
   :disabled
     opacity = 0.35
-
-style MenuSelect
-  box-sizing = "border-box"
-  width = "100%"
-  height = 44
-  padding = "0px 14px"
-  border = "1px solid var(--cinematic.glass-edge)"
-  border-radius = 12
-  background-color = "cinematic.field"
-  color = "ink.primary"
-  font-size = 14
-
-component SettingLabel
-  props
-    label: string
-  view
-    text label class=Eyebrow font-size=10 color="ink.quiet" margin-top=4
 
 // A ring with a travelling arc: the engine is preparing, buffering or seeking.
 component Spinner
@@ -237,3 +276,11 @@ component FullscreenIcon
   view
     svg width=24 height=24 viewBox="0 0 24 24" aria-hidden=true
       path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15" fill="none" stroke="currentcolor" stroke-width=1.8 stroke-linecap="round"
+
+// Playback speed: a dial with its needle leaning forward.
+component SpeedIcon
+  view
+    svg width=24 height=24 viewBox="0 0 24 24" aria-hidden=true
+      path d="M4.5 17.5a8.5 8.5 0 1 1 15 0" fill="none" stroke="currentcolor" stroke-width=1.7 stroke-linecap="round"
+      path d="M12 14.5l4-5" fill="none" stroke="currentcolor" stroke-width=1.9 stroke-linecap="round"
+      circle cx=12 cy=14.5 r=1.6 fill="currentcolor"
