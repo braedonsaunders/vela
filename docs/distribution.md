@@ -239,6 +239,13 @@ id wins. A conversion of a skin that is still compiled into the client ships as
 failed catalog only means no built-in documents; a page a document does not draw
 falls back to the cinematic default, as for server documents.
 
+The production release runs this generator into `dist/skins` before inventorying
+the static tree. Every catalog, document, font, image and licence is covered by
+the same file hashes and atomic installation as the app. The service worker admits
+versioned document/assets only on request; it never prefetches another skin.
+`catalog.json` stays network-only and should be served with revalidation. No server
+appearance API response or signed artwork/media grant enters this static cache.
+
 ## Planned single-renderer release
 
 The end state is one compiled Exact app plus skin documents conforming to
