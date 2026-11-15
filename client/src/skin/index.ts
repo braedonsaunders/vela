@@ -39,8 +39,8 @@ const INHERITED = new Set(['color', 'font-family', 'font-size', 'font-weight', '
 const BINDABLE: Record<string, string> = { width: 'dw', 'background-color': 'dbg', 'background-image': 'dbi', color: 'dc', opacity: 'dop', translate: 'dtr' };
 const KEYFRAMES = new Set(['rise', 'dissolve', 'vanish', 'pop', 'open', 'expose', 'drift', 'fill', 'shimmer', 'spin', 'breathe', 'glow', 'float', 'bounce', 'twinkle', 'slideUp', 'slideIn', 'zoom', 'wiggle', 'auroraA', 'auroraB', 'auroraC', 'scan']);
 const keyframes = (name: string) => name === 'none' ? '' : `vr-${name}`;
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow']);
-const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back']);
+const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
 type Part = { l: string; k: number; f: string };
