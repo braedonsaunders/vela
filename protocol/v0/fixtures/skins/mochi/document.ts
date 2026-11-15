@@ -327,6 +327,40 @@ const shelf = (paged: boolean): Node => ({ type: 'box', style: { ...col, positio
     ] },
 ] });
 
+// ---------------------------------------------------------------- status
+
+// A loading placeholder: a candy block swept by a soft highlight (look.contract Skeleton).
+const skeleton = (width: string, height: string, radius: number, extra: Extra = {}): Node => ({ type: 'box', ...extra,
+  style: { ...col, width, height, 'flex-shrink': '0', 'border-radius': `${radius}px`, 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$skeleton', ...(extra.style ?? {}) }, children: [
+    { type: 'box', when: [moving], motion: 'shimmer', style: { width: '100%', height: '100%', 'background-image': 'linear-gradient(90deg, $page-clear 0%, $skeleton-light 50%, $page-clear 100%)' } },
+  ] } as Node);
+// A row-shaped placeholder while titles load (slots.contract RowSkeleton).
+const rowSkeleton: Node = { type: 'box', style: { ...col, gap: '18px', 'padding-bottom': '24px' }, children: [
+  { type: 'box', style: { ...col, ...gutter }, small: gutterSmall, children: [skeleton('190px', '22px', 8)] },
+  { type: 'box', style: { ...row, gap: '20px', ...gutter, 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, small: { gap: '14px', ...gutterSmall }, children: [0, 1, 2, 3, 4, 5, 6, 7].map(() => ({ type: 'box', style: { ...col, gap: '10px', 'flex-shrink': '0' }, children: [
+    skeleton('clamp(146px, 11.6vw, 208px)', 'clamp(219px, 17.4vw, 312px)', 20, { small: { width: '132px', height: '198px' } }),
+    skeleton('70%', '12px', 6),
+  ] } as Node)) },
+] };
+// Home while it loads: Mochi hopping inside a banner-shaped frame, the field and rows as
+// skeletons; when it fails, a sad Mochi and, when the foundation can ask again, Try again
+// (slots.contract Status).
+const homeLoading: Node = { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:findingYourEvening}', motion: 'statusIn', style: { ...col, 'padding-top': '10px', gap: '34px' }, small: { 'padding-top': '6px', gap: '26px' }, children: [
+  { type: 'box', style: { ...col, position: 'relative', 'margin-left': 'max(24px, 3.6vw)', 'margin-right': 'max(24px, 3.6vw)', height: 'clamp(380px, 54vh, 560px)', 'box-sizing': 'border-box', border: '3px dashed $shadow', 'border-radius': '34px', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$lavender-soft' },
+    small: { 'margin-left': '16px', 'margin-right': '16px', height: '440px', 'border-radius': '26px' }, children: [
+      { ...loader('{s:findingYourEvening}', 80), small: { display: 'none' } } as Node,
+      { ...loader('{s:findingYourEvening}', 64), style: { display: 'none' }, small: { ...col, 'align-items': 'center', gap: '14px' } } as Node,
+    ] },
+  { type: 'box', style: { ...col, 'align-items': 'center', ...gutter }, small: gutterSmall, children: [skeleton('min(720px, 100%)', '62px', 31)] },
+  rowSkeleton,
+] };
+const retryButton: Node = { type: 'box', when: [set('env.canRetry')], style: { ...row, 'justify-content': 'center' }, children: [
+  { type: 'box', press: { action: 'retry' }, label: '{s:tryAgain}', style: { ...Candy, height: '46px', padding: '0px 24px' }, ...candy, children: [{ type: 'text', text: '{s:tryAgain}' }] },
+] };
+const failed = (message: string): Node => ({ type: 'box', when: [is('env.load', 'failed')], style: { ...col, 'padding-top': '48px' }, small: { 'padding-top': '24px' }, children: [
+  { type: 'box', style: { ...col, gap: '4px' }, children: [emptyState('sad', '{s:somethingWentQuiet}', message), retryButton] },
+] });
+
 // ---------------------------------------------------------------- home
 
 const heroChip: Style = { 'font-size': '12.5px', 'font-weight': '600', padding: '3px 10px', 'border-radius': '999px', 'background-color': '$night-veil', border: '1.5px solid $night-edge-strong', color: '$night-ink', 'font-variant-numeric': 'tabular-nums' };
@@ -402,21 +436,25 @@ const searchField: Node = { type: 'box', style: field, states: [{ when: [set('en
 ] };
 
 const searchBlock: Style = { ...col, position: 'relative', 'padding-top': '34px', 'padding-bottom': '10px', ...gutter, 'align-items': 'center' };
-const home: Node = { type: 'box', style: { ...col, position: 'relative', 'padding-top': '10px' }, small: { 'padding-top': '6px' }, children: [
-  { type: 'repeat', over: 'home.hero', when: [not('env.searching')], item: { type: 'box', exit: 'heroOut', style: { ...col, ...gutter }, small: gutterSmall, children: [banner] } },
-  { type: 'box', role: 'group', label: '{s:featuredTitles}', when: [not('env.searching'), { test: 'env.heroCount', is: 'gt', value: '1' }],
+const ready: Condition = is('env.load', 'ready');
+const home: Node = { type: 'box', style: { ...col, position: 'relative' }, children: [
+  homeLoading,
+  failed('{s:homeFailed}'),
+  { type: 'box', when: [ready], style: { height: '10px', 'flex-shrink': '0' }, small: { height: '6px' } },
+  { type: 'repeat', over: 'home.hero', when: [ready, not('env.searching')], item: { type: 'box', exit: 'heroOut', style: { ...col, ...gutter }, small: gutterSmall, children: [banner] } },
+  { type: 'box', role: 'group', label: '{s:featuredTitles}', when: [ready, not('env.searching'), { test: 'env.heroCount', is: 'gt', value: '1' }],
     style: { ...row, gap: '8px', 'align-items': 'center', 'justify-content': 'center', 'padding-top': '20px' }, small: { 'padding-top': '16px' }, children: [
       { type: 'repeat', over: 'home.heroes', item: heroDot },
     ] },
   // Padding by searching and phone width, as states (variants layer over them).
-  { type: 'box', style: searchBlock, layoutTransition: '420ms ease-out', states: [
+  { type: 'box', when: [ready], style: searchBlock, layoutTransition: '420ms ease-out', states: [
       { when: [set('env.searching'), set('env.small')], style: { ...searchBlock, 'padding-top': '40px' } },
       { when: [set('env.searching')], style: { ...searchBlock, 'padding-top': '48px' } },
       { when: [set('env.small')], style: { ...searchBlock, 'padding-top': '26px' } },
     ], small: { 'padding-bottom': '4px', ...gutterSmall }, children: [
       searchField,
     ] },
-  { type: 'box', when: [not('env.searching')], style: { ...col, position: 'relative', 'padding-top': '18px' }, small: { 'padding-top': '12px' }, children: [
+  { type: 'box', when: [ready, not('env.searching')], style: { ...col, position: 'relative', 'padding-top': '18px' }, small: { 'padding-top': '12px' }, children: [
     { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'shelf', motion: 'hopRow', stagger: { step: 80, cap: 4 }, exit: 'rowOut' } as Node },
     { type: 'box', when: [set('env.homeHasMore')], style: { ...col, position: 'relative', 'min-height': '120px', 'align-items': 'center', 'justify-content': 'center' }, children: [
       { type: 'widget', widget: 'sentinel', params: { on: 'home' } },
@@ -431,8 +469,6 @@ const home: Node = { type: 'box', style: { ...col, position: 'relative', 'paddin
 
 const side: Style = { 'padding-left': 'max(48px, 5vw)', 'padding-right': 'max(48px, 5vw)' };
 const sideSmall = (n: number): Style => ({ 'padding-left': `${n}px`, 'padding-right': `${n}px` });
-const ready: Condition = is('env.load', 'ready');
-
 // A section title in pixel type beside a pixel icon in a candy badge (detail.contract).
 const sectionHeading = (label: string, english: string, iconName: string): Node => ({ type: 'box', style: { ...row, gap: '10px', 'align-items': 'center' }, children: [
   { type: 'box', style: { ...row, 'align-items': 'center', 'justify-content': 'center', ...sz(32), 'border-radius': '10px', 'background-color': `$${accentOf(english)}`, border: '2.5px solid $ink', 'box-sizing': 'border-box' }, children: [icon(iconName, 14)] },
@@ -627,17 +663,11 @@ const title: Node = { type: 'box', style: { ...col, position: 'relative', height
             // Opening: Mochi hopping where the page will be; failed: a sad Mochi.
             { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:openingTitle}', motion: 'statusIn', style: { ...col, gap: '34px' }, small: { gap: '26px' }, children: [
               { type: 'box', style: { ...col, position: 'relative', height: '70vh', 'border-radius': '34px', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box' }, small: { 'border-radius': '26px' }, children: [
-                loader('{s:openingTitle}', 80),
+                { ...loader('{s:openingTitle}', 80), small: { display: 'none' } } as Node,
+                { ...loader('{s:openingTitle}', 64), style: { display: 'none' }, small: { ...col, 'align-items': 'center', gap: '14px' } } as Node,
               ] },
             ] },
-            { type: 'box', when: [is('env.load', 'failed')], style: { ...col, 'padding-top': '48px' }, small: { 'padding-top': '24px' }, children: [
-              { type: 'box', style: { ...col, gap: '4px' }, children: [
-                emptyState('sad', '{s:somethingWentQuiet}', '{s:titleFailed}'),
-                { type: 'box', when: [set('env.canRetry')], style: { ...row, 'justify-content': 'center' }, children: [
-                  { type: 'box', press: { action: 'retry' }, label: '{s:tryAgain}', style: { ...Candy, height: '46px', padding: '0px 24px' }, ...candy, children: [{ type: 'text', text: '{s:tryAgain}' }] },
-                ] },
-              ] },
-            ] },
+            failed('{s:titleFailed}'),
             titleHead,
             episodesSection([set('detail.hasEpisodes')]), episodesSection([not('detail.hasEpisodes'), set('detail.hasSeasons')]),
             extras, cast, crew, related,
@@ -682,6 +712,7 @@ export default {
     closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', titleFailed: "This title couldn't be opened. It may no longer be available.",
     watchTrailer: 'Watch trailer', watchProgress: 'Watch progress', watchProgressOf: 'Watch progress:', episodes: 'Episodes', season: 'Season', episode: 'Episode',
     extras: 'Extras', featuring: 'Featuring', behindTheStory: 'Behind the story', play: 'Play', resume: 'Resume', watched: 'Watched', notAvailable: 'Not available', notAvailableYet: 'Not available yet', tryAgain: 'Try again',
+    findingYourEvening: 'Finding your evening…', homeFailed: "Your library couldn't be reached. Check your server connection.",
   } },
   fonts: {
     fredoka: { family: 'Fredoka', files: [{ url: asset('fredoka.ttf'), weight: '300 700', style: 'normal' }] },
@@ -715,9 +746,12 @@ export default {
     float36: float(3.6), float50: float(5), float32: float(3.2),
     pop0: popIn(0), pop60: popIn(60), pop120: popIn(120), pop260: popIn(260),
     hop0: hop(0), hop160: hop(160), hop260: hop(260), hop380: hop(380), hop420: hop(420), hop460: hop(460), hop480: hop(480), hop500: hop(500), hopRow: hop(120),
+    shimmer: { keyframes: 'shimmer', duration: 1600, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     statusIn: { keyframes: 'dissolve', duration: 400, easing: 'ease-out', fill: 'both', still: fade(200) },
     pageOpen: { keyframes: 'open', duration: 680, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both', still: fade(240) },
   },
+  // Home draws its own loading and failure states.
+  status: true,
   templates: { card, shelf: shelf(true), relatedShelf: shelf(false) },
   slots: { shell, home },
   routes: { title },
