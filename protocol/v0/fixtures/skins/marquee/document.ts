@@ -221,7 +221,7 @@ const caption: Node = { type: 'box', style: { display: 'flex', 'flex-direction':
   ...subLine({ 'font-size': '13px', color: '$ink-faint', 'font-variant-numeric': 'tabular-nums', ...oneLine }, { 'font-size': '12px' }),
 ] };
 const cardShell = (w: number, wSmall: number, ratio: string, artwork: Node[]): Node => ({ type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}',
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'align-items': 'stretch', 'flex-shrink': '0', 'box-sizing': 'border-box', width: px(w), 'border-radius': '4px', color: '$ink' }, small: { width: px(wSmall) }, children: [
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'align-items': 'stretch', 'flex-shrink': '0', 'box-sizing': 'border-box', width: px(w), 'border-radius': '4px', color: '$ink', outline: 'none' }, small: { width: px(wSmall) }, children: [
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': ratio, 'border-radius': '4px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised', 'box-shadow': '0px 4px 12px $scrim-faint' }, children: [
       ...artwork,
@@ -322,13 +322,13 @@ const searchStrip: Node = { type: 'box', style: { position: 'sticky', top: '0px'
   small: { position: 'relative', top: 'auto', height: 'auto', 'margin-top': px(bar.small), padding: '10px 14px 16px', 'background-color': 'transparent', 'backdrop-filter': 'none' }, children: [
     { type: 'box', style: fieldStyle(false), states: [{ when: [set('env.searchFocused')], style: fieldStyle(true) }], children: [
       glyph('search', 18, { style: { color: '$ink-faint' }, states: [{ when: [set('env.searchFocused')], style: { width: '18px', height: '18px', 'flex-shrink': '0', color: '$ink' } }] } as Partial<Node>),
-      { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:search}', label: '{s:searchYourLibrary}', placeholderColor: '$ink-faint' }, style: { flex: '1', 'min-width': '0px', height: '100%', color: '$ink', 'font-size': '15px', 'font-family': sans } },
+      { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:search}', label: '{s:searchYourLibrary}', placeholderColor: '$ink-faint' }, style: { flex: '1', 'min-width': '0px', height: '100%', padding: '0px', outline: 'none', color: '$ink', 'font-size': '15px', 'font-family': sans } },
       { type: 'box', when: [set('env.searching')], press: { action: 'clearSearch' }, label: '{s:clearSearch}', ...round(30), children: [glyph('close', 16)] },
     ] } as Node,
   ] };
 // Home's next rows load as its end scrolls into view, shaped like what is coming.
 const shelfBlocks: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '12px', 'padding-bottom': '30px' }, children: [
-  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', ...gutter }, small: gutterSmall, children: [block('200px', '20px', 4)] },
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'padding-left': '40px' }, small: { 'padding-left': '14px' }, children: [block('200px', '20px', 4)] },
   { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'padding-left': '40px' }, small: { gap: '10px', 'padding-left': '14px' }, children: Array.from({ length: 10 }, (): Node => (
     { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', 'flex-shrink': '0' }, children: [block('152px', '228px', 4, { small: { width: '112px', height: '168px' } }), block('70%', '12px', 3)] })) },
 ] };
@@ -338,14 +338,34 @@ const homeEnd: Node = { type: 'box', when: [unset('env.searching'), set('env.hom
 ] };
 
 const contentStyle = (searching: boolean): Style => ({ display: 'flex', 'flex-direction': 'column', 'padding-top': searching ? '0px' : '24px', 'padding-bottom': searching ? '0px' : '48px' });
+const ready = is('env.load', 'ready'), loading = is('env.load', 'loading'), failed = is('env.load', 'failed');
+// A failed page: what happened, and Try again when the foundation can ask again. It sits below the bar.
+const failure = (message: string): Node => ({ type: 'box', when: [failed], motion: 'statusIn', style: { display: 'flex', 'flex-direction': 'column', gap: '4px', 'padding-top': px(bar.normal) }, small: { 'padding-top': px(bar.small) }, children: [
+  empty('alert', '{s:somethingWentQuiet}', message),
+  { type: 'box', when: [set('env.canRetry')], style: { display: 'flex', 'flex-direction': 'row', 'justify-content': 'center' }, children: [
+    { type: 'box', press: { action: 'retry' }, label: '{s:tryAgain}', ...primary(40, '0px 22px'), children: [{ type: 'text', text: '{s:tryAgain}' }] },
+  ] },
+] });
+// Home while it loads: the bar's strip, then a banner and two hubs in outline.
+const homeLoading: Node[] = [
+  { type: 'box', when: [loading], motion: 'statusIn', style: { position: 'sticky', top: '0px', 'z-index': '16', 'flex-shrink': '0', height: px(bar.normal), ...glassBar }, small: { position: 'relative', height: px(bar.small), 'background-color': 'transparent', 'backdrop-filter': 'none' } },
+  { type: 'box', when: [loading], role: 'status', label: '{s:findingYourEvening}', motion: 'statusIn', style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '24px' }, children: [
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'margin-left': '40px', 'margin-right': '40px', 'margin-bottom': '30px' }, small: { 'margin-left': '14px', 'margin-right': '14px' }, children: [
+      block('100%', 'clamp(280px, 30vw, 380px)', 6, { small: { height: '200px' } }),
+    ] },
+    shelfBlocks, shelfBlocks,
+  ] },
+];
 const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column' }, children: [
-  searchStrip,
-  { type: 'box', style: contentStyle(false), small: { 'padding-top': '0px' }, states: [{ when: [set('env.searching')], style: contentStyle(true) }], children: [
+  { ...searchStrip, when: [ready] },
+  ...homeLoading,
+  { type: 'box', when: [ready], style: contentStyle(false), small: { 'padding-top': '0px' }, states: [{ when: [set('env.searching')], style: contentStyle(true) }], children: [
     spotlight,
     { type: 'repeat', over: 'home.rows', when: [unset('env.searching')], item: { type: 'box', motion: 'arrive', stagger: { step: 40, cap: 5 }, children: [{ type: 'use', template: 'homeRow' }] } },
     homeEnd,
     empty('stack', '{s:nothingHereYet}', '{s:noRowsYet}', { when: [unset('env.searching'), is('env.rowCount', '0'), is('env.heroCount', '0')] }),
   ] },
+  failure('{s:homeFailed}'),
 ] };
 
 // ---------------------------------------------------------------- title page
@@ -422,7 +442,7 @@ const seasonCard: Node = { type: 'box', press: { action: 'select', arg: '{season
 
 // An episode: its still plays it (hover or focus shows the amber play); its title opens it.
 const still = (resumed: boolean): Node => ({ type: 'box', group: true, when: [{ test: 'card.hasProgress', not: !resumed }], press: { action: 'play', arg: '{card.id}' }, label: resumed ? '{s:resumeTitle}' : '{s:playTitle}', testId: 'episode-{card.id}',
-  style: { position: 'relative', width: '100%', 'flex-shrink': '0', 'aspect-ratio': '16 / 9', 'border-radius': '4px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised' }, small: { width: '148px' }, children: [
+  style: { position: 'relative', width: '100%', 'flex-shrink': '0', 'aspect-ratio': '16 / 9', 'border-radius': '4px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised', outline: 'none' }, small: { width: '148px' }, children: [
     { ...art('{card.backdrop}'), when: [set('card.backdrop')] },
     { type: 'box', when: [unset('card.backdrop')], style: { ...fill, display: 'flex', 'align-items': 'center', 'justify-content': 'center', color: '$ink-faint' }, children: [glyph('tv', 28)] },
     corner(20),
@@ -507,10 +527,10 @@ const titleHeadSmall: Node = { type: 'box', motion: 'arrive', style: { display: 
   facts,
 ] };
 
-const detailLoading: Node = { type: 'box', role: 'status', label: '{s:openingTitle}', when: [is('env.load', 'loading')], style: { display: 'flex', 'flex-direction': 'row', gap: '36px', padding: '48px 48px', 'align-items': 'flex-start' }, small: { padding: '24px 16px' }, children: [
+const detailLoading: Node = { type: 'box', when: [is('env.load', 'loading')], motion: 'statusIn', style: { display: 'flex', 'flex-direction': 'column', 'padding-top': px(bar.normal) }, small: { 'padding-top': px(bar.small) }, children: [{ type: 'box', role: 'status', label: '{s:openingTitle}', style: { display: 'flex', 'flex-direction': 'row', gap: '36px', padding: '48px 48px', 'align-items': 'flex-start' }, small: { padding: '24px 16px' }, children: [
   block('260px', '390px', 4, { small: { display: 'none' } }),
   { type: 'box', style: { display: 'flex', 'flex-direction': 'column', flex: '1', gap: '16px' }, children: [block('60%', '34px', 4), block('30%', '16px', 3), block('200px', '44px', 6), block('100%', '72px', 4)] },
-] };
+] }] };
 
 // The title page scrolls in its own box (navigation restores it); the close button stays put.
 const title: Node = { type: 'box', style: { position: 'relative', height: '100%', 'min-height': '0px', display: 'flex', 'flex-direction': 'column', 'background-color': '$page', color: '$ink', 'font-family': sans }, children: [
@@ -519,12 +539,7 @@ const title: Node = { type: 'box', style: { position: 'relative', height: '100%'
   ] },
   { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{s:titleDetails}', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'auto', 'padding-bottom': '60px' }, children: [
     detailLoading,
-    { type: 'box', when: [is('env.load', 'failed')], style: { display: 'flex', 'flex-direction': 'column', gap: '4px' }, children: [
-      empty('alert', '{s:somethingWentQuiet}', '{s:titleFailed}'),
-      { type: 'box', when: [set('env.canRetry')], style: { display: 'flex', 'flex-direction': 'row', 'justify-content': 'center' }, children: [
-        { type: 'box', press: { action: 'retry' }, label: '{s:tryAgain}', ...primary(40, '0px 22px'), children: [{ type: 'text', text: '{s:tryAgain}' }] },
-      ] },
-    ] },
+    failure('{s:titleFailed}'),
     { type: 'box', when: [is('env.load', 'ready')], style: { position: 'absolute', top: '0px', left: '0px', right: '0px', height: '100vh', 'max-height': '900px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'pointer-events': 'none' }, small: { height: '420px', 'max-height': 'none' }, children: [
       { ...art('{detail.backdrop}'), when: [set('detail.backdrop')] },
       { type: 'box', style: { ...fill, 'background-image': 'linear-gradient(180deg, $page-veil 0%, $page-veil 45%, $page 100%), linear-gradient(90deg, $page-veil 0%, $page-clear 100%)' } },
@@ -552,7 +567,7 @@ const title: Node = { type: 'box', style: { position: 'relative', height: '100%'
 const rise = { keyframes: 'doc:rise', duration: 420, easing: ease, fill: 'both' as const, still: { keyframes: 'dissolve', duration: 160 } };
 
 export default {
-  schema: 1, renderer: 7, id, name: 'Marquee', version,
+  schema: 1, renderer: 8, id, name: 'Marquee', version, status: true,
   tagline: 'Your media server at home: charcoal hubs, a sidebar and amber accents.',
   preview: asset('preview.jpg'), swatches: ['#1f2023', '#eeeeee', '#e9a31b', '#121315', '#2c2e32'],
   tokens: {
@@ -575,7 +590,7 @@ export default {
     episodeNumber: 'Episode {card.episodeNumberLabel}', seasonEpisode: 'S{card.seasonNumberLabel} · E{card.episodeNumberLabel}',
     detailSeasonEpisode: 'S{detail.seasonNumberLabel} · E{detail.episodeNumberLabel}', detailEpisodeNumber: 'Episode {detail.episodeNumberLabel}',
     resumeFrom: 'Resume from {detail.resumePosition}', resumeTitle: 'Resume {card.name}', playTitle: 'Play {card.name}', watchTrailer: 'Watch trailer', watchProgress: 'Watch progress', watched: 'Watched', genres: 'Genres', nothingHereYet: 'Nothing here yet', noRowsYet: "Your library hasn't offered any rows yet. Titles appear here as your server adds them.",
-    closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', titleFailed: "This title couldn't be opened. It may no longer be available.",
+    closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', findingYourEvening: 'Finding your evening…', homeFailed: "Your library couldn't be reached. Check your server connection.", titleFailed: "This title couldn't be opened. It may no longer be available.",
     scrollBack: 'Earlier in {row.name}', scrollOn: 'More in {row.name}',
     season: 'Season', seasons: 'Seasons', episodes: 'Episodes', extras: 'Extras', cast: 'Cast', media: 'Media', play: 'Play', trailer: 'Trailer', clip: 'Clip', featurette: 'Featurette', extra: 'Extra', notAvailableYet: 'Not available yet',
   } },
@@ -585,6 +600,7 @@ export default {
     gone100: { keyframes: 'vanish', duration: 100, easing: 'linear' },
     gone120: { keyframes: 'vanish', duration: 120, easing: 'linear' },
     fade: { keyframes: 'dissolve', duration: 160, easing: 'linear' },
+    statusIn: { keyframes: 'dissolve', duration: 200, easing: 'linear' },
     spin: { keyframes: 'spin', duration: 900, easing: 'linear', iterations: 'infinite', fill: 'none', still: { keyframes: 'none', duration: 0 } },
     sheen: { keyframes: 'shimmer', duration: 1500, easing: 'ease-in-out', iterations: 'infinite', fill: 'none' },
     slide: { keyframes: 'doc:slide', duration: 220, easing: ease, still: { keyframes: 'dissolve', duration: 120 } },
@@ -598,5 +614,5 @@ export default {
   templates: { card, wideCard, rankedCard, row, homeRow },
   slots: { shell, home },
   routes: { title },
-  detail: { wide: 'fullscreen', small: 'fullscreen' },
+  detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },
 } satisfies SkinDocument;
