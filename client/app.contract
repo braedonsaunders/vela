@@ -153,7 +153,9 @@ component Client
                                 SignIn(p=slotProps)
                 else
                   // Home and the libraries side by side: the track pans to the active section.
-                  column flex=1 min-height=0 position="relative" z-index=0 overflow="hidden"
+                  // The section track clips (never scrolls): a focus or scrollIntoView inside a row would
+                  // otherwise scroll this sideways and slide the whole page off its section.
+                  column flex=1 min-height=0 position="relative" z-index=0 overflow="clip"
                     row height="100%" translate=`${e.name == "home" ? sectionIndex * -100 : 0}% 0px` transition=(not traits.panSections or still ? "none" : "translate 640ms cubic-bezier(0.65, 0, 0.35, 1)")
                       scroll id=(e.name == "home" ? "home-scroll" : `page-${e.id}`) role="region" aria-label=(e.name == "home" ? t("ui.browseAndSearch") : "") scroll=cancelPreviewOnScroll mask-image=(e.name == "home" and traits.barMask ? (small ? "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 64px, black 118px)" : "linear-gradient(180deg, transparent 0px, rgba(0, 0, 0, 0.2) 48px, black 96px)") : "none") width="100%" height="100%" flex-shrink=0 inert=(e.name == "home" and sectionIndex != 0) aria-hidden=(e.name == "home" and sectionIndex != 0) opacity=(e.name != "home" or sectionIndex == 0 or not still ? 1 : 0) transition=(not traits.panSections ? "none" : still ? "opacity 260ms linear" : "opacity 640ms cubic-bezier(0.65, 0, 0.35, 1)")
                         if e.name == "home" and homeKnown
