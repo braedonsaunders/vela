@@ -187,7 +187,9 @@ export class PlexAdapter implements ServerAdapter {
   async rows(q: V.RowsQuery): Promise<V.Page<V.Row>> {
     const path = q.placement === 'detail' && q.titleId ? `/library/metadata/${enc(q.titleId)}/related` : '/hubs';
     const c = await this.request(path, { count: q.limit || 20 });
-    return page((c.Hub || []).map((h: Node) => this.hub(h)), 0, (c.Hub || []).length);
+    // PMS lists every hub type, including ones with nothing in them; an empty, finished hub is not a row.
+    const hubs = (c.Hub || []).map((h: Node) => this.hub(h)).filter((row: V.Row) => row.items.length > 0 || row.continuation === 'more');
+    return page(hubs, 0, hubs.length);
   }
   async row(id: string, cursor?: string, limit = 20): Promise<V.Row> {
     if (!id.startsWith('/hubs/') && !id.startsWith('/library/')) fail('Invalid Plex hub');
@@ -243,6 +245,7 @@ export class PlexAdapter implements ServerAdapter {
     return { query: r.query, generation: r.generation, ...page(all.map((n: Node) => this.title(n)), 0, all.length) };
   }
   async trailerPreview(_id: string, _r: V.TrailerPreviewRequest): Promise<V.TrailerPreviewResponse> { return { state: 'unavailable', reason: 'Plex trailers are available as extras' }; }
+  trailerPreviewStatus(id: string) { return this.trailerPreview(id, undefined!); }
   async startAI(_r: V.AISearchRequest): Promise<V.AISearchJob> { return fail('Plex AI search unavailable'); }
   async aiJob(_id: string): Promise<V.AISearchJob> { return fail('Plex AI search unavailable'); }
   async cancelAI(_id: string, _r: V.CancelRequest): Promise<V.AISearchJob> { return fail('Plex AI search unavailable'); }

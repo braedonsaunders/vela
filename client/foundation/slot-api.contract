@@ -1,4 +1,4 @@
-use Card, HomeModel, SearchModel, DetailModel, Viewport, LibraryNav, LibraryModel, QuickModel, CardPreview, SkinManifest from "./models.contract"
+use Card, HomeModel, SearchModel, DetailModel, Viewport, LibraryNav, LibraryModel, QuickModel, CardPreview, SkinManifest, ServerOption, ServerProbe, PlexLink, PlexServer from "./models.contract"
 use PlayerView from "./player-models.contract"
 use GuideModel, LiveTile, GuideFocus from "../live/models.contract"
 
@@ -24,6 +24,8 @@ shape ShellProps
   secureOrigin: string
   secureBusy: bool
   secureError: string
+  // The viewer's servers, for the switcher (the selected one first is the skin's choice).
+  servers: ServerOption[]
 
 shape HomeProps
   model: HomeModel
@@ -152,6 +154,28 @@ shape SignInProps
 shape QuickConnectProps
   model: QuickModel
   error: string
+  still: bool
+
+// Connecting a server: adding one (serverId empty) or signing in to one. No credentials
+// ever: the address is checked by probe, and each kind's sign-in runs in the data module.
+shape ConnectProps
+  serverId: string
+  servers: ServerOption[]
+  probe: ServerProbe
+  addedServerId: string
+  addServerError: string
+  serverError: string
+  plexLink: PlexLink
+  plexServers: PlexServer[]
+  plexError: string
+  jellyQuick: QuickModel
+  jellyQuickError: string
+  jellySignInError: string
+  // A request is in flight; buttons that would send another wait.
+  busy: bool
+  // Opened over the app (Cancel goes back); false on the sign-in stage.
+  canClose: bool
+  small: bool
   still: bool
 
 // What the root reads about the active skin instead of naming it (skin.json "traits";

@@ -1822,3 +1822,70 @@ waits for device ownership and surface binding. First frame was 638 ms in that
 run; no speed improvement or 4K sustained-play claim is inferred from it. The
 named Chrome and local server were closed. Real 4K/HDR and correctly published
 copy-origin qualification remain required before changing the production default.
+
+### lab.23: off-grid copy seek and refreshed HEVC qualification
+
+Core candidate `7f4a1f394fe50290` (implementation `79f11c9`, full payload manifest
+`5823df3c…6e29`) ran through the native view on lab.23, which includes Ether
+`444b07e3a`. Production remained on the qualified wrapper. Each title had one
+session, an acknowledged Stop (`ended`), accepted auth revoke, and no remaining
+video/canvas nodes. The dedicated Chrome was closed and the shared slot released.
+
+| Actual source | Historical wrapper Play / post-plan / seek | Current core Play / plan / post-plan / seek |
+| --- | --- | --- |
+| 1917 H.264-copy fMP4 HLS + AAC | 13,960 ms old native TS start; no equivalent seek baseline | 1,736 / 1,051 / 686 / **817 ms** to 61.370 s |
+| Mummy (1959), HEVC Main10 SDR 1776×1080 + EAC3 mono | 4,364 / 692 / 6,458 ms | **243 / 91 / 153 / 206 ms** to 60 s |
+| Mummy (1999), HEVC Main10 SDR 3840×2160 + EAC3 5.1 | No same-source baseline; historical HDR+DTS run was a wrong-film pack member | **173 / 46 / 128 / 270 ms** to 120 s |
+| Model Citizen, HEVC Main10 3840×2160 PQ, DV8 compatibility 1 + EAC3 5.1 | 958 / 878 / 1,022 ms | **334 / 145 / 189 / 261 ms** to 120 s |
+
+Times are milliseconds. These are short sequential LAN/HTTPS measurements, not
+controlled cold-cache paired benchmarks: browser assets/shaders and server source
+resolution can already be cached. Each page starts its normal idle warmup before
+Play, approximately 75–150 ms before the click in these traces. The historical
+wrapper's plan costs and sometimes source releases differ. No same-source HLS
+wrapper seek win is claimed. All current samples had **zero dropped frames and
+zero AudioWorklet underruns**, including continued playing after seek. Counters
+following seek were respectively 107/69 decoded/presented for 1917, 248/144 for
+1959, 203/146 for 1999, and 202/146 for Model Citizen. Preroll is discarded rather
+than counted as a presentation drop.
+
+The off-grid 1917 seek now proves the source/title mapping rather than just a
+label: requested **61.370 s**, HTTP seek reply revision 7 **origin 60.018 s**,
+retained through revision 13. Ether's independent producer log confirms restart
+**60.018 s**. The first presented title timestamp was **61.354 s** at clock
+**61.370 s**; this is the frame spanning the target, 16 ms before it at 24 fps.
+**32 earlier preroll frames were discarded.** The reply took 240 ms, followed by
+approximately 574 ms to the target frame. Initial segment acquisition was
+527 ms (518 ms first-byte wait); seek metadata acquisition was 518 ms; exact
+native decoder configure was 5.7/3.6 ms on start/seek. Authoritative seek-generation changes
+replaced the HLS runtime and index; immutable original sources retained the same
+runtime and byte reader across their seeks.
+
+Maximum absolute physical-audio-clock/frame age was 16 ms for 1917, 23 ms for
+1959, 7.4 ms for 1999, and 47 ms for Model Citizen (includes the initial seek
+preview; final playing sample 4.5 ms). These are scheduler measurements, **not a
+physical lip-sync measurement**. Original HEVC decoder configuration took
+14.2/8.8/12.4 ms on the three starts and approximately 0.9/1.2/1.0 ms on seeks.
+All used native video decode and software EAC3 output. Model Citizen rendered
+real programme pictures from the HDR10-compatible base layer; RPU enhancement,
+Dolby Vision certification and physical HDR output are not established.
+
+Ether independently confirmed **no FFmpeg or transcode session** for any of the
+three originals. The selected 1999 source was the genuine PandaQT SDR cut, not
+The Mummy Returns. Thus this set proves 4K SDR and DV8/PQ base-layer playback,
+but does not establish a genuine HDR10+DTS source. Session identifiers for
+correlation: 1917 `OCSOP5NXX6VHFG6ADDTQIHFKHU`; original public sessions
+`SYH7LWCQL2PJTR6ZECGOWV6IWE`, `T2FFG2UR3C4JSKKGAV5ME4LYRT`,
+`JRSTDCIE4CGIBABW6LG5DASWV7`. Broker original session prefixes from the server
+were `384205bf`, `bf27b325`, `4cf5389e` respectively.
+
+Direct H.264/HEVC and finite muxed HLS startup/seek now have measured core passes;
+the prior origin-publication blocker is closed. Before replacing the production
+wrapper entirely, remaining migration coverage is the real-app `/watch` with
+this candidate, audio/subtitle selection and original↔converted quality changes
+through the core, and moving live HLS/TS (the current core segment reader is
+finite VOD only). Real native-server header-auth integration is also pending
+installed foundation wiring. The current production wrapper and narrow internal
+native/MSE fallback remain available while those paths migrate. DV7 enhancement,
+a genuine HDR10+DTS sample, long-run/physical lip-sync and network-interruption
+qualification are not claimed by this run.

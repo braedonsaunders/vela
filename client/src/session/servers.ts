@@ -55,6 +55,16 @@ export class ServerRegistry {
     if (!current.servers.some(s => s.id === id)) throw new Error('Server not found');
     this.write({ ...current, selectedId: id });
   }
+  /** A record's proven address and name replace the ones it was added with; its ID and session stay. */
+  relocate(id: string, name: string, url: string): ServerRecord {
+    const current = this.read(), known = current.servers.find(s => s.id === id);
+    if (!known || known.kind === 'ether' || !name.trim() || name.length > 100) throw new Error('Server not found');
+    const address = serverAddress(url, known.kind);
+    if (current.servers.some(s => s.id !== id && s.kind === known.kind && s.origin === address.origin && s.basePath === address.basePath)) throw new Error('Server already added');
+    const record = { ...known, name: name.trim(), ...address };
+    this.write({ ...current, servers: current.servers.map(s => s.id === id ? record : s) });
+    return record;
+  }
   remove(id: string): void {
     if (id === 'ether') throw new Error('Cannot remove the default server');
     const current = this.read();

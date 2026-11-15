@@ -2,11 +2,12 @@
 // package exports. Do not edit: change a package and run the generator.
 // Every installed engine is dispatched.
 use SkinManifest from "./models.contract"
-use SkinTraits, ShellProps, HomeProps, SearchProps, SearchFieldProps, DetailProps, StatusProps, CollectionProps, LibraryProps, GuideProps, LiveControlsProps, MiniGuideProps, PlayerProps, AuthStageProps, AuthNoticeProps, SignInProps, QuickConnectProps from "./slot-api.contract"
+use SkinTraits, ShellProps, HomeProps, SearchProps, SearchFieldProps, DetailProps, StatusProps, CollectionProps, LibraryProps, GuideProps, LiveControlsProps, MiniGuideProps, PlayerProps, AuthStageProps, AuthNoticeProps, SignInProps, QuickConnectProps, ConnectProps from "./slot-api.contract"
 use SkinDoc, RouteProps from "../renderer/shapes.contract"
 use Route as DocumentsRoute from "../skins/doc/slots.contract"
 use AuthStage as CinematicAuthStage, AuthNotice as CinematicAuthNotice, SignIn as CinematicSignIn, QuickConnect as CinematicQuickConnect from "../skins/cinematic/auth.contract"
 use Collection as CinematicCollection from "../skins/cinematic/browse.contract"
+use Connect as CinematicConnect from "../skins/cinematic/connect.contract"
 use Detail as CinematicDetail from "../skins/cinematic/detail.contract"
 use Guide as CinematicGuide from "../skins/cinematic/guide.contract"
 use Library as CinematicLibrary from "../skins/cinematic/library.contract"
@@ -66,12 +67,16 @@ component Shell
     goHome: action
     openSearch: action
     openLive: action
+    selectServer: action
+    openConnect: action
   provide
     signOut = logout
     home = goHome
     search = openSearch
     live = openLive
     library = goHome
+    chooseServer = selectServer
+    connectServer = openConnect
   slot
   view
     if activeSkin == "index"
@@ -438,6 +443,34 @@ component QuickConnect
       MarqueeQuickConnect(p=p)
     else
       CinematicQuickConnect(p=p)
+
+component Connect
+  props
+    p: ConnectProps
+  inject
+    probeServer: action
+    addServer: action
+    selectServer: action
+    removeServer: action
+    startPlexLink: action
+    choosePlexServer: action
+    cancelPlexLink: action
+    signInJellyfin: action
+    startJellyfinQuick: action
+    cancelJellyfinQuick: action
+  provide
+    probe = probeServer
+    add = addServer
+    select = selectServer
+    remove = removeServer
+    startPlex = startPlexLink
+    choosePlex = choosePlexServer
+    cancelPlex = cancelPlexLink
+    signInJelly = signInJellyfin
+    startQuick = startJellyfinQuick
+    cancelQuick = cancelJellyfinQuick
+  view
+    CinematicConnect(p=p)
 
 // The route view: the one place the renderer draws a whole route.
 component DocRoute
