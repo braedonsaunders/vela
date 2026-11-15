@@ -1,6 +1,6 @@
 import manifest from './assets.json';
 export const subtitleAssetKey=manifest.assetKey;
-export interface AssRendererPort extends EventTarget {_videoWidth:number;_videoHeight:number;resize(width:number,height:number,top?:number,left?:number):void;setCurrentTime(paused:boolean,time:number,rate:number):void;destroy():void}
+export interface AssRendererPort extends EventTarget {createEvent(event:Record<string,unknown>):void;getStyles(callback:(error:Error|null,styles:{Name:string}[])=>void):void;_videoWidth:number;_videoHeight:number;resize(width:number,height:number,top?:number,left?:number):void;setCurrentTime(paused:boolean,time:number,rate:number):void;destroy():void}
 export interface AssConstructor {new(options:Record<string,unknown>):AssRendererPort}
 export interface AssAssets {constructor:AssConstructor;workerURL:string;wasmURL:string;font:Uint8Array;dispose():void}
 /** Verify every executable/font before use. Blob URLs keep verified bytes attached to this owner. */
