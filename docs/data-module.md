@@ -28,9 +28,9 @@ requests. Replace the scheme grants and application-level pin when Exact adds a
 trusted same-origin grant that also scopes redirects. Ether can serve the same
 static build at each origin; no per-server HTML template is needed.
 
-## Native-server adapter interface (integration in progress)
+## Native-server adapter interface
 
-The data module will select one configured server at a time. A server record has a
+The data module selects one configured server at a time. A server record has a
 stable local ID, type (`ether`, `jellyfin`, `emby`, or `plex`), origin and optional
 base path. The selected record is presentation-safe: it never contains credentials.
 Ether remains the default when the app is served by Ether. Configuration and sessions
@@ -93,9 +93,39 @@ Session updates use the adapter's stream when supported, including cursor resume
 snapshot fallback. A server without an event stream uses bounded, cancellable snapshot
 polling while the session is active; it must not invent cursors or event semantics.
 Appearance and distributed skins are optional server features; absence uses the local
-built-in appearance rather than an invented remote endpoint. The concrete registry,
-source signatures and polling cadence will be defined with the UI and adapter owners
-before integration; these are intended boundaries, not implemented capabilities.
+built-in appearance rather than an invented remote endpoint.
+
+### Implementation
+
+- Registry: `client/src/session/servers.ts` (`vela.servers`, per-server sessions in
+  `vela.server-sessions`; Ether keeps `vela.session`). `client/src/adapter/connection.ts`
+  builds one `Connection` per record: adapter, credentials, `MediaAccess` (native only),
+  per-read artwork addressing and plan validation (`mediaPlan` for Ether's broker,
+  `scopedPlan` for native origins/base paths). The Plex client identifier is `vela.device`.
+- Every source asks the selected connection. A selection change (here or in another tab)
+  resets the cached answers, negotiation, previews, AI job, receipts queue and media handle;
+  the foundation's `switchedServer` drops paging, previews and receipts and dissolves to Home.
+- Detection (`detectServer`, `adapter/probe.ts`) reads only public endpoints with redirects
+  refused and a 6 s bound: Jellyfin/Emby `System/Info/Public`, Plex `/identity`, Vela
+  `/vela/v0/capabilities` (reported as unsupported to add; it opens at its own address).
+- Plex linking (`adapter/plex/link.ts`): plex.tv PIN, account token in memory only, server
+  choice proved by the connection's own `/identity` machine identifier; only that server's
+  token is stored. A secure page offers only HTTPS connections.
+- Quick-connect secrets (Ether and Jellyfin) stay in the data module; models carry an opaque handle.
+- `uiMediaAuth(serverId, revision)` answers the `{handle, origin, pathPrefix, headers}` JSON
+  (transient resource, `mediaAuthJson`); the handle rotates with server, viewer and token.
+  `uiNativeMedia(request, at)` mints the native URL with a 30 s attachment deadline, or a
+  refusal reply that fails closed. Watch, live tiles (skins and renderer) and previews receive
+  `mediaAuthJson`/`*NativeMedia` by inject; a native plan is not mounted until its
+  authorization is present (`mediaReady`).
+- Polling: `AuthModel.pollSeconds` is 5 for native servers, whose snapshot is re-read every
+  5 s while the watch view is visible and the session has not ended.
+- Artwork: Plex through `/photo/:/transcode` sized per slot with the in-memory delegation
+  token (none: artwork is absent, never the persistent token); Jellyfin/Emby with
+  `maxWidth`/`maxHeight`. The web JS target keeps no resource answers on the device; a native
+  or wasm host would need the catalogue resources made `transient` before Plex is offered there.
+- Collections page through `cursor`/`limit` (`uiCollection(id, pages)`); `CollectionModel.complete`
+  is true only when the server says the list is exhausted.
 
 Host qualification with dummy credentials and a local strict-range fixture:
 core direct and the current wrapper's dedicated-worker direct path both played

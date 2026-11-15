@@ -1,4 +1,4 @@
-import { artworkURL } from '../discovery/artwork';
+import { artworkURL, type Images } from '../discovery/artwork';
 import { localeContext, minute, msg, number, time, withLocale } from '../../foundation/i18n';
 import type { ArtworkRef, Channel, GuideQuery, GuideResponse, Page, Programme } from '../../wire/v0/types';
 
@@ -105,10 +105,10 @@ function tone(genre: string): number {
   return known >= 0 ? known : TONES.length;
 }
 
-const picture = (artwork: ArtworkRef[], kinds: ArtworkRef['kind'][], width: number, height: number, origin?: string) => {
+const picture = (artwork: ArtworkRef[], kinds: ArtworkRef['kind'][], width: number, height: number, images?: Images) => {
   for (const kind of kinds) {
     const art = artwork.find(a => a.kind === kind);
-    if (art) return artworkURL(art, width, height, origin) ?? '';
+    if (art) return artworkURL(art, width, height, images) ?? '';
   }
   return '';
 };
@@ -134,7 +134,7 @@ function group(programmes: Programme[]) {
  * One local day of listings, every page fetched; incomplete pages are never presented as complete.
  * `day` counts days from today. Airing state and progress are projected at `now`.
  */
-export async function loadGuide(api: GuideApi, day: number, now: number, scope: string, origin?: string, localeJSON?: string): Promise<GuideModel> {
+export async function loadGuide(api: GuideApi, day: number, now: number, scope: string, images?: Images, localeJSON?: string): Promise<GuideModel> {
   if (!Number.isInteger(day) || day < 0 || day >= DAYS) throw new Error('Invalid guide day');
   const { start, end } = withLocale(localeJSON, () => {
     const start = midnight(now, day);
@@ -171,12 +171,12 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       return {
         id: channel.id, number: channel.number, name: channel.name, favorite: channel.favorite, group: channel.group ?? '',
         guideIds: [...new Set((channel.guides ?? []).map(g => g.id))],
-        logo: picture(channel.artwork, ['logo', 'channel'], 160, 90, origin), listed: entries.length > 0,
+        logo: picture(channel.artwork, ['logo', 'channel'], 160, 90, images), listed: entries.length > 0,
         now: airing?.name ?? '', next: next?.name ?? '', nowId: airing?.id ?? '',
         nowProgress: airing ? Math.round((now - airingStart) / (airingEnd - airingStart) * 1000) / 10 : 0,
         nowRemaining: airing ? left(airingEnd - now) : '',
         nextLabel: next ? msg('live.nextAt', { time: time(Date.parse(next.start)), programme: next.name }) : '',
-        nowArt: airing ? picture(airing.artwork, ['still', 'backdrop', 'poster'], 640, 360, origin) : '',
+        nowArt: airing ? picture(airing.artwork, ['still', 'backdrop', 'poster'], 640, 360, images) : '',
         nowEpisode: airing ? episodeLine(airing) : '', nowGenre: airing?.genres?.[0] ?? '',
         programmes: entries.map(p => {
           const a = Date.parse(p.start), b = Date.parse(p.end);
@@ -193,7 +193,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
             startsLabel: a <= now ? '' : a - now < HOUR ? msg('live.startsIn', { minutes: number(Math.ceil((a - now) / MINUTE)) })
               : a < midnight(now, 1) ? msg('live.startsAt', { time: time(a) }) : a < midnight(now, 2) ? msg('live.startsTomorrow', { time: time(a) }) : msg('live.startsOn', { day: weekday.format(a), time: time(a) }),
             episode, rating: p.rating ?? '', genre, tone: tone(genre),
-            art: picture(p.artwork, ['still', 'backdrop', 'poster'], 640, 360, origin),
+            art: picture(p.artwork, ['still', 'backdrop', 'poster'], 640, 360, images),
           };
         }),
       };

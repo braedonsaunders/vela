@@ -1738,3 +1738,87 @@ keyframes and its raw packet timestamps were checked before the single drive.
 No lab media or credentials were used. The native view, named Chrome and owned
 local server were disposed/closed. Lab.21 requalification remains pending the
 packager's first slot.
+
+### Lab.21 1917 HLS seek identity passes
+
+Core `9e1e4578186740d8`, H.264-copy/AAC fMP4 through the real native view,
+with Ether's generation-unique media names installed:
+
+| Measurement | Result |
+| --- | --- |
+| Play → first frame | **1,446.8 ms**, including **61.1 ms** plan |
+| First segment | 4.2 MB; **780 ms** first-byte wait |
+| Seek intent | Immediate target 60 s and buffering |
+| Authorized seek command | HTTP 200 in **168.9 ms** |
+| Seek → target frame/playing | **1,081.5 ms**, at **60.010 s** |
+| Seek segment acquisition | 10.9 MB; **795 ms** first-byte wait |
+| Continued play | **62.946 s**, 71 presented frames, **0 drops / 0 audio underruns** |
+| Maximum physical-clock frame age | **12.10 ms**; not a speaker/display lipsync measurement |
+| Recovery | None; no invalid-segment read or return to the beginning |
+
+The plan advanced source/seek `(1,1)` → `(1,2)` and reported origin 60. The HLS
+runtime was replaced with a new reader/demux; frame counters therefore restart
+per generation. The driver now correctly recognizes a replacement runtime plus
+an actual presented target frame, rather than comparing local epoch numbers
+between different instances. HLS has no original-file `byteReader`; an equality
+of two absent byteReader values is not retained-cache evidence.
+
+This fixes the lab.20 cached-byte failure. The historical native-TS wrapper
+startup was 13.96 s, but it has no equivalent measured seek baseline. A paired
+wrapper seek win is **not established**. The seek is close to the 1 s LAN target
+and most time is command/producer readiness, not the 5 ms decoder configure.
+
+The copy-keyframe-origin fix is **not installed** in this run. A reported target
+position proves transport/control progress, not exact picture mapping when a
+copy seek retains preceding-keyframe preroll. Ether's worker is making the actual
+source/keyframe origin truthful while retaining the requested `positionSeconds`.
+Raw output PTS may also include a common mux/B-frame shift; it must not be
+confused with the source/title keyframe origin. That separate clock gate, the
+refreshed 4K/HDR set and track/subtitle/live/recovery parity remain before a core
+production-default claim.
+
+Public session `V25AYLG4TOJABFC5JN4QKQCTGY`, test device
+`3425a4e1-279b-4cb5-a358-fcdf05b90d17`: Stop returned `ended`, auth revoke was
+accepted, all native-view video/canvas nodes were removed, and dedicated Chrome
+was closed before the slot was returned to packaging. Screenshot:
+`client/.exact/lab-core-1917-hls-lab21.png`; numeric-only record:
+`client/.exact/core-lab21-result.json`. No media bytes or private headers captured.
+
+### Lab.22 correction: published origin still blocks content-seek proof
+
+The next bounded 1917 run measured 1,223.5 ms Play → first frame (717.3 ms
+plan), and a target-labelled frame at 60 s after 639.3 ms (95.6 ms command,
+390 KB opening segment with 490 ms first-byte wait). It continued to label
+62.961 s, zero dropped frames/audio underruns and 9.32 ms maximum clock-frame
+age. Stop returned ended, auth revoke succeeded, and Chrome was closed before
+returning the slot. Session `XHUAT4I64W3TN2645VHBEPBV3P`, test device
+`90866c52-a0b5-446f-807a-597d2a86275a`.
+
+**This is not a correct-content seek pass.** Ether's read-only log established
+that the copied source actually restarted at preceding keyframe **50.05 s**.
+The seek reply revision 5 and subsequent SSE revisions 6, 7 and 8 all published
+origin **60 s**. The core therefore labelled an earlier picture as 60 s. The
+numeric presentation latency and zero-drop counters remain measured, but cannot
+prove that the requested picture was shown. The publication fix is Ether branch
+`w0312/vela-origin-publish`, commit `444b07e3a`: resolve the public session binding,
+publish the known origin in the seek reply, retain it in following revisions,
+or publish the first later-known value on the next changed revision.
+
+The host now treats a changed URL, source revision, timeline or measured origin
+in a same-generation plan as a material source update: reopen at the pending
+seek/current intended title position. It does not relabel an already-running
+native/demux clock in place. One generated local Chrome check published a
+corrected origin 4 → 0 with source/seek generations unchanged at (2,2). The
+backend was replaced, kept intended position 4 s, discarded **96 preroll frames**
+and presented the corrected target in **78 ms**, zero drops/failure. This checks
+the late-publication mechanism; sustained audio-clock progress was not measured
+in that short correction sample.
+
+The core-only overlap candidate also moved source/index acquisition and exact
+native decoder configuration ahead of the exclusive GPU-ready barrier. In the
+same local trace metadata started at 199 ms and was ready at 218 ms, before the
+claimed idle warmup yielded at 372 ms. GPU presentation/package creation still
+waits for device ownership and surface binding. First frame was 638 ms in that
+run; no speed improvement or 4K sustained-play claim is inferred from it. The
+named Chrome and local server were closed. Real 4K/HDR and correctly published
+copy-origin qualification remain required before changing the production default.
