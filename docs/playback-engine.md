@@ -1957,3 +1957,25 @@ are not release assets. The core **must stay gated**. Next blockers are sustaine
 original audio/read scheduling, the HLS subsequent-fragment format failure,
 qualified live colour admission and live fallback parsing, then completed
 Original/Auto/PGS/TrueHD transitions through this same real-app path.
+
+Follow-up source correlation for the real-app Inception UHD interval: Ether
+measured **662,225,778 delivered bytes over 105.1 s (50.4 Mbps)** against the
+selected title's **65.6 Mbps average**. Its shared Real-Debrid host cap of four
+connections incurred 272 waits (median 0.77 s, p90 1.98 s, maximum 2.76 s).
+Background warm/resume jobs and the broadcast competed with playhead reads.
+Ether is addressing foreground priority and background yielding. Therefore the
+observed underruns are **not evidence of a faulty DTS decoder**, and the core's
+three-request range reader is not being widened speculatively. The second HLS
+encoder in that interval was the explicit UI lower-quality request, including
+authorization of the locally selected AC-3 track; it was not an unsolicited
+parallel fallback.
+
+The HLS error also needs narrower evidence: Ether's real-FFmpeg fixture has one
+0.5 s opening fragment, then segments containing four `moof/mdat` pairs. All
+156 video / 281 AAC packets demux correctly through the current Vela reader in
+an offline metadata run. A generated tagged equivalent also plays to EOS through
+the current core in local Chrome (156 frames, zero video drops, no failure).
+Thus multiple fragments per object alone do **not** reproduce the lab failure.
+A bounded fragment-index/object-shape diagnostic is being added before changing
+parsing semantics. Both local browser and fixture server were closed; the
+production gate remains unchanged.
