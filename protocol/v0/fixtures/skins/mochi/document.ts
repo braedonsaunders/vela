@@ -28,7 +28,7 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 9 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// Renderer 10 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
 const pending = (fields: Record<string, unknown>) => fields as object;
@@ -465,6 +465,103 @@ const home: Node = { type: 'box', style: { ...col, position: 'relative' }, child
   ] },
 ] };
 
+
+// ---------------------------------------------------------------- library
+
+// A card in a wrapping grid fills its column (TitleCard fill).
+const gridCard: Node = { ...card, stagger: { step: 28, cap: 18 }, style: { ...card.style, width: '100%' }, small: {} } as Node;
+
+// A page heading as a sticker label: the artwork stuck on at a tilt, a pixel eyebrow, the name
+// (library.contract PageHeading).
+const pageHeading = (eyebrow: string, name: string, backdrop?: string): Node => ({ type: 'box', motion: 'hop40', style: { ...row, position: 'relative', gap: '16px', 'align-items': 'center', ...gutter, 'padding-top': '18px' },
+  small: { gap: '12px', ...gutterSmall, 'padding-top': '10px' }, children: [
+    ...(backdrop ? [{ type: 'box', when: [set(backdrop.slice(1, -1)), not('env.small')], style: { ...col, position: 'relative', ...sz(96, 60), 'border-radius': '16px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', border: '3px solid $ink', 'box-shadow': '4px 4px 0px $lavender', rotate: '-3' }, children: [
+      { type: 'image', src: backdrop, alt: '', fade: true, style: fadeIn },
+    ] } as Node] : []),
+    { type: 'box', style: { ...col, gap: '4px', 'min-width': '0px' }, children: [
+      { type: 'box', style: { ...row, gap: '6px', 'align-items': 'center', color: '$pink-deep' }, children: [
+        icon('sparkle', 11),
+        { type: 'text', text: eyebrow, style: { ...Label, 'font-size': '11px' } },
+      ] },
+      { type: 'text', text: name, role: 'heading', level: 1, style: { ...Title, 'font-size': '42px', 'line-clamp': '1' }, small: { 'font-size': '30px' } },
+    ] },
+  ] });
+
+// One choice in a segmented candy group (library.contract Chip).
+const chipBase: Style = { ...row, position: 'relative', 'align-items': 'center', height: '34px', padding: '0px 14px', border: '2px solid $page-clear', 'border-radius': '999px', 'background-color': '$page-clear', color: '$ink', 'font-family': fredoka, 'font-size': '14px', 'font-weight': '550', cursor: 'pointer', 'white-space': 'nowrap', transition: 'background-color 160ms linear' };
+const chipOn: Style = { ...chipBase, 'border-color': '$ink', 'background-color': '$pink', 'font-weight': '650' };
+const chip = (label: string, on: Condition[], arg: string, when: Condition[] = []): Node => ({ type: 'box', when, press: { action: 'libraryFilter' as Action, arg }, label, a11y: { pressed: on },
+  style: chipBase, states: [{ when: on, style: chipOn }], hover: { 'border-color': '$ink' }, focus: { 'box-shadow': '0px 0px 0px 2px $card, 0px 0px 0px 5px $focus' }, children: [
+    { type: 'text', text: label },
+  ] });
+const chipGroup = (label: string, when: Condition[], children: Node[]): Node => ({ type: 'box', role: 'group', label, when, style: { ...row, gap: '4px', padding: '4px', 'flex-shrink': '0', 'border-radius': '999px', 'background-color': '$card', border: '2.5px solid $ink' }, children });
+// A native picker in Mochi's pill (look.contract Picker).
+const Picker: Style = { height: '44px', 'flex-shrink': '0', 'box-sizing': 'border-box', padding: '0px 14px', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', 'font-family': fredoka, 'font-size': '14px', 'font-weight': '600' };
+const favourite: Style = { ...Bubble, ...row, height: '44px', 'padding-left': '14px', 'padding-right': '18px', gap: '8px', 'background-color': '$card' };
+
+const toolbar: Node = { type: 'box', motion: 'hop90', style: { ...row, position: 'relative', gap: '10px', 'align-items': 'center', 'flex-wrap': 'wrap', 'padding-top': '4px', 'padding-bottom': '8px', ...gutter, 'min-width': '100%', 'box-sizing': 'border-box' },
+  small: { 'flex-wrap': 'nowrap', ...gutterSmall, 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
+    chipGroup('{s:all}', [{ test: 'library.kindCount', is: 'gt', value: '1' }], [
+      chip('{s:all}', [is('library.kindFilter', '')], 'kind|'),
+      { type: 'repeat', over: 'library.kinds', item: chip('{opt.label}', [set('opt.on')], 'kind|{opt.id}') },
+    ]),
+    chipGroup('{s:unwatched}', [set('library.canPlayed')], [
+      chip('{s:all}', [is('library.playedFilter', '')], 'played|'),
+      chip('{s:unwatched}', [is('library.playedFilter', 'false')], 'played|false'),
+      chip('{s:watchedFilter}', [is('library.playedFilter', 'true')], 'played|true'),
+    ]),
+    ...[true, false].map(on => ({ type: 'box', when: [set('library.canFavorite'), on ? set('library.favoriteFilter') : not('library.favoriteFilter')], press: { action: 'libraryFilter' as Action, arg: on ? 'favorite|' : 'favorite|true' }, label: '{s:favourites}',
+      a11y: { pressed: [set('library.favoriteFilter')] }, style: on ? { ...favourite, 'background-color': '$pink' } : favourite, ...bubble, children: [
+        icon('heart', 14, on ? 'ink' : 'pink-deep'),
+        { type: 'text', text: '{s:favourites}', style: { 'font-size': '15px', 'font-weight': '600' } },
+      ] } as Node)),
+    { type: 'widget', widget: 'select', when: [{ test: 'library.genreCount', is: 'gt', value: '0' }], params: { options: 'library.genres', action: 'libraryFilter', arg: 'genre|{opt.id}', none: '{s:anyGenre}', noneArg: 'genre|', label: '{s:genre}' }, style: Picker },
+    { type: 'box', style: { flex: '1' } },
+    { type: 'box', when: [{ test: 'library.sortCount', is: 'gt', value: '1' }], style: { ...row, gap: '8px', 'align-items': 'center', 'flex-shrink': '0' }, children: [
+      { type: 'text', text: '{s:sortBy}', style: { ...Label, 'font-size': '11px', color: '$ink-soft' } },
+      { type: 'widget', widget: 'select', params: { options: 'library.sorts', action: 'librarySort', arg: '{opt.id}', label: '{s:sortBy}' }, style: Picker },
+      // The flip turns its arrow over with a bounce; its name says the current direction.
+      { type: 'box', when: [set('library.canFlip')], press: { action: 'librarySortFlip' as Action }, label: '{library.directionLabel}', style: { ...Bubble, ...sz(44) }, ...bubble, children: [
+        { type: 'box', style: { ...col, rotate: '0', transition: `rotate 320ms ${boing}` }, states: [
+          { when: [stillC, is('library.direction', 'asc')], style: { ...col, rotate: '180', transition: 'none' } },
+          { when: [stillC], style: { ...col, rotate: '0', transition: 'none' } },
+          { when: [is('library.direction', 'asc')], style: { ...col, rotate: '180', transition: `rotate 320ms ${boing}` } },
+        ], children: [icon('sort', 15)] },
+      ] },
+    ] },
+  ] };
+
+const libraryGrid: Node = { type: 'box', style: { ...col, transition: 'opacity 200ms linear' }, states: [{ when: [set('env.libraryLoading')], style: { ...col, transition: 'opacity 200ms linear', opacity: '0.6' } }], ...pending({ a11y: { busy: [set('env.libraryLoading')] } }), children: [
+  { type: 'box', style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(176px, 1fr))', 'column-gap': '24px', 'row-gap': '34px', ...gutter, 'padding-top': '8px' },
+    small: { 'grid-template-columns': 'repeat(auto-fill, minmax(136px, 1fr))', 'column-gap': '14px', 'row-gap': '24px', ...gutterSmall }, children: [
+      { type: 'repeat', over: 'library.items', item: { type: 'use', template: 'gridCard' } },
+    ] },
+] };
+
+// A library: its name, the server's sort and filter choices, then its titles in a grid.
+const library: Node = { type: 'box', style: { ...col, position: 'relative', color: '$ink', 'font-family': fredoka }, children: [
+  // Before the page's first answer (library.contract Status kind "library", or a failure).
+  { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:findingTitles}', motion: 'statusIn', style: { ...col, 'padding-top': '72px', 'align-items': 'center' }, small: { 'padding-top': '48px' }, children: [
+    { ...loader('{s:findingTitles}', 80), small: { display: 'none' } } as Node,
+    { ...loader('{s:findingTitles}', 64), style: { display: 'none' }, small: { ...col, 'align-items': 'center', gap: '14px' } } as Node,
+  ] },
+  failed('{s:libraryFailed}'),
+  { type: 'box', when: [ready], style: { ...col, position: 'relative', gap: '20px', 'padding-bottom': '80px' }, small: { gap: '14px' }, children: [
+    pageHeading('{s:library}', '{library.name}', '{library.backdrop}'),
+    toolbar,
+    { type: 'box', when: [set('env.libraryLoading'), is('library.itemCount', '0')], style: { ...col, 'align-items': 'center', padding: '48px 0px' }, children: [loader('{s:findingTitles}', 64)] },
+    { ...emptyState('sleepy', '{s:libraryEmpty}', '{s:libraryEmptyHint}'), when: [not('env.libraryLoading'), is('library.itemCount', '0')] } as Node,
+    { ...libraryGrid, when: [{ test: 'library.itemCount', is: 'gt', value: '0' }] } as Node,
+    { type: 'box', when: [{ test: 'library.itemCount', is: 'gt', value: '0' }, set('library.more')], style: { ...row, 'justify-content': 'center', 'padding-top': '18px' }, children: [
+      { ...loader('{s:loadingMore}', 44), when: [set('env.libraryMoreLoading')] } as Node,
+      { type: 'box', when: [not('env.libraryMoreLoading')], press: { action: 'libraryMore' as Action }, label: '{s:loadMore}', style: { ...Candy, height: '52px', 'padding-left': '30px', 'padding-right': '30px', gap: '10px' }, ...candy, children: [
+        icon('sparkle', 14),
+        { type: 'text', text: '{s:loadMore}', style: { 'font-size': '16px' } },
+      ] },
+    ] },
+  ] },
+] };
+
 // ---------------------------------------------------------------- title
 
 const side: Style = { 'padding-left': 'max(48px, 5vw)', 'padding-right': 'max(48px, 5vw)' };
@@ -685,7 +782,7 @@ const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds 
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
 export default {
-  schema: 1, renderer: 9, id, name: 'Mochi', version,
+  schema: 1, renderer: 10, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true, flatDetail: false },
@@ -712,7 +809,9 @@ export default {
     closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', titleFailed: "This title couldn't be opened. It may no longer be available.",
     watchTrailer: 'Watch trailer', watchProgress: 'Watch progress', watchProgressOf: 'Watch progress:', episodes: 'Episodes', season: 'Season', episode: 'Episode',
     extras: 'Extras', featuring: 'Featuring', behindTheStory: 'Behind the story', play: 'Play', resume: 'Resume', watched: 'Watched', notAvailable: 'Not available', notAvailableYet: 'Not available yet', tryAgain: 'Try again',
-    findingYourEvening: 'Finding your evening…', homeFailed: "Your library couldn't be reached. Check your server connection.",
+    findingYourEvening: 'Finding your evening…', findingTitles: 'Finding titles…', library: 'Library', all: 'All', unwatched: 'Unwatched', watchedFilter: 'Watched', favourites: 'Favourites',
+    genre: 'Genre', anyGenre: 'Any genre', sortBy: 'Sort by', loadMore: 'Show more', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.',
+    libraryFailed: "This library couldn't be opened. Check your connection and try again.", homeFailed: "Your library couldn't be reached. Check your server connection.",
   } },
   fonts: {
     fredoka: { family: 'Fredoka', files: [{ url: asset('fredoka.ttf'), weight: '300 700', style: 'normal' }] },
@@ -745,15 +844,15 @@ export default {
     heroFill: { keyframes: 'fill', duration: 9000, easing: 'linear', fill: 'both' },
     float36: float(3.6), float50: float(5), float32: float(3.2),
     pop0: popIn(0), pop60: popIn(60), pop120: popIn(120), pop260: popIn(260),
-    hop0: hop(0), hop160: hop(160), hop260: hop(260), hop380: hop(380), hop420: hop(420), hop460: hop(460), hop480: hop(480), hop500: hop(500), hopRow: hop(120),
+    hop0: hop(0), hop40: hop(40), hop90: hop(90), hop160: hop(160), hop260: hop(260), hop380: hop(380), hop420: hop(420), hop460: hop(460), hop480: hop(480), hop500: hop(500), hopRow: hop(120),
     shimmer: { keyframes: 'shimmer', duration: 1600, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     statusIn: { keyframes: 'dissolve', duration: 400, easing: 'ease-out', fill: 'both', still: fade(200) },
     pageOpen: { keyframes: 'open', duration: 680, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both', still: fade(240) },
   },
   // Home draws its own loading and failure states.
   status: true,
-  templates: { card, shelf: shelf(true), relatedShelf: shelf(false) },
+  templates: { card, gridCard, shelf: shelf(true), relatedShelf: shelf(false) },
   slots: { shell, home },
-  routes: { title },
+  routes: { title, library },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { scrim: '$scrim' } },
 } as unknown as SkinDocument;

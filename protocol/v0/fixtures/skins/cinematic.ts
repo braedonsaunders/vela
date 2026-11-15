@@ -1,52 +1,77 @@
 // Cinematic, written as a skin document (protocol/v0/skin.ts): the fidelity proof for
 // the doc engine. The compiled original is client/skins/cinematic; this file follows
 // its Shell, Home, Row and TitleCard (look.contract tokens, motion and geometry).
-import type { Node, SkinDocument, Style } from '../../skin';
+import type { BoxNode, Condition, Node, SkinDocument, Style } from '../../skin';
 
 const gutter: Style = { 'padding-left': 'max(28px, 4vw)', 'padding-right': 'max(28px, 4vw)' } as Style;
 const gutterSmall = { 'padding-left': '18px', 'padding-right': '18px' } as Style;
 const sans = 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif';
 const enter = (delay: number) => `enter${delay}`;
-const enterPresets = Object.fromEntries([0, 140, 200, 220, 260, 280, 300, 340, 380, 400, 420, 440, 480, 500, 520, 560, 580, 600].map(d => [enter(d), { keyframes: 'rise', duration: 640, delay: d, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' as const, still: { keyframes: 'dissolve', duration: 240 } }]));
+const enterPresets = Object.fromEntries([0, 80, 140, 200, 220, 260, 280, 300, 340, 380, 400, 420, 440, 480, 500, 520, 560, 580, 600].map(d => [enter(d), { keyframes: 'rise', duration: 640, delay: d, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' as const, still: { keyframes: 'dissolve', duration: 240 } }]));
 
+// Compiled's GhostPill keeps the browser's content-box, so its border sits outside the height.
 const pill = (primary: boolean): Style => ({
-  display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', height: '56px', 'border-radius': '999px',
+  display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': primary ? 'border-box' : 'content-box', height: '56px', 'border-radius': '999px',
   'padding-left': primary ? '28px' : '24px', 'padding-right': primary ? '32px' : '26px', border: primary ? 'none' : '1px solid cinematic.glass-edge',
   'background-color': primary ? 'ink.primary' : 'cinematic.control', color: primary ? 'ink.inverse' : 'ink.primary', 'backdrop-filter': primary ? 'none' : 'blur(20px) saturate(1.3)',
   'font-weight': primary ? '650' : '600', transition: 'background-color 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)',
 } as Style);
 
 // The brand lockup (client/assets/brand, two-tone), one image node.
-const wordmark = (size: number): Node => ({ type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: `${Math.round(size * 2.629)}px`, height: `${size}px` } });
+const markSize = (size: number): Style => ({ width: `${+(size * 2.629).toFixed(3)}px`, height: `${size}px` });
+const wordmark = (size: number, small: number): Node => ({ type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: markSize(size), small: markSize(small) });
 
-const navItem: Node = { type: 'box', group: true, press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}',
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '40px', padding: '0px 14px', 'border-radius': '999px', color: 'ink.secondary', 'font-weight': '550', 'font-size': '15px', 'white-space': 'nowrap' },
-  hover: { 'background-color': 'cinematic.control', color: 'ink.primary' },
+// The pill and icon buttons' keyboard ring, and a nav link's.
+const focusRing = '0px 0px 0px 2px var(--surface.page), 0px 0px 0px 4px var(--brand.warm)';
+const navFocus: Style = { 'box-shadow': '0px 0px 0px 2px var(--brand.warm)', color: 'ink.primary' };
+
+// A primary destination: the current one in full ink and weight, with the underline that
+// glides between destinations (a shared element).
+const navBase: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '40px', padding: '0px 14px', 'border-radius': '999px', color: 'ink.secondary', 'font-weight': '550', 'font-size': '14px', 'white-space': 'nowrap' };
+const navUnderline = (when: Condition[]): Node => ({ type: 'box', when, sharedElement: 'nav-underline', layoutTransition: '460ms ease-out', style: { position: 'absolute', left: '14px', right: '14px', bottom: '4px', height: '2px', 'border-radius': '1px', 'background-color': 'brand.warm' } });
+const navItem = (on: Condition[], press: BoxNode['press'], label: string): Node => ({ type: 'box', group: true, press, label,
+  style: navBase, states: [{ when: on, style: { ...navBase, color: 'ink.primary', 'font-weight': '650' } }], a11y: { current: on },
+  hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus,
+  // The weight sits on the label: the renderer resolves an inherited weight into the text.
+  children: [{ type: 'text', text: label, style: { 'font-weight': '550' }, states: [{ when: on, style: { 'font-weight': '650' } }] }, navUnderline(on)] });
+
+// On phones the destinations are chips in a row under the bar; the current chip's fill
+// glides between them (a shared element).
+const chipBase: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'flex-shrink': '0', height: '34px', 'box-sizing': 'content-box', padding: '0px 14px', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'background-color': 'cinematic.control', color: 'ink.primary', 'backdrop-filter': 'blur(16px)', transition: 'color 240ms linear', 'white-space': 'nowrap' };
+const navChip = (on: Condition[], press: BoxNode['press'], label: string): Node => ({ type: 'box', press, label,
+  style: chipBase, states: [{ when: on, style: { ...chipBase, color: 'ink.inverse' } }], a11y: { current: on }, focus: { 'box-shadow': '0px 0px 0px 2px var(--brand.warm)' },
   children: [
-    { type: 'text', text: '{dest.name}' },
-    { type: 'box', when: [{ test: 'dest.on' }], style: { position: 'absolute', left: '14px', right: '14px', bottom: '4px', height: '2px', 'border-radius': '1px', 'background-color': 'brand.warm' } },
-  ] };
+    { type: 'box', when: on, sharedElement: 'nav-chip', layoutTransition: '460ms ease-out', style: { position: 'absolute', top: '-1px', right: '-1px', bottom: '-1px', left: '-1px', 'border-radius': '999px', 'background-color': 'ink.primary' } },
+    { type: 'text', text: label, style: { position: 'relative', 'font-size': '13px', 'font-weight': '600', 'white-space': 'nowrap' } },
+  ] });
+const chipRow: Node = { type: 'box', style: { display: 'none' }, small: { position: 'relative', display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, transparent 0%, black 5%, black 88%, transparent 100%)' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '6px', 'align-items': 'center', 'padding-left': '18px', 'padding-right': '18px', 'padding-bottom': '8px' }, children: [
+    navChip([{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }, '{s:home}'),
+    { type: 'repeat', over: 'nav.destinations', item: navChip([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}') },
+  ] },
+] };
 
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'background-color': 'surface.page', color: 'ink.primary', 'font-family': sans }, children: [
   { type: 'slot', slot: 'children', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px' }, inner: { display: 'flex', 'flex-direction': 'column', 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } as Style },
   { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], motion: 'navIn', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', 'z-index': '20' }, children: [
     { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'pointer-events': 'none', 'background-image': 'linear-gradient(180deg, var(--cinematic.nav-scrim) 0%, var(--cinematic.scrim-clear) 100%)', 'backdrop-filter': 'blur(16px)' }, small: { bottom: '-18px' } },
     { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', height: '84px', 'box-sizing': 'border-box', ...gutter, 'align-items': 'center', gap: '10px' }, small: { height: '56px', ...gutterSmall, gap: '8px' }, children: [
-      { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', 'margin-right': '22px' } as Style, small: { 'margin-right': '0px' } as Style, children: [wordmark(28)] },
+      { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', controlStates: false, style: { position: 'relative', 'margin-right': '22px' } as Style, small: { 'margin-right': '0px' } as Style, children: [wordmark(28, 24)] },
       { type: 'box', style: { display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', gap: '2px', 'align-items': 'center', 'mask-image': 'linear-gradient(90deg, black 0%, black 90%, transparent 100%)' },
         small: { display: 'none' }, children: [
-          { ...navItem, press: { action: 'home' }, label: '{s:home}', children: [{ type: 'text', text: '{s:home}' }, { type: 'box', when: [{ test: 'env.section', is: 'eq', value: 'home' }], style: { position: 'absolute', left: '14px', right: '14px', bottom: '4px', height: '2px', 'border-radius': '1px', 'background-color': 'brand.warm' } }] },
-          { type: 'repeat', over: 'nav.destinations', item: navItem },
+          navItem([{ test: 'env.section', is: 'eq', value: 'home' }], { action: 'home' }, '{s:home}'),
+          { type: 'repeat', over: 'nav.destinations', item: navItem([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}') },
         ] },
       { type: 'box', small: { flex: '1' } },
-      { type: 'box', press: { action: 'search' }, label: '{s:search}', style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '10px', 'border-radius': '999px', border: '1px solid var(--cinematic.glass-edge)', 'background-color': 'cinematic.control', 'flex-shrink': '0' }, hover: { 'background-color': 'cinematic.control-hover' },
+      { type: 'box', press: { action: 'search' }, label: '{s:search}', style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '10px', 'border-radius': '999px', border: '1px solid var(--cinematic.glass-edge)', 'background-color': 'cinematic.control', 'flex-shrink': '0' }, hover: { 'background-color': 'cinematic.control-hover' }, focus: { 'box-shadow': focusRing },
         children: [{ type: 'icon', symbol: 'search', style: { width: '18px', height: '18px' } }] },
       { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', padding: '4px 14px 4px 4px', 'border-radius': '999px', 'flex-shrink': '0', color: 'ink.secondary', 'font-weight': '550' },
-        hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, small: { padding: '4px' }, children: [
+        hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus, small: { padding: '4px' }, children: [
           { type: 'text', text: '{env.viewerInitial}', style: { width: '32px', height: '32px', 'border-radius': '16px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': '14px', 'font-weight': '650', color: 'ink.primary', 'background-image': 'linear-gradient(135deg, var(--cinematic.ember) 0%, var(--cinematic.dusk) 100%)' } },
           { type: 'text', text: '{env.viewer}', style: { 'font-size': '14px', 'font-weight': '550' }, small: { display: 'none' } },
         ] },
     ] },
+    chipRow,
   ] },
   { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'pop', style: { position: 'absolute', top: '78px', right: 'max(28px, 4vw)', 'z-index': '30', width: '260px', 'box-sizing': 'border-box', padding: '20px', display: 'flex', 'flex-direction': 'column', gap: '16px', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '20px', 'background-color': 'cinematic.popover', 'backdrop-filter': 'blur(24px)', 'box-shadow': '0px 24px 70px var(--cinematic.shadow)' },
     small: { top: '104px', right: '12px' }, children: [
@@ -55,7 +80,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
         { type: 'text', text: '{env.viewer}', style: { 'font-size': '16px', 'font-weight': '600', flex: '1', 'line-clamp': '1' } },
       ] },
       { type: 'box', style: { height: '1px', 'background-color': 'cinematic.glass-edge' } },
-      { type: 'box', press: { action: 'openPicker' }, label: '{s:appearance}', testId: 'skin-picker', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'justify-content': 'space-between', 'align-items': 'center', padding: '8px 10px', margin: '0px -10px', 'border-radius': '12px', color: 'ink.primary' }, hover: { 'background-color': 'cinematic.control' }, children: [
+      { type: 'box', press: { action: 'openPicker' }, label: '{s:appearance}', testId: 'skin-picker', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'justify-content': 'space-between', 'align-items': 'center', padding: '8px 10px', margin: '0px -10px', 'border-radius': '12px', color: 'ink.primary' }, hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus, children: [
         { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '2px' }, children: [
           { type: 'text', text: '{s:appearance}', style: { 'font-size': '10px', 'font-weight': '600', 'letter-spacing': '0.18em', 'text-transform': 'uppercase', color: 'ink.quiet' } },
           { type: 'text', text: '{s:skinName}', style: { 'font-size': '14px' } },
@@ -64,7 +89,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       ] },
       { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
       { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-      { type: 'box', press: { action: 'signOut' }, label: '{s:signOut}', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', padding: '8px 10px', margin: '0px -10px', 'border-radius': '12px', 'font-size': '14px' }, hover: { 'background-color': 'cinematic.control' }, children: [
+      { type: 'box', press: { action: 'signOut' }, label: '{s:signOut}', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', padding: '8px 10px', margin: '0px -10px', 'border-radius': '12px', 'font-size': '14px' }, hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus, children: [
         { type: 'icon', symbol: 'sign-out', style: { width: '16px', height: '16px' } },
         { type: 'text', text: '{s:signOut}' },
       ] },
@@ -87,8 +112,10 @@ const stage: Node = { type: 'repeat', over: 'home.hero', item: { type: 'box', mo
     { type: 'image', src: 'assets/grain.svg', alt: '', style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'fill', opacity: '0.05' } },
   ] } };
 
+// The first featured title's primary pill carries a warm halo.
+const firstHeroHalo = (base: Style) => [{ when: [{ test: 'env.heroIndex', is: 'eq', value: '0' }] as Condition[], style: { ...base, 'box-shadow': '0px 14px 44px var(--cinematic.focus-halo), 0px 0px 0px 1px var(--cinematic.ring)' } }];
 const heroPrimary: Node = { type: 'box', press: { action: 'play', arg: '{hero.id}' }, label: '{heroAct.actionLabel}', testId: 'hero-primary', when: [{ test: 'heroAct.playable' }],
-  style: { ...pill(true), position: 'relative', 'box-shadow': '0px 14px 44px var(--cinematic.focus-halo), 0px 0px 0px 1px var(--cinematic.ring)' }, small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px' }, hover: { 'background-color': 'cinematic.primary-hover' }, children: [
+  style: { ...pill(true), position: 'relative' }, states: firstHeroHalo({ ...pill(true), position: 'relative' }), small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px' }, hover: { 'background-color': 'cinematic.primary-hover' }, focus: { 'box-shadow': focusRing }, children: [
     { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center' }, children: [
       { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' } },
       { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px', 'align-items': 'flex-start' }, children: [
@@ -100,8 +127,10 @@ const heroPrimary: Node = { type: 'box', press: { action: 'play', arg: '{hero.id
       ] },
     ] },
   ] };
+const morePill = (primary: boolean): Style => ({ ...pill(primary), position: 'relative', ...(primary ? { 'padding-right': '30px' } : {}) });
 const heroMore = (primary: boolean): Node => ({ type: 'box', press: { action: 'select', arg: '{hero.kindId}' }, label: '{s:moreInfo}', testId: 'hero-more', when: [{ test: 'heroAct.playable', not: primary }],
-  style: { ...pill(primary), position: 'relative' }, small: { height: '50px', 'padding-left': '20px', 'padding-right': '22px' }, hover: { 'background-color': primary ? 'cinematic.primary-hover' : 'cinematic.control-hover' }, children: [
+  style: morePill(primary), states: primary ? firstHeroHalo(morePill(true)) : undefined, small: primary ? { height: '50px', 'padding-left': '22px', 'padding-right': '24px' } : { height: '50px', 'padding-left': '20px', 'padding-right': '22px' },
+  hover: primary ? { 'background-color': 'cinematic.primary-hover' } : { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing }, children: [
     { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
       { type: 'icon', symbol: 'info', style: { width: '17px', height: '17px' } },
       { type: 'text', text: '{s:moreInfo}', style: { 'font-size': '15px' } },
@@ -125,7 +154,7 @@ const heroCopy: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.
 // One dot per featured title; the current one widens and fills over the rotation interval.
 const dot = (current: boolean): Node => ({ type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', when: [{ test: 'index.current', not: !current }],
   style: { position: 'relative', width: current ? '34px' : '8px', height: '8px', 'border-radius': '4px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': current ? 'cinematic.track-strong' : 'cinematic.glass-edge-strong' },
-  hover: { 'background-color': 'cinematic.control-hover' },
+  hover: { 'background-color': 'cinematic.control-hover' }, focus: { 'box-shadow': '0px 0px 0px 2px var(--brand.warm)' },
   // The current dot is filled; while the carousel rotates the fill grows over the interval.
   children: current ? [
     { type: 'box', when: [{ test: 'env.rotating' }], motion: 'heroFill', style: { position: 'absolute', inset: '0px', 'border-radius': '4px', 'background-color': 'ink.primary' } },
@@ -135,21 +164,37 @@ const dots: Node = { type: 'box', role: 'group', label: '{s:featured}', motion: 
   style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', ...gutter, 'padding-top': '22px' } as Style, small: { ...gutterSmall, 'padding-top': '16px' } as Style, children: [
     { type: 'repeat', over: 'home.heroes', item: { type: 'box', style: { display: 'flex' }, children: [dot(true), dot(false)] } },
   ] };
-const copyColumn: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'box-sizing': 'border-box', 'min-height': 'calc(clamp(500px, 62vh, 700px) - 104px)', 'padding-top': 'calc(84px + 32px + env(safe-area-inset-top))' },
-  small: { 'min-height': '416px', 'padding-top': 'calc(104px + 22px + env(safe-area-inset-top))' }, children: [heroCopy, dots] };
+// The hero copy and its dots. Compiled draws them in one column with the search field below
+// (at least the hero's height, copy at its foot; folded to the field while searching or with
+// no featured title); a slot stands at the top of its tree, so here the field follows this
+// column and each height leaves out its block: 34 + 60 + 14 px wide, 26 + 60 + 10 on phones.
+const searchSlot: Node = { type: 'slot', slot: 'searchField', style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '34px', 'padding-bottom': '14px', 'padding-left': 'max(28px, 4vw)', 'padding-right': 'max(28px, 4vw)', 'align-items': 'center' } as Style,
+    small: { 'padding-top': '26px', 'padding-bottom': '10px', 'padding-left': '16px', 'padding-right': '16px' } as Style, inner: { width: '100%', 'max-width': '720px', animation: 'vr-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 420ms both' } };
+const copyBase: Style = { position: 'relative', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'box-sizing': 'border-box', 'min-height': 'calc(clamp(500px, 62vh, 700px) - 108px)', 'padding-top': 'calc(84px + 32px + env(safe-area-inset-top))' };
+const folded = (height: string): Style => ({ ...copyBase, height, 'min-height': '0px', 'padding-top': '0px' });
+const small: Condition = { test: 'env.small' };
+const noHero: Condition = { test: 'env.heroCount', is: 'eq', value: '0' };
+const copyColumn: Node = { type: 'box', layoutTransition: '640ms ease-out', style: copyBase, states: [
+  { when: [{ test: 'env.searching' }, small], style: folded('80px') },
+  { when: [{ test: 'env.searching' }], style: folded('82px') },
+  { when: [noHero, small], style: folded('80px') },
+  { when: [noHero], style: folded('82px') },
+  { when: [small], style: { ...copyBase, 'min-height': '424px', 'padding-top': 'calc(104px + 22px + env(safe-area-inset-top))' } },
+], children: [heroCopy, dots] };
 
-const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}',
+const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}', controlStates: false,
   style: { position: 'relative', display: 'flex', 'flex-direction': 'column', width: 'clamp(150px, 12.4vw, 232px)', 'flex-shrink': '0', gap: '12px' }, small: { width: '132px' }, children: [
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '2 / 3', 'background-color': 'surface.raised', 'border-radius': '12px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', scale: '1', translate: '0px 0px',
       'box-shadow': '0px 10px 24px -12px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.hairline)', transition: 'scale 360ms cubic-bezier(0.16, 1, 0.3, 1), translate 360ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 360ms cubic-bezier(0.16, 1, 0.3, 1)' },
       small: { 'border-radius': '10px' },
-      groupHover: { scale: '1.045', translate: '0px -6px', 'box-shadow': '0px 28px 50px -14px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)' }, children: [
+      groupHover: { scale: '1.045', translate: '0px -6px', 'box-shadow': '0px 28px 50px -14px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)' },
+      groupFocus: { scale: '1.045', translate: '0px -6px', 'box-shadow': '0px 0px 0px 3px var(--ink.primary), 0px 28px 50px -14px var(--cinematic.card-shadow)' }, children: [
         { type: 'image', when: [{ test: 'card.poster' }], src: '{card.poster}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover', transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)' } },
         { type: 'box', when: [{ test: 'card.poster', not: true }], style: { position: 'absolute', inset: '0px', padding: '16px', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'background-image': 'linear-gradient(160deg, var(--cinematic.placeholder-top) 0%, var(--cinematic.placeholder-bottom) 100%)' }, children: [
           { type: 'text', text: '{card.name}', style: { 'font-family': 'cinematic.display', 'font-size': '24px', 'line-clamp': '4', 'line-height': '0.98' }, small: { 'font-size': '20px' } },
         ] },
-        { type: 'box', style: { position: 'absolute', inset: '0px', 'pointer-events': 'none', 'background-image': 'linear-gradient(145deg, var(--cinematic.sheen) 0%, var(--cinematic.scrim-clear) 42%)', opacity: '0', transition: 'opacity 360ms cubic-bezier(0.16, 1, 0.3, 1)' }, groupHover: { opacity: '1' } },
+        { type: 'box', style: { position: 'absolute', inset: '0px', 'pointer-events': 'none', 'background-image': 'linear-gradient(145deg, var(--cinematic.sheen) 0%, var(--cinematic.scrim-clear) 42%)', opacity: '0', transition: 'opacity 360ms cubic-bezier(0.16, 1, 0.3, 1)' }, groupHover: { opacity: '1' }, groupFocus: { opacity: '1' } },
         { type: 'box', when: [{ test: 'card.played' }], style: { position: 'absolute', top: '8px', right: '8px', width: '24px', height: '24px', 'border-radius': '12px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': 'cinematic.glass', 'backdrop-filter': 'blur(12px)' }, children: [
           { type: 'icon', symbol: 'checkmark', style: { width: '12px', height: '12px', color: 'ink.primary' } },
         ] },
@@ -208,20 +253,6 @@ const shelfRow = (paged: boolean): Node => ({ type: 'box', style: { position: 'r
 const row = shelfRow(true);
 const relatedRow = shelfRow(false);
 
-const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column' }, children: [
-  stage,
-  copyColumn,
-  { type: 'slot', slot: 'searchField', style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '34px', 'padding-bottom': '14px', 'padding-left': 'max(28px, 4vw)', 'padding-right': 'max(28px, 4vw)', 'align-items': 'center' } as Style,
-    small: { 'padding-top': '26px', 'padding-bottom': '10px', 'padding-left': '16px', 'padding-right': '16px' } as Style, inner: { width: '100%', 'max-width': '720px', animation: 'vr-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 420ms both' } },
-  { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-top': '22px' }, small: { 'padding-top': '14px' }, children: [
-    { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'row', motion: 'rowIn', stagger: { step: 90, cap: 4 } } },
-    // More rows load as the end of home comes near.
-    { type: 'box', when: [{ test: 'env.homeHasMore' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'min-height': '120px', 'justify-content': 'center' }, children: [
-      { type: 'widget', widget: 'sentinel', params: { on: 'home' } },
-      { ...rowSkeleton, when: [{ test: 'env.homeMoreLoading' }] } as Node,
-    ] },
-  ] },
-] };
 
 // The title page as a route (a first cut: the full Detail is the UI lead's conversion).
 // The title page, as compiled cinematic draws it (skins/cinematic/detail.contract).
@@ -229,7 +260,6 @@ const side: Style = { 'padding-left': 'max(32px, 5.5vw)', 'padding-right': 'max(
 const sideSmall: Style = { 'padding-left': '20px', 'padding-right': '20px' } as Style;
 const display: Style = { 'font-family': 'cinematic.display', 'font-weight': '400', 'letter-spacing': '-0.01em', 'line-height': '0.98' } as Style;
 const eyebrow: Style = { 'font-size': '11px', 'font-weight': '600', 'letter-spacing': '0.24em', 'text-transform': 'uppercase' } as Style;
-const focusRing = '0px 0px 0px 2px var(--surface.page), 0px 0px 0px 4px var(--brand.warm)';
 const ghost: Style = { border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'background-color': 'cinematic.control', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: 'ink.primary', 'font-weight': '600', transition: 'background-color 180ms linear' } as Style;
 const sectionHeading = (key: string): Node => ({ type: 'text', text: `{s:${key}}`, role: 'heading', level: 2, style: { ...display, 'font-size': '34px' }, small: { 'font-size': '28px' } });
 
@@ -266,7 +296,7 @@ const band: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'r
           ] },
         ] },
       { type: 'box', when: [{ test: 'detail.trailerReady' }], press: { action: 'playExtra', arg: '{detail.trailerId}' }, label: '{s:watchTrailer}', testId: 'detail-trailer',
-        style: { ...ghost, position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '56px', 'box-sizing': 'border-box', 'padding-left': '22px', 'padding-right': '26px' },
+        style: { ...ghost, position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '56px', 'box-sizing': 'content-box', 'padding-left': '22px', 'padding-right': '26px' },
         small: { height: '50px' }, hover: { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing }, children: [
           { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
             { type: 'icon', symbol: 'play', style: { width: '16px', height: '16px' } },
@@ -326,7 +356,7 @@ const upNext: Node = { type: 'repeat', over: 'detail.upNext', item: { type: 'box
   ] } };
 
 const seasonTab = (on: boolean): Node => ({ type: 'box', when: [{ test: 'season.on', not: !on }], press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}',
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '40px', padding: '0px 18px', 'box-sizing': 'border-box', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'font-weight': '600', 'flex-shrink': '0',
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '40px', padding: '0px 18px', 'box-sizing': 'content-box', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'font-weight': '600', 'flex-shrink': '0',
     'background-color': on ? 'ink.primary' : 'cinematic.control', color: on ? 'ink.inverse' : 'ink.primary', transition: 'background-color 180ms linear, color 180ms linear' },
   hover: { 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': '0px 0px 0px 2px var(--brand.warm)' }, children: [{ type: 'text', text: '{card.name}', style: { 'font-size': '14px' } }] });
 
@@ -347,7 +377,7 @@ const episodes: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value
 
 // An extra (trailer, featurette): a glass tile that plays, or says it is unavailable.
 const extraTile = (ready: boolean): Node => ({ type: 'box', when: [{ test: 'extra.ready', not: !ready }], ...(ready ? { press: { action: 'playExtra', arg: '{extra.id}' } } : {}), label: '{extra.name}',
-  style: { ...ghost, position: 'relative', 'border-radius': '16px', width: '280px', height: '110px', padding: '18px', 'box-sizing': 'border-box', 'flex-shrink': '0', ...(ready ? {} : { opacity: '0.42' }) },
+  style: { ...ghost, position: 'relative', 'border-radius': '16px', width: '280px', height: '110px', padding: '18px', 'box-sizing': 'content-box', 'flex-shrink': '0', ...(ready ? {} : { opacity: '0.42' }) },
   small: { width: '220px', height: '96px' }, ...(ready ? { hover: { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing } } : {}), children: [
     { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'align-items': 'center', height: '100%' }, children: [
       { type: 'box', style: { width: '40px', height: '40px', 'border-radius': '20px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': ready ? 'ink.primary' : 'cinematic.control', 'flex-shrink': '0' }, children: [
@@ -391,27 +421,82 @@ const related: Node = { type: 'repeat', over: 'detail.related', when: [{ test: '
 
 const detailSections: Node[] = [band, episodes, extras, cast, crew, related];
 
-const title: Node = { type: 'box', motion: 'frameIn', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', padding: '4vh 4vw', 'box-sizing': 'border-box', 'background-color': 'media.overlay', 'backdrop-filter': 'blur(18px) saturate(1.1)' },
+// Loading and failure (status: true), as compiled cinematic's Status draws them: home's
+// shape in skeletons while it loads, the title's while it opens, and a quiet empty state
+// with Try again when either fails.
+const is = (test: string, value: string): Condition => ({ test, is: 'eq', value });
+const ready: Condition = is('env.load', 'ready');
+const bone = (width: string, height: string, radius: number, small?: Style): Node => skeleton({ width, height, 'border-radius': `${radius}px` }, small);
+const homeLoading: Node = { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:findingYourEvening}', motion: 'statusIn', style: { display: 'flex', 'flex-direction': 'column' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: 'clamp(500px, 62vh, 700px)', 'justify-content': 'flex-end', gap: '16px', ...gutter, 'box-sizing': 'border-box', 'background-image': 'radial-gradient(ellipse 80% 70% at 20% 40%, var(--cinematic.skeleton) 0%, var(--cinematic.scrim-clear) 70%)' } as Style,
+    small: { height: '520px', ...gutterSmall } as Style, children: [
+      bone('120px', '10px', 4),
+      bone('min(560px, 50%)', '76px', 10, { width: '80%', height: '48px' }),
+      bone('300px', '14px', 4, { width: '60%' }),
+      bone('150px', '52px', 26),
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-top': '34px' }, children: [bone('min(720px, 100%)', '60px', 30)] },
+    ] },
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '36px' }, children: [rowSkeleton] },
+] };
+const titleLoading: Node = { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:openingTitle}', motion: 'statusOpen', style: { display: 'flex', 'flex-direction': 'column', gap: '18px', ...side, 'padding-top': '300px', 'padding-bottom': '48px', 'background-image': 'radial-gradient(ellipse 90% 60% at 30% 20%, var(--cinematic.skeleton) 0%, var(--cinematic.scrim-clear) 70%)' } as Style,
+  small: { ...sideSmall, 'padding-top': '260px' } as Style, children: [
+    bone('90px', '10px', 4),
+    bone('min(620px, 60%)', '72px', 10, { width: '85%', height: '44px' }),
+    bone('260px', '14px', 4),
+    bone('min(560px, 55%)', '52px', 8, { width: '100%' }),
+    bone('170px', '56px', 28),
+  ] };
+const failure = (message: string): Node => ({ type: 'box', when: [is('env.load', 'failed')], style: { display: 'flex', 'flex-direction': 'column', gap: '4px' }, children: [
+  { type: 'box', role: 'status', motion: enter(80), style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'text-align': 'center', gap: '14px', padding: '56px 24px 72px' }, children: [
+    { type: 'box', style: { display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '64px', height: '64px', 'border-radius': '32px', 'background-color': 'cinematic.glass', border: '1px solid var(--cinematic.glass-edge)', 'box-shadow': 'inset 0px 1px 0px var(--cinematic.ring)', 'margin-bottom': '6px' } as Style,
+      children: [{ type: 'icon', symbol: 'alert', style: { width: '24px', height: '24px', color: 'brand.warm' } }] },
+    { type: 'text', text: '{s:somethingWentQuiet}', style: { ...display, 'font-size': '32px' } },
+    { type: 'text', text: message, style: { 'font-size': '15px', color: 'ink.secondary', 'line-height': '1.55', 'max-width': '28rem' } },
+  ] },
+  { type: 'box', when: [{ test: 'env.canRetry' }], style: { display: 'flex', 'flex-direction': 'row', 'justify-content': 'center' }, children: [
+    { type: 'box', press: { action: 'retry' }, label: '{s:tryAgain}', style: { ...pill(true), position: 'relative', height: '44px', 'padding-left': '24px', 'padding-right': '24px', 'font-size': '14px' }, hover: { 'background-color': 'cinematic.primary-hover' }, focus: { 'box-shadow': focusRing },
+      children: [{ type: 'text', text: '{s:tryAgain}' }] },
+  ] },
+] });
+
+// Home: the hero stage and copy, the search field and the rows; its own states while it loads or fails.
+const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column' }, children: [
+  stage,
+  homeLoading,
+  failure('{s:homeFailed}'),
+  { ...copyColumn, when: [ready] } as Node,
+  { ...searchSlot, when: [ready] } as Node,
+  { type: 'box', when: [ready, { test: 'env.searching', not: true }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-top': '22px' }, small: { 'padding-top': '14px' }, children: [
+    { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'row', motion: 'rowIn', stagger: { step: 90, cap: 4 } } },
+    // More rows load as the end of home comes near.
+    { type: 'box', when: [{ test: 'env.homeHasMore' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'min-height': '120px', 'justify-content': 'center' }, children: [
+      { type: 'widget', widget: 'sentinel', params: { on: 'home' } },
+      { ...rowSkeleton, when: [{ test: 'env.homeMoreLoading' }] } as Node,
+    ] },
+  ] },
+] };
+
+// The page frame; the scrim, blur and dissolve behind it are the route column's (the foundation's).
+const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', padding: '4vh 4vw', 'box-sizing': 'border-box' },
   small: { padding: '0px' }, children: [
     { type: 'box', motion: 'open', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': 'surface.page', 'box-shadow': '0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)' },
       small: { 'border-radius': '0px' }, children: [
         { type: 'box', press: { action: 'back' }, label: '{s:close}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', width: '44px', height: '44px', 'box-sizing': 'border-box', padding: '13px', 'border-radius': '22px', border: '1px solid var(--surface.line)', 'background-color': 'surface.glass', 'backdrop-filter': 'blur(20px) saturate(1.3)' },
           children: [{ type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } }] },
         { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', style: { flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden', display: 'flex', 'flex-direction': 'column', gap: '52px', 'padding-bottom': '72px' }, small: { gap: '36px' }, children: [
-          { type: 'text', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], text: '{s:opening}', style: { padding: '64px', color: 'ink.secondary' } },
-          { type: 'text', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], text: '{s:failed}', role: 'alert', style: { padding: '64px', color: 'ink.secondary' } },
+          titleLoading,
+          failure('{s:titleFailed}'),
           ...detailSections,
         ] },
       ] },
   ] };
 
 export const cinematicDoc: SkinDocument = {
-  schema: 1, renderer: 7, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
+  schema: 1, renderer: 8, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg', swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
-  strings: { en: { velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', opening: 'Opening title…', failed: 'This title could not be opened.' , episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
+  strings: { en: { findingYourEvening: 'Finding your evening…', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', homeFailed: "Your library couldn't be reached. Check your server connection.", titleFailed: "This title couldn't be opened. It may no longer be available.", velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
   motion: {
     ...enterPresets,
-    frameIn: { keyframes: 'dissolve', duration: 420, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 200 } },
     pulse0: { keyframes: 'breathe', duration: 1400, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     pulse180: { keyframes: 'breathe', duration: 1400, delay: 180, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     pulse360: { keyframes: 'breathe', duration: 1400, delay: 360, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
@@ -424,10 +509,15 @@ export const cinematicDoc: SkinDocument = {
     drift: { keyframes: 'drift', duration: 32000, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', direction: 'alternate', fill: 'none', still: { keyframes: 'none', duration: 0 } },
     heroFill: { keyframes: 'fill', duration: 9000, easing: 'linear', still: { keyframes: 'none', duration: 0 } },
     card: { keyframes: 'rise', duration: 640, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 240 } },
+    statusIn: { keyframes: 'dissolve', duration: 500, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 240 } },
+    statusOpen: { keyframes: 'dissolve', duration: 400, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 240 } },
     rowIn: { keyframes: 'rise', duration: 640, delay: 520, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 240 } },
   },
   templates: { card, row, relatedRow },
   slots: { shell, home },
   routes: { title },
+  // Home and the title page draw their own loading and failure; home fades under the floating bar.
+  status: true,
+  traits: { barMask: true },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
 };
