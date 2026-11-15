@@ -233,8 +233,8 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
   `auto` are accepted: the platform draws the ring itself.
 - **Control states**: a pressable box shows Exact's hover wash under its content (as a compiled
   button does), unless its style has a background image, it has its own `hover` overlay (an
-  authored hover replaces the wash, as an authored `:hover` does in Exact; the pressed look and
-  `active` still apply), or it sets `controlStates: false` (no wash and no pressed look).
+  authored hover replaces the wash, as an authored `:hover` does in Exact; the pressed state
+  still applies), or it sets `controlStates: false` (no wash and no pressed look).
 - **searchInput** takes its node's padding (the input is the padded box, so the ring hugs it).
 - **traits**: `{ barMask?: bool, panSections?: bool }`: home fades under a floating bar; home,
   libraries and Live TV pan sideways between sections (unset: the doc engine's).
@@ -297,8 +297,9 @@ Without `routes.library` the foundation's library page shows.
 - `escape` acts only while one of its flags is open and may name several (`"menu drawer"`), so it
   can sit on a whole bar; a pressable box's `id` is its press button's, so `returnFocus` and
   `press.focus` land on the control. Route action `home`.
-- **Pressed**: a pressable box with control states dims its content to .65 while pressed when
-  it has no ground, and shows Exact's pressed wash (`--exact-tertiary-fill`) when it has one.
+- **Pressed**: a pressable box with control states shows Exact's pressed state while held: the
+  whole box at .65 opacity (its ground, ring and content; a hover ground stays), with or without a
+  ground of its own. An `active` overlay replaces it (author over platform), as a bound opacity does.
 - **Focus ring**: no inline outline unless the node suppresses the ring (`outline: none`, or a
   focus/groupFocus overlay without `outline: auto`), so Exact's own focus-visible ring is
   drawn exactly as on a compiled button.

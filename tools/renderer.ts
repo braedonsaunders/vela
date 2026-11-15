@@ -64,11 +64,9 @@ const CONTENT_ONLY = new Set(['lineClamp', 'objectFit', 'outlineStyle']);
 // after every commit: only a tree's root takes it (RootEl), so a page has a handful, not one per node.
 /** Rows a renderer box keeps as bound (inline) rows; the others are the document's stylesheet
  * (the resolver's css, one rule per distinct style, matched by the box's data-st), so a box
- * carries a couple of dozen bindings, not a hundred. Kept: what Exact itself reads (display,
- * overflow), the bindable rows (\`d*\` overrides), motion, and the text rows, whose
- * writes feed Exact's text styles. Roots and slot boxes bind every row (\`full\`). */
-export const BOUND_ROWS = new Set(['display', 'width', 'overflowX', 'overflowY', 'color', 'backgroundColor', 'backgroundImage', 'opacity', 'translate', 'animation',
-  'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'textTransform', 'textAlign', 'textShadow', 'textStroke', 'textOverflow', 'whiteSpace', 'fontVariantNumeric']);
+ * carries ten bindings, not a hundred. Kept: what Exact itself reads (display, overflow), the
+ * bindable rows (\`d*\` overrides) and motion. Roots and slot boxes bind every row (\`full\`). */
+export const BOUND_ROWS = new Set(['display', 'width', 'overflowX', 'overflowY', 'color', 'backgroundColor', 'backgroundImage', 'opacity', 'translate', 'animation']);
 const rows = (full: boolean) => STYLE.filter(([field]) => !CONTENT_ONLY.has(field) && (full ? true : BOUND_ROWS.has(field))).map(([field, row]) => {
   const bind = BINDABLE.find(([f]) => f === field);
   // A box that clips or scrolls takes only relative/absolute/sticky (lower-attr-value); the checker reads the choice off a prop.
@@ -160,7 +158,7 @@ function level(d: number): string {
   // and disabled once (kidsN), dropping those whose \`when\` fails, so a child level renders one
   // element and its row needs no anchors. \`hot\`: this box's focus when it is a group.
   const next = d < DEPTH ? `
-        for kid in kids${d + 1}(n.kids, c, e, (n.grp ? focused : c.hot)) key=kid.key
+        for kid in kids${d + 1}(n.kids, c, e, (n.grp ? focused : c.hot), vals) key=kid.key
           V${d + 1}(n=kid.n, c=kid.c, vals=kid.vals, sr=kid.sr, dis=kid.dis, e=e, scope=scope)` : '';
   // A level declares no action that reads its props: Exact passes every prop and inject of a
   // component to each of its actions as hidden arguments and checks their types on every call,
@@ -713,8 +711,10 @@ ${Array.from({ length: DEPTH }, (_, i) => i + 1).map(d => `fn detailCtxs${d}(n: 
 }
 // A box's children in document order, each stepped into its contexts (a repeat's items) with its
 // bindings, state and disabled resolved once (a lambda binds each value once), those whose \`when\`
-// fails left out: the child level then draws one element and nothing else.
-const kidsBody = (d: number) => `fn kids${d}(ns: N${d}[], c: Ctx, e: Env, hot: bool): Kid${d}[] = ns.map((k, ki) => ctxs${d}(k, c, e).map((cc, j) => [Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=hot)].map(x => [binds(x, e)].map(vals => Kid${d}(n=k, c=x, vals=vals, sr=stateOf(k.sts, k.base, vals, e), dis=(k.dis.length > 0 and shows(k.dis, vals, e)), key=\`\${ki}:\${ctxKey(cc, j)}\`))).flat()).flat()).flat().filter(x => shows(x.n.cond, x.vals, e))`;
+// fails left out: the child level then draws one element and nothing else. A child that repeats
+// nothing shares its parent's context, so it takes the parent's bindings (pv) rather than computing
+// the whole vocabulary again: bindings are computed once per repeated item, not once per node.
+const kidsBody = (d: number) => `fn kids${d}(ns: N${d}[], c: Ctx, e: Env, hot: bool, pv: string[]): Kid${d}[] = ns.map((k, ki) => ctxs${d}(k, c, e).map((cc, j) => [Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=hot)].map(x => [k.rep == "" ? pv : binds(x, e)].map(vals => Kid${d}(n=k, c=x, vals=vals, sr=stateOf(k.sts, k.base, vals, e), dis=(k.dis.length > 0 and shows(k.dis, vals, e)), key=\`\${ki}:\${ctxKey(cc, j)}\`))).flat()).flat()).flat().filter(x => shows(x.n.cond, x.vals, e))`;
 // The detail collections, split out to keep expressions within Exact's depth limit.
 const detailCtxsBody = `match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }`;
 const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs${d}(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : n.rep.startsWith("library.") ? libraryCtxs(n.rep, n.lim, c, e) : n.rep == "collection.items" ? match first(e.collection) { case some(l) => l.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "quick.chars" ? e.quickCode.split("").slice(0, n.lim).map(x => Ctx(c, fact=[x])) : [])`;
