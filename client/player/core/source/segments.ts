@@ -1,3 +1,4 @@
+import {DeliveryMeter} from './delivery';
 import {LiveWindow} from './live-window';
 import {BandwidthEstimator} from '../../abr';
 import { CustomPathedSource, CustomSource } from 'mediabunny';
@@ -20,6 +21,7 @@ export class SegmentReader {
   networkRetries=0;retrying=false;
   private polling?:ReturnType<typeof setInterval>;
   readonly bandwidth=new BandwidthEstimator();
+  readonly delivery=new DeliveryMeter();
   readonly metrics={requests:0,bytes:0,cacheHits:0,milliseconds:0};
   readonly diagnostics:string[]=[];
   constructor(url:string,private readonly fetcher:typeof fetch=(...args)=>fetch(...args),private readonly allowed?:(url:URL)=>boolean,private readonly cacheIdentity='local',live=false){
@@ -117,6 +119,7 @@ export class SegmentReader {
   private async request(path:string,signal:AbortSignal,playlist:boolean):Promise<ObjectBytes>{
     const at=performance.now(),request=++this.metrics.requests;
     const response=await this.fetcher(path,{signal,credentials:'same-origin',redirect:'error',cache:'no-store'});
+    const firstByte=performance.now();
     try{
       if(response.status!==200){
         if(response.status===408||response.status===429||response.status>=500)throw new TypeError(`Segment HTTP ${response.status}`);
@@ -144,6 +147,7 @@ export class SegmentReader {
         this.diagnostics.push(`hls-object:${request}:bytes=${size}:${objectShape(bytes)}`);
         if(this.diagnostics.length>8)this.diagnostics.shift();
       }
+      if(!playlist)this.delivery.record(at,firstByte,size);
       if(!playlist)this.bandwidth.sample(size,performance.now()-at,Number(response.headers.get('Age')??0)>0||/hit/i.test(response.headers.get('X-Cache')??''));
       this.metrics.bytes+=size;this.metrics.milliseconds+=performance.now()-at;
       if(playlist&&this.liveWindow&&path===this.root){

@@ -130,6 +130,22 @@ const home: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'c
   ] },
 ] };
 
+// ---------------------------------------------------------------- library
+// A plain Contract button with no ground of its own, as Exact draws it ("bordered"): a hairline
+// in the label colour at 45%, the control radius, the label colour at weight 500.
+const bordered: Style = { display: 'block', padding: '16px', border: '1px solid var(--exact-line)', 'border-radius': 'calc(8px * var(--exact-curve-reach))',
+  color: 'var(--exact-label)', 'font-weight': '500', 'line-height': '20px', 'text-align': 'center' };
+
+// A library's titles in the server's order, a way back and a way to load more.
+const library: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: [
+  status('{s:findingTitles}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
+  status('{s:libraryFailed}', [{ test: 'env.load', is: 'eq', value: 'failed' }]),
+  { type: 'box', when: [ready], press: { action: 'back' }, label: '{s:back}', style: bordered, children: [{ type: 'text', text: '{s:back}' }] },
+  catalogue('{library.name}', 'library.items', [ready]),
+  { type: 'box', when: [ready, { test: 'library.more' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{s:showMore}',
+    style: bordered, children: [{ type: 'text', text: '{s:showMore}' }] },
+] };
+
 // ---------------------------------------------------------------- title
 const section = (heading: string, when: Condition[], children: Node[], gap: string): Node => ({ type: 'box', when, style: { display: 'flex', 'flex-direction': 'column', padding: '0px 7%', gap }, children: [
   { type: 'text', text: heading, role: 'heading', level: 2, style: { 'font-size': '24px', 'font-weight': '700' } },
@@ -180,7 +196,7 @@ const title: Node = { type: 'box', style: { width: '100%', height: '100%', displ
 ] };
 
 export default {
-  schema: 1, renderer: 8, status: true, id, name: 'Index', version, tagline: 'A quiet printed catalogue: light paper, serif type, plain lists.',
+  schema: 1, renderer: 10, status: true, id, name: 'Index', version, tagline: 'A quiet printed catalogue: light paper, serif type, plain lists.',
   preview: asset('preview.jpg'), swatches: ['#f3f0e8', '#22221e', '#813b31', '#e3dfd3', '#bcb8ae'],
   // Sections cut rather than slide; nothing fades under a bar.
   traits: { panSections: false, barMask: false },
@@ -196,12 +212,13 @@ export default {
     viewingIndex: 'THE VIEWING INDEX', searchLabel: 'SEARCH', searchPlaceholder: 'Title, person, or description', searchLibrary: 'Search your library', clearSearch: 'Clear search', clear: 'Clear', featured: 'FEATURED', loadingMore: 'Loading more…',
     film: 'Film', series: 'Series', episode: 'Episode', season: 'Season', collection: 'Collection', noYear: '—',
     closeTitle: 'Close title', titleDetails: 'Title details', opening: 'Opening title…', failed: 'This title couldn\'t be opened. It may no longer be available.',
+    back: 'Back', showMore: 'Show more', findingTitles: 'Finding titles…', libraryFailed: 'This library couldn\'t be opened. Check your connection and try again.',
     play: 'Play', resume: 'Resume watching', seasons: 'Seasons', episodes: 'Episodes', extras: 'Extras', notAvailable: '{extra.name} · Not available',
     featuring: 'Featuring', behind: 'Behind the story',
   } },
   templates: { card, row },
   slots: { shell, home },
-  routes: { title },
+  routes: { title, library },
   // Below 900 px the title page covers home; from 900 it stacks beside a 360 px home pane.
   detail: { from: 900, small: 'fullscreen', wide: 'stack', split: '360', frame: { flat: true } },
 } satisfies SkinDocument;
