@@ -7,14 +7,13 @@ component LiveControls
   props
     p: LiveControlsProps
   inject
-    toggleLowDelay: action
     catchUp: action
     zap: action
   view
     column gap=10 padding="12px 14px" min-width=230 max-width=320 border-radius=6 background-color="jellytwin.popup" color="jellytwin.ink-strong" font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" box-shadow="0px 8px 30px var(--jellytwin.shadow)"
       row gap=10 align-items="center"
         text t("live.liveBadge") font-size=10 font-weight=700 letter-spacing="0.06em" padding="2px 6px" border-radius=2 background-color="jellytwin.danger"
-        text (p.lowDelay ? t("live.lowDelay") : t("live.adaptive")) font-size=14 font-weight=500 color="jellytwin.ink" flex=1
+        column flex=1
         button press=zap(-1) aria-label=t("live.channelUp") class=IconBtn width=34 height=34
           Icon(name="symbol:icon.jelly-up", size=20)
         button press=zap(1) aria-label=t("live.channelDown") class=IconBtn width=34 height=34
@@ -30,9 +29,6 @@ component LiveControls
       if p.drift > 0
         text t("live.behind", seconds=p.driftLabel) role="status" font-size=13 color="jellytwin.secondary" font-variant-numeric="tabular-nums"
       row gap=8 flex-wrap="wrap"
-        button press=toggleLowDelay aria-label=t("ui.toggleLowDelay") aria-pressed=p.lowDelay class=Raised height=34 padding="0px 12px" background-color=(p.lowDelay ? "jellytwin.accent" : "jellytwin.raised")
-          Icon(name="symbol:icon.jelly-bolt", size=16)
-          text (p.lowDelay ? t("ui.lowDelayOn") : t("ui.useLowDelay")) font-size=13
         if p.canCatchUp and p.drift > 0
           button press=catchUp class=Raised height=34 padding="0px 12px"
             text t("live.catchUp") font-size=13

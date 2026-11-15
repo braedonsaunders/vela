@@ -72,7 +72,7 @@ component Client
     homeTile
     homeTuned
     homeZapping
-    toggleLowDelay
+    retryTileStop
     catchUpLive
     zap
     tuneZap
@@ -223,7 +223,7 @@ component Client
             if current(playback)
               if e.name == "liveWatch"
                 column position="absolute" top=88 right=(small ? 12 : 36) z-index=2 max-width=(small ? "calc(100% - 24px)" : "none") opacity=(liveControlsVisible ? 1 : 0) pointer-events=(liveControlsVisible ? "auto" : "none") inert=(not liveControlsVisible) transition=(still ? "none" : "opacity 180ms ease")
-                  for slotProps in [LiveControlsProps(lowDelay=lowDelay, reconnecting=(liveView.sessionId == playback.sessionId and liveView.reconnecting), delivery=(liveView.sessionId == playback.sessionId ? liveView.delivery : "unknown"), drift=(liveView.sessionId == playback.sessionId ? liveView.drift : -1), driftLabel=(liveView.sessionId == playback.sessionId ? liveView.driftLabel : ""), canCatchUp=(liveView.sessionId == playback.sessionId and liveView.canCatchUp))] key="liveControls"
+                  for slotProps in [LiveControlsProps(reconnecting=(liveView.sessionId == playback.sessionId and liveView.reconnecting), delivery=(liveView.sessionId == playback.sessionId ? liveView.delivery : "unknown"), drift=(liveView.sessionId == playback.sessionId ? liveView.drift : -1), driftLabel=(liveView.sessionId == playback.sessionId ? liveView.driftLabel : ""), canCatchUp=(liveView.sessionId == playback.sessionId and liveView.canCatchUp))] key="liveControls"
                     LiveControls(p=slotProps)
                 if zapTarget != "" and guide.channels.length > 0
                   column position="absolute" left=(small ? 16 : 40) top="50%" translate="0px -50%" z-index=3
