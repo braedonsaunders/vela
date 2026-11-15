@@ -216,6 +216,29 @@ document that fails validation. The viewer's own pick is kept and retried when t
 server next answers. Until the compiled skins are removed, the fallback is the
 compiled cinematic engine.
 
+## Built-in skin documents
+
+A release ships every skin document in `protocol/v0/fixtures/skins/` as a built-in
+skin, so a viewer can pick a data skin with no server involvement:
+
+    bun tools/skin.ts documents <out>
+
+writes, from `fixtures/skins/<id>/document.ts` (default export) plus its `assets/`,
+and the legacy `fixtures/skins/cinematic.ts`:
+
+    <out>/catalog.json                    {schema: 1, documents: [SkinDocumentRef + renderer + sha256]}
+    <out>/<id>/<version>/document.json    the document; asset URLs point at /vela/skins/<id>/<version>/
+    <out>/<id>/<version>/<asset>          preview and assets
+
+The release serves `<out>` at `/vela/skins/` beside the app (immutable apart from
+`catalog.json`). The client fetches `/vela/skins/catalog.json` from its own origin,
+drops entries whose `renderer` exceeds its `RENDERER_VERSION`, and lists the rest in
+the appearance picker beside the server's documents; a server document with the same
+id wins. A conversion of a skin that is still compiled into the client ships as
+`<id>-data`, named "<name> (data)", until the compiled skin is deleted. A missing or
+failed catalog only means no built-in documents; a page a document does not draw
+falls back to the cinematic default, as for server documents.
+
 ## Planned single-renderer release
 
 The end state is one compiled Exact app plus skin documents conforming to

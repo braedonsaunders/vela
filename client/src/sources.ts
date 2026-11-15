@@ -10,7 +10,7 @@ import { liveStatus, stopPlan } from './live/player';
 import { InteractionQueue } from './telemetry';
 import { PreviewCoordinator } from './discovery/preview';
 import { sessionEvents } from './protocol/events';
-import { appearanceModel, appearanceStream } from './appearance';
+import { appearanceModel, appearanceStream, builtInDocuments } from './appearance';
 import { skinDoc } from './skin';
 import { mediaPlan } from './protocol/media';
 import { randomId } from './protocol/id';
@@ -527,11 +527,17 @@ const sources: Sources = {
   },
   uiSkinDoc: async ([url, width, localeJSON], store) => {
     const path = new URL(url).pathname;
+    // A built-in document is a static file of this release; a server document lives in the appearance tree.
+    if (path.startsWith('/vela/skins/') && path.endsWith('/document.json')) {
+      const response = await fetch(`${API}${path}`);
+      if (!response.ok) throw new Error(`Built-in skin document ${path}: ${response.status}`);
+      return skinDoc(await response.json(), width, API, String(JSON.parse(localeJSON).locale ?? 'en')) as unknown as Awaited<ReturnType<Sources['uiSkinDoc']>>;
+    }
     if (!path.startsWith('/vela/v0/appearance/skins/')) throw new Error('Skin document outside the appearance tree');
     // The model is built from the same tables tools/renderer.ts generates its shapes from.
     return skinDoc(await server(store).skinDocument(path.slice('/vela/v0'.length)), width, API, String(JSON.parse(localeJSON).locale ?? 'en')) as unknown as Awaited<ReturnType<Sources['uiSkinDoc']>>;
   },
-  uiAppearance: async (_args, store) => appearanceModel(await server(store).appearance(), API),
+  uiAppearance: async (_args, store) => appearanceModel(await server(store).appearance(), API, await builtInDocuments(API)),
   appearanceEvents: async ([_attempt, floor], store) => {
     const api = await session(store);
     return appearanceStream(API, mapper => api.streamEvents(mapper), floor);

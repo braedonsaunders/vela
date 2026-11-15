@@ -190,7 +190,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
 /** Image sources: a vocabulary template, an app asset, or a same-origin pack asset. */
 function asset(src: string, r: Resolve): string {
   if (/^\{[a-zA-Z.]+\}$/.test(src) || /^assets\/[a-z0-9/._-]+$/.test(src)) return src;
-  if (src.startsWith('/vela/v0/appearance/') && !/[?#\\]/.test(src)) return `${r.assets}${src}`;
+  if ((src.startsWith('/vela/v0/appearance/') || src.startsWith('/vela/skins/')) && !/[?#\\]/.test(src)) return `${r.assets}${src}`;
   throw new Error(`Image source outside the document's assets: ${src}`);
 }
 
@@ -217,7 +217,7 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
   const routes = Object.entries(doc.routes ?? {}).map(([name, tree]) => { const { present: _, ...rest } = slot(tree, r, 'children'); return { name, ...rest }; });
   // Document fonts: same-origin appearance files, registered by the vela-theme view under their family names.
   const fonts = Object.values(doc.fonts ?? {}).slice(0, 8).flatMap(f => /^[A-Za-z0-9 ]{1,48}$/.test(f?.family ?? '') ? (f.files ?? []).slice(0, 4).flatMap(file => {
-    const url = file && typeof file.url === 'string' && file.url.startsWith('/vela/v0/appearance/') && /\.(woff2|woff|ttf|otf)$/.test(file.url) && !/[?#\\]/.test(file.url) ? `${origin}${file.url}` : '';
+    const url = file && typeof file.url === 'string' && (file.url.startsWith('/vela/v0/appearance/') || file.url.startsWith('/vela/skins/')) && /\.(woff2|woff|ttf|otf)$/.test(file.url) && !/[?#\\]/.test(file.url) ? `${origin}${file.url}` : '';
     return url ? [{ family: f.family, url, weight: Number(file.weight) || 400, style: file.style === 'italic' ? 'italic' : 'normal', sizeAdjust: Number(f.sizeAdjust) || 100 }] : [];
   }) : []);
   return { id: doc.id, fontsJson: fonts.length ? JSON.stringify(fonts) : '', styles: r.styles, shell, home, routes,
