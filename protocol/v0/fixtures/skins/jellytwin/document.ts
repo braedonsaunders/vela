@@ -94,7 +94,8 @@ const sections = (style: Style, below: Style): Node => ({ type: 'box', role: 'ta
 ] });
 
 const headerHeight = { style: { height: '58px' }, below: { [COMPACT]: { height: '52px' } } };
-const header: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}', when: [{ test: 'env.viewer' }],
+// Escape closes the user menu from the profile button too (focus stays there when the menu opens).
+const header: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}', when: [{ test: 'env.viewer' }], escape: 'menu', returnFocus: 'jt-user',
   style: col({ position: 'relative', 'flex-shrink': '0', 'z-index': '20', 'background-color': '$header', 'backdrop-filter': 'blur(12px)', 'box-shadow': '0px 2px 6px $shadow' }), children: [
     { type: 'box', style: row({ ...headerHeight.style, 'box-sizing': 'border-box', 'padding-left': '10px', 'padding-right': '14px', 'align-items': 'center', gap: '6px' }),
       below: { [COMPACT]: { ...headerHeight.below[COMPACT], 'padding-left': '4px', 'padding-right': '6px', gap: '2px' } }, children: [
