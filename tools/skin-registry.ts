@@ -23,7 +23,7 @@ export const SLOT_API = 2;
 export const SLOTS: SlotSpec[] = [
   { name: 'Shell', record: 'ShellProps', children: true, actions: { chooseSkin: 'chooseSkin', signOut: 'logout', home: 'goHome', search: 'openSearch', live: 'openLive', library: 'goHome', openLibrary: 'openLibrary', goSecure: 'goSecure' } },
   { name: 'Home', record: 'HomeProps', children: true, actions: { selectTitle: 'selectTitle', observe: 'observe', pickHero: 'pickHero', reachEnd: 'loadMoreHome', reachRowEnd: 'loadMoreRow', previewIntent: 'previewIntent', playHero: 'playHero', openLibrary: 'openLibrary', live: 'openLive' } },
-  { name: 'SearchSurface', record: 'SearchProps', actions: { openLiveProgramme: 'openLiveProgramme', selectTitle: 'selectTitle', observe: 'observe' } },
+  { name: 'SearchSurface', record: 'SearchProps', actions: { openLiveProgramme: 'openLiveProgramme', retryDescriptive: 'retryDescriptive', selectTitle: 'selectTitle', observe: 'observe' } },
   { name: 'SearchField', record: 'SearchFieldProps', actions: { edit: 'edit' } },
   { name: 'Detail', record: 'DetailProps', actions: { play: 'play', playExtra: 'playExtra', selectTitle: 'selectTitle', observe: 'observeDetail' } },
   { name: 'Status', record: 'StatusProps', actions: {} },

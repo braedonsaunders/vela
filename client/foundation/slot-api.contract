@@ -49,6 +49,8 @@ shape SearchProps
   aiAvailable: bool
   // Each optional lane's state for this query: "off", "loading", "failed" or "ready".
   descriptiveState: string
+  // A failed descriptive answer may be asked again now (the server allows it, after its backoff).
+  descriptiveCanRetry: bool
   aiState: string
   small: bool
   still: bool
