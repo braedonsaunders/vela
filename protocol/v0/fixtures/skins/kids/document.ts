@@ -16,6 +16,9 @@ const gutter = { 'padding-left': 'max(24px, 4vw)', 'padding-right': 'max(24px, 4
 const gutterSmall = { 'padding-left': '16px', 'padding-right': '16px' } as Style;
 // A raised, toy-like button: a flat ledge under a soft drop.
 const ledge = (tint: string) => `0px 6px 0px ${tint}, 0px 16px 28px -12px rgba(27, 37, 80, 0.35)`;
+// A white sticker frame, as longhands: every side's width and colour stated.
+const frame = (w: number): Style => ({ 'border-style': 'solid', 'border-width': `${w}px`, 'border-color': '#FFFFFF',
+  'border-top-width': `${w}px`, 'border-top-color': '#FFFFFF', 'border-bottom-width': `${w}px`, 'border-bottom-color': '#FFFFFF' } as Style);
 const lift = { translate: '0px -3px', transition: `translate 380ms ${bouncy}, scale 380ms ${bouncy}, background-color 160ms linear` } as Style;
 // Keyboard and remote focus: a thick sky ring outside a white gap, readable on any ground.
 const ring = '0px 0px 0px 4px #FFFFFF, 0px 0px 0px 8px #3FA9F5';
@@ -172,8 +175,8 @@ const infoButton = (alone: boolean): Node => ({ type: 'box', press: { action: 's
 // Today's pick: a big rounded window onto the featured title, with a star sticker on its corner.
 const hero: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.searching', not: true }], item: { type: 'box', motion: 'rise', style: { position: 'relative', ...gutter, 'padding-top': '112px' }, small: { ...gutterSmall, 'padding-top': '78px' }, children: [
   { type: 'widget', widget: 'observe', params: { receipt: '{hero.receipt}' } },
-  { type: 'box', style: { position: 'relative', height: 'clamp(340px, 54vh, 600px)', 'box-sizing': 'border-box', border: '8px solid #FFFFFF', 'border-radius': '48px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky',
-    'box-shadow': '0px 12px 0px rgba(27, 37, 80, 0.07), 0px 40px 70px -28px rgba(27, 37, 80, 0.45)' }, small: { height: '440px', 'border-radius': '36px', border: '6px solid #FFFFFF' }, children: [
+  { type: 'box', style: { position: 'relative', height: 'clamp(340px, 54vh, 600px)', 'box-sizing': 'border-box', ...frame(8), 'border-radius': '48px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky',
+    'box-shadow': '0px 12px 0px rgba(27, 37, 80, 0.07), 0px 40px 70px -28px rgba(27, 37, 80, 0.45)' }, small: { height: '440px', 'border-radius': '36px', ...frame(6) }, children: [
     { type: 'box', when: [{ test: 'hero.backdrop' }], motion: 'drift', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'transform-origin': '60% 40%' }, small: { display: 'none' }, children: [
       { type: 'image', src: '{hero.backdrop}', alt: '', fade: true, style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '100%', 'object-fit': 'cover', transition: `opacity 420ms ${soft}` } }] },
     // On a phone the window is tall: the poster fills it better than a cropped backdrop.
@@ -211,9 +214,9 @@ const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '2 / 3' }, children: [
       ...ledges,
-      { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'box-sizing': 'border-box', border: '6px solid #FFFFFF', 'border-radius': tileRadius, 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky-soft',
+      { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'box-sizing': 'border-box', ...frame(6), 'border-radius': tileRadius, 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky-soft',
         'box-shadow': '0px 14px 30px -16px rgba(27, 37, 80, 0.5)', scale: '1', translate: '0px 0px', rotate: '0', transition: `scale 460ms ${bouncy}, translate 460ms ${bouncy}, rotate 460ms ${bouncy}, box-shadow 300ms ${soft}` },
-        small: { border: '5px solid #FFFFFF', 'border-radius': '24px' },
+        small: { ...frame(5), 'border-radius': '24px' },
         groupHover: { scale: '1.04', translate: '0px -10px', rotate: '-2', 'box-shadow': '0px 26px 40px -16px rgba(27, 37, 80, 0.55)' }, children: [
           { type: 'image', when: [{ test: 'card.poster' }], src: '{card.poster}', alt: '', fade: true, style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '100%', 'object-fit': 'cover', transition: `opacity 420ms ${soft}` } },
           { type: 'box', when: [{ test: 'card.poster', not: true }], style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', padding: '16px', 'background-image': 'linear-gradient(160deg, #FFE59A 0%, #FFB3C7 100%)' }, children: [
@@ -267,6 +270,19 @@ const backButton: Node = { type: 'box', press: { action: 'back' }, label: '{s:ba
   small: { width: '52px', height: '52px', top: 'calc(14px + env(safe-area-inset-top))', left: '14px' }, hover: lift, focus: ringed(ledge('rgba(27, 37, 80, 0.10)')), children: [
     { type: 'icon', symbol: 'back', style: { width: '26px', height: '26px', color: '$ink' }, small: { width: '22px', height: '22px' } }] };
 
+// A show plays its next episode: the first one not yet watched, with its number and name.
+const upNext: Node = { type: 'repeat', over: 'detail.upNext', when: [{ test: 'detail.canPlay', not: true }], item: { type: 'box', press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}: {episode.numberTitle}', testId: 'detail-up-next',
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '14px', 'align-self': 'flex-start', 'min-height': '84px', 'max-width': '30rem', 'box-sizing': 'border-box', padding: '10px 36px 10px 10px', 'border-radius': '999px', 'background-color': '$sun',
+    'box-shadow': '0px 7px 0px #E8A419, 0px 22px 40px -16px rgba(27, 37, 80, 0.45)', scale: '1', translate: '0px 0px', transition: `scale 420ms ${bouncy}, translate 420ms ${bouncy}` },
+  small: { 'align-self': 'stretch', 'max-width': 'none' }, hover: { scale: '1.04', translate: '0px -3px' }, focus: { scale: '1.04', 'box-shadow': `${ring}, 0px 7px 0px #E8A419` }, children: [
+    { type: 'box', style: { display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '64px', height: '64px', 'flex-shrink': '0', 'border-radius': '999px', 'background-color': '$card' }, small: { width: '54px', height: '54px' }, children: [
+      { type: 'icon', symbol: 'play-fill', style: { width: '28px', height: '28px', 'margin-left': '4px', color: '$ink' } }] },
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '4px', 'min-width': '0px' }, children: [
+      { type: 'text', text: '{episode.playLabel}', style: { 'font-size': '22px', 'font-weight': '800', 'line-height': '1.05' }, small: { 'font-size': '20px' } },
+      { type: 'text', text: '{episode.numberTitle}', style: { 'font-size': '15px', 'font-weight': '700', 'line-clamp': '1', opacity: '0.8' } },
+    ] },
+  ] } };
+
 const titlePlay: Node = { type: 'box', when: [{ test: 'detail.canPlay' }], press: { action: 'play', arg: '{detail.id}' }, label: '{detail.playLabel}', testId: 'detail-play',
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '14px', 'align-self': 'flex-start', height: '84px', 'box-sizing': 'border-box', padding: '0px 36px 0px 10px', 'border-radius': '999px', 'background-color': '$sun',
     'box-shadow': '0px 7px 0px #E8A419, 0px 22px 40px -16px rgba(27, 37, 80, 0.45)', scale: '1', translate: '0px 0px', transition: `scale 420ms ${bouncy}, translate 420ms ${bouncy}` },
@@ -288,8 +304,8 @@ const seasonChip: Node = { type: 'repeat', over: 'detail.seasons', item: { type:
   ] } };
 
 // An episode is a wide sticker: its picture, a big number badge and a progress bar.
-const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: '{card.id}' }, label: '{card.label}', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '12px' }, children: [
-  { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'box-sizing': 'border-box', border: '6px solid #FFFFFF', 'border-radius': '28px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky-soft',
+const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}: {episode.numberTitle}', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '12px' }, children: [
+  { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'box-sizing': 'border-box', ...frame(6), 'border-radius': '28px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky-soft',
     'box-shadow': '0px 8px 0px rgba(27, 37, 80, 0.07), 0px 18px 30px -18px rgba(27, 37, 80, 0.5)', scale: '1', translate: '0px 0px', transition: `scale 460ms ${bouncy}, translate 460ms ${bouncy}` },
     groupHover: { scale: '1.03', translate: '0px -6px', 'box-shadow': `${ring}, 0px 22px 36px -18px rgba(27, 37, 80, 0.55)` }, children: [
       { type: 'image', when: [{ test: 'card.backdrop' }], src: '{card.backdrop}', alt: '', fade: true, style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
@@ -316,8 +332,8 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
     { type: 'widget', widget: 'observe', params: { receipt: '{detail.receipt}' } },
     // The window onto the title, the same sticker frame as home's.
     { type: 'box', motion: 'rise', style: { position: 'relative' }, children: [
-      { type: 'box', style: { position: 'relative', height: 'clamp(300px, 50vh, 560px)', 'box-sizing': 'border-box', border: '8px solid #FFFFFF', 'border-radius': '48px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky',
-        'box-shadow': '0px 12px 0px rgba(27, 37, 80, 0.07), 0px 40px 70px -28px rgba(27, 37, 80, 0.45)' }, small: { height: '300px', 'border-radius': '34px', border: '6px solid #FFFFFF' }, children: [
+      { type: 'box', style: { position: 'relative', height: 'clamp(300px, 50vh, 560px)', 'box-sizing': 'border-box', ...frame(8), 'border-radius': '48px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky',
+        'box-shadow': '0px 12px 0px rgba(27, 37, 80, 0.07), 0px 40px 70px -28px rgba(27, 37, 80, 0.45)' }, small: { height: '300px', 'border-radius': '34px', ...frame(6) }, children: [
         { type: 'image', when: [{ test: 'detail.backdrop' }], src: '{detail.backdrop}', alt: '', fade: true, style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
         { type: 'image', when: [{ test: 'detail.backdrop', not: true }, { test: 'detail.poster' }], src: '{detail.poster}', alt: '', style: { position: 'absolute', top: '-20%', left: '-20%', width: '140%', height: '140%', 'object-fit': 'cover', filter: 'blur(60px) saturate(1.5)' } },
         { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'background-image': 'linear-gradient(0deg, rgba(12, 20, 52, 0.72) 0%, rgba(12, 20, 52, 0) 52%)' } },
@@ -330,7 +346,7 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
     ] },
     // Play first; then a little for the grown-ups: facts and two lines of story.
     { type: 'box', motion: 'zoomLate', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '26px', 'align-items': 'center' }, small: { 'flex-direction': 'column', 'align-items': 'stretch', gap: '18px' }, children: [
-      titlePlay,
+      titlePlay, upNext,
       { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', flex: '1', 'min-width': '16rem', 'max-width': '44rem' }, small: { 'min-width': '0px' }, children: [
         { type: 'text', text: '{detail.factsLine}', style: { 'font-size': '15px', 'font-weight': '700', color: '$ink-soft' } },
         { type: 'text', when: [{ test: 'detail.summary' }], text: '{detail.summary}', style: { 'font-size': '17px', 'font-weight': '600', 'line-height': '1.45', color: '$ink-soft', 'line-clamp': '2' } },
@@ -338,8 +354,8 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
     ] },
     { type: 'box', when: [{ test: 'detail.hasEpisodes' }], style: { display: 'flex', 'flex-direction': 'column', gap: '22px' }, children: [
       sectionTitle('{s:episodes}'),
-      { type: 'box', when: [{ test: 'detail.hasSeasons' }], role: 'group', label: '{s:seasons}', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'overflow-x': 'auto', 'scrollbar-width': 'none', padding: '6px 4px 14px 4px', margin: '-6px -4px -14px -4px' }, children: [seasonChip] },
-      { type: 'box', style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(300px, 1fr))', gap: '30px 26px' }, small: { 'grid-template-columns': '1fr', gap: '22px' }, children: [
+      { type: 'box', when: [{ test: 'detail.hasSeasons' }], role: 'group', label: '{s:seasons}', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '14px' }, children: [seasonChip] },
+      { type: 'box', style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(300px, 1fr))', gap: '30px' }, small: { 'grid-template-columns': '1fr', gap: '22px' }, children: [
         { type: 'repeat', over: 'detail.episodes', item: { ...episode, motion: 'tileIn', stagger: { step: 45, cap: 10 } } },
       ] },
     ] },
@@ -353,9 +369,9 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
     ] },
   ] };
 
-const title: Node = { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', display: 'flex', 'flex-direction': 'column', 'background-color': '$page', color: '$ink', 'font-family': rounded }, children: [
+const title: Node = { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', height: '100%', display: 'flex', 'flex-direction': 'column', 'background-color': '$page', color: '$ink', 'font-family': rounded }, children: [
   backButton,
-  { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{detail.name}', style: { position: 'relative', flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden' }, children: [
+  { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{detail.name}', style: { position: 'relative', flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'background-color': '$page' }, children: [
     { type: 'image', src: art('sky.svg'), alt: '', style: { position: 'absolute', top: '0px', left: '0px', width: '100%', height: '560px', 'object-fit': 'cover', 'pointer-events': 'none', 'mask-image': 'linear-gradient(180deg, black 0%, black 60%, transparent 100%)' } },
     restState('loading', 'star.svg', '{s:opening}', false),
     restState('failed', 'sleepy.svg', '{s:failed}', true),
