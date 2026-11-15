@@ -184,6 +184,16 @@ members Client
   // Home has been answered at least once (a failed or revalidating request keeps its last
   // answer): the page stays drawn from it; only a home never answered shows a failure.
   derive homeKnown = current(home) or home.viewer != ""
+  // The viewer's Try again on a failure: ask again for whatever failed.
+  action retryFailed
+    if failed(home)
+      refresh home
+    if failed(libraryModel)
+      refresh libraryModel
+    if failed(detail)
+      refresh detail
+    if failed(collection)
+      refresh collection
   derive homeSurface = HomeModel(home, rows=allHomeRows, nextCursor=homeMoreCursor, previews=(previewRow == "@hero" and cardPreview.cardId != "" ? [HeroPreview(id=cardPreview.cardId, url=cardPreview.url, expiresAt=cardPreview.expiresAt)] : []))
   state previewTarget = ""
   state previewRow = ""

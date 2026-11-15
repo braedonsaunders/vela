@@ -196,6 +196,9 @@ component Status
     p: StatusProps
   inject
     activeSkin: string
+    retryFailed: action
+  provide
+    retry = retryFailed
   view
     if activeSkin == "index"
       IndexStatus(p=p)
