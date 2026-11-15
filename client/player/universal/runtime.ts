@@ -1,3 +1,4 @@
+import {playbackMark} from '../timing';
 import { abortable } from './abortable';
 import { QUALIFIED_ORIGINAL_VIDEO } from './qualified';
 import { configureEngineAssets } from '../../../vendor/webgpu-player/src/EngineAssets';
@@ -32,6 +33,14 @@ export interface RuntimeOptions {
   onEvent: (event: CustomPlaybackControllerEvent) => void;
   onFailure: (reason: string, position: number) => void;
 }
+/** Observe successful component presentation, rather than the later 250ms UI sample. */
+class TimedPresenter extends Presenter {
+  override presentDecodedFrame(...args:Parameters<Presenter['presentDecodedFrame']>){
+    const drawn=super.presentDecodedFrame(...args);
+    if(drawn)playbackMark('first-frame','webgpu');
+    return drawn;
+  }
+}
 /** One original file/session. This module is loaded separately from Contract and
  * the legacy media engine; workers and decoder packages remain separate assets. */
 export class UniversalRuntime {
@@ -59,7 +68,7 @@ export class UniversalRuntime {
   private readonly visibility = () => this.loop?.synchronizePageVisibility(!document.hidden);
   constructor(private options: RuntimeOptions) {
     configureEngineAssets({ baseURL: options.assets.baseURL, cacheKey: options.assets.assetKey });
-    this.presenter = new Presenter((_generation, reason) => this.failed(`WebGPU presentation: ${reason}`), () => this.loop?.schedule(false), () => this.failed('WebGPU device lost'));
+    this.presenter = new TimedPresenter((_generation, reason) => this.failed(`WebGPU presentation: ${reason}`), () => this.loop?.schedule(false), () => this.failed('WebGPU device lost'));
     options.signal.addEventListener('abort', this.abort, { once: true });
     document.addEventListener('visibilitychange', this.visibility);
   }
@@ -105,15 +114,19 @@ export class UniversalRuntime {
     // Capture audio activation before asynchronous capability/package work.
     const prewarm = prewarmBrowserAudioContext(48000);
     try {
+      playbackMark('metadata:start');
       media = this.media = await abortable(probeOriginal(media,signal),signal);
+      playbackMark('metadata:ready');
       if (!QUALIFIED_ORIGINAL_VIDEO.includes(media.video.codec)) throw new Error(`Original video ${media.video.codec} is not yet qualified; using compatible fallback`);
       // Only the proven HDR10-compatible DV8 base is normalized by the probe.
       // Full DV reconstruction (including profile7) has not passed its gate.
       if (media.video.dvProfile !== undefined) throw new Error('Original Dolby Vision reconstruction is not yet qualified; using compatible fallback');
       const registry = this.audioRegistry = createAudioPackages(this.options.assets.audioDecoderURL);
       const maximumChannels = this.maximumChannels = prewarm?.audioContext.destination.maxChannelCount ?? null;
+      playbackMark('audio:start');
       const preparedAudio = (media.audioTrackCount ?? media.audio.length) > 0 ? await abortable(prepareOriginalAudioSwitch({url:media.url,
         tracks:media.audio, trackId:media.selectedAudioId ?? media.audio[0]?.id ?? '', registry, maximumOutputChannels:maximumChannels, signal, forceSoftware:this.options.retry?.audio}),signal) : null;
+      playbackMark('audio:ready');
       if (preparedAudio) audioDifferences(preparedAudio.discrepancies,media.audio.find(track => track.id === media.selectedAudioId),preparedAudio.actualTrack);
       media = this.media = preparedAudio ? {...media, selectedAudioId:preparedAudio.actualTrack.id,
         audio:[...media.audio.filter(track => track.id !== preparedAudio.actualTrack.id),preparedAudio.actualTrack],
@@ -125,6 +138,7 @@ export class UniversalRuntime {
       signal.throwIfAborted();
       this.presenter.startSession(this.generation);
       const input = readPresentationInput(options);
+      playbackMark('decode:start');
       const [probedCapabilities, presentation] = await abortable(Promise.all([
         probeCustomDecodeCapabilities(options.mediaSource),
         getCustomPresentationEligibilityOptions(this.presenter, { input, options, isCurrent: this.current, isHDRToneMappingEnabled: async () => true }),
@@ -162,6 +176,7 @@ export class UniversalRuntime {
       }),signal);
       signal.throwIfAborted();
       if (!configured) throw new Error('Original colour pipeline could not be configured');
+      playbackMark('decode:ready');
       const audioOptions = preparedAudio?.audioOptions ?? {};
       const controller = this.controller = new Controller({
         audioOutputFactory: audio ? createBrowserCustomAudioOutputFactory(prewarm, getWebGPUAudioOutputManager()) : undefined,

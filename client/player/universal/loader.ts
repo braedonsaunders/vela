@@ -1,3 +1,5 @@
+import { abortable } from '../core/async';
+import {playbackMark} from '../timing';
 import { QUALIFIED_ORIGINAL_VIDEO, QUALIFIED_ORIGINAL_AUDIO } from './qualified';
 import type { ClientCapabilities } from '../../wire/v0/types';
 import type { DecoderRetry } from './retry';
@@ -51,16 +53,42 @@ export async function loadOriginalRuntime(options: Omit<OriginalRuntimeOptions, 
   const {module,assets}=await loadRuntimeModule(options.signal);
   return new module.UniversalRuntime({...options,assets});
 }
+interface RuntimeManifest {
+  version:number;assetKey:string;upstreamRevision:string;
+  originalPlayback?:ClientCapabilities['originalPlayback'];
+  subtitleAssets?:{assetKey:string;directory:string};originalSubtitleFormats?:unknown;
+}
+const manifests=new Map<string,Promise<RuntimeManifest>>();
+/** Identity changes invalidate the page-local capability snapshot. */
+export function capabilityIdentity(){const {base,assetKey}=assetLocation();return `${base.href}#${assetKey??''}`;}
+function runtimeManifest(signal:AbortSignal):Promise<RuntimeManifest>{
+  const {base,assetKey}=assetLocation(),key=capabilityIdentity();
+  let pending=manifests.get(key);
+  if(!pending){
+    playbackMark('assets:start');
+    const load=(async()=>{
+      const response=await fetch(new URL('assets.json',base),{signal:AbortSignal.timeout(10000),credentials:'same-origin'});
+      if(!response.ok)throw new Error(`Original runtime assets HTTP ${response.status}`);
+      const manifest=await response.json() as RuntimeManifest;
+      if(manifest.version!==1||assetKey!==undefined&&manifest.assetKey!==assetKey||!/^[a-f0-9]{16}$/.test(manifest.assetKey)||manifest.upstreamRevision!=='a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2')throw new Error('Original runtime asset identity mismatch');
+      if(manifest.subtitleAssets&&(!/^[a-f0-9]{16}$/.test(manifest.subtitleAssets.assetKey)||manifest.subtitleAssets.directory!=='libraries/subtitles/'))throw new Error('Invalid subtitle asset identity');
+      playbackMark('assets:ready');return Object.freeze(manifest);
+    })();
+    pending=load.catch(error=>{if(manifests.get(key)===pending)manifests.delete(key);throw error;});
+    manifests.set(key,pending);
+    // An aborted view may detach while its immutable shared fetch settles.
+    void pending.catch(()=>{});
+    if(manifests.size>2)manifests.delete(manifests.keys().next().value!);
+  }
+  return abortable(pending,signal);
+}
 async function loadRuntimeModule(signal:AbortSignal){
-  const {base,assetKey} = assetLocation();
-  const response = await fetch(new URL('assets.json', base), {signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]), credentials:'same-origin'});
-  if (!response.ok) throw new Error(`Original runtime assets HTTP ${response.status}`);
-  const manifest = await response.json() as {version: number; assetKey: string; upstreamRevision: string;subtitleAssets?:{assetKey:string;directory:string}};
-  if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey) || manifest.upstreamRevision !== 'a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2') throw new Error('Original runtime asset identity mismatch');
-  signal.throwIfAborted();
+  const {base}=assetLocation();
+  const manifest=await runtimeManifest(signal);
+  signal.throwIfAborted();playbackMark('runtime:start');
   const moduleURL = new URL('runtime.js', base); moduleURL.searchParams.set('v', manifest.assetKey);
   const module = await import(moduleURL.href) as {UniversalRuntime: new (options: OriginalRuntimeOptions) => OriginalBackend;SubtitleSession?:new(options:SubtitleSessionOptions)=>SubtitleSession};
-  signal.throwIfAborted();
+  signal.throwIfAborted();playbackMark('runtime:ready');
   const subtitles=manifest.subtitleAssets;
   if(subtitles&&(!/^[a-f0-9]{16}$/.test(subtitles.assetKey)||subtitles.directory!=='libraries/subtitles/'))throw new Error('Invalid subtitle asset identity');
   return {module,assets:{baseURL:new URL('libraries/',base).href,assetKey:manifest.assetKey,audioDecoderURL:new URL('libraries/audio-decoders/',base).href,
@@ -76,12 +104,8 @@ export async function loadSubtitleSession(options:Omit<SubtitleSessionOptions,'a
 
 /** Embedded families are advertised only by a core payload with installed assets. */
 export async function subtitleCapabilities(signal:AbortSignal,original:boolean):Promise<string[]>{
-  const {base,assetKey}=assetLocation();
-  const response=await fetch(new URL('assets.json',base),{credentials:'same-origin',signal:AbortSignal.any([signal,AbortSignal.timeout(10000)])});
-  if(!response.ok)return[];
-  const value=await response.json() as {version?:number;assetKey?:string;upstreamRevision?:string;subtitleAssets?:{assetKey?:string;directory?:string};originalSubtitleFormats?:unknown};
-  if(value.version!==1||assetKey!==undefined&&value.assetKey!==assetKey||!/^[a-f0-9]{16}$/.test(value.assetKey??'')||value.upstreamRevision!=='a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2'||
-    !/^[a-f0-9]{16}$/.test(value.subtitleAssets?.assetKey??'')||value.subtitleAssets?.directory!=='libraries/subtitles/')return[];
+  const value=await runtimeManifest(signal);
+  if(!value.subtitleAssets)return[];
   const embedded=original&&Array.isArray(value.originalSubtitleFormats)?value.originalSubtitleFormats.filter((format):format is string=>typeof format==='string'&&['srt','webvtt','ass','ssa','pgs','tx3g'].includes(format)):[];
   return [...new Set(['webvtt','ether-vtt-window',...embedded])];
 }
@@ -90,20 +114,14 @@ export async function subtitleCapabilities(signal:AbortSignal,original:boolean):
  * profiles/layouts still go through runtime admission and bounded fallback. */
 export async function originalPlaybackCapabilities(signal: AbortSignal): Promise<ClientCapabilities['originalPlayback'] | null> {
   if (!canAttemptOriginal()) return null;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const gpu = (navigator as Navigator & {gpu?: {requestAdapter(): Promise<unknown>}}).gpu;
-    const adapter = await Promise.race([gpu?.requestAdapter(), new Promise<null>(resolve => { timer=setTimeout(() => resolve(null),2000); })]);
-    if (!adapter) return null;
-  } finally { if (timer) clearTimeout(timer); }
-  signal.throwIfAborted();
-  const {base,assetKey} = assetLocation();
-  const response = await fetch(new URL('assets.json',base),
-    {credentials:'same-origin',signal:AbortSignal.any([signal,AbortSignal.timeout(10000)])});
-  if (!response.ok) return null;
-  const manifest = await response.json() as {version?:number;assetKey?:string;upstreamRevision?:string;originalPlayback?:ClientCapabilities['originalPlayback']};
-  if (manifest.version !== 1 || assetKey !== undefined && manifest.assetKey !== assetKey || !/^[a-f0-9]{16}$/.test(manifest.assetKey ?? '') ||
-      manifest.upstreamRevision !== 'a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2') return null;
+  const adapterSignal=AbortSignal.timeout(2000);
+  const gpu=(navigator as Navigator & {gpu?:{requestAdapter():Promise<unknown>}}).gpu;
+  // Fetch the immutable declaration while the browser resolves its GPU adapter.
+  // Caller cancellation detaches; it never cancels another view's shared probe.
+  const [adapter,manifest]=await abortable(Promise.all([
+    abortable(gpu?.requestAdapter(),adapterSignal).catch(()=>null),runtimeManifest(signal),
+  ]),signal);
+  if(!adapter)return null;
   const declaration = manifest.originalPlayback;
   if (!declaration || declaration.version !== 1 || declaration.range !== true || declaration.webgpu !== true) return null;
   for (const list of [declaration.demuxContainers,declaration.videoDecoders,declaration.audioDecoders])

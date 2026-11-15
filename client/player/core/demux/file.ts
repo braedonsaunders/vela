@@ -1,4 +1,4 @@
-import { ALL_FORMATS, CustomSource, Input, InputVideoTrack, PacketReader, type InputTrack } from 'mediabunny';
+import { ALL_FORMATS, CustomSource, Input, InputVideoTrack, PacketReader, type InputTrack, type Source } from 'mediabunny';
 import { readWaveFormatAudioTrack } from '../../../../vendor/webgpu-player/src/demux/WaveFormatAudioConfiguration';
 import { velaContainerCodec, velaTrackPrivate } from '../../universal/audio/ffmpeg/track-configuration';
 import { canonicalAudioCodec } from '../../universal/audio/packages';
@@ -6,7 +6,7 @@ import { abortable } from '../async';
 import type { AudioTrack, ByteReader, EncodedPacket, MediaTrack, VideoTrack } from '../types';
 
 /** Demux only. No upstream controller, decoder, clock or independent HTTP cache. */
-export class FileDemux {
+export class PacketDemux {
   private readonly input: Input;
   private readonly lifetime = new AbortController();
   private readonly tracks = new Map<string, InputTrack>();
@@ -14,19 +14,14 @@ export class FileDemux {
   private operationSignal: AbortSignal;
   private readBytes = 0;
 
-  constructor(readonly reader: ByteReader, sourceSignal: AbortSignal) {
-    this.operationSignal = AbortSignal.any([sourceSignal,this.lifetime.signal]);
-    const source = new CustomSource({
-      getSize: () => reader.size(this.operationSignal),
-      read: (start,end) => {
-        this.operationSignal.throwIfAborted();
-        this.readBytes += end-start;
-        if (this.readBytes > 32 * 1024 * 1024) throw new Error('Demux operation exceeded its bounded search budget');
-        return reader.read(start,end-start,this.operationSignal);
-      },
-      maxCacheSize: 0, prefetchProfile: 'none',
+  constructor(makeSource:(signal:()=>AbortSignal,count:(bytes:number)=>void)=>Source,
+    sourceSignal:AbortSignal,private readonly originUs=0) {
+    this.operationSignal=AbortSignal.any([sourceSignal,this.lifetime.signal]);
+    const source=makeSource(()=>this.operationSignal,bytes=>{
+      this.operationSignal.throwIfAborted();this.readBytes+=bytes;
+      if(this.readBytes>32*1024*1024)throw new Error('Demux operation exceeded its bounded search budget');
     });
-    this.input = new Input({source,formats:ALL_FORMATS});
+    this.input=new Input({source,formats:ALL_FORMATS,formatOptions:{hls:{offsetTimestampsByDateTime:false}}});
     sourceSignal.addEventListener('abort',this.abort,{once:true});
     this.detach = () => sourceSignal.removeEventListener('abort',this.abort);
     if (sourceSignal.aborted) this.dispose();
@@ -80,7 +75,7 @@ export class FileDemux {
           codecPrivate:velaTrackPrivate(track,config),waveFormat:wave?.status === 'read' ? wave.waveFormat.slice() : null};
         tracks.push(actual); this.tracks.set(id,track);
       }
-      return {tracks,durationUs:duration === null ? null : Math.round(duration*1e6),container:format.name};
+      return {tracks,durationUs:duration === null ? null : Math.round(duration*1e6)+this.originUs,container:format.name};
     },signal);
   }
 
@@ -89,20 +84,21 @@ export class FileDemux {
     if (!track) throw new Error('Unknown demux track');
     if (!Number.isFinite(positionUs) || positionUs < 0) throw new Error('Invalid demux seek position');
     const reader = new PacketReader(track);
+    const querySeconds=Math.max(0,positionUs-this.originUs)/1e6;
     // Container cues/sample tables locate a preceding random-access packet.
     let packet = await this.operation(() => track instanceof InputVideoTrack
-      ? reader.getKeyAt(positionUs/1e6) : reader.getAt(positionUs/1e6),signal);
+      ? reader.getKeyAt(querySeconds) : reader.getAt(querySeconds),signal);
     if (!packet) {
       const first = await this.operation(() => track instanceof InputVideoTrack ? reader.getFirstKey() : reader.getFirst(),signal);
       // A track starting after the target needs its first packet. EOF must never
       // wrap to packet zero and silently replay the beginning of the title.
-      if (first && first.timestamp * 1e6 >= positionUs) packet = first;
+      if (first && first.timestamp * 1e6 + this.originUs >= positionUs) packet = first;
     }
     while (packet) {
       signal.throwIfAborted();
       if (packet.data.length > 16 * 1024 * 1024) throw new Error('Encoded packet exceeds decode budget');
       if (![packet.timestamp,packet.duration].every(Number.isFinite) || packet.duration < 0) throw new Error('Invalid encoded packet timing');
-      yield {trackId,epoch,data:packet.data,timestampUs:Math.round(packet.timestamp*1e6),durationUs:Math.round(packet.duration*1e6),
+      yield {trackId,epoch,data:packet.data,timestampUs:Math.round(packet.timestamp*1e6)+this.originUs,durationUs:Math.round(packet.duration*1e6),
         key:packet.type === 'key',additions:packet.sideData.matroskaBlockAdditions?.map(item => ({addId:item.addId,data:item.data}))};
       const previous = packet;
       packet = await this.operation(() => reader.getNext(previous),signal);
@@ -110,6 +106,16 @@ export class FileDemux {
   }
 
   dispose(): void { if(this.lifetime.signal.aborted)return;this.lifetime.abort(); this.detach?.(); this.input.dispose(); this.tracks.clear(); }
+}
+
+/** Original-file transport: the reader and its cache survive demux epochs. */
+export class FileDemux extends PacketDemux {
+  constructor(readonly reader:ByteReader,signal:AbortSignal){
+    super((current,count)=>new CustomSource({
+      getSize:()=>reader.size(current()),read:(start,end)=>{count(end-start);return reader.read(start,end-start,current());},
+      maxCacheSize:0,prefetchProfile:'none',
+    }),signal);
+  }
 }
 
 function copyBytes(value: AllowSharedBufferSource): Uint8Array<ArrayBuffer> {

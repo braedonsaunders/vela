@@ -82,7 +82,8 @@ export class UniversalRuntime implements OriginalBackend {
     const ordered=[...media.audio].sort((a,b)=>a.streamIndex-b.streamIndex);
     const ordinal=ordered.findIndex(track=>track.id===media.selectedAudioId);
     this.notes=['audio-selection:audio-ordinal'];
-    await this.core.open(media.url,media.position*1e6,Math.max(0,ordinal));
+    if(media.hls)await this.core.openHls(media.url,media.position*1e6,Math.round(media.hls.originSeconds*1e6),Math.max(0,ordinal));
+    else await this.core.open(media.url,media.position*1e6,Math.max(0,ordinal));
     this.core.setVolume(this.volume,this.muted);
   }
   pause(){this.core.pause();}

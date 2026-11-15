@@ -51,6 +51,8 @@ component PlayerChrome
     command("quality", v)
   action speed(rate: number)
     command("speed", `${rate}`)
+  action subtitleStyle(setting: string)
+    command("subtitleStyle", setting)
   view
     column position="absolute" inset=0 justify-content="space-between" pointer-events="none" testId="player-chrome" color="ink.primary"
       // Top: close, and the title being screened.
@@ -76,8 +78,6 @@ component PlayerChrome
         if waiting
           column align-self="center" align-items="center" gap=18 role="status" aria-label=(p.model.state == "recovering" ? t("ui.findingAWayForward") : p.model.state == "loading" ? t("ui.preparingYourScreening") : t("ui.buildingALittleBreathingRoom")) testId="player-status" animation=(p.still ? "dissolve 240ms linear both" : "dissolve 400ms ease-out 120ms both")
             Spinner(size=(p.small ? 52 : 64), still=p.still)
-            if p.model.state == "loading" or p.model.state == "recovering"
-              text (p.model.state == "recovering" ? t("ui.findingAWayForward") : t("ui.preparingYourScreening")) class=Display font-size=(p.small ? 22 : 26) color="ink.primary" text-shadow="0px 2px 24px var(--cinematic.shadow)"
       // Bottom: the timeline, then icon transport and screening controls.
       column position="relative" padding=(p.small ? "80px 16px 18px" : "150px 40px 30px") gap=(p.small ? 10 : 14) background-image="linear-gradient(0deg, var(--cinematic.player-bottom) 0%, var(--cinematic.player-upper) 42%, var(--cinematic.player-mid) 72%, var(--cinematic.scrim-clear) 100%)" opacity=(shown ? 1 : 0) translate=(shown or p.still ? "0px 0px" : "0px 18px") transition=chrome(p.still) pointer-events=(shown ? "auto" : "none")
         if p.model.actionError != "" and failure == ""
@@ -134,6 +134,15 @@ component PlayerChrome
         ChoiceRow(menu="player-cc", index=0, count=p.model.subtitles.length + 1, label=t("ui.off"), detail="", selected=(p.model.subtitleId == "" and p.model.pendingSubtitleId == ""), pending=false, enabled=not blocked, still=p.still, choose=subtitles(""))
         for track, i in p.model.subtitles key=track.id
           ChoiceRow(menu="player-cc", index=i + 1, count=p.model.subtitles.length + 1, label=itemName(track.label), detail=itemDetail(track.label), selected=(p.model.subtitleId == track.id), pending=(p.model.pendingSubtitleId == track.id), enabled=not blocked, still=p.still, choose=subtitles(track.id))
+        if p.model.subtitleError != ""
+          text p.model.subtitleError role="status" font-size=12 color="brand.warm" padding="6px 12px 2px"
+        // Appearance, where the engine draws the text itself (not for styled or burned-in tracks).
+        if p.model.subtitleStyleAvailable and p.model.subtitleId != ""
+          column height=1 margin="6px 12px" background-color="cinematic.glass-edge" aria-hidden=true
+          StyleRow(name=t("player.subtitleSize"), setting="subtitleSize", values=["small", "medium", "large", "xl"], labels=[t("player.size.small"), t("player.size.medium"), t("player.size.large"), t("player.size.xl")], names=[t("player.size.smallName"), t("player.size.mediumName"), t("player.size.largeName"), t("player.size.xlName")], current=p.model.subtitleSize, enabled=not blocked, pick=subtitleStyle)
+          StyleRow(name=t("player.subtitleBackground"), setting="subtitleBackground", values=["none", "shadow", "box"], labels=[t("player.background.none"), t("player.background.shadow"), t("player.background.box")], names=[t("player.background.none"), t("player.background.shadow"), t("player.background.box")], current=p.model.subtitleBackground, enabled=not blocked, pick=subtitleStyle)
+          StyleRow(name=t("player.subtitleColor"), setting="subtitleColor", values=["white", "yellow"], labels=[t("player.color.white"), t("player.color.yellow")], names=[t("player.color.white"), t("player.color.yellow")], current=p.model.subtitleColor, enabled=not blocked, pick=subtitleStyle)
+          StyleRow(name=t("player.subtitlePosition"), setting="subtitlePosition", values=["bottom", "raised"], labels=[t("player.position.bottom"), t("player.position.raised")], names=[t("player.position.bottom"), t("player.position.raised")], current=p.model.subtitlePosition, enabled=not blocked, pick=subtitleStyle)
       MenuPanel(menu="player-audio", name=t("ui.audio"), small=p.small, opened=opened)
         if p.model.audio.length > 0
           for track, i in p.model.audio key=track.id
@@ -280,3 +289,24 @@ component SpeedIcon
       path d="M4.5 17.5a8.5 8.5 0 1 1 15 0" fill="none" stroke="currentcolor" stroke-width=1.7 stroke-linecap="round"
       path d="M12 14.5l4-5" fill="none" stroke="currentcolor" stroke-width=1.9 stroke-linecap="round"
       circle cx=12 cy=14.5 r=1.6 fill="currentcolor"
+
+// One subtitle appearance setting: its name over a row of segments, the current one filled.
+component StyleRow
+  props
+    name: string
+    setting: string
+    values: string[]
+    labels: string[]
+    names: string[]
+    current: string
+    enabled: bool
+    pick: action
+  view
+    column gap=6 padding="6px 12px"
+      text name font-size=12 color="ink.quiet"
+      row role="radiogroup" aria-label=name gap=2 padding=3 border-radius=11 background-color="cinematic.field"
+        for value, i in values key=value
+          button role="radio" aria-checked=(value == current) aria-label=match names.at(i) { case some(n) => n, case none => value } disabled=(not enabled) press=pick(`${setting}=${value}`) flex=1 min-width=0 height=30 padding="0px 6px" border="none" border-radius=8 background-color=(value == current ? "ink.primary" : "cinematic.scrim-clear") color=(value == current ? "ink.inverse" : "ink.primary") font-size=12 font-weight=600 cursor="pointer" transition="background-color 180ms linear, color 180ms linear"
+            :focus-visible
+              box-shadow = "0px 0px 0px 2px var(--brand.warm)"
+            text match labels.at(i) { case some(l) => l, case none => value } line-clamp=1

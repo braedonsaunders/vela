@@ -1,3 +1,4 @@
+import {playbackMark} from './timing';
 import { decoderRetry, type DecoderRetry } from './universal/retry';
 import { canAttemptOriginal, loadOriginalRuntime,loadSubtitleSession, type OriginalBackend } from './universal/loader';
 import type {SubtitleSession} from './universal/subtitles/session';
@@ -16,6 +17,8 @@ type ExtendedVideo = HTMLVideoElement & { audioTracks?: ArrayLike<NativeAudioTra
 export class PlaybackEngine {
   readonly controller = new SessionController();
   private session?: PlaybackSession; private source?: Source; private pipeline?: SegmentPipeline;
+  private startupFrameSeen=false;
+  private startupVideoCallback?:number;
   private original?: OriginalBackend;
   private originalJob?: AbortController;
   private originalGeneration?: Generation;
@@ -160,6 +163,7 @@ export class PlaybackEngine {
   private publish(force = false) {
     if (this.disposed) return;
     if (this.pipeline?.audioTrackId) this.audio = this.pipeline.audioTrackId;
+    if(this.original&&!this.startupFrameSeen&&this.original.readout.presentedFrames>0){this.startupFrameSeen=true;playbackMark('first-frame','webgpu');}
     const now = performance.now();
     if (!force && now - this.lastObservation < 250) return;
     this.lastObservation = now; this.emit({ type: 'snapshot', snapshot: this.snapshot() });
@@ -305,6 +309,7 @@ export class PlaybackEngine {
     if (original) this.originalClosing = original.dispose().catch(() => {});
   }
   private resetMedia() {
+    if(this.startupVideoCallback!==undefined)this.video.cancelVideoFrameCallback?.(this.startupVideoCallback);this.startupVideoCallback=undefined;
     if (this.originalStartTimer) clearTimeout(this.originalStartTimer); this.originalStartTimer = undefined;
     this.releaseOriginal();
     this.nativeOrigin = 0;
@@ -316,6 +321,8 @@ export class PlaybackEngine {
     this.startupDeadlineMs = source.renditions?.some(r => !codecKnown(r)) ? 60000 : 45000;
     this.resumePosition = position; this.waitSince = performance.now(); this.lastAdvance = this.waitSince; this.lastPosition = position; this.everPlayed = false;
     const token = this.controller.changeSource(!initial); this.resetMedia(); this.source = source;
+    this.startupFrameSeen=false;playbackMark('source:open',source.delivery);
+    this.startupVideoCallback=this.video.requestVideoFrameCallback?.(()=>{if(this.controller.current(token)){this.startupVideoCallback=undefined;if(!this.original&&!this.startupFrameSeen){this.startupFrameSeen=true;playbackMark('first-frame',this.backend==='mse'?'mse':'native');}}});
     this.bindMedia(token);
     this.attempted.add(source.id); this.status = recovery ? 'recovering' : 'loading'; this.failure = null; this.lastObservation = -Infinity;
     this.publish();
@@ -435,7 +442,7 @@ export class PlaybackEngine {
     const position = this.position();
     const failure: Failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
     if (this.originalStartTimer) clearTimeout(this.originalStartTimer); this.originalStartTimer = undefined;
-    this.status = 'recovering'; this.failure = failure; this.publish(true);
+    playbackMark('source:failed');this.status = 'recovering'; this.failure = failure; this.publish(true);
     try {
       const retry = this.backend === 'webgpu' && (!failure.message.startsWith('Original first-frame deadline') || this.original?.readout.decoderReady) ? decoderRetry(failure.message) : null;
       if (retry && this.source?.original && !this.localDecoderRetries.has(this.source.id)) {

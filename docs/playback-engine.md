@@ -1451,3 +1451,57 @@ offered track IDs and current generations. That command check does not claim PGS
 glyph rendering. Core TypeScript and host builds passed; the redundant full
 Contract build was stopped after10minutes without a result, with UI integration
 compile delegated to the UI owner. No new core code is in this shipping payload.
+
+### Startup latency audit: client marks and detail prewarm
+
+The existing data source retains successful negotiation by authentication version
+and exact serialized capability declaration. Reopening a title does not send
+another negotiate request unless authentication or that declaration changed.
+The root media-context probe runs before authentication and detail Play becomes
+available. It is not newly started by each playback request.
+
+The host now retains one page-local capability result per immutable asset
+identity. GPU-adapter discovery, manifest fetch and subtitle capability checks
+run concurrently, and probing/runtime loading share one manifest promise. Caller
+cancellation detaches from shared work; bounded shared requests continue for
+other consumers. Failed manifest loads clear their cache entry. No session or
+original-file grant is prefetched from detail: POST/playback allocates playback
+resources, and the protocol currently has no read-only prepare token endpoint.
+
+`window.velaPlaybackTimings()` exposes copies of at most200content-free native
+marks: Play, probe/assets start and completion, plan arrival, source open, runtime
+import, metadata/audio/decode preparation, first successful frame presentation
+and recovery. Attempt/source counters distinguish retries. It contains no title,
+session ID, URL, grant or credential. GPU first-frame marks come from successful
+presentation, not the later250ms snapshot sample. Native uses its video frame
+callback. Browser network timing must be collected separately, including the
+data worker's negotiate, POST/playback, snapshot and SSE requests; main-window
+resource entries alone do not include all worker requests.
+
+One local generated AVC/AAC drive of the qualified wrapper measured:
+
+| Stage | Measured duration |
+| --- | ---: |
+| Root capability probe, before Play |3.0ms |
+| Second media-context probe |cached identical result |
+| Manifest requests across both probes and playback |1 |
+| Play → first GPU-presented frame |714.8ms |
+| Runtime import |32.4ms |
+| Original metadata probe |17.3ms |
+| Selected audio preparation |3.2ms |
+| Capability/presentation/decode setup |121.9ms |
+| Setup complete → first presented frame |456.2ms |
+
+The plan in this loopback drive was supplied locally, so it does not measure
+negotiation, server resolution or SSE latency. This is not a before/after LAN
+startup comparison. Chrome and the owned local server were closed.
+
+Ether's read-only comparison explains a likely server-side gap: Vela detail does
+not call the owner-setting-gated prewarmer that Plex detail uses. The previously
+captured Vela cold plan took3.39s, including a1.21s uncached probe, provider
+acquisition and losing-candidate waits. The owner's latest AppleTV session had
+resolved on detail beforehand; candidate open took2.2ms, native probe452.6ms,
+augment0.6ms, and session start roughly0.46s after candidate open. That is a
+Plex measurement, not a Vela POST measurement. Ether worker's detail-prewarm
+change and one actual Vela click-to-frame lab breakdown are pending; the lab is
+held while the owner is watching. No under1.5s cold-LAN claim is made.
