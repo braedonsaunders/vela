@@ -24,15 +24,15 @@ export class VideoBuffer<T extends DecodedVideoFrame> {
     return true;
   }
   /** Keep the newest due frame. Future frames remain queued; preroll never paints. */
-  takeDue(positionUs: number, epoch: number, minimumUs = 0): { frame: T | null; dropped: number } {
-    let frame: T | null = null, dropped = 0;
+  takeDue(positionUs: number, epoch: number, minimumUs = 0): { frame: T | null; dropped: number; firstDroppedUs:number|null } {
+    let frame: T | null = null, dropped = 0,firstDroppedUs:number|null=null;
     while (this.frames.length && this.frames[0].timestampUs <= positionUs) {
       const next = this.frames.shift()!;
       if (next.epoch !== epoch || next.timestampUs < minimumUs && next.timestampUs + next.durationUs <= minimumUs) { next.release(); continue; }
-      if (frame) { frame.release(); dropped++; }
+      if (frame) { firstDroppedUs??=frame.timestampUs;frame.release(); dropped++; }
       frame = next;
     }
-    return { frame, dropped };
+    return { frame, dropped,firstDroppedUs };
   }
   clear(): void { for (const frame of this.frames) frame.release(); this.frames = []; }
 }
