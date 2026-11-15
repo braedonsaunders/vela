@@ -102,8 +102,10 @@ export interface QualityTarget { width: number; height: number;
   dynamicRange?: 'sdr' | 'hdr10' | 'hlg' | 'dv' }
 export interface Quality extends QualityTarget { id: ID; videoCodec: string; audioCodec?: string; url: string; audioGroupId?: ID }
 export interface Generations { sourceGeneration: number; seekGeneration: number }
+/** POST /titles/:id/trailer-preview initiates the request; GET polls it without a body or mutation key. */
 export interface TrailerPreviewRequest extends Mutation { client: ClientCapabilities }
 export interface PreviewGrant extends Generations { sessionId: ID; url: string; mimeType: string; expiresAt: Timestamp; purpose: 'preview' }
+/** POST result or GET status of an already-requested preview; GET never starts preparation and returns 404 when none was requested. */
 export type TrailerPreviewResponse = { state: 'ready'; grant: PreviewGrant } |
   { state: 'preparing'; retryAfterSeconds: number } | { state: 'unavailable'; reason: string };
 export interface SwitchBoundary { atSeconds: number; independent: boolean; timelineId: ID;
