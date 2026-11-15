@@ -132,8 +132,9 @@ const home: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'c
 
 // ---------------------------------------------------------------- library
 // A plain Contract button with no ground of its own, as Exact draws it ("bordered"): a hairline
-// in the label colour at 45%, the control radius and curve, the label colour at weight 500.
-const bordered: Style = { display: 'block', padding: '16px', border: '1px solid var(--exact-line)', 'border-radius': 'calc(8px * var(--exact-curve-reach))', 'corner-shape': 'var(--exact-control-curve, var(--exact-curve))',
+// in the label colour at 45%, the control radius (8px x Exact's curve reach, 1.52 where corner-shape
+// is supported: a var() radius is not bound) and curve, the label colour at weight 500, centred.
+const bordered: Style = { display: 'grid', 'justify-content': 'center', 'align-items': 'center', padding: '16px', border: '1px solid var(--exact-line)', 'border-radius': '12.16px', 'corner-shape': 'var(--exact-control-curve, var(--exact-curve))',
   color: 'var(--exact-label)', 'font-weight': '500', 'line-height': '20px', 'text-align': 'center' };
 
 // A library's titles in the server's order, a way back and a way to load more.
