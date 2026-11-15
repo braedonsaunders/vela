@@ -51,6 +51,8 @@ export type Action =
   | 'librarySort' | 'librarySortFlip' | 'libraryFilter' | 'libraryMore'
   /** Signed out (route auth): sign in with the fields; start or cancel a quick-connect code. */
   | 'signIn' | 'startQuick' | 'cancelQuick' | 'goSecure'
+  /** A collection page: load its next titles. */
+  | 'collectionMore'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
 
