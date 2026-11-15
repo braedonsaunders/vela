@@ -454,5 +454,6 @@
   "server.plex.secure-direct": "Secure · plex.direct",
   "server.plex.secure": "Secure",
   "server.plex.local": "Local · http",
-  "server.plex.remote": "Remote · http"
+  "server.plex.remote": "Remote · http",
+  "server.probe.insecure": "{url} only offers HTTP, which a secure (HTTPS) page can't reach. Open Vela from its http:// address, or enable HTTPS on the server."
 }
