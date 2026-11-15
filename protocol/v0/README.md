@@ -322,10 +322,24 @@ belongs to Ether v0.3.11; absent capability means unsupported, not preparing.
 
 Non-2xx JSON responses are ErrorResponse. Classes/statuses: auth/401, policy/403,
 not-found/404 (also policy-hidden entities), request/400, conflict/409, source/502,
-decoder/422, capacity/503, transient/503. Retry only when retry.allowed; respect
+decoder/422, playback/422, capacity/503, transient/503. Retry only when retry.allowed; respect
 Retry-After/afterSeconds, bounded attempts and caller deadlines. Decoder failures
 must not trigger unbounded retries of the same corrupt bytes. Error codes are
 stable machine identifiers; messages are displayable text without credentials.
+
+Playback admission errors `no_compatible_path`, `track_not_found` and
+`unsupported_conversion` use HTTP422, class `playback`, and `retry.allowed: false`.
+Only `no_compatible_path` includes optional `rejectedPaths: [{path,reasons}]`.
+`path` is an attempted delivery label, not a `PlaybackPath.id`: failed admission
+may have created no session. Both labels and diagnostic reason strings are open;
+reasons are human-readable text, not machine codes to branch on.
+
+When bootstrap assembly cannot produce a consistent response after its bounded
+internal attempts, GET `/bootstrap` may return HTTP409, class `conflict`, code
+`bootstrap_changed`, with `Retry-After: 1` and
+`retry: {allowed: true, afterSeconds: 1, maxAttempts: 3}`. Respect that backoff;
+do not turn it into an immediate fresh-request loop. This GET has no idempotency
+key. It does not share the cursor-refresh behavior of `cursor_expired`.
 
 ## Compatibility
 
