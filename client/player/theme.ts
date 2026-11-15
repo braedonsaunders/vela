@@ -8,7 +8,7 @@
 export interface ThemeHandle { theme: true; sheet: HTMLStyleElement; fonts: FontFace[]; json: string; docFonts: FontFace[]; docFontsJson: string }
 
 /** A skin document's font file (src/skin validated it: same-origin, appearance tree, font type). */
-interface DocFont { family: string; url: string; weight: number; style: string; sizeAdjust: number }
+interface DocFont { family: string; url: string; weight: string; style: string; sizeAdjust: number }
 
 /** Each engine's palette roles, by the Tamber token whose house value anchors the role. */
 const ENGINES: Record<string, { roles: Record<string, string>; prefixes: string[] }> = {
@@ -88,7 +88,8 @@ function fontFaces(pack: Pack, name: string): FontFace[] {
     try { url = new URL(f.url, location.href); } catch { return []; }
     // The server's origin, which the data module pinned (the page's own in a release).
     if (url.origin !== pack.origin || !url.pathname.startsWith('/vela/v0/appearance/') || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname)) return [];
-    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, '')}")`, { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, font.sizeAdjust ?? 100))}%` } as FontFaceDescriptors & { sizeAdjust: string });
+    const descriptors: FontFaceDescriptors & { sizeAdjust: string } = { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, font.sizeAdjust ?? 100))}%` } as FontFaceDescriptors & { sizeAdjust: string };
+    const face = new FontFace(name, `url("${url.href.replace(/["\\]/g, '')}")`, descriptors);
     document.fonts.add(face);
     void face.load().catch(() => document.fonts.delete(face));
     return [face];
@@ -106,7 +107,8 @@ function documentFonts(handle: ThemeHandle, json: string) {
     let url: URL;
     try { url = new URL(f.url, location.href); } catch { continue; }
     if (!/^[A-Za-z0-9 ]{1,48}$/.test(f.family) || !(url.pathname.startsWith('/vela/v0/appearance/') || url.pathname.startsWith('/vela/skins/')) || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname)) continue;
-    const face = new FontFace(f.family, `url("${url.href.replace(/["\\]/g, '')}")`, { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, f.sizeAdjust || 100))}%` });
+    const descriptors: FontFaceDescriptors & { sizeAdjust: string } = { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, f.sizeAdjust || 100))}%` };
+    const face = new FontFace(f.family, `url("${url.href.replace(/["\\]/g, '')}")`, descriptors);
     document.fonts.add(face);
     void face.load().catch(() => document.fonts.delete(face));
     handle.docFonts.push(face);
@@ -114,8 +116,10 @@ function documentFonts(handle: ThemeHandle, json: string) {
 }
 
 function apply(handle: ThemeHandle, json: string) {
-  const props = JSON.parse(json) as { pack?: string; fonts?: string };
+  const props = JSON.parse(json) as { pack?: string; fonts?: string; keyframes?: string };
   if (props.fonts !== undefined) { documentFonts(handle, props.fonts); return; }
+  // A skin document's keyframes: CSS the data module built from validated numbers and lengths.
+  if (props.keyframes !== undefined) { handle.sheet.textContent = /^[@a-zA-Z0-9{}:;.%\s,()-]*$/.test(props.keyframes) ? props.keyframes : ''; return; }
   const packJson = props.pack ?? '';
   if (packJson === handle.json) return;
   handle.json = packJson;

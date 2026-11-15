@@ -37,6 +37,7 @@ component Guide
   props
     p: GuideProps
   inject
+    retryPreviewStop: action
     watch: action
     chooseDay: action
     setZoom: action
@@ -203,7 +204,7 @@ component Guide
             GuideHero(channel=c, programmeId=(pickedChannel == c.id and pickedProgramme != "" ? pickedProgramme : c.nowId), small=p.small, still=p.still, watch=watch)
           if p.tile.state != "off"
             column position="absolute" right=side(p.small) bottom=(p.small ? 12 : 14) z-index=2
-              GuideTile(tile=p.tile, small=p.small, still=p.still, watch=watch, message=tileMessage, unmute=tileUnmute, tuneIn=tileTuneIn)
+              GuideTile(tile=p.tile, small=p.small, still=p.still, watch=watch, message=tileMessage, unmute=tileUnmute, tuneIn=tileTuneIn, retryStop=retryPreviewStop)
       // Toolbar: days, the time stepper and filters. Phones put the view switch first and the days beneath.
       if p.small
         row flex-shrink=0 align-items="center" gap=10 padding-left=side(p.small) padding-right=side(p.small) padding-top=10 padding-bottom=(grid ? 8 : 12) role="toolbar" aria-label=t("live.guideControls")
@@ -388,6 +389,7 @@ component GuideTile
     message: action
     unmute: action
     tuneIn: action
+    retryStop: action
   view
     column position="relative" height=(small ? 72 : "clamp(120px, calc(16vh - 14px), 168px)") aspect-ratio="16 / 9" border-radius=(small ? 10 : 14) overflow="hidden" background-color="media.ground" border="1px solid var(--cinematic.glass-edge-strong)" box-shadow="0px 18px 50px var(--cinematic.shadow)"
       if tile.planJson != "" and (tile.state == "connecting" or tile.state == "playing")
@@ -398,7 +400,12 @@ component GuideTile
       if tile.state == "unavailable"
         column position="absolute" inset=0 align-items="center" justify-content="center" padding=10 role="status"
           text t("live.previewUnavailable") font-size=12 color="ink.secondary" text-align="center"
-      if tile.state == "tune-in"
+      if tile.state == "stuck"
+        button press=retryStop aria-label=t("live.previewStuck") position="absolute" inset=0 class=TileTuneIn
+          column gap=4 align-items="center" justify-content="center" padding=10
+            text t("live.previewStuck") font-size=12 color="ink.secondary" text-align="center"
+            text t("ui.tryAgain") font-size=12 font-weight=650
+      else if tile.state == "tune-in"
         button press=tuneIn aria-label=t("live.tuneInTo", channel=tile.channelName) position="absolute" inset=0 class=TileTuneIn
           row gap=8 align-items="center" justify-content="center"
             image "symbol:play-fill" width=12 height=12 aria-hidden=true
@@ -432,9 +439,9 @@ component GuideRail
       row gap=(small ? 0 : 12) align-items="center" width="100%" justify-content=(small ? "center" : "flex-start")
         if not small
           text channel.number width=34 flex-shrink=0 text-align="right" font-size=12 color="ink.quiet" font-variant-numeric="tabular-nums"
-        column position="relative" width=(small ? 64 : 58) height=(small ? 40 : 36) flex-shrink=0 border-radius=8 overflow="hidden" align-items="center" justify-content="center" background-color="cinematic.guide-logo" border="1px solid var(--cinematic.hairline)"
+        column position="relative" width=(small ? 64 : 58) height=(small ? 40 : 36) flex-shrink=0 border-radius=8 overflow="hidden" padding=6 box-sizing="border-box" align-items="center" justify-content="center" background-color="cinematic.guide-logo" border="1px solid var(--cinematic.hairline)"
           if channel.logo != ""
-            image channel.logo alt="" width="100%" height="100%" object-fit="cover"
+            image channel.logo alt="" width="100%" height="100%" object-fit="contain"
           else
             text channel.name.slice(0, 2).toUpperCase() font-size=13 font-weight=750 letter-spacing="0.04em" color="ink.secondary"
           if small
@@ -518,9 +525,9 @@ component GuideNowList
       for c in rows key=c.id
         button press=watch(c.id) aria-label=t("ui.watchChannel", channel=c.name) class=GuideNowRow
           row gap=14 align-items="center" width="100%"
-            column position="relative" width=76 height=48 flex-shrink=0 border-radius=10 overflow="hidden" align-items="center" justify-content="center" background-color="cinematic.guide-logo" border="1px solid var(--cinematic.hairline)"
+            column position="relative" width=76 height=48 flex-shrink=0 border-radius=10 overflow="hidden" padding=6 box-sizing="border-box" align-items="center" justify-content="center" background-color="cinematic.guide-logo" border="1px solid var(--cinematic.hairline)"
               if c.logo != ""
-                image c.logo alt="" width="100%" height="100%" object-fit="cover"
+                image c.logo alt="" width="100%" height="100%" object-fit="contain"
               else
                 text c.name.slice(0, 2).toUpperCase() font-size=15 font-weight=750 color="ink.secondary"
             column flex=1 min-width=0 gap=4

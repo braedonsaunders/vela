@@ -27,7 +27,6 @@ members Client
     guideFocusApplied = guideFocusKey
     guideDay = guideFocusDay
   state guideNow = 0
-  state lowDelay = false
   resource guide = uiGuide(guideNow, guideDay) with localeJSON when auth.authenticated and (guideOpen or top(nav).name == "liveWatch") and guideNow > 0 as shape GuideModel else empty()
   // The minute clock re-projects the same day in place; only another day shows the loading state.
   derive guideReady = current(guide) or (guide.day == guideDay and guide.channels.length > 0)
@@ -58,7 +57,6 @@ members Client
     let target = zapTarget
     zapTarget = ""
     if target != "" and target != playingId and top(nav).name == "liveWatch"
-      lowDelay = false
       if tileViewer != ""
         tileLast = `${tileViewer}\n${target}`
       nav = replace(nav, path("liveWatch", target))
@@ -93,6 +91,11 @@ members Client
   state tileCommandId = 0
   state tileMuted = true
   state tileGivenUp = false
+  // A preview session whose stop is in flight, or failed: full watch waits for the
+  // server's confirmation, so the viewer never holds two streams.
+  state tileStopping = ""
+  state tileStopError = false
+  state tileStopTries = 0
   state pendingWatch = ""
   state saveData = false
   derive tileViewer = (current(home) ? home.viewer : "")
@@ -106,7 +109,7 @@ members Client
   derive tilePlan = (tileWanted and current(tilePlayback) ? tilePlayback.planJson : "")
   resource tileModel = uiPlayer(tilePlan, tileEvent, "", localeJSON) when tilePlan != "" as shape PlayerView
   derive tileFailed = tileWanted and (failed(tilePlayback) or (tilePlan != "" and current(tileModel) and tileModel.state == "failed"))
-  derive tileState = (tileTarget == "" ? "off" : not tileAllowed ? "tune-in" : tileGivenUp ? "unavailable" : tilePlan != "" and current(tileModel) and tileModel.playing and not tileModel.waiting ? "playing" : "connecting")
+  derive tileState = (tileStopError ? "stuck" : tileTarget == "" ? "off" : not tileAllowed ? "tune-in" : tileGivenUp ? "unavailable" : tilePlan != "" and current(tileModel) and tileModel.playing and not tileModel.waiting ? "playing" : "connecting")
   derive tileName = match first(guide.channels.filter(c => c.id == tileTarget)) { case some(c) => c.name, case none => "" }
   derive tileNumber = match first(guide.channels.filter(c => c.id == tileTarget)) { case some(c) => c.number, case none => "" }
   derive tile = LiveTile(channelId=tileTarget, channelName=tileName, channelNumber=tileNumber, state=tileState, muted=tileMuted, planJson=tilePlan, commandJson=tileCommandJson)
@@ -123,16 +126,27 @@ members Client
   // after three, or for a channel the viewer chose, it says so and holds nothing.
   task tileFallback when tileFailed
     after(10, nextTile)
-  task tilePendingWatch when pendingWatch != ""
-    after(2500, afterTileStop)
+  task tileStopFailure when tileStopping != "" and failed(tileStopped) and not pending(tileStopped)
+    after(1, markTileStopError)
+  // A stop that did not take is sent again, three times with growing waits; after that the
+  // tile says so and its Try again sends it once more.
+  task tileStopRetry1 when tileStopError and tileStopTries == 0
+    after(1000, autoRetryTileStop)
+  task tileStopRetry2 when tileStopError and tileStopTries == 1
+    after(3000, autoRetryTileStop)
+  task tileStopRetry3 when tileStopError and tileStopTries == 2
+    after(8000, autoRetryTileStop)
   action holdTile
     if tileHeldPlan != "" and tileHeldPlan != tilePlan
       send tileStopped = liveStop(tileHeldPlan)
+      tileStopping = tileHeldPlan
     tileHeldPlan = tilePlan
     tileEvent = ""
   action stopTile
     if tileHeldPlan != ""
       send tileStopped = liveStop(tileHeldPlan)
+      tileStopping = tileHeldPlan
+      tileStopTries = 0
     tileHeldPlan = ""
     tileEvent = ""
     tileGen = tileGen + 1
@@ -151,11 +165,31 @@ members Client
       tileAttempt = tileAttempt + 1
     else
       tileGivenUp = true
+  // The server answered the stop: only a confirmed stop releases the held session.
   action afterTileStop
-    let id = pendingWatch
-    if id != ""
-      pendingWatch = ""
-      openLiveWatch(id)
+    match tileStopped
+      case some(reply)
+        if reply.error == ""
+          tileStopping = ""
+          tileStopError = false
+          tileStopTries = 0
+          let id = pendingWatch
+          if id != ""
+            pendingWatch = ""
+            openLiveWatch(id)
+        else
+          tileStopError = true
+      case none
+        tileStopError = true
+  action markTileStopError
+    tileStopError = true
+  action autoRetryTileStop
+    tileStopTries = tileStopTries + 1
+    retryTileStop()
+  action retryTileStop
+    if tileStopping != "" and not pending(tileStopped)
+      send tileStopped = liveStop(tileStopping)
+      tileStopError = false
   // A live home's monitor flicks like the watch stage: up/down move a pending target through
   // the guide's order and it retunes once the viewer pauses, so a held key opens one session.
   state tileZapTarget = ""
@@ -224,22 +258,15 @@ members Client
     guideDay = max(0, min(6, day))
   // Full watch waits for the preview's stop, so the server never sees two of this viewer's streams.
   action watchChannel(id: string)
-    if tileHeldPlan != ""
+    if tileHeldPlan != "" or tileStopping != ""
       pendingWatch = id
       stopTile()
     else
       openLiveWatch(id)
   action openLiveWatch(id: string)
-    lowDelay = false
     if tileViewer != ""
       tileLast = `${tileViewer}\n${id}`
     nav = push(nav, path("liveWatch", id))
-  action toggleLowDelay
-    let enabled = not lowDelay
-    lowDelay = enabled
-    let next = watchCommandId + 1
-    watchCommandId = next
-    watchCommandJson = `{"id":${next},"type":"lowDelay","enabled":${enabled}}`
   action catchUpLive
     watchControl("catchUp", "")
   action liveWatchMessage(json: string)

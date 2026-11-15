@@ -32,6 +32,8 @@ component Client
   provide
     activeSkin
     doc = activeDoc
+    // The home pane's own width (a split title page narrows it): document breakpoints follow it.
+    homeWidth = shellViewport.width
     chooseSkin
     logout
     goHome
@@ -72,7 +74,7 @@ component Client
     homeTile
     homeTuned
     homeZapping
-    toggleLowDelay
+    retryTileStop
     catchUpLive
     zap
     tuneZap
@@ -92,6 +94,7 @@ component Client
     main navigationKey=`${top(nav).id}` navigationBack="back" navigate=follow width="100%" height="100%" background-color=pageColor color=inkColor color-scheme="dark" -exact-mode=(activePackJson != "" ? "pack=installed" : "pack=house")
       vela-theme pack=activePackJson width=0 height=0 aria-hidden=true
       vela-theme fonts=activeDoc.fontsJson width=0 height=0 aria-hidden=true
+      vela-theme keyframes=activeDoc.keyframesCss width=0 height=0 aria-hidden=true
       vela-engine build=buildEngine() wanted=resolveSkin(wantedSkin) chosen=pickEngine fallback=serverEngine settled=engineSettled still=still width=0 height=0 aria-hidden=true
       vela-context message=receiveOrigin secureNavigate=secureNavigate secureOrigins=secureOriginsJSON width=0 height=0 aria-hidden=true
       vela-context probe="media" message=receiveCapabilities width=0 height=0 aria-hidden=true
@@ -175,7 +178,7 @@ component Client
         // The route view: a route the active skin document draws whole (one renderer call site).
         if docRoutes.includes(e.name)
           column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=(e.name == "title" ? skinDetailPresentation(activeSkin, viewport.width, activeDoc) : "") navigationScroll=`${e.name}-scroll-${e.id}` position="absolute" inset=0
-            for routeProps in [RouteProps(route=e.name, entry=`${e.id}`, load=(e.name == "title" ? (failed(detail) ? "failed" : current(detail) ? "ready" : "loading") : "ready"), detail=(e.name == "title" and current(detail) ? [detailSurface] : []), season=detailSeason, small=small, tv=(viewport.width >= 1600), still=still)] key="route"
+            for routeProps in [RouteProps(route=e.name, entry=`${e.id}`, load=(e.name == "title" ? (failed(detail) ? "failed" : current(detail) ? "ready" : "loading") : "ready"), detail=(e.name == "title" and current(detail) ? [detailSurface] : []), season=detailSeason, small=small, tv=(viewport.width >= 1600), width=viewport.width, still=still)] key="route"
               DocRoute(p=routeProps)
         if e.name == "title" and not docRoutes.includes("title")
           column navigationKey=`${e.id}` navigationBar="none" navigationPresentation=skinDetailPresentation(activeSkin, viewport.width, activeDoc) navigationScroll=`detail-scroll-${e.id}` position="absolute" inset=0 box-sizing="border-box" padding=(flatDetail or small ? "0px" : "4vh 4vw") background-color=(flatDetail ? pageColor : traits.detailScrim) backdrop-filter=(flatDetail ? "none" : "blur(18px) saturate(1.1)") animation=(flatDetail ? "none" : still ? "dissolve 200ms linear both" : "dissolve 420ms ease-out both") color=inkColor
@@ -223,7 +226,7 @@ component Client
             if current(playback)
               if e.name == "liveWatch"
                 column position="absolute" top=88 right=(small ? 12 : 36) z-index=2 max-width=(small ? "calc(100% - 24px)" : "none") opacity=(liveControlsVisible ? 1 : 0) pointer-events=(liveControlsVisible ? "auto" : "none") inert=(not liveControlsVisible) transition=(still ? "none" : "opacity 180ms ease")
-                  for slotProps in [LiveControlsProps(lowDelay=lowDelay, reconnecting=(liveView.sessionId == playback.sessionId and liveView.reconnecting), delivery=(liveView.sessionId == playback.sessionId ? liveView.delivery : "unknown"), drift=(liveView.sessionId == playback.sessionId ? liveView.drift : -1), driftLabel=(liveView.sessionId == playback.sessionId ? liveView.driftLabel : ""), canCatchUp=(liveView.sessionId == playback.sessionId and liveView.canCatchUp))] key="liveControls"
+                  for slotProps in [LiveControlsProps(reconnecting=(liveView.sessionId == playback.sessionId and liveView.reconnecting), delivery=(liveView.sessionId == playback.sessionId ? liveView.delivery : "unknown"), drift=(liveView.sessionId == playback.sessionId ? liveView.drift : -1), driftLabel=(liveView.sessionId == playback.sessionId ? liveView.driftLabel : ""), canCatchUp=(liveView.sessionId == playback.sessionId and liveView.canCatchUp))] key="liveControls"
                     LiveControls(p=slotProps)
                 if zapTarget != "" and guide.channels.length > 0
                   column position="absolute" left=(small ? 16 : 40) top="50%" translate="0px -50%" z-index=3

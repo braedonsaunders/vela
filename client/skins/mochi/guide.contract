@@ -418,9 +418,9 @@ component GuideRail
       row gap=(small ? 0 : 12) align-items="center" width="100%" justify-content=(small ? "center" : "flex-start")
         if not small
           text channel.number width=34 flex-shrink=0 text-align="right" class=Pixel font-size=13 color="mochi.night-quiet" font-variant-numeric="tabular-nums"
-        column position="relative" width=(small ? 64 : 58) height=(small ? 40 : 36) flex-shrink=0 border-radius=12 overflow="hidden" align-items="center" justify-content="center" background-color="mochi.night-card" border="1px solid var(--mochi.night-card)"
+        column position="relative" width=(small ? 64 : 58) height=(small ? 40 : 36) flex-shrink=0 border-radius=12 overflow="hidden" padding=6 box-sizing="border-box" align-items="center" justify-content="center" background-color="mochi.night-card" border="1px solid var(--mochi.night-card)"
           if channel.logo != ""
-            image channel.logo alt="" width="100%" height="100%" object-fit="cover"
+            image channel.logo alt="" width="100%" height="100%" object-fit="contain"
           else
             text channel.name.slice(0, 2).toUpperCase() font-size=13 font-weight=750 letter-spacing="0.04em" color="mochi.night-soft"
           if small
@@ -495,9 +495,9 @@ component GuideNowList
       for c in rows key=c.id
         button press=watch(c.id) aria-label=t("ui.watchChannel", channel=c.name) class=GuideNowRow
           row gap=14 align-items="center" width="100%"
-            column position="relative" width=76 height=48 flex-shrink=0 border-radius=14 overflow="hidden" align-items="center" justify-content="center" background-color="mochi.night-card" border="1px solid var(--mochi.night-card)"
+            column position="relative" width=76 height=48 flex-shrink=0 border-radius=14 overflow="hidden" padding=6 box-sizing="border-box" align-items="center" justify-content="center" background-color="mochi.night-card" border="1px solid var(--mochi.night-card)"
               if c.logo != ""
-                image c.logo alt="" width="100%" height="100%" object-fit="cover"
+                image c.logo alt="" width="100%" height="100%" object-fit="contain"
               else
                 text c.name.slice(0, 2).toUpperCase() font-size=15 font-weight=750 color="mochi.night-soft"
             column flex=1 min-width=0 gap=4

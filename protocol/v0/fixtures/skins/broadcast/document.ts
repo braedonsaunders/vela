@@ -40,9 +40,9 @@ const clock: Node = { type: 'box', when: [{ test: 'env.clock' }], role: 'timer',
   ] };
 
 const iconButton = (action: 'search', label: string, symbol: string): Node => ({ type: 'box', press: { action }, label, style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '11px', 'border-radius': '3px', 'background-color': '$panel', color: '$ink', 'flex-shrink': '0' },
-  hover: { 'background-color': '$panelHi' }, children: [{ type: 'icon', symbol, style: { width: '18px', height: '18px' } }] });
+  hover: { 'background-color': '$panel-hi' }, children: [{ type: 'icon', symbol, style: { width: '18px', height: '18px' } }] });
 
-const menuItem = (press: Press, label: string, kids: Node[]): Node => ({ type: 'box', press, label, style: { position: 'relative', ...row('12px'), padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', 'font-size': '14px', color: '$ink' }, hover: { 'background-color': '$panelHi' }, children: kids });
+const menuItem = (press: Press, label: string, kids: Node[]): Node => ({ type: 'box', press, label, style: { position: 'relative', ...row('12px'), padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', 'font-size': '14px', color: '$ink' }, hover: { 'background-color': '$panel-hi' }, children: kids });
 
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'background-color': '$ground', color: '$ink', 'font-family': sans }, children: [
   { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], style: { position: 'relative', 'z-index': '20', ...col('0px'), 'background-color': '$ground', 'box-shadow': '0px 1px 0px $line' }, children: [
@@ -55,7 +55,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       clock,
       iconButton('search', '{s:search}', 'search'),
       { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', width: '40px', height: '40px', 'border-radius': '3px', 'background-color': '$panel', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'flex-shrink': '0' },
-        hover: { 'background-color': '$panelHi' }, children: [
+        hover: { 'background-color': '$panel-hi' }, children: [
           { type: 'text', text: '{env.viewerInitial}', style: { 'font-family': display, 'font-size': '18px', 'font-weight': '700', color: '$ink' } },
         ] },
     ] },
@@ -98,21 +98,23 @@ const ident: Node = { type: 'box', style: { ...row('8px'), height: '34px', paddi
 ] };
 
 /** The two-tier lower-third: number tab and programme on the white bar, time and next on the dark one. */
-const lowerThird: Node = { type: 'box', when: [{ test: 'tile.now' }], motion: 'wipe', style: { position: 'absolute', left: '24px', right: '24px', bottom: '22px', ...col('0px'), 'align-items': 'flex-start', 'pointer-events': 'none', 'max-width': '760px' } as Style,
+const lowerThird: Node = { type: 'box', when: [{ test: 'tile.channelId' }, { test: 'tile.zapping', not: true }], motion: 'wipe', style: { position: 'absolute', left: '24px', right: '24px', bottom: '22px', ...col('0px'), 'align-items': 'flex-start', 'pointer-events': 'none', 'max-width': '760px' } as Style,
   small: { left: '10px', right: '10px', bottom: '10px' }, children: [
     { type: 'box', style: { ...row('0px', { 'align-items': 'stretch' }), 'max-width': '100%', 'box-shadow': '0px 10px 30px rgba(0, 0, 0, 0.4)' }, children: [
       { type: 'box', style: { ...row('0px'), 'justify-content': 'center', 'min-width': '64px', padding: '0px 12px', 'background-color': '$signal' }, small: { 'min-width': '48px', padding: '0px 8px' }, children: [
         { type: 'text', text: '{tile.channelNumber}', style: { 'font-family': display, 'font-size': '30px', 'font-weight': '700', 'font-variant-numeric': 'tabular-nums', color: '$ink', 'line-height': '1' }, small: { 'font-size': '20px' } },
       ] },
-      { type: 'box', style: { ...col('2px'), 'min-width': '0px', padding: '9px 18px 8px 16px', 'background-color': '$paper', color: '$paperInk' }, small: { padding: '6px 10px 5px 10px' }, children: [
-        { type: 'text', text: '{tile.now}', role: 'heading', level: 2, style: { 'font-family': display, 'font-size': '30px', 'font-weight': '700', 'line-height': '1.05', 'line-clamp': '1', 'letter-spacing': '0.005em' }, small: { 'font-size': '19px' } },
-        { type: 'text', when: [{ test: 'tile.nowEpisode' }], text: '{tile.nowEpisode}', style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1', color: '$paperInk2' }, small: { display: 'none' } },
+      { type: 'box', style: { ...col('2px'), 'min-width': '0px', padding: '9px 18px 8px 16px', 'background-color': '$paper', color: '$paper-ink' }, small: { padding: '6px 10px 5px 10px' }, children: [
+        { type: 'text', when: [{ test: 'tile.now', not: true }], text: '{tile.channelName}', role: 'heading', level: 2, style: { 'font-family': display, 'font-size': '30px', 'font-weight': '700', 'line-height': '1.05', 'line-clamp': '1', 'letter-spacing': '0.005em' }, small: { 'font-size': '19px' } },
+        { type: 'text', when: [{ test: 'tile.now' }], text: '{tile.now}', role: 'heading', level: 2, style: { 'font-family': display, 'font-size': '30px', 'font-weight': '700', 'line-height': '1.05', 'line-clamp': '1', 'letter-spacing': '0.005em' }, small: { 'font-size': '19px' } },
+        { type: 'text', when: [{ test: 'tile.nowEpisode' }], text: '{tile.nowEpisode}', style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1', color: '$paper-ink2' }, small: { display: 'none' } },
       ] },
     ] },
     { type: 'box', style: { ...row('14px'), 'max-width': '100%', 'box-sizing': 'border-box', padding: '0px 16px 0px 14px', height: '32px', 'background-color': 'rgba(10, 13, 19, 0.88)', 'backdrop-filter': 'blur(10px)', color: '$ink2', 'font-size': '13px', 'font-variant-numeric': 'tabular-nums', 'white-space': 'nowrap' },
       small: { height: '26px', gap: '10px', padding: '0px 10px', 'font-size': '12px' }, children: [
-        { type: 'text', text: '{tile.channelName}', style: { ...caps('14px'), color: '$ink', 'line-clamp': '1' }, small: { display: 'none' } },
-        { type: 'box', style: { width: '96px', height: '3px', 'background-color': 'rgba(255, 255, 255, 0.18)', 'flex-shrink': '0', ...clip }, small: { width: '56px' }, children: [
+        { type: 'text', when: [{ test: 'tile.now' }], text: '{tile.channelName}', style: { ...caps('14px'), color: '$ink', 'line-clamp': '1' }, small: { display: 'none' } },
+        { type: 'text', when: [{ test: 'tile.now', not: true }], text: '{s:noListing}', style: { color: '$ink2' } },
+        { type: 'box', when: [{ test: 'tile.now' }], style: { width: '96px', height: '3px', 'background-color': 'rgba(255, 255, 255, 0.18)', 'flex-shrink': '0', ...clip }, small: { width: '56px' }, children: [
           { type: 'box', style: { height: '3px', width: '{tile.nowProgress}%', 'background-color': '$signal' } },
         ] },
         { type: 'text', when: [{ test: 'tile.nowRemaining' }], text: '{tile.nowRemaining}', style: { color: '$ink2' } },
@@ -163,7 +165,7 @@ const monitor: Node = { type: 'box', role: 'region', label: '{s:monitor}', testI
 
 const control = (press: Press, label: string, kids: Node[], primary = false, when?: Node['when']): Node => ({ type: 'box', press, label, when,
   style: { position: 'relative', ...row('9px'), height: '44px', 'box-sizing': 'border-box', padding: '0px 16px', 'border-radius': '3px', 'flex-shrink': '0', 'background-color': primary ? '$ink' : '$panel', color: primary ? '$ground' : '$ink', ...caps('16px', { 'letter-spacing': '0.06em' }), transition: 'background-color 140ms linear' },
-  hover: { 'background-color': primary ? '#ffffff' : '$panelHi' }, small: { height: '40px', padding: '0px 12px', 'font-size': '14px' }, children: kids });
+  hover: { 'background-color': primary ? '#ffffff' : '$panel-hi' }, small: { height: '40px', padding: '0px 12px', 'font-size': '14px' }, children: kids });
 const chButton = (step: string, label: string, glyph: string): Node => control({ action: 'zap', arg: step }, label, [
   { type: 'text', text: '{s:ch}', style: { color: '$ink3' } },
   { type: 'text', text: glyph, style: { 'font-size': '13px', 'line-height': '1' } },
@@ -190,7 +192,7 @@ const controls: Node = { type: 'box', role: 'toolbar', label: '{s:monitorControl
 /** One channel in the favourites stack: pressing it puts it on the monitor. */
 const stackRow: Node = { type: 'box', group: true, press: { action: 'preview', arg: '{ch.id}' }, label: '{s:previewChannel}', testId: 'broadcast-fav-{ch.id}',
   style: { position: 'relative', ...row('12px'), padding: '10px 16px 10px 14px', 'box-shadow': 'inset 0px -1px 0px $line', 'flex-shrink': '0', transition: 'background-color 120ms linear' },
-  hover: { 'background-color': '$panelHi' },
+  hover: { 'background-color': '$panel-hi' },
   small: { width: '232px', 'border-radius': '3px', 'background-color': '$panel', 'box-shadow': 'none', padding: '10px 12px' }, children: [
     { type: 'box', when: [{ test: 'ch.tuned' }], style: { position: 'absolute', top: '0px', bottom: '0px', left: '0px', width: '3px', 'background-color': '$signal' } },
     { type: 'text', text: '{ch.number}', style: { width: '42px', 'flex-shrink': '0', 'font-family': display, 'font-size': '22px', 'font-weight': '700', 'font-variant-numeric': 'tabular-nums', color: '$ink2' }, small: { width: '34px', 'font-size': '19px' } },
@@ -278,7 +280,7 @@ const nowCard: Node = { type: 'box', group: true, press: { action: 'watch', arg:
   ] };
 
 const guideCard: Node = { type: 'box', group: true, press: { action: 'guide' }, label: '{s:fullGuide}', style: { position: 'relative', width: 'clamp(200px, 13vw, 260px)', 'flex-shrink': '0', 'aspect-ratio': '4 / 3', 'align-self': 'flex-start', ...col('8px'), 'justify-content': 'center', 'align-items': 'center', 'border-radius': '3px', 'background-color': '$panel', color: '$ink', 'box-shadow': 'inset 0px 0px 0px 1px $line2' },
-  hover: { 'background-color': '$panelHi' }, small: { width: '160px' }, children: [
+  hover: { 'background-color': '$panel-hi' }, small: { width: '160px' }, children: [
     { type: 'icon', symbol: 'calendar', style: { width: '26px', height: '26px', color: '$cue' } },
     { type: 'text', text: '{s:fullGuide}', style: caps('18px') },
     { type: 'text', text: '{s:allChannels}', style: { 'font-size': '13px', color: '$ink3' } },
@@ -361,8 +363,8 @@ const broadcastDoc: SkinDocument = {
   live: { home: true },
   fonts: { display: { family: 'Barlow Condensed', files: [500, 600, 700].map(weight => ({ url: `${ASSETS}/barlow-condensed-${weight}.ttf`, weight, style: 'normal' as const })) } },
   tokens: {
-    ground: '#07090d', panel: '#121821', panelHi: '#1b2330', plate: 'rgba(255, 255, 255, 0.06)', line: 'rgba(255, 255, 255, 0.07)', line2: 'rgba(255, 255, 255, 0.14)',
-    ink: '#f2f4f7', ink2: '#b4bdca', ink3: '#7d8898', paper: '#f4f5f7', paperInk: '#0b0e13', paperInk2: '#4a5361',
+    ground: '#07090d', panel: '#121821', 'panel-hi': '#1b2330', plate: 'rgba(255, 255, 255, 0.06)', line: 'rgba(255, 255, 255, 0.07)', line2: 'rgba(255, 255, 255, 0.14)',
+    ink: '#f2f4f7', ink2: '#b4bdca', ink3: '#7d8898', paper: '#f4f5f7', 'paper-ink': '#0b0e13', 'paper-ink2': '#4a5361',
     signal: '#ff3d2e', cue: '#ffc23d',
   },
   strings: { en: {

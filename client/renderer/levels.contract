@@ -2,7 +2,7 @@
 use Card, FeedRow, HomeModel, HeroAction, LibraryNav, DetailModel, ExtraModel, CastPerson, cardName from "../foundation/models.contract"
 use GuideModel, GuideChannel, LiveTile from "../live/models.contract"
 
-use Style, Part, Cond, Ctx, Env, N10, N9, N8, N7, N6, N5, N4, N3, N2, N1, DocSlot, ShellSlot, RouteProps, RouteTree, SkinDoc, noStyle, emptyDoc from "./shapes.contract"
+use Style, Part, Cond, StateRef, Ctx, Env, N10, N9, N8, N7, N6, N5, N4, N3, N2, N1, DocSlot, ShellSlot, RouteProps, RouteTree, SkinDoc, noStyle, emptyDoc from "./shapes.contract"
 
 keyframes vr-rise
   from opacity=0 translate="0px 22px"
@@ -107,7 +107,7 @@ keyframes vr-jitter
 // The document's distinct styles, shared by index (nodes name theirs by position).
 fn styleAt(e: Env, i: number): Style = match e.styles.at(i) { case some(s) => s, case none => e.dflt }
 fn pct(at: number, of: number): string = (of > 0 ? min(100, at / of * 100).toString() : "0")
-fn binds(c: Ctx, e: Env): string[] = [match first(c.card) { case some(x) => x.id, case none => "" }, match first(c.hero) { case some(x) => x.id, case none => "" }, match first(c.card) { case some(x) => x.kind, case none => "" }, match first(c.hero) { case some(x) => x.kind, case none => "" }, match first(c.card) { case some(x) => x.name, case none => "" }, match first(c.hero) { case some(x) => x.name, case none => "" }, match first(c.card) { case some(x) => x.summary, case none => "" }, match first(c.hero) { case some(x) => x.summary, case none => "" }, match first(c.card) { case some(x) => x.facts, case none => "" }, match first(c.hero) { case some(x) => x.facts, case none => "" }, match first(c.card) { case some(x) => x.yearLabel, case none => "" }, match first(c.hero) { case some(x) => x.yearLabel, case none => "" }, match first(c.card) { case some(x) => x.rating, case none => "" }, match first(c.hero) { case some(x) => x.rating, case none => "" }, match first(c.card) { case some(x) => x.progressLabel, case none => "" }, match first(c.hero) { case some(x) => x.progressLabel, case none => "" }, match first(c.card) { case some(x) => x.poster, case none => "" }, match first(c.hero) { case some(x) => x.poster, case none => "" }, match first(c.card) { case some(x) => x.backdrop, case none => "" }, match first(c.hero) { case some(x) => x.backdrop, case none => "" }, match first(c.card) { case some(x) => x.logo, case none => "" }, match first(c.hero) { case some(x) => x.logo, case none => "" }, match first(c.card) { case some(x) => x.accent, case none => "" }, match first(c.hero) { case some(x) => x.accent, case none => "" }, match first(c.card) { case some(x) => x.receipt, case none => "" }, match first(c.hero) { case some(x) => x.receipt, case none => "" }, match first(c.card) { case some(x) => (x.played ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => x.episodeNumberLabel, case none => "" }, match first(c.card) { case some(x) => x.durationLabel, case none => "" }, match first(c.card) { case some(x) => pct(x.progressSeconds, x.durationSeconds), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 and x.durationSeconds > 0 and not x.played ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => cardName(x), case none => "" }, match first(c.card) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, match first(c.hero) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, match first(c.card) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, match first(c.hero) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, match first(c.row) { case some(x) => x.id, case none => "" }, match first(c.row) { case some(x) => x.name, case none => "" }, match first(c.row) { case some(x) => x.presentation, case none => "" }, match first(c.row) { case some(x) => (x.nextCursor != "" ? "true" : "false"), case none => "" }, match first(c.heroAct) { case some(x) => x.reasonLabel, case none => "" }, match first(c.heroAct) { case some(x) => x.actionLabel, case none => "" }, match first(c.heroAct) { case some(x) => x.actionDetail, case none => "" }, match first(c.heroAct) { case some(x) => x.action, case none => "" }, match first(c.heroAct) { case some(x) => x.targetId, case none => "" }, match first(c.heroAct) { case some(x) => (x.progress * 100).toString(), case none => "" }, match first(c.heroAct) { case some(x) => (x.progress > 0 ? "true" : "false"), case none => "" }, match first(c.heroAct) { case some(x) => (x.action != "details" and x.targetId != "" ? "true" : "false"), case none => "" }, match first(c.dest) { case some(x) => x.id, case none => "" }, match first(c.dest) { case some(x) => x.name, case none => "" }, match first(c.dest) { case some(x) => x.kind, case none => "" }, match first(c.dest) { case some(x) => ((x.kind == "live" ? e.section == "live" : e.section == x.id) ? "true" : "false"), case none => "" }, e.viewer, e.viewer.slice(0, 1).toUpperCase(), e.section, e.query, (e.small ? "true" : "false"), (e.tv ? "true" : "false"), (e.still ? "true" : "false"), (e.query != "" ? "true" : "false"), (e.canLive ? "true" : "false"), match first(e.home) { case some(x) => x.hero.length.toString(), case none => "" }, e.heroIndex.toString(), match first(e.home) { case some(x) => x.rows.length.toString(), case none => "" }, match first(e.home) { case some(x) => (x.hero.length > 1 and not e.still and e.query == "" ? "true" : "false"), case none => "" }, c.index.toString(), (c.index + 1).toString(), (c.index == e.heroIndex ? "true" : "false"), e.route, e.load, e.entry, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.id, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.kind, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.name, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.summary, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.facts, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.poster, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.backdrop, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.logo, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.accent, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.receipt, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => (x.kind == "movie" ? t("ui.film") : x.kind == "show" ? t("ui.series") : x.kind == "season" ? t("ui.season") : t("ui.episode")), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => (d.canPlay ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.resumeSeconds > 0 ? t("ui.resumePositionIn", position=d.resumePosition) : t("ui.play")), case none => "" }, match first(e.detail) { case some(d) => (d.canPlay and d.resumeSeconds > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => pct(d.resumeSeconds, x.durationSeconds), case none => "" }, case none => "0" }, match first(e.detail) { case some(d) => (d.seasons.length > 1 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.episodes.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.castPeople.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => d.crew.join(" · "), case none => "" }, match first(e.detail) { case some(d) => (d.extras.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.related.length > 0 ? "true" : "false"), case none => "false" }, e.season, match first(c.card) { case some(x) => (x.id == e.season ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => `${x.id}|season|`, case none => "" }, match first(c.card) { case some(x) => (x.episodeNumber > 0 ? t("ui.numberTitle", number=x.episodeNumberLabel, title=x.name) : x.name), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 ? t("ui.continueWatching") : t("ui.upNext")), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 ? t("ui.resumeEpisode") : t("ui.playEpisode")), case none => "" }, match first(c.extra) { case some(x) => x.id, case none => "" }, match first(c.extra) { case some(x) => x.name, case none => "" }, match first(c.extra) { case some(x) => x.kind, case none => "" }, match first(c.extra) { case some(x) => (x.ready ? "true" : "false"), case none => "" }, match first(c.person) { case some(x) => x.name, case none => "" }, match first(c.person) { case some(x) => x.role, case none => "" }, match first(c.person) { case some(x) => x.portrait, case none => "" }, match first(c.person) { case some(x) => x.name.split(" ").slice(0, 2).map(w => w.slice(0, 1)).join("").toUpperCase(), case none => "" }, match first(c.fact) { case some(x) => x, case none => "" }, match first(c.ch) { case some(x) => x.id, case none => "" }, match first(c.ch) { case some(x) => x.number, case none => "" }, match first(c.ch) { case some(x) => x.name, case none => "" }, match first(c.ch) { case some(x) => x.logo, case none => "" }, match first(c.ch) { case some(x) => x.group, case none => "" }, match first(c.ch) { case some(x) => x.now, case none => "" }, match first(c.ch) { case some(x) => x.next, case none => "" }, match first(c.ch) { case some(x) => x.nowRemaining, case none => "" }, match first(c.ch) { case some(x) => x.nextLabel, case none => "" }, match first(c.ch) { case some(x) => x.nowArt, case none => "" }, match first(c.ch) { case some(x) => x.nowEpisode, case none => "" }, match first(c.ch) { case some(x) => x.nowGenre, case none => "" }, match first(c.ch) { case some(x) => (x.favorite ? "true" : "false"), case none => "" }, match first(c.ch) { case some(x) => x.nowProgress.toString(), case none => "" }, match first(c.ch) { case some(x) => (x.id == e.tunedId ? "true" : "false"), case none => "" }, match first(e.tuned) { case some(x) => x.id, case none => "" }, match first(e.tuned) { case some(x) => x.name, case none => "" }, match first(e.tuned) { case some(x) => x.number, case none => "" }, match first(e.tuned) { case some(x) => x.logo, case none => "" }, match first(e.tuned) { case some(x) => x.now, case none => "" }, match first(e.tuned) { case some(x) => x.next, case none => "" }, match first(e.tuned) { case some(x) => x.nowRemaining, case none => "" }, match first(e.tuned) { case some(x) => x.nextLabel, case none => "" }, match first(e.tuned) { case some(x) => x.nowArt, case none => "" }, match first(e.tuned) { case some(x) => x.nowEpisode, case none => "" }, match first(e.tuned) { case some(x) => x.nowGenre, case none => "" }, match first(e.tuned) { case some(x) => x.nowProgress.toString(), case none => "" }, match first(e.tile) { case some(x) => x.state, case none => "" }, match first(e.tile) { case some(x) => (x.muted ? "true" : "false"), case none => "" }, e.zapping, match first(e.guide) { case some(x) => x.nowLabel, case none => "" }, match first(e.guide) { case some(x) => (x.channels.length > 0 ? "true" : "false"), case none => "" }, match first(e.guide) { case some(x) => x.channels.length.toString(), case none => "" }, e.favoriteCount.toString()]
+fn binds(c: Ctx, e: Env): string[] = [match first(c.card) { case some(x) => x.id, case none => "" }, match first(c.hero) { case some(x) => x.id, case none => "" }, match first(c.card) { case some(x) => x.kind, case none => "" }, match first(c.hero) { case some(x) => x.kind, case none => "" }, match first(c.card) { case some(x) => x.name, case none => "" }, match first(c.hero) { case some(x) => x.name, case none => "" }, match first(c.card) { case some(x) => x.summary, case none => "" }, match first(c.hero) { case some(x) => x.summary, case none => "" }, match first(c.card) { case some(x) => x.facts, case none => "" }, match first(c.hero) { case some(x) => x.facts, case none => "" }, match first(c.card) { case some(x) => x.yearLabel, case none => "" }, match first(c.hero) { case some(x) => x.yearLabel, case none => "" }, match first(c.card) { case some(x) => x.rating, case none => "" }, match first(c.hero) { case some(x) => x.rating, case none => "" }, match first(c.card) { case some(x) => x.progressLabel, case none => "" }, match first(c.hero) { case some(x) => x.progressLabel, case none => "" }, match first(c.card) { case some(x) => x.poster, case none => "" }, match first(c.hero) { case some(x) => x.poster, case none => "" }, match first(c.card) { case some(x) => x.backdrop, case none => "" }, match first(c.hero) { case some(x) => x.backdrop, case none => "" }, match first(c.card) { case some(x) => x.logo, case none => "" }, match first(c.hero) { case some(x) => x.logo, case none => "" }, match first(c.card) { case some(x) => x.accent, case none => "" }, match first(c.hero) { case some(x) => x.accent, case none => "" }, match first(c.card) { case some(x) => x.receipt, case none => "" }, match first(c.hero) { case some(x) => x.receipt, case none => "" }, match first(c.card) { case some(x) => (x.played ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => x.episodeNumberLabel, case none => "" }, match first(c.card) { case some(x) => x.durationLabel, case none => "" }, match first(c.card) { case some(x) => pct(x.progressSeconds, x.durationSeconds), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 and x.durationSeconds > 0 and not x.played ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => cardName(x), case none => "" }, match first(c.card) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, match first(c.hero) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, match first(c.card) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, match first(c.hero) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, match first(c.row) { case some(x) => x.id, case none => "" }, match first(c.row) { case some(x) => x.name, case none => "" }, match first(c.row) { case some(x) => x.presentation, case none => "" }, match first(c.row) { case some(x) => (x.nextCursor != "" ? "true" : "false"), case none => "" }, match first(c.heroAct) { case some(x) => x.reasonLabel, case none => "" }, match first(c.heroAct) { case some(x) => x.actionLabel, case none => "" }, match first(c.heroAct) { case some(x) => x.actionDetail, case none => "" }, match first(c.heroAct) { case some(x) => x.action, case none => "" }, match first(c.heroAct) { case some(x) => x.targetId, case none => "" }, match first(c.heroAct) { case some(x) => (x.progress * 100).toString(), case none => "" }, match first(c.heroAct) { case some(x) => (x.progress > 0 ? "true" : "false"), case none => "" }, match first(c.heroAct) { case some(x) => (x.action != "details" and x.targetId != "" ? "true" : "false"), case none => "" }, match first(c.dest) { case some(x) => x.id, case none => "" }, match first(c.dest) { case some(x) => x.name, case none => "" }, match first(c.dest) { case some(x) => x.kind, case none => "" }, match first(c.dest) { case some(x) => ((x.kind == "live" ? e.section == "live" : e.section == x.id) ? "true" : "false"), case none => "" }, e.viewer, e.viewer.slice(0, 1).toUpperCase(), e.section, e.query, (e.small ? "true" : "false"), (e.tv ? "true" : "false"), (e.still ? "true" : "false"), (e.query != "" ? "true" : "false"), (e.canLive ? "true" : "false"), match first(e.home) { case some(x) => x.hero.length.toString(), case none => "" }, e.heroIndex.toString(), match first(e.home) { case some(x) => x.rows.length.toString(), case none => "" }, match first(e.home) { case some(x) => (x.hero.length > 1 and not e.still and e.query == "" ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.hero) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.dest) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.extra) { case some(x) => x.id.length.toString(), case none => "" }, match first(c.person) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.card) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.hero) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.row) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.person) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.dest) { case some(x) => x.name.length.toString(), case none => "" }, match first(c.card) { case some(x) => x.seasonNumber.toString(), case none => "" }, match first(c.card) { case some(x) => x.episodeNumber.toString(), case none => "" }, match first(c.card) { case some(x) => x.seasonNumberLabel, case none => "" }, match first(c.card) { case some(x) => ((x.kind == "movie" or x.kind == "episode") and not x.played and x.progressSeconds <= 0 ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => x.genres.join(", "), case none => "" }, match first(c.hero) { case some(x) => cardName(x), case none => "" }, match first(c.hero) { case some(x) => x.genres.slice(0, 3).join(", "), case none => "" }, match first(c.hero) { case some(x) => [x.yearLabel].concat(x.genres.slice(0, 3)).concat([x.rating]).filter(f => f != "").join(" · "), case none => "" }, match first(c.row) { case some(x) => (x.items.length > 0 and not x.items.map(i => i.kind == "episode" or (i.progressSeconds > 0 and not i.played)).includes(false) ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (x.items.length > 0 and not x.items.map(i => i.progressSeconds > 0 and not i.played).includes(false) ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (x.previewOnFocus ? "true" : "false"), case none => "" }, match first(c.row) { case some(x) => (e.rowLoading.includes(x.id) ? "true" : "false"), case none => "" }, match first(c.dest) { case some(x) => x.backdrop, case none => "" }, e.width.toString(), e.skinCount.toString(), e.libraries.length.toString(), (e.libraries.map(l => l.kind == "live").includes(true) ? "true" : "false"), (e.homeLoading ? "true" : "false"), match first(e.home) { case some(x) => (x.nextCursor != "" ? "true" : "false"), case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.yearLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.year.toString(), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.rating, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => (x.played ? "true" : "false"), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.durationLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => (x.progressSeconds > 0 and x.durationSeconds > 0 and not x.played ? "true" : "false"), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => pct(x.progressSeconds, x.durationSeconds), case none => "" }, case none => "0" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.seasonNumberLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.episodeNumberLabel, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.episodeNumber.toString(), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => d.resumePosition, case none => "" }, match first(e.detail) { case some(d) => d.seasons.length.toString(), case none => "0" }, match first(e.detail) { case some(d) => d.seasons.filter(x => x.id == e.season).map(x => x.name).join(""), case none => "" }, match first(e.detail) { case some(d) => (e.season != "" and d.episodes.length > 0 and not d.episodes.map(x => x.seasonId == e.season).includes(true) ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.genres.join(", "), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => d.crew.join(", "), case none => "" }, match first(e.detail) { case some(d) => d.cast.join(" · "), case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.name.length.toString(), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.id.length.toString(), case none => "" }, case none => "" }, match first(c.fact) { case some(x) => x, case none => "" }, c.index.toString(), (c.index + 1).toString(), (c.index == e.heroIndex ? "true" : "false"), e.route, e.load, (e.load == "failed" ? "true" : "false"), e.entry, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.id, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.kind, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.name, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.summary, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.facts, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.poster, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.backdrop, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.logo, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.accent, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => x.receipt, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => (x.kind == "movie" ? t("ui.film") : x.kind == "show" ? t("ui.series") : x.kind == "season" ? t("ui.season") : t("ui.episode")), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => `${x.id}|${x.kind}|${x.receipt}`, case none => "" }, case none => "" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => [x.facts].concat(x.genres.slice(0, 3)).filter(f => f != "").join(" · "), case none => "" }, case none => "" }, match first(e.detail) { case some(d) => (d.canPlay ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.resumeSeconds > 0 ? t("ui.resumePositionIn", position=d.resumePosition) : t("ui.play")), case none => "" }, match first(e.detail) { case some(d) => (d.canPlay and d.resumeSeconds > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => match first(d.title) { case some(x) => pct(d.resumeSeconds, x.durationSeconds), case none => "" }, case none => "0" }, match first(e.detail) { case some(d) => (d.seasons.length > 1 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.episodes.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.castPeople.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => d.crew.join(" · "), case none => "" }, match first(e.detail) { case some(d) => (d.extras.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.mediaFacts.length > 0 ? "true" : "false"), case none => "false" }, match first(e.detail) { case some(d) => (d.related.length > 0 ? "true" : "false"), case none => "false" }, e.season, match first(c.card) { case some(x) => (x.id == e.season ? "true" : "false"), case none => "" }, match first(c.card) { case some(x) => `${x.id}|season|`, case none => "" }, match first(c.card) { case some(x) => (x.episodeNumber > 0 ? t("ui.numberTitle", number=x.episodeNumberLabel, title=x.name) : x.name), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 ? t("ui.continueWatching") : t("ui.upNext")), case none => "" }, match first(c.card) { case some(x) => (x.progressSeconds > 0 ? t("ui.resumeEpisode") : t("ui.playEpisode")), case none => "" }, match first(c.extra) { case some(x) => x.id, case none => "" }, match first(c.extra) { case some(x) => x.name, case none => "" }, match first(c.extra) { case some(x) => x.kind, case none => "" }, match first(c.extra) { case some(x) => (x.ready ? "true" : "false"), case none => "" }, match first(c.person) { case some(x) => x.name, case none => "" }, match first(c.person) { case some(x) => x.role, case none => "" }, match first(c.person) { case some(x) => x.portrait, case none => "" }, match first(c.person) { case some(x) => x.name.split(" ").slice(0, 2).map(w => w.slice(0, 1)).join("").toUpperCase(), case none => "" }, match first(c.fact) { case some(x) => x, case none => "" }, match first(c.ch) { case some(x) => x.id, case none => "" }, match first(c.ch) { case some(x) => x.number, case none => "" }, match first(c.ch) { case some(x) => x.name, case none => "" }, match first(c.ch) { case some(x) => x.logo, case none => "" }, match first(c.ch) { case some(x) => x.group, case none => "" }, match first(c.ch) { case some(x) => x.now, case none => "" }, match first(c.ch) { case some(x) => x.next, case none => "" }, match first(c.ch) { case some(x) => x.nowRemaining, case none => "" }, match first(c.ch) { case some(x) => x.nextLabel, case none => "" }, match first(c.ch) { case some(x) => x.nowArt, case none => "" }, match first(c.ch) { case some(x) => x.nowEpisode, case none => "" }, match first(c.ch) { case some(x) => x.nowGenre, case none => "" }, match first(c.ch) { case some(x) => (x.favorite ? "true" : "false"), case none => "" }, match first(c.ch) { case some(x) => x.nowProgress.toString(), case none => "" }, match first(c.ch) { case some(x) => (x.id == e.tunedId ? "true" : "false"), case none => "" }, match first(e.tuned) { case some(x) => x.id, case none => "" }, match first(e.tuned) { case some(x) => x.name, case none => "" }, match first(e.tuned) { case some(x) => x.number, case none => "" }, match first(e.tuned) { case some(x) => x.logo, case none => "" }, match first(e.tuned) { case some(x) => x.now, case none => "" }, match first(e.tuned) { case some(x) => x.next, case none => "" }, match first(e.tuned) { case some(x) => x.nowRemaining, case none => "" }, match first(e.tuned) { case some(x) => x.nextLabel, case none => "" }, match first(e.tuned) { case some(x) => x.nowArt, case none => "" }, match first(e.tuned) { case some(x) => x.nowEpisode, case none => "" }, match first(e.tuned) { case some(x) => x.nowGenre, case none => "" }, match first(e.tuned) { case some(x) => x.nowProgress.toString(), case none => "" }, match first(e.tile) { case some(x) => x.state, case none => "" }, match first(e.tile) { case some(x) => (x.muted ? "true" : "false"), case none => "" }, e.zapping, match first(e.guide) { case some(x) => x.nowLabel, case none => "" }, match first(e.guide) { case some(x) => (x.channels.length > 0 ? "true" : "false"), case none => "" }, match first(e.guide) { case some(x) => x.channels.length.toString(), case none => "" }, e.favoriteCount.toString()]
 fn pick(vals: string[], i: number): string = match vals.at(i) { case some(v) => v, case none => "" }
 fn flagged(e: Env, f: string): string = (e.flags.includes(f) ? "true" : "false")
 fn fill(parts: Part[], vals: string[], e: Env): string = parts.map(p => (p.f != "" ? flagged(e, p.f) : p.k < 0 ? p.l : pick(vals, p.k))).join("")
@@ -115,34 +115,38 @@ fn num(s: string): number = match parseNumber(s) { case some(x) => x, case none 
 fn subject(k: Cond, vals: string[], e: Env): string = (k.f != "" ? flagged(e, k.f) : pick(vals, k.k))
 fn holds(k: Cond, vals: string[], e: Env): bool = (k.is == "eq" ? subject(k, vals, e) == k.v : k.is == "ne" ? subject(k, vals, e) != k.v : k.is == "gt" ? num(subject(k, vals, e)) > num(k.v) : k.is == "lt" ? num(subject(k, vals, e)) < num(k.v) : k.is == "mod" ? num(subject(k, vals, e)) % num(k.v.split(":").slice(0, 1).join("")) == num(k.v.split(":").slice(1, 2).join("")) : not ["", "false", "0"].includes(subject(k, vals, e)))
 fn shows(conds: Cond[], vals: string[], e: Env): bool = not conds.map(k => holds(k, vals, e) == k.not).includes(true)
+// The first state whose conditions hold, else the node's own.
+fn stateOf(sts: StateRef[], base: StateRef, vals: string[], e: Env): StateRef = match first(sts.filter(x => shows(x.cond, vals, e))) { case some(x) => x, case none => base }
+fn ariaOpt(conds: Cond[], vals: string[], e: Env): option<bool> = (conds.length == 0 ? none : some(shows(conds, vals, e)))
+fn aria(conds: Cond[], vals: string[], e: Env): string = (conds.length == 0 ? "" : shows(conds, vals, e) ? "true" : "false")
 fn motion(mk: string, md: number, mdl: number, me: string, mf: string, mit: string, mdir: string, msk: string, msd: number, step: number, cap: number, i: number, e: Env): string = (e.still ? (msk == "" ? "none" : `${msk} ${msd}ms linear both`) : `${mk} ${md}ms ${me} ${mdl + min(i, cap) * step}ms ${mit} ${mdir} ${mf}`)
-fn heroActFor(home: HomeModel, id: string): HeroAction[] = home.heroActions.filter(a => a.heroId == id).slice(0, 1)
-// The season a detail page shows: the viewer's pick, else the season of its first episode (a title opened with no pick).
+// The season a title page shows: the visit's pick, else its episodes' season, else the season page itself.
 fn selectedSeason(detail: DetailModel[], picked: string): string = (picked != "" ? picked : match first(detail) { case some(d) => match first(d.episodes) { case some(x) => x.seasonId, case none => d.title.filter(t => t.kind == "season").map(t => t.id).join("") }, case none => "" })
+fn heroActFor(home: HomeModel, id: string): HeroAction[] = home.heroActions.filter(a => a.heroId == id).slice(0, 1)
 // The live home's lineup in the guide's order, or its favourites alone (a subset, never a reorder).
 fn liveCtxs(rep: string, lim: number, c: Ctx, e: Env): Ctx[] = match first(e.guide) { case some(g) => (rep == "live.favorites" ? g.channels.filter(x => x.favorite) : g.channels).slice(0, lim).map(x => Ctx(c, ch=[x])), case none => [] }
-fn rootCtx(): Ctx = Ctx(hot=false, card=[], row=[], hero=[], heroAct=[], dest=[], extra=[], person=[], fact=[], ch=[], index=0)
+fn rootCtx(): Ctx = Ctx(hot=false, fhot=false, card=[], row=[], hero=[], heroAct=[], dest=[], extra=[], person=[], fact=[], ch=[], index=0)
 fn ctxKey(c: Ctx, j: number): string = `${j}:${c.card.map(x => x.id).join("")}:${c.row.map(x => x.id).join("")}:${c.hero.map(x => x.id).join("")}:${c.dest.map(x => x.id).join("")}:${c.ch.map(x => x.id).join("")}`
-fn detailCtxs1(n: N1, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : []), case none => [] }
-fn ctxs1(n: N1, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs1(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
-fn detailCtxs2(n: N2, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : []), case none => [] }
-fn ctxs2(n: N2, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs2(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
-fn detailCtxs3(n: N3, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : []), case none => [] }
-fn ctxs3(n: N3, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs3(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
-fn detailCtxs4(n: N4, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : []), case none => [] }
-fn ctxs4(n: N4, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs4(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
-fn detailCtxs5(n: N5, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : []), case none => [] }
-fn ctxs5(n: N5, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs5(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
-fn detailCtxs6(n: N6, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : []), case none => [] }
-fn ctxs6(n: N6, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs6(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
-fn detailCtxs7(n: N7, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : []), case none => [] }
-fn ctxs7(n: N7, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs7(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
-fn detailCtxs8(n: N8, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : []), case none => [] }
-fn ctxs8(n: N8, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs8(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
-fn detailCtxs9(n: N9, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : []), case none => [] }
-fn ctxs9(n: N9, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs9(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
-fn detailCtxs10(n: N10, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : []), case none => [] }
-fn ctxs10(n: N10, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep.startsWith("detail.") ? detailCtxs10(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
+fn detailCtxs1(n: N1, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }
+fn ctxs1(n: N1, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs1(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
+fn detailCtxs2(n: N2, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }
+fn ctxs2(n: N2, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs2(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
+fn detailCtxs3(n: N3, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }
+fn ctxs3(n: N3, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs3(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
+fn detailCtxs4(n: N4, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }
+fn ctxs4(n: N4, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs4(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
+fn detailCtxs5(n: N5, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }
+fn ctxs5(n: N5, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs5(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
+fn detailCtxs6(n: N6, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }
+fn ctxs6(n: N6, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs6(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
+fn detailCtxs7(n: N7, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }
+fn ctxs7(n: N7, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs7(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
+fn detailCtxs8(n: N8, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }
+fn ctxs8(n: N8, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs8(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
+fn detailCtxs9(n: N9, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }
+fn ctxs9(n: N9, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs9(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
+fn detailCtxs10(n: N10, c: Ctx, e: Env): Ctx[] = match first(e.detail) { case some(d) => (n.rep == "detail.seasons" ? d.seasons.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.episodes" ? d.episodes.slice(0, n.lim).map(x => Ctx(c, card=[x])) : n.rep == "detail.upNext" ? d.episodes.filter(x => not x.played).slice(0, 1).map(x => Ctx(c, card=[x])) : n.rep == "detail.extras" ? d.extras.slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.cast" ? d.castPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : n.rep == "detail.mediaFacts" ? d.mediaFacts.slice(0, n.lim).map(x => Ctx(c, fact=[x])) : n.rep == "detail.related" ? d.related.slice(0, n.lim).map(r => Ctx(c, row=[r])) : n.rep == "detail.genres" ? match first(d.title) { case some(t) => t.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep == "detail.trailers" ? d.extras.filter(x => x.kind == "trailer" and x.ready).slice(0, n.lim).map(x => Ctx(c, extra=[x])) : n.rep == "detail.crew" ? d.crewPeople.slice(0, n.lim).map(x => Ctx(c, person=[x])) : []), case none => [] }
+fn ctxs10(n: N10, c: Ctx, e: Env): Ctx[] = (n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs10(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])
 
 // The renderer's element: every node draws through it (docs/skin-schema.md).
 component BoxEl
@@ -161,10 +165,15 @@ component BoxEl
     domId: string
     role: string
     label: string
+    lt: string
+    se: string
+    exitAnim: string
     hovering: action
+    pointing: action
+    keying: action
   slot
   view
-    box id=domId hover=hovering testId=test role=role aria-label=label display=s.display position=pos top=s.top right=s.right bottom=s.bottom left=s.left z-index=s.zIndex width=(dw != "" ? dw : s.width) height=s.height min-width=s.minWidth min-height=s.minHeight max-width=s.maxWidth max-height=s.maxHeight aspect-ratio=s.aspectRatio box-sizing=s.boxSizing flex-grow=s.flexGrow flex-basis=s.flexBasis flex-direction=s.flexDirection flex-wrap=s.flexWrap flex-shrink=s.flexShrink align-items=s.alignItems align-self=s.alignSelf justify-content=s.justifyContent gap=s.gap order=s.order grid-template-columns=s.gridTemplateColumns grid-template-rows=s.gridTemplateRows grid-column=s.gridColumn grid-row=s.gridRow padding-top=s.paddingTop padding-right=s.paddingRight padding-bottom=s.paddingBottom padding-left=s.paddingLeft margin-top=s.marginTop margin-right=s.marginRight margin-bottom=s.marginBottom margin-left=s.marginLeft overflow-x=s.overflowX overflow-y=s.overflowY scroll-snap-type=s.scrollSnapType scroll-snap-align=s.scrollSnapAlign scrollbar-width=s.scrollbarWidth color=(dc != "" ? dc : s.color) background-color=(dbg != "" ? dbg : s.backgroundColor) background-image=(dbi != "" ? dbi : s.backgroundImage) opacity=(fade ? 0 : dop != "" ? num(dop) : s.opacity) border-width=s.borderWidth border-style=s.borderStyle border-color=s.borderColor border-radius=s.borderRadius border-top-width=s.borderTopWidth border-top-color=s.borderTopColor border-bottom-width=s.borderBottomWidth border-bottom-color=s.borderBottomColor box-shadow=s.boxShadow filter=s.filter backdrop-filter=s.backdropFilter mask-image=s.maskImage font-family=s.fontFamily font-size=s.fontSize font-weight=s.fontWeight font-style=s.fontStyle line-height=s.lineHeight letter-spacing=s.letterSpacing text-transform=s.textTransform text-align=s.textAlign text-shadow=s.textShadow -webkit-text-stroke=s.textStroke text-overflow=s.textOverflow white-space=s.whiteSpace font-variant-numeric=s.fontVariantNumeric transform-origin=s.transformOrigin translate=(dtr != "" ? dtr : s.translate) scale=s.scale rotate=s.rotate perspective=s.perspective transition=s.transition animation=(anim != "" ? anim : s.animation) pointer-events=s.pointerEvents cursor=s.cursor
+    box id=domId hover=hovering pointerdown=pointing key=keying testId=test role=role aria-label=label -exact-layout-transition=lt sharedElement=se -exact-exit-animation=exitAnim display=s.display position=pos top=s.top right=s.right bottom=s.bottom left=s.left z-index=s.zIndex width=(dw != "" ? dw : s.width) height=s.height min-width=s.minWidth min-height=s.minHeight max-width=s.maxWidth max-height=s.maxHeight aspect-ratio=s.aspectRatio box-sizing=s.boxSizing flex-grow=s.flexGrow flex-basis=s.flexBasis flex-direction=s.flexDirection flex-wrap=s.flexWrap flex-shrink=s.flexShrink align-items=s.alignItems align-self=s.alignSelf justify-content=s.justifyContent gap=s.gap column-gap=s.columnGap row-gap=s.rowGap order=s.order grid-template-columns=s.gridTemplateColumns grid-template-rows=s.gridTemplateRows grid-column=s.gridColumn grid-row=s.gridRow padding-top=s.paddingTop padding-right=s.paddingRight padding-bottom=s.paddingBottom padding-left=s.paddingLeft margin-top=s.marginTop margin-right=s.marginRight margin-bottom=s.marginBottom margin-left=s.marginLeft overflow-x=s.overflowX overflow-y=s.overflowY scroll-snap-type=s.scrollSnapType scroll-snap-align=s.scrollSnapAlign scrollbar-width=s.scrollbarWidth scroll-behavior=s.scrollBehavior scroll-padding-left=s.scrollPaddingLeft color-scheme=s.colorScheme color=(dc != "" ? dc : s.color) background-color=(dbg != "" ? dbg : s.backgroundColor) background-image=(dbi != "" ? dbi : s.backgroundImage) opacity=(fade ? 0 : dop != "" ? num(dop) : s.opacity) border-width=s.borderWidth border-style=s.borderStyle border-color=s.borderColor border-radius=s.borderRadius border-top-width=s.borderTopWidth border-top-color=s.borderTopColor border-bottom-width=s.borderBottomWidth border-bottom-color=s.borderBottomColor border-left-width=s.borderLeftWidth border-left-color=s.borderLeftColor box-shadow=s.boxShadow filter=s.filter backdrop-filter=s.backdropFilter mask-image=s.maskImage font-family=s.fontFamily font-size=s.fontSize font-weight=s.fontWeight font-style=s.fontStyle line-height=s.lineHeight letter-spacing=s.letterSpacing text-transform=s.textTransform text-align=s.textAlign text-shadow=s.textShadow -webkit-text-stroke=s.textStroke text-overflow=s.textOverflow white-space=s.whiteSpace font-variant-numeric=s.fontVariantNumeric transform-origin=s.transformOrigin translate=(dtr != "" ? dtr : s.translate) scale=s.scale rotate=s.rotate perspective=s.perspective transition=s.transition animation=(anim != "" ? anim : s.animation) pointer-events=s.pointerEvents cursor=s.cursor
       children
 
 component V1
@@ -181,42 +190,67 @@ component V1
   state ready = false
   action hovering(v: bool)
     over = v
+  state pointed = false
+  // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
+  action pointing
+    pointed = true
   action focusing
-    focused = true
+    focused = not pointed
   action blurring
     focused = false
+    pointed = false
+  action pressing(arg: string, to: string)
+    act(n.act, arg)
+    if to != ""
+      focus(to)
+  action escaping(to: string, k: string)
+    if k == "Escape" and n.esc != ""
+      preventDefault()
+      act("close", n.esc)
+      if to != ""
+        focus(to)
   action loaded
     ready = true
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
-          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
-            if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
-            else if n.t == "liveTile"
-              for t in e.tile key=t.channelId
-                if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
-                  vela-player plan=t.planJson playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
-            else
-              if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-              else
-                BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
-                  if n.t == "text"
-                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+          for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
+            for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
+              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+                if n.t == "install"
+                  vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else if n.t == "liveTile"
+                  for t in e.tile key=t.channelId
+                    if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
+                      vela-player plan=t.planJson playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                else
+                  if n.t == "observe"
+                    column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    if n.t == "image"
-                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
-                    else
-                      if n.t == "icon"
-                        image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                    BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                      if n.t == "text"
+                        text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
-                        for k, ki in n.kids key=`${ki}`
-                          for cc, j in ctxs2(k, cx, e) key=ctxKey(cc, j)
-                            V2(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot)), e=e, act=act, obs=obs)
-                        if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                        if n.t == "image"
+                          image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                        else
+                          if n.t == "icon"
+                            if n.sym != ""
+                              image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                            else
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
+                          else
+                            for k, ki in n.kids key=`${ki}`
+                              for cc, j in ctxs2(k, cx, e) key=ctxKey(cc, j)
+                                V2(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.act != ""
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V2
   props
@@ -232,42 +266,67 @@ component V2
   state ready = false
   action hovering(v: bool)
     over = v
+  state pointed = false
+  // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
+  action pointing
+    pointed = true
   action focusing
-    focused = true
+    focused = not pointed
   action blurring
     focused = false
+    pointed = false
+  action pressing(arg: string, to: string)
+    act(n.act, arg)
+    if to != ""
+      focus(to)
+  action escaping(to: string, k: string)
+    if k == "Escape" and n.esc != ""
+      preventDefault()
+      act("close", n.esc)
+      if to != ""
+        focus(to)
   action loaded
     ready = true
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
-          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
-            if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
-            else if n.t == "liveTile"
-              for t in e.tile key=t.channelId
-                if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
-                  vela-player plan=t.planJson playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
-            else
-              if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-              else
-                BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
-                  if n.t == "text"
-                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+          for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
+            for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
+              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+                if n.t == "install"
+                  vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else if n.t == "liveTile"
+                  for t in e.tile key=t.channelId
+                    if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
+                      vela-player plan=t.planJson playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                else
+                  if n.t == "observe"
+                    column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    if n.t == "image"
-                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
-                    else
-                      if n.t == "icon"
-                        image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                    BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                      if n.t == "text"
+                        text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
-                        for k, ki in n.kids key=`${ki}`
-                          for cc, j in ctxs3(k, cx, e) key=ctxKey(cc, j)
-                            V3(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot)), e=e, act=act, obs=obs)
-                        if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                        if n.t == "image"
+                          image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                        else
+                          if n.t == "icon"
+                            if n.sym != ""
+                              image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                            else
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
+                          else
+                            for k, ki in n.kids key=`${ki}`
+                              for cc, j in ctxs3(k, cx, e) key=ctxKey(cc, j)
+                                V3(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.act != ""
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V3
   props
@@ -283,42 +342,67 @@ component V3
   state ready = false
   action hovering(v: bool)
     over = v
+  state pointed = false
+  // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
+  action pointing
+    pointed = true
   action focusing
-    focused = true
+    focused = not pointed
   action blurring
     focused = false
+    pointed = false
+  action pressing(arg: string, to: string)
+    act(n.act, arg)
+    if to != ""
+      focus(to)
+  action escaping(to: string, k: string)
+    if k == "Escape" and n.esc != ""
+      preventDefault()
+      act("close", n.esc)
+      if to != ""
+        focus(to)
   action loaded
     ready = true
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
-          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
-            if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
-            else if n.t == "liveTile"
-              for t in e.tile key=t.channelId
-                if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
-                  vela-player plan=t.planJson playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
-            else
-              if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-              else
-                BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
-                  if n.t == "text"
-                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+          for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
+            for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
+              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+                if n.t == "install"
+                  vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else if n.t == "liveTile"
+                  for t in e.tile key=t.channelId
+                    if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
+                      vela-player plan=t.planJson playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                else
+                  if n.t == "observe"
+                    column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    if n.t == "image"
-                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
-                    else
-                      if n.t == "icon"
-                        image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                    BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                      if n.t == "text"
+                        text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
-                        for k, ki in n.kids key=`${ki}`
-                          for cc, j in ctxs4(k, cx, e) key=ctxKey(cc, j)
-                            V4(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot)), e=e, act=act, obs=obs)
-                        if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                        if n.t == "image"
+                          image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                        else
+                          if n.t == "icon"
+                            if n.sym != ""
+                              image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                            else
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
+                          else
+                            for k, ki in n.kids key=`${ki}`
+                              for cc, j in ctxs4(k, cx, e) key=ctxKey(cc, j)
+                                V4(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.act != ""
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V4
   props
@@ -332,38 +416,63 @@ component V4
   state ready = false
   action hovering(v: bool)
     over = v
+  state pointed = false
+  // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
+  action pointing
+    pointed = true
   action focusing
-    focused = true
+    focused = not pointed
   action blurring
     focused = false
+    pointed = false
+  action pressing(arg: string, to: string)
+    act(n.act, arg)
+    if to != ""
+      focus(to)
+  action escaping(to: string, k: string)
+    if k == "Escape" and n.esc != ""
+      preventDefault()
+      act("close", n.esc)
+      if to != ""
+        focus(to)
   action loaded
     ready = true
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
-          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
-            if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
-            else
-              if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-              else
-                BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
-                  if n.t == "text"
-                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+          for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
+            for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
+              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+                if n.t == "install"
+                  vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else
+                  if n.t == "observe"
+                    column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    if n.t == "image"
-                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
-                    else
-                      if n.t == "icon"
-                        image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                    BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                      if n.t == "text"
+                        text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
-                        for k, ki in n.kids key=`${ki}`
-                          for cc, j in ctxs5(k, cx, e) key=ctxKey(cc, j)
-                            V5(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot)), e=e, act=act, obs=obs)
-                        if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                        if n.t == "image"
+                          image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                        else
+                          if n.t == "icon"
+                            if n.sym != ""
+                              image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                            else
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
+                          else
+                            for k, ki in n.kids key=`${ki}`
+                              for cc, j in ctxs5(k, cx, e) key=ctxKey(cc, j)
+                                V5(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.act != ""
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V5
   props
@@ -377,38 +486,63 @@ component V5
   state ready = false
   action hovering(v: bool)
     over = v
+  state pointed = false
+  // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
+  action pointing
+    pointed = true
   action focusing
-    focused = true
+    focused = not pointed
   action blurring
     focused = false
+    pointed = false
+  action pressing(arg: string, to: string)
+    act(n.act, arg)
+    if to != ""
+      focus(to)
+  action escaping(to: string, k: string)
+    if k == "Escape" and n.esc != ""
+      preventDefault()
+      act("close", n.esc)
+      if to != ""
+        focus(to)
   action loaded
     ready = true
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
-          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
-            if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
-            else
-              if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-              else
-                BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
-                  if n.t == "text"
-                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+          for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
+            for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
+              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+                if n.t == "install"
+                  vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else
+                  if n.t == "observe"
+                    column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    if n.t == "image"
-                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
-                    else
-                      if n.t == "icon"
-                        image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                    BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                      if n.t == "text"
+                        text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
-                        for k, ki in n.kids key=`${ki}`
-                          for cc, j in ctxs6(k, cx, e) key=ctxKey(cc, j)
-                            V6(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot)), e=e, act=act, obs=obs)
-                        if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                        if n.t == "image"
+                          image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                        else
+                          if n.t == "icon"
+                            if n.sym != ""
+                              image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                            else
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
+                          else
+                            for k, ki in n.kids key=`${ki}`
+                              for cc, j in ctxs6(k, cx, e) key=ctxKey(cc, j)
+                                V6(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.act != ""
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V6
   props
@@ -422,38 +556,63 @@ component V6
   state ready = false
   action hovering(v: bool)
     over = v
+  state pointed = false
+  // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
+  action pointing
+    pointed = true
   action focusing
-    focused = true
+    focused = not pointed
   action blurring
     focused = false
+    pointed = false
+  action pressing(arg: string, to: string)
+    act(n.act, arg)
+    if to != ""
+      focus(to)
+  action escaping(to: string, k: string)
+    if k == "Escape" and n.esc != ""
+      preventDefault()
+      act("close", n.esc)
+      if to != ""
+        focus(to)
   action loaded
     ready = true
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
-          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
-            if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
-            else
-              if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-              else
-                BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
-                  if n.t == "text"
-                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+          for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
+            for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
+              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+                if n.t == "install"
+                  vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else
+                  if n.t == "observe"
+                    column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    if n.t == "image"
-                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
-                    else
-                      if n.t == "icon"
-                        image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                    BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                      if n.t == "text"
+                        text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
-                        for k, ki in n.kids key=`${ki}`
-                          for cc, j in ctxs7(k, cx, e) key=ctxKey(cc, j)
-                            V7(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot)), e=e, act=act, obs=obs)
-                        if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                        if n.t == "image"
+                          image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                        else
+                          if n.t == "icon"
+                            if n.sym != ""
+                              image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                            else
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
+                          else
+                            for k, ki in n.kids key=`${ki}`
+                              for cc, j in ctxs7(k, cx, e) key=ctxKey(cc, j)
+                                V7(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.act != ""
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V7
   props
@@ -467,38 +626,63 @@ component V7
   state ready = false
   action hovering(v: bool)
     over = v
+  state pointed = false
+  // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
+  action pointing
+    pointed = true
   action focusing
-    focused = true
+    focused = not pointed
   action blurring
     focused = false
+    pointed = false
+  action pressing(arg: string, to: string)
+    act(n.act, arg)
+    if to != ""
+      focus(to)
+  action escaping(to: string, k: string)
+    if k == "Escape" and n.esc != ""
+      preventDefault()
+      act("close", n.esc)
+      if to != ""
+        focus(to)
   action loaded
     ready = true
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
-          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
-            if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
-            else
-              if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-              else
-                BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
-                  if n.t == "text"
-                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+          for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
+            for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
+              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+                if n.t == "install"
+                  vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else
+                  if n.t == "observe"
+                    column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    if n.t == "image"
-                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
-                    else
-                      if n.t == "icon"
-                        image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                    BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                      if n.t == "text"
+                        text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
-                        for k, ki in n.kids key=`${ki}`
-                          for cc, j in ctxs8(k, cx, e) key=ctxKey(cc, j)
-                            V8(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot)), e=e, act=act, obs=obs)
-                        if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                        if n.t == "image"
+                          image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                        else
+                          if n.t == "icon"
+                            if n.sym != ""
+                              image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                            else
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
+                          else
+                            for k, ki in n.kids key=`${ki}`
+                              for cc, j in ctxs8(k, cx, e) key=ctxKey(cc, j)
+                                V8(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.act != ""
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V8
   props
@@ -512,38 +696,63 @@ component V8
   state ready = false
   action hovering(v: bool)
     over = v
+  state pointed = false
+  // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
+  action pointing
+    pointed = true
   action focusing
-    focused = true
+    focused = not pointed
   action blurring
     focused = false
+    pointed = false
+  action pressing(arg: string, to: string)
+    act(n.act, arg)
+    if to != ""
+      focus(to)
+  action escaping(to: string, k: string)
+    if k == "Escape" and n.esc != ""
+      preventDefault()
+      act("close", n.esc)
+      if to != ""
+        focus(to)
   action loaded
     ready = true
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
-          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
-            if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
-            else
-              if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-              else
-                BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
-                  if n.t == "text"
-                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+          for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
+            for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
+              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+                if n.t == "install"
+                  vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else
+                  if n.t == "observe"
+                    column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    if n.t == "image"
-                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
-                    else
-                      if n.t == "icon"
-                        image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                    BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                      if n.t == "text"
+                        text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
-                        for k, ki in n.kids key=`${ki}`
-                          for cc, j in ctxs9(k, cx, e) key=ctxKey(cc, j)
-                            V9(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot)), e=e, act=act, obs=obs)
-                        if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                        if n.t == "image"
+                          image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                        else
+                          if n.t == "icon"
+                            if n.sym != ""
+                              image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                            else
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
+                          else
+                            for k, ki in n.kids key=`${ki}`
+                              for cc, j in ctxs9(k, cx, e) key=ctxKey(cc, j)
+                                V9(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.act != ""
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V9
   props
@@ -557,38 +766,63 @@ component V9
   state ready = false
   action hovering(v: bool)
     over = v
+  state pointed = false
+  // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
+  action pointing
+    pointed = true
   action focusing
-    focused = true
+    focused = not pointed
   action blurring
     focused = false
+    pointed = false
+  action pressing(arg: string, to: string)
+    act(n.act, arg)
+    if to != ""
+      focus(to)
+  action escaping(to: string, k: string)
+    if k == "Escape" and n.esc != ""
+      preventDefault()
+      act("close", n.esc)
+      if to != ""
+        focus(to)
   action loaded
     ready = true
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
-          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
-            if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
-            else
-              if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-              else
-                BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
-                  if n.t == "text"
-                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+          for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
+            for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
+              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+                if n.t == "install"
+                  vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else
+                  if n.t == "observe"
+                    column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    if n.t == "image"
-                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
-                    else
-                      if n.t == "icon"
-                        image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                    BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                      if n.t == "text"
+                        text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
-                        for k, ki in n.kids key=`${ki}`
-                          for cc, j in ctxs10(k, cx, e) key=ctxKey(cc, j)
-                            V10(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot)), e=e, act=act, obs=obs)
-                        if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                        if n.t == "image"
+                          image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                        else
+                          if n.t == "icon"
+                            if n.sym != ""
+                              image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                            else
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
+                          else
+                            for k, ki in n.kids key=`${ki}`
+                              for cc, j in ctxs10(k, cx, e) key=ctxKey(cc, j)
+                                V10(n=k, c=Ctx(cc, index=(k.rep == "" ? cc.index : j), hot=(n.grp ? over or focused : cc.hot), fhot=(n.grp ? focused : cc.fhot)), e=e, act=act, obs=obs)
+                            if n.act != ""
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 
 component V10
   props
@@ -602,33 +836,58 @@ component V10
   state ready = false
   action hovering(v: bool)
     over = v
+  state pointed = false
+  // Keyboard focus only (focus-visible): a focus that follows a pointer press draws no focus overlay.
+  action pointing
+    pointed = true
   action focusing
-    focused = true
+    focused = not pointed
   action blurring
     focused = false
+    pointed = false
+  action pressing(arg: string, to: string)
+    act(n.act, arg)
+    if to != ""
+      focus(to)
+  action escaping(to: string, k: string)
+    if k == "Escape" and n.esc != ""
+      preventDefault()
+      act("close", n.esc)
+      if to != ""
+        focus(to)
   action loaded
     ready = true
   view
     for cx in [c] key="c"
       for vals in [binds(cx, e)] key="v"
         if shows(n.cond, vals, e)
-          for st in [styleAt(e, over and n.hh ? (e.still ? n.hs2 : n.hs) : focused and n.hf ? (e.still ? n.fs2 : n.fs) : cx.hot and n.hg ? (e.still ? n.gs2 : n.gs) : n.s)] key="s"
-            if n.t == "install"
-              vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
-            else
-              if n.t == "observe"
-                column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
-              else
-                BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), hovering=hovering)
-                  if n.t == "text"
-                    text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp
+          for sr in [stateOf(n.sts, n.base, vals, e)] key="r"
+            for dis in [n.dis.length > 0 and shows(n.dis, vals, e)] key="d"
+              for st in [styleAt(e, dis ? sr.ds : over and n.hh ? (e.still ? sr.hs2 : sr.hs) : focused and n.hf ? (e.still ? sr.fs2 : sr.fs) : cx.fhot and n.gf ? (e.still ? sr.gfs2 : sr.gfs) : cx.hot and n.hg ? (e.still ? sr.gs2 : sr.gs) : sr.s)] key="s"
+                if n.t == "install"
+                  vela-install pwaAction=n.sym buttonLabel=fill(n.label, vals, e)
+                else
+                  if n.t == "observe"
+                    column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
                   else
-                    if n.t == "image"
-                      image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
-                    else
-                      if n.t == "icon"
-                        image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                    BoxEl(s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, dw=fill(n.dw, vals, e), dbg=fill(n.dbg, vals, e), dbi=fill(n.dbi, vals, e), dc=fill(n.dc, vals, e), dop=fill(n.dop, vals, e), dtr=fill(n.dtr, vals, e), test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=fill(n.dom, vals, e), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : ""), lt=(e.still ? "none" : n.lt), se=n.se, exitAnim=(e.still ? n.exs : n.ex), hovering=hovering, pointing=pointing, keying=escaping(fill(n.escTo, vals, e)))
+                      if n.t == "text"
+                        text fill(n.parts, vals, e) role=n.role aria-level=n.level testId=fill(n.test, vals, e) line-clamp=st.lineClamp overflow-x=st.overflowX text-overflow=st.textOverflow
                       else
-                        if n.act != ""
-                          button press=act(n.act, fill(n.arg, vals, e)) aria-label=fill(n.label, vals, e) focus=focusing blur=blurring outline=(n.hf or n.hg ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" color="inherit" cursor="pointer"
+                        if n.t == "image"
+                          image fill(n.src, vals, e) alt=fill(n.label, vals, e) testId=fill(n.test, vals, e) load=loaded width="100%" height="100%" object-fit=st.objectFit opacity=(n.fade and not ready ? 0 : 1) transition=(n.fade ? "opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)" : "none")
+                        else
+                          if n.t == "icon"
+                            if n.sym != ""
+                              image `symbol:${n.sym}` aria-hidden=true width="100%" height="100%"
+                            else
+                              svg viewBox=n.ivb width="100%" height="100%" aria-hidden=true
+                                for p, pi in n.ipaths key=`${pi}`
+                                  path d=p fill="currentColor" fill-rule=(n.fr == "evenodd" ? "evenodd" : "nonzero")
+                          else
+                            if n.act != ""
+                              if n.aexp.length > 0 or n.asel.length > 0
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-expanded=(n.aexp.length > 0 and shows(n.aexp, vals, e)) aria-selected=(n.asel.length > 0 and shows(n.asel, vals, e)) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
+                              else
+                                button press=pressing(fill(n.arg, vals, e), fill(n.pfocus, vals, e)) disabled=dis aria-label=fill(n.label, vals, e) role=n.brole title=fill(n.atitle, vals, e) aria-current=aria(n.acur, vals, e) aria-pressed=aria(n.aprs, vals, e) aria-haspopup=n.ahp focus=focusing blur=blurring outline=(n.hf or n.hg or n.gf ? "none" : "") position="absolute" inset=0 z-index=1 margin=0 padding=0 border="none" background-color="transparent" background-image="none" color="inherit" cursor="pointer"
 

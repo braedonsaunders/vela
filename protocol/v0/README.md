@@ -529,3 +529,8 @@ idempotent response. Trailer playback uses the existing `extraId` playback targe
 `extraPlayback` capability. An unresolved trailer can be started on explicit
 request. Its independent broker session does not update watch history, resume,
 Continue Watching or scrobbles. Other extras remain unavailable unless offered.
+
+A live `PlaybackPlan` may include `livePolicy: { latencyProfile, targetLatencySeconds }`.
+The profile is `auto`, `low`, or `stable`; the positive finite target is a
+preferred latency in seconds, not a strict floor. Playback may adapt to stalls.
+When absent, the profile is auto and the target is unknown.

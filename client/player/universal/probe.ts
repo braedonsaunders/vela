@@ -5,7 +5,7 @@ import { metadataDifference } from './diagnostics';
 import type { OriginalMedia } from './source';
 /** Bounded header/index inspection of the ORIGINAL; never a whole-file fallback.
  * The decode worker performs its own exact configuration validation afterwards. */
-export async function probeOriginal(media: OriginalMedia, signal: AbortSignal): Promise<OriginalMedia> {
+export async function probeOriginal(media: OriginalMedia, signal: AbortSignal,fetcher:typeof fetch=(...args)=>fetch(...args)): Promise<OriginalMedia> {
   let readBudget = 0;
   let sourceETag: string | null = null;
   let sourceSize: string | null = null;
@@ -22,7 +22,7 @@ export async function probeOriginal(media: OriginalMedia, signal: AbortSignal): 
       readBudget += end-start+1;
       if (readBudget > 32*1024*1024) throw new Error('Original inspection exceeded its byte budget');
       headers.set('Range', `bytes=${start}-${end}`);
-      const response = await fetch(url, {...init, headers, redirect:'error', credentials:'same-origin', signal:AbortSignal.any([signal, ...(init?.signal ? [init.signal] : []), AbortSignal.timeout(15000)])});
+      const response = await fetcher(url, {...init, headers, redirect:'error', credentials:'same-origin', signal:AbortSignal.any([signal, ...(init?.signal ? [init.signal] : []), AbortSignal.timeout(15000)])});
       try {
         requireSuccessfulMediaHTTPResponse(response);
         requireValidByteRangeResponse(headers.get('Range'), response, null);

@@ -17,12 +17,12 @@ export class SegmentReader {
   private root:string;
   readonly bandwidth=new BandwidthEstimator();
   readonly metrics={requests:0,bytes:0,cacheHits:0,milliseconds:0};
-  constructor(url:string,private readonly fetcher:typeof fetch=(...args)=>fetch(...args)){
+  constructor(url:string,private readonly fetcher:typeof fetch=(...args)=>fetch(...args),private readonly allowed?:(url:URL)=>boolean,private readonly cacheIdentity='local'){
     this.root=this.scoped(url);
   }
   private scoped(path:string):string{
     const url=new URL(path,location.href);
-    if(!['http:','https:'].includes(url.protocol)||url.origin!==location.origin||url.username||url.password||url.hash)
+    if(!['http:','https:'].includes(url.protocol)||(this.allowed?!this.allowed(url):url.origin!==location.origin)||url.username||url.password||url.hash)
       throw new SegmentFailure('Segment input must use same-origin scoped HTTP URLs');
     return url.href;
   }
@@ -53,11 +53,13 @@ export class SegmentReader {
   createSource(signal:()=>AbortSignal,count:(bytes:number)=>void):CustomPathedSource{
     return new CustomPathedSource(this.root,request=>{
       const path=this.scoped(String(request.path));
+      let expectedLength:number|undefined;
       return new CustomSource({maxCacheSize:0,prefetchProfile:'none',
-        getSize:async()=>{const value=await this.object(path,signal());return value.bytes.length;},
+        getSize:async()=>{const value=await this.object(path,signal());expectedLength=value.bytes.length;return expectedLength;},
         read:async(start,end)=>{count(end-start);const value=await this.object(path,signal());
           if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||end>value.bytes.length)
-            throw new SegmentFailure('Invalid segment byte request');
+            throw new SegmentFailure(`Invalid segment byte request (${start}:${end}, size ${value.bytes.length}, indexed ${expectedLength??-1})`);
+          if(expectedLength!==undefined&&expectedLength!==value.bytes.length)throw new SegmentFailure(`Segment changed within its generation (size ${value.bytes.length}, indexed ${expectedLength})`);
           return value.bytes.subarray(start,end);
         },
       });
@@ -65,18 +67,19 @@ export class SegmentReader {
   }
   private async object(path:string,signal:AbortSignal,playlist=false):Promise<ObjectBytes>{
     signal.throwIfAborted();this.lifetime.signal.throwIfAborted();
-    const existing=this.cache.get(path);
-    if(existing){this.cache.delete(path);this.cache.set(path,existing);this.metrics.cacheHits++;return existing;}
-    const current=this.pending.get(path);
+    const key=`${this.cacheIdentity}:${path}`;
+    const existing=this.cache.get(key);
+    if(existing){this.cache.delete(key);this.cache.set(key,existing);this.metrics.cacheHits++;return existing;}
+    const current=this.pending.get(key);
     if(current&&!current.signal.aborted)return abortable(current.promise,signal);
     const operation=AbortSignal.any([signal,this.lifetime.signal]);
     const entry={signal:operation,promise:Promise.resolve(null as unknown as ObjectBytes)};
     entry.promise=this.load(path,operation,playlist).then(value=>{
-      operation.throwIfAborted();this.cache.set(path,value);this.cached+=value.bytes.length;
+      operation.throwIfAborted();this.cache.set(key,value);this.cached+=value.bytes.length;
       while(this.cached>CACHE_BYTES){const key=this.cache.keys().next().value!;this.cached-=this.cache.get(key)!.bytes.length;this.cache.delete(key);}
       return value;
-    }).finally(()=>{if(this.pending.get(path)===entry)this.pending.delete(path);});
-    this.pending.set(path,entry);return abortable(entry.promise,operation);
+    }).finally(()=>{if(this.pending.get(key)===entry)this.pending.delete(key);});
+    this.pending.set(key,entry);return abortable(entry.promise,operation);
   }
   private async slot(signal:AbortSignal){
     while(this.active>=2)await abortable(new Promise<void>(resolve=>{
@@ -97,7 +100,7 @@ export class SegmentReader {
   }
   private async request(path:string,signal:AbortSignal,playlist:boolean):Promise<ObjectBytes>{
     const at=performance.now();this.metrics.requests++;
-    const response=await this.fetcher(path,{signal,credentials:'same-origin',redirect:'error'});
+    const response=await this.fetcher(path,{signal,credentials:'same-origin',redirect:'error',cache:'no-store'});
     try{
       if(response.status!==200){
         if(response.status===408||response.status===429||response.status>=500)throw new TypeError(`Segment HTTP ${response.status}`);
@@ -124,5 +127,5 @@ export class SegmentReader {
       return{bytes,playlist};
     }catch(error){if(!response.body?.locked)await response.body?.cancel().catch(()=>{});throw error;}
   }
-  dispose(){this.lifetime.abort();this.cache.clear();this.cached=0;for(const wake of [...this.waiters])wake();}
+  dispose(){this.lifetime.abort();this.cache.clear();this.pending.clear();this.cached=0;for(const wake of [...this.waiters])wake();}
 }

@@ -54,11 +54,9 @@ function parseMediaCapabilities(json: string): MediaCapabilities {
   }
   return { containers: list('containers'), videoCodecs: list('videoCodecs'), audioCodecs: list('audioCodecs'), subtitleFormats: list('subtitleFormats'), hls: value.hls, mse: value.mse, ...(originalPlayback ? { originalPlayback } : {}) };
 }
-function key(store: Parameters<Sources['uiBootstrap']>[1]): string {
-  const n = Number(store.get('vela.counter') || '0') + 1;
-  store.set('vela.counter', String(n));
-  return `${device.id}-${n}`;
-}
+// Idempotency keys are unique per operation without mutating the shared store,
+// which would invalidate resources that read session credentials.
+function key(_store: Parameters<Sources['uiBootstrap']>[1]): string { return randomId(); }
 let adapter: EtherAdapter | undefined;
 let interactions: InteractionQueue | undefined;
 let ready: Promise<void> | undefined;
@@ -92,6 +90,12 @@ let validation: { token: string; pending: Promise<Tokens | null> } | undefined;
 let redemption: { code: string; idempotencyKey: string; pending?: Promise<Tokens>; consumed: boolean } | undefined;
 let negotiation: { version: number; context: string; pending: Promise<void> } | undefined;
 let features: ServerCapabilities['features'] | undefined;
+let appearanceAvailable = true;
+let lastAppearance: Awaited<ReturnType<Sources['uiAppearance']>> | undefined;
+const localAppearance = { revision: 0, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs: [], documents: [] };
+function missingAppearance(error: unknown): boolean {
+  return error instanceof VelaError && (error.status === 404 || error.detail.code === 'feature_unavailable' || error.detail.code === 'unsupported');
+}
 let ai: { epoch: number; generation: number; query: string; job?: AISearchJob; starting?: Promise<AISearchJob> } | undefined;
 const lane = (query: string, generation: number) => ({ query, generation, items: [] as ReturnType<typeof card>[], descriptive: [] as ReturnType<typeof card>[], ai: [] as ReturnType<typeof card>[], aiStatus: 'unavailable', descriptiveStatus: 'ready', descriptiveRetryAllowed: false, descriptiveRetryAfter: 0, liveChannels: [], liveProgrammes: [] });
 function server(store: Parameters<Sources['uiBootstrap']>[1], media?: MediaCapabilities): EtherAdapter {
@@ -502,7 +506,7 @@ const sources: Sources = {
     if (!read) {
       read = (async () => {
         try {
-          const plan = await api.playback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client: declared!, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}-${manual}` });
+          const plan = await api.playback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id } : { titleId: id }), client: declared!, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}-${manual}` });
           if (version !== authVersion) throw new Error('Session changed during playback');
           if (plan.state === 'preparing') {
             if (kind !== 'extra' || !Number.isFinite(plan.retryAfterSeconds) || plan.retryAfterSeconds < 1) throw new Error('Invalid playback preparation response');
@@ -537,10 +541,25 @@ const sources: Sources = {
     // The model is built from the same tables tools/renderer.ts generates its shapes from.
     return skinDoc(await server(store).skinDocument(path.slice('/vela/v0'.length)), width, API, String(JSON.parse(localeJSON).locale ?? 'en')) as unknown as Awaited<ReturnType<Sources['uiSkinDoc']>>;
   },
-  uiAppearance: async (_args, store) => appearanceModel(await server(store).appearance(), API, await builtInDocuments(API)),
+  uiAppearance: async (_args, store) => {
+    let appearance;
+    try { appearance = await server(store).appearance(); appearanceAvailable = true; }
+    catch (error) {
+      if (!missingAppearance(error)) throw error;
+      appearanceAvailable = false;
+      appearance = localAppearance;
+    }
+    return lastAppearance = appearanceModel(appearance, API, await builtInDocuments(API));
+  },
   appearanceEvents: async ([_attempt, floor], store) => {
+    if (!appearanceAvailable) return lastAppearance ?? appearanceModel(localAppearance, API, await builtInDocuments(API));
     const api = await session(store);
-    return appearanceStream(API, mapper => api.streamEvents(mapper), floor);
+    try { return await appearanceStream(API, mapper => api.streamEvents(mapper), floor); }
+    catch (error) {
+      if (!missingAppearance(error)) throw error;
+      appearanceAvailable = false;
+      return lastAppearance ?? appearanceModel(localAppearance, API, await builtInDocuments(API));
+    }
   },
   sessionEvents: async ([id], store) => {
     const api = await session(store);

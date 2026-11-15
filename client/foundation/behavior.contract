@@ -159,7 +159,7 @@ members Client
   state homeLocale = ""
   // Featured titles: the foundation rotates the shown hero; skins only present it.
   state heroIndex = 0
-  derive heroAt = (current(home) and home.hero.length > 0 ? heroIndex % home.hero.length : 0)
+  derive heroAt = (homeKnown and home.hero.length > 0 ? heroIndex % home.hero.length : 0)
   derive heroHasPreview = (previewRow == "@hero" and cardPreview.cardId != "")
   task rotateHero when top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and current(home) and home.hero.length > 1 and previewTarget == "" and not heroHasPreview
     every(9000, nextHero)
@@ -233,12 +233,12 @@ members Client
   state previewAskedGeneration = -1
   state previewDwellAt = 0
   state cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=0)
-  derive previewAllowed = auth.authenticated and current(home) and home.trailerPreviewAvailable and top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and not saveData
+  derive previewAllowed = auth.authenticated and homeKnown and home.trailerPreviewAvailable and top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and not saveData
   derive heroPreviewId = match first(home.hero.slice(heroAt, heroAt + 1)) { case some(h) => h.id, case none => "" }
   derive previewDesired = (previewAllowed ? (previewTarget != "" ? previewTarget : (home.heroPreviewIds.includes(heroPreviewId) ? heroPreviewId : "")) : "")
   mutation previewFetch as shape CardPreview then acceptPreview
   mutation previewCancelled as shape ReceiptReply queue
-  task previewContext when current(home) key=`${top(nav).name}:${libraryId}:${query}:${page.visibilityState}:${still}:${saveData}:${heroAt}:${auth.authenticated}:${home.trailerPreviewAvailable}:${home.heroPreviewIds.join(",")}`
+  task previewContext when homeKnown key=`${top(nav).name}:${libraryId}:${query}:${page.visibilityState}:${still}:${saveData}:${heroAt}:${auth.authenticated}:${home.trailerPreviewAvailable}:${home.heroPreviewIds.join(",")}`
     change(clearPreview)
   action clearPreview
     previewTarget = ""
@@ -278,7 +278,7 @@ members Client
   task previewDwell when previewDesired != "" key=`${previewDesired}:${previewGeneration}`
     after(700, requestPreview)
   action requestPreview
-    if previewDesired != "" and not pending(previewFetch)
+    if previewDesired != "" and previewAskedGeneration != previewGeneration and not pending(previewFetch)
       previewAskedGeneration = previewGeneration
       send previewFetch = uiPreviewRequest(previewDesired, previewGeneration, time.epochAtZero + performanceNow())
   action acceptPreview
