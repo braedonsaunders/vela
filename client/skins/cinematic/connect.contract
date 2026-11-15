@@ -24,10 +24,14 @@ component Connect
   state address = ""
   state username = ""
   state password = ""
-  derive target = (p.serverId != "" ? p.serverId : p.addedServerId)
+  // Only a server added on this visit moves the screen on to its sign-in.
+  state addedHere = false
+  derive target = (p.serverId != "" ? p.serverId : addedHere and not p.busy and p.addServerError == "" ? p.addedServerId : "")
   derive targetServer = p.servers.filter(s => s.id == target)
   derive kind = match first(targetServer) { case some(s) => s.kind, case none => (target != "" ? p.probe.kind : "") }
-  derive serverName = match first(targetServer) { case some(s) => s.name, case none => p.probe.name }
+  // A Plex server has no name until it is linked; its kind stands in.
+  derive foundName = (p.probe.name != "" ? p.probe.name : p.probe.kindLabel)
+  derive serverName = match first(targetServer) { case some(s) => s.name, case none => foundName }
   action edit(v: string)
     address = v
     probe(v)
@@ -36,7 +40,9 @@ component Connect
   action editPassword(v: string)
     password = v
   action addFound
-    add(p.probe.kind, p.probe.name, p.probe.normalizedUrl)
+    if p.probe.state == "found" and not p.busy
+      addedHere = true
+      add(p.probe.kind, foundName, p.probe.normalizedUrl)
   action submitJelly
     if username.trim() != "" and password != "" and not p.busy
       signInJelly(target, username.trim(), password)
@@ -57,7 +63,7 @@ component Connect
           column gap=14 padding=18 border-radius=18 background-color="cinematic.glass-deep" border="1px solid var(--cinematic.glass-edge)" role="status" animation=enter(p.still, 0)
             column gap=4
               text p.probe.kindLabel class=Eyebrow font-size=10 color="brand.warm"
-              text p.probe.name class=Display font-size=28 line-clamp=2
+              text foundName class=Display font-size=28 line-clamp=2
               if p.probe.version != ""
                 text p.probe.version font-size=12 color="ink.quiet"
             button press=addFound disabled=p.busy class=PrimaryPill height=50 testId="connect-continue" transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
