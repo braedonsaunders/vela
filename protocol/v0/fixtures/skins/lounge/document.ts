@@ -507,13 +507,76 @@ const library: Node = { type: 'box', style: { position: 'relative', display: 'fl
   ] },
 ] };
 
+// ---------------------------------------------------------------- signing in
+
+// A field sized for a remote's on-screen keyboard: tall, with a white ring while focused.
+const field = (name: 'username' | 'password', placeholder: string): Node => ({ type: 'widget', widget: 'textInput', params: { field: name, placeholder, label: placeholder, placeholderColor: 'rgba(245, 241, 233, 0.45)' },
+  style: { width: '100%', 'box-sizing': 'border-box', 'min-height': 'clamp(58px, 4.4vw, 84px)', padding: 'clamp(15px, 1.15vw, 22px) clamp(20px, 1.6vw, 30px)', 'border-radius': '20px', 'background-color': 'rgba(255, 255, 255, 0.07)', color: '$ink', 'font-size': 'clamp(18px, 1.35vw, 26px)', 'font-weight': '550', 'box-shadow': 'inset 0px 0px 0px 1px rgba(255, 255, 255, 0.12)' } as Style,
+  focus: { 'background-color': 'rgba(255, 255, 255, 0.12)', 'box-shadow': ring, outline: 'none' } as Style, small: { 'min-height': '54px', padding: '14px 18px', 'font-size': '17px' } });
+const authNote = (text: string, extra: Style = {}): Node => ({ type: 'text', text, style: { 'font-size': 'clamp(16px, 1.2vw, 23px)', 'line-height': '1.45', color: '$ink-dim', ...extra } as Style });
+
+const auth: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', gap: 'clamp(48px, 7vw, 160px)', 'box-sizing': 'border-box', 'overflow-x': 'hidden', 'overflow-y': 'auto', 'background-color': '$ground', color: '$ink', 'font-family': sans, ...gutter },
+  small: { 'flex-direction': 'column', 'justify-content': 'flex-start', gap: '28px', 'padding-top': '64px', ...gutterSmall }, children: [
+    // A lamp left on in the room: two warm glows, far back.
+    { type: 'box', style: { position: 'absolute', left: '-10%', top: '-20%', width: '70%', height: '90%', 'background-color': '#dcb998', opacity: '0.16', 'mask-image': 'radial-gradient(closest-side, black 0%, transparent 100%)', 'pointer-events': 'none' } },
+    { type: 'box', style: { position: 'absolute', right: '-15%', bottom: '-30%', width: '70%', height: '90%', 'background-color': '#4a5a78', opacity: '0.2', 'mask-image': 'radial-gradient(closest-side, black 0%, transparent 100%)', 'pointer-events': 'none' } },
+    { type: 'box', motion: 'copy0', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: 'clamp(18px, 1.6vw, 30px)', 'max-width': '34rem' }, small: { 'align-items': 'center', 'text-align': 'center' }, children: [
+      { type: 'image', src: 'assets/brand/vela-stacked.svg', alt: '{s:vela}', style: { width: 'clamp(120px, 9vw, 180px)', height: 'clamp(110px, 8.3vw, 166px)', 'align-self': 'flex-start' }, small: { width: '96px', height: '88px', 'align-self': 'center' } },
+      { type: 'text', text: '{s:welcome}', role: 'heading', level: 1, style: { 'font-size': 'clamp(36px, 3.4vw, 68px)', 'font-weight': '800', 'letter-spacing': '-0.02em', 'line-height': '1.02' }, small: { 'font-size': '30px' } },
+      authNote('{s:welcomeDetail}'),
+    ] },
+    { type: 'box', motion: 'copy1', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: 'clamp(14px, 1.2vw, 22px)', width: 'min(560px, 100%)', 'box-sizing': 'border-box', padding: 'clamp(26px, 2.2vw, 44px)', 'border-radius': '32px', 'background-color': 'rgba(24, 26, 32, 0.72)', 'backdrop-filter': 'blur(40px) saturate(1.4)', 'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.1), 0px 40px 90px -20px rgba(0, 0, 0, 0.9)' },
+      small: { padding: '22px', 'border-radius': '24px' }, children: [
+        // Connecting, or redeeming a sign-in link.
+        { type: 'box', when: [{ test: 'env.auth', is: 'eq', value: 'connecting' }], role: 'status', children: [authNote('{s:connecting}', { 'font-size': 'clamp(20px, 1.5vw, 30px)', color: '$ink' } as Style)], motion: 'pulse' },
+        { type: 'box', when: [{ test: 'env.auth', is: 'eq', value: 'redeeming' }], role: 'status', children: [authNote('{s:redeeming}', { 'font-size': 'clamp(20px, 1.5vw, 30px)', color: '$ink' } as Style)], motion: 'pulse' },
+        { type: 'box', when: [{ test: 'env.auth', is: 'eq', value: 'offline' }], role: 'alert', style: { display: 'flex', 'flex-direction': 'column', gap: '12px' }, children: [
+          { type: 'text', text: '{s:offline}', role: 'heading', level: 2, style: { 'font-size': 'clamp(24px, 1.9vw, 38px)', 'font-weight': '750' } },
+          authNote('{s:offlineDetail}'),
+        ] },
+        // Signing in: a code is the remote's way in; a name and password are there too.
+        { type: 'box', when: [{ test: 'env.auth', is: 'eq', value: 'signin' }], style: { display: 'flex', 'flex-direction': 'column', gap: 'clamp(14px, 1.2vw, 22px)' }, children: [
+          { type: 'box', when: [{ test: 'signin.canQuick' }], press: { action: 'startQuick' }, controlStates: false, label: '{s:useCode}', testId: 'quick-connect',
+            style: { ...capsule('clamp(58px, 4.4vw, 84px)'), 'background-color': 'rgba(245, 241, 233, 0.92)', color: '$ground' }, focus: capsuleFocus, hover: { 'background-color': '$ink' }, children: [
+              { type: 'icon', symbol: 'smartphone', style: { width: 'clamp(18px, 1.3vw, 26px)', height: 'clamp(18px, 1.3vw, 26px)' } },
+              { type: 'text', text: '{s:useCode}', style: { 'font-weight': '700' } },
+            ] },
+          { type: 'box', when: [{ test: 'signin.canQuick' }, { test: 'signin.canPassword' }], style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '14px', color: '$ink-quiet', 'font-size': 'clamp(13px, 0.95vw, 18px)', 'font-weight': '650', 'letter-spacing': '0.12em', 'text-transform': 'uppercase' }, children: [
+            { type: 'box', style: { flex: '1', height: '1px', 'background-color': 'rgba(255, 255, 255, 0.12)' } },
+            { type: 'text', text: '{s:or}' },
+            { type: 'box', style: { flex: '1', height: '1px', 'background-color': 'rgba(255, 255, 255, 0.12)' } },
+          ] },
+          // The fields sit at most three levels into the page (textInput's limit).
+          { ...field('username', '{s:username}'), when: [{ test: 'signin.canPassword' }] },
+          { ...field('password', '{s:password}'), when: [{ test: 'signin.canPassword' }] },
+          { type: 'text', when: [{ test: 'signin.error' }], text: '{signin.error}', role: 'alert', style: { 'font-size': 'clamp(15px, 1.1vw, 21px)', color: '#ff9b8a' } },
+          { type: 'box', when: [{ test: 'signin.canPassword' }], press: { action: 'signIn' }, controlStates: false, label: '{s:signIn}', testId: 'sign-in', disabled: [{ test: 'signin.busy' }],
+            style: capsule('clamp(58px, 4.4vw, 84px)'), focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.24)' }, children: [
+              { type: 'text', when: [{ test: 'signin.busy', not: true }], text: '{s:signIn}' },
+              { type: 'text', when: [{ test: 'signin.busy' }], text: '{s:signingIn}', motion: 'pulse' },
+            ] },
+        ] },
+        // Quick connect: the code, large enough to read from the sofa.
+        { type: 'box', when: [{ test: 'env.auth', is: 'eq', value: 'quick' }], style: { display: 'flex', 'flex-direction': 'column', gap: 'clamp(14px, 1.2vw, 22px)' }, children: [
+          authNote('{s:quickHow}'),
+          { type: 'text', when: [{ test: 'quick.code' }], text: '{quick.code}', label: '{s:quickCode}', style: { 'font-size': 'clamp(40px, 3.6vw, 72px)', 'font-weight': '800', 'letter-spacing': '0.08em', 'white-space': 'nowrap', 'font-variant-numeric': 'tabular-nums', 'text-align': 'center', padding: '10px 0px', 'border-radius': '20px', 'background-color': 'rgba(255, 255, 255, 0.06)' }, small: { 'font-size': '30px' } },
+          { type: 'text', when: [{ test: 'quick.code', not: true }, { test: 'quick.error', not: true }], text: '{s:quickWaiting}', role: 'status', motion: 'pulse', style: { 'font-size': 'clamp(18px, 1.4vw, 28px)', 'text-align': 'center' } },
+          { type: 'text', when: [{ test: 'quick.expires' }], text: '{s:quickExpires}', style: { 'font-size': 'clamp(14px, 1vw, 19px)', color: '$ink-quiet', 'text-align': 'center' } },
+          { type: 'text', when: [{ test: 'quick.error' }], text: '{quick.error}', role: 'alert', style: { 'font-size': 'clamp(15px, 1.1vw, 21px)', color: '#ff9b8a' } },
+          { type: 'box', press: { action: 'cancelQuick' }, controlStates: false, label: '{s:cancel}', testId: 'quick-cancel', style: capsule('clamp(54px, 4vw, 76px)'), focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.24)' }, children: [
+            { type: 'text', text: '{s:cancel}' },
+          ] },
+        ] },
+      ] },
+  ] };
+
 const rise = (delay: number) => ({ keyframes: 'rise', duration: 760, delay, easing: ease, fill: 'both' as const, still: { keyframes: 'dissolve', duration: 220 } });
 
 const lounge: SkinDocument = {
-  schema: 1, renderer: 9, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
+  schema: 1, renderer: 11, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.0/preview.jpg', swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
   tokens: { ground: '#05060a', raised: '#1a1d24', ink: '#f5f1e9', 'ink-dim': 'rgba(245, 241, 233, 0.78)', 'ink-quiet': 'rgba(245, 241, 233, 0.52)', amber: '#f2c27e' },
-  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew', loadingHome: 'Getting your library ready', homeFailed: 'Your library couldn’t be reached', homeFailedDetail: 'Vela couldn’t connect to your server. Check that it’s on and connected, then try again.', tryAgain: 'Try again', libraryCount: '{library.itemCount} titles · {library.sortLabel}', sortBy: 'Sort by', reverse: 'Reverse order', filters: 'Filters', unwatched: 'Unwatched', favorites: 'Favourites', libraryEmpty: 'Nothing here with these filters', libraryEmptyDetail: 'Clear a filter or choose another to see more.', loadingLibrary: 'Loading this library', libraryFailed: 'This library couldn’t be opened.', searchPlaceholder: 'Search films, shows, people and channels', clear: 'Clear', loadingMore: 'Loading more…' } },
+  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew', loadingHome: 'Getting your library ready', homeFailed: 'Your library couldn’t be reached', homeFailedDetail: 'Vela couldn’t connect to your server. Check that it’s on and connected, then try again.', tryAgain: 'Try again', vela: 'Vela', welcome: 'Welcome to the lounge', welcomeDetail: 'Sign in once on this screen and everything you watch picks up where you left it.', connecting: 'Connecting to your server…', redeeming: 'Signing you in…', offline: 'Can’t reach your server', offlineDetail: 'Check that it’s on and connected to the network; Vela will connect again as soon as it can.', useCode: 'Sign in with a code', or: 'or', username: 'Username', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…', quickHow: 'On your phone or computer, open Vela, choose Quick Connect and enter this code.', quickCode: 'Your sign-in code', quickWaiting: 'Getting a code…', quickExpires: 'The code works until {quick.expires}', cancel: 'Cancel', libraryCount: '{library.itemCount} titles · {library.sortLabel}', sortBy: 'Sort by', reverse: 'Reverse order', filters: 'Filters', unwatched: 'Unwatched', favorites: 'Favourites', libraryEmpty: 'Nothing here with these filters', libraryEmptyDetail: 'Clear a filter or choose another to see more.', loadingLibrary: 'Loading this library', libraryFailed: 'This library couldn’t be opened.', searchPlaceholder: 'Search films, shows, people and channels', clear: 'Clear', loadingMore: 'Loading more…' } },
   motion: {
     navIn: { keyframes: 'dissolve', duration: 700, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 200 } },
     sheet: { keyframes: 'pop', duration: 380, easing: ease, still: { keyframes: 'dissolve', duration: 160 } },
@@ -528,7 +591,9 @@ const lounge: SkinDocument = {
   },
   templates: { poster, gridPoster, wide, ranked, row, relatedRow },
   slots: { shell, home },
-  routes: { title, library },
+  routes: { title, library, auth },
+  // Lounge's ground and ink behind every screen, the launch splash included.
+  traits: { page: '#05060a', ink: '#f5f1e9' },
   // The title page is a full screen of its own: no frame drawn over home behind it.
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },
   status: true,

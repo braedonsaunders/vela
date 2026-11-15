@@ -349,7 +349,8 @@ const choice = (label: string, on: Condition, press: Press, when: Condition[] = 
     { type: 'text', text: label, style: { 'line-clamp': '1' } },
   ] } as Node);
 const menuHeading = (text: string, when: Condition[] = [], pad = '8px 16px 4px'): Node => ({ type: 'text', text, when, style: { 'font-size': '13px', 'font-weight': '600', color: '$secondary', padding: pad } });
-const divider = (when: Condition[] = []): Node => ({ type: 'box', when, style: { height: '1px', 'flex-shrink': '0', 'background-color': '$line', margin: '6px 0px' } });
+// A hairline between menu groups (like the compiled one it gives way when the menu overflows and scrolls).
+const divider = (when: Condition[] = []): Node => ({ type: 'box', when, style: { height: '1px', 'background-color': '$line', margin: '6px 0px' } });
 const hasFilters: Condition[][] = [[{ test: 'library.canPlayed' }], [{ test: 'library.genreCount', is: 'gt', value: '0' }], [{ test: 'library.canYear' }]];
 const filtering: Condition[][] = [[{ test: 'library.playedFilter' }], [{ test: 'library.genreFilter' }], [{ test: 'library.year', is: 'gt', value: '0' }]];
 // A menu sheet, anchored under its toolbar button (its right edge 16px inside the button's), the width of the phone less a margin.
@@ -359,7 +360,7 @@ const menuSheet = (flag: string, label: string, width: number, shifted: Conditio
     small: { left: '0px', right: 'auto', width: 'calc(100vw - 28px)' }, children } as Node;
 };
 const toolBtn = (testId: string, domId: string, label: string, press: Press, icon: Node, extra: Partial<Node> = {}): Node => ({ type: 'box', id: domId, testId, press, label, style: iconBtn(40), hover: iconBtnHover, focus: iconBtnFocus, children: [icon], ...extra } as Node);
-const sortButton = (when: Condition[]): Node => toolBtn('jt-sort', 'jt-library-sort', '{s:sortBy}', { action: 'toggle', arg: 'sort' }, glyph('sort', 21), { when, a11y: { haspopup: 'dialog', expanded: [{ test: 'flag:sort' }] } });
+const sortButton = (when: Condition[]): Node => toolBtn('jt-sort', 'jt-library-sort', '{s:sortBy}', { action: 'only', arg: 'sort' }, glyph('sort', 21), { when, a11y: { haspopup: 'dialog', expanded: [{ test: 'flag:sort' }] } });
 const filterIcon: Style = { ...iconBtn(40) };
 
 const libraryHeader: Node = { type: 'box', style: col({ position: 'sticky', top: '0px', 'z-index': '5', 'background-color': '$page', ...hairline }), children: [
@@ -377,14 +378,14 @@ const libraryHeader: Node = { type: 'box', style: col({ position: 'sticky', top:
     toolBtn('jt-favourites', 'jt-library-favourites', '{s:favourites}', { action: 'libraryFilter', arg: 'favorite|' }, glyph('heart-fill', 21), { when: [{ test: 'library.canFavorite' }, { test: 'library.favoriteFilter' }], a11y: { pressed: [{ test: 'library.favoriteFilter' }] }, style: { ...iconBtn(40), color: '$accent' } }),
     sortButton([{ test: 'library.sortCount', is: 'gt', value: '1' }]),
     sortButton([{ test: 'library.sortCount', is: 'lt', value: '2' }, { test: 'library.canFlip' }]),
-    ...hasFilters.map((w, i) => toolBtn('jt-filter', 'jt-library-filter', '{s:filters}', { action: 'toggle', arg: 'filter' }, glyph('filter', 21), {
+    ...hasFilters.map((w, i) => toolBtn('jt-filter', 'jt-library-filter', '{s:filters}', { action: 'only', arg: 'filter' }, glyph('filter', 21), {
       // Shown once, by the first condition that holds; accent while a filter is on.
       when: [...hasFilters.slice(0, i).map(c => ({ ...c[0], ...(c[0].is === 'gt' ? { is: 'lt', value: '1' } : { not: true }) } as Condition)), ...w],
       a11y: { haspopup: 'dialog', expanded: [{ test: 'flag:filter' }] }, style: filterIcon, states: filtering.map(f => ({ when: f, style: { ...filterIcon, color: '$accent' }, hover: iconBtnHover, focus: iconBtnFocus })) })),
   ] },
   // A tap outside an open menu closes it.
-  { type: 'box', when: [{ test: 'flag:sort' }], press: { action: 'toggle', arg: 'sort' }, label: '{s:close}', controlStates: false, style: { position: 'absolute', top: '0px', left: '0px', width: '100vw', height: '100vh', 'z-index': '5', 'background-color': 'transparent' } } as Node,
-  { type: 'box', when: [{ test: 'flag:filter' }], press: { action: 'toggle', arg: 'filter' }, label: '{s:close}', controlStates: false, style: { position: 'absolute', top: '0px', left: '0px', width: '100vw', height: '100vh', 'z-index': '5', 'background-color': 'transparent' } } as Node,
+  { type: 'box', when: [{ test: 'flag:sort' }], press: { action: 'close', arg: 'sort' }, label: '{s:close}', controlStates: false, style: { position: 'absolute', top: '0px', left: '0px', width: '100vw', height: '100vh', 'z-index': '5', 'background-color': 'transparent' } } as Node,
+  { type: 'box', when: [{ test: 'flag:filter' }], press: { action: 'close', arg: 'filter' }, label: '{s:close}', controlStates: false, style: { position: 'absolute', top: '0px', left: '0px', width: '100vw', height: '100vh', 'z-index': '5', 'background-color': 'transparent' } } as Node,
   menuSheet('sort', '{s:sortBy}', 280, hasFilters, 'jt-library-sort', [
     menuHeading('{s:sortBy}'),
     { type: 'repeat', over: 'library.sorts', item: choice('{opt.label}', { test: 'opt.on' }, { action: 'librarySort', arg: '{opt.id}' }) },
@@ -405,6 +406,11 @@ const libraryHeader: Node = { type: 'box', style: col({ position: 'sticky', top:
     menuHeading('{s:genres}', [{ test: 'library.genreCount', is: 'gt', value: '0' }]),
     choice('{s:anyGenre}', { test: 'library.genreFilter', not: true }, { action: 'libraryFilter', arg: 'genre|' }, [{ test: 'library.genreCount', is: 'gt', value: '0' }]),
     { type: 'repeat', over: 'library.genres', item: choice('{opt.label}', { test: 'opt.on' }, { action: 'libraryFilter', arg: 'genre|{opt.id}' }) },
+    divider([{ test: 'library.canYear' }]),
+    { type: 'box', when: [{ test: 'library.canYear' }], style: col({ gap: '6px', padding: '8px 16px 10px' }), children: [
+      { type: 'text', text: '{s:year}', style: { 'font-size': '13px', 'font-weight': '600', color: '$secondary' } },
+      { type: 'widget', widget: 'yearInput', params: { placeholder: '{s:anyYear}', label: '{s:year}' }, style: { 'box-sizing': 'border-box', width: '100%', height: '40px', padding: '0px 10px', border: '1px solid $field', 'border-radius': '4px', 'background-color': '$field', color: '$ink-strong', 'font-size': '15px' } },
+    ] },
   ]),
 ] };
 
@@ -427,6 +433,64 @@ const library: Node = { type: 'box', style: col({ 'min-height': '100%', color: '
       ] },
     ] },
   ] as Node[]).map(n => ({ ...n, when: [ready, ...(n.when ?? [])] } as Node)),
+] };
+
+// ---------------------------------------------------------------- Signed out
+
+// The signed-out page: the mark above a plain dark form, with a faint gradient wash.
+const field: Style = { 'box-sizing': 'border-box', width: '100%', height: '44px', padding: '0px 12px', border: '1px solid $field', 'border-radius': '4px', 'background-color': '$field', color: '$ink-strong', 'font-size': '16px', outline: 'none' };
+const fieldLabel = (text: string): Node => ({ type: 'text', text, style: { 'font-size': '14px', color: '$secondary' } });
+// The input fills its box: the box gives it the field's height and the space after it.
+const textField = (name: 'username' | 'password', label: string, gapAfter: number): Node => ({ type: 'box', style: col({ height: '44px', 'margin-bottom': `${gapAfter}px`, 'flex-shrink': '0' }), children: [
+  { type: 'widget', widget: 'textInput', params: { field: name, label }, style: field, focus: { 'border-color': '$accent', 'border-top-color': '$accent', 'border-bottom-color': '$accent' } } as Node,
+] });
+const authIs = (v: string): Condition => ({ test: 'env.auth', is: 'eq', value: v });
+const notAuth = (v: string): Condition => ({ test: 'env.auth', is: 'ne', value: v });
+// Connecting, redeeming a web code, offline: the spinner (or the alert) and a line of copy.
+const notice: Node = { type: 'box', when: [notAuth('signin'), notAuth('quick')], motion: 'fadeIn', style: col({ gap: '16px', 'align-items': 'center', 'text-align': 'center', padding: '12px 0px' }), children: [
+  { type: 'box', when: [authIs('offline')], role: 'alert', style: col({ gap: '16px', 'align-items': 'center' }), children: [
+    glyph('alert', 40, { style: { width: '40px', height: '40px', color: '$danger' } }),
+    { type: 'text', text: '{s:unreachable}', role: 'heading', level: 1, style: { 'font-size': '24px', 'font-weight': '600', color: '$ink-strong' } },
+    { type: 'text', text: '{s:unreachableHint}', style: { 'font-size': '15px', 'line-height': '1.5', color: '$secondary' } },
+  ] },
+  { type: 'box', when: [notAuth('offline')], role: 'status', style: col({ gap: '16px', 'align-items': 'center' }), children: [
+    spinner(48),
+    { type: 'text', when: [authIs('redeeming')], text: '{s:signingYouIn}', style: { 'font-size': '15px', 'line-height': '1.5', color: '$secondary' } },
+    { type: 'text', when: [notAuth('redeeming')], text: '{s:connecting}', style: { 'font-size': '15px', 'line-height': '1.5', color: '$secondary' } },
+  ] },
+] };
+const signIn: Node = { type: 'box', when: [authIs('signin')], motion: 'fadeIn', style: col({ gap: '8px' }), children: [
+  { type: 'text', text: '{s:pleaseSignIn}', role: 'heading', level: 1, style: { 'font-size': '28px', 'font-weight': '500', color: '$ink-strong', 'text-align': 'center', 'margin-bottom': '12px' } },
+  { type: 'text', when: [{ test: 'signin.error' }], text: '{signin.error}', role: 'alert', style: { 'font-size': '14px', 'line-height': '1.45', color: '$ink-strong', padding: '10px 12px', 'margin-bottom': '8px', 'border-radius': '4px', 'background-color': '$raised', 'border-left-width': '4px', 'border-left-color': '$danger', 'border-style': 'solid', 'border-width': '0px', 'border-top-width': '0px', 'border-bottom-width': '0px' } },
+  { ...fieldLabel('{s:user}'), when: [{ test: 'signin.canPassword' }] } as Node,
+  { ...textField('username', '{s:username}', 10), when: [{ test: 'signin.canPassword' }] } as Node,
+  { ...fieldLabel('{s:password}'), when: [{ test: 'signin.canPassword' }] } as Node,
+  { ...textField('password', '{s:password}', 18), when: [{ test: 'signin.canPassword' }] } as Node,
+  { type: 'box', when: [{ test: 'signin.canPassword' }], press: { action: 'signIn' }, label: '{s:signIn}', testId: 'sign-in', disabled: [{ test: 'signin.busy' }], disabledStyle: { opacity: '0.45' },
+    style: submit, hover: { opacity: '0.9' }, focus: submitFocus, children: [
+      { type: 'text', when: [{ test: 'signin.busy', not: true }], text: '{s:signIn}' },
+      { type: 'text', when: [{ test: 'signin.busy' }], text: '{s:signingIn}' },
+    ] },
+  { type: 'box', when: [{ test: 'signin.canQuick' }], press: { action: 'startQuick' }, label: '{s:quickConnect}', testId: 'quick-connect', disabled: [{ test: 'signin.busy' }], disabledStyle: { opacity: '0.45' },
+    style: { ...raised, height: '46px', 'margin-top': '12px' }, hover: { 'background-color': '$raised-hover' }, focus: { 'box-shadow': '0px 0px 0px 2px $accent', outline: 'auto' }, children: [{ type: 'text', text: '{s:quickConnect}' }] },
+  { type: 'text', when: [{ test: 'signin.canPassword', not: true }, { test: 'signin.canQuick', not: true }], role: 'status', text: '{s:noSignIn}', style: { 'font-size': '14px', 'line-height': '1.5', color: '$secondary', 'text-align': 'center' } },
+] };
+const quick: Node = { type: 'box', when: [authIs('quick')], motion: 'fadeIn', style: col({ gap: '18px', 'align-items': 'center', 'text-align': 'center' }), children: [
+  { type: 'text', text: '{s:quickConnect}', role: 'heading', level: 1, style: { 'font-size': '28px', 'font-weight': '500', color: '$ink-strong' } },
+  { type: 'text', text: '{s:approveCode}', style: { 'font-size': '15px', 'line-height': '1.5', color: '$secondary', 'max-width': '320px' } },
+  { type: 'text', text: '{quick.code}', label: '{quick.code}', testId: 'connect-code', style: { 'font-family': 'ui-monospace, "SF Mono", Menlo, Consolas, monospace', 'font-size': '44px', 'font-weight': '600', 'letter-spacing': '0.18em', color: '$accent', padding: '10px 18px', 'border-radius': '6px', 'background-color': '$raised' } },
+  spinner(22, { when: [{ test: 'quick.error', not: true }] }),
+  { type: 'text', when: [{ test: 'quick.error', not: true }], role: 'status', text: '{s:waitingApproval}', style: { 'font-size': '14px', color: '$secondary' } },
+  { type: 'text', when: [{ test: 'quick.error' }], role: 'status', text: '{quick.error}', style: { 'font-size': '14px', color: '$ink-strong' } },
+  { type: 'text', text: '{s:codeExpires}', style: { 'font-size': '13px', color: '$quiet' } },
+  { type: 'box', press: { action: 'cancelQuick' }, label: '{s:cancel}', style: { ...raised, width: '100%', height: '46px' }, hover: { 'background-color': '$raised-hover' }, focus: { 'box-shadow': '0px 0px 0px 2px $accent', outline: 'auto' }, children: [{ type: 'text', text: '{s:cancel}' }] },
+] };
+// The stage centres a 420px column: the mark, then the step, rising in together.
+const step = (n: Node): Node => ({ ...n, motion: 'riseIn', style: { ...(n as { style: Style }).style, position: 'relative', width: '100%', 'max-width': '420px' } } as Node);
+const auth: Node = { type: 'box', layoutTransition: '300ms ease-out', style: col({ position: 'relative', 'min-height': '100dvh', width: '100%', 'box-sizing': 'border-box', 'align-items': 'center', gap: '36px', padding: 'max(48px, 12vh) 18px 48px', 'background-color': '$page', color: '$ink', 'color-scheme': 'dark', 'font-family': sans, 'overflow-x': 'hidden', 'overflow-y': 'hidden' }), children: [
+  { type: 'box', style: { position: 'absolute', left: '-20%', right: '-20%', top: '-40%', height: '80%', 'pointer-events': 'none', opacity: '0.22', 'background-image': gradient, 'mask-image': 'radial-gradient(closest-side, black 0%, transparent 100%)' } },
+  { type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', motion: 'riseIn', style: { position: 'relative', width: `${46 * 2.629}px`, height: '46px', 'flex-shrink': '0' } },
+  step(notice), step(signIn), step(quick),
 ] };
 
 // ---------------------------------------------------------------- Title
@@ -590,7 +654,7 @@ const title: Node = { type: 'box', style: col({ position: 'relative', height: '1
 ] };
 
 export default {
-  schema: 1, renderer: 10, id, name: 'Jelly Twin', version,
+  schema: 1, renderer: 11, id, name: 'Jelly Twin', version,
   tagline: 'A familiar home-media client: near-black, cyan accents, card rows.',
   preview: asset('preview.jpg'), swatches: ['#101010', '#ffffff', '#00a4dc', '#aa5cc3', '#292929'],
   tokens: {
@@ -598,7 +662,7 @@ export default {
     line: '#ffffff1f', ink: '#ffffffde', 'ink-strong': '#ffffff', secondary: '#ffffff99', quiet: '#ffffff66',
     accent: '#00a4dc', 'accent-soft': '#00a4dc33', violet: '#aa5cc3', hover: '#ffffff14',
     overlay: '#00000099', scrim: '#000000b3', 'scrim-clear': '#10101000', 'scrim-page': '#101010d9',
-    track: '#ffffff40', popup: '#202020f7', shadow: '#000000a6',
+    track: '#ffffff40', popup: '#202020f7', shadow: '#000000a6', danger: '#cb272a',
     'tile-1': '#00455c', 'tile-2': '#44007e', 'tile-3': '#1e5631', 'tile-4': '#6b2c1f', 'tile-5': '#234a7a',
   },
   strings: { en: {
@@ -611,7 +675,11 @@ export default {
     play: 'Play', resume: 'Resume', resumeFrom: 'Resume from {detail.resumePosition}', trailer: 'Trailer', watchProgress: 'Watch progress', crew: 'Crew', genres: 'Genres', played: 'Played',
     nextUp: 'Next Up', episodes: 'Episodes', seasons: 'Seasons', specialFeatures: 'Special Features', cast: 'Cast', moreLikeThis: 'More Like This', notYet: 'Not available yet',
     playExtra: 'Play {extra.name}', extraNotAvailable: '{extra.name} · Not available',
-    tryAgain: 'Try again', findingTitles: 'Finding titles…', libraryFailed: 'This library couldn\'t be opened. Check your connection and try again.',
+    tryAgain: 'Try again', year: 'Year', anyYear: 'Any year',
+    unreachable: 'Can\'t reach your server', unreachableHint: 'Your server could not be reached. Reopen Vela when the connection is restored.', signingYouIn: 'Signing you in…', connecting: 'Connecting to your library…',
+    pleaseSignIn: 'Please sign in', username: 'Username', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…', quickConnect: 'Quick Connect',
+    noSignIn: 'This server doesn\'t offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.',
+    approveCode: 'Approve this code from a signed-in Ether device.', waitingApproval: 'Waiting for approval…', codeExpires: 'This code expires at {quick.expires}.', cancel: 'Cancel', findingTitles: 'Finding titles…', libraryFailed: 'This library couldn\'t be opened. Check your connection and try again.',
     libraryTools: 'Library tools', favourites: 'Favourites', sortBy: 'Sort by', sortOrder: 'Sort order', ascending: 'Ascending', descending: 'Descending', filters: 'Filters',
     status: 'Status', all: 'All', unplayed: 'Unplayed', anyGenre: 'Any genre', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.', showMore: 'Show more', findingEvening: 'Finding your evening…', homeFailed: 'Your library couldn\'t be reached. Check your server connection.', closeTitle: 'Close title', titleDetails: 'Title details', opening: 'Opening title…', quiet: 'Something went quiet', titleFailed: 'This title couldn\'t be opened. It may no longer be available.',
   } },
@@ -619,10 +687,12 @@ export default {
     drawerIn: { '0%': { translate: '-100% 0px' } },
     drawerOut: { '100%': { translate: '-100% 0px' } },
     popIn: { '0%': { opacity: 0, scale: 0.96 } },
+    rise: { '0%': { opacity: 0, translate: '0px 12px' } },
   },
   motion: {
     fadeIn: { keyframes: 'dissolve', duration: 260, easing: 'ease-out', fill: 'both' },
     statusIn: { keyframes: 'dissolve', duration: 300, delay: 200, easing: 'ease-out', fill: 'both' },
+    riseIn: { keyframes: 'doc:rise', duration: 360, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'both', still: { keyframes: 'dissolve', duration: 200 } },
     spin: { keyframes: 'spin', duration: 900, easing: 'linear', iterations: 'infinite', fill: 'none' },
     menuIn: { keyframes: 'doc:popIn', duration: 200, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 160 } },
     menuOut: { keyframes: 'vanish', duration: 140, easing: 'ease-in', fill: 'both', still: { keyframes: 'vanish', duration: 100 } },
@@ -633,8 +703,8 @@ export default {
   },
   templates: { poster: card(false), wide: card(true), gridPoster: card(false, { style: '100%', small: '100%' }), upNext: card(true, { style: wideW.style, small: '58vw' }) },
   status: true,
-  traits: { barMask: false, panSections: true },
+  traits: { barMask: false, panSections: true, page: '#101010', ink: '#ffffffde' },
   slots: { shell, home },
-  routes: { title, library },
+  routes: { title, library, auth },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },
 } satisfies SkinDocument;

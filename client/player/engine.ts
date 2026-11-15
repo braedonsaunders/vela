@@ -113,9 +113,21 @@ export class PlaybackEngine {
     if (this.pendingSwitch && performance.now() - this.pendingSwitch.startedAt > 15000) { this.pendingSwitch = undefined; this.fail({kind:'network', message:'Source switch authorization timed out', recoverable:true}); return; }
     if (!this.session || !this.source || !this.wantsPlay || ['failed','ended','recovering'].includes(this.status)) return;
     const now = performance.now();
-    if (!this.pendingSeek && this.position() > this.lastPosition + 0.02 && (this.original ? this.status === 'playing' : !this.video.paused)) { this.everPlayed = true; this.lastAdvance = now; this.lastPosition = this.position(); return; }
+    if (this.recordPlaybackProgress(now)) return;
     const expired = !this.everPlayed ? now - this.waitSince > this.startupDeadlineMs : now - this.lastAdvance > 30000;
     if (expired) void this.recover(new PlaybackFault(this.everPlayed ? 'Playback stalled for 30 seconds' : `Playback did not start within ${this.startupDeadlineMs / 1000} seconds`, 'network'), this.controller.token());
+  }
+  private recordPlaybackProgress(now = performance.now()) {
+    if (this.pendingSeek) return false;
+    const position = this.position();
+    const decoded = (this.frameMetrics().frames ?? 0) > 0 || !this.original && this.video.readyState >= 2;
+    const started = !this.everPlayed && (this.startupFrameSeen || (this.original?.readout.presentedFrames ?? 0) > 0 ||
+      position > this.lastPosition && decoded);
+    const advanced = (this.everPlayed || decoded) && position > this.lastPosition + 0.02 && (this.original ? this.status === 'playing' : !this.video.paused);
+    if (!started && !advanced) return false;
+    this.everPlayed = true; this.lastAdvance = now; this.lastPosition = position;
+    if (this.originalStartTimer) clearTimeout(this.originalStartTimer); this.originalStartTimer = undefined;
+    return true;
   }
   private resetProgress(position: number) {
     this.waitSince = performance.now(); this.lastAdvance = this.waitSince;
@@ -420,6 +432,8 @@ export class PlaybackEngine {
   }
   private async activate(source: Source, position: number, recovery = false, initial = false, retry?: DecoderRetry) {
     this.startupDeadlineMs = source.renditions?.some(r => !codecKnown(r)) ? 60000 : 45000;
+    // A source is admitted only after its plan arrives. Server preparation and
+    // the earlier Play intent are outside this client startup deadline.
     this.resumePosition = position; this.resetProgress(position);
     const token = this.controller.changeSource(!initial); this.resetMedia(); this.source = source;
     this.startupFrameSeen=false;playbackMark('source:open',source.delivery);
@@ -431,7 +445,9 @@ export class PlaybackEngine {
       this.backend = 'webgpu'; this.startupDeadlineMs = 8000;
       this.originalStartTimer = setTimeout(() => {
         this.originalStartTimer = undefined;
-        if (this.controller.current(token) && !(this.original?.readout.presentedFrames ?? 0))
+        if (!this.controller.current(token)) return;
+        this.recordPlaybackProgress();
+        if (!this.everPlayed)
           void this.recover(new PlaybackFault('Original first-frame deadline exceeded (8 seconds)','decoder'),token);
       },8000);
     }

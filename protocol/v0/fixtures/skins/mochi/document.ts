@@ -608,7 +608,8 @@ const authNotice: Node[] = [
   ] } as Node)),
 ];
 
-// Sign in (auth.contract SignIn).
+// Sign in (auth.contract SignIn). Sign in waits for both fields (signin.ready: not busy, a
+// username and a password).
 const signInButton: Style = { ...Candy, height: '54px', 'margin-top': '8px', gap: '10px' };
 const signIn: Node = { type: 'box', when: [is('env.auth', 'signin')], motion: 'hop60', exit: 'stepOut', style: { ...col, gap: '22px' }, children: [
   welcome('{s:welcome}', '{s:signInHint}'),
@@ -619,7 +620,7 @@ const signIn: Node = { type: 'box', when: [is('env.auth', 'signin')], motion: 'h
   { type: 'box', when: [set('signin.canPassword')], style: { ...col, gap: '14px' }, children: [
     textField('username', '{s:username}'),
     textField('password', '{s:password}'),
-    { type: 'box', press: { action: 'signIn' as Action }, label: '{s:signIn}', testId: 'sign-in', disabled: [set('signin.busy')], style: signInButton, ...candy,
+    { type: 'box', press: { action: 'signIn' as Action }, label: '{s:signIn}', testId: 'sign-in', disabled: [not('signin.ready')], style: signInButton, ...candy,
       disabledStyle: { 'background-color': '$pink-soft', color: '$ink-soft', 'box-shadow': 'none' }, children: [
         { ...dots, when: [set('signin.busy')] } as Node,
         icon('heart', 14, undefined, { when: [not('signin.busy')] }),
