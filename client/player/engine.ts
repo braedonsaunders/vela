@@ -27,6 +27,7 @@ export class PlaybackEngine {
   private original?: OriginalBackend;
   private readonly coreQuality=new CoreQuality();
   private deferredPath:string|null=null;
+  private deferredPosition=0;
   private readonly browserFallbacks=new Set<string>();
   private originalJob?: AbortController;
   private originalGeneration?: Generation;
@@ -58,7 +59,7 @@ export class PlaybackEngine {
   private waitSince = 0; private everPlayed = false; private lastPosition = 0; private lastAdvance = 0;
   private wantsPlay = false; private manualQuality: string | null = null;
   private speed = 1;
-  private pendingTracks?: { audio?: string; subtitle?: string | null; startedAt: number };
+  private pendingTracks?: { audio?: string; subtitle?: string | null; previousSubtitlePreference?:string|null; startedAt: number };
   private track?: HTMLTrackElement; private lastObservation = 0;
   constructor(readonly video: ExtendedVideo, private deliver: (event: EngineEvent) => void, private fullscreenContainer: HTMLElement = video, private readonly ambient = false,private readonly mediaAccess?:MediaAccess) {
     video.crossOrigin = 'anonymous'; video.playsInline = true; video.controls = false; video.preload = 'auto';
@@ -101,7 +102,8 @@ export class PlaybackEngine {
   }
   private checkWaiting() {
     if (this.pendingTracks && performance.now() - this.pendingTracks.startedAt > 15000) {
-      this.pendingTracks = undefined; this.emit({type:'error',failure:{kind:'action',message:'Track selection authorization timed out',recoverable:true}});
+      if(this.pendingTracks.subtitle!==undefined)this.subtitlePreference=this.pendingTracks.previousSubtitlePreference;
+      this.pendingTracks = undefined; this.deferredPath=null; this.emit({type:'error',failure:{kind:'action',message:'Track selection authorization timed out',recoverable:true}});
     }
     if (this.pendingSeek && !this.pendingSeek.authorized && performance.now() - this.pendingSeek.startedAt > 15000) { this.fail({kind:'network', message:'Seek authorization timed out', recoverable:true}); return; }
     if (this.pendingSwitch && performance.now() - this.pendingSwitch.startedAt > 15000) { this.pendingSwitch = undefined; this.fail({kind:'network', message:'Source switch authorization timed out', recoverable:true}); return; }
@@ -284,7 +286,7 @@ export class PlaybackEngine {
     if (!source) { this.fail({ kind: 'unsupported', message: 'No browser-compatible source for this edition', recoverable: false }); return; }
     if(this.deferredPath){const id=this.deferredPath;this.deferredPath=null;
       if(id!==source.id&&(session.sources.some(s=>s.id===id)||session.onDemandSources?.some(s=>s.id===id))){
-        this.source=source;this.status='buffering';this.requestSwitch({id,onDemand:true},position);this.publish();return;
+        this.source=source;this.status='buffering';this.requestSwitch({id,onDemand:true},Math.max(position,this.deferredPosition));this.publish();return;
       }
     }
     await this.activate(source, position, recovery, true);
@@ -498,13 +500,14 @@ export class PlaybackEngine {
     });
   }
   rejectCommand(message: string) {
-    if (this.pendingTracks) { this.pendingTracks = undefined;this.deferredPath=null; if (message) this.emit({type:'error',failure:{kind:'action',message,recoverable:true}}); this.publish(); return; }
+    if (this.pendingTracks) { if(this.pendingTracks.subtitle!==undefined)this.subtitlePreference=this.pendingTracks.previousSubtitlePreference;this.pendingTracks = undefined;this.deferredPath=null; if (message) this.emit({type:'error',failure:{kind:'action',message,recoverable:true}}); this.publish(); return; }
     this.pendingSwitch = undefined; if (message) this.fail({ kind: 'source', message, recoverable: false });
   }
   private requestTracks(tracks: {audio?: string; subtitle?: string | null}) {
     if (!this.session?.serverControlled) throw new Error('Server track selection is unavailable');
     if (this.pendingTracks) throw new Error('A track selection is already pending');
-    this.pendingTracks = {...tracks,startedAt:performance.now()};
+    this.pendingTracks = {...tracks,previousSubtitlePreference:this.subtitlePreference,startedAt:performance.now()};
+    if(tracks.subtitle!==undefined)this.subtitlePreference=tracks.subtitle;
     this.emit({type:'session-command',sessionId:this.session.id,command:{kind:'tracks',sourceGeneration:this.controller.source,
       seekGeneration:this.controller.seek,idempotencyKey:randomId(),
       ...(tracks.audio === undefined ? {} : {audioTrackId:tracks.audio}),
@@ -685,7 +688,7 @@ export class PlaybackEngine {
             const audio=this.audio&&this.session.audioTracks.some(t=>t.id===this.audio)&&this.audio!==this.session.audioTrackId?this.audio:undefined;
             const subtitle=this.overlay?.tracks.find(t=>t.id===this.subtitle);
             const burn=subtitle?.delivery.kind==='embedded'&&subtitle.codec==='pgs'?subtitle.serverId:undefined;
-            if(audio||burn){this.deferredPath=source.id;this.requestTracks({...(audio?{audio}:{}),...(burn?{subtitle:burn}:{})});}
+            if(audio||burn){this.deferredPath=source.id;this.deferredPosition=this.position();this.requestTracks({...(audio?{audio}:{}),...(burn?{subtitle:burn}:{})});}
             else this.requestSwitch({id:source.id,onDemand:true}, this.position());
           }
           else if (!('onDemand' in source) && source.recoveryAllowed !== false) await this.activate(source, this.position());
