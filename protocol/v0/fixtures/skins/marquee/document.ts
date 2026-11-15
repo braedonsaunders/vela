@@ -121,12 +121,12 @@ const barStartStyle = (w: number): Style => ({ display: 'flex', 'flex-direction'
 const barStart: Node = { type: 'box', style: barStartStyle(232), states: rail(barStartStyle(232), barStartStyle(200), [notSmall]), layoutTransition: railLayout,
   small: { width: 'auto', 'padding-left': '4px', gap: '4px' }, children: [
     railButton([flip, narrow], true), railButton([flip, wideEnough], false), railButton([unset('flag:keep-flip'), narrow], false), railButton([unset('flag:keep-flip'), wideEnough], true),
-    { type: 'box', when: [set('env.small')], press: { action: 'toggle', arg: 'drawer' }, label: '{s:openNavigation}', testId: 'marquee-menu', id: 'marquee-drawer-button', ...round(44), a11y: { expanded: [set('flag:drawer')] }, children: [glyph('menu', 22)] } as Node,
+    { type: 'box', when: [set('env.small')], escape: 'drawer', returnFocus: 'marquee-drawer-button', press: { action: 'toggle', arg: 'drawer' }, label: '{s:openNavigation}', testId: 'marquee-menu', id: 'marquee-drawer-button', ...round(44), a11y: { expanded: [set('flag:drawer')] }, children: [glyph('menu', 22)] } as Node,
     { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', display: 'flex', 'align-items': 'center', padding: '6px 4px', 'border-radius': '4px' }, children: [wordmark(28)] },
   ] } as Node;
 
 const glassBar: Style = { 'background-color': '$chrome-glass', 'backdrop-filter': 'blur(18px)' };
-const topBar: Node = { type: 'box', when: [set('env.viewer')], style: { position: 'absolute', top: '0px', left: '0px', right: '0px', height: px(bar.normal), 'z-index': '20', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'box-sizing': 'border-box', 'padding-right': '14px', gap: '12px', 'pointer-events': 'none', ...glassBar },
+const topBar: Node = { type: 'box', when: [set('env.viewer')], escape: 'menu', returnFocus: 'marquee-account', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', height: px(bar.normal), 'z-index': '20', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'box-sizing': 'border-box', 'padding-right': '14px', gap: '12px', 'pointer-events': 'none', ...glassBar },
   // Over a wide home the bar is clear: the page draws its middle, around the live search field.
   states: [{ when: [is('env.section', 'home'), notSmall], style: { 'background-color': '$scrim-clear', 'backdrop-filter': 'none' } }],
   small: { height: px(bar.small), 'padding-right': '6px', gap: '2px' }, children: [
@@ -577,25 +577,27 @@ const pick = (params: Record<string, string>, when: Condition[]): Node => ({ typ
   { type: 'widget', widget: 'select', params, style: { 'box-sizing': 'border-box', height: '34px', padding: '0px 30px 0px 12px', border: 'none', 'border-radius': '4px', 'background-color': 'transparent', color: '$ink', 'font-size': '14px', 'font-weight': '600', 'line-height': 'normal', 'font-family': sans, cursor: 'pointer' } },
   { type: 'box', style: { position: 'absolute', right: '8px', top: '0px', bottom: '0px', display: 'flex', 'justify-content': 'center', 'pointer-events': 'none', color: '$ink-dim' }, children: [glyph('down', 14)] },
 ] });
-// Grid or list: the view on show is lit and stays put when pressed; the other switches to it.
-const viewButton = (list: boolean, active: boolean): Node => ({ type: 'box', when: [{ test: 'flag:list', not: list !== active }],
-  press: { action: 'toggle', arg: active ? 'view-shown' : 'list' }, label: list ? '{s:listView}' : '{s:gridView}', a11y: { pressed: active ? [{ test: 'flag:list', not: list !== active }] : never }, ...round(36),
-  style: { ...round(36).style, color: active ? '$amber' : '$ink-dim' }, children: [glyph(list ? 'rows' : 'grid', 20)] } as Node);
+// Grid or list: each button shows its view (the one on show is lit).
+const viewButton = (list: boolean): Node => {
+  const lit: Condition = { test: 'flag:list', not: !list };
+  return { type: 'box', press: { action: list ? 'open' : 'close', arg: 'list' }, label: list ? '{s:listView}' : '{s:gridView}', a11y: { pressed: [lit] }, ...round(36),
+    style: { ...round(36).style, color: '$ink-dim' }, states: [{ when: [lit], style: { ...round(36).style, color: '$amber' } }], children: [glyph(list ? 'rows' : 'grid', 20)] } as Node;
+};
 const favouriteStyle = (on: boolean): Style => ({ position: 'relative', outline: 'auto', display: 'flex', 'flex-direction': 'row', gap: '6px', 'align-items': 'center', 'box-sizing': 'border-box', height: '34px', padding: '0px 12px', 'border-radius': '4px', color: on ? '$amber' : '$ink' });
 const libraryToolbar: Node = { type: 'box', style: { position: 'sticky', top: px(bar.normal), 'z-index': '5', display: 'flex', 'flex-direction': 'column', 'background-color': '$page', 'border-style': 'solid', 'border-width': '0px', 'border-bottom-width': '1px', 'border-bottom-color': '$line', 'flex-shrink': '0' } as Style, small: { top: px(bar.small) }, children: [
   { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '14px', 'min-height': '56px', ...gutter }, small: { gap: '8px', 'min-height': '48px', ...gutterSmall }, children: [
     { type: 'text', text: '{library.name}', role: 'heading', level: 1, style: { 'font-size': '20px', 'font-weight': '700', ...oneLine, 'min-width': '0px', 'flex-shrink': '0' }, small: { 'font-size': '18px', 'flex-shrink': '1' } },
     spinner(18, { when: [set('env.libraryLoading'), { test: 'library.itemCount', is: 'gt', value: '0' }] }),
     { type: 'box', style: { flex: '1' } },
-    { type: 'box', role: 'group', label: '{s:view}', style: { display: 'flex', 'flex-direction': 'row', gap: '2px' }, children: [viewButton(false, true), viewButton(false, false), viewButton(true, true), viewButton(true, false)] },
+    { type: 'box', role: 'group', label: '{s:view}', style: { display: 'flex', 'flex-direction': 'row', gap: '2px' }, children: [viewButton(false), viewButton(true)] },
   ] },
   { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
     { type: 'box', role: 'toolbar', label: '{s:libraryControls}', style: { display: 'flex', 'flex-direction': 'row', gap: '4px', 'align-items': 'center', 'padding-left': '28px', 'padding-right': '40px', 'padding-bottom': '8px' }, small: { 'padding-left': '4px', 'padding-right': '14px' }, children: [
       pick({ options: 'library.kinds', action: 'libraryFilter', arg: 'kind|{value}', none: '{s:allTypes}', label: '{s:type}' }, [{ test: 'library.kindCount', is: 'gt', value: '1' }]),
       pick({ options: 'library.sorts', action: 'librarySort', label: '{s:sortBy}' }, [{ test: 'library.sortCount', is: 'gt', value: '1' }]),
-      ...(['asc', 'desc'] as const).map((dir): Node => ({ type: 'box', when: [set('library.canFlip'), dir === 'asc' ? is('library.direction', 'asc') : isnt('library.direction', 'asc')], press: { action: 'librarySortFlip' }, label: dir === 'asc' ? '{s:ascending}' : '{s:descending}', ...round(34), children: [
-        glyph('up', 18, { style: { rotate: dir === 'asc' ? '0' : '180' } }),
-      ] })),
+      { type: 'box', when: [set('library.canFlip')], press: { action: 'librarySortFlip' }, label: '{s:ascending}', ...round(34), states: [{ when: [isnt('library.direction', 'asc')], style: round(34).style!, label: '{s:descending}' }], children: [
+        glyph('up', 18, { style: { width: '18px', height: '18px', 'flex-shrink': '0', rotate: '0', transition: 'rotate 160ms linear' }, states: [{ when: [isnt('library.direction', 'asc')], style: { width: '18px', height: '18px', 'flex-shrink': '0', rotate: '180', transition: 'rotate 160ms linear' } }] } as Partial<Node>),
+      ] } as Node,
       pick({ options: 'library.genres', action: 'libraryFilter', arg: 'genre|{value}', none: '{s:anyGenre}', label: '{s:genre}' }, [{ test: 'library.genreCount', is: 'gt', value: '0' }]),
       pick({ options: 'library.played', action: 'libraryFilter', arg: 'played|{value}', label: '{s:watchStatus}', choices: '|{s:anyStatus};false|{s:unwatched};true|{s:watched}' }, [set('library.canPlayed')]),
       { type: 'box', when: [set('library.canFavorite'), unset('library.favoriteFilter')], press: { action: 'libraryFilter', arg: 'favorite|true' }, label: '{s:favourites}', a11y: { pressed: [set('library.favoriteFilter')] }, style: favouriteStyle(false), hover: { 'background-color': '$hover' }, focus: { 'box-shadow': ring('$amber') }, children: [
@@ -653,10 +655,79 @@ const libraryRoute: Node = { type: 'box', style: { position: 'relative', display
   libraryItems,
 ] };
 
+// ---------------------------------------------------------------- signed out
+// Every signed-out state stands on a dark page: the wordmark over one plain card.
+const fieldLabel: Style = { 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.06em', 'text-transform': 'uppercase', color: '$ink-faint' };
+const textField = (field: 'username' | 'password', top: string): Node => ({ type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'margin-top': top, width: '100%', height: '44px' }, children: [
+  { type: 'widget', widget: 'textInput', params: { field, label: field === 'username' ? '{s:username}' : '{s:password}' },
+    style: { width: '100%', height: '100%', 'box-sizing': 'border-box', padding: '0px 14px', border: '1px solid $line-strong', 'border-radius': '4px', 'background-color': '$field', color: '$ink', 'font-size': '15px', 'font-family': sans, outline: 'none' },
+    hover: { 'border-color': '$ink-faint' }, focus: { 'border-color': '$amber', 'box-shadow': '0px 0px 0px 1px $amber' } } as Node,
+] });
+const auth = (is_: string) => is('env.auth', is_);
+const authNotice: Node[] = [
+  { type: 'box', when: [auth('offline')], role: 'alert', style: { display: 'flex', 'flex-direction': 'column', gap: '14px', 'align-items': 'center', 'text-align': 'center', padding: '8px 0px' }, children: [
+    glyph('alert', 32, { style: { color: '$amber' } }),
+    { type: 'text', text: '{s:serverUnreachable}', role: 'heading', level: 1, style: { 'font-size': '22px', 'font-weight': '700' } },
+    { type: 'text', text: '{s:serverUnreachableHint}', style: { color: '$ink-dim', 'font-size': '15px', 'line-height': '1.5' } },
+  ] },
+  ...(['connecting', 'redeeming'] as const).map((k): Node => ({ type: 'box', when: [auth(k)], role: 'status', style: { display: 'flex', 'flex-direction': 'column', gap: '14px', 'align-items': 'center', 'text-align': 'center', padding: '8px 0px' }, children: [
+    spinner(36), { type: 'text', text: k === 'redeeming' ? '{s:signingYouIn}' : '{s:connecting}', style: { color: '$ink-dim', 'font-size': '15px' } },
+  ] })),
+];
+const signInButton = (busy: boolean): Node => ({ type: 'box', when: [{ test: 'signin.busy', not: !busy }], press: { action: 'signIn' }, label: '{s:signIn}', testId: 'sign-in', disabled: busy ? [set('signin.busy')] : [],
+  disabledStyle: { 'background-color': '$raised', color: '$ink-faint' }, ...primary(46, '0px'), style: { ...primary(46, '0px').style, gap: '10px', 'margin-top': '20px' }, children: [
+    ...(busy ? [spinner(18)] : []), { type: 'text', text: busy ? '{s:signingIn}' : '{s:signIn}', style: { 'font-size': '16px' } },
+  ] } as Node);
+const signIn: Node[] = [
+  { type: 'text', when: [auth('signin')], text: '{s:signIn}', role: 'heading', level: 1, style: { 'font-size': '24px', 'font-weight': '700' } },
+  { type: 'text', when: [auth('signin')], text: '{s:signInToYourLibrary}', style: { color: '$ink-dim', 'font-size': '15px', 'margin-top': '6px' } },
+  { type: 'box', when: [auth('signin'), set('signin.error')], role: 'alert', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'flex-start', padding: '10px 12px', 'margin-top': '20px', 'border-radius': '4px', 'background-color': '$amber-soft', 'box-shadow': 'inset 3px 0px 0px $amber' }, children: [
+    glyph('alert', 18, { style: { color: '$amber' } }), { type: 'text', text: '{signin.error}', style: { 'font-size': '14px', 'line-height': '1.45' } },
+  ] },
+  { type: 'text', when: [auth('signin'), set('signin.canPassword')], text: '{s:username}', style: { ...fieldLabel, 'margin-top': '20px' } },
+  { ...textField('username', '6px'), when: [auth('signin'), set('signin.canPassword')] },
+  { type: 'text', when: [auth('signin'), set('signin.canPassword')], text: '{s:password}', style: { ...fieldLabel, 'margin-top': '14px' } },
+  { ...textField('password', '6px'), when: [auth('signin'), set('signin.canPassword')] },
+  { ...signInButton(false), when: [auth('signin'), set('signin.canPassword'), unset('signin.busy')] },
+  { ...signInButton(true), when: [auth('signin'), set('signin.canPassword'), set('signin.busy')] },
+  { type: 'box', when: [auth('signin'), set('signin.canPassword'), set('signin.canQuick')], style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center', 'margin-top': '20px' }, children: [
+    { type: 'box', style: { flex: '1', height: '1px', 'background-color': '$line-strong' } },
+    { type: 'text', text: '{s:or}', style: { 'font-size': '13px', color: '$ink-faint' } },
+    { type: 'box', style: { flex: '1', height: '1px', 'background-color': '$line-strong' } },
+  ] },
+  { type: 'box', when: [auth('signin'), set('signin.canQuick')], press: { action: 'startQuick' }, label: '{s:connectWithACode}', testId: 'quick-connect', disabled: [set('signin.busy')], disabledStyle: { opacity: '0.45' },
+    ...secondary(46, '0px'), style: { ...secondary(46, '0px').style, gap: '10px', 'margin-top': '20px' }, children: [glyph('phone', 18), { type: 'text', text: '{s:connectWithACode}', style: { 'font-size': '15px' } }] } as Node,
+  { type: 'text', when: [auth('signin'), unset('signin.canPassword'), unset('signin.canQuick')], role: 'status', text: '{s:noSignInMethods}', style: { color: '$ink-dim', 'font-size': '14px', 'line-height': '1.55', 'margin-top': '20px' } },
+];
+// Quick connect: the code to approve from a signed-in device, in large amber type.
+const quickConnect: Node = { type: 'box', when: [auth('quick')], style: { display: 'flex', 'flex-direction': 'column', gap: '20px', 'align-items': 'center', 'text-align': 'center' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '6px', 'align-items': 'center' }, children: [
+    { type: 'text', text: '{s:connectWithACode}', role: 'heading', level: 1, style: { 'font-size': '24px', 'font-weight': '700' } },
+    { type: 'text', text: '{s:approveCode}', style: { color: '$ink-dim', 'font-size': '15px', 'line-height': '1.5', 'max-width': '320px' } },
+  ] },
+  { type: 'text', text: '{quick.code}', label: '{quick.code}', testId: 'connect-code', style: { 'font-family': 'ui-monospace, "SF Mono", Menlo, Consolas, monospace', 'font-size': '38px', 'font-weight': '700', 'letter-spacing': '0.18em', color: '$amber', padding: '14px 20px', 'border-radius': '6px', 'background-color': '$chrome', 'box-shadow': 'inset 0px 0px 0px 1px $line' } },
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', 'align-items': 'center' }, children: [
+    { type: 'box', role: 'status', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
+      spinner(16, { when: [unset('quick.error')] }),
+      { type: 'text', when: [unset('quick.error')], text: '{s:waitingForApproval}', style: { color: '$ink-dim', 'font-size': '14px' } },
+      { type: 'text', when: [set('quick.error')], text: '{quick.error}', style: { color: '$amber', 'font-size': '14px' } },
+    ] },
+    { type: 'text', text: '{s:codeExpires}', style: { color: '$ink-faint', 'font-size': '13px' } },
+  ] },
+  { type: 'box', press: { action: 'cancelQuick' }, label: '{s:cancel}', ...secondary(42, '0px 26px'), children: [{ type: 'text', text: '{s:cancel}', style: { 'font-size': '14px' } }] },
+] };
+const authRoute: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'min-height': '100dvh', width: '100%', 'box-sizing': 'border-box', 'align-items': 'center', 'justify-content': 'center', padding: 'max(32px, 8vh) 16px', gap: '28px',
+  'background-color': '$chrome', 'background-image': 'radial-gradient(ellipse 80% 60% at 50% 0%, $raised 0%, $chrome 70%)', color: '$ink', 'color-scheme': 'dark' }, children: [
+    wordmark(44),
+    { type: 'box', motion: 'arrive', style: { display: 'flex', 'flex-direction': 'column', width: '100%', 'max-width': '420px', 'box-sizing': 'border-box', 'font-family': sans, padding: 'clamp(24px, 5vw, 36px)', 'border-radius': '8px', 'background-color': '$page', 'box-shadow': '0px 24px 60px $shadow, 0px 0px 0px 1px $line' }, children: [
+      ...authNotice, ...signIn, quickConnect,
+    ] },
+  ] };
+
 const rise = { keyframes: 'doc:rise', duration: 420, easing: ease, fill: 'both' as const, still: { keyframes: 'dissolve', duration: 160 } };
 
 export default {
-  schema: 1, renderer: 10, id, name: 'Marquee', version, status: true,
+  schema: 1, renderer: 11, id, name: 'Marquee', version, status: true,
   tagline: 'Your media server at home: charcoal hubs, a sidebar and amber accents.',
   preview: asset('preview.jpg'), swatches: ['#1f2023', '#eeeeee', '#e9a31b', '#121315', '#2c2e32'],
   tokens: {
@@ -664,7 +735,7 @@ export default {
     control: '#ffffff1a', 'control-hover': '#ffffff2b', hover: '#ffffff14', selected: '#ffffff1f', line: '#ffffff12', 'line-strong': '#ffffff29',
     field: '#ffffff14', 'field-focus': '#ffffff21',
     ink: '#eeeeee', 'ink-dim': '#a7a9ad', 'ink-faint': '#74777c',
-    amber: '#e9a31b', 'amber-hover': '#f5b638', 'on-amber': '#1a1a1a', track: '#ffffff33',
+    amber: '#e9a31b', 'amber-hover': '#f5b638', 'on-amber': '#1a1a1a', 'amber-soft': '#e9a31b2e', track: '#ffffff33',
     scrim: '#000000b8', 'scrim-soft': '#00000066', 'scrim-faint': '#00000033', 'scrim-clear': '#00000000',
     'page-clear': '#1f202300', 'page-veil': '#1f2023c4', shadow: '#00000099', menu: '#2a2c30',
     // The title page's close button, as the app draws it for every flat title page.
@@ -680,6 +751,9 @@ export default {
     detailSeasonEpisode: 'S{detail.seasonNumberLabel} · E{detail.episodeNumberLabel}', detailEpisodeNumber: 'Episode {detail.episodeNumberLabel}',
     resumeFrom: 'Resume from {detail.resumePosition}', resumeTitle: 'Resume {card.name}', playTitle: 'Play {card.name}', watchTrailer: 'Watch trailer', watchProgress: 'Watch progress', watched: 'Watched', genres: 'Genres', nothingHereYet: 'Nothing here yet', noRowsYet: "Your library hasn't offered any rows yet. Titles appear here as your server adds them.",
     closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', findingYourEvening: 'Finding your evening…', homeFailed: "Your library couldn't be reached. Check your server connection.", titleFailed: "This title couldn't be opened. It may no longer be available.",
+    serverUnreachable: "Can't reach your server", serverUnreachableHint: 'Your server could not be reached. Reopen Vela when the connection is restored.', signingYouIn: 'Signing you in…', connecting: 'Connecting to your library…',
+    signIn: 'Sign in', signInToYourLibrary: 'Sign in to your library.', username: 'Username', password: 'Password', signingIn: 'Signing in…', or: 'or', connectWithACode: 'Connect with a code',
+    noSignInMethods: "This server doesn't offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.", approveCode: 'Approve this code from a signed-in Ether device.', waitingForApproval: 'Waiting for approval…', codeExpires: 'This code expires at {quick.expires}.', cancel: 'Cancel',
     view: 'View', gridView: 'Grid view', listView: 'List view', libraryControls: 'Library controls', type: 'Type', allTypes: 'All types', sortBy: 'Sort by', ascending: 'Ascending', descending: 'Descending',
     genre: 'Genre', anyGenre: 'Any genre', watchStatus: 'Watch status', anyStatus: 'Any status', unwatched: 'Unwatched', favourites: 'Favourites', titleColumn: 'Title', year: 'Year', ratingColumn: 'Rating', genresColumn: 'Genres',
     loadMore: 'Show more', findingTitles: 'Finding titles…', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.',
@@ -705,8 +779,8 @@ export default {
   },
   templates: { card, gridCard, wideCard, rankedCard, row, homeRow },
   slots: { shell, home },
-  routes: { title, library: libraryRoute },
+  routes: { title, library: libraryRoute, auth: authRoute },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },
   // Sections switch in place (no sideways pan), and pages run under an opaque bar, as compiled.
-  traits: { barMask: false, panSections: false },
+  traits: { barMask: false, panSections: false, page: '#1f2023', ink: '#eeeeee', splashOnPaper: false },
 } satisfies SkinDocument;

@@ -50,7 +50,7 @@ export type Action =
   /** A library page: sort by an option, flip the direction, filter name|value, load more titles. */
   | 'librarySort' | 'librarySortFlip' | 'libraryFilter' | 'libraryMore'
   /** Signed out (route auth): sign in with the fields; start or cancel a quick-connect code. */
-  | 'signIn' | 'startQuick' | 'cancelQuick'
+  | 'signIn' | 'startQuick' | 'cancelQuick' | 'goSecure'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
 
@@ -61,12 +61,14 @@ interface NodeBase extends Breakpoints {
   hover?: Style; focus?: Style;
   /** A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`. */
   group?: boolean; groupHover?: Style; groupFocus?: Style;
+  /** While pressed (pointer down), over the hover style: e.g. { scale: '0.97' } as a compiled control's press scale. */
+  active?: Style;
   /** The first state whose conditions hold replaces `style` on the same element (transitions run). */
   states?: { when: Condition[]; style: Style; hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; /** The press button's name while this state holds. */ label?: Template }[];
   /** A pressable box: disabled while these hold, drawn with `disabledStyle`. */
   disabled?: Condition[]; disabledStyle?: Style;
   /** The press button's accessibility state and role. */
-  a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; /** aria-checked (menu item radios and checkboxes). */ checked?: Condition[]; haspopup?: string; title?: Template; role?: string };
+  a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; /** aria-checked (menu item radios and checkboxes). */ checked?: Condition[]; /** Decorative: hidden from assistive technology (aria-hidden). */ hidden?: boolean; haspopup?: string; title?: Template; role?: string };
   /** Escape clears this flag and moves focus to `returnFocus` (an element id). */
   escape?: string; returnFocus?: Template;
   layoutTransition?: string; /** Accepted and ignored for now (docs/skin-schema.md). */ sharedElement?: string;
