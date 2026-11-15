@@ -12,7 +12,7 @@ interface Segment {timestampFactor:number;codecDelay?:number;clusterSeekStartPos
 interface Track {id:number;codecDelay:number;defaultDuration:number|null;codecId:string|null;decodingInstructions:{scope:number;data:{type:string;algorithm?:number|null;settings?:Uint8Array|null}|null}[];
  info:{type:string;codec?:string|null;alphaMode?:boolean}|null;segment:Segment;cuePoints:{time:number;trackId:number;clusterPosition:number}[];
  demuxer:{segments:unknown[];input:{_rootSource:object};loadDeferredCues(segment:Segment):Promise<void>|null;expandLacedBlocks(blocks:RawBlock[],track:Track):RawBlock[];decodeBlockData(track:Track,data:Uint8Array):Uint8Array}}
-interface Scope {metadata:boolean;prefetch:WeakMap<object,Promise<void>>;reader:ByteReader;signal:AbortSignal;startSeconds:number;subtitles?:MatroskaSubtitleStream;tracks:WeakMap<object,StreamingMatroskaTrack>;cues:WeakMap<object,Promise<void>>}
+interface Scope {metadata:boolean;prefetch:WeakMap<object,Promise<void>>;reader:ByteReader;signal:AbortSignal;startSeconds:number;videoStart?:{cluster:number;time:number};subtitles?:MatroskaSubtitleStream;tracks:WeakMap<object,StreamingMatroskaTrack>;cues:WeakMap<object,Promise<void>>}
 const scopes=new WeakMap<object,Scope>();
 export function installMatroskaStreaming(source:object,reader:ByteReader,signal:AbortSignal,startSeconds:number,subtitles?:MatroskaSubtitleStream){
  const scope:Scope={metadata:true,reader,signal,startSeconds,subtitles,tracks:new WeakMap(),cues:new WeakMap(),prefetch:new WeakMap()};scopes.set(source,scope);
@@ -47,7 +47,7 @@ function vint(bytes:Uint8Array,at=0,id=false){
 }
 class Step {
  readonly signal:AbortSignal;private requested=0;private visits=0;private pages=new Set<number>();
- constructor(private scope:Scope,readonly size:number){this.signal=AbortSignal.any([scope.signal,AbortSignal.timeout(8000)]);}
+ constructor(private scope:Scope,readonly size:number,readonly forward=true){this.signal=AbortSignal.any([scope.signal,AbortSignal.timeout(8000)]);}
  async read(offset:number,length:number){
   this.signal.throwIfAborted();if(!Number.isSafeInteger(offset)||!Number.isSafeInteger(length)||offset<0||length<0||offset+length>this.size||length>MAX_PACKET)throw new Error('Invalid Matroska streaming range');
   this.requested+=length;if(this.requested>32*1024*1024||++this.visits>65536)throw new Error('Matroska streaming search exceeds bound');
@@ -63,6 +63,7 @@ class Step {
 interface Cursor {cluster:number;data:number;end:number;at:number;timestamp:number|null;remaining:{packet:EncodedPacket;cursor:Cursor}[]}
 interface Result {set(value:{packet:EncodedPacket|null;provisional:boolean}):void}
 interface Found {packet:EncodedPacket;cursor:Cursor}
+interface BlockSearch {done:boolean;visit(element:Element,cursor:Cursor,timestamp:number):void}
 /** Packets are acquired at block granularity. Cursors retain positions, not clusters. */
 export class StreamingMatroskaTrack {
  private cursors=new WeakMap<EncodedPacket,Cursor>();
@@ -73,11 +74,18 @@ export class StreamingMatroskaTrack {
  private async step(){this.scope.signal.throwIfAborted();return new Step(this.scope,await this.scope.reader.size(this.scope.signal));}
  private async cursor(at:number,step:Step):Promise<Cursor>{
   const segment=this.track.segment,limit=segment.elementEndPos??step.size;
-  if(!this.scope.metadata&&at<limit)this.scope.reader.prefetch?.(at,this.scope.signal);
+  if(step.forward&&!this.scope.metadata&&at<limit)this.scope.reader.prefetch?.(at,this.scope.signal);
   for(;at<limit;){const element=await step.element(at,limit);if(element.id===CLUSTER)return{cluster:at,data:element.data,end:element.end,at:element.data,timestamp:null,remaining:[]};if(element.unknown)throw new Error('Unknown-sized Matroska metadata');at=element.end;}
   return{cluster:limit,data:limit,end:limit,at:limit,timestamp:null,remaining:[]};
  }
- private async indexed(target:number,step:Step){
+ private async indexed(target:number,step:Step,common=true){
+  // Both selected tracks acquire the video random-access cluster. The old
+  // artificial 100-ms audio lookback could choose the preceding video GOP and
+  // claim a distant read-ahead run before video had requested its first block.
+  const shared=this.scope.videoStart;
+  const preroll=this.track.codecDelay>0||/^(A_OPUS|A_VORBIS|A_MPEG\/L3)$/.test(this.track.codecId??'');
+  if(common&&shared&&this.track.info?.type==='audio'&&!preroll&&shared.time<=this.scope.startSeconds)
+   return{cursor:await this.cursor(shared.cluster,step),cueTime:null as number|null,ticks:target*this.track.segment.timestampFactor+this.track.codecDelay,shared:true};
   if(target<=0)return{cursor:await this.cursor(this.track.segment.clusterSeekStartPos,step),cueTime:null as number|null,ticks:target*this.track.segment.timestampFactor+this.track.codecDelay};
   await loadCues(this.scope,this.track);step.signal.throwIfAborted();
   const ticks=target*this.track.segment.timestampFactor+this.track.codecDelay,cues=this.track.cuePoints;
@@ -93,7 +101,7 @@ export class StreamingMatroskaTrack {
   if(!Number.isFinite(timestamp)||!Number.isFinite(duration)||duration<0)throw new Error('Invalid Matroska streaming timestamp');
   return new EncodedPacket(data,key?'key':'delta',timestamp,duration,position,data.length,raw.otherAdditionals.length?{matroskaBlockAdditions:raw.otherAdditionals}:{});
  }
- private async block(element:Element,cursor:Cursor,step:Step,keyFrom?:number):Promise<RawBlock[]|null>{
+ private async block(element:Element,cursor:Cursor,step:Step,keyFrom?:number,search?:BlockSearch):Promise<RawBlock[]|null>{
   let block=element,duration=0,key=true,additions:{addId:number;data:Uint8Array}[]=[],additionalElements:Element[]=[];
   if(element.id===GROUP){
    let found:Element|undefined;
@@ -109,10 +117,13 @@ export class StreamingMatroskaTrack {
   const relative=new DataView(header.buffer,header.byteOffset+number.length,2).getInt16(0),flags=header[number.length+2],payload=block.data+number.length+3;
   const clusterTime=cursor.timestamp!,factor=this.track.segment.timestampFactor,actual=this.track.segment.idToTrack.get(number.value);
   const hint={position:cursor.cluster,payloadStart:cursor.data,length:cursor.end-cursor.data,time:clusterTime/factor,endTime:Math.max(clusterTime,clusterTime+relative+(actual?.defaultDuration??0))/factor,timestamp:clusterTime};
-  this.scope.subtitles?.advance(hint);
-  if(!actual?.info||!['video','audio'].includes(actual.info.type))this.scope.subtitles?.fragment(hint,element.start,element.end-element.start,number.value);
+  if(step.forward){this.scope.subtitles?.advance(hint);
+   if(!actual?.info||!['video','audio'].includes(actual.info.type))this.scope.subtitles?.fragment(hint,element.start,element.end-element.start,number.value);}
   if(number.value!==this.track.id)return null;
   if(element.id===SIMPLE)key=!!(flags&128);
+  // An audio lookup needs block timestamps, not every preceding compressed
+  // payload. Materialize only the chosen block after locating the target.
+  if(search){search.visit(element,cursor,(clusterTime+relative-this.track.codecDelay)/factor);return null;}
   if(keyFrom!==undefined&&(!key||clusterTime+relative+1<keyFrom))return null;
   for(const item of additionalElements)for(let pos=item.data;pos<item.end;){const more=await step.element(pos,item.end);if(more.unknown)throw new Error('Unknown-sized Matroska block additions');
    if(more.id===0xa6){let id=1,data:Uint8Array|null=null;for(let p=more.data;p<more.end;){const part=await step.element(p,more.end);if(part.unknown)throw new Error('Unknown-sized Matroska block additional');if(part.id===0xee)id=unsigned(await step.read(part.data,part.end-part.data));if(part.id===0xa5)data=await step.read(part.data,part.end-part.data);p=part.end;}
@@ -123,7 +134,12 @@ export class StreamingMatroskaTrack {
   const raw:RawBlock={timestamp:clusterTime+relative,duration:duration||(lacing===0?Math.round(this.track.defaultDuration??0):0),isKeyFrame:key,data:await step.read(payload,block.end-payload),lacing,decoded:this.track.decodingInstructions.length===0,postProcessed:false,mainAdditional:null,otherAdditionals:additions};
   return this.track.demuxer.expandLacedBlocks([raw],this.track);
  }
- private async next(cursor:Cursor,step:Step,keyFrom?:number):Promise<Found|null>{
+ private fromBlocks(blocks:RawBlock[],element:Element,cursor:Cursor){
+  const found=blocks.map((raw,index):Found=>({packet:this.packet(raw,element.start+index),cursor:{...cursor,remaining:[]}}));
+  for(let i=0;i<found.length;i++){found[i].cursor.remaining=found.slice(i+1);this.cursors.set(found[i].packet,found[i].cursor);}
+  return found;
+ }
+ private async next(cursor:Cursor,step:Step,keyFrom?:number,search?:BlockSearch):Promise<Found|null>{
   if(cursor.remaining.length)return cursor.remaining[0];
   const limit=this.track.segment.elementEndPos??step.size;
   while(cursor.at<limit){
@@ -133,10 +149,9 @@ export class StreamingMatroskaTrack {
    cursor={...cursor,at:item.end,remaining:[]};
    if(item.id===TIMESTAMP){cursor.timestamp=unsigned(await step.read(item.data,item.end-item.data));continue;}
    if(item.id!==SIMPLE&&item.id!==GROUP)continue;if(cursor.timestamp===null)throw new Error('Matroska block precedes cluster timestamp');
-   const blocks=await this.block(item,cursor,step,keyFrom);if(!blocks)continue;
-   const found=blocks.map((raw,index):Found=>({packet:this.packet(raw,item.start+index),cursor:{...cursor,remaining:[]}}));
+   const blocks=await this.block(item,cursor,step,keyFrom,search);if(search?.done)return null;if(!blocks)continue;
+   const found=this.fromBlocks(blocks,item,cursor);
    // Each lace cursor owns only its successors within this bounded block.
-   for(let i=0;i<found.length;i++){found[i].cursor.remaining=found.slice(i+1);this.cursors.set(found[i].packet,found[i].cursor);}
    return found[0]??null;
   }
   return null;
@@ -154,11 +169,27 @@ export class StreamingMatroskaTrack {
   }
  }
  async at(result:Result,target:number){
-  const step=await this.step(),start=await this.indexed(target,step);let cursor=start.cursor,previous:EncodedPacket|null=null;
-  for(;;){const found=await this.next(cursor,step);if(!found)return result.set({packet:previous,provisional:false});cursor=found.cursor;
-   if(found.packet.timestamp>target)return result.set({packet:previous??found.packet,provisional:false});previous=found.packet;
-   if(found.packet.timestamp+found.packet.duration>target)return result.set({packet:found.packet,provisional:false});
+  this.scope.signal.throwIfAborted();
+  const step=new Step(this.scope,await this.scope.reader.size(this.scope.signal),false);
+  for(const common of [true,false]){
+   const start=await this.indexed(target,step,common);
+   let candidate:{element:Element;cursor:Cursor}|undefined;
+   const search:BlockSearch={done:false,visit:(element,cursor,timestamp)=>{
+    if(timestamp<=target)candidate={element,cursor};
+    else{candidate??={element,cursor};search.done=true;}
+   }};
+   await this.next(start.cursor,step,undefined,search);
+   if(!candidate)return result.set({packet:null,provisional:false});
+   const blocks=await this.block(candidate.element,candidate.cursor,step);
+   const packets=this.fromBlocks(blocks??[],candidate.element,candidate.cursor);
+   const packet=packets.filter(value=>value.packet.timestamp<=target).at(-1)?.packet??packets[0]?.packet??null;
+   // A real gap/dependent packet needs earlier history. The fallback scans
+   // headers only and never turns the previous GOP into a media forward run.
+   if(common&&'shared'in start&&start.shared&&packet&&(packet.timestamp>this.scope.startSeconds||packet.type!=='key'))continue;
+   this.scope.reader.prefetch?.(candidate.element.start,this.scope.signal);
+   return result.set({packet,provisional:false});
   }
+  return result.set({packet:null,provisional:false});
  }
  owns(packet:EncodedPacket){return this.cursors.has(packet);}
  async after(result:Result,packet:EncodedPacket,keyOnly=false){
@@ -172,7 +203,15 @@ export function hasStreamingMatroskaBacking(value:unknown){return !!streamingMat
 export function primeMatroskaIndex(backing:unknown){
  const track=rawTrack(backing);
  const scope=track?.demuxer&&scopes.get(track.demuxer.input._rootSource);
- return scope&&scope.startSeconds>0&&track.demuxer.segments.length===1?loadCues(scope,track):undefined;
+ if(!scope||track.demuxer.segments.length!==1)return;
+ const work=(async()=>{
+  if(scope.startSeconds>0)await loadCues(scope,track);
+  if(track.info?.type!=='video')return;
+  const ticks=scope.startSeconds*track.segment.timestampFactor+track.codecDelay,cues=track.cuePoints;
+  let low=0,high=cues.length;while(low<high){const mid=(low+high)>>>1;if(cues[mid].time<=ticks)low=mid+1;else high=mid;}
+  const cue=low?cues[low-1]:undefined;
+  scope.videoStart={cluster:cue?.clusterPosition??track.segment.clusterSeekStartPos,time:cue?(cue.time-track.codecDelay)/track.segment.timestampFactor:0};
+ })();void work.catch(()=>{});return work;
 }
 export function finishMatroskaMetadata(source:object){const scope=scopes.get(source);if(scope)scope.metadata=false;}
 

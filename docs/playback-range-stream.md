@@ -90,3 +90,52 @@ not a committed test harness. Runtime `4eb2a47d73296048` awaits a bounded real-a
 startup confirmation, then alternating cold lab pairs. Production remains the
 qualified wrapper. The signed 0.1.42 / Ether 0.3.13 integration baseline replaces
 the earlier lab.33 baseline for those new pairs.
+
+## Cold pair 2A and foreground ownership
+
+The first new core-first half on signed 0.1.42 / Ether 0.3.13 integration
+`84a5c9482` failed before a seek or sustained sample. Vela
+`VTBUH2Y23MFCVJB7CATT2YUUKD`: plan 2.581 s, first image 9.144 s,
+reserve failure 12.321 s with only 0.667 s / 32,000 PCM frames against 1.8 s.
+Ether delivered 17.2 MB in 10.1 s, with one 1.08-second slow range and no
+outstanding source waits in the final 7.6 seconds. The failure is not erased by
+the position-zero local proof. Stop/revoke returned 200, mounted players zero,
+Chrome/profile closed; Ether unpinned and confirmed zero sessions/FFmpeg.
+Neither the wrapper half nor pair 3 ran.
+
+A generated 72.09-second copy of the same 4K fixture starts at 52.5 s, but a
+resume at 48.08 s reproduces a first-frame deadline. Its video keyframe is at
+48.06 s; the audio lookup's 100-ms lookback selects the previous cue at 40.05 s.
+An audio range beginning at byte 234,849,300 owns future pages including the
+video demand at byte 281,819,446. A promise for a prefetched page must not force
+foreground decode to wait through an unrelated earlier GOP.
+
+Foreground reads now split a planned range and transfer its pending promises,
+cancel the old response, and release its network slot. A random read outside
+all planned ranges can preempt a background request too. Completed cache pages
+remain shared. Cancellation can discard an incomplete page or transport-buffered
+bytes; zero repeated completed pages is the measured property, not a claim that
+HTTP cancellation prevents every duplicate wire byte. Metadata lookups do not
+own arbitrary distant forward acquisition.
+
+Reader acquisition state is scalar-only: source epoch, request/byte counts,
+network concurrency, cache bytes/limit, anchor, demand, reserve, active run
+cursors and twelve latest read spans. Failure messages retain compact `io`
+arrays before teardown: `counts=[requests,bytes,active,cacheBytes]`,
+`cursor=[anchor,demand,ahead]`, and up to two runs of
+`[next,end,demand,pendingPages,requestActive,paused]`. The existing host redaction
+and message bound still apply. No URL, header, source identifier or content is
+stored in this state.
+
+This brings the boundary fixture's first image to 1.844 s but does not yet make
+it playable. The source-complete build adapter gates streaming audio on
+`DefaultDuration`; this DTS file omits it. Consequently its audio still takes
+the library whole-cluster path, and the new common-cluster/header-only lookup is
+not admitted. It expires with `InputDisposedError` after the eight-second audio
+operation. The TypeScript/build pass does not qualify this candidate.
+
+Next admission work must infer absent block durations from the following block
+on the same track, retain one-block lookahead, and timestamp laces correctly.
+Dropping the guard without that work would produce zero-duration laces. No
+additional lab capture is justified before that local proof succeeds. Production
+remains the wrapper; the unqualified partial repair is committed for review.

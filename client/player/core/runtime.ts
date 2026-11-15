@@ -329,6 +329,13 @@ export class PlaybackCore {
   private fail(error:unknown){
     if(this.state==='failed'||this.closed)return;
     const failure=error instanceof Error?error:new Error(String(error));const position=this.clock.time();
+    if(this.source?.kind==='file'){
+      const io=this.source.reader.acquisitionState;
+      // Keep the compact transport state in the existing durable recovery
+      // message. No URL, header, source identifier or media byte is included.
+      failure.message+=` io=${JSON.stringify({counts:[io.requests,io.bytes,io.active,io.cacheBytes],cursor:[io.anchor,io.demand,io.ahead],
+        runs:io.runs.slice(0,2).map(run=>[run.next,run.end,run.demand,run.pages,Number(run.request),Number(run.paused)])})}`;
+    }
     this.state='failed';this.failure=failure.message;this.clock.setPlaying(false);this.source?.audio.pause();
     this.epoch?.abort.abort();this.epoch?.decoder.dispose();this.scheduler.stop();this.scheduler.buffer.clear();
     if(this.timer)clearInterval(this.timer);this.timer=undefined;
