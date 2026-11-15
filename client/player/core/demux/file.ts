@@ -51,7 +51,7 @@ export class PacketDemux {
   /** Serial source operations make each cancellation/read budget unambiguous. */
   private operation<T>(run: () => PromiseLike<T> | T, signal: AbortSignal,stage='metadata',parallel=false): Promise<T> {
     if(parallel){
-      const operation=AbortSignal.any([signal,this.lifetime.signal,AbortSignal.timeout(8000)]);
+      const operation=AbortSignal.any([signal,this.lifetime.signal]);
       return abortable(Promise.resolve().then(()=>{operation.throwIfAborted();return run();}),operation).catch(error=>{
         if(signal.aborted)throw error;
         throw new Error(`Demux ${stage}: ${error instanceof Error?error.message:'operation failed'}`);
@@ -60,7 +60,7 @@ export class PacketDemux {
     const work = this.serial.then(async () => {
       signal.throwIfAborted(); this.lifetime.signal.throwIfAborted();
       this.operationStage=stage;
-      this.operationSignal = AbortSignal.any([signal,this.lifetime.signal,AbortSignal.timeout(8000)]);
+      this.operationSignal = AbortSignal.any([signal,this.lifetime.signal]);
       this.readBytes = 0;
       const abort = () => this.dispose();
       this.operationSignal.addEventListener('abort',abort,{once:true});
@@ -121,6 +121,8 @@ export class PacketDemux {
     if (!Number.isFinite(positionUs) || positionUs < 0) throw new Error('Invalid demux seek position');
     const reader = new PacketReader(track);
     const parallel=hasStreamingMatroskaBacking(track);
+    if(this.originalReader){const note=`${track instanceof InputVideoTrack?'Video':'Audio'} packet acquisition: ${parallel?'streaming':'library'}`;
+      if(!this.diagnostics.includes(note)&&this.diagnostics.length<16)this.diagnostics.push(note);}
     const read=<T>(run:()=>PromiseLike<T>|T)=>this.operation(run,signal,track instanceof InputVideoTrack?'video-packet':'audio-packet',parallel);
     const querySeconds=Math.max(0,positionUs-this.originUs)/1e6;
     // Container cues/sample tables locate a preceding random-access packet.

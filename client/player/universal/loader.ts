@@ -17,6 +17,8 @@ export interface UniversalReadout {
 export interface OriginalBackend {
   readonly implementation?: 'vela-core' | 'upstream-controller';
   readonly retainsSource?: boolean;
+  /** The Vela core owns progress-based startup and its hard admission ceiling. */
+  readonly startupPending?: boolean;
   readonly live?:{startSeconds:number;edgeSeconds:number;segmentSeconds:number;ended:boolean;retries:number;retrying:boolean;delivery:'upstream-gap'|'segment-delayed'|'waiting-for-publication'|'available'};
   setLiveTarget?(seconds:number,rate:number):void;
   readonly supportsLocalAudioSwitch?:boolean;

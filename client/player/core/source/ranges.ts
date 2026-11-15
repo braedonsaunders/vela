@@ -8,11 +8,13 @@ const MAX_READ = 16 * 1024 * 1024;
 const CACHE = 32 * 1024 * 1024;
 const MIB=1024*1024,WINDOW=64*MIB;
 class RangeFailure extends Error {}
+class RangePreempt extends Error {}
 interface ReadEpoch {id:number;seen:Uint8Array|null|undefined;unique:number;repeated:number}
 interface PageSlot {promise:Promise<Uint8Array>;resolve(bytes:Uint8Array):void;reject(error:unknown):void}
 interface ForwardRun {
   end:number;next:number;demand:number;scope:ReadEpoch;
   abort:AbortController;signal:AbortSignal;slots:Map<number,PageSlot>;
+  request?:AbortController;
 }
 
 /** One pinned original, shared by AV and subtitles. Media runs use streamed
@@ -33,6 +35,7 @@ export class RangeReader implements ByteReader {
   private forwardDemand=0;
   private readonly forwardRuns=new Set<ForwardRun>();
   private readonly progressWaiters=new Set<()=>void>();
+  private readonly demands:{offset:number;length:number}[]=[];
   private total: number | null = null;
   private etag: string | null = null;
   private modified: string | null = null;
@@ -41,13 +44,14 @@ export class RangeReader implements ByteReader {
   private readonly url: string;
   readonly bandwidth=new BandwidthEstimator();
   readonly delivery=new DeliveryMeter();
-  readonly metrics = { requests: 0, bytes: 0, cacheHits: 0, milliseconds: 0,
+  readonly metrics = { requests: 0, bytes: 0, receivedBytes:0,cacheHits: 0, milliseconds: 0,
     sourceEpoch:0,uniquePageRequests:0 as number|null,repeatedPageRequests:0 as number|null };
   /** A bounded bitmap counts repeat physical acquisitions without retaining URLs
    * or a list of file offsets. Old pending reads retain their requesting epoch. */
   beginEpoch(id:number){
     for(const run of this.forwardRuns)this.cancelForward(run);
     this.forward=undefined;this.forwardSignal=undefined;this.forwardDemand=0;
+    this.demands.length=0;
     this.readEpoch={id,seen:undefined,unique:0,repeated:0};
     this.metrics.sourceEpoch=id;this.metrics.uniquePageRequests=0;this.metrics.repeatedPageRequests=0;
   }
@@ -61,13 +65,14 @@ export class RangeReader implements ByteReader {
     signal.throwIfAborted();this.lifetime.signal.throwIfAborted();
     if(this.total===null||!Number.isSafeInteger(offset)||offset<0||offset>=this.total)return;
     if(!this.forwardSignal){this.forwardSignal=signal;this.forwardAnchor=offset;this.forwardDemand=offset;}
-    this.maintainForward(offset,offset);
+    this.forwardAnchor=Math.min(this.forwardAnchor,offset);
+    this.maintainForward(offset,offset,true);
   }
-  private maintainForward(offset:number,end:number){
+  private maintainForward(offset:number,end:number,foreground=false){
     const signal=this.forwardSignal,previous=this.forward;
     if(!signal||signal.aborted||this.total===null||offset<this.forwardAnchor)return;
     // Random indexes do not retarget the established media run.
-    if(previous&&offset>previous.end+MAX_READ)return;
+    if(!foreground&&previous&&offset>previous.end+MAX_READ)return;
     this.forwardDemand=Math.max(this.forwardDemand,end);
     for(const run of this.forwardRuns)run.demand=this.forwardDemand;
     this.wakeProgress();
@@ -77,11 +82,14 @@ export class RangeReader implements ByteReader {
     // gaps concurrently rather than paying another RTT after every island.
     while(index*PAGE<wanted){
       if(this.pages.has(index)||this.pending.has(index)){index++;continue;}
-      if(this.forwardRuns.size>=3)return;
+      if(this.forwardRuns.size>=3&&!foreground)return;
       const start=index*PAGE;
       let limit=Math.min(start+WINDOW,this.total);
       for(const at of [...this.pages.keys(),...this.pending.keys()])if(at>index&&at*PAGE<limit)limit=at*PAGE;
       this.startForward(start,limit,signal);index=Math.ceil(limit/PAGE);
+      // One explicit media hint may add a demanded run even while three
+      // background plans exist; it does not plan an unlimited future tail.
+      foreground=false;
     }
   }
   private startForward(start:number,limit:number,signal:AbortSignal){
@@ -105,6 +113,28 @@ export class RangeReader implements ByteReader {
     const error=new DOMException('Forward source epoch retired','AbortError');
     this.rejectForward(run,error);run.abort.abort(error);this.wakeProgress();
   }
+  /** A pending page is a promise, not permission for read-ahead to make a
+   * foreground decoder wait for megabytes it did not ask to consume. Transfer
+   * its unchanged promises to a tail run and cancel only the in-flight body. */
+  private prioritize(index:number){
+    for(const run of this.forwardRuns){
+      const cut=index*PAGE;
+      if(!run.slots.has(index))continue;
+      if(cut<=run.next+PAGE)return;
+      const abort=new AbortController(),tail:ForwardRun={end:run.end,next:cut,demand:this.forwardDemand,scope:run.scope,
+        abort,signal:AbortSignal.any([this.forwardSignal!,this.lifetime.signal,abort.signal]),slots:new Map()};
+      for(const [at,slot]of run.slots)if(at>=index){tail.slots.set(at,slot);run.slots.delete(at);}
+      run.end=cut;this.forward=tail;this.forwardRuns.add(tail);
+      void this.loadForward(tail).catch(error=>{this.rejectForward(tail,error);if(error instanceof RangeFailure&&!tail.signal.aborted)this.lifetime.abort(error);})
+        .finally(()=>{this.forwardRuns.delete(tail);this.wakeProgress();});
+      run.request?.abort(new RangePreempt('Foreground range split'));this.wakeProgress();return;
+    }
+  }
+  /** Bounded scalars survive teardown in the host's durable recovery record. */
+  get acquisitionState(){return {epoch:this.readEpoch.id,requests:this.metrics.requests,bytes:this.metrics.bytes,active:this.active,
+    anchor:this.forwardSignal?this.forwardAnchor:null,demand:this.forwardDemand,ahead:this.ahead,cacheBytes:this.cachedBytes,cacheLimit:this.cacheLimit,
+    runs:[...this.forwardRuns].map(run=>({next:run.next,end:run.end,demand:run.demand,pages:run.slots.size,request:!!run.request,
+      paused:run.next>=run.demand+this.ahead})),demands:this.demands.map(value=>({...value}))};}
   private wakeProgress(){for(const wake of [...this.progressWaiters])wake();}
   private changed(signal:AbortSignal,waiters=this.progressWaiters){
     signal.throwIfAborted();return new Promise<void>((resolve,reject)=>{
@@ -149,7 +179,10 @@ export class RangeReader implements ByteReader {
         length > MAX_READ || !Number.isSafeInteger(offset + length)) throw new RangeFailure('Invalid or oversized original read');
     const total = await this.size(signal);
     if (offset + length > total) throw new RangeFailure('Original read exceeds pinned source length');
+    this.demands.push({offset,length});if(this.demands.length>12)this.demands.shift();
     this.maintainForward(offset,offset+length);
+    const firstPage=Math.floor(offset/PAGE);
+    if(length&&!this.pages.has(firstPage))this.prioritize(firstPage);
     const output = new Uint8Array(length);
     // Limit fanout as well as network concurrency. A seek never queues a remux.
     for (let cursor = offset; cursor < offset + length;) {
@@ -183,6 +216,9 @@ export class RangeReader implements ByteReader {
 
   private async load(index: number,scope:ReadEpoch): Promise<Uint8Array> {
     const signal = this.lifetime.signal;
+    // Random metadata outside every planned run must also get a network slot.
+    if(this.active>=3){const background=[...this.forwardRuns].filter(run=>run.request)
+      .sort((a,b)=>(b.next-b.demand)-(a.next-a.demand))[0];background?.request?.abort(new RangePreempt('Foreground metadata'));}
     while(this.active>=3)await this.changed(signal,this.slotWaiters);
     signal.throwIfAborted(); this.active++;
     try {
@@ -199,23 +235,24 @@ export class RangeReader implements ByteReader {
   }
 
   private async loadForward(run:ForwardRun){
-    while(this.active>=3)await this.changed(run.signal,this.slotWaiters);
-    run.signal.throwIfAborted();this.active++;
-    try{
-      for(let attempt=0;run.next<run.end;attempt++){
-        run.signal.throwIfAborted();
-        try{await this.streamForward(run);return;}
-        catch(error){
-          run.signal.throwIfAborted();
-          if(error instanceof RangeFailure||attempt>=2)throw error;
-          await delay(200*2**attempt,run.signal);
-        }
-      }
-    }finally{this.active--;for(const wake of [...this.slotWaiters])wake();}
+    let attempts=0;
+    while(run.next<run.end){
+      while(run.next>=run.demand+this.ahead)await this.changed(run.signal);
+      while(this.active>=3)await this.changed(run.signal,this.slotWaiters);
+      run.signal.throwIfAborted();this.active++;
+      let failure:unknown;
+      try{await this.streamForward(run);return;}catch(error){failure=error;}
+      finally{this.active--;for(const wake of [...this.slotWaiters])wake();}
+      run.signal.throwIfAborted();
+      if(failure instanceof RangePreempt)continue;
+      if(failure instanceof RangeFailure||attempts>=2)throw failure;
+      await delay(200*2**attempts++,run.signal);
+    }
   }
 
   private async streamForward(run:ForwardRun){
     const requestAbort=new AbortController(),signal=AbortSignal.any([run.signal,requestAbort.signal]);
+    run.request=requestAbort;
     let timer:ReturnType<typeof setTimeout>|undefined;
     const arm=()=>{timer=setTimeout(()=>requestAbort.abort(new TypeError('Original forward range stalled')),10000);};
     const disarm=()=>{if(timer)clearTimeout(timer);timer=undefined;};
@@ -226,18 +263,19 @@ export class RangeReader implements ByteReader {
       let page=new Uint8Array(Math.min(PAGE,run.end-run.next)),filled=0,lastPublication=at;
       const cacheHit=Number(response.headers.get('Age')??0)>0||/hit/i.test(response.headers.get('X-Cache')??'');
       for(;;){
-        run.signal.throwIfAborted();
+        signal.throwIfAborted();
         // Explicit backpressure: intentionally paused network reads have no
         // inactivity timer. A seek/epoch still cancels the fetch immediately.
-        while(run.next<run.end&&run.next>=run.demand+this.ahead)await this.changed(run.signal);
+        while(run.next<run.end&&run.next>=run.demand+this.ahead)await this.changed(signal);
         arm();let chunk:ReadableStreamReadResult<Uint8Array>;
         try{chunk=await body.read();}finally{disarm();}
         if(chunk.done){if(run.next!==run.end||filled)throw new TypeError('Original forward range was truncated');complete=true;break;}
+        this.metrics.receivedBytes+=chunk.value.length;
         let cursor=0;
         while(cursor<chunk.value.length){
-          run.signal.throwIfAborted();
+          signal.throwIfAborted();
           if(run.next>=run.end)throw new RangeFailure('Original forward body exceeds declared length');
-          while(run.next>=run.demand+this.ahead)await this.changed(run.signal);
+          while(run.next>=run.demand+this.ahead)await this.changed(signal);
           const count=Math.min(page.length-filled,chunk.value.length-cursor);
           page.set(chunk.value.subarray(cursor,cursor+count),filled);cursor+=count;filled+=count;
           if(filled===page.length){
@@ -251,7 +289,9 @@ export class RangeReader implements ByteReader {
           }
         }
       }
-    }finally{
+    }catch(error){if(requestAbort.signal.reason instanceof RangePreempt)throw requestAbort.signal.reason;throw error;}
+    finally{
+      if(run.request===requestAbort)run.request=undefined;
       disarm();if(body){if(!complete){requestAbort.abort();void body.cancel().catch(()=>{});}body.releaseLock();}
     }
   }
@@ -289,6 +329,7 @@ export class RangeReader implements ByteReader {
       try {
         for (;;) {
           const {done,value} = await body.read(); if (done) break;
+          this.metrics.receivedBytes+=value.length;
           if (written+value.length > expected) throw new RangeFailure('Original range body exceeds declared length');
           bytes.set(value,written); written += value.length;
         }
