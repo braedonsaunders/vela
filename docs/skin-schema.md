@@ -14,7 +14,9 @@ fidelity proof, cinematic as a document: `protocol/v0/fixtures/skins/cinematic.t
 | --- | --- |
 | Shapes are finite and nonrecursive (`contract-grammar.md:3020`); a component cannot use itself (`syntax-inline-depth`) | The renderer is 12 generated levels `L1..L12` over shapes `N1..N12`. A document nests at most 12 boxes deep; the resolver refuses deeper ones. |
 | A component is inlined at every call site | Each level calls the next from exactly one place: one generic container; only leaves (text, image, icon, widgets) branch. A slot draws its tree from one call site. |
-| `:hover`/`:focus` rows are literals or token names (`lower-state-literal`) | Hover, focus and group hover are node overlays the renderer applies from its own hover/focus state, not CSS state rows. |
+| `:hover`/`:focus` rows are literals or token names (`lower-state-literal`) | Hover, press and group hover are CSS the resolver writes (`statesCss`, injected by vela-theme) on the nodes' `data-vs`/`data-vg`/`data-vf`: a pointer over the page runs no script. Focus looks (keyboard focus, a group's focus) are the renderer's own state, since parent-from-child CSS (`:has`) is missing on the TV browsers. |
+| An action receives every prop and inject of its component as hidden arguments, type-checked deeply on each call | Renderer components declare no actions that read their props: events go to the app's own actions (`client/skins/doc/members.contract`) with a few strings, so an event never re-checks a subtree or the page's models. |
+| Every element with `color-scheme` is a colour boundary that Exact's modes pass walks after every commit | `color-scheme` is set only on a tree's root box (the shell's or a route's); the resolver refuses it elsewhere. |
 | Computed `border`/`flex` must be longhands (`lower-css-shorthand`, `lower-attr-type`) | Write the shorthands; the resolver splits them. |
 | Number rows (`opacity`, `order`, `flex-grow`, `flex-shrink`, `font-weight`, `line-clamp`, `scale`) take numbers | Write them as strings; the resolver converts and resolves `font-weight` inheritance down the tree. |
 | A bound `position` on a clipping box is `relative`, `absolute` or `sticky` | `fixed` and `static` are not offered; anything else is `relative`. |
@@ -159,7 +161,8 @@ Renderer 3 is the live home above; a document using anything here names `rendere
 - Press: `press: { action, arg?, focus?: "<id>" }`; `disabled: Condition[]` with a
   `disabled` style overlay; `a11y: { expanded?, selected?, current?, pressed?: Condition[],
   haspopup?, controls?, title?: Template, role? }` on the press button.
-- `escape: "<flag>"` on a node: Escape clears the flag and returns focus to `returnFocus`.
+- `escape: "<flag>"` on a node: Escape (anywhere on the page) clears the innermost such node's open
+  flags and returns focus to `returnFocus` (a literal id).
 - Flags named `keep-…` survive navigation actions; shell `reset` clears all others.
   Shell `only <flag>` opens that flag alone (closing the other non-keep flags); pressed again it closes.
 - Home's `nav.destinations` (and `dest.*`, `env.libraryCount`, `env.hasLiveLibrary`) list the libraries

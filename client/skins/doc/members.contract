@@ -1,0 +1,229 @@
+// The doc renderer's events, as the app's own actions. A renderer component declares no
+// action that reads its props: Exact hands every prop and inject of a component to each of
+// its actions as hidden arguments and checks their types on every call, so an action in a
+// level re-checked its node's subtree and the whole Env per event, and the route view's
+// re-checked every model it draws. Here an event costs its own few strings.
+use part, pagerUpdate, toggled from "./slots.contract"
+use heroActFor, num from "../../renderer/levels.contract"
+
+members Client
+  // The shell's open flags (its menus), the route views' (each "route:<route>:<entry>|flag",
+  // so a stack entry keeps its own), the row pagers' edges and the skin picker.
+  state docShellFlags: string[] = []
+  state docFlags: string[] = []
+  state docPagers: string[] = []
+  state docPickerOpen = false
+
+  // A press, a search field's focus, a select's choice: by the scope that drew the node.
+  action docAct(scope: string, name: string, arg: string, to: string)
+    if scope == "shell"
+      docShellAct(name, arg)
+    else
+      docRouteAct(scope, name, arg)
+    if to != ""
+      focus(to)
+  // A select's choice: its action, with {value} in its argument template filled.
+  action docPick(scope: string, name: string, template: string, v: string)
+    docAct(scope, name, template.replaceAll("{value}", v), "")
+  // A library page's year field filters by its year (empty: any year).
+  action docYear(v: string)
+    setLibraryFilter("year", v.trim())
+
+  action docShellAct(name: string, arg: string)
+    if name == "home"
+      docShellFlags = docShellFlags.filter(f => f.startsWith("keep-"))
+      goHome()
+    if name == "search"
+      docShellFlags = docShellFlags.filter(f => f.startsWith("keep-"))
+      openSearch()
+    if name == "live"
+      docShellFlags = docShellFlags.filter(f => f.startsWith("keep-"))
+      openLive()
+    // A live library is the Live TV section, not a browse library: its id is no section id.
+    if name == "library"
+      docShellFlags = docShellFlags.filter(f => f.startsWith("keep-"))
+      if (current(libraries) ? libraries : []).filter(l => l.id == arg and l.kind == "live").length > 0
+        openLive()
+      else
+        openLibrary(arg)
+    if name == "toggle"
+      docShellFlags = toggled(docShellFlags, arg)
+    // The search input's focus is the flag search-focused (env.searchFocused).
+    if name == "searchFocus"
+      docShellFlags = (docShellFlags.includes("search-focused") ? docShellFlags : docShellFlags.concat(["search-focused"]))
+    if name == "searchBlur"
+      docShellFlags = docShellFlags.filter(f => f != "search-focused")
+    if name == "clearSearch"
+      edit("")
+    if name == "focusSearch"
+      focus("vela-search")
+    // One open panel at a time: this flag alone (keep- flags stay).
+    if name == "only"
+      docShellFlags = (docShellFlags.includes(arg) ? docShellFlags.filter(f => f != arg) : docShellFlags.filter(f => f.startsWith("keep-")).concat([arg]))
+    if name == "reset"
+      docShellFlags = docShellFlags.filter(f => f.startsWith("keep-"))
+    if name == "open"
+      docShellFlags = (docShellFlags.includes(arg) ? docShellFlags : docShellFlags.concat([arg]))
+    if name == "close"
+      docShellFlags = docShellFlags.filter(x => not arg.split(" ").includes(x))
+    if name == "openPicker"
+      docShellFlags = docShellFlags.filter(f => f.startsWith("keep-"))
+      docPickerOpen = true
+    if name == "signOut"
+      docShellFlags = docShellFlags.filter(f => f.startsWith("keep-"))
+      logout()
+
+  action docRouteAct(scope: string, name: string, arg: string)
+    // The route view's own flags, and the rest of the list untouched.
+    let mine = docFlags.filter(f => part(f, 0) == scope).map(f => part(f, 1))
+    let others = docFlags.filter(f => part(f, 0) != scope)
+    if name == "select"
+      selectTitle(part(arg, 0), part(arg, 1), part(arg, 2))
+    // Play: a hero's action on home, the title's play on a title page.
+    if name == "play"
+      if scope.startsWith("route:home:")
+        if homeKnown
+          playHero(heroActFor(homeSurface, arg).map(a => a.targetId).join(""), num(heroActFor(homeSurface, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(homeSurface, arg).map(a => a.hasPosition).includes(true))
+      else
+        play(arg)
+    if name == "playExtra"
+      playExtra(arg)
+    // Back (the foundation's close; a call by that name is the host's close command).
+    if name == "back"
+      nav = back(nav)
+    // Home (a library page replaces home's entry, so its way back is home, not back).
+    if name == "home"
+      goHome()
+    if name == "retry"
+      retryFailed()
+    if name == "watch" and arg != ""
+      watchChannel(arg)
+    if name == "preview" and arg != ""
+      previewChannel(arg)
+    if name == "zap"
+      zapTile(num(arg) < 0 ? -1 : 1)
+    if name == "tuneIn"
+      tileTuneIn()
+    if name == "unmute"
+      tileUnmute()
+    if name == "guide" or name == "live"
+      openLive()
+    // A live library is the Live TV section (as in the shell).
+    if name == "library"
+      if (current(libraries) ? libraries : []).filter(l => l.id == arg and l.kind == "live").length > 0
+        openLive()
+      else
+        openLibrary(arg)
+    // A library page (its entry is the library's id): sort by an option (keeping its direction
+    // when the option allows it), flip, filter name|value.
+    if name == "librarySort"
+      match first([libraryModel].filter(m => m.id == part(scope, 2)).concat(librarySnapshots.filter(m => m.id == part(scope, 2))))
+        case some(l)
+          match first(l.sorts.filter(o => o.id == arg))
+            case some(o)
+              setLibrarySort(arg, (o.directions.includes(l.direction) ? l.direction : match first(o.directions) { case some(x) => x, case none => "" }))
+            case none
+              setLibrarySort(arg, "")
+        case none
+          docFlags = docFlags
+    if name == "librarySortFlip"
+      match first([libraryModel].filter(m => m.id == part(scope, 2)).concat(librarySnapshots.filter(m => m.id == part(scope, 2))))
+        case some(l)
+          setLibrarySort(l.sort, (l.direction == "asc" ? "desc" : "asc"))
+        case none
+          docFlags = docFlags
+    if name == "libraryFilter"
+      setLibraryFilter(part(arg, 0), part(arg, 1))
+    if name == "libraryMore"
+      moreLibrary()
+    // Signed out: sign in with the fields, start or cancel a quick-connect code.
+    if name == "signIn"
+      submitSignIn()
+    if name == "startQuick"
+      startCode()
+    if name == "cancelQuick"
+      cancelCode()
+    if name == "goSecure"
+      goSecure()
+    if name == "collectionMore"
+      moreCollection()
+    if name == "pickHero"
+      pickHero(match parseNumber(arg) { case some(x) => x, case none => 0 })
+    if name == "pageNext" or name == "pagePrev"
+      match first(docPagers.filter(x => part(x, 0) == arg))
+        case some(x)
+          scrollBy(`pager-${arg}`, (name == "pageNext" ? 1 : -1) * max(200, shellViewport.width - 2 * num(part(x, 3)) - num(part(x, 4))), 0)
+        case none
+          docFlags = docFlags
+    if name == "toggle"
+      docFlags = others.concat(toggled(mine, arg).map(f => `${scope}|${f}`))
+    if name == "open"
+      docFlags = others.concat((mine.includes(arg) ? mine : mine.concat([arg])).map(f => `${scope}|${f}`))
+    if name == "close"
+      docFlags = others.concat(mine.filter(x => not arg.split(" ").includes(x)).map(f => `${scope}|${f}`))
+    if name == "only"
+      docFlags = others.concat((mine.includes(arg) ? mine.filter(f => f != arg) : mine.filter(f => f.startsWith("keep-")).concat([arg])).map(f => `${scope}|${f}`))
+    if name == "reset"
+      docFlags = others.concat(mine.filter(f => f.startsWith("keep-")).map(f => `${scope}|${f}`))
+    // The search input's focus is the flag search-focused (env.searchFocused).
+    if name == "searchFocus"
+      docFlags = others.concat((mine.includes("search-focused") ? mine : mine.concat(["search-focused"])).map(f => `${scope}|${f}`))
+    if name == "searchBlur"
+      docFlags = others.concat(mine.filter(f => f != "search-focused").map(f => `${scope}|${f}`))
+    if name == "clearSearch"
+      edit("")
+    if name == "focusSearch"
+      focus("vela-search")
+
+  // A row pager's edge marker entering or leaving its scroller: rowId|start|end|inset|peek.
+  // Only a change reaches state: an edge that reports what is already known redraws nothing.
+  action docEdge(rowId: string, which: string, sym: string, entry: IntersectionObserverEntry)
+    let arg = `${rowId}|${which}|${entry.isIntersecting ? 1 : 0}|${sym}`
+    if not docPagers.includes(pagerUpdate(docPagers, arg))
+      docPagers = docPagers.filter(x => part(x, 0) != rowId).concat([pagerUpdate(docPagers, arg)])
+
+  // A card's impression: home's observer on home (as the foundation's observe, whose name a call
+  // would take for the host's observe command), the title page's elsewhere; the shell's none.
+  action docObserve(scope: string, token: string, entry: IntersectionObserverEntry)
+    if scope.startsWith("route:home:")
+      if entry.isIntersecting and entry.intersectionRatio > 0 and token != "" and not observed.includes(token) and (top(nav).name == "home" or top(nav).name == "collection") and page.visibilityState == "visible"
+        observed = observed.concat([token])
+        send receipt = interaction(token, "visible", time.epochAtZero + performanceNow())
+    else if scope != "shell"
+      observeDetail(token, entry)
+  // A library page's or a collection's sentinel asks for its next page once it is in view.
+  action docMoreLibrary(entry: IntersectionObserverEntry)
+    if entry.isIntersecting
+      moreLibrary()
+  action docMoreCollection(entry: IntersectionObserverEntry)
+    if entry.isIntersecting
+      moreCollection()
+  // A sign-in field: Enter signs in.
+  action docFieldKey(k: string)
+    if k == "Enter"
+      preventDefault()
+      submitSignIn()
+  // The search input: Escape clears a query.
+  action docSearchKey(k: string)
+    if k == "Escape" and query != ""
+      preventDefault()
+      edit("")
+  // Escape anywhere closes the innermost open menu the document lets Escape close
+  // (a node's escape flags; the list is innermost first) and returns focus where it says (returnFocus).
+  action docKey(k: string)
+    if k == "Escape"
+      match first(activeDoc.escapes.filter(x => x.flags.split(" ").filter(f => docShellFlags.includes(f) or docFlags.map(g => part(g, 1)).includes(f)).length > 0))
+        case some(x)
+          preventDefault()
+          docShellFlags = docShellFlags.filter(f => not x.flags.split(" ").includes(f))
+          docFlags = docFlags.filter(g => not x.flags.split(" ").includes(part(g, 1)))
+          if x.to != ""
+            focus(x.to)
+        case none
+          docPickerOpen = docPickerOpen
+
+  action docPickSkin(value: string)
+    docPickerOpen = false
+    chooseSkin(value)
+  action docDismissPicker
+    docPickerOpen = false
