@@ -107,6 +107,7 @@ const originalPlayback = completeAudio && installedVideo.includes('hevc') ? {
 } : undefined;
 const completeSubtitles=(await Promise.all(Object.entries(subtitleManifest.files).map(([file,fact])=>verified('subtitles',file,fact.sha256)))).every(Boolean);
 const subtitleAssets=completeSubtitles?{assetKey:subtitleManifest.assetKey,directory:'libraries/subtitles/'}:undefined;
+const core=Bun.argv.includes('--core')?{version:1,vodHls:true}:undefined;
 const originalSubtitleFormats=completeSubtitles&&Bun.argv.includes('--core')?['srt','webvtt','ass','ssa','pgs','tx3g']:undefined;
-await Bun.write(join(destination, 'assets.json'), JSON.stringify({ version:1, upstreamRevision:revision, assetKey, libraries:'./libraries/', sources:'./sources/', originalPlayback,subtitleAssets,originalSubtitleFormats },null,2)+'\n');
+await Bun.write(join(destination, 'assets.json'), JSON.stringify({ version:1, upstreamRevision:revision, assetKey, libraries:'./libraries/', sources:'./sources/', originalPlayback,subtitleAssets,originalSubtitleFormats,core },null,2)+'\n');
 console.log(`Universal runtime assets assembled at ${destination}, key ${assetKey}`);

@@ -13,6 +13,7 @@ export interface UniversalReadout {
 }
 export interface OriginalBackend {
   readonly retainsSource?: boolean;
+  readonly supportsLocalAudioSwitch?:boolean;
   readonly supportsSubtitles?: boolean;
   readonly byteReader?: ByteReader;
   readonly sourceContainer?: string;
@@ -57,8 +58,12 @@ interface RuntimeManifest {
   version:number;assetKey:string;upstreamRevision:string;
   originalPlayback?:ClientCapabilities['originalPlayback'];
   subtitleAssets?:{assetKey:string;directory:string};originalSubtitleFormats?:unknown;
+  core?:{version:1;vodHls:boolean};
 }
 const manifests=new Map<string,Promise<RuntimeManifest>>();
+const resolvedManifests=new Map<string,RuntimeManifest>();
+/** Only an explicitly prepared migration payload enables this route. */
+export function hasCoreHls(){return canAttemptOriginal()&&resolvedManifests.get(capabilityIdentity())?.core?.version===1&&resolvedManifests.get(capabilityIdentity())?.core?.vodHls===true;}
 /** Identity changes invalidate the page-local capability snapshot. */
 export function capabilityIdentity(){const {base,assetKey}=assetLocation();return `${base.href}#${assetKey??''}`;}
 function runtimeManifest(signal:AbortSignal):Promise<RuntimeManifest>{
@@ -72,6 +77,7 @@ function runtimeManifest(signal:AbortSignal):Promise<RuntimeManifest>{
       const manifest=await response.json() as RuntimeManifest;
       if(manifest.version!==1||assetKey!==undefined&&manifest.assetKey!==assetKey||!/^[a-f0-9]{16}$/.test(manifest.assetKey)||manifest.upstreamRevision!=='a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2')throw new Error('Original runtime asset identity mismatch');
       if(manifest.subtitleAssets&&(!/^[a-f0-9]{16}$/.test(manifest.subtitleAssets.assetKey)||manifest.subtitleAssets.directory!=='libraries/subtitles/'))throw new Error('Invalid subtitle asset identity');
+      resolvedManifests.set(key,manifest);if(resolvedManifests.size>2)resolvedManifests.delete(resolvedManifests.keys().next().value!);
       playbackMark('assets:ready');return Object.freeze(manifest);
     })();
     pending=load.catch(error=>{if(manifests.get(key)===pending)manifests.delete(key);throw error;});

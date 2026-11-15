@@ -89,6 +89,10 @@ async function loadOriginalRuntime(options) {
   return new module.UniversalRuntime({ ...options, assets });
 }
 var manifests = new Map;
+var resolvedManifests = new Map;
+function hasCoreHls() {
+  return canAttemptOriginal() && resolvedManifests.get(capabilityIdentity())?.core?.version === 1 && resolvedManifests.get(capabilityIdentity())?.core?.vodHls === true;
+}
 function capabilityIdentity() {
   const { base, assetKey } = assetLocation();
   return `${base.href}#${assetKey ?? ""}`;
@@ -107,6 +111,9 @@ function runtimeManifest(signal) {
         throw new Error("Original runtime asset identity mismatch");
       if (manifest.subtitleAssets && (!/^[a-f0-9]{16}$/.test(manifest.subtitleAssets.assetKey) || manifest.subtitleAssets.directory !== "libraries/subtitles/"))
         throw new Error("Invalid subtitle asset identity");
+      resolvedManifests.set(key, manifest);
+      if (resolvedManifests.size > 2)
+        resolvedManifests.delete(resolvedManifests.keys().next().value);
       playbackMark("assets:ready");
       return Object.freeze(manifest);
     })();
@@ -1731,7 +1738,7 @@ class PlaybackEngine {
   }
   snapshot() {
     const ranges = this.video.buffered, quality = this.video.getVideoPlaybackQuality?.();
-    const audioTrackIds = this.original ? this.original.audioTrackIds : this.session?.serverControlled ? this.session.audioTracks.map((t) => t.id) : this.backend === "mse" ? this.pipeline?.audioTracks ?? [] : this.session?.audioTracks.filter((t) => !!this.nativeAudio(t.id)).map((t) => t.id) ?? [];
+    const audioTrackIds = this.original && this.original.supportsLocalAudioSwitch !== false ? this.original.audioTrackIds : this.session?.serverControlled ? this.session.audioTracks.map((t) => t.id) : this.backend === "mse" ? this.pipeline?.audioTracks ?? [] : this.session?.audioTracks.filter((t) => !!this.nativeAudio(t.id)).map((t) => t.id) ?? [];
     const subtitleTracks = this.overlay?.tracks.map((track) => ({
       id: track.id,
       label: track.label,
@@ -1758,7 +1765,7 @@ class PlaybackEngine {
       qualityIds: this.pipeline?.qualityIds ?? [],
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 },
       lockedQuality: this.manualQuality,
-      audioTracks: this.original?.audioTracks ?? this.session?.audioTracks ?? [],
+      audioTracks: this.original?.supportsLocalAudioSwitch !== false ? this.original?.audioTracks ?? this.session?.audioTracks ?? [] : this.session?.audioTracks ?? [],
       subtitleTracks,
       renditions: this.source?.renditions?.map(({ url, ...rendition }) => rendition) ?? [],
       speed: this.speed,
@@ -1847,7 +1854,7 @@ class PlaybackEngine {
       return false;
     if (source.delivery === "file")
       return source.original && canAttemptOriginal() || !!this.video.canPlayType(source.mime);
-    return !!this.video.canPlayType("application/vnd.apple.mpegurl") || !!source.renditions?.some((r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass().isTypeSupported(r.mime)));
+    return !this.session?.live && hasCoreHls() || !!this.video.canPlayType("application/vnd.apple.mpegurl") || !!source.renditions?.some((r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass().isTypeSupported(r.mime)));
   }
   useNativeHls(source) {
     const native = !!this.video.canPlayType("application/vnd.apple.mpegurl");
@@ -1921,7 +1928,7 @@ class PlaybackEngine {
   }
   canRetainOriginal(session, source) {
     const previous = this.session, current = this.source, original = this.original;
-    if (!previous || !current || !original?.retainsSource || !this.originalJob || this.originalJob.signal.aborted || session.serverState === "ended" || session.id !== previous.id || session.mediaId !== previous.mediaId || session.sourceGeneration !== this.controller.source || session.seekGeneration === this.controller.seek || !source.original || source.id !== current.id || source.url !== current.url || source.edition !== current.edition || source.timeline !== current.timeline || source.sourceRevision !== current.sourceRevision || source.timelineOriginSeconds !== current.timelineOriginSeconds || (session.subtitleTrackId ?? null) !== this.subtitle)
+    if (!previous || !current || !original?.retainsSource || !this.originalJob || this.originalJob.signal.aborted || session.serverState === "ended" || session.id !== previous.id || session.mediaId !== previous.mediaId || session.sourceGeneration !== this.controller.source || session.seekGeneration === this.controller.seek || !source.original && !(source.delivery === "hls" && hasCoreHls()) || source.delivery !== current.delivery || source.id !== current.id || source.url !== current.url || source.edition !== current.edition || source.timeline !== current.timeline || source.sourceRevision !== current.sourceRevision || source.timelineOriginSeconds !== current.timelineOriginSeconds || (session.subtitleTrackId ?? null) !== this.subtitle)
       return false;
     const identities = (tracks) => JSON.stringify(tracks.map((track) => [track.id, track.streamIndex]));
     if (identities(session.audioTracks) !== identities(previous.audioTracks))
@@ -2112,7 +2119,7 @@ class PlaybackEngine {
     this.failure = null;
     this.lastObservation = -Infinity;
     this.publish();
-    if (source.original && canAttemptOriginal()) {
+    if (source.original && canAttemptOriginal() || source.delivery === "hls" && !this.session?.live && hasCoreHls()) {
       this.backend = "webgpu";
       this.startupDeadlineMs = 8000;
       this.originalStartTimer = setTimeout(() => {
@@ -2133,7 +2140,7 @@ class PlaybackEngine {
         });
       });
       cancelled(token.signal);
-      if (source.original && !this.session?.live && canAttemptOriginal()) {
+      if (!this.session?.live && (source.original && canAttemptOriginal() || source.delivery === "hls" && hasCoreHls())) {
         this.backend = "webgpu";
         this.startupDeadlineMs = 8000;
         const parent = this.video.parentElement;
@@ -2177,7 +2184,8 @@ class PlaybackEngine {
           throw new Error("Selected subtitles require a compatible fallback; original overlay is not ready");
         const info = source.originalVideo;
         await original.open({
-          url: source.url,
+          url: source.delivery === "hls" ? source.renditions?.find((r) => r.id === (this.manualQuality ?? source.initialRenditionId))?.url ?? source.url : source.url,
+          ...source.delivery === "hls" ? { hls: { originSeconds: source.timelineOriginSeconds ?? 0 } } : {},
           container: "",
           duration: this.session?.duration ?? null,
           position,
@@ -2683,8 +2691,20 @@ class PlaybackEngine {
             this.requestSeek(command.seconds);
             break;
           }
-          this.controller.changeSeek();
-          if (this.backend === "mse" && this.source)
+          const token = this.controller.changeSeek();
+          if (this.original) {
+            const original = this.original;
+            this.originalGeneration = token;
+            this.pendingSeek = { position: command.seconds, startedAt: performance.now(), authorized: true };
+            this.publish(true);
+            if (this.overlay)
+              this.overlay.seek(command.seconds, ++this.overlayEpoch).catch(() => {});
+            await original.seek(command.seconds);
+            if (this.controller.current(token) && this.original === original) {
+              this.pendingSeek = undefined;
+              this.status = original.readout.state;
+            }
+          } else if (this.backend === "mse" && this.source)
             await this.activate(this.source, command.seconds, false, true);
           else
             this.video.currentTime = Math.max(0, command.seconds - this.nativeOrigin);
@@ -2750,9 +2770,9 @@ class PlaybackEngine {
           break;
         }
         case "audio": {
-          if (!(this.original?.audioTrackIds ?? this.session?.audioTracks.map((track) => track.id) ?? []).includes(command.trackId))
+          if (!(this.original && this.original.supportsLocalAudioSwitch !== false ? this.original.audioTrackIds : this.session?.audioTracks.map((track) => track.id) ?? []).includes(command.trackId))
             throw new Error("Unknown audio track");
-          if (this.original) {
+          if (this.original && this.original.supportsLocalAudioSwitch !== false) {
             const original = this.original;
             await original.selectAudio(command.trackId);
             if (this.original !== original)
