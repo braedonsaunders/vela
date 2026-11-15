@@ -77,6 +77,17 @@ It reads existing cache/index metadata, stores no URLs or packet bytes, and adds
 no media request. Diagnostic sources ship with the payload. Normal builds omit
 the hook; this does not widen capability advertisement or change defaults.
 Wrapper timestamps are projected through its existing container/title origin.
+Core reader metrics also expose `sourceEpoch`, `uniquePageRequests` and
+`repeatedPageRequests`. A bitmap (at most one MiB) tracks validated physical
+range acquisitions in each demux/seek epoch; old in-flight acquisitions remain
+attributed to their requesting epoch. This distinguishes repeated parser reads
+served from memory from genuine repeated HTTP page requests. Files beyond the
+bitmap's bound report unknown rather than a false zero. Retries of a truncated
+206 also count as repeats; request failures remain a separate cause.
+A generated 64-MiB range-adapter proof acquired 131 unique pages, deliberately
+re-read one evicted page and reported exactly one repeat. Cache hits added no
+acquisition, an old in-flight read did not change the new epoch's counters, and
+a three-TiB virtual source reported unknown tracking without a large allocation.
 The coverage calculation uses the complete contiguous cached component,
 including bytes before the latest packet-read cursor. A cursor already ahead
 of the playhead must not hide earlier cached coverage. Disjoint cache regions

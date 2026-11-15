@@ -160,6 +160,7 @@ export class PlaybackCore {
     this.epoch?.abort.abort();this.epoch?.decoder.dispose();this.epoch?.demux.dispose();
     source.audio.pause();
     const abort=new AbortController(),id=++this.nextEpoch;
+    if(source.kind==='file')source.reader.beginEpoch(id);
     const signal=AbortSignal.any([source.abort.signal,abort.signal]);
     if(source.kind==='file')source.subtitleClusters.reset(id);
     const demux:PacketDemux=source.kind==='file'?new FileDemux(source.reader,signal,source.subtitleClusters,()=>source.reader.bufferCache):new HlsDemux(source.segments,signal,source.originUs);
