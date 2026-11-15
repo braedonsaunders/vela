@@ -146,9 +146,11 @@ export interface SessionSnapshot { cursor: Cursor; revision: number; plan: Playb
 export type SessionEvent = { cursor: Cursor; revision: number; sessionId: ID } & (
   { type: 'snapshot'; snapshot: SessionSnapshot } | { type: 'plan'; plan: PlaybackPlan } |
   { type: 'error'; error: ProtocolError } | { type: 'ended'; reason: string });
-export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'source' | 'decoder' | 'capacity' | 'transient' | 'request' | 'conflict';
+export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'source' | 'decoder' | 'playback' | 'capacity' | 'transient' | 'request' | 'conflict';
   code: string; message: string; retry: { allowed: boolean; afterSeconds?: number; maxAttempts?: number };
-  requestId?: ID; currentGenerations?: Generations }
+  requestId?: ID; currentGenerations?: Generations;
+  /** Attempted delivery labels (not path IDs) and human-readable diagnostics. */
+  rejectedPaths?: { path: string; reasons: string[] }[] }
 export interface ErrorResponse { error: ProtocolError }
 export interface LiveGuide { id: ID; name: string }
 export interface Channel { id: ID; number: string; name: string; kind: string; artwork: ArtworkRef[]; favorite: boolean; rating?: string; group?: string; guides?: LiveGuide[] }

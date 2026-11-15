@@ -363,7 +363,9 @@ const extraCard: Node = { type: 'box', press: { action: 'playExtra', arg: '{extr
     ] },
     { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '2px', 'padding-top': '8px' }, children: [
       { type: 'text', text: '{extra.name}', style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1' } },
-      { type: 'text', when: [set('extra.ready')], text: '{s:collection}', style: { 'font-size': '13px', color: '$ink-faint' } },
+      // The extra's kind. (The compiled original fell through to "Collection" here; this is the intended label.)
+      ...([['trailer', '{s:trailer}'], ['clip', '{s:clip}'], ['featurette', '{s:featurette}'], ['other', '{s:extra}']] as const).map(([kind, text]): Node =>
+        ({ type: 'text', when: [set('extra.ready'), is('extra.kind', kind)], text, style: { 'font-size': '13px', color: '$ink-faint' } })),
       { type: 'text', when: [unset('extra.ready')], text: '{s:notAvailableYet}', style: { 'font-size': '13px', color: '$ink-faint' } },
     ] },
   ] };
@@ -465,7 +467,7 @@ export default {
     featured: 'FEATURED', featuredTitles: 'Featured titles', featuredNumber: 'Featured title {index.label} of {env.heroCount}', moreInfo: 'More info',
     episodeNumber: 'Episode {card.episodeNumberLabel}', nothingHereYet: 'Nothing here yet', noRowsYet: "Your library hasn't offered any rows yet. Titles appear here as your server adds them.",
     closeTitle: 'Close title', titleDetails: 'Title details', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', titleFailed: "This title couldn't be opened. It may no longer be available.",
-    seasons: 'Seasons', episodes: 'Episodes', extras: 'Extras', cast: 'Cast', media: 'Media', play: 'Play', collection: 'Collection', notAvailableYet: 'Not available yet',
+    seasons: 'Seasons', episodes: 'Episodes', extras: 'Extras', cast: 'Cast', media: 'Media', play: 'Play', trailer: 'Trailer', clip: 'Clip', featurette: 'Featurette', extra: 'Extra', notAvailableYet: 'Not available yet',
   } },
   motion: {
     arrive: rise,
