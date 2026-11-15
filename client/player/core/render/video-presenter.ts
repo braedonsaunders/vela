@@ -1,3 +1,4 @@
+import {playbackMark} from '../../timing';
 import Presenter from '../../../../vendor/webgpu-player/src/presentation/WebGPUPresenter';
 import { createSDRColorMetadata,createPQColorMetadata,createHLGColorMetadata, type ColorPrimaries, type YUVMatrix } from '../../../../vendor/webgpu-player/src/color/ColorMetadata';
 import { createDefaultRenderSettings,createHDRToSDRRenderSettings } from '../../../../vendor/webgpu-player/src/presentation/RenderSettings';
@@ -43,10 +44,12 @@ export class CoreVideoPresenter implements CorePresenter,VideoPresentation {
     await abortable(this.presenter.prepareDecodedVideo({chromaFormat:null,frameWidth:track.width,frameHeight:track.height},epoch),signal);
   }
   present(frame:CoreVideoFrame,positionUs:number):boolean{
-    if(frame.kind==='gpu')return this.presenter.presentDecodedFrame(frame.frame,frame.epoch,undefined,secondsToMicroseconds(positionUs/1e6));
-    return this.presenter.presentDecodedFrame({outputMode:'video-frame',frame:frame.frame,
-      mediaTimeMicroseconds:secondsToMicroseconds(frame.timestampUs/1e6),durationMicroseconds:secondsToMicroseconds(frame.durationUs/1e6)},
-      frame.epoch,undefined,secondsToMicroseconds(positionUs/1e6));
+    const drawn=frame.kind==='gpu'?this.presenter.presentDecodedFrame(frame.frame,frame.epoch,undefined,secondsToMicroseconds(positionUs/1e6)):
+      this.presenter.presentDecodedFrame({outputMode:'video-frame',frame:frame.frame,
+        mediaTimeMicroseconds:secondsToMicroseconds(frame.timestampUs/1e6),durationMicroseconds:secondsToMicroseconds(frame.durationUs/1e6)},
+        frame.epoch,undefined,secondsToMicroseconds(positionUs/1e6));
+    if(drawn)playbackMark('first-frame','webgpu');
+    return drawn;
   }
   dispose(){this.presenter.destroy();}
 }
