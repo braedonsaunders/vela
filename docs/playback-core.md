@@ -286,3 +286,45 @@ The dedicated browser and fixture server were closed; no lab/provider requests
 were made. Build/type checks passed. This establishes the local components and
 first-edge motion, not long-run latency tightening, metadata-epoch rotation,
 PGS burn-in or cross-path continuity; those remain in the combined real-app run.
+
+### Lab.26: source recovery and subtitle conversion gate
+
+Actual cinematic app candidate `0.1.37-core-f071d36`, runtime
+`8758a83c20733c08`, played the pinned Inception jennaortegaUHD release
+`525f3640da729300e2e6562e155516ff23c29212` directly. Ether independently
+confirmed the release and no FFmpeg, host-cap waits, cancelled/failed ranges,
+slow responses or prefetch failures during original playback.
+
+| Measurement | Result |
+| --- | --- |
+| Play to first frame | 365.2 ms |
+| Plan received | 124.5 ms after Play |
+| Post-plan first frame | 240.7 ms |
+| Sustained sample | 45.6 seconds of media, no buffering |
+| Decoded / presented / dropped | 1,099 / 1,093 / 1 |
+| Audio worklet underruns | 0 |
+| Last / maximum sampled presentation lag | 1.5 / 26.6 ms |
+
+The lag measures scheduling against the audio clock, not human lip-sync or
+physical speaker mapping. This short source-recovery sample improves on the
+lab.25 sample (26.7 seconds of media in 30 seconds, five drops and two underruns).
+
+English PGS selection did **not** establish caption pixels. Embedded preparation
+requested the bounded burn-in fallback; the lab's Homebrew FFmpeg then failed
+HDR-to-SDR conversion because it lacked the production bundle's tone-map filters.
+The init returned HTTP 500 and subsequent source recovery failed. No 720p, seek
+or PGS pass is claimed for this run. UI Stop returned 200/ended, sign-out revoke
+returned 200/accepted, and the dedicated Chrome closed. Ether independently
+confirmed zero sessions and encoders, removed the pin, and scheduled its
+production-bundled Jellyfin FFmpeg for the next run. Production remains on the
+qualified wrapper.
+
+The transition also exposed an HLS validation precision hole: an interpolated
+seconds target could be 0.2 microseconds below its independently rounded origin.
+`openHls` now rounds both to the same microsecond grid before comparing them;
+invalid/non-finite or genuinely earlier targets still fail. A direct method
+check accepts 83,123,456.8 us against origin 83,123,457 us and still rejects a
+one-second earlier target. Subtitle preparation failure messages now survive
+replacement of the overlay in a bounded, URL-redacted snapshot diagnostics list,
+so a burn-in fallback cannot erase its initial cause. Scoped core/native-host
+TypeScript compilation passed after these changes.
