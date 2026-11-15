@@ -231,6 +231,10 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
 - **searchInput** takes its node's padding (the input is the padded box, so the ring hugs it).
 - **traits**: `{ barMask?: bool, panSections?: bool }`: home fades under a floating bar; home,
   libraries and Live TV pan sideways between sections (unset: the doc engine's).
+- **status: true** (document): its pages draw their own loading and failure states. Home is
+  then drawn while it loads (`env.load` = `loading`, no home models) or fails (`failed`, with
+  `env.canRetry` and the `retry` action); a title page always gets its states (`env.load`).
+  Without it, the foundation's status screen shows while home loads or fails.
 - **detail.frame**: a framed title page's surround, drawn by the route frame over home:
   `{ scrim?: colour (media.overlay), blur?: 'blur(18px) saturate(1.1)', flat?: true }`.
 
