@@ -1639,5 +1639,41 @@ Its seek spent only 1.1 ms in metadata and 10.1 ms in configure; the remaining
 
 Screenshots are `client/.exact/lab-core-*.png`; content-free numeric drive records
 are `client/.exact/core-lab18-results.json`. No original source bytes, credentials,
-grants or private request headers were captured. The corrected priming build and
-further lab qualification are paused for the owner-facing 0.1.33 build priority.
+grants or private request headers were captured. The local generated wrapped-AAC fixture subsequently played through the core
+(635 ms first frame, 482 ms authorized seek) and reported the exact correction.
+That drive exposed four drops from a separate idle-warmup/active-playback race;
+its guard and performance work remain separate qualification gates. The 0.1.33
+release hold is now lifted; no production core switch is claimed.
+
+### Idle GPU reuse and bounded preroll candidate
+
+Core candidate `39a841e9b754f1e0` moves HEVC shader/colour-route compilation to
+idle after first paint or title intent. One idle GPU device/package cache is
+retained for two minutes; an active playback lease prevents a competing warmup
+from creating another device. If Play claims a warming device, remaining warm
+stages yield instead of competing with playback. Media, audio and byte caches
+are not retained across sessions. The qualified wrapper payload does no core
+warmup. Seeks keep the same source/reader and device; ordered encoded read-ahead
+is bounded by 64 packets, 12 MiB and six seconds plus one in-flight packet.
+
+Native HEVC HDR is admitted only through the library's validated external-HDR
+route. Decoder configuration and in-band SPS colour are neutralized before the
+browser decode, preventing double colour conversion; original PQ/HLG facts
+still drive Vela's SDR tone mapper. A route/frame-contract mismatch falls back
+to the package decoder. This is base-layer tone mapping, not DV RPU rendering.
+
+One local native-view drive per fixture, generated media and real same-origin
+assets, Chrome on this Mac:
+
+| Fixture | First frame | Authorized seek | Dropped | Outcome |
+| --- | --- | --- | --- | --- |
+| Old muxed H.264/AAC HLS with raw unsigned `tfdt = 2^64 - 1024` | 347 ms | 70 ms at 6 s | 0 | Playing, exact `-1024/48000` correction recorded |
+| HEVC Main10 PQ / E-AC-3 5.1, 640×360 | 47 ms after idle warmup | 86 ms at 4 s | 0 | Native hardware route, SDR tone-map picture, true EOF at 7.995 s |
+
+The HDR idle warmup took 551 ms before Play. Both seeks retained the runtime
+and reader. The HLS maximum observed frame age was 9.12 ms; no stale/drop events
+were recorded. Audio preroll preserves negative AAC priming at the start and
+reads up to 100 ms before a seek target for decoder/output trimming. These small
+fixtures establish mechanism and cleanup, **not 4K lab parity or physical A/V
+lipsync**. The earlier four-drop warmup race did not recur. Dedicated Chrome and
+the owned local fixture server were closed after the drive.

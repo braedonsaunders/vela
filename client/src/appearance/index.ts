@@ -2,7 +2,8 @@
 // force flag and each installed runtime skin pack, validated here so nothing a pack
 // carries reaches the page except colours, lengths and same-origin asset URLs.
 import type { StreamEvent } from '../../app.contract.d.ts';
-import type { Appearance, PackFont, ServerEvent, SkinPack } from '../../wire/v0/types';
+import type { Appearance, PackFont, ServerEvent, SkinDocumentRef, SkinPack } from '../../wire/v0/types';
+import { RENDERER_VERSION } from '../skin/vocabulary';
 
 /** Compiled engines a pack may style. A pack for any other engine is not offered. */
 const ENGINES = ['cinematic'];
@@ -42,6 +43,14 @@ function font(v: PackFont | undefined, origin: string) {
   return files.length ? { family: v.family, files, sizeAdjust } : undefined;
 }
 
+/** A built-in skin document's file: same origin, under /vela/skins/. */
+function builtInAsset(v: unknown, origin: string, ext: RegExp): string {
+  if (typeof v !== 'string' || v.length > 300) return '';
+  let url: URL;
+  try { url = new URL(v, `${origin}/`); } catch { return ''; }
+  return url.origin === origin && url.pathname.startsWith('/vela/skins/') && ext.test(url.pathname) && !url.search && !url.hash ? url.href : '';
+}
+
 /** One pack as the page may apply it, or nothing when any required part is invalid. */
 function pack(p: SkinPack, origin: string): PackEntryModel | undefined {
   if (!p || p.schema !== 1 || typeof p.id !== 'string' || !NAME.test(p.id) || ENGINES.includes(p.id) || !ENGINES.includes(p.engine)) return undefined;
@@ -58,13 +67,25 @@ function pack(p: SkinPack, origin: string): PackEntryModel | undefined {
     wordmark: asset(p.images?.wordmark, origin, image), swatches, packJson: JSON.stringify(canonical) };
 }
 
-export function appearanceModel(a: Appearance, origin: string): AppearanceModel {
+/** The release's own skin documents (/vela/skins/catalog.json): none in a development build. */
+let builtIn: Promise<SkinDocumentRef[]> | undefined;
+let builtInList: SkinDocumentRef[] = [];
+export function builtInDocuments(origin: string): Promise<SkinDocumentRef[]> {
+  builtIn ??= fetch(`${origin}/vela/skins/catalog.json`).then(r => r.ok ? r.json() : { documents: [] }).then((c: { documents?: (SkinDocumentRef & { renderer?: number })[] }) =>
+    // A document needing a newer renderer than this client is not offered.
+    (Array.isArray(c?.documents) ? c.documents : []).filter(d => typeof d?.renderer === 'number' && d.renderer <= RENDERER_VERSION).slice(0, 32)).catch(() => []).then(list => (builtInList = list));
+  return builtIn;
+}
+
+export function appearanceModel(a: Appearance, origin: string, builtInDocs: SkinDocumentRef[] = []): AppearanceModel {
   if (!a || typeof a.revision !== 'number' || typeof a.defaultSkinId !== 'string') throw new Error('Invalid appearance');
   const packs = (Array.isArray(a.packs) ? a.packs.slice(0, 32) : []).flatMap(p => pack(p, origin) ?? []);
-  const docs = (Array.isArray(a.documents) ? a.documents.slice(0, 32) : []).flatMap(d => {
-    const url = asset(d?.url, origin, /\.json$/);
+  // The server's documents, then the release's built-ins it does not replace.
+  const server = Array.isArray(a.documents) ? a.documents.slice(0, 32) : [];
+  const docs = [...server, ...builtInDocs.filter(b => !server.some(d => d?.id === b.id))].flatMap(d => {
+    const url = asset(d?.url, origin, /\.json$/) || builtInAsset(d?.url, origin, /\/document\.json$/);
     return d && typeof d.id === 'string' && NAME.test(d.id) && !ENGINES.includes(d.id) && url ? [{ id: d.id, name: text(d.name, 40), tagline: text(d.tagline, 120), url,
-      preview: asset(d.preview, origin, /\.(svg|png|jpe?g|webp|avif)$/), swatches: (Array.isArray(d.swatches) ? d.swatches : []).slice(0, 5).flatMap(c => colour(c) ?? []) }] : [];
+      preview: asset(d.preview, origin, /\.(svg|png|jpe?g|webp|avif)$/) || builtInAsset(d.preview, origin, /\.(svg|png|jpe?g|webp|avif)$/), swatches: (Array.isArray(d.swatches) ? d.swatches : []).slice(0, 5).flatMap(c => colour(c) ?? []) }] : [];
   });
   return { revision: a.revision, defaultSkinId: text(a.defaultSkinId, 64), defaultEngineId: text(a.defaultEngineId, 64), force: a.force === true, packs, docs };
 }
@@ -77,7 +98,7 @@ export function appearanceStream(origin: string, open: (mapper: (event: StreamEv
     if (typeof event.data !== 'string') throw new Error('Invalid server event');
     const value = JSON.parse(event.data) as ServerEvent;
     if (value.type !== 'appearance') { if (newest) return newest; throw new Error('Waiting for appearance'); }
-    const next = appearanceModel(value.appearance, origin);
+    const next = appearanceModel(value.appearance, origin, builtInList);
     if (next.revision >= Math.max(floor, newest?.revision ?? 0)) newest = next;
     return newest ?? next;
   });

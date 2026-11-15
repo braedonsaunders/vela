@@ -8,6 +8,7 @@ import decoderPins from '../../vendor/webgpu-player/tools/pinned-releases.json';
 import { stageUniversalAssets } from '../release/universal-assets';
 import { transformUpstreamAudio } from '../../client/player/universal/audio/ffmpeg/upstream-transform';
 import {transformUpstreamTransport} from '../../client/player/universal/transport-transform';
+import {transformCoreDemux} from '../../client/player/core/demux/transform';
 import { transformUpstreamVideo } from '../../client/player/universal/video/upstream-transform';
 import { installSubtitleAssets } from '../../client/player/universal/subtitles/install';
 import subtitleManifest from '../../client/player/universal/subtitles/assets.json';
@@ -57,7 +58,8 @@ const plugin = { name:'vela-audio', setup(builder: any) {
     const audio = transformUpstreamAudio(path, original);
     const video = transformUpstreamVideo(path, audio ?? original);
     const transport=transformUpstreamTransport(path,video??audio??original);
-    const transformed = transport??video??audio;
+    const clock=Bun.argv.includes('--core')?transformCoreDemux(path,transport??video??audio??original):null;
+    const transformed = clock??transport??video??audio;
     if (transformed !== null) return {contents:transformed, loader:'ts', resolveDir:dirname(path)};
   });
 }};
@@ -74,7 +76,12 @@ await build({...common, entryPoints:[join(root,runtimeEntry)], format:'esm', out
 await cp(join(root,'client/player/universal/audio/ffmpeg'), join(sourceDir,'vela-audio-hooks'), {recursive:true});
 await copyFile(join(root,'client/player/universal/transport-transform.ts'),join(sourceDir,'vela-transport-transform.ts'));
 await copyFile(join(root,'client/player/universal/transport.ts'),join(sourceDir,'vela-transport.ts'));
+await copyFile(join(root,'client/player/media-auth.ts'),join(sourceDir,'vela-media-auth.ts'));
 await copyFile(join(root,'client/player/universal/video/upstream-transform.ts'), join(sourceDir,'vela-video-transform.ts'));
+if(Bun.argv.includes('--core')){
+  await mkdir(join(sourceDir,'vela-core-demux'),{recursive:true});
+  for(const file of ['fragment-time.ts','transform.ts'])await copyFile(join(root,'client/player/core/demux',file),join(sourceDir,'vela-core-demux',file));
+}
 const audioDirectory = Bun.argv.find(arg => arg.startsWith('--audio-dir='))?.slice(12);
 if (audioDirectory) await run([process.execPath, join(root,'client/player/universal/audio/install-packages.ts'), join(libraries,'audio-decoders'), `--from=${resolve(audioDirectory)}`], root);
 const videoDirectory = Bun.argv.find(arg => arg.startsWith('--video-dir='))?.slice(12);

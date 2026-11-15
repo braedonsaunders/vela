@@ -269,7 +269,9 @@ const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: 
 // The season picker: capsules, the selected one filled.
 const season: Node = { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', testId: 'season-{card.id}',
   style: { ...capsule('clamp(46px, 3.4vw, 64px)'), 'background-color': 'rgba(255, 255, 255, 0.08)', color: '$ink-dim', 'font-size': 'clamp(15px, 1.15vw, 22px)' }, focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.18)' }, children: [
+    // The chosen season, or the first while none is chosen yet.
     { type: 'box', when: [{ test: 'season.on' }], style: { position: 'absolute', inset: '0px', 'border-radius': '999px', 'background-color': 'rgba(255, 255, 255, 0.2)', 'box-shadow': 'inset 0px 0px 0px 2px rgba(255, 255, 255, 0.5)' } },
+    { type: 'box', when: [{ test: 'detail.selectedSeason', not: true }, { test: 'index', is: 'eq', value: '0' }], style: { position: 'absolute', inset: '0px', 'border-radius': '999px', 'background-color': 'rgba(255, 255, 255, 0.2)', 'box-shadow': 'inset 0px 0px 0px 2px rgba(255, 255, 255, 0.5)' } },
     { type: 'text', text: '{card.name}', style: { position: 'relative', 'white-space': 'nowrap' } },
   ] };
 
@@ -306,6 +308,17 @@ const titleCopy: Node = { type: 'box', style: { display: 'flex', 'flex-direction
             { type: 'box', style: { height: '5px', width: '{detail.resumePct}%', 'background-color': '$ground' } },
           ] },
         ] },
+      { type: 'repeat', over: 'detail.upNext', when: [{ test: 'detail.canPlay', not: true }], item: { type: 'box', press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}: {card.label}', testId: 'detail-up-next',
+        style: { ...capsule('clamp(58px, 4.4vw, 84px)'), 'background-color': 'rgba(245, 241, 233, 0.92)', color: '$ground', 'max-width': 'min(640px, 80vw)' }, focus: capsuleFocus, hover: { 'background-color': '$ink' }, small: { height: '54px' }, children: [
+          { type: 'icon', symbol: 'play-fill', style: { width: 'clamp(18px, 1.3vw, 26px)', height: 'clamp(18px, 1.3vw, 26px)', 'flex-shrink': '0' } },
+          { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px', 'align-items': 'flex-start', 'min-width': '0px' }, children: [
+            { type: 'text', text: '{episode.numberTitle}', style: { 'line-height': '1.05', 'font-weight': '700', 'line-clamp': '1' } },
+            { type: 'text', text: '{episode.upNextLabel}', style: { 'font-size': '0.62em', 'font-weight': '600', opacity: '0.62', 'line-height': '1' } },
+          ] },
+          { type: 'box', when: [{ test: 'card.hasProgress' }], small: { display: 'none' }, style: { width: 'clamp(48px, 4vw, 76px)', height: '5px', 'flex-shrink': '0', 'border-radius': '3px', 'background-color': 'rgba(9, 11, 14, 0.22)', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
+            { type: 'box', style: { height: '5px', width: '{card.progressPct}%', 'background-color': '$ground' } },
+          ] },
+        ] } },
       { type: 'box', press: { action: 'back' }, label: '{s:back}', testId: 'detail-back', style: capsule('clamp(58px, 4.4vw, 84px)'), focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.24)' }, small: { height: '54px' }, children: [
         { type: 'icon', symbol: 'back', style: { width: 'clamp(16px, 1.2vw, 24px)', height: 'clamp(16px, 1.2vw, 24px)' } },
         { type: 'text', text: '{s:back}' },
@@ -316,7 +329,7 @@ const titleCopy: Node = { type: 'box', style: { display: 'flex', 'flex-direction
     ] },
   ] };
 
-const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', 'background-color': '$ground', color: '$ink', 'font-family': sans }, children: [
+const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', display: 'flex', 'flex-direction': 'column', 'background-color': '$ground', color: '$ink', 'font-family': sans }, children: [
   // The title's backdrop fills the screen and stays while the page scrolls over it.
   { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], motion: 'backdropIn', style: { position: 'absolute', inset: '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'pointer-events': 'none' }, children: [
     { type: 'image', when: [{ test: 'detail.backdrop' }], src: '{detail.backdrop}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
@@ -331,13 +344,14 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
     ] },
     { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], style: { display: 'flex', 'flex-direction': 'column' }, children: [
       titleCopy,
-      section('{s:upNext}', [{ test: 'detail.hasEpisodes' }, { test: 'detail.hasSeasons', not: true }], [track({ type: 'repeat', over: 'detail.upNext', item: episode })]),
-      { type: 'box', when: [{ test: 'detail.hasSeasons' }], style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
-        { type: 'box', role: 'group', label: '{s:seasons}', style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'padding-top': '18px', 'padding-bottom': '6px', ...gutter }, small: { ...gutterSmall }, children: [
-          { type: 'repeat', over: 'detail.seasons', item: season },
+      section('{s:episodes}', [{ test: 'detail.hasEpisodes' }], [
+        { type: 'box', when: [{ test: 'detail.hasSeasons' }], style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
+          { type: 'box', role: 'group', label: '{s:seasons}', style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'padding-top': 'clamp(14px, 1.2vw, 24px)', 'padding-bottom': '4px', ...gutter }, small: { ...gutterSmall }, children: [
+            { type: 'repeat', over: 'detail.seasons', item: season },
+          ] },
         ] },
-      ] },
-      section('{s:episodes}', [{ test: 'detail.hasEpisodes' }], [track({ type: 'repeat', over: 'detail.episodes', item: { ...episode, motion: 'cardIn', stagger: { step: 40, cap: 8 } } })]),
+        track({ type: 'repeat', over: 'detail.episodes', item: { ...episode, motion: 'cardIn', stagger: { step: 40, cap: 8 } } }),
+      ]),
       section('{s:extras}', [{ test: 'detail.hasExtras' }], [track({ type: 'repeat', over: 'detail.extras', item: extra }, 'clamp(14px, 1.2vw, 24px)')]),
       section('{s:cast}', [{ test: 'detail.hasCast' }], [track({ type: 'repeat', over: 'detail.cast', item: person }, 'clamp(18px, 1.6vw, 32px)')]),
       { type: 'repeat', over: 'detail.related', item: { type: 'use', template: 'row' } },
@@ -351,7 +365,7 @@ const lounge: SkinDocument = {
   schema: 1, renderer: 2, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.0/preview.jpg', swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
   tokens: { ground: '#05060a', raised: '#1a1d24', ink: '#f5f1e9', 'ink-dim': 'rgba(245, 241, 233, 0.78)', 'ink-quiet': 'rgba(245, 241, 233, 0.52)', amber: '#f2c27e' },
-  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', upNext: 'Up next', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew' } },
+  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew' } },
   motion: {
     navIn: { keyframes: 'dissolve', duration: 700, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 200 } },
     sheet: { keyframes: 'pop', duration: 380, easing: ease, still: { keyframes: 'dissolve', duration: 160 } },

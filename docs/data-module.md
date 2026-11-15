@@ -52,8 +52,38 @@ and resource discovery use their own explicitly scoped plex.tv authority, separa
 from the selected PMS token. Ether retains its existing strict `/sessions/media/`
 broker validation. Native adapters must explicitly validate their own media and image
 paths against the selected origin and base path; adding them must not relax Ether's
-rules. Native media that requires a persistent token in a URL needs a reviewed
-transport decision before it is exposed through player plans or DOM properties.
+rules. Universal and MSE playback send native-server credentials in request headers, never
+in media URLs. Only native-element fallback may use a URL credential: Plex uses a
+short-lived delegation token; Jellyfin may use its api_key in memory only. Such URLs
+are never persisted, logged, sent in diagnostics or observations, or exposed to skins,
+and errors must redact them.
+
+Foundation passes `mediaAuth` directly to the native view as an in-memory JSON
+prop: `{handle, origin, pathPrefix, headers}`. Exact web props are not DOM
+attributes; `vela-player` has `snapshot: false`. This object is outside plans,
+observations, renderer models and skin bindings. The data module constructs it
+from secret storage just in time and rotates the opaque handle on server,
+principal or credential change. The host retires old readers on rotation and
+clears authorization on disposal. Media requests attach headers only to the
+validated exact origin and base-path boundary; redirects are refused. Runtime
+assets and decoder packages never use those credentials. A private copy crosses
+only to a dedicated demux worker, never through decoder telemetry.
+
+When a native element needs a URL, the host emits `native-media-request` with
+`{requestId, handle, url}` using the token-free source URL. Foundation asks the
+adapter to mint its native fallback and returns a private `nativeMedia` prop
+`{requestId, handle, url, expiresAt}`. The host accepts only the pending request,
+current handle, matching origin/path and bounded future attachment deadline.
+The deadline is not a claim that a Jellyfin token expires. The URL exists only
+in memory and at native element attachment; it never enters a playback plan,
+skin binding, log, observation or diagnostic. Error text crossing back to
+Contract strips media URL queries and credential fields. A missing, expired or
+stale response fails closed. Ether broker-grant behavior remains unchanged.
+
+Renderer documents have no vocabulary binding to player props. Renderer 4 also
+rejects vocabulary expressions mentioning `mediaAuth`, `planJson`, `commandJson`
+or `headers`. Live preview receives authorization through a foundation inject,
+not a `LiveTile` or any other renderer-readable model field.
 
 Session updates use the adapter's stream when supported, including cursor resume and
 snapshot fallback. A server without an event stream uses bounded, cancellable snapshot
@@ -62,3 +92,14 @@ Appearance and distributed skins are optional server features; absence uses the 
 built-in appearance rather than an invented remote endpoint. The concrete registry,
 source signatures and polling cadence will be defined with the UI and adapter owners
 before integration; these are intended boundaries, not implemented capabilities.
+
+Host qualification with dummy credentials and a local strict-range fixture:
+core direct and the current wrapper's dedicated-worker direct path both played
+through Authorization-header-only reads; native fallback requested one private
+attachment reply and played. Nine header requests, one native URL request, zero
+unauthorized requests, zero credential query parameters on fetch requests, zero
+credential strings in public events; all three reported zero frame drops. The
+owned server and named Chrome were closed. In-process scope checks also refused
+another origin, a sibling prefix, and an encoded traversal; redaction removed a
+credential query. This proves the host seam, not a real Plex/Jellyfin end-to-end
+foundation integration. Those adapter flows require their own installed check.

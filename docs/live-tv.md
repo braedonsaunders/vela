@@ -36,3 +36,23 @@ Earlier real guide pagination and live transport/stop checks passed. BBC News
 decoded a Pluto device-unavailable slate, so BBC programme content remains a
 failure despite successful transport and decoded frames. That upstream finding
 does not establish the content outcome for CHROMA 80.
+
+## Automatic latency and preview lifetime
+
+Latency is engine policy. A viewer does not select low-delay/adaptive modes.
+Ether's optional `livePolicy` supplies an owner preference (`auto`, `low`, or
+`stable`) and a preferred target in seconds, not a minimum. Omission means auto.
+The engine starts with an adaptive cushion, tightens only after sustained buffer
+and transfer headroom, and backs off after a stall or network retry. A small
+catch-up rate applies only while playing with enough real buffer. Jump to Live
+uses the current target and the published/seekable window. Native HLS retains
+browser-managed loading; Vela controls catch-up and the explicit live target.
+The core's moving-live demux path remains a separate migration gate.
+
+UI lead's installed 0.1.33/lab.18 guide check tuned one preview, then navigating
+Home sent the session's Stop command and received HTTP 200. No later request
+used that session, and the dedicated browser was closed. The pending foundation
+change additionally holds full watch until the preview's Stop reply is confirmed;
+a timeout is not treated as successful release. Stop failures have bounded
+retries and a visible retry action. This one Home-transition proof does not
+stand in for a measured tab-hide or full-watch-transition check.
