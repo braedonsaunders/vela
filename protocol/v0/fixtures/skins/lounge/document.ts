@@ -250,15 +250,46 @@ const rowOf = (paged: boolean): Node => ({ type: 'box', style: { position: 'rela
 ] });
 const row = rowOf(true), relatedRow = rowOf(false);
 
+// Home before it has anything to show: the shelf and two rows in outline, breathing; and if
+// the server can't be reached, one sentence and a large Try again a remote can land on.
+const bone = (style: Style): Node => ({ type: 'box', motion: 'pulse', style: { 'border-radius': '999px', 'background-color': 'rgba(245, 241, 233, 0.08)', ...style } as Style });
+const posterBone: Node = { type: 'box', motion: 'pulse', style: { width: 'clamp(150px, 11.2vw, 252px)', 'aspect-ratio': '2 / 3', 'flex-shrink': '0', 'border-radius': 'clamp(12px, 0.9vw, 18px)', 'background-color': 'rgba(245, 241, 233, 0.06)' }, small: { width: '128px' } };
+const boneRow: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: 'clamp(22px, 2vw, 40px)', 'padding-bottom': 'clamp(30px, 2.6vw, 52px)', 'overflow-x': 'hidden', ...gutter }, small: { ...gutterSmall }, children: [
+  bone({ width: 'clamp(160px, 14vw, 280px)', height: 'clamp(18px, 1.4vw, 28px)' } as Style),
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: 'clamp(20px, 1.9vw, 40px)' }, small: { gap: '14px' }, children: Array.from({ length: 8 }, () => posterBone) },
+] };
+const loading: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], role: 'status', label: '{s:loadingHome}', style: { display: 'flex', 'flex-direction': 'column', 'min-height': '100vh', 'overflow-y': 'hidden' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', gap: 'clamp(16px, 1.4vw, 26px)', 'box-sizing': 'border-box', 'min-height': 'max(500px, 64vh)', 'padding-bottom': 'clamp(40px, 4vw, 80px)', ...gutter }, small: { 'min-height': '470px', ...gutterSmall }, children: [
+    bone({ width: 'clamp(120px, 9vw, 180px)', height: 'clamp(12px, 0.9vw, 18px)' } as Style),
+    bone({ width: 'min(640px, 70vw)', height: 'clamp(52px, 5vw, 100px)', 'border-radius': '20px' } as Style),
+    bone({ width: 'min(420px, 60vw)', height: 'clamp(16px, 1.25vw, 24px)' } as Style),
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: 'clamp(14px, 1.2vw, 24px)', 'margin-top': 'clamp(8px, 1vw, 18px)' } as Style, children: [
+      bone({ width: 'clamp(160px, 12vw, 240px)', height: 'clamp(58px, 4.4vw, 84px)' } as Style),
+      bone({ width: 'clamp(140px, 10vw, 200px)', height: 'clamp(58px, 4.4vw, 84px)' } as Style),
+    ] },
+  ] },
+  boneRow, boneRow,
+] };
+const failed: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], role: 'alert', motion: 'fadeIn', style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-start', 'justify-content': 'center', gap: 'clamp(18px, 1.6vw, 30px)', 'box-sizing': 'border-box', 'min-height': '100vh', ...gutter }, small: { ...gutterSmall }, children: [
+  { type: 'image', src: 'assets/brand/vela-symbol.svg', alt: '', style: { width: 'clamp(44px, 3.4vw, 64px)', height: 'clamp(44px, 3.4vw, 64px)', opacity: '0.9' } },
+  { type: 'text', text: '{s:homeFailed}', role: 'heading', level: 1, style: { 'font-size': 'clamp(32px, 3vw, 60px)', 'font-weight': '800', 'letter-spacing': '-0.02em', 'line-height': '1.05', 'max-width': '22ch' } },
+  { type: 'text', text: '{s:homeFailedDetail}', style: { 'font-size': 'clamp(17px, 1.3vw, 25px)', 'line-height': '1.45', color: '$ink-dim', 'max-width': '40rem' } },
+  { type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, controlStates: false, label: '{s:tryAgain}', testId: 'home-retry', style: { ...capsule('clamp(58px, 4.4vw, 84px)'), 'background-color': 'rgba(245, 241, 233, 0.92)', color: '$ground', 'margin-top': 'clamp(6px, 0.8vw, 14px)' } as Style, focus: capsuleFocus, hover: { 'background-color': '$ink' }, children: [
+    { type: 'text', text: '{s:tryAgain}', style: { 'font-weight': '700' } },
+  ] },
+] };
+
 // No minimum height: while a query is open the home is only its search bar, and the results
 // follow right under it.
 const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', color: '$ink', 'font-family': sans }, children: [
+  loading,
+  failed,
   backdrop,
   shelf,
   // Search: a wide field between the shelf and the rows; it rises to the top while a query is open.
   // Search: Lounge's own ten-foot bar between the shelf and the rows; with a query open the
   // shelf and rows give way and it rises under the top bar.
-  { type: 'box', style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-bottom': 'clamp(4px, 0.6vw, 12px)', ...gutter } as Style,
+  { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-bottom': 'clamp(4px, 0.6vw, 12px)', ...gutter } as Style,
     small: { ...gutterSmall, 'padding-top': '8px' } as Style,
     states: [{ when: [{ test: 'env.searching' }], style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-top': 'clamp(120px, 10.5vw, 200px)', 'padding-bottom': 'clamp(10px, 1vw, 20px)', ...gutter } as Style }], children: [
     { type: 'box', role: 'search', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: 'clamp(14px, 1.1vw, 22px)', width: '100%', 'max-width': '1100px', 'box-sizing': 'border-box', height: 'clamp(60px, 4.6vw, 88px)', padding: '0px clamp(10px, 0.8vw, 14px) 0px clamp(22px, 1.7vw, 32px)', 'border-radius': '999px', 'background-color': 'rgba(18, 20, 26, 0.62)', 'backdrop-filter': 'blur(30px) saturate(1.4)', 'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.12), 0px 20px 50px -20px rgba(0, 0, 0, 0.8)', transition: lift },
@@ -418,7 +449,7 @@ const lounge: SkinDocument = {
   schema: 1, renderer: 8, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.0/preview.jpg', swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
   tokens: { ground: '#05060a', raised: '#1a1d24', ink: '#f5f1e9', 'ink-dim': 'rgba(245, 241, 233, 0.78)', 'ink-quiet': 'rgba(245, 241, 233, 0.52)', amber: '#f2c27e' },
-  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew', searchPlaceholder: 'Search films, shows, people and channels', clear: 'Clear', loadingMore: 'Loading more…' } },
+  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew', loadingHome: 'Getting your library ready', homeFailed: 'Your library couldn’t be reached', homeFailedDetail: 'Vela couldn’t connect to your server. Check that it’s on and connected, then try again.', tryAgain: 'Try again', searchPlaceholder: 'Search films, shows, people and channels', clear: 'Clear', loadingMore: 'Loading more…' } },
   motion: {
     navIn: { keyframes: 'dissolve', duration: 700, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 200 } },
     sheet: { keyframes: 'pop', duration: 380, easing: ease, still: { keyframes: 'dissolve', duration: 160 } },
@@ -434,7 +465,9 @@ const lounge: SkinDocument = {
   templates: { poster, wide, ranked, row, relatedRow },
   slots: { shell, home },
   routes: { title },
-  detail: { wide: 'fullscreen', small: 'fullscreen' },
+  // The title page is a full screen of its own: no frame drawn over home behind it.
+  detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },
+  status: true,
 };
 
 export default lounge;
