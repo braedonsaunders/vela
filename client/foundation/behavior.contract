@@ -295,7 +295,7 @@ members Client
             previewRow = (previewTarget == "" ? "@hero" : previewRow)
             previewRetryAt = 0
           else if p.retryAfterSeconds > 0 and previewAttempts < 3
-            // v0 has no preview status read: a preparing trailer is asked again by POST (fresh key),
+            // A preparing trailer is polled (GET after the intent's one POST; re-POST on an older Ether)
             // at the server's delay doubled per attempt, at most three times per intent.
             previewRetryAt = time.epochAtZero + performanceNow() + p.retryAfterSeconds * 1000 * (previewAttempts == 0 ? 1 : previewAttempts == 1 ? 2 : 4)
             previewAttempts = previewAttempts + 1

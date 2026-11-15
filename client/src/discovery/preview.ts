@@ -1,5 +1,6 @@
 import type { ClientCapabilities, PreviewGrant } from '../../wire/v0/types';
 import type { ServerAdapter } from '../adapter';
+import { VelaError } from '../adapter/ether';
 
 type Preview = { cardId: string; url: string; expiresAt: number; retryAfterSeconds: number; generation: number };
 const empty = (generation: number, retryAfterSeconds = 0): Preview => ({ cardId: '', url: '', expiresAt: 0, retryAfterSeconds, generation });
@@ -8,6 +9,10 @@ const empty = (generation: number, retryAfterSeconds = 0): Preview => ({ cardId:
 export class PreviewCoordinator {
   private generation = 0;
   private grant?: PreviewGrant;
+  /** The preview this intent already asked for: later asks read its state instead of requesting again. */
+  private requested?: { id: string; generation: number };
+  /** False once the server answered the status read 405 (an Ether older than the GET). */
+  private statusRead = true;
   private tail: Promise<void> = Promise.resolve();
   constructor(private api: ServerAdapter, private origin: string, private client: ClientCapabilities, private key: () => string) {}
   setClient(client: ClientCapabilities): void { this.client = client; }
@@ -24,13 +29,27 @@ export class PreviewCoordinator {
     this.tail = operation.catch(() => {});
     return operation;
   }
+  /** One POST per intent, then GET polls. An Ether without the GET (405), or one that no longer
+   * holds the request (404), is asked again by POST with a fresh key. */
+  private async ask(id: string, generation: number) {
+    if (this.statusRead && this.requested?.id === id && this.requested.generation === generation) {
+      try { return await this.api.trailerPreviewStatus(id); }
+      catch (error) {
+        if (!(error instanceof VelaError) || (error.status !== 404 && error.status !== 405)) throw error;
+        if (error.status === 405) this.statusRead = false;
+      }
+    }
+    const result = await this.api.trailerPreview(id, { idempotencyKey: this.key(), client: this.client });
+    this.requested = { id, generation };
+    return result;
+  }
   request(id: string, generation: number, now: number): Promise<Preview> {
     if (generation < this.generation) return Promise.resolve(empty(generation));
     const advance = this.cancel(generation);
     const operation = this.tail.then(async () => {
       await advance;
       if (generation !== this.generation) return empty(generation);
-      const result = await this.api.trailerPreview(id, { idempotencyKey: this.key(), client: this.client });
+      const result = await this.ask(id, generation);
       if (result.state !== 'ready') return empty(generation, generation === this.generation && result.state === 'preparing' && Number.isFinite(result.retryAfterSeconds) ? Math.max(1, result.retryAfterSeconds) : 0);
       const grant = result.grant;
       const expiresAt = Date.parse(grant.expiresAt);
