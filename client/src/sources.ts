@@ -6,7 +6,7 @@ import { etherConnection, nativeConnection, type Connection } from './adapter/co
 import { probeServer } from './adapter/probe';
 import { PlexLink } from './adapter/plex/link';
 import { SessionCredentials } from './session';
-import { ServerCredentials, ServerRegistry, type ServerKind } from './session/servers';
+import { ServerCredentials, ServerRegistry, type ServerKind, type ServerRecord } from './session/servers';
 import { card, entry, feedRow, homeModel, detailModel } from './discovery/models';
 import { guideFocus, loadGuide, liveIdentity } from './live/guide';
 import { liveSearch } from './live/search';
@@ -772,7 +772,7 @@ const sources: Sources = {
   },
 
   // Servers. Presentation records only: no credential reaches these answers.
-  uiServers: async ([_revision, localeJSON], store) => {
+  uiServers: async ([_revision, _authRevision, _authenticated, localeJSON], store) => {
     const selected = server(store);
     const list = servers(store).read();
     const rows = await Promise.all(list.servers.map(async record => {
@@ -860,7 +860,12 @@ const sources: Sources = {
       if (!plexLink || !plexCode) throw new Error(msg('server.plex.again'));
       const chosen = await plexLink.choose(plexCode, id, pageOriginBound.startsWith('https:'));
       plexCode = '';
-      const record = servers(store).add('plex', chosen.name, chosen.origin);
+      // A Plex record added by a typed address (often the LAN one) becomes this server at its proven address.
+      const list = servers(store).read().servers;
+      const proven = list.find(s => s.kind === 'plex' && s.origin === chosen.origin);
+      let typed: ServerRecord | undefined;
+      for (const s of list) if (!proven && !typed && s.kind === 'plex' && chosen.origins.includes(s.origin) && !await signedIn(connection(store, s.id))) typed = s;
+      const record = proven ?? (typed ? servers(store).relocate(typed.id, chosen.name, chosen.origin) : servers(store).add('plex', chosen.name, chosen.origin));
       await connection(store, record.id).credentials.set(chosen.tokens);
       selectServer(store, record.id);
       return { id: record.id, error: '' };

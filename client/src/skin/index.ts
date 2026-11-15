@@ -63,7 +63,7 @@ function keyframesCss(doc: SkinDocument): string {
     return `@keyframes dk-${docId}-${name}{${body}}`;
   }).join('');
 }
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'retry', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
 const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
@@ -73,10 +73,10 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
   disabled?: Condition[]; disabledStyle?: Style; a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; haspopup?: string; title?: string; role?: string };
   escape?: string; returnFocus?: string; layoutTransition?: string; sharedElement?: string; exit?: string }
 type Level = Record<string, unknown>;
-export interface DocSlot { present: boolean; root: number; rootPos: number; slotStyle: number; slotPos: number; slotInner: number; slotOrder: string; nodes: Level[] }
+export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
 export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string }
-interface Resolve { doc: SkinDocument; small: boolean; wide: boolean; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
+interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
   const key = JSON.stringify(s);
@@ -300,18 +300,23 @@ function asset(src: string, r: Resolve): string {
   throw new Error(`Image source outside the document's assets: ${src}`);
 }
 
+/** A slot's root box or holder: its style with states and viewport variants, as any node's (it follows the slot's width). */
+function boxStates(node: { style?: Style; small?: Style; wide?: Style; below?: Record<string, Style>; above?: Record<string, Style>; states?: unknown } | undefined, r: Resolve, extra?: Style): { base: unknown; sts: unknown[] } {
+  const level = convert({ type: 'box', style: { ...node?.style, ...extra }, small: node?.small, wide: node?.wide, below: node?.below, above: node?.above, states: node?.states } as Node, 1, r)!;
+  return { base: level.base, sts: level.sts as unknown[] };
+}
 function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchField', from = 1): DocSlot {
-  if (!root) return { present: false, root: intern(style([], r), r), rootPos: 0, slotStyle: intern(style([], r), r), slotPos: 0, slotInner: intern(style([], r), r), slotOrder: '0', nodes: [] };
+  if (!root) { const none = boxStates(undefined, r); return { present: false, rootBase: none.base, rootSts: [], slotBase: none.base, slotSts: [], slotInner: intern(style([], r), r), slotOrder: '0', nodes: [] }; }
   if (root.type !== 'box') throw new Error('A slot tree starts with a box');
   const kids = root.children ?? [];
   const at = kids.findIndex(k => k.type === 'slot' && k.slot === holder);
-  const holderNode = kids[at] as Extract<Node, { type: 'slot' }> | undefined;
+  const holderNode = kids[at] as (Extract<Node, { type: 'slot' }> & { below?: Record<string, Style>; above?: Record<string, Style>; states?: unknown }) | undefined;
   // Every top-level node gets its flex order; the foundation's content takes the slot's.
   const nodes = kids.flatMap((k, i) => k.type === 'slot' ? [] : [convert({ ...k, style: { ...k.style, order: String(i) } } as Node, from, r)!]);
   // The slot box's own flex order rides in its style (the box takes every row).
-  const outer = style([holderNode?.style, r.small ? holderNode?.small : undefined, r.wide ? holderNode?.wide : undefined, { order: String(at < 0 ? kids.length : at) } as Style], r);
-  const rootStyle = style([root.style, r.small ? root.small : undefined, r.wide ? root.wide : undefined], r);
-  return { present: true, root: intern(rootStyle, r), rootPos: rootStyle.position === 'absolute' ? 1 : rootStyle.position === 'sticky' ? 2 : 0, slotStyle: intern(outer, r), slotPos: outer.position === 'absolute' ? 1 : outer.position === 'sticky' ? 2 : 0, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), nodes };
+  const rootStates = boxStates(root as Parameters<typeof boxStates>[0], r);
+  const holderStates = boxStates(holderNode, r, { order: String(at < 0 ? kids.length : at) } as Style);
+  return { present: true, rootBase: rootStates.base, rootSts: rootStates.sts, slotBase: holderStates.base, slotSts: holderStates.sts, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), nodes };
 }
 
 export function skinDoc(doc: SkinDocument, width: number, origin: string, locale = 'en'): SkinDocModel {
@@ -321,7 +326,7 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
   docId = doc.id; docKeyframes = new Set();
   const kfCss = keyframesCss(doc);
   const strings = { ...doc.strings?.en, ...doc.strings?.[locale.split('-')[0]], ...doc.strings?.[locale] };
-  const r: Resolve = { doc, small: width < 640, wide: width >= 1200, count: 0, assets: origin, strings, styles: [], index: new Map() };
+  const r: Resolve = { doc, count: 0, assets: origin, strings, styles: [], index: new Map() };
   const shell = slot(doc.slots.shell, r, 'children', SHELL_FROM), home = slot(doc.slots.home, r, 'searchField');
   // A route tree is a slot without `present` (a route is drawn only when the document has it).
   const routes = Object.entries(doc.routes ?? {}).map(([name, tree]) => { const { present: _, ...rest } = slot(tree, r, 'children'); return { name, ...rest }; });

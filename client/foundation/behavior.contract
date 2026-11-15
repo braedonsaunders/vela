@@ -12,6 +12,7 @@ shape Time
 
 shape PageState
   visibilityState: string
+  hasFocus: bool
 
 // The home visit's query for a library section and its browse query.
 fn librarySection(id: string, query: string): string = (query == "" ? `?lib=${encodeURIComponent(id)}` : `${query}&lib=${encodeURIComponent(id)}`)
@@ -159,15 +160,22 @@ members Client
   state homeLocale = ""
   // Featured titles: the foundation rotates the shown hero; skins only present it.
   state heroIndex = 0
+  // Auto-advances since the viewer last chose a slide: one full cycle, back to the first,
+  // then the carousel rests until the viewer picks one (no endless background work).
+  state heroAdvances = 0
   derive heroAt = (homeKnown and home.hero.length > 0 ? heroIndex % home.hero.length : 0)
   derive heroHasPreview = (previewRow == "@hero" and cardPreview.cardId != "")
-  task rotateHero when top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and current(home) and home.hero.length > 1 and previewTarget == "" and not heroHasPreview
+  // The page is in front of the viewer: tab visible and window focused.
+  derive pageWatched = page.visibilityState == "visible" and page.hasFocus
+  task rotateHero when top(nav).name == "home" and libraryId == "" and query == "" and pageWatched and not still and current(home) and home.hero.length > 1 and heroAdvances < home.hero.length and previewTarget == "" and not heroHasPreview
     every(9000, nextHero)
   action nextHero
     if previewTarget == ""
       heroIndex = (heroAt + 1) % max(1, home.hero.length)
+      heroAdvances = heroAdvances + 1
   action pickHero(i: number)
     heroIndex = i
+    heroAdvances = 0
   task captureHomeTime when auth.authenticated key=`${localeJSON}:${auth.serverId}:${auth.revision}`
     after(1, stampHomeTime)
   action stampHomeTime
@@ -234,12 +242,12 @@ members Client
   state previewAskedGeneration = -1
   state previewDwellAt = 0
   state cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=0)
-  derive previewAllowed = auth.authenticated and homeKnown and home.trailerPreviewAvailable and top(nav).name == "home" and libraryId == "" and query == "" and page.visibilityState == "visible" and not still and not saveData
+  derive previewAllowed = auth.authenticated and homeKnown and home.trailerPreviewAvailable and top(nav).name == "home" and libraryId == "" and query == "" and pageWatched and not still and not saveData
   derive heroPreviewId = match first(home.hero.slice(heroAt, heroAt + 1)) { case some(h) => h.id, case none => "" }
   derive previewDesired = (previewAllowed ? (previewTarget != "" ? previewTarget : (home.heroPreviewIds.includes(heroPreviewId) ? heroPreviewId : "")) : "")
   mutation previewFetch as shape CardPreview then acceptPreview
   mutation previewCancelled as shape ReceiptReply queue
-  task previewContext when homeKnown key=`${top(nav).name}:${libraryId}:${query}:${page.visibilityState}:${still}:${saveData}:${heroAt}:${auth.authenticated}:${home.trailerPreviewAvailable}:${home.heroPreviewIds.join(",")}`
+  task previewContext when homeKnown key=`${top(nav).name}:${libraryId}:${query}:${page.visibilityState}:${page.hasFocus}:${still}:${saveData}:${heroAt}:${auth.authenticated}:${home.trailerPreviewAvailable}:${home.heroPreviewIds.join(",")}`
     change(clearPreview)
   action clearPreview
     previewTarget = ""
@@ -247,7 +255,8 @@ members Client
     previewRetryAt = 0
     previewGeneration = previewGeneration + 1
     previewAttempts = 0
-    previewDwellAt = time.epochAtZero + performanceNow() + 700
+    // A slide's trailer starts only after it has been on screen for three seconds.
+    previewDwellAt = time.epochAtZero + performanceNow() + 3000
     cardPreview = CardPreview(cardId="", url="", expiresAt=0, retryAfterSeconds=0, generation=previewGeneration)
     send previewCancelled = uiPreviewCancel(previewGeneration)
   action previewIntent(cardId: string, rowId: string, on: bool)
@@ -295,7 +304,7 @@ members Client
             previewRow = (previewTarget == "" ? "@hero" : previewRow)
             previewRetryAt = 0
           else if p.retryAfterSeconds > 0 and previewAttempts < 3
-            // v0 has no preview status read: a preparing trailer is asked again by POST (fresh key),
+            // A preparing trailer is polled (GET after the intent's one POST; re-POST on an older Ether)
             // at the server's delay doubled per attempt, at most three times per intent.
             previewRetryAt = time.epochAtZero + performanceNow() + p.retryAfterSeconds * 1000 * (previewAttempts == 0 ? 1 : previewAttempts == 1 ? 2 : 4)
             previewAttempts = previewAttempts + 1
@@ -583,6 +592,9 @@ members Client
     nav = back(nav)
   action goHome
     nav = (top(nav).name == "home" ? replace(nav, path("home")) : open(nav, path("home")))
+  // Connecting a server from the switcher: a screen over the app.
+  action openConnect
+    nav = push(nav, path("connect"))
   action openSearch
     nav = (top(nav).name == "home" ? replace(nav, path("home") + (query == "" ? "" : `?q=${encodeURIComponent(query)}`)) : open(nav, path("home")))
   action openLive
@@ -641,7 +653,8 @@ members Client
   state serverRevision = 0
   state serverSwitching = false
   state switchedAt = 0
-  resource servers = uiServers(serverRevision) with localeJSON when current(auth) as shape ServerList else empty()
+  // Asked again on every sign-in, sign-out and server change, so each entry shows its real session.
+  resource servers = uiServers(serverRevision, auth.revision, auth.authenticated) with localeJSON when current(auth) as shape ServerList else empty()
   // Detection before adding: generation-fenced, credential-free, bounded.
   state serverProbeUrl = ""
   state serverProbeGeneration = 0

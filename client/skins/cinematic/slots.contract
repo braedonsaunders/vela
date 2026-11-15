@@ -11,6 +11,8 @@ component Shell
   props
     p: ShellProps
   inject
+    chooseServer: action
+    connectServer: action
     chooseSkin: action
     signOut: action
     home: action
@@ -26,6 +28,13 @@ component Shell
   action toggleMenu
     menuOpen = not menuOpen
   state pickerOpen = false
+  action pickServer(id: string)
+    menuOpen = false
+    if p.servers.filter(s => s.id == id and s.selected).length == 0
+      chooseServer(id)
+  action addServerScreen
+    menuOpen = false
+    connectServer()
   action openPicker
     menuOpen = false
     pickerOpen = true
@@ -87,6 +96,21 @@ component Shell
                   for color, c in p.current.swatches.slice(0, 4) key=`${c}`
                     column width=10 height=10 border-radius=5 background-color=color box-shadow="inset 0px 0px 0px 1px var(--cinematic.glass-edge-strong)"
                 image "symbol:forward-chevron" width=12 height=12 color="ink.quiet" aria-hidden=true
+          // Your servers: the current one checked; choosing another switches to it.
+          if p.servers.length > 0
+            column gap=2 role="group" aria-label=t("connect.servers")
+              text t("connect.servers") class=Eyebrow font-size=10 color="ink.quiet" padding="4px 0px"
+              for server in p.servers key=server.id
+                button press=pickServer(server.id) aria-current=server.selected testId=`server-${server.id}` class=NavLink justify-content="space-between" padding="8px 10px" margin="0px -10px"
+                  column gap=2 flex=1 min-width=0 text-align="left"
+                    text server.name font-size=14 color="ink.primary" line-clamp=1
+                    text (server.status == "ready" ? server.kindLabel : `${server.kindLabel} · ${server.message != "" ? server.message : t("connect.signedOut")}`) font-size=11 color=(server.status == "ready" ? "ink.quiet" : "brand.warm") line-clamp=1
+                  if server.selected
+                    image "symbol:checkmark" width=13 height=13 color="brand.warm" aria-hidden=true
+              button press=addServerScreen testId="server-add" class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
+                row gap=10 align-items="center"
+                  image "symbol:add" width=14 height=14 aria-hidden=true
+                  text t("connect.add") font-size=14
           if p.secureOrigin != ""
             button press=goSecure disabled=p.secureBusy testId="secure-switch-menu" class=NavLink justify-content="flex-start" padding="8px 10px" margin="0px -10px"
               row gap=10 align-items="center"

@@ -21,7 +21,7 @@ import { join } from 'node:path';
 export interface SlotSpec { name: string; record: string; children?: boolean; frame?: string; actions: Record<string, string> }
 export const SLOT_API = 2;
 export const SLOTS: SlotSpec[] = [
-  { name: 'Shell', record: 'ShellProps', children: true, actions: { chooseSkin: 'chooseSkin', signOut: 'logout', home: 'goHome', search: 'openSearch', live: 'openLive', library: 'goHome', openLibrary: 'openLibrary', goSecure: 'goSecure' } },
+  { name: 'Shell', record: 'ShellProps', children: true, actions: { chooseSkin: 'chooseSkin', signOut: 'logout', home: 'goHome', search: 'openSearch', live: 'openLive', library: 'goHome', openLibrary: 'openLibrary', goSecure: 'goSecure', chooseServer: 'selectServer', connectServer: 'openConnect' } },
   { name: 'Home', record: 'HomeProps', children: true, actions: { selectTitle: 'selectTitle', observe: 'observe', pickHero: 'pickHero', reachEnd: 'loadMoreHome', reachRowEnd: 'loadMoreRow', previewIntent: 'previewIntent', playHero: 'playHero', openLibrary: 'openLibrary', live: 'openLive' } },
   { name: 'SearchSurface', record: 'SearchProps', actions: { openLiveProgramme: 'openLiveProgramme', retryDescriptive: 'retryDescriptive', selectTitle: 'selectTitle', observe: 'observe' } },
   { name: 'SearchField', record: 'SearchFieldProps', actions: { edit: 'edit' } },
@@ -37,6 +37,7 @@ export const SLOTS: SlotSpec[] = [
   { name: 'AuthNotice', record: 'AuthNoticeProps', actions: {} },
   { name: 'SignIn', record: 'SignInProps', actions: { editUsername: 'editUsername', editPassword: 'editPassword', submit: 'submitSignIn', quick: 'startCode', goSecure: 'goSecure' } },
   { name: 'QuickConnect', record: 'QuickConnectProps', actions: { cancel: 'cancelCode' } },
+  { name: 'Connect', record: 'ConnectProps', actions: { probe: 'probeServer', add: 'addServer', select: 'selectServer', remove: 'removeServer', startPlex: 'startPlexLink', choosePlex: 'choosePlexServer', cancelPlex: 'cancelPlexLink', signInJelly: 'signInJellyfin', startQuick: 'startJellyfinQuick', cancelQuick: 'cancelJellyfinQuick', close: 'close' } },
 ];
 /** Functions a skin may export; a parameter is matched by its name (`width`, `doc`). */
 export const FUNCTIONS = { detailPresentation: '"fullscreen"', detailSplit: '"none"' } as const;
