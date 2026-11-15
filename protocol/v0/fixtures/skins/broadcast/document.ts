@@ -47,10 +47,8 @@ const menuItem = (press: Press, label: string, kids: Node[]): Node => ({ type: '
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'background-color': '$ground', color: '$ink', 'font-family': sans }, children: [
   { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], style: { position: 'relative', 'z-index': '20', ...col('0px'), 'background-color': '$ground', 'box-shadow': '0px 1px 0px $line' }, children: [
     { type: 'box', style: { ...row('6px'), height: '64px', ...gutter }, small: { height: '52px', ...gutterSmall, gap: '8px' }, children: [
-      { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', ...row('14px'), 'margin-right': '18px', 'flex-shrink': '0' }, small: { 'margin-right': '0px' }, children: [
-        { type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: '66px', height: '25px' }, small: { width: '58px', height: '22px' } },
-        { type: 'box', style: { width: '1px', height: '22px', 'background-color': '$line2' }, small: { display: 'none' } },
-        { type: 'text', text: '{s:network}', style: { ...caps('14px', { 'letter-spacing': '0.22em' }), color: '$ink3' }, small: { display: 'none' } },
+      { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', ...row('0px'), 'margin-right': '26px', 'flex-shrink': '0' }, small: { 'margin-right': '0px' }, children: [
+        { type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: '74px', height: '28px' }, small: { width: '58px', height: '22px' } },
       ] },
       { type: 'box', style: { ...row('0px'), flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, small: { display: 'none' }, children: [homeTab, guideTab, destTab] },
       { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1' } },
@@ -368,7 +366,7 @@ const broadcastDoc: SkinDocument = {
     signal: '#ff3d2e', cue: '#ffc23d',
   },
   strings: { en: {
-    velaHome: 'Vela home', network: 'Live', live: 'Live', guide: 'Guide', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Broadcast',
+    velaHome: 'Vela home', live: 'Live', guide: 'Guide', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Broadcast',
     install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', clockLabel: 'Time now, {env.clock}',
     onAir: 'On air', lineup: '{env.channelCount} channels', liveBug: 'Live', monitor: 'Now playing on {tile.channelName}', monitorControls: 'Monitor controls',
     tuneInTo: 'Tune in to {tile.channelName}', tuning: 'Tuning {tile.channelNumber}', noPicture: 'No picture on {tile.channelNumber}', noPictureHint: 'Pick another channel, or try again from the guide.',
