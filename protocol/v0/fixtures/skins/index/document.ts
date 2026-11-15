@@ -147,6 +147,14 @@ const library: Node = { type: 'box', style: { display: 'flex', 'flex-direction':
     style: bordered, children: [{ type: 'text', text: '{s:showMore}' }] },
 ] };
 
+// A collection's titles in server order, under a way back.
+const collection: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: [
+  status('{s:openingCollection}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
+  status('{s:collectionFailed}', [{ test: 'env.load', is: 'eq', value: 'failed' }]),
+  { type: 'box', when: [ready], press: { action: 'back' }, label: '{s:back}', style: bordered, children: [{ type: 'text', text: '{s:back}' }] },
+  catalogue('{collection.name}', 'collection.items', [ready]),
+] };
+
 // ---------------------------------------------------------------- signed out
 // Compiled Index signs in on the default stage inside its own shell: drifting light, a vignette
 // and grain behind a glass card. (Its heading is now readable: compiled drew it in Index's ink.)
@@ -324,7 +332,7 @@ const title: Node = { type: 'box', style: { width: '100%', height: '100%', displ
 ] };
 
 export default {
-  schema: 1, renderer: 12, status: true, id, name: 'Index', version, tagline: 'A quiet printed catalogue: light paper, serif type, plain lists.',
+  schema: 1, renderer: 13, status: true, id, name: 'Index', version, tagline: 'A quiet printed catalogue: light paper, serif type, plain lists.',
   preview: asset('preview.jpg'), swatches: ['#f3f0e8', '#22221e', '#813b31', '#e3dfd3', '#bcb8ae'],
   // Sections cut rather than slide; nothing fades under a bar.
   traits: { panSections: false, barMask: false, page: '$page', ink: '$ink', splashOnPaper: true },
@@ -340,7 +348,7 @@ export default {
     viewingIndex: 'THE VIEWING INDEX', searchLabel: 'SEARCH', searchPlaceholder: 'Title, person, or description', searchLibrary: 'Search your library', clearSearch: 'Clear search', clear: 'Clear', featured: 'FEATURED', loadingMore: 'Loading more…',
     film: 'Film', series: 'Series', episode: 'Episode', season: 'Season', collection: 'Collection', noYear: '—',
     closeTitle: 'Close title', titleDetails: 'Title details', opening: 'Opening title…', failed: 'This title couldn\'t be opened. It may no longer be available.',
-    back: 'Back', showMore: 'Show more', findingTitles: 'Finding titles…', libraryFailed: 'This library couldn\'t be opened. Check your connection and try again.',
+    back: 'Back', openingCollection: 'Opening collection…', collectionFailed: 'This collection couldn\'t be opened.', showMore: 'Show more', findingTitles: 'Finding titles…', libraryFailed: 'This library couldn\'t be opened. Check your connection and try again.',
     welcome: 'Welcome to your evening.', signInTo: 'Sign in to your library.', username: 'Username', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…', or: 'or',
     withCode: 'Connect with a code', noMethods: 'This server doesn\'t offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.',
     unreachableTitle: 'Can\'t reach your server', unreachableBody: 'Your server could not be reached. Reopen Vela when the connection is restored.',
@@ -361,7 +369,7 @@ export default {
   },
   templates: { card, row },
   slots: { shell, home },
-  routes: { title, library, auth },
+  routes: { title, library, collection, auth },
   // Below 900 px the title page covers home; from 900 it stacks beside a 360 px home pane.
   detail: { from: 900, small: 'fullscreen', wide: 'stack', split: '360', frame: { flat: true } },
 } satisfies SkinDocument;
