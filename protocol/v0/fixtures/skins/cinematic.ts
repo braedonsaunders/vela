@@ -29,7 +29,7 @@ const navFocus: Style = { 'box-shadow': '0px 0px 0px 2px var(--brand.warm)', col
 // glides between destinations (a shared element).
 const navBase: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '40px', padding: '0px 14px', 'border-radius': '999px', color: 'ink.secondary', 'font-weight': '550', 'font-size': '14px', 'white-space': 'nowrap' };
 const navUnderline = (when: Condition[]): Node => ({ type: 'box', when, sharedElement: 'nav-underline', layoutTransition: '460ms ease-out', style: { position: 'absolute', left: '14px', right: '14px', bottom: '4px', height: '2px', 'border-radius': '1px', 'background-color': 'brand.warm' } });
-const navItem = (on: Condition[], press: BoxNode['press'], label: string): Node => ({ type: 'box', group: true, press, label,
+const navItem = (on: Condition[], press: BoxNode['press'], label: string): Node => ({ type: 'box', group: true, press, label, testId: `nav-${label}`,
   style: navBase, states: [{ when: on, style: { ...navBase, color: 'ink.primary', 'font-weight': '650' } }], a11y: { current: on },
   hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, focus: navFocus,
   // The weight sits on the label: the renderer resolves an inherited weight into the text.
@@ -446,13 +446,15 @@ const titleLoading: Node = { type: 'box', when: [is('env.load', 'loading')], rol
     bone('min(560px, 55%)', '52px', 8, { width: '100%' }),
     bone('170px', '56px', 28),
   ] };
-const failure = (message: string): Node => ({ type: 'box', when: [is('env.load', 'failed')], style: { display: 'flex', 'flex-direction': 'column', gap: '4px' }, children: [
-  { type: 'box', role: 'status', motion: enter(80), style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'text-align': 'center', gap: '14px', padding: '56px 24px 72px' }, children: [
+// A centred, quiet moment: an icon in a glass ring, a display title and a line of help.
+const emptyState = (icon: string, title: string, message: string): Node => ({ type: 'box', role: 'status', motion: enter(80), style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'text-align': 'center', gap: '14px', padding: '56px 24px 72px' }, children: [
     { type: 'box', style: { display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '64px', height: '64px', 'border-radius': '32px', 'background-color': 'cinematic.glass', border: '1px solid var(--cinematic.glass-edge)', 'box-shadow': 'inset 0px 1px 0px var(--cinematic.ring)', 'margin-bottom': '6px' } as Style,
-      children: [{ type: 'icon', symbol: 'alert', style: { width: '24px', height: '24px', color: 'brand.warm' } }] },
-    { type: 'text', text: '{s:somethingWentQuiet}', style: { ...display, 'font-size': '32px' } },
+      children: [{ type: 'icon', symbol: icon, style: { width: '24px', height: '24px', color: 'brand.warm' } }] },
+    { type: 'text', text: title, style: { ...display, 'font-size': '32px' } },
     { type: 'text', text: message, style: { 'font-size': '15px', color: 'ink.secondary', 'line-height': '1.55', 'max-width': '28rem' } },
-  ] },
+  ] });
+const failure = (message: string): Node => ({ type: 'box', when: [is('env.load', 'failed')], style: { display: 'flex', 'flex-direction': 'column', gap: '4px' }, children: [
+  emptyState('alert', '{s:somethingWentQuiet}', message),
   { type: 'box', when: [{ test: 'env.canRetry' }], style: { display: 'flex', 'flex-direction': 'row', 'justify-content': 'center' }, children: [
     { type: 'box', press: { action: 'retry' }, label: '{s:tryAgain}', style: { ...pill(true), position: 'relative', height: '44px', 'padding-left': '24px', 'padding-right': '24px', 'font-size': '14px' }, hover: { 'background-color': 'cinematic.primary-hover' }, focus: { 'box-shadow': focusRing },
       children: [{ type: 'text', text: '{s:tryAgain}' }] },
@@ -476,6 +478,98 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
   ] },
 ] };
 
+// A library page (compiled cinematic's Library): its art faint behind a sticky toolbar of
+// filters and sort, then its titles in a grid, with "Show more" while the server has more.
+const libChip = (on: Condition[], arg: string, label: string): Node => {
+  const base: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '34px', padding: '0px 14px', 'border-radius': '999px', 'background-color': 'cinematic.scrim-clear', color: 'ink.secondary', 'font-size': '13px', 'font-weight': '600', 'flex-shrink': '0', transition: 'background-color 180ms linear, color 180ms linear' };
+  return { type: 'box', press: { action: 'libraryFilter', arg }, label, a11y: { pressed: on },
+    style: base, states: [{ when: on, style: { ...base, 'background-color': 'ink.primary', color: 'ink.inverse' } }],
+    hover: { opacity: '0.92' }, focus: { 'box-shadow': '0px 0px 0px 2px var(--brand.warm)' }, children: [{ type: 'text', text: label }] };
+};
+const chipGroup = (label: string, children: Node[], when?: Condition[]): Node => ({ type: 'box', ...(when ? { when } : {}), role: 'group', label,
+  style: { display: 'flex', 'flex-direction': 'row', gap: '4px', padding: '4px', 'border-radius': '999px', 'background-color': 'cinematic.control', border: '1px solid var(--cinematic.glass-edge)', 'flex-shrink': '0' }, children });
+const glassSelect: Style = { 'box-sizing': 'border-box', height: '42px', padding: '0px 14px', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'background-color': 'cinematic.control', color: 'ink.primary', 'font-size': '14px' };
+const favOn: Condition = { test: 'library.favoriteFilter' };
+const favBase: Style = { ...pill(false), position: 'relative', height: '42px', 'padding-left': '16px', 'padding-right': '18px', 'flex-shrink': '0', transition: 'background-color 180ms linear, color 180ms linear' };
+const favourites: Node = { type: 'box', when: [{ test: 'library.canFavorite' }], press: { action: 'libraryFilter', arg: 'favorite|' }, label: '{s:favorites}', a11y: { pressed: [favOn] },
+  style: favBase, states: [{ when: [favOn], style: { ...favBase, 'background-color': 'ink.primary', color: 'ink.inverse' } }],
+  hover: { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing }, children: [
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center' }, children: [
+      { type: 'icon', when: [favOn], symbol: 'heart-fill', style: { width: '15px', height: '15px' } },
+      { type: 'icon', when: [{ ...favOn, not: true }], symbol: 'heart', style: { width: '15px', height: '15px' } },
+      { type: 'text', text: '{s:favorites}', style: { 'font-size': '14px' } },
+    ] },
+  ] };
+const favouritesOff: Node = { ...favourites, when: [{ test: 'library.canFavorite' }, { ...favOn, not: true }], press: { action: 'libraryFilter', arg: 'favorite|true' } } as Node;
+const favouritesOn: Node = { ...favourites, when: [{ test: 'library.canFavorite' }, favOn] } as Node;
+const ascending: Condition = { test: 'library.direction', is: 'eq', value: 'asc' };
+// Sort: its label, the server's sort options and, when the sort has both directions, a flip.
+// They sit in the toolbar row itself (a select stays near the top of its tree); the label's
+// 4 px and the group's 6 px gap are the row's 10, and the flip draws in 4 px to its 6.
+const sorting: Condition = { test: 'library.sortCount', is: 'gt', value: '1' };
+// The flip names the current direction; its glyph turns over for ascending.
+const flip = (asc: boolean): Node => ({ type: 'box', when: [sorting, { test: 'library.canFlip' }, asc ? ascending : { ...ascending, not: true }], press: { action: 'librarySortFlip' }, label: asc ? '{s:ascending}' : '{s:descending}',
+  style: { position: 'relative', width: '42px', height: '42px', padding: '12px', 'margin-left': '-4px', 'box-sizing': 'border-box', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'background-color': 'cinematic.control', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: 'ink.primary', 'flex-shrink': '0' } as Style,
+  hover: { 'background-color': 'cinematic.control-hover' }, focus: { 'box-shadow': focusRing },
+  children: [{ type: 'icon', symbol: 'sort', style: { width: '18px', height: '18px', rotate: asc ? '180' : '0' } }] });
+const sortControls: Node[] = [
+  { type: 'text', when: [sorting], text: '{s:sortBy}', style: { ...eyebrow, 'font-size': '10px', color: 'ink.quiet', 'flex-shrink': '0' } as Style },
+  { type: 'widget', widget: 'select', when: [sorting], params: { options: 'library.sorts', action: 'librarySort', label: '{s:sortBy}' }, style: glassSelect },
+  flip(true), flip(false),
+];
+const toolbar: Node = { type: 'box', style: { position: 'sticky', top: '0px', 'z-index': '5', display: 'flex', 'flex-direction': 'column', 'padding-top': '84px', 'background-color': 'cinematic.toolbar', 'backdrop-filter': 'blur(20px) saturate(1.3)', 'border-width': '0px', 'border-style': 'solid', 'border-bottom-width': '1px', 'border-bottom-color': 'cinematic.hairline' } as Style,
+  small: { 'padding-top': '104px' } as Style, children: [
+    { type: 'text', text: '{library.name}', role: 'heading', level: 1, style: { position: 'absolute', width: '1px', height: '1px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', opacity: '0', 'pointer-events': 'none' } },
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, small: { 'mask-image': 'linear-gradient(90deg, black 0%, black 90%, transparent 100%)' }, children: [
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', 'padding-top': '10px', 'padding-bottom': '10px', ...gutter, 'min-width': '100%', 'box-sizing': 'border-box' } as Style, small: { ...gutterSmall }, children: [
+        chipGroup('{s:all}', [
+          libChip([{ test: 'library.kindFilter', not: true }], 'kind|', '{s:all}'),
+          { type: 'repeat', over: 'library.kinds', item: libChip([{ test: 'opt.on' }], 'kind|{opt.id}', '{opt.label}') },
+        ], [{ test: 'library.kindCount', is: 'gt', value: '1' }]),
+        chipGroup('{s:unwatched}', [
+          libChip([{ test: 'library.playedFilter', not: true }], 'played|', '{s:all}'),
+          libChip([{ test: 'library.playedFilter', is: 'eq', value: 'false' }], 'played|false', '{s:unwatched}'),
+          libChip([{ test: 'library.playedFilter', is: 'eq', value: 'true' }], 'played|true', '{s:watched}'),
+        ], [{ test: 'library.canPlayed' }]),
+        favouritesOff,
+        favouritesOn,
+        { type: 'widget', widget: 'select', when: [{ test: 'library.genreCount', is: 'gt', value: '0' }], params: { options: 'library.genres', action: 'libraryFilter', arg: 'genre|{value}', none: '{s:anyGenre}', label: '{s:genre}' }, style: glassSelect },
+        { type: 'box', style: { flex: '1' } },
+        ...sortControls,
+      ] },
+    ] },
+  ] };
+const gridCard: Node = { ...card, style: { ...(card as BoxNode).style, width: '100%' }, small: { width: '100%' } } as Node;
+const libraryLoading: Node = { type: 'box', when: [is('env.load', 'loading')], role: 'status', label: '{s:findingTitles}', motion: 'statusOpen', style: { display: 'flex', 'flex-direction': 'column', gap: '28px', 'padding-top': '128px' }, small: { 'padding-top': '120px' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '16px', ...gutter } as Style, small: { ...gutterSmall }, children: [
+    bone('90px', '10px', 4),
+    bone('380px', '68px', 10, { width: '70%', height: '44px' }),
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px' }, children: [bone('220px', '42px', 21), bone('160px', '42px', 21)] },
+  ] },
+  rowSkeleton, rowSkeleton,
+] };
+const noItems: Condition = { test: 'library.itemCount', is: 'eq', value: '0' };
+const library: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column' }, children: [
+  libraryLoading,
+  failure('{s:libraryFailed}'),
+  { type: 'box', when: [ready], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '26px', 'padding-bottom': '80px' }, small: { gap: '18px' }, children: [
+    { type: 'box', when: [{ test: 'library.backdrop' }], style: { position: 'absolute', top: '0px', left: '0px', right: '0px', height: '320px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'pointer-events': 'none', 'mask-image': 'linear-gradient(180deg, black 0%, transparent 100%)', opacity: '0.22' }, small: { height: '260px' },
+      children: [{ type: 'image', src: '{library.backdrop}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } }] },
+    toolbar,
+    { type: 'box', when: [{ test: 'env.libraryLoading' }, noItems], role: 'status', label: '{s:findingTitles}', style: { display: 'flex', 'flex-direction': 'column' }, children: [rowSkeleton, rowSkeleton] },
+    { ...emptyState('filter', '{s:libraryEmpty}', '{s:libraryEmptyHint}'), when: [{ test: 'env.libraryLoading', not: true }, noItems] } as Node,
+    { type: 'box', when: [{ ...noItems, not: true }], style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(190px, 1fr))', 'column-gap': '20px', 'row-gap': '34px', ...gutter } as Style,
+      small: { 'grid-template-columns': 'repeat(auto-fill, minmax(140px, 1fr))', 'column-gap': '12px', 'row-gap': '22px', ...gutterSmall } as Style, children: [
+        { type: 'repeat', over: 'library.items', item: { ...gridCard, motion: 'card', stagger: { step: 30, cap: 18 } } as Node },
+      ] },
+    { type: 'box', when: [{ ...noItems, not: true }, { test: 'library.more' }], style: { display: 'flex', 'flex-direction': 'row', 'justify-content': 'center', 'padding-top': '12px' }, children: [
+      { ...pulse, when: [{ test: 'env.libraryMoreLoading' }] } as Node,
+      { type: 'box', when: [{ test: 'env.libraryMoreLoading', not: true }], press: { action: 'libraryMore' }, label: '{s:loadMore}', style: { ...pill(false), position: 'relative', height: '48px', 'padding-left': '28px', 'padding-right': '28px' },
+        hover: { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{s:loadMore}', style: { 'font-size': '15px' } }] },
+    ] },
+  ] },
+] };
+
 // The page frame; the scrim, blur and dissolve behind it are the route column's (the foundation's).
 const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', padding: '4vh 4vw', 'box-sizing': 'border-box' },
   small: { padding: '0px' }, children: [
@@ -492,9 +586,9 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
   ] };
 
 export const cinematicDoc: SkinDocument = {
-  schema: 1, renderer: 8, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
+  schema: 1, renderer: 10, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg', swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
-  strings: { en: { findingYourEvening: 'Finding your evening…', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', homeFailed: "Your library couldn't be reached. Check your server connection.", titleFailed: "This title couldn't be opened. It may no longer be available.", velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
+  strings: { en: { all: 'All', unwatched: 'Unwatched', watched: 'Watched', favorites: 'Favourites', genre: 'Genre', anyGenre: 'Any genre', sortBy: 'Sort by', ascending: 'Ascending', descending: 'Descending', loadMore: 'Show more', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.', findingTitles: 'Finding titles…', libraryFailed: "This library couldn't be opened. Check your connection and try again.", findingYourEvening: 'Finding your evening…', openingTitle: 'Opening title…', somethingWentQuiet: 'Something went quiet', tryAgain: 'Try again', homeFailed: "Your library couldn't be reached. Check your server connection.", titleFailed: "This title couldn't be opened. It may no longer be available.", velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
   motion: {
     ...enterPresets,
     pulse0: { keyframes: 'breathe', duration: 1400, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
@@ -515,7 +609,7 @@ export const cinematicDoc: SkinDocument = {
   },
   templates: { card, row, relatedRow },
   slots: { shell, home },
-  routes: { title },
+  routes: { title, library },
   // Home and the title page draw their own loading and failure; home fades under the floating bar.
   status: true,
   traits: { barMask: true },
