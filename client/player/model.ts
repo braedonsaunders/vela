@@ -53,7 +53,7 @@ export interface Snapshot {
   chapters: Chapter[];
   subtitleError: string | null; subtitleStyle: SubtitlePreferences; subtitleStyleAvailable: boolean;
   subtitleReportingId?: string | null; subtitleClientOnly?: boolean; audioClientOnly?: boolean;
-  diagnostics?: { implementation?:'vela-core'|'upstream-controller'; metadataDiscrepancies: string[] };
+  diagnostics?: { implementation?:'vela-core'|'upstream-controller'; metadataDiscrepancies: string[]; subtitleFailures?:string[] };
   live: LiveSnapshot | null;
   seekTarget: number | null; waiting: boolean; volume: number; muted: boolean;
   preparation: 'media-metadata' | 'initial-buffer' | 'starting' | null;

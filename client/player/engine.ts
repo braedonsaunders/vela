@@ -37,6 +37,7 @@ export class PlaybackEngine {
   private overlayEpoch=0;
   private subtitleStyle=readSubtitlePreferences();
   private subtitleFailures=new Set<string>();
+  private subtitleFailureNotes:string[]=[];
   private originalStartTimer?: ReturnType<typeof setTimeout>;
   private localDecoderRetries = new Set<string>();
   private originalClosing: Promise<void> = Promise.resolve();
@@ -160,7 +161,7 @@ export class PlaybackEngine {
     return {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.pendingSeek ? 'buffering' : this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
-      diagnostics: this.original ? {implementation:this.original.implementation,metadataDiscrepancies:this.original.readout.metadataDiscrepancies} : undefined,
+      diagnostics: this.original||this.subtitleFailureNotes.length ? {implementation:this.original?.implementation,metadataDiscrepancies:this.original?.readout.metadataDiscrepancies??[],subtitleFailures:[...this.subtitleFailureNotes]} : undefined,
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? (this.backend === 'webgpu' ? this.coreQuality.id : this.backend === 'native-hls' ? this.manualQuality ?? this.source?.initialRenditionId ?? null : null), qualityIds: this.pipeline?.qualityIds ?? (this.backend==='webgpu'?this.source?.renditions?.map(r=>r.id)??[]:[]),
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 }, lockedQuality: this.manualQuality,
       audioTracks: this.original?.supportsLocalAudioSwitch!==false?this.original?.audioTracks??this.session?.audioTracks??[]:this.session?.audioTracks??[], subtitleTracks, renditions: this.source?.renditions?.map(({url,...rendition})=>({...rendition,bitrateBps:rendition.bandwidth,requiredBandwidthBps:rendition.bandwidth*QUALITY_HEADROOM}))??[],
@@ -267,6 +268,7 @@ export class PlaybackEngine {
     if (session.id !== this.session?.id) {
       this.browserFallbacks.clear();
       this.subtitleFailures.clear();
+      this.subtitleFailureNotes=[];
       this.subtitlePreference=undefined;this.deferredPath=null;
       this.audioPreference = undefined; this.localTransportIntent = undefined;
       this.liveLatency.reset(session.livePolicy);this.liveNetworkRetries=0;
@@ -640,6 +642,11 @@ export class PlaybackEngine {
     try{return await loading;}catch(error){if(current())this.releaseOverlay();throw error;}
   }
   private subtitleFailed(failure:SubtitleFailure){
+    // A burn-in replacement retires the overlay (and its error). Keep a small,
+    // source-free history so successful or failed recovery remains diagnosable.
+    const note=failure.message.replace(/https?:\/\/\S+/g,'[source]').slice(0,256);
+    if(!this.subtitleFailureNotes.includes(note)){this.subtitleFailureNotes.push(note);if(this.subtitleFailureNotes.length>8)this.subtitleFailureNotes.shift();}
+    this.publish(true);
     const serverId=failure.serverId;
     const key=`${this.session?.id}:${this.source?.sourceRevision??this.source?.timeline}:${failure.trackId}`;
     if(serverId&&this.session?.serverControlled&&this.overlay?.tracks.some(track=>track.id===failure.trackId&&track.delivery.kind==='embedded')&&this.session.subtitleTracks.some(track=>track.id===serverId)&&!this.subtitleFailures.has(key)&&!this.pendingTracks&&!this.pendingSwitch&&!this.recovering&&!['failed','ended'].includes(this.status)){
