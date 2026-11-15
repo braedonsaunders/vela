@@ -219,7 +219,7 @@ members Client
     if liveHome and tileViewer != ""
       tileLast = `${tileViewer}\n${id}`
   action homeKey(k: string, event: KeyboardEvent)
-    if guideOpen and libraryId == "" and not event.metaKey and not event.ctrlKey and not event.altKey and (k == "ChannelUp" or k == "ChannelDown")
+    if top(nav).name == "home" and guideOpen and libraryId == "" and not event.metaKey and not event.ctrlKey and not event.altKey and (k == "ChannelUp" or k == "ChannelDown")
       preventDefault()
       zapTile(k == "ChannelUp" ? -1 : 1)
   // What a live home's document reads, each bound once: the listings, the tile and the

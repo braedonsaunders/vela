@@ -71,7 +71,7 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
 type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; holds: boolean; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
-export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string }
+export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string }
 interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
@@ -343,16 +343,18 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
   const kfCss = keyframesCss(doc);
   const strings = { ...doc.strings?.en, ...doc.strings?.[locale.split('-')[0]], ...doc.strings?.[locale] };
   const r: Resolve = { doc, count: 0, assets: origin, strings, styles: [], index: new Map() };
-  const shell = slot(doc.slots.shell, r, 'children', SHELL_FROM), home = slot(doc.slots.home, r, 'searchField');
+  const shell = slot(doc.slots.shell, r, 'children', SHELL_FROM);
   // A route tree is a slot without `present` (a route is drawn only when the document has it).
-  const routes = Object.entries(doc.routes ?? {}).map(([name, tree]) => { const { present: _, ...rest } = slot(tree, r, 'children'); return { name, ...rest }; });
+  // Home is a route like the others (its holder is the foundation's search field): one renderer call site draws them all.
+  const tree = (name: string, root: Node | undefined, holder: 'children' | 'searchField') => { const { present, ...rest } = slot(root, r, holder); return present ? [{ name, ...rest }] : []; };
+  const routes = [...tree('home', doc.slots.home ?? doc.routes?.home, 'searchField'), ...Object.entries(doc.routes ?? {}).filter(([name]) => name !== 'home').flatMap(([name, root]) => tree(name, root, 'children'))];
   // Document fonts: same-origin appearance files, registered by the vela-theme view under their family names.
   const fonts = Object.values(doc.fonts ?? {}).slice(0, 8).flatMap(f => /^[A-Za-z0-9 ]{1,48}$/.test(f?.family ?? '') ? (f.files ?? []).slice(0, 4).flatMap(file => {
     const url = file && typeof file.url === 'string' && (file.url.startsWith('/vela/v0/appearance/') || file.url.startsWith('/vela/skins/')) && /\.(woff2|woff|ttf|otf)$/.test(file.url) && !/[?#\\]/.test(file.url) ? `${origin}${file.url}` : '';
     const w = String(file.weight ?? 400).trim();
     return url && /^\d{3}( \d{3})?$/.test(w) ? [{ family: f.family, url, weight: w, style: file.style === 'italic' ? 'italic' : 'normal', sizeAdjust: Number(f.sizeAdjust) || 100 }] : [];
   }) : []);
-  return { id: doc.id, fontsJson: fonts.length ? JSON.stringify(fonts) : '', keyframesCss: kfCss, styles: r.styles, shell, home, routes, liveHome: doc.live?.home === true,
+  return { id: doc.id, fontsJson: fonts.length ? JSON.stringify(fonts) : '', keyframesCss: kfCss, styles: r.styles, shell, routes, liveHome: doc.live?.home === true,
     detailWide: doc.detail?.wide === 'stack' ? '' : doc.detail?.wide ?? 'fullscreen', detailSmall: doc.detail?.small === 'stack' ? '' : doc.detail?.small ?? 'fullscreen',
     // From this viewport width the detail takes its wide presentation and splits home beside it (a pane width in px).
     detailFrom: Math.max(0, Math.min(4000, Math.round(Number(doc.detail?.from ?? 640)) || 0)), detailSplit: /^(\d{2,4})(px)?$/.exec(String(doc.detail?.split ?? ''))?.[1] ?? 'none' };

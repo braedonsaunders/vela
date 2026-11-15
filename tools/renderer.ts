@@ -422,21 +422,8 @@ shape Env
   ev: string[]
 
 ${Array.from({ length: DEPTH }, (_, i) => shape(DEPTH - i)).join('\n')}
-// One slot's tree: its root container's style, its top-level nodes, and the flex
-// order of the foundation's content among them (the route a shell wraps, the
-// search field a home holds), so the renderer is inlined at one call site per slot.
-shape DocSlot
-  present: bool
-  rootBase: StateRef
-  rootSts: StateRef[]
-  slotBase: StateRef
-  slotSts: StateRef[]
-  slotInner: number
-  slotOrder: string
-  // The tree places the foundation's content (a slot node); without one, none is drawn (home).
-  holds: bool
-  nodes: N1[]
-
+// The shell's tree: its root container's style, its top-level nodes, and the flex order
+// of the route it wraps among them.
 shape ShellSlot
   present: bool
   rootBase: StateRef
@@ -460,6 +447,13 @@ shape RouteProps
   tv: bool
   width: number
   still: bool
+  // Home's models (route "home"): the model (zero or one), the query, the hero shown, paging.
+  home: HomeModel[]
+  query: string
+  heroIndex: number
+  rowMoreLoading: string[]
+  homeMoreLoading: bool
+  libraries: LibraryNav[]
 
 // A route's tree (the route view draws the one named after the current stack entry).
 shape RouteTree
@@ -481,7 +475,7 @@ shape SkinDoc
   keyframesCss: string
   styles: Style[]
   shell: ShellSlot
-  home: DocSlot
+  // Home and the routes the document draws, each by name (one renderer call site draws them all).
   routes: RouteTree[]
   liveHome: bool
   detailWide: string
@@ -525,7 +519,7 @@ const detailCtxsBody = `match first(e.detail) { case some(d) => (n.rep == "detai
 const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs${d}(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])`;
 
 const noStyleBody = () => `Style(${STYLE.map(([f]) => `${f}=${NUMERIC.has(f) ? ({ opacity: 1, flexShrink: 1, fontWeight: 400, scale: 1 } as Record<string, number>)[f] ?? 0 : '""'}`).join(', ')})`;
-const EMPTY_DOC = `fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)\nfn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=false, nodes=[]), home=DocSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=false, nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none")\n`;
+const EMPTY_DOC = `fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)\nfn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=false, nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none")\n`;
 
 /**
  * The renderer's compatibility version: a document names the version it needs

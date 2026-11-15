@@ -218,6 +218,13 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
   `pageNext` / `pagePrev` with arg `{row.id}` scroll it by max(200, home width - 2 x inset - peek);
   `pager.overflows`, `pager.atStart`, `pager.atEnd` for the arrows.
 
+**The page call site.** Home and every route a document draws are drawn by one route view
+(Exact copies a component per call site): home is the `home` route (`slots.home`, or
+`routes.home`), its `searchField` slot node the holder for the foundation's search field. A
+framed title page's scrim and blur belong to the route frame (the doc engine's traits), not
+to the document's title root: a route is its own backdrop root, so a blur inside it cannot see
+home beneath.
+
 ## Next (renderer 8, names final)
 
 - Per-document `traits`: `page`, `ink`, `flatDetail`, `panSections`, `barMask`, `splashOnPaper`,

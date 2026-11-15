@@ -1,6 +1,6 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
-use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, RouteProps, noStyle from "../../renderer/shapes.contract"
+use Style, Env, Ctx, ShellSlot, SkinDoc, RouteProps, noStyle from "../../renderer/shapes.contract"
 use V1, V5, BoxEl, ctxs1, ctxs5, ctxKey, binds, envBinds, heroActFor, num, styleAt, stateOf, rootCtx, selectedSeason from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use HomeProps, ShellProps from "../../foundation/slot-api.contract"
@@ -8,6 +8,8 @@ use GuideModel, GuideChannel, LiveTile from "../../live/models.contract"
 
 fn part(s: string, i: number): string = match s.split("|").at(i) { case some(x) => x, case none => "" }
 fn pagerUpdate(pagers: string[], arg: string): string = match first(pagers.filter(x => part(x, 0) == part(arg, 0))) { case some(x) => `${part(arg, 0)}|${part(arg, 1) == "s" ? part(arg, 2) : part(x, 1)}|${part(arg, 1) == "e" ? part(arg, 2) : part(x, 2)}|${part(arg, 3)}|${part(arg, 4)}`, case none => `${part(arg, 0)}|${part(arg, 1) == "s" ? part(arg, 2) : "1"}|${part(arg, 1) == "e" ? part(arg, 2) : "1"}|${part(arg, 3)}|${part(arg, 4)}` }
+// A full-size flex column: the shell's boxes when it wraps a route page bare.
+fn bareStyle(): Style = Style(noStyle(), display="flex", flexDirection="column", flexGrow=1, minHeight="0px", width="100%", height="100%")
 fn toggled(flags: string[], f: string): string[] = (flags.includes(f) ? flags.filter(x => x != f) : flags.concat([f]))
 fn detailPresentation(doc: SkinDoc, width: number): string = (width < doc.detailFrom ? doc.detailSmall : doc.detailWide)
 fn detailSplit(doc: SkinDoc, width: number): string = (width < doc.detailFrom ? "none" : doc.detailSplit)
@@ -128,24 +130,44 @@ component Shell
         for rv in [binds(rootCtx(), env)] key="rv"
           for rs in [stateOf(doc.shell.rootSts, doc.shell.rootBase, rv, env)] key="rs"
             for ss in [stateOf(doc.shell.slotSts, doc.shell.slotBase, rv, env)] key="ss"
-              Root(s=styleAt(env, rs.s), pos=(rs.pos == 1 ? "absolute" : rs.pos == 2 ? "sticky" : "relative"), e=env)
-                SlotBox(order=doc.shell.slotOrder, pos=(ss.pos == 1 ? "absolute" : ss.pos == 2 ? "sticky" : "relative"), s=styleAt(env, ss.s), inner=styleAt(env, doc.shell.slotInner), e=env)
+              // Bare (a route page): a plain full-size box around the page, no shell nodes.
+              Root(s=(p.bare ? bareStyle() : styleAt(env, rs.s)), pos=(not p.bare and rs.pos == 1 ? "absolute" : not p.bare and rs.pos == 2 ? "sticky" : "relative"), e=env)
+                SlotBox(order=(p.bare ? "0" : doc.shell.slotOrder), pos=(not p.bare and ss.pos == 1 ? "absolute" : not p.bare and ss.pos == 2 ? "sticky" : "relative"), s=(p.bare ? bareStyle() : styleAt(env, ss.s)), inner=(p.bare ? bareStyle() : styleAt(env, doc.shell.slotInner)), e=env)
                   children
-                for n, i in doc.shell.nodes key=`${i}`
-                  for cc, j in ctxs5(n, rootCtx(), env) key=ctxKey(cc, j)
-                    V5(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=seen)
-                if pickerOpen
+                if not p.bare
+                  for n, i in doc.shell.nodes key=`${i}`
+                    for cc, j in ctxs5(n, rootCtx(), env) key=ctxKey(cc, j)
+                      V5(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=seen)
+                if pickerOpen and not p.bare
                   SkinPicker(skins=p.skins, current=p.skin, small=env.small, still=env.still, choose=pick, dismiss=dismiss)
 
+// Home's slot is empty for documents: home is drawn by the route view (Route below) with
+// the other routes, so the renderer has one call site for all of them.
 component Home
   props
     p: HomeProps
+  slot
+  view
+    column display="none" aria-hidden=true
+
+// The route view: the one place the renderer draws a page (docs/skin-distribution.md,
+// "End state"): home or a route the document draws, by the stack entry's route, with that
+// route's models. Its children are the foundation's content for the tree's holder (home's
+// search field).
+component Route
+  props
+    p: RouteProps
   inject
     edit: action
     homeWidth: number
     doc: SkinDoc
     selectTitle: action
-    observe: action
+    observeCard: action
+    observeDetail: action
+    play: action
+    playExtra: action
+    leave: action
+    retryFailed: action
     pickHero: action
     playHero: action
     openLive: action
@@ -162,9 +184,32 @@ component Home
   slot
   state flags: string[] = []
   state pagers: string[] = []
+  derive onHome = p.route == "home"
+  // A card's impression: home's observer on home, the title page's on a title.
+  action observed(token: string, entry: IntersectionObserverEntry)
+    if onHome
+      observeCard(token, entry)
+    else
+      observeDetail(token, entry)
   action act(name: string, arg: string)
     if name == "select"
       selectTitle(part(arg, 0), part(arg, 1), part(arg, 2))
+    // Play: a hero's action on home, the title's play on a title page.
+    if name == "play"
+      if onHome
+        match first(p.home)
+          case some(h)
+            playHero(heroActFor(h, arg).map(a => a.targetId).join(""), num(heroActFor(h, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(h, arg).map(a => a.hasPosition).includes(true))
+          case none
+            flags = flags
+      else
+        play(arg)
+    if name == "playExtra"
+      playExtra(arg)
+    if name == "back"
+      leave()
+    if name == "retry"
+      retryFailed()
     if name == "watch" and arg != ""
       watchChannel(arg)
     if name == "preview" and arg != ""
@@ -175,9 +220,7 @@ component Home
       tileTuneIn()
     if name == "unmute"
       tileUnmute()
-    if name == "guide"
-      openLive()
-    if name == "live"
+    if name == "guide" or name == "live"
       openLive()
     // A live library is the Live TV section (as in the shell).
     if name == "library"
@@ -185,8 +228,6 @@ component Home
         openLive()
       else
         openLibrary(arg)
-    if name == "play"
-      playHero(heroActFor(p.model, arg).map(a => a.targetId).join(""), num(heroActFor(p.model, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(p.model, arg).map(a => a.hasPosition).includes(true))
     if name == "pickHero"
       pickHero(match parseNumber(arg) { case some(x) => x, case none => 0 })
     // A pager edge: rowId|s or e|visible|inset|peek; the record is rowId|start|end|inset|peek.
@@ -210,66 +251,17 @@ component Home
     if name == "focusSearch"
       focus("vela-search")
   view
-    // One Env, bound once (Exact expands a derive at every use).
-    for env0 in [Env(styles=doc.styles, dflt=noStyle(), route="home", entry="", load="ready", detail=[], season="", home=[p.model], libraries=p.libraries, viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, tv=homeWidth >= 1600, width=homeWidth, skinCount=0, rowLoading=p.rowMoreLoading, homeLoading=p.homeMoreLoading, still=p.still, canLive=p.model.liveAvailable, flags=flags, guide=homeGuide, tile=homeTile, tuned=homeTuned, tunedId=homeTuned.map(c => c.id).join(""), zapping=homeZapping, favoriteCount=match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 }, pagers=pagers, ev=[])] key="env0"
-      for env in [Env(env0, ev=envBinds(env0))] key="env"
-        for rv in [binds(rootCtx(), env)] key="rv"
-          for rs in [stateOf(doc.home.rootSts, doc.home.rootBase, rv, env)] key="rs"
-            for ss in [stateOf(doc.home.slotSts, doc.home.slotBase, rv, env)] key="ss"
-              Root(s=styleAt(env, rs.s), pos=(rs.pos == 1 ? "absolute" : rs.pos == 2 ? "sticky" : "relative"), e=env)
-                if doc.home.holds
-                  SlotBox(order=doc.home.slotOrder, pos=(ss.pos == 1 ? "absolute" : ss.pos == 2 ? "sticky" : "relative"), s=styleAt(env, ss.s), inner=styleAt(env, doc.home.slotInner), e=env)
-                    children
-                for n, i in doc.home.nodes key=`${i}`
-                  for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
-                    V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observe)
-
-// The route view: the one place the renderer draws a whole route (docs/skin-distribution.md,
-// "End state"). It draws the document's tree named after the stack entry's route, with
-// that route's models; routes move here from the compiled slots one by one.
-component Route
-  props
-    p: RouteProps
-  inject
-    edit: action
-    doc: SkinDoc
-    selectTitle: action
-    observeDetail: action
-    play: action
-    playExtra: action
-    leave: action
-    retryFailed: action
-  state flags: string[] = []
-  action act(name: string, arg: string)
-    if name == "select"
-      selectTitle(part(arg, 0), part(arg, 1), part(arg, 2))
-    if name == "play"
-      play(arg)
-    if name == "playExtra"
-      playExtra(arg)
-    if name == "back"
-      leave()
-    if name == "retry"
-      retryFailed()
-    if name == "toggle"
-      flags = toggled(flags, arg)
-    // The search input's focus is the flag search-focused (env.searchFocused).
-    if name == "searchFocus"
-      flags = (flags.includes("search-focused") ? flags : flags.concat(["search-focused"]))
-    if name == "searchBlur"
-      flags = flags.filter(f => f != "search-focused")
-    if name == "clearSearch"
-      edit("")
-    if name == "focusSearch"
-      focus("vela-search")
-  view
-    for env0 in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=[], libraries=[], viewer="", section=p.route, query="", heroIndex=0, small=p.small, tv=p.tv, width=p.width, skinCount=0, rowLoading=[], homeLoading=false, still=p.still, canLive=false, flags=flags, guide=[], tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0, pagers=[], ev=[])] key="env0"
+    // One Env, bound once (Exact expands a derive at every use). Home reads the home pane's width.
+    for env0 in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=p.home, libraries=p.libraries, viewer=p.home.map(h => h.viewer).join(""), section=p.route, query=p.query, heroIndex=p.heroIndex, small=p.small, tv=(onHome ? homeWidth >= 1600 : p.tv), width=(onHome ? homeWidth : p.width), skinCount=0, rowLoading=p.rowMoreLoading, homeLoading=p.homeMoreLoading, still=p.still, canLive=p.home.map(h => h.liveAvailable).includes(true), flags=flags, guide=(onHome ? homeGuide : []), tile=(onHome ? homeTile : []), tuned=(onHome ? homeTuned : []), tunedId=(onHome ? homeTuned.map(c => c.id).join("") : ""), zapping=(onHome ? homeZapping : ""), favoriteCount=(onHome ? match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 } : 0), pagers=pagers, ev=[])] key="env0"
       for env in [Env(env0, ev=envBinds(env0))] key="env"
         for tree in doc.routes.filter(t => t.name == p.route) key=tree.name
           for rv in [binds(rootCtx(), env)] key="rv"
             for rs in [stateOf(tree.rootSts, tree.rootBase, rv, env)] key="rs"
               for ss in [stateOf(tree.slotSts, tree.slotBase, rv, env)] key="ss"
                 Root(s=styleAt(env, rs.s), pos=(rs.pos == 1 ? "absolute" : rs.pos == 2 ? "sticky" : "relative"), e=env)
+                  if tree.holds
+                    SlotBox(order=tree.slotOrder, pos=(ss.pos == 1 ? "absolute" : ss.pos == 2 ? "sticky" : "relative"), s=styleAt(env, ss.s), inner=styleAt(env, tree.slotInner), e=env)
+                      children
                   for n, i in tree.nodes key=`${i}`
                     for cc, j in ctxs1(n, rootCtx(), env) key=ctxKey(cc, j)
-                      V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observeDetail)
+                      V1(n=n, c=Ctx(cc, index=(n.rep == "" ? cc.index : j)), e=env, act=act, obs=observed)

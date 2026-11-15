@@ -2,7 +2,7 @@
 use Card, FeedRow, HomeModel, HeroAction, LibraryNav, DetailModel, ExtraModel, CastPerson, cardName from "../foundation/models.contract"
 use GuideModel, GuideChannel, LiveTile from "../live/models.contract"
 
-use Style, Part, Cond, StateRef, Ctx, Env, N10, N9, N8, N7, N6, N5, N4, N3, N2, N1, DocSlot, ShellSlot, RouteProps, RouteTree, SkinDoc, noStyle, noRef, emptyDoc from "./shapes.contract"
+use Style, Part, Cond, StateRef, Ctx, Env, N10, N9, N8, N7, N6, N5, N4, N3, N2, N1, ShellSlot, RouteProps, RouteTree, SkinDoc, noStyle, noRef, emptyDoc from "./shapes.contract"
 
 keyframes vr-rise
   from opacity=0 translate="0px 22px"

@@ -472,13 +472,17 @@ component Connect
   view
     CinematicConnect(p=p)
 
-// The route view: the one place the renderer draws a whole route.
+// The route view: the one place the renderer draws a page (home or a route); children fill the page's holder.
 component DocRoute
   props
     p: RouteProps
   inject
     close: action
+    observe: action
   provide
     leave = close
+    observeCard = observe
+  slot
   view
     DocumentsRoute(p=p)
+      children
