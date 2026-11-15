@@ -22,4 +22,4 @@ export interface SubtitleContainer {
 export function subtitleAbort(signal:AbortSignal){signal.throwIfAborted()}
 export function subtitleLimit(value:number,max:number,label:string){if(!Number.isSafeInteger(value)||value<0||value>max)throw new Error(`Subtitle ${label} exceeds its bound`);return value}
 
-export type {ByteReader as SubtitleByteReader} from '../../core/types';
+export type {ByteReader as SubtitleByteReader} from '../../core/source/types';

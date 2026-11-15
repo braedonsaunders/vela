@@ -136,3 +136,28 @@ The runtime, reader cache and presentation device survived the seek. The parser
 coordinator runs in bounded workers; GPU jobs use the library's decode-session
 component while Vela retains packet credits, presentation queues and clock policy.
 This640×360 local result does not qualify4K lab parity or Dolby Vision processing.
+
+## Clock-driven subtitle integration
+
+The core native-view candidate shares its original-file ByteReader with the
+subtitle subsystem. Actual full-container subtitle tracks populate the existing
+chrome snapshot. Selection, Off and paused seeks are local; text selection never
+restarts the broker. HLS text uses the same overlay with absolute title time and
+cancellable WebVTT windows. An embedded decode/acquisition failure may request
+one authorized server fallback per session/source/track; external network errors
+do not trigger an encoder restart. Burn-in is explicitly reported.
+
+A local generated AVC/AAC+ASS fixture rendered its attached font and italic cue
+at a paused, authorized seek to2s: one overlay canvas,7536nontransparent pixels,
+selected server ID preserved, no subtitle error. The generated PGS fixture used
+the same native-view/seek path and rendered14300nontransparent pixels. Off
+removed the overlay in both drives. Neither selection sent a tracks command;
+the only session command was seek. Both browsers and the local asset server
+were closed. These prove local host integration, not lab or4K parity.
+
+Plain-text appearance preferences are exposed to chrome and persisted locally.
+ASS and PGS keep authored styling/bitmap composition and disable those overrides.
+Subtitle assets, fonts, exact corresponding sources and notices are optional,
+verified payload components; embedded families are declared only by a core
+payload containing them. The production wrapper remains selected until the
+core migration gates pass.

@@ -13,6 +13,7 @@ interface ContextHandle { context: true; disposed: boolean; lastNavigation: stri
 interface Handle {
   engine: PlaybackEngine; video: HTMLVideoElement; sessionJson: string; lastCommand: number;
   endedReport: string; reportedFailure: string; serverError: string; planRevision: number; planSession: string; sequence: number; lastReport: number;
+  reportedTracks:string;
 }
 export function create(tag: string, element: HTMLElement, json: string, event: (kind: number, payload: string) => void): Handle | ContextHandle | PreviewHandle | InstallHandle | ThemeHandle | EngineHandle {
   if (tag === 'vela-engine') return createEngine(json);
@@ -37,19 +38,21 @@ export function create(tag: string, element: HTMLElement, json: string, event: (
   const style = document.createElement('style');
   style.textContent = '.webgpuPlayerCanvas{position:absolute;display:block;z-index:1;opacity:0;pointer-events:none}.webgpuPlayerCanvas-visible{opacity:1}';
   surface.append(video); root.replaceChildren(style,surface);
-  const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0, serverError: '', endedReport: '', reportedFailure: '' };
+  const handle: Handle = { engine: undefined!, video, sessionJson: '', lastCommand: -1, planRevision: -1, planSession: '', sequence: 0, lastReport: 0, serverError: '', endedReport: '', reportedFailure: '',reportedTracks:'' };
   handle.engine = new PlaybackEngine(video, value => {
     event(8, JSON.stringify(value));
     const now = performance.now();
     const failureKey = value.type === 'snapshot' && value.snapshot.failure
       ? `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}:${value.snapshot.sourceId}:${value.snapshot.failure.kind}:${value.snapshot.failure.message}` : '';
-    if (value.type === 'snapshot' && handle.engine.observationAllowed && (now - handle.lastReport >= 1000 || failureKey !== '' && failureKey !== handle.reportedFailure)) {
+    const trackKey=value.type==='snapshot'?JSON.stringify([value.snapshot.sessionId,value.snapshot.sourceGeneration,value.snapshot.seekGeneration,
+      value.snapshot.audioTrackId,value.snapshot.subtitleTrackId]):'';
+    if (value.type === 'snapshot' && handle.engine.observationAllowed && (now - handle.lastReport >= 1000 || failureKey !== '' && failureKey !== handle.reportedFailure||trackKey!==handle.reportedTracks)) {
       if (failureKey) handle.reportedFailure = failureKey;
       const endedKey = `${value.snapshot.sessionId}:${value.snapshot.sourceGeneration}:${value.snapshot.seekGeneration}`;
       if (value.snapshot.state === 'ended' && handle.endedReport === endedKey) return;
       if (value.snapshot.state === 'ended') handle.endedReport = endedKey;
       const report = observation(value.snapshot, ++handle.sequence);
-      if (report) { handle.lastReport = now; event(8, JSON.stringify({ type: 'observation', sessionId: value.snapshot.sessionId, observation: report })); }
+      if (report) { handle.lastReport = now;handle.reportedTracks=trackKey; event(8, JSON.stringify({ type: 'observation', sessionId: value.snapshot.sessionId, observation: report })); }
     }
   }, element.parentElement ?? element, ambient);
   try { setProps(handle, json); } catch (error) { handle.engine.dispose(); video.remove(); throw error; }
@@ -92,6 +95,7 @@ function applyCommand(handle: Handle, props: Record<string, string>) {
         case 'seek': command = { ...base, type: 'seek', seconds: Number(decoded) }; break;
         case 'volume': command = { ...base, type: 'volume', value: Number(decoded) }; break;
         case 'speed': command = { ...base, type: 'speed', value: Number(decoded) }; break;
+        case 'subtitleStyle': command = { ...base, type: 'subtitleStyle', value: decoded }; break;
         case 'mute': command = { ...base, type: 'mute', muted: decoded === '' ? undefined : decoded === 'true' }; break;
         case 'quality': command = { ...base, type: 'quality', renditionId: decoded || null }; break;
         case 'audio': command = { ...base, type: 'audio', trackId: decoded }; break;

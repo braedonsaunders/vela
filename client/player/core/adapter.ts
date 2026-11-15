@@ -8,10 +8,15 @@ import type { AudioTrack } from './types';
 import { canonicalAudioCodec } from '../universal/audio/packages';
 import { VideoPackages } from '../universal/video/packages';
 import { VideoDecoderRouter } from './decode/video';
+export {SubtitleSession} from '../universal/subtitles/session';
 
 /** Same native-view boundary; all orchestration beneath it belongs to Vela. */
 export class UniversalRuntime implements OriginalBackend {
   readonly retainsSource=true;
+  get supportsSubtitles(){return !!this.options.assets.subtitleBaseURL;}
+  get byteReader(){return this.core.byteReader;}
+  get sourceContainer(){return this.core.container;}
+  get videoSize(){const track=this.core.snapshot().tracks.find(track=>track.kind==='video');return track?{width:track.width,height:track.height}:undefined;}
   private readonly core:PlaybackCore;
   private media?:OriginalMedia;
   private audioAliases=new Map<string,string>();
@@ -55,6 +60,14 @@ export class UniversalRuntime implements OriginalBackend {
   }
   get position(){return this.core.snapshot().positionUs/1e6;}
   get audioTrackIds(){return [...this.audioAliases.keys()];}
+  get audioTracks(){
+    const descriptions=[...(this.media?.audio??[])].sort((a,b)=>a.streamIndex-b.streamIndex);
+    return this.core.snapshot().tracks.filter((track):track is AudioTrack=>track.kind==='audio').map((track,index)=>({
+      id:[...this.audioAliases].find(([,actual])=>actual===track.id)?.[0]??track.id,
+      label:descriptions[index]?.label??[track.language,track.codec.toUpperCase(),`${track.channels} ch`].filter(Boolean).join(' · '),
+      language:track.language,codec:track.codec,channels:track.channels,
+    }));
+  }
   get pendingAudioTrackId(){return this.pendingAudio;}
   get readout():UniversalReadout{
     const state=this.core.snapshot();

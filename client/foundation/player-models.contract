@@ -36,6 +36,12 @@ shape PlayerView
   qualityAuto: bool
   pendingAudioId: string
   pendingSubtitleId: string
+  subtitleError: string
+  subtitleStyleAvailable: bool
+  subtitleSize: string
+  subtitleBackground: string
+  subtitleColor: string
+  subtitlePosition: string
   audioId: string
   audioLabel: string
   subtitleId: string

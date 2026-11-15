@@ -41,6 +41,7 @@ export class PlaybackCore {
   private requestedAudioId?:string;
   private initialAudioOrdinal=0;
   private durationUs:number|null=null;
+  private containerName='';
   private failure:string|null=null;
   private playing=true;
   private closed=false;
@@ -69,6 +70,8 @@ export class PlaybackCore {
       tracks:this.tracks,videoTrackId:this.video?.id??null,audioTrackId:this.audio?.id??null,
       decoded:this.decodedBeforeEpoch+(this.epoch?.decoder.metrics.decoded??0),presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
   }
+  get byteReader(){return this.source?.reader;}
+  get container(){return this.containerName;}
   private publish(){this.onState(this.snapshot());}
   private current(run:Epoch){return this.epoch===run&&!run.abort.signal.aborted&&!this.closed;}
 
@@ -118,7 +121,7 @@ export class PlaybackCore {
         ?? metadata.tracks.filter((track):track is AudioTrack=>track.kind==='audio')[this.initialAudioOrdinal]
         ?? metadata.tracks.find((track):track is AudioTrack=>track.kind==='audio');
       const sameAudio=!!this.audio&&this.audio.id===audio?.id;
-      this.tracks=metadata.tracks;this.video=video;this.audio=audio;this.durationUs=metadata.durationUs;
+      this.tracks=metadata.tracks;this.video=video;this.audio=audio;this.durationUs=metadata.durationUs;this.containerName=metadata.container;
       this.clock.reset(positionUs,id,!!audio);
       await abortable(Promise.all([
         run.decoder.configure(video,id,startup),

@@ -22,6 +22,7 @@ import type { UniversalReadout } from './loader';
 import { audioDifferences } from './diagnostics';
 import { probeOriginal } from './probe';
 import { upstreamOptions, type OriginalMedia } from './source';
+export {SubtitleSession} from './subtitles/session';
 
 export interface RuntimeOptions {
   surface: { container: HTMLDivElement; video: HTMLVideoElement };
