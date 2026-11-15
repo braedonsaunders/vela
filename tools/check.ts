@@ -10,6 +10,7 @@
  */
 import { cp, lstat, mkdir, readlink, rm, symlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import { engines, prepareEngine } from './engine';
 import { generateLocales } from './locales';
 
@@ -39,8 +40,12 @@ const run = (cmd: string[], env: Record<string, string> = {}) => Bun.spawnSync(c
 if (run([process.execPath, 'player/build.ts'])) process.exit(1);
 const agent = rest.indexOf('--agent');
 if (agent < 0) {
-  // Compile only, one at a time across the machine.
-  process.exit(run([lock, process.execPath, 'exact.mjs', 'contract', 'build', 'app.contract', '--json', '--errors-only']) ?? 1);
+  // Compile only, one at a time across the machine. The build's nested type check lowers the
+  // contract again with Exact's debug compiler unless EXACT_WEB_COMPILER names the optimised
+  // one (host/web-js/module.mjs webCompiler); the doc engine's lowering takes over its
+  // 10-minute bound in debug.
+  const fast = join(root, 'vendor/exact/target/host-dev/exact-web-js');
+  process.exit(run([lock, process.execPath, 'exact.mjs', 'contract', 'build', 'app.contract', '--json', '--errors-only'], existsSync(fast) ? { EXACT_WEB_COMPILER: fast } : {}) ?? 1);
 }
 // A drive builds and serves the profile; it is not wrapped in the lock (it would hold it for the whole session).
 process.exit(run([process.execPath, 'exact.mjs', 'agent', 'web', ...rest.slice(agent + 1)]) ?? 1);
