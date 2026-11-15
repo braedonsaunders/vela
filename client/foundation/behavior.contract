@@ -653,7 +653,8 @@ members Client
   state serverRevision = 0
   state serverSwitching = false
   state switchedAt = 0
-  resource servers = uiServers(serverRevision) with localeJSON when current(auth) as shape ServerList else empty()
+  // Asked again on every sign-in, sign-out and server change, so each entry shows its real session.
+  resource servers = uiServers(serverRevision, auth.revision, auth.authenticated) with localeJSON when current(auth) as shape ServerList else empty()
   // Detection before adding: generation-fenced, credential-free, bounded.
   state serverProbeUrl = ""
   state serverProbeGeneration = 0

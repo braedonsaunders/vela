@@ -385,6 +385,21 @@ bodies must use identical serialized JSON within the idempotency scope.
 
 channelId identifies live playback even when no live window is observable. The
 optional live object can report only a mode; omit unknown window/drift fields.
+
+Optional `live.anchor: {mediaSequence, windowStartSeconds}` maps the first segment
+of a published media playlist to its start on the broadcast rendition's clock.
+The sequence is a nonnegative JavaScript-safe integer; reject or omit values
+outside that range. Seconds are cumulative actual segment durations from
+the first published segment, independent of programme-date-time drift.
+`live.windowStartSeconds` and `live.liveEdgeSeconds` use this same clock.
+Do not derive timestamps as media sequence multiplied by target duration.
+
+Vela media playlist responses carry the current published mapping in
+`X-Ether-Live-Media-Sequence` and `X-Ether-Live-Window-Start`. These paired headers
+are authoritative for that response and override a stale plan anchor as the live
+window slides. Omit an anchor or header pair when no published mapping is known;
+absence is not a zero origin. Reconcile sequence offsets using the playlist's
+actual segment durations, not wall-clock or target-duration estimates.
 Mode is the initial player buffering preference, not a server latency guarantee.
 Track.codec describes the delivered track format (for example WebVTT for a VTT
 sidecar), while mediaSummary retains source codec facts. Empty publishedRanges

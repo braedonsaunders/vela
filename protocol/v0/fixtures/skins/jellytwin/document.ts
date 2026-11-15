@@ -95,13 +95,13 @@ const header: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigatio
   style: col({ position: 'relative', 'flex-shrink': '0', 'z-index': '20', 'background-color': '$header', 'backdrop-filter': 'blur(12px)', 'box-shadow': '0px 2px 6px $shadow' }), children: [
     { type: 'box', style: row({ ...headerHeight.style, 'box-sizing': 'border-box', 'padding-left': '10px', 'padding-right': '14px', 'align-items': 'center', gap: '6px' }),
       below: { [COMPACT]: { ...headerHeight.below[COMPACT], 'padding-left': '4px', 'padding-right': '6px', gap: '2px' } }, children: [
-        { type: 'box', id: 'jt-menu', press: { action: 'open', arg: 'drawer', focus: 'jt-drawer-home' }, label: '{s:openMenu}', testId: 'jt-menu', a11y: { expanded: [{ test: 'flag:drawer' }] },
+        { type: 'box', id: 'jt-menu', press: { action: 'only', arg: 'drawer', focus: 'jt-drawer-home' }, label: '{s:openMenu}', testId: 'jt-menu', a11y: { expanded: [{ test: 'flag:drawer' }] },
           style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [glyph('menu', 24)] },
         { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', padding: '0px 8px', 'flex-shrink': '0', color: '$ink-strong' }, children: [wordmark] },
         sections({ flex: '1' }, { display: 'none' }),
         { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { display: 'flex', flex: '1' } } },
         { type: 'box', press: { action: 'search', focus: 'jt-search' }, label: '{s:search}', testId: 'jt-search-button', style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [glyph('search', 23)] },
-        { type: 'box', id: 'jt-user', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', a11y: { expanded: [{ test: 'flag:menu' }] },
+        { type: 'box', id: 'jt-user', press: { action: 'only', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', a11y: { expanded: [{ test: 'flag:menu' }] },
           style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [initial(30, 14)] },
       ] },
     // Under 800px the tabs take their own line under the bar, centred.
@@ -272,10 +272,13 @@ const myMedia: Node = { type: 'box', when: [{ test: 'env.searching', not: true }
 
 const home: Node = { type: 'box', style: col({ 'padding-bottom': '40px', color: '$ink', 'font-family': sans }), children: [
   { type: 'slot', slot: 'searchField', style: col() },
-  mediaBar,
+  { type: 'box', style: col(), children: [mediaBar] },
   { type: 'box', when: [{ test: 'env.searching', not: true }, { test: 'env.heroCount', is: 'eq', value: '0' }], style: { height: '22px', 'flex-shrink': '0' }, small: { height: '14px' } },
   myMedia,
-  { type: 'repeat', over: 'home.rows', when: [{ test: 'env.searching', not: true }], item: section('row.items', [sectionTitle('{row.name}')], { test: 'row.landscape' }) },
+  // Repeats sit in a container: a repeat's own style (its flex order among these nodes) belongs to its items.
+  { type: 'box', when: [{ test: 'env.searching', not: true }], style: col(), children: [
+    { type: 'repeat', over: 'home.rows', item: section('row.items', [sectionTitle('{row.name}')], { test: 'row.landscape' }) },
+  ] },
   emptyState(jelly('folder', 44), '{s:nothingHere}', '{s:noRows}', [{ test: 'env.searching', not: true }, { test: 'env.rowCount', is: 'eq', value: '0' }, { test: 'env.heroCount', is: 'eq', value: '0' }]),
 ] };
 
