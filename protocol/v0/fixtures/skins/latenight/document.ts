@@ -67,7 +67,7 @@ const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer'
           { type: 'text', text: 'CH', style: osdText('18px') },
           { type: 'text', when: [{ test: 'env.section', is: 'eq', value: 'home' }], text: '03', style: { ...osdText('32px'), 'font-variant-numeric': 'tabular-nums' } },
           { type: 'text', when: [{ test: 'env.section', is: 'eq', value: 'live' }], text: '{s:live}', style: osdText('32px', '$rec') },
-          { type: 'repeat', over: 'nav.destinations', item: { type: 'text', when: [{ test: 'dest.on' }], text: '1{index.label}', style: { ...osdText('32px'), 'font-variant-numeric': 'tabular-nums' } } },
+          { type: 'repeat', over: 'nav.destinations', item: { type: 'text', when: [{ test: 'dest.on' }, { test: 'dest.kind', is: 'ne', value: 'live' }], text: '1{index.label}', style: { ...osdText('32px'), 'font-variant-numeric': 'tabular-nums' } } },
         ] },
         { type: 'box', press: { action: 'search' }, label: '{s:search}', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '40px', height: '40px', 'box-sizing': 'border-box', 'border-radius': '4px', border: '1px solid $edge', 'background-color': '$glass', color: '$ink', 'flex-shrink': '0' },
           hover: { 'background-color': '$glass-hi' }, focus: { 'background-color': '$vcr-blue', 'border-color': '$ink' },
@@ -151,7 +151,8 @@ const bigBug = (text: string, name: string): Node => ({ type: 'box', when: [{ te
 const flips: Node[] = [
   flipLayer([{ test: 'env.viewer' }, { test: 'env.section', is: 'eq', value: 'home' }], [bigBug('CH 03', '{s:home}')]),
   flipLayer([{ test: 'env.viewer' }, { test: 'env.section', is: 'eq', value: 'live' }], [bigBug('{s:live}', '{s:liveTv}')]),
-  { type: 'repeat', over: 'nav.destinations', item: flipLayer([{ test: 'dest.on' }], [bigBug('CH 1{index.label}', '{dest.name}')]) },
+  // A live library is the live section (its own layer above), not a numbered channel.
+  { type: 'repeat', over: 'nav.destinations', item: flipLayer([{ test: 'dest.on' }, { test: 'dest.kind', is: 'ne', value: 'live' }], [bigBug('CH 1{index.label}', '{dest.name}')]) },
 ];
 
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$page', color: '$ink', 'font-family': sans }, children: [
