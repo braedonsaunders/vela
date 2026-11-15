@@ -173,7 +173,15 @@ export class PlaybackCore {
         onFailure:error=>{if(this.current(run))this.fail(new Error(`Video decode: ${error.message}`));}})};
     this.epoch=run;this.epochStartedAt=performance.now();this.lastPresentationAt=performance.now();this.scheduler.reset(id,positionUs,!this.playing);this.state='loading';this.failure=null;
     this.clock.reset(positionUs,id,!!this.audio);this.clock.setPlaying(false);this.publish();
-    const startup=AbortSignal.any([signal,AbortSignal.timeout(Math.max(0,Math.ceil(deadline-performance.now())))]);
+    // This deadline admits a presented frame. Once presentation succeeds, it
+    // must not consume the independent, bounded PCM acquisition/reserve budget.
+    const firstDeadline=new AbortController();
+    const firstTimer=setTimeout(()=>firstDeadline.abort(new Error('Core first-frame deadline exceeded')),
+      Math.max(0,Math.ceil(deadline-performance.now())));
+    const stopFirstDeadline=()=>clearTimeout(firstTimer);
+    void firstFrame.then(stopFirstDeadline);
+    signal.addEventListener('abort',stopFirstDeadline,{once:true});
+    const startup=AbortSignal.any([signal,firstDeadline.signal]);
     try{
       playbackMark('metadata:start');
       let preparedVideo:string|undefined,videoConfiguring:Promise<void>|undefined;
@@ -211,7 +219,7 @@ export class PlaybackCore {
       if(!this.current(run))return;
       this.scheduler.start();
       if((this.scheduler.buffer.nextTimestampUs??Infinity)<=positionUs)await abortable(firstFrame,startup);
-      if(this.playing)await this.primeStartBuffer(run,positionUs,deadline,startup);
+      if(this.playing)await this.primeStartBuffer(run,positionUs,startup);
       if(this.playing&&audio)await abortable(source.audio.play(),startup);
       if(!this.current(run))return;
       if(this.playing)this.clock.setPlaying(true);else source.audio.pause();
@@ -222,6 +230,7 @@ export class PlaybackCore {
         if(!this.timer)this.timer=setInterval(()=>{this.checkLive();this.checkEnded();this.publish();},250);
       }
     }catch(error){if(this.current(run))this.fail(error);throw error;}
+    finally{stopFirstDeadline();signal.removeEventListener('abort',stopFirstDeadline);}
   }
 
   private async *measuredPackets(run:Epoch,track:MediaTrack,positionUs:number,signal:AbortSignal){
@@ -232,11 +241,12 @@ export class PlaybackCore {
       yield packet;
     }
   }
-  private async primeStartBuffer(run:Epoch,positionUs:number,deadline:number,signal:AbortSignal){
+  private async primeStartBuffer(run:Epoch,positionUs:number,signal:AbortSignal){
     const source=this.source;if(!source||!this.current(run))return;
     const delivery=(source.kind==='file'?source.reader:source.segments).delivery;
-    const reserve=new StartBuffer(),began=performance.now(),until=Math.min(began+3000,deadline-100);
-    let buffered=0,ended=false;
+    const reserve=new StartBuffer(),began=performance.now(),acquireBy=began+8000;
+    const minimum=this.audio?0.08:0;
+    let buffered=0,ended=false,firstPcmAt:number|null=null;
     for(;;){
       signal.throwIfAborted();if(!this.current(run))return;
       let bitrate=0;
@@ -244,11 +254,20 @@ export class PlaybackCore {
       reserve.observe(delivery.since(run.deliveryMark),bitrate||null);
       buffered=Math.max(0,((this.audio?run.audioBufferedUntilUs:run.readAheadEndUs)-positionUs)/1e6);
       ended=this.audio?run.audioEnded&&run.audioTailReported:run.videoEnded;
-      if(!this.playing||buffered>=reserve.targetSeconds||ended||performance.now()>=until)break;
+      const now=performance.now();
+      // Establishing the first usable PCM is not reserve building. Otherwise a
+      // delayed first audio block spends the entire hold and arms an empty queue.
+      if(firstPcmAt===null&&buffered>=minimum)firstPcmAt=now;
+      const until=firstPcmAt===null?acquireBy:Math.min(acquireBy,firstPcmAt+3000);
+      if(!this.playing||buffered>=Math.max(minimum,reserve.targetSeconds)||ended)break;
+      if(now>=until){
+        run.startBuffer=reserve.result(now-began,buffered,true);
+        throw new Error('Cold-start audio reserve did not become available within its deadline');
+      }
       await delay(Math.min(25,Math.max(1,until-performance.now())),signal);
     }
     if(!this.current(run))return;
-    run.startBuffer=reserve.result(performance.now()-began,buffered,buffered<reserve.targetSeconds&&this.playing&&!ended&&performance.now()>=until);
+    run.startBuffer=reserve.result(performance.now()-began,buffered,false);
     playbackMark('buffer:ready');
   }
 

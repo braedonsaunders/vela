@@ -61,3 +61,46 @@ direct playback ties. Initial audio continuity is not yet at parity. Production
 remains on the wrapper. Next: trace and repair cold-start PCM priming locally,
 then two more cold pairs with order alternated before proposing a default
 switch. No new lab stream is running.
+
+## Initial PCM reserve repair
+
+The reserve used `min(reserveBegin + 3 s, originalFirstFrameDeadline - 100 ms)`.
+If video acquisition/preroll consumed that deadline, the reserve could return
+`capped=true` with no PCM, then request audio playback. The output's normal
+80-ms arming threshold subsequently started the physical clock, regardless of
+the adaptive 1.8-second reserve target. The existing 48-credit core adaptation
+can hold two seconds of PCM; an eight-credit queue was not this failure.
+
+The first-frame deadline now clears on actual presentation. PCM acquisition is
+bounded separately (eight seconds total); the extra adaptive hold is at most
+three seconds after the first usable PCM. The clock is released only after the
+reserve is met, or the real EOF tail is established. Insufficient reserve at
+the bound fails into recovery instead of arming an empty output. Output queue
+capacity, credit limits, media timing and decoder selection are unchanged.
+
+Local headed Chrome proof used the same generated 4K Main10/PQ plus DTS-core
+fixture at 4.5 s, an 800-ms initial source wait, aggregate 32 Mbps for the first
+eight seconds then 65 Mbps, and a documented one-time 650-ms pause in compressed
+audio input at media 4.807 s. The pause models a cold packet-delivery gap; it is
+not a captured or exact reproduction of the lab's network trace. Both runs used
+fresh profiles with service workers blocked and HTTP cache disabled.
+
+| Scalar from local timeline | Core 859 | Repaired core 18273ed7e9bd2a39 |
+| --- | ---: | ---: |
+| Reserve begins | 7.676 s | 7.649 s |
+| Reserve ends | 8.075 s | 9.939 s |
+| Adaptive reserve target | 1.8 s | 1.8 s |
+| PCM at playback request | 0 frames | 88,000 frames / 1.833 s |
+| Reserve capped | Yes | No |
+| First physical audio-clock report | 8.634 s | 9.939 s |
+| Open/playable | 8.075 s | 9.939 s |
+| Audio underruns / missing output frames | 1 / 23,232 | 0 / 0 |
+
+The old physical-clock report followed only about 125 ms of submitted PCM; the
+gap then emptied it. The repair absorbs the gap while the clock is stopped.
+The measured tradeoff is 1.864 s longer to playable in this adverse local case,
+with no audio hole. A normal 65-Mbps trace before the repair already filled
+96,000 PCM frames before playing; the unsafe capped branch was the defect.
+The scoped TypeScript check and matching asset build passed. Both local browser
+contexts and the fixture server were closed. Further lab pairs remain required;
+the original 859 pair's startup underrun is still a recorded failure.
