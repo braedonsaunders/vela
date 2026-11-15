@@ -449,3 +449,21 @@ original trusted executable during a dry run. This changes no Keychain ACL and
 never exports the private key. Do not delete the authorized helper while a release
 is pending. The same key remains in the login keychain if scratch output is lost;
 recompiling the helper may require normal macOS authorization again.
+
+## Local installer qualification (2026-11-15)
+
+The Ether 0.3.13 integration lab, pinned to the dedicated **test** key and explicit
+local file channel, checked signed Vela 0.1.42 successfully: signature, expiry,
+compatibility and a tampered-descriptor rejection (`release signature is not
+trusted`). Owner rollback to 0.1.41 and a subsequent 0.1.42 install both ran through
+the installer. The 193,700,293-byte archive streamed in about six seconds; all
+1,117 installed file hashes matched and the served version was 0.1.42.
+
+This is **provisional**, not public-release approval. The dry run exposed two Ether
+installer defects: rollback failed to carry forward additive assets staged after
+the rollback point, and rollback retention sorted names and pruned the newest
+rollback. The coordinator restored the missing verified diagnostic assets and
+confirmed the signed 0.1.42 tree and zero sessions/pins. Both defects must be fixed
+and the owner rollback/check/reinstall repeated, proving additive preservation
+and retention of the two newest rollbacks, before the distribution gate passes.
+No public GitHub release or stable channel has been published by these commands.
