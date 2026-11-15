@@ -164,8 +164,9 @@ component Client
                               for slotProps in [SearchFieldProps(query=query)] key="searchField"
                                 SearchField(p=slotProps)
                         // The route view: home's tree when a document draws home, else the route's; one call site.
-                        if (e.name != "home" or homeKnown) and docRoutes.includes(e.name)
-                          for routeProps in [RouteProps(route=e.name, entry=`${e.id}`, load=(e.name == "title" ? (failed(detail) ? "failed" : current(detail) ? "ready" : "loading") : "ready"), detail=(e.name == "title" and current(detail) ? [detailSurface] : []), season=detailSeason, small=(e.name == "home" ? homeSmall : small), tv=(viewport.width >= 1600), width=viewport.width, still=still, home=(e.name == "home" ? [homeSurface] : []), query=query, heroIndex=heroAt, rowMoreLoading=rowMoreLoading, homeMoreLoading=homeMoreLoading, libraries=(current(libraries) ? libraries : []))] key="route"
+                        // A document that draws its own status (activeDoc.drawsStatus) gets home while it loads or fails.
+                        if (e.name != "home" or homeKnown or activeDoc.drawsStatus) and docRoutes.includes(e.name)
+                          for routeProps in [RouteProps(route=e.name, entry=`${e.id}`, load=(e.name == "title" ? (failed(detail) ? "failed" : current(detail) ? "ready" : "loading") : e.name == "home" and not homeKnown ? (failed(home) ? "failed" : "loading") : "ready"), detail=(e.name == "title" and current(detail) ? [detailSurface] : []), season=detailSeason, small=(e.name == "home" ? homeSmall : small), tv=(viewport.width >= 1600), width=viewport.width, still=still, home=(e.name == "home" and homeKnown ? [homeSurface] : []), query=query, heroIndex=heroAt, rowMoreLoading=rowMoreLoading, homeMoreLoading=homeMoreLoading, libraries=(current(libraries) ? libraries : []))] key="route"
                             DocRoute(p=routeProps)
                               if e.name == "home"
                                 for slotProps in [SearchFieldProps(query=query)] key="searchField"
@@ -173,7 +174,7 @@ component Client
                         if e.name == "home" and homeKnown and query != ""
                           for slotProps in [SearchProps(query=query, model=results, descriptive=descriptive, ai=ai, generation=generation, loading=(searchTimeQuery != query or searchTimeGeneration != generation or pending(results) or (not failed(results) and (not current(results) or results.query != query or results.generation != generation))), error=(failed(results) and not pending(results) and searchTimeQuery == query and searchTimeGeneration == generation), aiAvailable=home.aiAvailable, descriptiveState=descriptiveState, descriptiveCanRetry=descriptiveCanRetry, aiState=aiState, small=homeSmall, still=still)] key="searchSurface"
                             SearchSurface(p=slotProps)
-                        if e.name == "home" and not homeKnown
+                        if e.name == "home" and not homeKnown and not (activeDoc.drawsStatus and docRoutes.includes("home"))
                           if failed(home)
                             for slotProps in [StatusProps(kind="failure", message=t("ui.yourLibraryCouldnTBeReachedCheckYourServerConnection"), canRetry=true, small=homeSmall, still=still)] key="status"
                               Status(p=slotProps)
