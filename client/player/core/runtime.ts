@@ -36,7 +36,7 @@ interface Epoch {
   firstFrame:Promise<void>; resolveFirst():void; primed:Promise<void>; resolvePrimed():void; started:boolean; readAheadEndUs:number;videoEndUs:number; audioEndUs:number;
   deliveryMark:number; packetBytes:{video:number;audio:number};packetDurationUs:{video:number;audio:number};startBuffer:StartBufferResult|null;
   encodedVideo:EncodedBufferAudit;
-  videoEnded:boolean; audioEnded:boolean; audioTailReported:boolean; audioBufferedUntilUs:number;
+  videoEnded:boolean; audioEnded:boolean; audioTailReported:boolean; audioBufferedUntilUs:number;audioAnchorsRejected:number;
 }
 
 export interface CoreLiveOptions {windowStartSeconds?:number;targetSeconds:number;startAtEdge:boolean}
@@ -125,7 +125,7 @@ export class PlaybackCore {
         if(run&&run.id===anchor.epoch){run.audioBufferedUntilUs=anchor.bufferedUntilUs;if(run.audioEnded)run.audioTailReported=true;}
         if(this.playing&&(this.state==='playing'||this.state==='buffering'))this.state=anchor.playing?'playing':'buffering';
         this.checkEnded();
-      }
+      }else if(this.epoch?.id===anchor.epoch)this.epoch.audioAnchorsRejected++;
     },onFailure:failure=>{if(this.epoch?.id===failure.epoch)this.fail(new Error(`Audio ${failure.stage}: ${failure.message}`));}});
     const allowed=this.mediaRequests?.allows.bind(this.mediaRequests);
     let source:SourceState;
@@ -168,7 +168,7 @@ export class PlaybackCore {
     const firstFrame=new Promise<void>(resolve=>{resolveFirst=resolve;});
     const primed=new Promise<void>(resolve=>{resolvePrimed=resolve;});
     const run:Epoch={id,abort,demux,firstFrame,resolveFirst,primed,resolvePrimed,started:false,encodedVideo:{bytes:0,packets:0,durationSeconds:0},deliveryMark:(source.kind==='file'?source.reader:source.segments).delivery.mark(),packetBytes:{video:0,audio:0},packetDurationUs:{video:0,audio:0},startBuffer:null,readAheadEndUs:positionUs,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,audioTailReported:false,audioBufferedUntilUs:positionUs,
-      decoder:this.createVideo({output:frame=>{if(this.current(run)){const eligible=frame.timestampUs+frame.durationUs>positionUs;this.scheduler.push(frame);if(eligible)run.resolvePrimed();}else frame.release();},
+      audioAnchorsRejected:0,decoder:this.createVideo({output:frame=>{if(this.current(run)){const eligible=frame.timestampUs+frame.durationUs>positionUs;this.scheduler.push(frame);if(eligible)run.resolvePrimed();}else frame.release();},
         canOutput:()=>!this.scheduler.buffer.full,active:()=>this.playing,
         onFailure:error=>{if(this.current(run))this.fail(new Error(`Video decode: ${error.message}`));}})};
     this.epoch=run;this.epochStartedAt=performance.now();this.lastPresentationAt=performance.now();this.scheduler.reset(id,positionUs,!this.playing);this.state='loading';this.failure=null;
@@ -262,7 +262,8 @@ export class PlaybackCore {
       if(!this.playing||buffered>=Math.max(minimum,reserve.targetSeconds)||ended)break;
       if(now>=until){
         run.startBuffer=reserve.result(now-began,buffered,true);
-        throw new Error('Cold-start audio reserve did not become available within its deadline');
+        const pcm=source.audio.bufferState?.();
+        throw new Error(`Cold-start audio reserve deadline: target=${reserve.targetSeconds.toFixed(3)} buffered=${buffered.toFixed(3)} rejectedAnchors=${run.audioAnchorsRejected} pcm=${JSON.stringify(pcm??null)}`);
       }
       await delay(Math.min(25,Math.max(1,until-performance.now())),signal);
     }
