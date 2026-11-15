@@ -199,6 +199,32 @@ const poster: Node = { type: 'box', group: true, press: { action: 'select', arg:
     ] },
   ] };
 
+// A row of things in progress (continue watching, next up) draws wide 16:9 stills:
+// the frame you left, the time left, and the episode under it.
+const wide: Node = { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}',
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'column', width: 'clamp(280px, 22vw, 470px)', 'flex-shrink': '0', gap: 'clamp(12px, 1vw, 20px)' }, small: { width: '240px', gap: '10px' }, children: [
+    { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
+    { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'border-radius': 'clamp(12px, 0.9vw, 18px)', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised', 'box-shadow': rest, scale: '1', translate: '0px 0px', transition: lift },
+      groupHover: { scale: '1.08', translate: '0px -8px', 'box-shadow': ring }, small: { 'border-radius': '10px' }, children: [
+        { type: 'box', when: [{ test: 'card.backdrop' }], style: { position: 'absolute', inset: '0px', scale: '1.02', transition: `scale 600ms ${ease}` }, groupHover: { scale: '1.07' }, children: [
+          { type: 'image', src: '{card.backdrop}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
+        ] },
+        { type: 'image', when: [{ test: 'card.backdrop', not: true }, { test: 'card.poster' }], src: '{card.poster}', alt: '', style: { position: 'absolute', top: '-30%', left: '-10%', width: '120%', height: '160%', 'object-fit': 'cover', filter: 'blur(28px) saturate(1.3)', opacity: '0.8' } },
+        { type: 'box', style: { position: 'absolute', inset: '0px', 'background-image': 'linear-gradient(0deg, rgba(5, 6, 9, 0.8) 0%, rgba(5, 6, 9, 0) 55%)' } },
+        { type: 'text', when: [{ test: 'card.backdrop', not: true }], text: '{card.name}', style: { position: 'absolute', left: 'clamp(14px, 1.1vw, 22px)', right: 'clamp(14px, 1.1vw, 22px)', top: 'clamp(12px, 1vw, 20px)', 'font-size': 'clamp(18px, 1.4vw, 28px)', 'font-weight': '750', 'line-height': '1.05', 'line-clamp': '2' } },
+        { type: 'box', style: { position: 'absolute', top: '-20%', bottom: '-20%', left: '-60%', width: '50%', 'pointer-events': 'none', 'background-image': 'linear-gradient(100deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.18) 50%, rgba(255, 255, 255, 0) 100%)', opacity: '0', translate: '0px 0px', transition: `translate 900ms ${ease}, opacity 900ms ${ease}` },
+          groupHover: { opacity: '1', translate: '420% 0px' } },
+        { type: 'text', when: [{ test: 'card.progressLabel' }, { test: 'card.played', not: true }], text: '{card.progressLabel}', style: { position: 'absolute', right: '12px', bottom: '20px', 'font-size': 'clamp(12px, 0.85vw, 16px)', 'font-weight': '700', 'font-variant-numeric': 'tabular-nums', color: '$ink-dim', 'text-shadow': '0px 1px 8px rgba(0, 0, 0, 0.8)' } },
+        { type: 'box', when: [{ test: 'card.hasProgress' }], style: { position: 'absolute', left: '12px', right: '12px', bottom: '10px', height: '5px', 'border-radius': '3px', 'background-color': 'rgba(255, 255, 255, 0.24)', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
+          { type: 'box', style: { height: '5px', width: '{card.progressPct}%', 'background-color': '$ink' } },
+        ] },
+      ] },
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '4px', padding: '0px 2px', opacity: '0.62', translate: '0px 0px', transition: `opacity 260ms linear, translate 420ms ${ease}` }, groupHover: { opacity: '1', translate: '0px 6px' }, children: [
+      { type: 'text', text: '{card.name}', style: { 'font-size': 'clamp(15px, 1.1vw, 22px)', 'font-weight': '650', 'line-clamp': '1' }, small: { 'font-size': '14px' } },
+      { type: 'text', text: '{card.facts}', style: { 'font-size': 'clamp(13px, 0.9vw, 18px)', color: '$ink-quiet', 'line-clamp': '1', 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '12px' } },
+    ] },
+  ] };
+
 // A ranked row puts a tall outlined numeral beside each poster.
 const ranked: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end' }, children: [
   { type: 'text', text: '{index.label}', style: { 'font-size': 'clamp(120px, 10vw, 220px)', 'font-weight': '800', 'line-height': '0.8', 'letter-spacing': '-0.06em', color: 'rgba(245, 241, 233, 0.2)', 'text-shadow': '0px 0px 30px rgba(0, 0, 0, 0.5)', 'margin-right': '-0.1em', 'padding-bottom': 'clamp(44px, 3.4vw, 70px)' }, small: { 'font-size': '96px' } },
@@ -210,7 +236,8 @@ const row: Node = { type: 'box', style: { position: 'relative', display: 'flex',
   // Room above and below the track lets a focused poster grow without being clipped.
   { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
     { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-start', gap: 'clamp(20px, 1.9vw, 40px)', 'padding-top': 'clamp(26px, 2.2vw, 44px)', 'padding-bottom': 'clamp(30px, 2.6vw, 52px)', ...gutter }, small: { gap: '14px', 'padding-top': '18px', 'padding-bottom': '22px', ...gutterSmall }, children: [
-      { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'ne', value: 'ranked' }], item: { type: 'use', template: 'poster', motion: 'cardIn', stagger: { step: 40, cap: 8 } } },
+      { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'ne', value: 'ranked' }, { test: 'row.landscape', not: true }], item: { type: 'use', template: 'poster', motion: 'cardIn', stagger: { step: 40, cap: 8 } } },
+      { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'ne', value: 'ranked' }, { test: 'row.landscape' }], item: { type: 'use', template: 'wide', motion: 'cardIn', stagger: { step: 40, cap: 8 } } },
       { type: 'repeat', over: 'row.items', limit: 10, when: [{ test: 'row.presentation', is: 'eq', value: 'ranked' }], item: { type: 'use', template: 'ranked', motion: 'cardIn', stagger: { step: 40, cap: 8 } } },
     ] },
   ] },
@@ -377,7 +404,7 @@ const lounge: SkinDocument = {
     cardIn: { keyframes: 'rise', duration: 700, easing: ease, still: { keyframes: 'dissolve', duration: 220 } },
     rowIn: { keyframes: 'rise', duration: 760, delay: 380, easing: ease, still: { keyframes: 'dissolve', duration: 220 } },
   },
-  templates: { poster, ranked, row },
+  templates: { poster, wide, ranked, row },
   slots: { shell, home },
   routes: { title },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
