@@ -8,7 +8,7 @@ import {abortable} from './async';
 import { PlaybackCore, type CoreState } from './runtime';
 import type { AudioTrack } from './types';
 import { canonicalAudioCodec } from '../universal/audio/packages';
-import { VideoDecoderRouter } from './decode/video';
+import { VideoDecoderRouter,type VideoPresentation } from './decode/video';
 export {SubtitleSession} from '../universal/subtitles/session';
 export async function warmup(options:Pick<OriginalRuntimeOptions,'assets'|'signal'>){configureEngineAssets({baseURL:options.assets.baseURL,cacheKey:options.assets.assetKey});return prewarmCoreVideo(options.assets,options.signal);}
 
@@ -21,7 +21,6 @@ export class UniversalRuntime implements OriginalBackend {
   get sourceContainer(){return this.core.container;}
   get videoSize(){const track=this.core.snapshot().tracks.find(track=>track.kind==='video');return track?{width:track.width,height:track.height}:undefined;}
   private readonly core:PlaybackCore;
-  private readonly videoResources:ReturnType<typeof acquireCoreVideo>;
   private media?:OriginalMedia;
   private audioAliases=new Map<string,string>();
   private lastState:CoreState['state']='idle';
@@ -34,12 +33,20 @@ export class UniversalRuntime implements OriginalBackend {
   constructor(private readonly options:OriginalRuntimeOptions){
     this.volume=options.surface.video.volume;this.muted=options.surface.video.muted;
     configureEngineAssets({baseURL:options.assets.baseURL,cacheKey:options.assets.assetKey});
-    const resources=this.videoResources=acquireCoreVideo(options.assets,options.surface,error=>this.failed(error));
+    const resources=acquireCoreVideo(options.assets,options.surface,error=>this.failed(error));
     const {presenter,packages}=resources;
+    const presentation:VideoPresentation={
+      // Fetch/index work and exact native decoder configure may overlap an idle
+      // compile; only GPU use waits for exclusive ownership and surface binding.
+      prepare:async(track,epoch,signal,route)=>{await abortable(resources.ready,signal);signal.throwIfAborted();await presenter.prepare(track,epoch,signal,route);},
+      createGPUDecodeFactory:()=>{const create=presenter.createGPUDecodeFactory();return async request=>{
+        await abortable(resources.ready,options.signal);options.signal.throwIfAborted();return create(request);
+      };},
+    };
     this.core=new PlaybackCore({present:(frame,position)=>presenter.present(frame,position),dispose:()=>resources.release()},audio=>createCoreAudioOutput({...audio,libraryBaseURL:options.assets.baseURL,
       assetKey:options.assets.assetKey,forceSoftware:options.retry?.audio}),state=>this.publish(state),(error,position)=>{
       if(!this.disposed)options.onFailure(error.message,position/1e6);
-    },callbacks=>new VideoDecoderRouter(presenter,packages,callbacks,options.retry?.video),options.mediaRequests);
+    },callbacks=>new VideoDecoderRouter(presentation,packages,callbacks,options.retry?.video),options.mediaRequests);
     this.core.setVolume(this.volume,this.muted);
     options.signal.addEventListener('abort',this.abort,{once:true});
   }
@@ -83,7 +90,7 @@ export class UniversalRuntime implements OriginalBackend {
   }
   get presentationTelemetry(){return {presentedFrameCount:this.core.snapshot().presented,...this.core.presentationTelemetry};}
   async open(media:OriginalMedia){
-    this.options.signal.throwIfAborted();await abortable(this.videoResources.ready,this.options.signal);this.options.signal.throwIfAborted();this.media=media;
+    this.options.signal.throwIfAborted();this.media=media;
     const ordered=[...media.audio].sort((a,b)=>a.streamIndex-b.streamIndex);
     const ordinal=ordered.findIndex(track=>track.id===media.selectedAudioId);
     this.notes=['audio-selection:audio-ordinal'];

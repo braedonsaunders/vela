@@ -2469,6 +2469,15 @@ class PlaybackEngine {
   updateSession(session) {
     if (session.id !== this.session?.id)
       throw new Error("Cannot update a different session");
+    const next = session.sources.find((source) => source.id === this.source?.id), current = this.source;
+    if (next && current && (next.url !== current.url || next.delivery !== current.delivery || next.sourceRevision !== current.sourceRevision || next.timeline !== current.timeline || next.timelineOriginSeconds !== current.timelineOriginSeconds)) {
+      const replacement = { ...session, position: this.pendingSeek?.position ?? this.position() };
+      this.load(replacement).catch((error) => {
+        if (!this.disposed && this.session === replacement)
+          this.fail({ kind: "source", message: error instanceof Error ? error.message : "Updated media source could not be opened", recoverable: true });
+      });
+      return;
+    }
     const previousState = this.session?.serverState;
     this.session = session;
     if (this.pendingTracks && (this.pendingTracks.audio === undefined || this.pendingTracks.audio === session.audioTrackId) && (this.pendingTracks.subtitle === undefined || this.pendingTracks.subtitle === (session.subtitleTrackId ?? null)))
