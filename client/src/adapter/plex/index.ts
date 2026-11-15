@@ -233,19 +233,23 @@ export class PlexAdapter implements ServerAdapter {
     const tracks = (type: number): V.Track[] => streams.filter(s => Number(s.streamType) === type).map(s => ({ id: String(s.id), streamIndex: s.index,
       kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
       default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
-      ...(type === 3 ? { delivery: s.key && s.codec === 'webvtt' ? { kind: 'external' as const, format: 'webvtt' as const, url: this.mediaURL(s.key) } : { kind: 'embedded' as const }, ...(s.key && s.codec === 'webvtt' ? { url: this.mediaURL(s.key) } : {}) } : {}) }));
+      ...(type === 3 ? { delivery: s.key ? s.codec === 'webvtt'
+        ? { kind: 'external' as const, format: 'webvtt' as const, url: this.mediaURL(s.key) }
+        : { kind: 'burn-in' as const }
+        : { kind: 'embedded' as const }, ...(s.key && s.codec === 'webvtt' ? { url: this.mediaURL(s.key) } : {}) } : {}) }));
     const audioTracks = tracks(2), subtitleTracks = tracks(3);
     const audio = r.audioTrackId || audioTracks.find(t => t.default)?.id;
     const subtitle = r.subtitleTrackId === undefined ? subtitleTracks.find(t => t.default)?.id || null : r.subtitleTrackId;
     if (audio && !audioTracks.some(t => t.id === audio) || subtitle && !subtitleTracks.some(t => t.id === subtitle)) fail('Unknown Plex track');
+    const burnSubtitle = subtitle ? subtitleTracks.find(t => t.id === subtitle)?.delivery?.kind === 'burn-in' : false;
     // Plex part stream selection is viewer state; perform only explicit preferences.
     if (r.audioTrackId !== undefined || r.subtitleTrackId !== undefined) await this.request(`/library/parts/${enc(String(part.id))}`, { audioStreamID: r.audioTrackId, subtitleStreamID: r.subtitleTrackId === null ? 0 : r.subtitleTrackId, allParts: 1 }, 'PUT');
     const original = r.client.originalPlayback;
     const compatible = !!original && original.demuxContainers.includes(media.container) &&
       (!media.videoCodec || original.videoDecoders.includes(media.videoCodec)) && (!media.audioCodec || original.audioDecoders.includes(media.audioCodec));
     const nativeCompatible = r.client.containers.includes(media.container) && (!media.videoCodec || r.client.videoCodecs.includes(media.videoCodec)) && (!media.audioCodec || r.client.audioCodecs.includes(media.audioCodec));
-    const direct = compatible || nativeCompatible;
-    if (!direct && r.allowTranscode === false) fail('Original media is incompatible and transcoding is disabled', 'playback');
+    const direct = (compatible || nativeCompatible) && !burnSubtitle;
+    if (!direct && r.allowTranscode === false) fail(burnSubtitle ? 'Selected Plex subtitle requires transcoding' : 'Original media is incompatible and transcoding is disabled', 'playback');
     const paths: V.PlaybackPath[] = [];
     if (direct) paths.push({ id: 'original', kind: 'direct', transport: 'file', mimeType: media.container === 'mp4' ? 'video/mp4' : media.container === 'webm' ? 'video/webm' : 'video/x-matroska',
       readiness: 'ready', url: this.mediaURL(part.key), original: true, range: true, byteLength: Number(part.size) || undefined, sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: 0,
@@ -254,7 +258,8 @@ export class PlexAdapter implements ServerAdapter {
       const u = new URL('/video/:/transcode/universal/start.m3u8', this.origin);
       const query = { path: `/library/metadata/${id}`, mediaIndex: 0, partIndex: 0, protocol: 'hls', directPlay: 0, directStream: 1,
         session: sessionId, offset: 0, fastSeek: 1, 'X-Plex-Client-Identifier': this.config.clientIdentifier,
-        maxVideoBitrate: Math.floor((r.client.maxBitrate || 20000000) / 1000), videoResolution: `${r.client.maxWidth || 1920}x${r.client.maxHeight || 1080}`, subtitleSize: 100, audioBoost: 100 };
+        maxVideoBitrate: Math.floor((r.client.maxBitrate || 20000000) / 1000), videoResolution: `${r.client.maxWidth || 1920}x${r.client.maxHeight || 1080}`,
+        subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 };
       for (const [key, value] of Object.entries(query)) u.searchParams.set(key, String(value));
       paths.push({ id: 'plex-hls', kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: u.href,
         sourceId: String(part.id), timelineId: String(part.id), timelineOriginSeconds: 0, qualities: [], boundaries: [] });
