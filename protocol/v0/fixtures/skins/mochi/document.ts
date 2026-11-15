@@ -886,12 +886,11 @@ const related: Node = { type: 'repeat', over: 'detail.related', when: [ready], i
 
 // The title page opens as a framed page over the route frame's blurred scrim (detail.frame),
 // with an ink-ringed close button.
-// (The compiled trait's frame shadow named `var(--mochi.ink)` in a bound row, which never
-// resolved, so the frame draws without one; matched here.)
+// The frame wears an ink edge and a hard lavender shadow (the compiled detailShadow trait).
 const title: Node = { type: 'box', style: { ...col, position: 'relative', height: '100%' }, children: [
   { type: 'box', style: { ...col, ...inset0, 'box-sizing': 'border-box', padding: '4vh 4vw', color: '$ink' }, small: { padding: '0px' }, children: [
-    { type: 'box', motion: 'pageOpen', style: { ...col, position: 'relative', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': '$page' },
-      small: { 'border-radius': '0px' }, children: [
+    { type: 'box', motion: 'pageOpen', style: { ...col, position: 'relative', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': '$page', 'box-shadow': '0px 0px 0px 3px $ink, 10px 12px 0px 3px $lavender' },
+      small: { 'border-radius': '0px', 'box-shadow': 'none' }, children: [
         { type: 'box', id: 'back', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', ...sz(44), 'box-sizing': 'border-box', padding: '13px', border: '3px solid $ink', 'border-radius': '22px', 'background-color': '$card', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: '$ink' },
           // The glyph keeps its 18px size inside the 12px content box (as the foundation's close does).
           children: [{ type: 'icon', symbol: 'close', style: { ...sz(18) } }] },
