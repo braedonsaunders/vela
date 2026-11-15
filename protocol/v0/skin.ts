@@ -62,11 +62,11 @@ interface NodeBase extends Breakpoints {
   /** A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`. */
   group?: boolean; groupHover?: Style; groupFocus?: Style;
   /** The first state whose conditions hold replaces `style` on the same element (transitions run). */
-  states?: { when: Condition[]; style: Style; hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style }[];
+  states?: { when: Condition[]; style: Style; hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; /** The press button's name while this state holds. */ label?: Template }[];
   /** A pressable box: disabled while these hold, drawn with `disabledStyle`. */
   disabled?: Condition[]; disabledStyle?: Style;
   /** The press button's accessibility state and role. */
-  a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; haspopup?: string; title?: Template; role?: string };
+  a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; /** aria-checked (menu item radios and checkboxes). */ checked?: Condition[]; haspopup?: string; title?: Template; role?: string };
   /** Escape clears this flag and moves focus to `returnFocus` (an element id). */
   escape?: string; returnFocus?: Template;
   layoutTransition?: string; /** Accepted and ignored for now (docs/skin-schema.md). */ sharedElement?: string;
