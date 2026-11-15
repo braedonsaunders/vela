@@ -1,7 +1,7 @@
 // The "doc" engine: its slots draw the active skin document (docs/skin-schema.md)
 // through the generated renderer. Slots a document leaves out use cinematic's.
 use Style, Env, Ctx, DocSlot, ShellSlot, SkinDoc, RouteProps, noStyle from "../../renderer/shapes.contract"
-use V1, V5, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, rootCtx from "../../renderer/levels.contract"
+use V1, V5, ctxs1, ctxs5, ctxKey, binds, heroActFor, num, styleAt, rootCtx, selectedSeason from "../../renderer/levels.contract"
 use SkinPicker from "../../foundation/skin-picker.contract"
 use HomeProps, ShellProps from "../../foundation/slot-api.contract"
 use GuideModel, GuideChannel, LiveTile from "../../live/models.contract"
@@ -58,9 +58,13 @@ component Shell
     if name == "live"
       flags = []
       live()
+    // A live library is the Live TV section, not a browse library: its id is no section id.
     if name == "library"
       flags = []
-      openLibrary(arg)
+      if p.libraries.filter(l => l.id == arg and l.kind == "live").length > 0
+        live()
+      else
+        openLibrary(arg)
     if name == "toggle"
       flags = toggled(flags, arg)
     if name == "reset"
@@ -172,7 +176,7 @@ component Route
     if name == "toggle"
       flags = toggled(flags, arg)
   view
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=p.season, home=[], libraries=[], viewer="", section=p.route, query="", heroIndex=0, small=p.small, tv=p.tv, still=p.still, canLive=false, flags=flags, guide=[], tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0)] key="env"
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=[], libraries=[], viewer="", section=p.route, query="", heroIndex=0, small=p.small, tv=p.tv, still=p.still, canLive=false, flags=flags, guide=[], tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0)] key="env"
       for tree in doc.routes.filter(t => t.name == p.route) key=tree.name
         Root(s=styleAt(env, tree.root))
           for n, i in tree.nodes key=`${i}`

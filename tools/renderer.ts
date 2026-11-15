@@ -172,7 +172,7 @@ const vocabulary: [string, string][] = [
   ...['reasonLabel', 'actionLabel', 'actionDetail', 'action', 'targetId'].map(f => [`heroAct.${f}`, m('c.heroAct', `x.${f}`)] as [string, string]),
   ['heroAct.progressPct', m('c.heroAct', '(x.progress * 100).toString()')], ['heroAct.hasProgress', m('c.heroAct', yes('x.progress > 0'))],
   ['heroAct.playable', m('c.heroAct', yes('x.action != "details" and x.targetId != ""'))],
-  ['dest.id', m('c.dest', 'x.id')], ['dest.name', m('c.dest', 'x.name')], ['dest.kind', m('c.dest', 'x.kind')], ['dest.on', m('c.dest', yes('e.section == x.id'))],
+  ['dest.id', m('c.dest', 'x.id')], ['dest.name', m('c.dest', 'x.name')], ['dest.kind', m('c.dest', 'x.kind')], ['dest.on', m('c.dest', yes('(x.kind == "live" ? e.section == "live" : e.section == x.id)'))],
   ['env.viewer', 'e.viewer'], ['env.viewerInitial', 'e.viewer.slice(0, 1).toUpperCase()'], ['env.section', 'e.section'], ['env.query', 'e.query'],
   ['env.small', yes('e.small')], ['env.tv', yes('e.tv')], ['env.still', yes('e.still')], ['env.searching', yes('e.query != ""')], ['env.canLive', yes('e.canLive')],
   ['env.heroCount', m('e.home', 'x.hero.length.toString()')], ['env.heroIndex', 'e.heroIndex.toString()'], ['env.rowCount', m('e.home', 'x.rows.length.toString()')],
@@ -345,6 +345,8 @@ fn holds(k: Cond, vals: string[], e: Env): bool = (k.is == "eq" ? subject(k, val
 fn shows(conds: Cond[], vals: string[], e: Env): bool = not conds.map(k => holds(k, vals, e) == k.not).includes(true)
 fn motion(mk: string, md: number, mdl: number, me: string, mf: string, mit: string, mdir: string, msk: string, msd: number, step: number, cap: number, i: number, e: Env): string = (e.still ? (msk == "" ? "none" : \`\${msk} \${msd}ms linear both\`) : \`\${mk} \${md}ms \${me} \${mdl + min(i, cap) * step}ms \${mit} \${mdir} \${mf}\`)
 fn heroActFor(home: HomeModel, id: string): HeroAction[] = home.heroActions.filter(a => a.heroId == id).slice(0, 1)
+// The season a detail page shows: the viewer's pick, else the season of its first episode (a title opened with no pick).
+fn selectedSeason(detail: DetailModel[], picked: string): string = (picked != "" ? picked : match first(detail) { case some(d) => match first(d.episodes) { case some(x) => x.seasonId, case none => d.title.filter(t => t.kind == "season").map(t => t.id).join("") }, case none => "" })
 // The live home's lineup in the guide's order, or its favourites alone (a subset, never a reorder).
 fn liveCtxs(rep: string, lim: number, c: Ctx, e: Env): Ctx[] = match first(e.guide) { case some(g) => (rep == "live.favorites" ? g.channels.filter(x => x.favorite) : g.channels).slice(0, lim).map(x => Ctx(c, ch=[x])), case none => [] }
 fn rootCtx(): Ctx = Ctx(hot=false, card=[], row=[], hero=[], heroAct=[], dest=[], extra=[], person=[], fact=[], ch=[], index=0)
