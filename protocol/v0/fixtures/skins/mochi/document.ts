@@ -28,7 +28,7 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 12 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// Renderer 13 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
 const pending = (fields: Record<string, unknown>) => fields as object;
@@ -586,7 +586,7 @@ const dots: Node = { type: 'box', style: { ...row, gap: '8px' }, children: (['pi
 const Field: Style = { 'box-sizing': 'border-box', height: '52px', padding: '0px 20px', border: '3px solid $ink', 'border-radius': '18px', 'background-color': '$card', color: '$ink', 'font-family': fredoka, 'font-size': '17px', outline: 'none', 'box-shadow': 'inset 0px 3px 0px $page-deep' };
 const textField = (field: 'username' | 'password', label: string): Node => ({ type: 'box', style: { ...col, gap: '6px' }, children: [
   { type: 'text', text: label, style: { ...Label, 'font-size': '11px', color: '$ink-soft' } },
-  { type: 'widget', widget: 'textInput', params: { field, label }, style: Field, focus: { 'border-color': '$lavender-deep', 'box-shadow': '0px 0px 0px 4px $lavender-soft' } } as Node,
+  { type: 'widget', widget: 'textInput', params: { field, label }, style: Field, focus: { 'border-color': '$lavender-deep', 'box-shadow': '0px 0px 0px 4px $lavender-soft', outline: 'none' } } as Node,
 ] });
 
 const welcome = (title: string, line: string, extra: Style = {}): Node => ({ type: 'box', style: { ...col, gap: '8px', 'align-items': 'center', 'text-align': 'center' }, children: [
@@ -902,7 +902,7 @@ const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds 
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
 export default {
-  schema: 1, renderer: 12, id, name: 'Mochi', version,
+  schema: 1, renderer: 13, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true },
