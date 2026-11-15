@@ -15,6 +15,7 @@ import { nativeMediaPlaylist } from './native-hls';
 import { randomId } from '../src/protocol/id';
 import {LiveLatency} from './live-latency';
 import type {MediaAccess} from './media-auth';
+import {RecoveryHistory} from './recovery-history';
 
 interface NativeAudioTrack { id: string; language: string; enabled: boolean }
 type ExtendedVideo = HTMLVideoElement & { audioTracks?: ArrayLike<NativeAudioTrack>; webkitEnterFullscreen?: () => void; webkitExitFullscreen?: () => void; webkitSupportsFullscreen?: boolean; webkitDisplayingFullscreen?: boolean; webkitSupportsPresentationMode?: (mode: string) => boolean; webkitSetPresentationMode?: (mode: string) => void };
@@ -45,6 +46,7 @@ export class PlaybackEngine {
   private audioPreference?: string;
   private subtitlePreference?:string|null;
   private failure: Failure | null = null; private audio: string | null = null; private subtitle: string | null = null;
+  private readonly recoveryHistory=new RecoveryHistory();
   private timer: ReturnType<typeof setInterval> | undefined; private listeners: (() => void)[] = [];
   private attempted = new Set<string>(); private recovering = false; private disposed = false;
   private resumePosition = 0;
@@ -74,6 +76,7 @@ export class PlaybackEngine {
   }
   /** A server/principal/credential switch retires every old private reader. */
   retireMediaAuthorization(){
+    this.recoveryHistory.clear();
     this.controller.stop();this.detachMedia();this.resetMedia();this.session=undefined;this.source=undefined;
     this.pendingSeek=undefined;this.pendingSwitch=undefined;this.pendingTracks=undefined;this.failure=null;this.status='idle';
   }
@@ -161,7 +164,7 @@ export class PlaybackEngine {
     return {
       sessionId: this.session?.id ?? null, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek,
       state: this.pendingSeek ? 'buffering' : this.status, sourceId: this.source?.id ?? null, strategy: this.source?.strategy ?? null,
-      diagnostics: this.original||this.subtitleFailureNotes.length ? {implementation:this.original?.implementation,metadataDiscrepancies:this.original?.readout.metadataDiscrepancies??[],subtitleFailures:[...this.subtitleFailureNotes]} : undefined,
+      diagnostics: this.original||this.subtitleFailureNotes.length||this.recoveryHistory.length ? {implementation:this.original?.implementation,metadataDiscrepancies:this.original?.readout.metadataDiscrepancies??[],subtitleFailures:[...this.subtitleFailureNotes],recoveryHistory:this.recoveryHistory.snapshot()} : undefined,
       backend: this.backend, renditionId: this.pipeline?.current?.id ?? (this.backend === 'webgpu' ? this.coreQuality.id : this.backend === 'native-hls' ? this.manualQuality ?? this.source?.initialRenditionId ?? null : null), qualityIds: this.pipeline?.qualityIds ?? (this.backend==='webgpu'?this.source?.renditions?.map(r=>r.id)??[]:[]),
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 }, lockedQuality: this.manualQuality,
       audioTracks: this.original?.supportsLocalAudioSwitch!==false?this.original?.audioTracks??this.session?.audioTracks??[]:this.session?.audioTracks??[], subtitleTracks, renditions: this.source?.renditions?.map(({url,...rendition})=>({...rendition,bitrateBps:rendition.bandwidth,requiredBandwidthBps:rendition.bandwidth*QUALITY_HEADROOM}))??[],
@@ -266,6 +269,7 @@ export class PlaybackEngine {
     const previousServerState = session.id === this.session?.id ? this.session.serverState : undefined;
     if (session.id !== this.session?.id || session.selectedSourceId !== this.source?.id) {this.manualQuality = null;this.coreQuality.reset();}
     if (session.id !== this.session?.id) {
+      this.recoveryHistory.clear();
       this.browserFallbacks.clear();
       this.subtitleFailures.clear();
       this.subtitleFailureNotes=[];
@@ -535,6 +539,10 @@ export class PlaybackEngine {
     const kind = error instanceof PlaybackFault ? error.kind : error instanceof TypeError || error instanceof DOMException && error.name === 'TimeoutError' ? 'network' : 'source';
     const position = this.position();
     const failure: Failure = { kind, message: error instanceof Error ? error.message : String(error), recoverable: true };
+    const readout=this.original?.readout;
+    this.recoveryHistory.record({atMilliseconds:performance.now(),sourceGeneration:this.controller.source,seekGeneration:this.controller.seek,
+      positionSeconds:position,delivery:this.source?.delivery??null,backend:this.backend,kind,message:failure.message,
+      bufferAheadSeconds:readout?.bufferAheadSeconds??null,readAheadSeconds:readout?.readAheadSeconds??null});
     if (this.originalStartTimer) clearTimeout(this.originalStartTimer); this.originalStartTimer = undefined;
     playbackMark('source:failed');this.status = 'recovering'; this.failure = failure; this.publish(true);
     try {

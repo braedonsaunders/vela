@@ -235,8 +235,13 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   ];
   level.dis = conds(n.disabled);
   const a = n.a11y ?? {};
+<<<<<<< HEAD
   Object.assign(level, { achk: conds((a as { checked?: Condition[] }).checked), aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
     pfocus: parts(node.type === 'box' ? node.press?.focus : undefined, r), esc: n.escape ?? '', escTo: parts(n.returnFocus, r), lt: n.layoutTransition ?? '', se: n.sharedElement ?? '', ex: '', exs: '', ivb: '', ipaths: [], fr: 'nonzero' });
+=======
+  Object.assign(level, { aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
+    pfocus: parts(node.type === 'box' ? node.press?.focus : undefined, r), esc: n.escape ?? '', escTo: parts(n.returnFocus, r), lt: n.layoutTransition ?? '', ex: '', exs: '', ivb: '', ipaths: [], fr: 'nonzero' });
+>>>>>>> origin/main
   if (n.exit) {
     const m = r.doc.motion?.[n.exit];
     if (!m) throw new Error(`Unknown motion ${n.exit}`);

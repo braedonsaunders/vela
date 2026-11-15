@@ -2,7 +2,8 @@ import {playbackMark} from '../timing';
 import { abortable,delay } from './async';
 import {StartBuffer,type StartBufferResult} from './start-buffer';
 import { MediaClock } from './clock';
-import {bufferedPackets} from './packet-buffer';
+import {bufferedPackets,type EncodedBufferAudit} from './packet-buffer';
+import type {SourceBufferAudit} from '../universal/buffer-audit';
 import { FileDemux,type PacketDemux } from './demux/file';
 import { HlsDemux } from './demux/hls';
 import { SegmentReader } from './source/segments';
@@ -27,12 +28,14 @@ export interface CoreState {
   tracks:readonly MediaTrack[]; videoTrackId:string|null; audioTrackId:string|null;
   bufferAheadSeconds:number|null;readAheadSeconds:number|null;throughputBps:number|null;throughputHistory:number[];
   startBuffer:StartBufferResult|null;
+  bufferAudit:{source:SourceBufferAudit;encodedVideo:EncodedBufferAudit}|null;
   decoded:number; presented:number; dropped:number; failure:string|null;diagnostics:string[];
 }
 interface Epoch {
   id:number; abort:AbortController; demux:PacketDemux; decoder:VideoBackend;
   firstFrame:Promise<void>; resolveFirst():void; primed:Promise<void>; resolvePrimed():void; started:boolean; readAheadEndUs:number;videoEndUs:number; audioEndUs:number;
   deliveryMark:number; packetBytes:{video:number;audio:number};packetDurationUs:{video:number;audio:number};startBuffer:StartBufferResult|null;
+  encodedVideo:EncodedBufferAudit;
   videoEnded:boolean; audioEnded:boolean; audioTailReported:boolean; audioBufferedUntilUs:number;
 }
 
@@ -86,11 +89,12 @@ export class PlaybackCore {
     const videoEnd=this.scheduler.bufferedEnd(position);
     const bufferedEnd=this.audio?Math.min(videoEnd,run?.audioBufferedUntilUs??position):videoEnd;
     const network=this.source?.kind==='file'?this.source.reader.bandwidth:this.source?.segments.bandwidth;
-    return {startBuffer:run?.startBuffer?{...run.startBuffer}:null,readAheadSeconds:run?Math.max(0,(run.readAheadEndUs-position)/1e6):null,diagnostics:[...(run?.demux.diagnostics??[]),...(this.source?.kind==='hls'?this.source.segments.diagnostics:[])],bufferAheadSeconds:run?Math.max(0,(bufferedEnd-position)/1e6):null,throughputBps:network?.bps??null,throughputHistory:network?.history??[],state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
+    const sourceAudit=run?.demux.bufferAudit;
+    return {bufferAudit:sourceAudit&&run?{source:sourceAudit,encodedVideo:{...run.encodedVideo}}:null,startBuffer:run?.startBuffer?{...run.startBuffer}:null,readAheadSeconds:run?Math.max(0,(run.readAheadEndUs-position)/1e6):null,diagnostics:[...(run?.demux.diagnostics??[]),...(this.source?.kind==='hls'?this.source.segments.diagnostics:[])],bufferAheadSeconds:run?Math.max(0,(bufferedEnd-position)/1e6):null,throughputBps:network?.bps??null,throughputHistory:network?.history??[],state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
       tracks:this.tracks,videoTrackId:this.video?.id??null,audioTrackId:this.audio?.id??null,
       decoded:this.decodedBeforeEpoch+(this.epoch?.decoder.metrics.decoded??0),presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
   }
-  get presentationTelemetry(){return {lastPresentationLagUs:this.scheduler.metrics.lastLagUs,maxPresentationLagUs:this.scheduler.metrics.maxLagUs,dropEvents:this.scheduler.dropEvents.map(value=>({...value}))};}
+  get presentationTelemetry(){return {clusterCache:this.epoch?.demux.clusterCacheAudit??null,lastPresentationLagUs:this.scheduler.metrics.lastLagUs,maxPresentationLagUs:this.scheduler.metrics.maxLagUs,dropEvents:this.scheduler.dropEvents.map(value=>({...value}))};}
   get byteReader(){return this.source?.kind==='file'?this.source.reader:undefined;}
   get subtitleClusters(){return this.source?.kind==='file'?this.source.subtitleClusters:undefined;}
   get container(){return this.containerName;}
@@ -156,13 +160,14 @@ export class PlaybackCore {
     this.epoch?.abort.abort();this.epoch?.decoder.dispose();this.epoch?.demux.dispose();
     source.audio.pause();
     const abort=new AbortController(),id=++this.nextEpoch;
+    if(source.kind==='file')source.reader.beginEpoch(id);
     const signal=AbortSignal.any([source.abort.signal,abort.signal]);
     if(source.kind==='file')source.subtitleClusters.reset(id);
-    const demux:PacketDemux=source.kind==='file'?new FileDemux(source.reader,signal,source.subtitleClusters):new HlsDemux(source.segments,signal,source.originUs);
+    const demux:PacketDemux=source.kind==='file'?new FileDemux(source.reader,signal,source.subtitleClusters,()=>source.reader.bufferCache):new HlsDemux(source.segments,signal,source.originUs);
     let resolveFirst!:()=>void,resolvePrimed!:()=>void;
     const firstFrame=new Promise<void>(resolve=>{resolveFirst=resolve;});
     const primed=new Promise<void>(resolve=>{resolvePrimed=resolve;});
-    const run:Epoch={id,abort,demux,firstFrame,resolveFirst,primed,resolvePrimed,started:false,deliveryMark:(source.kind==='file'?source.reader:source.segments).delivery.mark(),packetBytes:{video:0,audio:0},packetDurationUs:{video:0,audio:0},startBuffer:null,readAheadEndUs:positionUs,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,audioTailReported:false,audioBufferedUntilUs:positionUs,
+    const run:Epoch={id,abort,demux,firstFrame,resolveFirst,primed,resolvePrimed,started:false,encodedVideo:{bytes:0,packets:0,durationSeconds:0},deliveryMark:(source.kind==='file'?source.reader:source.segments).delivery.mark(),packetBytes:{video:0,audio:0},packetDurationUs:{video:0,audio:0},startBuffer:null,readAheadEndUs:positionUs,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,audioTailReported:false,audioBufferedUntilUs:positionUs,
       decoder:this.createVideo({output:frame=>{if(this.current(run)){const eligible=frame.timestampUs+frame.durationUs>positionUs;this.scheduler.push(frame);if(eligible)run.resolvePrimed();}else frame.release();},
         canOutput:()=>!this.scheduler.buffer.full,active:()=>this.playing,
         onFailure:error=>{if(this.current(run))this.fail(new Error(`Video decode: ${error.message}`));}})};
@@ -242,7 +247,7 @@ export class PlaybackCore {
 
   private async videoPackets(run:Epoch,track:VideoTrack,positionUs:number,signal:AbortSignal){
     try{
-      for await(const packet of bufferedPackets(this.measuredPackets(run,track,positionUs,signal),signal,end=>{if(this.current(run))run.readAheadEndUs=end;})){
+      for await(const packet of bufferedPackets(this.measuredPackets(run,track,positionUs,signal),signal,end=>{if(this.current(run))run.readAheadEndUs=end;},sample=>{if(this.current(run))run.encodedVideo=sample;})){
         if(!this.current(run))return;
         run.videoEndUs=Math.max(run.videoEndUs,packet.timestampUs+packet.durationUs);
         try{await run.decoder.decode(packet,signal);}catch(error){throw new Error(`Video decode: ${error instanceof Error?error.message:'decoder failed'}`);}

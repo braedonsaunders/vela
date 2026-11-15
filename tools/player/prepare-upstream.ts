@@ -10,6 +10,7 @@ import { transformUpstreamAudio } from '../../client/player/universal/audio/ffmp
 import {transformUpstreamTransport} from '../../client/player/universal/transport-transform';
 import {transformCoreDemux} from '../../client/player/core/demux/transform';
 import {transformCoreAudio} from '../../client/player/core/audio/transform';
+import {transformBufferAudit} from '../../client/player/universal/buffer-audit-transform';
 import { transformUpstreamVideo } from '../../client/player/universal/video/upstream-transform';
 import { installSubtitleAssets } from '../../client/player/universal/subtitles/install';
 import subtitleManifest from '../../client/player/universal/subtitles/assets.json';
@@ -58,10 +59,11 @@ const plugin = { name:'vela-audio', setup(builder: any) {
     const original = await readFile(path, 'utf8');
     const audio = transformUpstreamAudio(path, original);
     const video = transformUpstreamVideo(path, audio ?? original);
-    const transport=transformUpstreamTransport(path,video??audio??original);
+    const transport=transformUpstreamTransport(path,video??audio??original,Bun.argv.includes('--buffer-audit'));
     const clock=Bun.argv.includes('--core')?transformCoreDemux(path,transport??video??audio??original):null;
     const coreAudio=Bun.argv.includes('--core')?transformCoreAudio(path,clock??transport??video??audio??original):null;
-    const transformed = coreAudio??clock??transport??video??audio;
+    const audit=Bun.argv.includes('--buffer-audit')?transformBufferAudit(path,coreAudio??clock??transport??video??audio??original):null;
+    const transformed = audit??coreAudio??clock??transport??video??audio;
     if (transformed !== null) return {contents:transformed, loader:'ts', resolveDir:dirname(path)};
   });
 }};
@@ -78,12 +80,14 @@ await build({...common, entryPoints:[join(root,runtimeEntry)], format:'esm', out
 await cp(join(root,'client/player/universal/audio/ffmpeg'), join(sourceDir,'vela-audio-hooks'), {recursive:true});
 await copyFile(join(root,'client/player/universal/transport-transform.ts'),join(sourceDir,'vela-transport-transform.ts'));
 await copyFile(join(root,'client/player/universal/transport.ts'),join(sourceDir,'vela-transport.ts'));
+if(Bun.argv.includes('--buffer-audit'))for(const file of ['buffer-audit.ts','buffer-audit-transform.ts'])
+  await copyFile(join(root,'client/player/universal',file),join(sourceDir,'vela-'+file));
 await copyFile(join(root,'client/player/media-auth.ts'),join(sourceDir,'vela-media-auth.ts'));
 await copyFile(join(root,'client/player/universal/video/upstream-transform.ts'), join(sourceDir,'vela-video-transform.ts'));
 if(Bun.argv.includes('--core')){
   await mkdir(join(sourceDir,'vela-core-demux'),{recursive:true});
   await copyFile(join(root,'client/player/core/audio/transform.ts'),join(sourceDir,'vela-core-audio-transform.ts'));
-  for(const file of ['fragment-time.ts','subtitle-stream.ts','transform.ts'])await copyFile(join(root,'client/player/core/demux',file),join(sourceDir,'vela-core-demux',file));
+  for(const file of ['fragment-time.ts','subtitle-stream.ts','cluster-cache.ts','transform.ts'])await copyFile(join(root,'client/player/core/demux',file),join(sourceDir,'vela-core-demux',file));
 }
 const audioDirectory = Bun.argv.find(arg => arg.startsWith('--audio-dir='))?.slice(12);
 if (audioDirectory) await run([process.execPath, join(root,'client/player/universal/audio/install-packages.ts'), join(libraries,'audio-decoders'), `--from=${resolve(audioDirectory)}`], root);

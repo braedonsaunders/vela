@@ -4,9 +4,27 @@ export function transformCoreDemux(path:string,source:string):string|null{
   if(normalized.endsWith('/src/matroska/matroska-demuxer.ts')){
     const anchor='segment.lastReadCluster = cluster;';
     const cues='segment.deferredCuesPosition !== null && searchTimestamp > this.internalTrack.codecDelay';
-    if([anchor,cues].some(value=>source.split(value).length!==2))throw new Error('Pinned Matroska cluster tap changed');
+    const method='async readCluster(res: ResultValue<Cluster>, startPos: number, segment: Segment): MaybeRelevantPromise {';
+    const fast='if (segment.lastReadCluster?.elementStartPos === startPos) {\n\t\t\treturn res.set(segment.lastReadCluster);\n\t\t}';
+    const lookup='if (startOffset !== null && segment.lastReadCluster?.elementStartPos === startOffset) {\n\t\t\tstartCluster = segment.lastReadCluster;';
+    if([anchor,cues,method,fast,lookup].some(value=>source.split(value).length!==2))throw new Error('Pinned Matroska cluster tap changed');
     const module=JSON.stringify(new URL('./subtitle-stream.ts',import.meta.url).pathname);
-    return `import {publishSubtitleCluster} from ${module};\n`+source.replace(cues,'segment.deferredCuesPosition !== null && startOffset === null && searchTimestamp > this.internalTrack.codecDelay').replace(anchor,`
+    const cache=JSON.stringify(new URL('./cluster-cache.ts',import.meta.url).pathname);
+    return `import {publishSubtitleCluster} from ${module};\nimport {cachedCluster,loadCluster} from ${cache};\n`+source
+      .replace(method,method+`
+        const cluster = await loadCluster(this,this.input._rootSource,startPos,async()=>{
+          const result = new ResultValue<Cluster>();
+          await this.readUncachedVelaCluster(result,startPos,segment);
+          return result.value;
+        },cluster=>({sourceBytes:cluster.elementEndPos-cluster.elementStartPos,
+          blocks:[...cluster.trackData.values()].reduce((sum,track)=>sum+track.blocks.length,0),
+          release:()=>{if(segment.lastReadCluster===cluster)segment.lastReadCluster=null;}}));
+        return res.set(cluster);
+      }
+      private async readUncachedVelaCluster(res: ResultValue<Cluster>, startPos: number, segment: Segment): MaybeRelevantPromise {`)
+      .replace(fast,'')
+      .replace(lookup,'const retainedCluster = startOffset === null ? null : cachedCluster<Cluster>(demuxer,startOffset);\n        if (retainedCluster) {\n            startCluster = retainedCluster;')
+      .replace(cues,'segment.deferredCuesPosition !== null && startOffset === null && searchTimestamp > this.internalTrack.codecDelay').replace(anchor,`
         if (dataSlice) {
           let subtitleClusterEnd = cluster.timestamp;
           for (const trackData of cluster.trackData.values()) subtitleClusterEnd = Math.max(subtitleClusterEnd, trackData.endTimestamp);
