@@ -321,7 +321,18 @@ Without `routes.library` the foundation's library page shows.
 - `a11y.hidden`: decorative, hidden from assistive technology.
 - A press button takes its node's `border-radius`, so the platform focus ring follows the corners.
 
-## Next (renderer 13, names final)
+## Renderer 13: collection pages
+
+`routes.collection` draws a collection (a box set, a folder, a playlist) pushed over home, on
+the page colour (draw your own back: press `back`). `collection.name`, `collection.more`,
+`collection.complete`, `collection.itemCount`, `env.collectionMoreLoading`; `env.load`
+`loading`/`failed` until its first answer (`retry` asks again); collection `collection.items`
+(cards, `card.*`, `select` to open one); action `collectionMore` and `sentinel` with
+`on: "collection"` load more. Without `routes.collection` the foundation's page shows.
+Also: a fully transparent ground (`transparent`, `#rrggbb00`, `rgba(…, 0)`) counts as no ground,
+so a pressed control dims its content as a compiled button does.
+
+## Next (renderer 14, names final)
 
 - Per-document `traits`: `page`, `ink`, `splashOnPaper`. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 
