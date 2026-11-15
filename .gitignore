@@ -11,3 +11,6 @@ client/modules/web/universal/
 .worktrees/
 
 .artifacts/
+.exact
+target
+.artifacts

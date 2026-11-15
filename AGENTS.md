@@ -45,3 +45,8 @@ Vela is a greenfield client. Speed of high-quality code is the priority. Read
 - Exact is pinned at `vendor/exact` (revision in `EXACT_REVISION`). The app is consumed by
   path; `client/exact.mjs` forwards to it.
 - Large scratch output goes under `~/.scratch/tmp/vela/`, never `/tmp`.
+- Bulky build output lives on the scratch drive, not the internal disk: make `.artifacts`,
+  `client/.exact` and `client/target` in your worktree symlinks into
+  `~/.scratch/vela-build/<worktree>/` (create them before your first build; the ignore
+  rules cover the symlinks). Delete superseded candidates and release attempts yourself;
+  keep the current one and its rollback.
