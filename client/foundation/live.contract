@@ -1,5 +1,5 @@
 use GuideModel, GuideChannel, LiveStatus, LiveIdentity, LiveTile, GuideFocus, GuideFocusTime from "../live/models.contract"
-use PlaybackModel from "./models.contract"
+use PlaybackModel, MediaAuthReply from "./models.contract"
 use PlayerView, PlayerCommandReply from "./player-models.contract"
 
 members Client
@@ -228,8 +228,13 @@ members Client
   derive homeTile = (liveHome ? [tile] : [])
   derive homeTuned = (liveHome ? guide.channels.filter(c => c.id == (tileZapTarget != "" ? tileZapTarget : tileTarget)).slice(0, 1) : [])
   derive homeZapping = (tileZapTarget == "" ? "" : match first(guide.channels.filter(c => c.id == tileZapTarget)) { case some(c) => c.number, case none => "" })
+  mutation tileNativeReply as shape MediaAuthReply
+  derive tileNativeMedia = match tileNativeReply { case some(r) => r.json, case none => "" }
   action tileMessage(json: string)
-    tileEvent = json
+    if json.startsWith("{\"type\":\"native-media-request\"")
+      send tileNativeReply = uiNativeMedia(json, time.epochAtZero + performanceNow())
+    else
+      tileEvent = json
   action tileUnmute
     let next = tileCommandId + 1
     tileCommandId = next

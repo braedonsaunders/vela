@@ -2,7 +2,7 @@
 // inlined, viewport variants and document tokens applied, motion presets expanded,
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
-import { RENDERER_VERSION, VOCAB } from './vocabulary';
+import { FIXED_TOKENS, RENDERER_VERSION, VOCAB } from './vocabulary';
 
 const KEY = new Map(VOCAB.map((key, i) => [key, i]));
 /** A vocabulary key's index, a flag, or a refusal: documents name only known keys. */
@@ -63,7 +63,7 @@ function keyframesCss(doc: SkinDocument): string {
     return `@keyframes dk-${docId}-${name}{${body}}`;
   }).join('');
 }
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'retry', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
 const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
@@ -73,10 +73,10 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
   disabled?: Condition[]; disabledStyle?: Style; a11y?: { expanded?: Condition[]; selected?: Condition[]; current?: Condition[]; pressed?: Condition[]; haspopup?: string; title?: string; role?: string };
   escape?: string; returnFocus?: string; layoutTransition?: string; sharedElement?: string; exit?: string }
 type Level = Record<string, unknown>;
-export interface DocSlot { present: boolean; root: number; rootPos: number; slotStyle: number; slotPos: number; slotInner: number; slotOrder: string; nodes: Level[] }
+export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; holds: boolean; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
-export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string }
-interface Resolve { doc: SkinDocument; small: boolean; wide: boolean; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
+export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string }
+interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
   const key = JSON.stringify(s);
@@ -106,7 +106,9 @@ function parts(template: string | undefined, r?: Resolve, urls = false): Part[] 
 /** A style value: document tokens substituted, unsafe CSS refused. */
 /** A Tamber name inside var() as the page declares it (`var(--x-cinematic-glass)`):
  * Contract rewrites literal rows at build time, but a bound value reaches CSS as written. */
-const cssVar = (text: string) => text.replace(/var\(--([a-zA-Z][\w-]*(?:\.[\w-]+)+)\)/g, (_, name: string) => `var(--x-${name.replace(/[^A-Za-z0-9_-]/g, '-')})`);
+/** A theme token as the page has it: its value when Tamber folded it, else its custom property. */
+const themeToken = (name: string) => FIXED_TOKENS[name] ?? `var(--x-${name.replace(/[^A-Za-z0-9_-]/g, '-')})`;
+const cssVar = (text: string) => text.replace(/var\(--([a-zA-Z][\w-]*(?:\.[\w-]+)+)\)/g, (_, name: string) => themeToken(name));
 /** Four-sided shorthands become longhands: an empty bound longhand would reset what the shorthand set. */
 function sides(raw: string): [string, string, string, string] {
   const v = raw.trim().split(/\s+(?![^(]*\))/);
@@ -133,7 +135,7 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
       continue;
     }
     // A family token by name is the property the page declares for it.
-    if (name === 'font-family' && typeof raw === 'string' && /^[a-z][\w-]*(\.[\w-]+)+$/.test(raw.trim())) { merged[name] = `var(--x-${raw.trim().replace(/[^A-Za-z0-9_-]/g, '-')})`; continue; }
+    if (name === 'font-family' && typeof raw === 'string' && /^[a-z][\w-]*(\.[\w-]+)+$/.test(raw.trim())) { merged[name] = themeToken(raw.trim()); continue; }
     // A two-value gap is row-gap and column-gap (a bound gap takes one length).
     if (name === 'gap' && typeof raw === 'string' && value(raw, r).trim().split(/\s+/).length === 2) {
       const [rg, cg] = value(raw, r).trim().split(/\s+/);
@@ -159,6 +161,11 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
     if (dyn && BINDABLE[row] && raw.includes('{')) { dyn[BINDABLE[row]] = parts(value(raw, r), undefined, row === 'background-image'); continue; }
     merged[row] = value(raw, r);
   }
+  // The renderer binds gap, row-gap and column-gap: an empty bound longhand resets to normal,
+  // so a one-value gap is both longhands.
+  if (merged.gap !== undefined) { merged['row-gap'] ??= merged.gap; merged['column-gap'] ??= merged.gap; }
+  // A colour may name a theme token bare (`cinematic.glass-edge`), as font-family may.
+  for (const [row, v] of Object.entries(merged)) if (row.endsWith('color') && /^[a-z][\w-]*(\.[\w-]+)+$/.test(v.trim())) merged[row] = themeToken(v.trim());
   // Per-side border rows follow the shorthand's width and colour unless set: an empty bound
   // longhand would reset a side to the CSS default (3px currentColor).
   for (const side of ['top', 'bottom', 'left']) {
@@ -211,7 +218,6 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   for (const f of Object.values(BINDABLE)) level[f] = [];
   const base = style(variant, r, level, weight);
   const own = base as Record<string, number>;
-  level.pos = base.position === 'absolute' ? 1 : base.position === 'sticky' ? 2 : 0;
   // Under reduced motion the overlays drop what moves: scale, translate, rotate, transitions, animations.
   const still = (o: Style | undefined) => o && Object.fromEntries(Object.entries(o).filter(([k]) => !['scale', 'translate', 'rotate', 'transition', 'animation'].includes(k))) as Style;
   const n = node as Node & NodeExtra;
@@ -219,19 +225,20 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   /** A state's style indices: its base, each overlay, and the reduced-motion overlays. */
   const stateRef = (layers: (Style | undefined)[], s: { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style }, cond: Condition[]) => {
     const at = (extra?: Style) => intern(style([...layers, extra], r, undefined, weight), r);
-    const sIdx = intern(style(layers, r, undefined, weight), r);
+    const plain = style(layers, r, undefined, weight), sIdx = intern(plain, r);
     const overlay = (o?: Style) => o ? at(o) : sIdx, calm = (o?: Style) => o ? at(still(o)) : sIdx;
-    return { cond: conds(cond), s: sIdx, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
+    // Position is a choice the renderer binds per state (a viewport variant may move a node into flow).
+    return { cond: conds(cond), s: sIdx, pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
       hs2: calm(s.hover), fs2: calm(s.focus), gs2: calm(s.groupHover), gfs2: calm(s.groupFocus) };
   };
   const overlays = { hover: node.hover, focus: node.focus, groupHover: node.groupHover, groupFocus: n.groupFocus };
-  level.base = { ...stateRef(variant, overlays, []), s: intern(base, r) };
+  level.base = { ...stateRef(variant, overlays, []), s: intern(base, r), pos: base.position === 'absolute' ? 1 : base.position === 'sticky' ? 2 : 0 };
   // Each document state, then the plain node, at each width interval (first match wins).
   const userStates = (n.states ?? []).slice(0, 8);
   if (userStates.length * Math.max(1, intervals.length) + intervals.length > 48) throw new Error('Too many states x breakpoints on one node');
   const within = intervals.length ? intervals : [{ applied: [] as Style[], when: [] as { k: number; f: string; is: string; v: string; not: boolean }[] }];
   level.sts = [
-    ...userStates.flatMap(x => within.map(w => ({ ...stateRef([...variant, ...w.applied, x.style], { hover: x.hover ?? node.hover, focus: x.focus ?? node.focus, groupHover: x.groupHover ?? node.groupHover, groupFocus: x.groupFocus ?? n.groupFocus }, x.when), cond: [...conds(x.when), ...w.when] }))),
+    ...userStates.flatMap(x => within.map(w => ({ ...stateRef([...variant, x.style, ...w.applied], { hover: x.hover ?? node.hover, focus: x.focus ?? node.focus, groupHover: x.groupHover ?? node.groupHover, groupFocus: x.groupFocus ?? n.groupFocus }, x.when), cond: [...conds(x.when), ...w.when] }))),
     ...intervals.map(w => ({ ...stateRef([...variant, ...w.applied], overlays, []), cond: w.when })),
   ];
   level.dis = conds(n.disabled);
@@ -255,7 +262,6 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     case 'image': level.t = 'image'; level.src = parts(asset(node.src, r), undefined, true); level.label = parts(node.alt, r); level.fade = node.fade === true; break;
     case 'icon': {
       level.t = 'icon';
-      // A platform symbol, or a document SVG painted as a mask in the current colour.
       // A platform symbol, or the document's own glyph: SVG path data painted in the current colour.
       const glyph = node as { paths?: string[]; viewBox?: string };
       if (glyph.paths?.length) {
@@ -296,18 +302,25 @@ function asset(src: string, r: Resolve): string {
   throw new Error(`Image source outside the document's assets: ${src}`);
 }
 
+/** A slot's root box or holder: its style with states and viewport variants, as any node's (it follows the slot's width). */
+function boxStates(node: { style?: Style; small?: Style; wide?: Style; below?: Record<string, Style>; above?: Record<string, Style>; states?: unknown } | undefined, r: Resolve, extra?: Style): { base: unknown; sts: unknown[] } {
+  const level = convert({ type: 'box', style: { ...node?.style, ...extra }, small: node?.small, wide: node?.wide, below: node?.below, above: node?.above, states: node?.states } as Node, 1, r)!;
+  return { base: level.base, sts: level.sts as unknown[] };
+}
 function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchField', from = 1): DocSlot {
-  if (!root) return { present: false, root: intern(style([], r), r), rootPos: 0, slotStyle: intern(style([], r), r), slotPos: 0, slotInner: intern(style([], r), r), slotOrder: '0', nodes: [] };
+  if (!root) { const none = boxStates(undefined, r); return { present: false, rootBase: none.base, rootSts: [], slotBase: none.base, slotSts: [], slotInner: intern(style([], r), r), slotOrder: '0', holds: false, nodes: [] }; }
   if (root.type !== 'box') throw new Error('A slot tree starts with a box');
   const kids = root.children ?? [];
   const at = kids.findIndex(k => k.type === 'slot' && k.slot === holder);
-  const holderNode = kids[at] as Extract<Node, { type: 'slot' }> | undefined;
+  const holderNode = kids[at] as (Extract<Node, { type: 'slot' }> & { below?: Record<string, Style>; above?: Record<string, Style>; states?: unknown }) | undefined;
   // Every top-level node gets its flex order; the foundation's content takes the slot's.
-  const nodes = kids.flatMap((k, i) => k.type === 'slot' ? [] : [convert({ ...k, style: { ...k.style, order: String(i) } } as Node, from, r)!]);
+  // (A repeat draws no box: its item takes the order.)
+  const ordered = (k: Node, i: number): Node => k.type === 'repeat' ? { ...k, item: ordered(k.item, i) } as Node : { ...k, style: { ...k.style, order: String(i) } } as Node;
+  const nodes = kids.flatMap((k, i) => k.type === 'slot' ? [] : [convert(ordered(k, i), from, r)!]);
   // The slot box's own flex order rides in its style (the box takes every row).
-  const outer = style([holderNode?.style, r.small ? holderNode?.small : undefined, r.wide ? holderNode?.wide : undefined, { order: String(at < 0 ? kids.length : at) } as Style], r);
-  const rootStyle = style([root.style, r.small ? root.small : undefined, r.wide ? root.wide : undefined], r);
-  return { present: true, root: intern(rootStyle, r), rootPos: rootStyle.position === 'absolute' ? 1 : rootStyle.position === 'sticky' ? 2 : 0, slotStyle: intern(outer, r), slotPos: outer.position === 'absolute' ? 1 : outer.position === 'sticky' ? 2 : 0, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), nodes };
+  const rootStates = boxStates(root as Parameters<typeof boxStates>[0], r);
+  const holderStates = boxStates(holderNode, r, { order: String(at < 0 ? kids.length : at) } as Style);
+  return { present: true, rootBase: rootStates.base, rootSts: rootStates.sts, slotBase: holderStates.base, slotSts: holderStates.sts, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), holds: at >= 0, nodes };
 }
 
 export function skinDoc(doc: SkinDocument, width: number, origin: string, locale = 'en'): SkinDocModel {
@@ -317,7 +330,7 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
   docId = doc.id; docKeyframes = new Set();
   const kfCss = keyframesCss(doc);
   const strings = { ...doc.strings?.en, ...doc.strings?.[locale.split('-')[0]], ...doc.strings?.[locale] };
-  const r: Resolve = { doc, small: width < 640, wide: width >= 1200, count: 0, assets: origin, strings, styles: [], index: new Map() };
+  const r: Resolve = { doc, count: 0, assets: origin, strings, styles: [], index: new Map() };
   const shell = slot(doc.slots.shell, r, 'children', SHELL_FROM), home = slot(doc.slots.home, r, 'searchField');
   // A route tree is a slot without `present` (a route is drawn only when the document has it).
   const routes = Object.entries(doc.routes ?? {}).map(([name, tree]) => { const { present: _, ...rest } = slot(tree, r, 'children'); return { name, ...rest }; });
@@ -328,5 +341,7 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
     return url && /^\d{3}( \d{3})?$/.test(w) ? [{ family: f.family, url, weight: w, style: file.style === 'italic' ? 'italic' : 'normal', sizeAdjust: Number(f.sizeAdjust) || 100 }] : [];
   }) : []);
   return { id: doc.id, fontsJson: fonts.length ? JSON.stringify(fonts) : '', keyframesCss: kfCss, styles: r.styles, shell, home, routes, liveHome: doc.live?.home === true,
-    detailWide: doc.detail?.wide === 'stack' ? '' : doc.detail?.wide ?? 'fullscreen', detailSmall: doc.detail?.small === 'stack' ? '' : doc.detail?.small ?? 'fullscreen' };
+    detailWide: doc.detail?.wide === 'stack' ? '' : doc.detail?.wide ?? 'fullscreen', detailSmall: doc.detail?.small === 'stack' ? '' : doc.detail?.small ?? 'fullscreen',
+    // From this viewport width the detail takes its wide presentation and splits home beside it (a pane width in px).
+    detailFrom: Math.max(0, Math.min(4000, Math.round(Number(doc.detail?.from ?? 640)) || 0)), detailSplit: /^(\d{2,4})(px)?$/.exec(String(doc.detail?.split ?? ''))?.[1] ?? 'none' };
 }

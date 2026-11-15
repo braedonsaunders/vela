@@ -1,10 +1,11 @@
+import {LiveWindow} from './live-window';
 import {BandwidthEstimator} from '../../abr';
 import { CustomPathedSource, CustomSource } from 'mediabunny';
 import { abortable, delay } from '../async';
 
 const MAX_OBJECT=16*1024*1024,MAX_PLAYLIST=1024*1024,CACHE_BYTES=32*1024*1024;
 class SegmentFailure extends Error {}
-interface ObjectBytes {bytes:Uint8Array;playlist:boolean}
+interface ObjectBytes {bytes:Uint8Array;playlist:boolean;at:number}
 
 /** Vela owns acquisition, URL policy, retries and caching; HLS parsing is a library. */
 export class SegmentReader {
@@ -15,10 +16,14 @@ export class SegmentReader {
   private active=0;
   private cached=0;
   private root:string;
+  readonly liveWindow?:LiveWindow;
+  networkRetries=0;retrying=false;
+  private polling?:ReturnType<typeof setInterval>;
   readonly bandwidth=new BandwidthEstimator();
   readonly metrics={requests:0,bytes:0,cacheHits:0,milliseconds:0};
-  constructor(url:string,private readonly fetcher:typeof fetch=(...args)=>fetch(...args),private readonly allowed?:(url:URL)=>boolean,private readonly cacheIdentity='local'){
+  constructor(url:string,private readonly fetcher:typeof fetch=(...args)=>fetch(...args),private readonly allowed?:(url:URL)=>boolean,private readonly cacheIdentity='local',live=false){
     this.root=this.scoped(url);
+    if(live)this.liveWindow=new LiveWindow();
   }
   private scoped(path:string):string{
     const url=new URL(path,location.href);
@@ -43,9 +48,14 @@ export class SegmentReader {
           throw new SegmentFailure('Separate HLS audio requires coordinated rendition selection');
         this.root=this.scoped(new URL(target,this.root).href);continue;
       }
-      if(!lines.includes('#EXT-X-ENDLIST'))throw new SegmentFailure('Moving HLS requires the live-window adapter');
+      if(!this.liveWindow&&!lines.includes('#EXT-X-ENDLIST'))throw new SegmentFailure('Moving HLS requires the live-window adapter');
       if(lines.some(line=>line.startsWith('#EXT-X-KEY:')&&!/METHOD=NONE(?:,|$)/.test(line)))
         throw new SegmentFailure('Encrypted HLS requires an authorized decryption route');
+      if(this.liveWindow&&this.liveWindow.edge<=this.liveWindow.start){
+        if(lines.includes('#EXT-X-ENDLIST'))throw new SegmentFailure('Live stream ended before publishing media');
+        await delay(100,signal);depth--;continue;
+      }
+      if(this.liveWindow&&!this.polling)this.polling=setInterval(()=>{void this.object(this.root,this.lifetime.signal,true).catch(()=>{});},1000);
       return;
     }
     throw new SegmentFailure('HLS variant nesting exceeded its bound');
@@ -54,9 +64,13 @@ export class SegmentReader {
     return new CustomPathedSource(this.root,request=>{
       const path=this.scoped(String(request.path));
       let expectedLength:number|undefined;
+      // One CustomSource owns one playlist version even if the next reload
+      // publishes while its size/header/body are being read.
+      let snapshot:Promise<ObjectBytes>|undefined;
+      const object=()=>snapshot??=this.object(path,signal());
       return new CustomSource({maxCacheSize:0,prefetchProfile:'none',
-        getSize:async()=>{const value=await this.object(path,signal());expectedLength=value.bytes.length;return expectedLength;},
-        read:async(start,end)=>{count(end-start);const value=await this.object(path,signal());
+        getSize:async()=>{const value=await object();expectedLength=value.bytes.length;return expectedLength;},
+        read:async(start,end)=>{count(end-start);const value=await object();
           if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||end>value.bytes.length)
             throw new SegmentFailure(`Invalid segment byte request (${start}:${end}, size ${value.bytes.length}, indexed ${expectedLength??-1})`);
           if(expectedLength!==undefined&&expectedLength!==value.bytes.length)throw new SegmentFailure(`Segment changed within its generation (size ${value.bytes.length}, indexed ${expectedLength})`);
@@ -69,7 +83,8 @@ export class SegmentReader {
     signal.throwIfAborted();this.lifetime.signal.throwIfAborted();
     const key=`${this.cacheIdentity}:${path}`;
     const existing=this.cache.get(key);
-    if(existing){this.cache.delete(key);this.cache.set(key,existing);this.metrics.cacheHits++;return existing;}
+    if(existing&&!(this.liveWindow&&existing.playlist&&performance.now()-existing.at>=250)){this.cache.delete(key);this.cache.set(key,existing);this.metrics.cacheHits++;return existing;}
+    if(existing){this.cache.delete(key);this.cached-=existing.bytes.length;}
     const current=this.pending.get(key);
     if(current&&!current.signal.aborted)return abortable(current.promise,signal);
     const operation=AbortSignal.any([signal,this.lifetime.signal]);
@@ -93,8 +108,8 @@ export class SegmentReader {
     try{
       for(let attempt=0;;attempt++){
         signal.throwIfAborted();
-        try{return await this.request(path,AbortSignal.any([signal,AbortSignal.timeout(10000)]),playlist);}
-        catch(error){signal.throwIfAborted();if(error instanceof SegmentFailure||attempt>=2)throw error;await delay(200*2**attempt,signal);}
+        try{const value=await this.request(path,AbortSignal.any([signal,AbortSignal.timeout(10000)]),playlist);this.retrying=false;return value;}
+        catch(error){signal.throwIfAborted();if(error instanceof SegmentFailure||attempt>=2)throw error;this.networkRetries++;this.retrying=true;await delay(200*2**attempt,signal);}
       }
     }finally{this.active--;this.waiters.values().next().value?.();}
   }
@@ -121,11 +136,20 @@ export class SegmentReader {
         }
       }finally{if(!complete)await reader.cancel().catch(()=>{});reader.releaseLock();}
       if(length!==null&&size!==length)throw new TypeError('Segment response was truncated');
-      const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+      let bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
       if(!playlist)this.bandwidth.sample(size,performance.now()-at,Number(response.headers.get('Age')??0)>0||/hit/i.test(response.headers.get('X-Cache')??''));
       this.metrics.bytes+=size;this.metrics.milliseconds+=performance.now()-at;
-      return{bytes,playlist};
+      if(playlist&&this.liveWindow&&path===this.root){
+        const text=new TextDecoder().decode(bytes);
+        if(!text.includes('#EXT-X-STREAM-INF:'))try{
+          const sequence=response.headers.get('X-Ether-Live-Media-Sequence'),start=response.headers.get('X-Ether-Live-Window-Start');
+          if(sequence!==null&&sequence.trim()===''||start!==null&&start.trim()==='')throw new Error('Invalid live anchor header');
+          const anchor=sequence!==null&&start!==null?{mediaSequence:Number(sequence),windowStartSeconds:Number(start)}:undefined;
+          bytes=new TextEncoder().encode(this.liveWindow.update(text,anchor));
+        }catch(error){throw new SegmentFailure(error instanceof Error?error.message:'Invalid live timeline');}
+      }
+      return{bytes,playlist,at:performance.now()};
     }catch(error){if(!response.body?.locked)await response.body?.cancel().catch(()=>{});throw error;}
   }
-  dispose(){this.lifetime.abort();this.cache.clear();this.pending.clear();this.cached=0;for(const wake of [...this.waiters])wake();}
+  dispose(){if(this.polling)clearInterval(this.polling);this.polling=undefined;this.lifetime.abort();this.cache.clear();this.pending.clear();this.cached=0;for(const wake of [...this.waiters])wake();}
 }

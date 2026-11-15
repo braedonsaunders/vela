@@ -75,7 +75,7 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
     path: snapshot?.strategy || path?.kind ? msg(`data.${snapshot?.strategy ?? path?.kind}`) : '', backend: snapshot?.backend ?? '',
     quality:stats.resolutionLabel?[stats.resolutionLabel,stats.bitrateLabel].filter(Boolean).join(' · '):quality || path?.quality ? `${number((quality ?? path!.quality!).height, {useGrouping:false})}p` : path?.id === 'primary' || path?.kind === 'direct' ? msg('data.original') : snapshot?.backend === 'native-hls' ? msg('data.fixedQuality') : msg('data.starting'),
     lockedQuality: path?.original || path && !path.qualities.length && (path.id === 'primary' || path.quality) ? `path:${path.id}` : snapshot?.lockedQuality ?? '',
-    qualityAuto: snapshot?.backend === 'mse' && (path?.qualities.length ?? 0) > 1,
+    qualityAuto: (snapshot?.backend === 'mse' || snapshot?.diagnostics?.implementation==='vela-core') && (path?.qualities.length ?? 0) > 1,
     pendingAudioId: snapshot?.pendingAudioTrackId ?? '',
     audioId: snapshot?snapshot.audioTrackId??'':plan?.selectedAudioTrackId??'', audioLabel: selectedAudio?.name ?? msg('data.originalAudio'),
     subtitleId: snapshot?snapshot.subtitleTrackId??'':plan?.selectedSubtitleTrackId??'',

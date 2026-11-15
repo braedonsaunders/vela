@@ -52,11 +52,11 @@ Every node takes `style` (CSS name to value), `small` (under 640 px) and `wide` 
 
 | Type | Fields | Draws |
 | --- | --- | --- |
-| `box` | `children`, `press {action, arg}` | One flex/grid/block container. With `press` it gains a full-size transparent button carrying `label` (keyboard and screen readers) over its content. |
+| `box` | `children`, `press {action, arg}` | One flex/grid/block container: a flex **column** unless its style says otherwise (`display: flex` alone keeps the column; write `flex-direction: row` for a row, unlike CSS's default). With `press` it gains a full-size transparent button carrying `label` (keyboard and screen readers) over its content. |
 | `text` | `text` (template) | Text. |
 | `image` | `src` (template), `alt`, `fade` | An image: a vocabulary URL (`{card.poster}`), an app asset (`assets/grain.svg`) or the document's own assets under `/vela/v0/appearance/`. `fade` reveals it once loaded. |
 | `icon` | `symbol` | A platform symbol (`search`, `play-fill`, `checkmark`). |
-| `repeat` | `over`, `limit`, `item` | `item` once per element of `home.rows`, `row.items`, `home.heroes`, `home.hero` (the current one) or `nav.destinations`; the element becomes the binding context and its position `{index}`. |
+| `repeat` | `over`, `limit`, `item` | `item` once per element of `home.rows`, `row.items`, `home.heroes`, `home.hero` (the current one) or `nav.destinations`; the element becomes the binding context and its position `{index}`. A repeat draws no box of its own: its `when` applies to each item, its `style` and variants do not (style the `item`). |
 | `use` | `template` | A template, inlined; the use node's style, conditions and motion wrap it. |
 | `slot` | `slot`, `style`, `inner` | Where the foundation's content goes among a slot's top-level nodes: `children` (the route a shell wraps), `searchField` (home). |
 | `widget` | `widget`, `params` | A compiled interactive part: `install` (`params.action` install/update), `observe` (`params.receipt`: the visibility receipt). |
@@ -143,22 +143,26 @@ Renderer 3 is the live home above; a document using anything here names `rendere
 
 **Node features**
 - `states: [{ when: Condition[], style: Style, hover?, focus?, groupHover? }]`: the first
-  state whose conditions hold replaces `style` (variants still apply), on the same element,
+  state whose conditions hold replaces `style` (viewport variants still apply over it), on the same element,
   so transitions run (dot widths, padding while searching, on/off pills).
 - `layoutTransition: "300ms ease-out"`, `sharedElement: "<name>"`, `exit: "<motion>"`.
 - `below: { "<px>": Style }` and `above: { "<px>": Style }`: viewport overrides at the
   document's own breakpoints (`small`/`wide` remain as 640/1200 shorthands).
-- Icons from the document: `{ type: "icon", src: "<appearance asset>.svg" }` paints the SVG
-  as a mask in `currentColor`, so it follows colour, hover and states like a platform symbol.
+- Icons from the document: `{ type: "icon", paths: ["<SVG path data>", …], viewBox?, fillRule? }`
+  (up to 8 paths) painted in `currentColor`, so they follow colour, hover and states like a platform symbol.
 - Document keyframes: `keyframes: { name: { "0%": { opacity?, translate?, scale?, rotate? }, … } }`
   (numbers and px/% only); a motion preset names one as `keyframes: "doc:<name>"`.
 - Focus: `focus` is keyboard focus (focus-visible); `groupFocus` beside `groupHover`; a group's
   focus includes focus inside it.
-- Press: `press: { action, arg?, hold?: ms, focus?: "<id>" }`; `disabled: Condition[]` with a
+- Press: `press: { action, arg?, focus?: "<id>" }`; `disabled: Condition[]` with a
   `disabled` style overlay; `a11y: { expanded?, selected?, current?, pressed?: Condition[],
   haspopup?, controls?, title?: Template, role? }` on the press button.
 - `escape: "<flag>"` on a node: Escape clears the flag and returns focus to `returnFocus`.
 - Flags named `keep-…` survive navigation actions; shell `reset` clears all others.
+  Shell `only <flag>` opens that flag alone (closing the other non-keep flags); pressed again it closes.
+- Home's `nav.destinations` (and `dest.*`, `env.libraryCount`, `env.hasLiveLibrary`) list the libraries
+  on home too, with actions `library {dest.id}` (a live library opens Live) and `live`.
+- Boxes are never Tab stops (Escape handling no longer makes them focusable); focus goes to press buttons.
 - The slot box takes every style row (position, z-index, background, backdrop…).
 - Rows: `color-scheme`, `column-gap`, `row-gap`, `scroll-behavior`, `scroll-padding-left`,
   `border-left-width/color`. Under reduced motion overlays also drop `rotate` and `animation`.
@@ -179,10 +183,28 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
 `env.skinCount`, `env.libraryCount`, `env.hasLiveLibrary`, `env.homeMoreLoading`,
 `env.homeHasMore`, `env.clock`; `detail.hasMediaFacts` beside the other `detail.has*`. `detail.nameLength`; `env.canRetry` with the `retry` action (a failed route asks again).
 
-## Next (renderer 5, names final)
+## Renderer 5
+
+- `detail.trailerId`, `detail.trailerReady` (press `playExtra {detail.trailerId}`), `card.genresComma`.
+- `detail: { from?: px, small, wide, split?: px }`: below `from` (default 640) the title page
+  takes `small`, from it `wide`, and home stays beside it as a pane `split` px wide (none by default).
+- A colour row may name a theme token bare (`border: 1px solid cinematic.glass-edge`), as `var(--cinematic.glass-edge)`.
+- The press layer over a pressable box is transparent in every state: a document draws its own
+  hover and pressed looks (a compiled button's hover fill is `var(--exact-quaternary-fill)`).
+
+## Renderer 6
+
+- Theme tokens Tamber folds (one value, no axis: `brand.warm`, `index.page`, …) resolve to their
+  value, so `var(--brand.warm)` and bare `brand.warm` draw the token's colour.
+- A slot's root box and its holder take `states`, `small`/`wide` and `below`/`above`, live on `env.width`.
+- Home without a `searchField` slot node draws no search field.
+- A top-level `repeat` keeps its place among its siblings.
+- Smaller engine: environment-only vocabulary is bound once per slot, not per node.
+
+## Next (renderer 7, names final)
 
 - Per-document `traits`: `page`, `ink`, `flatDetail`, `panSections`, `barMask`, `splashOnPaper`,
-  detail frame tokens. `env.searchFocused`, `env.clock12`, `rotate-axis`.
+  detail frame tokens. `env.searchFocused`, `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 
 **Widgets** (leaf nodes drawn only in the first levels): `searchInput` (the bare input with
 `params` for type and ink; the document draws the field around it; `env.searchFocused`,

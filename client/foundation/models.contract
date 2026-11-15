@@ -181,12 +181,19 @@ shape PlaybackModel
   retryAfterSeconds: number
   retryLimit: number
 
+// The selected server's sign-in state. serverKind is "ether", "jellyfin", "emby" or "plex";
+// revision changes with every session or server change; pollSeconds > 0 means the server has
+// no session event stream and its playback snapshot is polled at that interval.
 shape AuthModel
   authenticated: bool
   passwordAvailable: bool
   quickAvailable: bool
   secureOrigin: string
   error: string
+  serverId: string
+  serverKind: string
+  revision: number
+  pollSeconds: number
 
 shape SecureSwitchReply
   url: string
@@ -200,9 +207,13 @@ shape QuickModel
   status: string
   pollIntervalSeconds: number
 
+// more: a further page can be read; complete: the server says these are all its items
+// (false with more false means the server gave no end, never that the list is whole).
 shape CollectionModel
   name: string
   items: Card[]
+  more: bool
+  complete: bool
 
 fn cardName(card: Card): string = t("ui.openTitleYearProgress", title=card.name, year=(card.year > 0 ? t("ui.year", year=card.yearLabel) : ""), progress=(card.played ? t("ui.watched") : card.progressSeconds > 0 and card.durationSeconds > 0 ? t("ui.progressComplete", progress=card.progressLabel) : ""))
 
@@ -268,3 +279,55 @@ shape SkinManifest
   tagline: string
   preview: string
   swatches: string[]
+
+// A configured server, presentation-safe. status: "ready" | "signed-out" | "unreachable".
+shape ServerOption
+  id: string
+  name: string
+  kind: string
+  kindLabel: string
+  origin: string
+  basePath: string
+  selected: bool
+  status: string
+  viewer: string
+  message: string
+
+shape ServerList
+  servers: ServerOption[]
+  selectedId: string
+
+// state: "" (nothing asked) | "checking" | "found" | "invalid" | "unreachable" | "unsupported"
+// | "insecure" (plain HTTP from an HTTPS page: the browser forbids it; message says how to proceed).
+shape ServerProbe
+  url: string
+  generation: number
+  state: string
+  kind: string
+  kindLabel: string
+  name: string
+  version: string
+  normalizedUrl: string
+  message: string
+
+shape ServerReply
+  id: string
+  error: string
+
+// state: "" | "starting" | "waiting" | "linked" | "expired" | "failed".
+shape PlexLink
+  code: string
+  linkUrl: string
+  state: string
+  expiresAt: string
+
+shape PlexServer
+  id: string
+  name: string
+  owned: bool
+  connectionLabel: string
+  recommended: bool
+
+// Native media authorization for vela-player and vela-preview props only (foundation-private).
+shape MediaAuthReply
+  json: string

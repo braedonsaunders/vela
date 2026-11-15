@@ -111,6 +111,7 @@ shape Cond
 shape StateRef
   cond: Cond[]
   s: number
+  pos: number
   hs: number
   fs: number
   gs: number
@@ -168,6 +169,8 @@ shape Env
   tunedId: string
   zapping: string
   favoriteCount: number
+  // The environment's own vocabulary values (envBinds), bound once per slot.
+  ev: string[]
 
 shape N10
   t: string
@@ -179,7 +182,6 @@ shape N10
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -239,7 +241,6 @@ shape N9
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -300,7 +301,6 @@ shape N8
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -361,7 +361,6 @@ shape N7
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -422,7 +421,6 @@ shape N6
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -483,7 +481,6 @@ shape N5
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -544,7 +541,6 @@ shape N4
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -605,7 +601,6 @@ shape N3
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -666,7 +661,6 @@ shape N2
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -727,7 +721,6 @@ shape N1
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -783,22 +776,26 @@ shape N1
 // search field a home holds), so the renderer is inlined at one call site per slot.
 shape DocSlot
   present: bool
-  root: number
-  rootPos: number
-  slotStyle: number
-  slotPos: number
+  rootBase: StateRef
+  rootSts: StateRef[]
+  slotBase: StateRef
+  slotSts: StateRef[]
   slotInner: number
   slotOrder: string
+  // The tree places the foundation's content (a slot node); without one, none is drawn (home).
+  holds: bool
   nodes: N1[]
 
 shape ShellSlot
   present: bool
-  root: number
-  rootPos: number
-  slotStyle: number
-  slotPos: number
+  rootBase: StateRef
+  rootSts: StateRef[]
+  slotBase: StateRef
+  slotSts: StateRef[]
   slotInner: number
   slotOrder: string
+  // The tree places the foundation's content (a slot node); without one, none is drawn (home).
+  holds: bool
   nodes: N5[]
 
 // What the foundation hands the route view: the stack entry's route and its models.
@@ -816,12 +813,14 @@ shape RouteProps
 // A route's tree (the route view draws the one named after the current stack entry).
 shape RouteTree
   name: string
-  root: number
-  rootPos: number
-  slotStyle: number
-  slotPos: number
+  rootBase: StateRef
+  rootSts: StateRef[]
+  slotBase: StateRef
+  slotSts: StateRef[]
   slotInner: number
   slotOrder: string
+  // The tree places the foundation's content (a slot node); without one, none is drawn (home).
+  holds: bool
   nodes: N1[]
 
 // A skin document as the renderer takes it (src/skin resolves it for one viewport class).
@@ -836,6 +835,9 @@ shape SkinDoc
   liveHome: bool
   detailWide: string
   detailSmall: string
+  detailFrom: number
+  detailSplit: string
 
 fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", columnGap="", rowGap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", scrollBehavior="", scrollPaddingLeft="", colorScheme="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", borderTopWidth="", borderTopColor="", borderBottomWidth="", borderBottomColor="", borderLeftWidth="", borderLeftColor="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", textOverflow="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, rotate=0, perspective="", transition="", animation="", pointerEvents="", cursor="")
-fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen")
+fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)
+fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=false, nodes=[]), home=DocSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=false, nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none")

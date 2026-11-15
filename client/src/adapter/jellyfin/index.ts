@@ -357,16 +357,17 @@ export class JellyfinAdapter implements ServerAdapter {
             library: this.libraryModel(item), sort, direction: q.direction ?? 'asc', ...this.page(result.Items.map(i => this.entry(i)), result, p.StartIndex)
         };
     }
-    async collection(id: string): Promise<V.CollectionContents> {
+    async collection(id: string, cursor?: string, limit = 100): Promise<V.CollectionContents> {
         const user = await this.userPath();
+        const p = this.paging(cursor, limit);
         const item = await this.request<Item>('GET', `${user}/Items/${e(id)}`);
         const result = await this.request<Result>('GET', `${user}/Items${query({
-            ParentId: id, Fields: fields, Limit: 100
+            ParentId: id, Fields: fields, ...p
         })}`);
         return {
             collection: {
                 id, name: item.Name, kind: item.Type === 'Playlist' ? 'playlist' : item.Type === 'BoxSet' ? 'collection' : 'directory', summary: item.Overview, artwork: this.artwork(item)
-            }, ...this.page(result.Items.map(i => this.entry(i)), result, 0)
+            }, ...this.page(result.Items.map(i => this.entry(i)), result, p.StartIndex)
         };
     }
     private chapters(i: Item): V.Chapter[] {
@@ -417,6 +418,9 @@ export class JellyfinAdapter implements ServerAdapter {
         return {
             state: 'unavailable', reason: 'No scoped trailer-preview grants'
         };
+    }
+    trailerPreviewStatus(id: string): Promise<V.TrailerPreviewResponse> {
+        return this.trailerPreview(id, undefined!);
     }
     async search(r: V.SearchRequest): Promise<V.SearchResponse> {
         if (r.mode !== 'fast')

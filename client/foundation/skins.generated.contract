@@ -2,11 +2,12 @@
 // package exports. Do not edit: change a package and run the generator.
 // Every installed engine is dispatched.
 use SkinManifest from "./models.contract"
-use SkinTraits, ShellProps, HomeProps, SearchProps, SearchFieldProps, DetailProps, StatusProps, CollectionProps, LibraryProps, GuideProps, LiveControlsProps, MiniGuideProps, PlayerProps, AuthStageProps, AuthNoticeProps, SignInProps, QuickConnectProps from "./slot-api.contract"
+use SkinTraits, ShellProps, HomeProps, SearchProps, SearchFieldProps, DetailProps, StatusProps, CollectionProps, LibraryProps, GuideProps, LiveControlsProps, MiniGuideProps, PlayerProps, AuthStageProps, AuthNoticeProps, SignInProps, QuickConnectProps, ConnectProps from "./slot-api.contract"
 use SkinDoc, RouteProps from "../renderer/shapes.contract"
 use Route as DocumentsRoute from "../skins/doc/slots.contract"
 use AuthStage as CinematicAuthStage, AuthNotice as CinematicAuthNotice, SignIn as CinematicSignIn, QuickConnect as CinematicQuickConnect from "../skins/cinematic/auth.contract"
 use Collection as CinematicCollection from "../skins/cinematic/browse.contract"
+use Connect as CinematicConnect from "../skins/cinematic/connect.contract"
 use Detail as CinematicDetail from "../skins/cinematic/detail.contract"
 use Guide as CinematicGuide from "../skins/cinematic/guide.contract"
 use Library as CinematicLibrary from "../skins/cinematic/library.contract"
@@ -39,7 +40,7 @@ use LiveControls as MarqueeLiveControls, MiniGuide as MarqueeMiniGuide from "../
 use PlayerChrome as MarqueePlayerChrome from "../skins/marquee/player.contract"
 use Shell as MarqueeShell, Home as MarqueeHome, SearchSurface as MarqueeSearchSurface, SearchField as MarqueeSearchField, Status as MarqueeStatus, detailPresentation as MarqueeDetailPresentation, detailSplit as MarqueeDetailSplit from "../skins/marquee/slots.contract"
 use Shell as ExampleShell, Home as ExampleHome, SearchSurface as ExampleSearchSurface, SearchField as ExampleSearchField, Detail as ExampleDetail, Status as ExampleStatus, Collection as ExampleCollection, Library as ExampleLibrary, Guide as ExampleGuide, LiveControls as ExampleLiveControls, PlayerChrome as ExamplePlayerChrome, detailPresentation as ExampleDetailPresentation, detailSplit as ExampleDetailSplit from "../skins/example/slots.contract"
-use Shell as DocShell, Home as DocHome, detailPresentation as DocDetailPresentation from "../skins/doc/slots.contract"
+use Shell as DocShell, Home as DocHome, detailPresentation as DocDetailPresentation, detailSplit as DocDetailSplit from "../skins/doc/slots.contract"
 
 // Every installed skin, in picker order.
 fn installedSkins(): string[] = ["cinematic","index","jellytwin","mochi","marquee","example","doc"]
@@ -55,7 +56,7 @@ fn pickerSkins(serverSkins: string[]): SkinManifest[] = ["cinematic","index","je
 // What the root reads about the active skin (page colours, detail frame, section motion).
 fn skinTraits(id: string): SkinTraits = (id == "index" ? SkinTraits(page="index.page", ink="index.ink", flatDetail=true, panSections=false, barMask=false, splashOnPaper=true, detailScrim="media.overlay", detailShadow="0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)", closeBorderWidth=1, closeBorderColor="surface.line", closeBackground="surface.glass", closeInk="ink.primary") : id == "jellytwin" ? SkinTraits(page="jellytwin.page", ink="jellytwin.ink", flatDetail=true, panSections=true, barMask=false, splashOnPaper=false, detailScrim="media.overlay", detailShadow="0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)", closeBorderWidth=1, closeBorderColor="surface.line", closeBackground="surface.glass", closeInk="ink.primary") : id == "mochi" ? SkinTraits(page="mochi.page", ink="mochi.ink", flatDetail=false, panSections=true, barMask=false, splashOnPaper=true, detailScrim="mochi.scrim", detailShadow="0px 0px 0px 3px var(--mochi.ink), 10px 12px 0px 3px var(--mochi.lavender)", closeBorderWidth=3, closeBorderColor="mochi.ink", closeBackground="mochi.card", closeInk="mochi.ink") : id == "marquee" ? SkinTraits(page="marquee.page", ink="marquee.ink", flatDetail=true, panSections=false, barMask=false, splashOnPaper=false, detailScrim="media.overlay", detailShadow="0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)", closeBorderWidth=1, closeBorderColor="surface.line", closeBackground="surface.glass", closeInk="ink.primary") : id == "example" ? SkinTraits(page="surface.page", ink="ink.primary", flatDetail=false, panSections=false, barMask=false, splashOnPaper=false, detailScrim="media.overlay", detailShadow="0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)", closeBorderWidth=1, closeBorderColor="surface.line", closeBackground="surface.glass", closeInk="ink.primary") : id == "doc" ? SkinTraits(page="surface.page", ink="ink.primary", flatDetail=false, panSections=true, barMask=false, splashOnPaper=false, detailScrim="media.overlay", detailShadow="0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)", closeBorderWidth=1, closeBorderColor="surface.line", closeBackground="surface.glass", closeInk="ink.primary") : SkinTraits(page="surface.page", ink="ink.primary", flatDetail=false, panSections=true, barMask=true, splashOnPaper=false, detailScrim="media.overlay", detailShadow="0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)", closeBorderWidth=1, closeBorderColor="surface.line", closeBackground="surface.glass", closeInk="ink.primary"))
 fn skinDetailPresentation(skin: string, width: number, doc: SkinDoc): string = (skin == "index" ? IndexDetailPresentation(width) : skin == "jellytwin" ? JellytwinDetailPresentation(width) : skin == "mochi" ? MochiDetailPresentation(width) : skin == "marquee" ? MarqueeDetailPresentation(width) : skin == "example" ? ExampleDetailPresentation(width) : skin == "doc" ? DocDetailPresentation(doc, width) : CinematicDetailPresentation(width))
-fn skinDetailSplit(skin: string, width: number, doc: SkinDoc): string = (skin == "index" ? IndexDetailSplit(width) : skin == "jellytwin" ? JellytwinDetailSplit(width) : skin == "mochi" ? MochiDetailSplit(width) : skin == "marquee" ? MarqueeDetailSplit(width) : skin == "example" ? ExampleDetailSplit(width) : CinematicDetailSplit(width))
+fn skinDetailSplit(skin: string, width: number, doc: SkinDoc): string = (skin == "index" ? IndexDetailSplit(width) : skin == "jellytwin" ? JellytwinDetailSplit(width) : skin == "mochi" ? MochiDetailSplit(width) : skin == "marquee" ? MarqueeDetailSplit(width) : skin == "example" ? ExampleDetailSplit(width) : skin == "doc" ? DocDetailSplit(doc, width) : CinematicDetailSplit(width))
 
 component Shell
   props
@@ -66,12 +67,16 @@ component Shell
     goHome: action
     openSearch: action
     openLive: action
+    selectServer: action
+    openConnect: action
   provide
     signOut = logout
     home = goHome
     search = openSearch
     live = openLive
     library = goHome
+    chooseServer = selectServer
+    connectServer = openConnect
   slot
   view
     if activeSkin == "index"
@@ -438,6 +443,34 @@ component QuickConnect
       MarqueeQuickConnect(p=p)
     else
       CinematicQuickConnect(p=p)
+
+component Connect
+  props
+    p: ConnectProps
+  inject
+    probeServer: action
+    addServer: action
+    selectServer: action
+    removeServer: action
+    startPlexLink: action
+    choosePlexServer: action
+    cancelPlexLink: action
+    signInJellyfin: action
+    startJellyfinQuick: action
+    cancelJellyfinQuick: action
+  provide
+    probe = probeServer
+    add = addServer
+    select = selectServer
+    remove = removeServer
+    startPlex = startPlexLink
+    choosePlex = choosePlexServer
+    cancelPlex = cancelPlexLink
+    signInJelly = signInJellyfin
+    startQuick = startJellyfinQuick
+    cancelQuick = cancelJellyfinQuick
+  view
+    CinematicConnect(p=p)
 
 // The route view: the one place the renderer draws a whole route.
 component DocRoute

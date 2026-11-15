@@ -41,6 +41,8 @@ export type Action =
   | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
   /** A failed route asks again for what failed (`env.canRetry`). */
   | 'retry'
+  /** Shell: open this flag alone, closing the others (keep- flags stay); pressed again it closes. */
+  | 'only'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
 
@@ -123,5 +125,6 @@ export interface SkinDocument {
   /** `home: true` makes home a live surface: the guide's listings, clock and one preview tile run there (docs/skin-schema.md, "Live home"). */
   live?: { home?: boolean };
   /** Detail route presentation per viewport class. */
-  detail?: { small?: 'fullscreen' | 'modal' | 'stack'; wide?: 'fullscreen' | 'modal' | 'stack'; split?: string };
+  /** The title page's presentation below and from `from` px (default 640), and the home pane width in px it splits beside it from there. */
+  detail?: { from?: number; small?: 'fullscreen' | 'modal' | 'stack'; wide?: 'fullscreen' | 'modal' | 'stack'; split?: string };
 }

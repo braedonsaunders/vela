@@ -85,15 +85,15 @@ ${elementProps}
     keying: action
   slot
   view
-    box id=domId hover=hovering pointerdown=pointing key=keying testId=test role=role aria-label=label -exact-layout-transition=lt sharedElement=se -exact-exit-animation=exitAnim ${rows()}
+    box id=domId hover=hovering pointerdown=pointing key=keying tabindex=-1 testId=test role=role aria-label=label -exact-layout-transition=lt sharedElement=se -exact-exit-animation=exitAnim ${rows()}
       children
 `;
 }
 /** The props every element call passes: the node's style for its state, motion and bound rows. */
-const pass = () => `s=st, pos=(n.pos == 1 ? "absolute" : n.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}`;
+const pass = () => `s=st, pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, cx.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}`;
 
 function shape(d: number): string {
-  const fields = ['t: string', 'base: StateRef', 'sts: StateRef[]', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gf: bool', 'fade: bool', 'pos: number', 'dis: Cond[]', 'aexp: Cond[]', 'asel: Cond[]', 'acur: Cond[]', 'aprs: Cond[]', 'ahp: string', 'atitle: Part[]', 'brole: string', 'pfocus: Part[]', 'esc: string', 'escTo: Part[]', 'lt: string', 'se: string', 'ex: string', 'exs: string', 'ivb: string', 'ipaths: string[]', 'fr: string', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
+  const fields = ['t: string', 'base: StateRef', 'sts: StateRef[]', 'hh: bool', 'hf: bool', 'grp: bool', 'hg: bool', 'gf: bool', 'fade: bool', 'dis: Cond[]', 'aexp: Cond[]', 'asel: Cond[]', 'acur: Cond[]', 'aprs: Cond[]', 'ahp: string', 'atitle: Part[]', 'brole: string', 'pfocus: Part[]', 'esc: string', 'escTo: Part[]', 'lt: string', 'se: string', 'ex: string', 'exs: string', 'ivb: string', 'ipaths: string[]', 'fr: string', 'cond: Cond[]', 'parts: Part[]', 'src: Part[]', 'label: Part[]', 'arg: Part[]',
     'sym: string', 'act: string', 'role: string', 'level: number', 'test: Part[]', 'dom: Part[]', 'rep: string', 'lim: number',
     'mk: string', 'md: number', 'mdl: number', 'me: string', 'mf: string', 'mit: string', 'mdir: string', 'msk: string', 'msd: number', 'step: number', 'cap: number',
     ...BINDABLE.map(([, f]) => `${f}: Part[]`)];
@@ -120,6 +120,8 @@ function level(d: number): string {
     obs: action
 ${d <= WIDGET_DEPTH ? `  inject
     tileMessage: action
+    mediaAuthJson: string
+    tileNativeMedia: string
 ` : ''}  state over = false
   state focused = false
   state ready = false
@@ -158,7 +160,7 @@ ${d <= WIDGET_DEPTH ? `  inject
 ${d <= WIDGET_DEPTH ? `                else if n.t == "liveTile"
                   for t in e.tile key=t.channelId
                     if t.planJson != "" and (t.state == "connecting" or t.state == "playing")
-                      vela-player plan=t.planJson playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
+                      vela-player plan=t.planJson mediaAuth=mediaAuthJson nativeMedia=tileNativeMedia playerCommand=t.commandJson message=tileMessage ambient="true" position="absolute" inset=0 width="100%" height="100%" aria-hidden=true
 ` : ''}                else
                   if n.t == "observe"
                     column width=1 height=1 position="absolute" top=0 left=0 pointer-events="none" aria-hidden=true intersect=obs(fill(n.arg, vals, e))
@@ -237,6 +239,8 @@ const vocabulary: [string, string][] = [
   ['detail.seasonPending', `match first(e.detail) { case some(d) => ${yes('e.season != "" and d.episodes.length > 0 and not d.episodes.map(x => x.seasonId == e.season).includes(true)')}, case none => "false" }`],
   ['detail.genresLine', `match first(e.detail) { case some(d) => ${m('d.title', 'x.genres.join(", ")')}, case none => "" }`],
   ['detail.crewLineComma', 'match first(e.detail) { case some(d) => d.crew.join(", "), case none => "" }'],
+  ['detail.trailerId', 'match first(e.detail) { case some(d) => d.trailerId, case none => "" }'],
+  ['detail.trailerReady', `match first(e.detail) { case some(d) => ${yes('d.trailerId != "" and d.trailerReady')}, case none => "false" }`],
   ['detail.castLine', 'match first(e.detail) { case some(d) => d.cast.join(" · "), case none => "" }'],
   ['detail.nameLength', `match first(e.detail) { case some(d) => ${m('d.title', 'x.name.length.toString()')}, case none => "" }`],
   ['detail.seed', `match first(e.detail) { case some(d) => ${m('d.title', 'x.id.length.toString()')}, case none => "" }`],
@@ -276,10 +280,17 @@ const vocabulary: [string, string][] = [
   ['env.clock', m('e.guide', 'x.nowLabel')], ['env.liveReady', m('e.guide', yes('x.channels.length > 0'))], ['env.channelCount', m('e.guide', 'x.channels.length.toString()')], ['env.favoriteCount', 'e.favoriteCount.toString()'],
 ];
 
+// Keys that read a context come first and are bound per node; the rest read only the slot's
+// environment and are bound once per slot (Env.ev): every level is a copy of the renderer,
+// so a key bound per node costs sixteen copies.
+const perNode = ([, expr]: [string, string]) => /\bc\.|\bcx\./.test(expr);
+vocabulary.sort((a, b) => Number(perNode(b)) - Number(perNode(a)));
+
 function core(): string {
   // Every vocabulary value of a context, once per node (a derive), in VOCAB order:
   // inlining a resolver at each template site multiplied the bundle (4,752 copies).
-  const binds = vocabulary.map(([, expr]) => expr).join(', ');
+  const binds = vocabulary.filter(perNode).map(([, expr]) => expr).join(', ');
+  const envBinds = vocabulary.filter(v => !perNode(v)).map(([, expr]) => expr).join(', ');
   return `// Generated by tools/renderer.ts: do not edit. The skin document renderer (docs/skin-schema.md).
 use Card, FeedRow, HomeModel, HeroAction, LibraryNav, DetailModel, ExtraModel, CastPerson, cardName from "../foundation/models.contract"
 use GuideModel, GuideChannel, LiveTile from "../live/models.contract"
@@ -305,6 +316,7 @@ shape Cond
 shape StateRef
   cond: Cond[]
   s: number
+  pos: number
   hs: number
   fs: number
   gs: number
@@ -362,6 +374,8 @@ shape Env
   tunedId: string
   zapping: string
   favoriteCount: number
+  // The environment's own vocabulary values (envBinds), bound once per slot.
+  ev: string[]
 
 ${Array.from({ length: DEPTH }, (_, i) => shape(DEPTH - i)).join('\n')}
 // One slot's tree: its root container's style, its top-level nodes, and the flex
@@ -369,22 +383,26 @@ ${Array.from({ length: DEPTH }, (_, i) => shape(DEPTH - i)).join('\n')}
 // search field a home holds), so the renderer is inlined at one call site per slot.
 shape DocSlot
   present: bool
-  root: number
-  rootPos: number
-  slotStyle: number
-  slotPos: number
+  rootBase: StateRef
+  rootSts: StateRef[]
+  slotBase: StateRef
+  slotSts: StateRef[]
   slotInner: number
   slotOrder: string
+  // The tree places the foundation's content (a slot node); without one, none is drawn (home).
+  holds: bool
   nodes: N1[]
 
 shape ShellSlot
   present: bool
-  root: number
-  rootPos: number
-  slotStyle: number
-  slotPos: number
+  rootBase: StateRef
+  rootSts: StateRef[]
+  slotBase: StateRef
+  slotSts: StateRef[]
   slotInner: number
   slotOrder: string
+  // The tree places the foundation's content (a slot node); without one, none is drawn (home).
+  holds: bool
   nodes: N${SHELL_FROM}[]
 
 // What the foundation hands the route view: the stack entry's route and its models.
@@ -402,12 +420,14 @@ shape RouteProps
 // A route's tree (the route view draws the one named after the current stack entry).
 shape RouteTree
   name: string
-  root: number
-  rootPos: number
-  slotStyle: number
-  slotPos: number
+  rootBase: StateRef
+  rootSts: StateRef[]
+  slotBase: StateRef
+  slotSts: StateRef[]
   slotInner: number
   slotOrder: string
+  // The tree places the foundation's content (a slot node); without one, none is drawn (home).
+  holds: bool
   nodes: N1[]
 
 // A skin document as the renderer takes it (src/skin resolves it for one viewport class).
@@ -422,13 +442,16 @@ shape SkinDoc
   liveHome: bool
   detailWide: string
   detailSmall: string
+  detailFrom: number
+  detailSplit: string
 
 ${Object.entries(KEYFRAMES).map(([k, v]) => `keyframes vr-${k}\n  ${v}\n`).join('\n')}
 fn noStyle(): Style = ${noStyleBody()}
 // The document's distinct styles, shared by index (nodes name theirs by position).
 fn styleAt(e: Env, i: number): Style = match e.styles.at(i) { case some(s) => s, case none => e.dflt }
 fn pct(at: number, of: number): string = (of > 0 ? min(100, at / of * 100).toString() : "0")
-fn binds(c: Ctx, e: Env): string[] = [${binds}]
+fn binds(c: Ctx, e: Env): string[] = [${binds}].concat(e.ev)
+fn envBinds(e: Env): string[] = [${envBinds}]
 fn pick(vals: string[], i: number): string = match vals.at(i) { case some(v) => v, case none => "" }
 fn flagged(e: Env, f: string): string = (e.flags.includes(f) ? "true" : "false")
 fn fill(parts: Part[], vals: string[], e: Env): string = parts.map(p => (p.f != "" ? flagged(e, p.f) : p.k < 0 ? p.l : pick(vals, p.k))).join("")
@@ -456,7 +479,7 @@ const detailCtxsBody = `match first(e.detail) { case some(d) => (n.rep == "detai
 const ctxsBody = (d: number) => `(n.rep == "" ? [c] : n.rep == "home.rows" ? match first(e.home) { case some(h) => h.rows.slice(0, n.lim).map(r => Ctx(c, row=[r])), case none => [] } : n.rep == "row.items" ? match first(c.row) { case some(r) => r.items.slice(0, n.lim).map(x => Ctx(c, card=[x])), case none => [] } : n.rep == "home.heroes" ? match first(e.home) { case some(h) => h.hero.slice(0, n.lim).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "home.hero" ? match first(e.home) { case some(h) => h.hero.slice(e.heroIndex, e.heroIndex + 1).map(x => Ctx(c, hero=[x], heroAct=heroActFor(h, x.id))), case none => [] } : n.rep == "nav.destinations" ? e.libraries.slice(0, n.lim).map(l => Ctx(c, dest=[l])) : n.rep == "hero.genres" ? match first(c.hero) { case some(h) => h.genres.slice(0, n.lim).map(g => Ctx(c, fact=[g])), case none => [] } : n.rep.startsWith("detail.") ? detailCtxs${d}(n, c, e) : n.rep.startsWith("live.") ? liveCtxs(n.rep, n.lim, c, e) : [])`;
 
 const noStyleBody = () => `Style(${STYLE.map(([f]) => `${f}=${NUMERIC.has(f) ? ({ opacity: 1, flexShrink: 1, fontWeight: 400, scale: 1 } as Record<string, number>)[f] ?? 0 : '""'}`).join(', ')})`;
-const EMPTY_DOC = `fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), home=DocSlot(present=false, root=0, rootPos=0, slotStyle=0, slotPos=0, slotInner=0, slotOrder="0", nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen")\n`;
+const EMPTY_DOC = `fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)\nfn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=false, nodes=[]), home=DocSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=false, nodes=[]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none")\n`;
 
 /**
  * The renderer's compatibility version: a document names the version it needs
@@ -476,12 +499,23 @@ async function rendererVersion(out: string, bump: boolean): Promise<{ version: n
   return next;
 }
 
+/** The app theme's tokens that no axis varies: the page has no custom property for these. */
+async function fixedTokens(): Promise<Record<string, string>> {
+  const lines = (await readFile(resolve(import.meta.dir, '../client/app.tamber'), 'utf8')).split('\n');
+  const fixed: Record<string, string> = {};
+  lines.forEach((line, i) => {
+    const m = /^  ([a-z][\w-]*\.[\w.-]+) = (.+?)(\s+scheme=\w+)?$/.exec(line);
+    if (m && !/^    when /.test(lines[i + 1] ?? '')) fixed[m[1]] = m[2].trim();
+  });
+  return fixed;
+}
+
 export async function generate(out = resolve(import.meta.dir, '../client/renderer'), bump = process.argv.includes('--bump')) {
   // Player plumbing (plans, commands, media credentials) is foundation-only: no document may bind it.
   const leak = vocabulary.find(([, expr]) => /mediaAuth|planJson|commandJson|headers/.test(expr));
   if (leak) throw new Error(`Vocabulary ${leak[0]} reads player plumbing`);
   const renderer = await rendererVersion(out, bump);
-  await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order, and the renderer's compatibility version.\nexport const RENDERER_VERSION = ${renderer.version};\nexport const RENDERER_DIGEST = ${JSON.stringify(renderer.digest)};\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\n`);
+  await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order, and the renderer's compatibility version.\nexport const RENDERER_VERSION = ${renderer.version};\nexport const RENDERER_DIGEST = ${JSON.stringify(renderer.digest)};\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\n// Theme tokens with one value (client/app.tamber): Tamber folds them, so the page declares no property for them.\nexport const FIXED_TOKENS: Record<string, string> = ${JSON.stringify(await fixedTokens())};\n`);
   let levels = '';
   for (let d = 1; d <= DEPTH; d++) levels += level(d) + '\n';
   // Shapes (and the empty document) live apart from the renderer: the foundation imports

@@ -93,6 +93,9 @@ var resolvedManifests = new Map;
 function hasCoreHls() {
   return canAttemptOriginal() && resolvedManifests.get(capabilityIdentity())?.core?.version === 1 && resolvedManifests.get(capabilityIdentity())?.core?.vodHls === true;
 }
+function hasCoreLive() {
+  return hasCoreHls() && resolvedManifests.get(capabilityIdentity())?.core?.liveHls === true;
+}
 function capabilityIdentity() {
   const { base, assetKey } = assetLocation();
   return `${base.href}#${assetKey ?? ""}`;
@@ -919,10 +922,27 @@ function veil(still, from, to) {
     el.style.opacity = String(to);
   return el;
 }
+var HOPS = "vela.handoff.hops";
+var HOP_WINDOW_MS = 60000;
+var MAX_HOPS = 2;
+function recentHops() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(HOPS) ?? "[]");
+    return Array.isArray(value) ? value.filter((t) => typeof t === "number" && Date.now() - t < HOP_WINDOW_MS) : [];
+  } catch {
+    return [];
+  }
+}
 function leave(handle, from, to, still) {
   const earlier = readHandoff();
   if (earlier && earlier.from === to && earlier.to === from)
     return;
+  const hops = recentHops();
+  if (hops.length >= MAX_HOPS)
+    return;
+  try {
+    sessionStorage.setItem(HOPS, JSON.stringify([...hops, Date.now()]));
+  } catch {}
   handle.leaving = true;
   const record = { from, to, at: Date.now(), url: location.href, scroll: scrollPositions(), window: Math.round(scrollY) };
   try {
@@ -996,6 +1016,71 @@ function destroyEngine(handle) {
     cancelAnimationFrame(handle.restoring);
   if (!handle.leaving)
     handle.overlay?.remove();
+}
+
+// client/player/core/quality.ts
+class CoreQuality {
+  selected = null;
+  locked = null;
+  since = 0;
+  stalled = null;
+  switched = -Infinity;
+  get id() {
+    return this.selected;
+  }
+  get manual() {
+    return this.locked;
+  }
+  reset() {
+    this.selected = null;
+    this.locked = null;
+    this.since = 0;
+    this.stalled = null;
+    this.switched = -Infinity;
+  }
+  choose(ladder, initial, now = performance.now()) {
+    const current = ladder.find((r) => r.id === (this.locked ?? this.selected));
+    const selected = current ?? ladder.find((r) => r.id === initial) ?? ladder[0];
+    if (selected && selected.id !== this.selected) {
+      this.selected = selected.id;
+      this.since = now;
+      this.stalled = null;
+    }
+    return selected;
+  }
+  pin(id, ladder) {
+    if (id && !ladder.some((r) => r.id === id))
+      throw new Error("Unknown quality rendition");
+    this.locked = id;
+    this.stalled = null;
+    if (id) {
+      this.selected = id;
+      this.since = performance.now();
+    }
+  }
+  sample(ladder, waiting, throughput, now = performance.now()) {
+    if (this.locked || !this.selected || now - this.since < 1e4 || now - this.switched < 30000)
+      return;
+    const current = ladder.find((r) => r.id === this.selected);
+    if (!current)
+      return;
+    if (!waiting) {
+      this.stalled = null;
+      return;
+    }
+    this.stalled ??= now;
+    if (now - this.stalled < 5000)
+      return;
+    const lower = ladder.filter((r) => r.bandwidth < current.bandwidth).sort((a, b) => a.bandwidth - b.bandwidth);
+    const next = throughput === null ? lower.at(-1) : lower.filter((r) => r.bandwidth * 1.4 < throughput).at(-1) ?? lower[0];
+    if (!next)
+      return;
+    this.selected = next.id;
+    this.since = now;
+    this.switched = now;
+    this.stalled = null;
+    return next;
+  }
 }
 
 // client/player/video-info.ts
@@ -1840,7 +1925,7 @@ class SegmentPipeline {
 
 // client/player/universal/retry.ts
 function decoderRetry(reason) {
-  if (!reason.startsWith("Original decode: decode-failed") && !reason.startsWith("Original first-frame deadline"))
+  if (!reason.startsWith("Video decode:") && !/^Audio (native|software|output):/.test(reason) && !reason.startsWith("Original decode: decode-failed") && !reason.startsWith("Original first-frame deadline"))
     return null;
   return { audio: true, video: true };
 }
@@ -1935,6 +2020,7 @@ class LiveLatency {
   }
   sample(sample) {
     const segment = Number.isFinite(sample.segmentSeconds) && sample.segmentSeconds > 0 ? clamp(sample.segmentSeconds, 0.2, 10) : 2;
+    const goal = sample.bufferGoalSeconds !== undefined && Number.isFinite(sample.bufferGoalSeconds) ? clamp(sample.bufferGoalSeconds, 0.5, segment * 2) : segment * 2;
     const profile = this.preference?.latencyProfile ?? "auto";
     const declared = this.preference?.targetLatencySeconds;
     const preferred = declared && Number.isFinite(declared) && declared > 0 ? declared : Math.max(6, segment * 2);
@@ -1957,7 +2043,7 @@ class LiveLatency {
         this.target = clamp(Math.max(baseline, this.target + segment * 2), floor, ceiling);
         this.lastRelax = sample.now;
       }
-    } else if (sample.playing && !sample.waiting && sample.bufferAhead >= Math.min(segment * 2, this.target * 0.75) && (headroom === null ? sample.bufferAhead >= segment * 2 : headroom >= 1.5)) {
+    } else if (sample.playing && !sample.waiting && sample.bufferAhead >= Math.min(goal, this.target * 0.75) && (headroom === null ? sample.bufferAhead >= goal : headroom >= 1.5)) {
       this.steady ??= sample.now;
       const stableFor = sample.now - this.steady, threshold = profile === "low" ? 1e4 : profile === "stable" ? 45000 : 20000;
       if (sample.now >= this.cooldown && stableFor >= threshold) {
@@ -1968,7 +2054,7 @@ class LiveLatency {
     } else
       this.steady = null;
     const steady = this.steady !== null && sample.now - this.steady >= 5000;
-    const catchingUp = sample.playing && !sample.waiting && steady && sample.bufferAhead >= segment * 2 && sample.behindSeconds !== null && sample.behindSeconds > this.target + Math.max(1, segment);
+    const catchingUp = sample.playing && !sample.waiting && steady && sample.bufferAhead >= goal && sample.behindSeconds !== null && sample.behindSeconds > this.target + Math.max(1, segment);
     return { targetSeconds: this.target, playbackRate: catchingUp ? 1.03 : 1 };
   }
 }
@@ -1987,6 +2073,9 @@ class PlaybackEngine {
   startupFrameSeen = false;
   startupVideoCallback;
   original;
+  coreQuality = new CoreQuality;
+  deferredPath = null;
+  browserFallbacks = new Set;
   originalJob;
   originalGeneration;
   overlay;
@@ -2053,6 +2142,7 @@ class PlaybackEngine {
     this.timer = setInterval(() => {
       this.checkWaiting();
       this.adaptLive();
+      this.adaptCoreQuality();
       this.publish();
     }, 1000);
   }
@@ -2080,6 +2170,8 @@ class PlaybackEngine {
     return this.terminalMedia?.position ?? this.original?.position ?? (this.video.readyState >= 1 && Number.isFinite(this.video.currentTime) ? this.nativeOrigin + this.video.currentTime : this.resumePosition);
   }
   duration() {
+    if (this.session?.live)
+      return null;
     return this.terminalMedia?.duration ?? this.original?.readout.duration ?? (Number.isFinite(this.video.duration) ? this.nativeOrigin + this.video.duration : this.session?.duration ?? null);
   }
   frameMetrics() {
@@ -2099,17 +2191,18 @@ class PlaybackEngine {
       return;
     this.liveLatency.setPreference(this.session.livePolicy);
     const bounds = this.liveBounds();
-    const retries = this.pipeline?.networkRetries ?? 0;
+    const retries = this.original?.live?.retries ?? this.pipeline?.networkRetries ?? 0;
     const decision = this.liveLatency.sample({
       now: performance.now(),
       playing: this.status === "playing" && this.wantsPlay,
       waiting: this.status === "buffering" || retries > this.liveNetworkRetries,
-      bufferAhead: bufferAhead(this.video),
-      throughputBps: this.pipeline?.bandwidth.bps ?? null,
-      bitrateBps: this.pipeline?.current?.bandwidth ?? null,
-      segmentSeconds: this.pipeline?.nominalSegmentSeconds ?? 2,
+      bufferGoalSeconds: this.original ? 2 : undefined,
+      bufferAhead: this.original ? Math.max(this.original.readout.bufferAheadSeconds ?? 0, this.original.readout.readAheadSeconds ?? 0) : bufferAhead(this.video),
+      throughputBps: this.original?.readout.throughputBps ?? this.pipeline?.bandwidth.bps ?? null,
+      bitrateBps: this.snapshotBitrate(),
+      segmentSeconds: this.original?.live?.segmentSeconds ?? this.pipeline?.nominalSegmentSeconds ?? 2,
       windowSeconds: bounds.edge !== null && bounds.start !== null ? bounds.edge - bounds.start : null,
-      behindSeconds: bounds.edge === null ? null : Math.max(0, bounds.edge - this.video.currentTime)
+      behindSeconds: bounds.edge === null ? null : Math.max(0, bounds.edge - this.position())
     });
     this.liveNetworkRetries = retries;
     this.liveTargetSeconds = decision.targetSeconds;
@@ -2117,7 +2210,9 @@ class PlaybackEngine {
       this.pipeline.liveTargetSeconds = decision.targetSeconds;
       this.pipeline.livePlaybackRate = decision.playbackRate;
     }
-    if (!this.original)
+    if (this.original?.setLiveTarget)
+      this.original.setLiveTarget(decision.targetSeconds, decision.playbackRate);
+    else if (!this.original)
       this.video.playbackRate = decision.playbackRate;
   }
   checkWaiting() {
@@ -2191,7 +2286,7 @@ class PlaybackEngine {
       }
     })) {
       const listener = () => {
-        if (!this.controller.current(token) || ["failed", "ended"].includes(this.status))
+        if (!this.controller.current(token) || ["failed", "ended"].includes(this.status) || this.backend === "webgpu" && name !== "volumechange")
           return;
         const previous = this.status;
         const failure = this.failure;
@@ -2205,7 +2300,7 @@ class PlaybackEngine {
     }
   }
   get observationAllowed() {
-    return this.session?.serverState !== "ended";
+    return this.session?.serverState !== "ended" && !this.pendingSeek && !this.pendingSwitch && (this.startupFrameSeen || this.status === "failed" || this.status === "ended");
   }
   snapshot() {
     const ranges = this.video.buffered, quality = this.video.getVideoPlaybackQuality?.();
@@ -2224,7 +2319,7 @@ class PlaybackEngine {
     const selectedSubtitle = this.overlay?.tracks.find((track) => track.id === subtitleId);
     const audioId = this.original?.readout.audioTrackId ?? this.pipeline?.audioTrackId ?? this.audio;
     const readout = this.original?.readout;
-    const rendition = this.pipeline?.current ?? this.source?.renditions?.find((r) => r.id === (this.manualQuality ?? this.source?.initialRenditionId));
+    const rendition = this.pipeline?.current ?? this.source?.renditions?.find((r) => r.id === (this.manualQuality ?? this.coreQuality.id ?? this.source?.initialRenditionId));
     const bitrate = rendition?.bandwidth ?? this.source?.quality?.bitrate;
     const currentBitrateBps = bitrate && Number.isFinite(bitrate) && bitrate > 0 ? bitrate : null;
     const video = readout?.video ?? (this.video.videoWidth > 0 ? {
@@ -2241,10 +2336,10 @@ class PlaybackEngine {
       state: this.pendingSeek ? "buffering" : this.status,
       sourceId: this.source?.id ?? null,
       strategy: this.source?.strategy ?? null,
-      diagnostics: this.original ? { metadataDiscrepancies: this.original.readout.metadataDiscrepancies } : undefined,
+      diagnostics: this.original ? { implementation: this.original.implementation, metadataDiscrepancies: this.original.readout.metadataDiscrepancies } : undefined,
       backend: this.backend,
-      renditionId: this.pipeline?.current?.id ?? (this.backend === "native-hls" ? this.manualQuality ?? this.source?.initialRenditionId ?? null : null),
-      qualityIds: this.pipeline?.qualityIds ?? [],
+      renditionId: this.pipeline?.current?.id ?? (this.backend === "webgpu" ? this.coreQuality.id : this.backend === "native-hls" ? this.manualQuality ?? this.source?.initialRenditionId ?? null : null),
+      qualityIds: this.pipeline?.qualityIds ?? (this.backend === "webgpu" ? this.source?.renditions?.map((r) => r.id) ?? [] : []),
       capabilities: { pip: this.pipAvailable(), fullscreen: this.fullscreenAvailable(), audioSwitch: audioTrackIds.length > 1 },
       lockedQuality: this.manualQuality,
       audioTracks: this.original?.supportsLocalAudioSwitch !== false ? this.original?.audioTracks ?? this.session?.audioTracks ?? [] : this.session?.audioTracks ?? [],
@@ -2294,12 +2389,12 @@ class PlaybackEngine {
     if (end - start < 0.25)
       return null;
     const target = Math.max(start + 0.05, end - this.liveTargetSeconds);
-    return target > this.video.currentTime + 0.25 ? Math.min(target, end - 0.1) : null;
+    return target > this.position() + 0.25 ? Math.min(target, end - 0.1) : null;
   }
   liveBounds() {
     const seekable = this.video.seekable;
-    let edge = this.pipeline?.publishedEdge ?? null;
-    let start = this.pipeline?.publishedStart ?? null;
+    let edge = this.original?.live?.edgeSeconds ?? this.pipeline?.publishedEdge ?? null;
+    let start = this.original?.live?.startSeconds ?? this.pipeline?.publishedStart ?? null;
     let source = edge === null ? null : "playlist";
     if (edge === null && seekable.length) {
       edge = seekable.end(seekable.length - 1);
@@ -2320,10 +2415,10 @@ class PlaybackEngine {
     return {
       edgeSeconds: edge,
       windowStartSeconds: start,
-      driftSeconds: edge === null ? null : Math.max(0, edge - this.video.currentTime),
+      driftSeconds: edge === null ? null : Math.max(0, edge - this.position()),
       edgeSource: source,
-      reconnecting: this.status === "recovering" || !!this.pipeline?.retrying,
-      delivery: this.pipeline?.delivery ?? "unknown",
+      reconnecting: this.status === "recovering" || !!this.original?.live?.retrying || !!this.pipeline?.retrying,
+      delivery: this.original?.live?.delivery ?? this.pipeline?.delivery ?? "unknown",
       canCatchUp: this.catchUpTarget() !== null
     };
   }
@@ -2342,12 +2437,31 @@ class PlaybackEngine {
     this.lastObservation = now;
     this.emit({ type: "snapshot", snapshot: this.snapshot() });
   }
+  adaptCoreQuality() {
+    if (!this.original || this.source?.delivery !== "hls" || this.pendingSwitch || this.pendingSeek || this.pendingTracks || this.recovering || !this.wantsPlay)
+      return;
+    const next = this.coreQuality.sample(this.source.renditions ?? [], this.status === "buffering", this.original.readout.throughputBps ?? null);
+    if (next) {
+      this.manualQuality = null;
+      this.activate(this.source, this.position(), false, true);
+    }
+  }
+  snapshotBitrate() {
+    const rendition = this.source?.renditions?.find((r) => r.id === (this.manualQuality ?? this.coreQuality.id ?? this.source?.initialRenditionId));
+    return this.pipeline?.current?.bandwidth ?? rendition?.bandwidth ?? this.source?.quality?.bitrate ?? null;
+  }
+  routeKey(source) {
+    return `${this.session?.id}:${this.controller.source}:${this.controller.seek}:${source.id}`;
+  }
+  useCore(source) {
+    return !this.browserFallbacks.has(this.routeKey(source)) && (source.original && canAttemptOriginal() || source.delivery === "hls" && (this.session?.live ? hasCoreLive() : hasCoreHls()));
+  }
   supported(source) {
     if (source.edition !== this.session?.edition)
       return false;
     if (source.delivery === "file")
       return source.original && canAttemptOriginal() || !!this.video.canPlayType(source.mime);
-    return !this.session?.live && hasCoreHls() || !!this.video.canPlayType("application/vnd.apple.mpegurl") || !!source.renditions?.some((r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass().isTypeSupported(r.mime)));
+    return (this.session?.live ? hasCoreLive() : hasCoreHls()) || !!this.video.canPlayType("application/vnd.apple.mpegurl") || !!source.renditions?.some((r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass().isTypeSupported(r.mime)));
   }
   useNativeHls(source) {
     const native = !!this.video.canPlayType("application/vnd.apple.mpegurl");
@@ -2365,6 +2479,7 @@ class PlaybackEngine {
       this.timer = setInterval(() => {
         this.checkWaiting();
         this.adaptLive();
+        this.adaptCoreQuality();
         this.publish();
       }, 1000);
     if (session.id !== this.session?.id || session.sourceGeneration !== this.controller.source || session.seekGeneration !== this.controller.seek)
@@ -2384,11 +2499,15 @@ class PlaybackEngine {
     else if (this.pendingSeek && session.seekGeneration !== this.controller.seek)
       this.pendingSeek = { ...this.pendingSeek, position: session.position ?? this.pendingSeek.position, authorized: true };
     const previousServerState = session.id === this.session?.id ? this.session.serverState : undefined;
-    if (session.id !== this.session?.id || session.selectedSourceId !== this.source?.id)
+    if (session.id !== this.session?.id || session.selectedSourceId !== this.source?.id) {
       this.manualQuality = null;
+      this.coreQuality.reset();
+    }
     if (session.id !== this.session?.id) {
+      this.browserFallbacks.clear();
       this.subtitleFailures.clear();
       this.subtitlePreference = undefined;
+      this.deferredPath = null;
       this.audioPreference = undefined;
       this.localTransportIntent = undefined;
       this.liveLatency.reset(session.livePolicy);
@@ -2413,11 +2532,22 @@ class PlaybackEngine {
     const preferred = this.audioPreference;
     const selected = session.sources.find((s) => s.id === session.selectedSourceId);
     this.audio = preferred && (selected?.audioRenditions?.some((a) => a.trackId === preferred) || selected?.original && session.audioTracks.some((track) => track.id === preferred)) ? preferred : session.audioTrackId ?? null;
-    this.subtitle = session.subtitleTrackId ?? null;
+    this.subtitle = this.subtitlePreference !== undefined ? this.subtitlePreference : session.subtitleTrackId ?? null;
     const source = this.candidates().find((s) => s.id === session.selectedSourceId) ?? this.candidates().find((s) => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) {
       this.fail({ kind: "unsupported", message: "No browser-compatible source for this edition", recoverable: false });
       return;
+    }
+    if (this.deferredPath) {
+      const id = this.deferredPath;
+      this.deferredPath = null;
+      if (id !== source.id && (session.sources.some((s) => s.id === id) || session.onDemandSources?.some((s) => s.id === id))) {
+        this.source = source;
+        this.status = "buffering";
+        this.requestSwitch({ id, onDemand: true }, position);
+        this.publish();
+        return;
+      }
     }
     await this.activate(source, position, recovery, true);
   }
@@ -2469,6 +2599,15 @@ class PlaybackEngine {
   updateSession(session) {
     if (session.id !== this.session?.id)
       throw new Error("Cannot update a different session");
+    const next = session.sources.find((source) => source.id === this.source?.id), current = this.source;
+    if (next && current && (next.url !== current.url || next.delivery !== current.delivery || next.sourceRevision !== current.sourceRevision || next.timeline !== current.timeline || next.timelineOriginSeconds !== current.timelineOriginSeconds)) {
+      const replacement = { ...session, position: this.pendingSeek?.position ?? this.position() };
+      this.load(replacement).catch((error) => {
+        if (!this.disposed && this.session === replacement)
+          this.fail({ kind: "source", message: error instanceof Error ? error.message : "Updated media source could not be opened", recoverable: true });
+      });
+      return;
+    }
     const previousState = this.session?.serverState;
     this.session = session;
     if (this.pendingTracks && (this.pendingTracks.audio === undefined || this.pendingTracks.audio === session.audioTrackId) && (this.pendingTracks.subtitle === undefined || this.pendingTracks.subtitle === (session.subtitleTrackId ?? null)))
@@ -2491,6 +2630,10 @@ class PlaybackEngine {
       this.applySubtitle();
     }
     if ((session.audioTrackId ?? null) !== this.audio) {
+      if (this.original?.supportsLocalAudioSwitch !== false && this.original && (this.original.readout.audioTrackId === (session.audioTrackId ?? null) || this.original.pendingAudioTrackId === (session.audioTrackId ?? null))) {
+        this.audio = session.audioTrackId ?? null;
+        return;
+      }
       if (this.original && this.audioPreference === this.audio && session.audioTracks.some((track) => track.id === this.audio))
         return;
       const previous = this.audio;
@@ -2600,7 +2743,7 @@ class PlaybackEngine {
     this.startupVideoCallback = this.video.requestVideoFrameCallback?.(() => {
       if (this.controller.current(token)) {
         this.startupVideoCallback = undefined;
-        if (!this.original && !this.startupFrameSeen) {
+        if (this.backend !== "webgpu" && !this.original && !this.startupFrameSeen) {
           this.startupFrameSeen = true;
           playbackMark("first-frame", this.backend === "mse" ? "mse" : "native");
         }
@@ -2612,7 +2755,7 @@ class PlaybackEngine {
     this.failure = null;
     this.lastObservation = -Infinity;
     this.publish();
-    if (source.original && canAttemptOriginal() || source.delivery === "hls" && !this.session?.live && hasCoreHls()) {
+    if (this.useCore(source)) {
       this.backend = "webgpu";
       this.startupDeadlineMs = 8000;
       this.originalStartTimer = setTimeout(() => {
@@ -2633,7 +2776,7 @@ class PlaybackEngine {
         });
       });
       cancelled(token.signal);
-      if (!this.session?.live && (source.original && canAttemptOriginal() || source.delivery === "hls" && hasCoreHls())) {
+      if (this.useCore(source)) {
         this.backend = "webgpu";
         this.startupDeadlineMs = 8000;
         const parent = this.video.parentElement;
@@ -2677,10 +2820,11 @@ class PlaybackEngine {
         if (this.subtitle && !original.supportsSubtitles)
           throw new Error("Selected subtitles require a compatible fallback; original overlay is not ready");
         const info = source.originalVideo;
+        const level = source.delivery === "hls" ? this.coreQuality.choose(source.renditions ?? [], source.initialRenditionId) : undefined;
         await original.open({
-          url: source.delivery === "hls" ? source.renditions?.find((r) => r.id === (this.manualQuality ?? source.initialRenditionId))?.url ?? source.url : source.url,
+          url: level?.url ?? source.url,
           authority: { sourceGeneration: this.controller.source, seekGeneration: this.controller.seek },
-          ...source.delivery === "hls" ? { hls: { originSeconds: source.timelineOriginSeconds ?? 0 } } : {},
+          ...source.delivery === "hls" ? { hls: { originSeconds: source.timelineOriginSeconds ?? 0, ...this.session?.live ? { live: { windowStartSeconds: this.session.liveWindowStart, targetSeconds: this.liveTargetSeconds, startAtEdge: !this.pendingSeek } } : {} } } : {},
           container: "",
           duration: this.session?.duration ?? null,
           position,
@@ -2792,6 +2936,7 @@ class PlaybackEngine {
   rejectCommand(message) {
     if (this.pendingTracks) {
       this.pendingTracks = undefined;
+      this.deferredPath = null;
       if (message)
         this.emit({ type: "error", failure: { kind: "action", message, recoverable: true } });
       this.publish();
@@ -2876,10 +3021,18 @@ class PlaybackEngine {
     this.publish(true);
     try {
       const retry = this.backend === "webgpu" && (!failure.message.startsWith("Original first-frame deadline") || this.original?.readout.decoderReady) ? decoderRetry(failure.message) : null;
-      if (retry && this.source?.original && !this.localDecoderRetries.has(this.source.id)) {
+      if (retry && this.source && !this.localDecoderRetries.has(this.source.id)) {
         this.localDecoderRetries.add(this.source.id);
         this.recovering = false;
         await this.activate(this.source, position, true, true, retry);
+        return;
+      }
+      if (this.backend === "webgpu" && this.source && this.source.delivery === "hls" && !this.browserFallbacks.has(this.routeKey(this.source))) {
+        this.browserFallbacks.add(this.routeKey(this.source));
+        if (this.browserFallbacks.size > 32)
+          this.browserFallbacks.delete(this.browserFallbacks.values().next().value);
+        this.recovering = false;
+        await this.activate(this.source, position, true, true);
         return;
       }
       this.resumePosition = position;
@@ -3171,9 +3324,16 @@ class PlaybackEngine {
           const source = this.candidates().find((s) => s.id === command.pathId) ?? this.session?.onDemandSources?.find((s) => s.id === command.pathId);
           if (!source || source.id === this.source?.id)
             break;
-          if (this.session?.serverControlled)
-            this.requestSwitch({ id: source.id, onDemand: true }, this.position());
-          else if (!("onDemand" in source) && source.recoveryAllowed !== false)
+          if (this.session?.serverControlled) {
+            const audio = this.audio && this.session.audioTracks.some((t) => t.id === this.audio) && this.audio !== this.session.audioTrackId ? this.audio : undefined;
+            const subtitle = this.overlay?.tracks.find((t) => t.id === this.subtitle);
+            const burn = subtitle?.delivery.kind === "embedded" && subtitle.codec === "pgs" ? subtitle.serverId : undefined;
+            if (audio || burn) {
+              this.deferredPath = source.id;
+              this.requestTracks({ ...audio ? { audio } : {}, ...burn ? { subtitle: burn } : {} });
+            } else
+              this.requestSwitch({ id: source.id, onDemand: true }, this.position());
+          } else if (!("onDemand" in source) && source.recoveryAllowed !== false)
             await this.activate(source, this.position());
           break;
         }
@@ -3187,6 +3347,25 @@ class PlaybackEngine {
         case "seek": {
           if (!Number.isFinite(command.seconds) || command.seconds < 0 || this.duration() !== null && command.seconds > this.duration())
             throw new Error("Seek outside media timeline");
+          if (this.session?.live && this.original?.live) {
+            const original = this.original, bounds = original.live;
+            if (!bounds)
+              throw new Error("Live source was retired");
+            if (command.seconds < bounds.startSeconds || command.seconds >= bounds.edgeSeconds)
+              throw new Error("Seek is outside the retained live window");
+            const token = this.controller.token();
+            this.pendingSeek = { position: command.seconds, startedAt: performance.now(), authorized: true };
+            this.status = "buffering";
+            this.publish(true);
+            if (this.overlay)
+              this.overlay.seek(command.seconds, ++this.overlayEpoch).catch(() => {});
+            await original.seek(command.seconds);
+            if (this.controller.current(token) && this.original === original) {
+              this.pendingSeek = undefined;
+              this.status = original.readout.state;
+            }
+            break;
+          }
           if (this.session?.serverControlled) {
             this.requestSeek(command.seconds);
             break;
@@ -3265,6 +3444,12 @@ class PlaybackEngine {
             break;
           }
           this.manualQuality = command.renditionId;
+          if (this.original) {
+            const previous = this.coreQuality.id;
+            this.coreQuality.pin(command.renditionId, this.source.renditions ?? []);
+            if (!command.renditionId || command.renditionId === previous)
+              break;
+          }
           if (this.pipeline && (!chosen || this.pipeline.qualityIds.includes(chosen.id)))
             this.pipeline.abr.manual = command.renditionId;
           else if (this.source)
@@ -3277,7 +3462,7 @@ class PlaybackEngine {
           if (this.original && this.original.supportsLocalAudioSwitch !== false) {
             const original = this.original;
             await original.selectAudio(command.trackId);
-            if (this.original !== original)
+            if (this.original !== original || original.readout.audioTrackId !== command.trackId)
               return;
             this.audio = command.trackId;
             this.audioPreference = command.trackId;
@@ -3314,7 +3499,8 @@ class PlaybackEngine {
           if (this.original?.supportsSubtitles) {
             const overlay = await this.ensureOverlay();
             const local = overlay.tracks.find((track) => track.id === command.trackId);
-            if (command.trackId === null || local?.delivery.kind !== "burn-in" && !!local) {
+            const burned = this.session?.subtitleTracks.some((t) => t.id === this.subtitle && t.delivery?.kind === "burn-in");
+            if (!burned && (command.trackId === null || local?.delivery.kind !== "burn-in" && !!local)) {
               this.subtitlePreference = command.trackId;
               this.subtitle = command.trackId;
               await overlay.select(command.trackId);
