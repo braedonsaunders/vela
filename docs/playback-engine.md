@@ -1783,3 +1783,42 @@ accepted, all native-view video/canvas nodes were removed, and dedicated Chrome
 was closed before the slot was returned to packaging. Screenshot:
 `client/.exact/lab-core-1917-hls-lab21.png`; numeric-only record:
 `client/.exact/core-lab21-result.json`. No media bytes or private headers captured.
+
+### Lab.22 correction: published origin still blocks content-seek proof
+
+The next bounded 1917 run measured 1,223.5 ms Play → first frame (717.3 ms
+plan), and a target-labelled frame at 60 s after 639.3 ms (95.6 ms command,
+390 KB opening segment with 490 ms first-byte wait). It continued to label
+62.961 s, zero dropped frames/audio underruns and 9.32 ms maximum clock-frame
+age. Stop returned ended, auth revoke succeeded, and Chrome was closed before
+returning the slot. Session `XHUAT4I64W3TN2645VHBEPBV3P`, test device
+`90866c52-a0b5-446f-807a-597d2a86275a`.
+
+**This is not a correct-content seek pass.** Ether's read-only log established
+that the copied source actually restarted at preceding keyframe **50.05 s**.
+The seek reply revision 5 and subsequent SSE revisions 6, 7 and 8 all published
+origin **60 s**. The core therefore labelled an earlier picture as 60 s. The
+numeric presentation latency and zero-drop counters remain measured, but cannot
+prove that the requested picture was shown. The publication fix is Ether branch
+`w0312/vela-origin-publish`, commit `444b07e3a`: resolve the public session binding,
+publish the known origin in the seek reply, retain it in following revisions,
+or publish the first later-known value on the next changed revision.
+
+The host now treats a changed URL, source revision, timeline or measured origin
+in a same-generation plan as a material source update: reopen at the pending
+seek/current intended title position. It does not relabel an already-running
+native/demux clock in place. One generated local Chrome check published a
+corrected origin 4 → 0 with source/seek generations unchanged at (2,2). The
+backend was replaced, kept intended position 4 s, discarded **96 preroll frames**
+and presented the corrected target in **78 ms**, zero drops/failure. This checks
+the late-publication mechanism; sustained audio-clock progress was not measured
+in that short correction sample.
+
+The core-only overlap candidate also moved source/index acquisition and exact
+native decoder configuration ahead of the exclusive GPU-ready barrier. In the
+same local trace metadata started at 199 ms and was ready at 218 ms, before the
+claimed idle warmup yielded at 372 ms. GPU presentation/package creation still
+waits for device ownership and surface binding. First frame was 638 ms in that
+run; no speed improvement or 4K sustained-play claim is inferred from it. The
+named Chrome and local server were closed. Real 4K/HDR and correctly published
+copy-origin qualification remain required before changing the production default.

@@ -159,6 +159,9 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
     if (dyn && BINDABLE[row] && raw.includes('{')) { dyn[BINDABLE[row]] = parts(value(raw, r), undefined, row === 'background-image'); continue; }
     merged[row] = value(raw, r);
   }
+  // The renderer binds gap, row-gap and column-gap: an empty bound longhand resets to normal,
+  // so a one-value gap is both longhands.
+  if (merged.gap !== undefined) { merged['row-gap'] ??= merged.gap; merged['column-gap'] ??= merged.gap; }
   // A colour may name a theme token bare (`cinematic.glass-edge`), as font-family may.
   for (const [row, v] of Object.entries(merged)) if (row.endsWith('color') && /^[a-z][\w-]*(\.[\w-]+)+$/.test(v.trim())) merged[row] = `var(--x-${v.trim().replace(/[^A-Za-z0-9_-]/g, '-')})`;
   // Per-side border rows follow the shorthand's width and colour unless set: an empty bound
@@ -213,7 +216,6 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   for (const f of Object.values(BINDABLE)) level[f] = [];
   const base = style(variant, r, level, weight);
   const own = base as Record<string, number>;
-  level.pos = base.position === 'absolute' ? 1 : base.position === 'sticky' ? 2 : 0;
   // Under reduced motion the overlays drop what moves: scale, translate, rotate, transitions, animations.
   const still = (o: Style | undefined) => o && Object.fromEntries(Object.entries(o).filter(([k]) => !['scale', 'translate', 'rotate', 'transition', 'animation'].includes(k))) as Style;
   const n = node as Node & NodeExtra;
@@ -221,13 +223,14 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   /** A state's style indices: its base, each overlay, and the reduced-motion overlays. */
   const stateRef = (layers: (Style | undefined)[], s: { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style }, cond: Condition[]) => {
     const at = (extra?: Style) => intern(style([...layers, extra], r, undefined, weight), r);
-    const sIdx = intern(style(layers, r, undefined, weight), r);
+    const plain = style(layers, r, undefined, weight), sIdx = intern(plain, r);
     const overlay = (o?: Style) => o ? at(o) : sIdx, calm = (o?: Style) => o ? at(still(o)) : sIdx;
-    return { cond: conds(cond), s: sIdx, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
+    // Position is a choice the renderer binds per state (a viewport variant may move a node into flow).
+    return { cond: conds(cond), s: sIdx, pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
       hs2: calm(s.hover), fs2: calm(s.focus), gs2: calm(s.groupHover), gfs2: calm(s.groupFocus) };
   };
   const overlays = { hover: node.hover, focus: node.focus, groupHover: node.groupHover, groupFocus: n.groupFocus };
-  level.base = { ...stateRef(variant, overlays, []), s: intern(base, r) };
+  level.base = { ...stateRef(variant, overlays, []), s: intern(base, r), pos: base.position === 'absolute' ? 1 : base.position === 'sticky' ? 2 : 0 };
   // Each document state, then the plain node, at each width interval (first match wins).
   const userStates = (n.states ?? []).slice(0, 8);
   if (userStates.length * Math.max(1, intervals.length) + intervals.length > 48) throw new Error('Too many states x breakpoints on one node');
@@ -257,7 +260,6 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     case 'image': level.t = 'image'; level.src = parts(asset(node.src, r), undefined, true); level.label = parts(node.alt, r); level.fade = node.fade === true; break;
     case 'icon': {
       level.t = 'icon';
-      // A platform symbol, or a document SVG painted as a mask in the current colour.
       // A platform symbol, or the document's own glyph: SVG path data painted in the current colour.
       const glyph = node as { paths?: string[]; viewBox?: string };
       if (glyph.paths?.length) {
