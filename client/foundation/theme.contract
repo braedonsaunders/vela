@@ -1,0 +1,29 @@
+// Theme music: a show's theme, quietly, while its title page is the visible screen. It
+// waits for the page to settle, fades in to a low level, and stops the moment the page
+// leaves, playback starts, the tab hides or the grant expires. Never under reduced
+// motion or Save-Data; the viewer's choice is kept on this device.
+members Client
+  state themeMusicOn = true persist
+  state themeArmed = ""
+  state themeVolume = 0
+  derive themeUrl = (top(nav).name == "title" ? detailSurface.themeMusicUrl : "")
+  derive themeAllowed = themeMusicOn and themeUrl != "" and auth.authenticated and not still and not saveData and page.visibilityState == "visible"
+  derive themePlaying = themeAllowed and themeArmed == themeUrl
+  task armTheme when themeAllowed key=themeUrl
+    after(1200, startTheme)
+  action startTheme
+    themeVolume = 0
+    themeArmed = themeUrl
+  task fadeInTheme when themePlaying and themeVolume < 0.3
+    every(100, raiseTheme)
+  action raiseTheme
+    themeVolume = min(0.3, themeVolume + 0.02)
+  // The grant's expiry, checked every 15 seconds while it plays.
+  task expireTheme when themePlaying and detailSurface.themeMusicExpiresAt > 0
+    every(15000, checkThemeGrant)
+  action checkThemeGrant
+    if time.epochAtZero + performanceNow() >= detailSurface.themeMusicExpiresAt - 15000
+      themeArmed = ""
+  action toggleThemeMusic
+    themeMusicOn = not themeMusicOn
+    themeArmed = ""

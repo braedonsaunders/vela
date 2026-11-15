@@ -1,5 +1,5 @@
-use PlayerView from "../../foundation/player-models.contract"
-use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, chrome, enter, base, glide, spin, breathe, dissolve from "./look.contract"
+use PlayerView, PlayerStats from "../../foundation/player-models.contract"
+use Display, Eyebrow, PrimaryPill, GhostPill, IconButton, chrome, enter, base, glide, spin, breathe, dissolve, pop from "./look.contract"
 use PlayerProps from "../../foundation/slot-api.contract"
 
 // A screening's controls: a top bar with the title, a centred spinner while the
@@ -23,6 +23,7 @@ component PlayerChrome
     seek: action
     editing: action
     close: action
+    toggleInfo: action
   state scrubbing = false
   // Opening a menu holds the controls up and puts focus on its active item.
   action opened(menu: string, e: ToggleEvent)
@@ -133,6 +134,8 @@ component PlayerChrome
           if p.model.fullscreen
             button press=command("fullscreen", "") aria-label=t("ui.fullscreen") class=Bare width=44 height=44 padding=10 flex-shrink=0
               FullscreenIcon()
+      if p.info and p.model.state != "failed"
+        InfoCard(stats=p.model.stats, small=p.small, still=p.still)
       // One compact menu per control: the menu's name, then a radio list (arrow keys move, Escape closes).
       MenuPanel(menu="player-cc", name=t("ui.subtitles"), small=p.small, opened=opened)
         ChoiceRow(menu="player-cc", index=0, count=p.model.subtitles.length + 1, label=t("ui.off"), detail="", selected=(p.model.subtitleId == "" and p.model.pendingSubtitleId == ""), pending=false, enabled=not blocked, still=p.still, choose=subtitles(""))
@@ -163,6 +166,17 @@ component PlayerChrome
           ChoiceRow(menu="player-quality", index=(p.model.qualityAuto ? i + 1 : i), count=(p.model.qualityAuto ? p.model.qualities.length + 1 : p.model.qualities.length), label=(grouped(qualityNames, option.label) ? itemName(itemDetail(option.label)) : itemName(option.label)), detail=(grouped(qualityNames, option.label) ? itemDetail(itemDetail(option.label)) : itemDetail(option.label)), selected=(p.model.lockedQuality == option.id or (p.model.lockedQuality == "" and not p.model.qualityAuto and option.label == p.model.quality)), pending=false, enabled=not blocked, still=p.still, choose=quality(option.id))
         if p.model.qualities.length == 0 and not p.model.qualityAuto
           ChoiceRow(menu="player-quality", index=0, count=1, label=itemName(p.model.quality != "" ? p.model.quality : p.model.path), detail=itemDetail(p.model.quality != "" ? p.model.quality : p.model.path), selected=true, pending=false, enabled=false, still=p.still, choose=quality(""))
+        column height=1 margin="6px 12px" background-color="cinematic.glass-edge" aria-hidden=true
+        button role="switch" aria-checked=p.info press=toggleInfo testId="player-info-toggle" display="flex" align-items="center" justify-content="space-between" gap=12 min-height=44 padding="8px 12px" border="none" border-radius=12 background-color="cinematic.scrim-clear" color="ink.primary" cursor="pointer"
+          :hover
+            background-color = "cinematic.control-hover"
+          :focus-visible
+            box-shadow = "0px 0px 0px 2px var(--brand.warm)"
+          text t("player.info") font-size=14 font-weight=500
+          row gap=10 align-items="center"
+            text "I" font-size=11 font-weight=650 color="ink.quiet" padding="2px 6px" border="1px solid var(--cinematic.glass-edge)" border-radius=5 aria-hidden=true
+            column position="relative" width=34 height=20 border-radius=10 background-color=(p.info ? "brand.warm" : "cinematic.track-strong") transition=(p.still ? "none" : "background-color 200ms linear") aria-hidden=true
+              column position="absolute" top=2 left=2 width=16 height=16 border-radius=8 background-color="ink.primary" translate=(p.info ? "14px 0px" : "0px 0px") transition=(p.still ? "none" : "translate 260ms cubic-bezier(0.16, 1, 0.3, 1)")
       MenuPanel(menu="player-speed", name=t("player.speed"), small=p.small, opened=opened)
         for rate, i in speeds key=`${rate}`
           ChoiceRow(menu="player-speed", index=i, count=speeds.length, label=`${formatNumber(rate, "decimal")}×`, detail=(rate == 1 ? t("player.normal") : ""), selected=(p.model.speeds.length == 0 ? rate == 1 : p.model.speed == rate), pending=false, enabled=(p.model.speeds.length > 0 and not blocked), still=p.still, choose=speed(rate))
@@ -317,3 +331,44 @@ component StyleRow
             :focus-visible
               box-shadow = "0px 0px 0px 2px var(--brand.warm)"
             text match labels.at(i) { case some(l) => l, case none => value } line-clamp=1
+
+// Live playback facts in a small glass card: the bitrate, the connection against what
+// this quality needs, the buffer, and what is playing. Labels only; unknowns stay out.
+component InfoCard
+  props
+    stats: PlayerStats
+    small: bool
+    still: bool
+  view
+    column position="absolute" top=(small ? 76 : 108) right=(small ? 12 : 40) width=(small ? "calc(100vw - 24px)" : 300) box-sizing="border-box" padding=18 gap=14 border="1px solid var(--cinematic.glass-edge)" border-radius=18 background-color="cinematic.popover" backdrop-filter="blur(30px) saturate(1.4)" box-shadow="0px 24px 70px var(--cinematic.shadow)" pointer-events="none" role="status" aria-label=t("player.info") animation=(still ? "dissolve 160ms linear both" : "pop 320ms cubic-bezier(0.16, 1, 0.3, 1) both")
+      row align-items="baseline" justify-content="space-between" gap=12
+        text t("player.info.bitrate") font-size=11 font-weight=650 letter-spacing="0.08em" color="ink.quiet"
+        text (stats.bitrateLabel != "" ? stats.bitrateLabel : "-") class=Display font-size=26 font-variant-numeric="tabular-nums"
+      if stats.throughputLabel != ""
+        column gap=8
+          row justify-content="space-between" gap=12
+            text t("player.info.connection") font-size=12 color="ink.secondary"
+            text (stats.requiredLabel != "" ? t("player.info.versus", measured=stats.throughputLabel, needed=stats.requiredLabel) : stats.throughputLabel) font-size=12 font-variant-numeric="tabular-nums"
+          // Measured against needed: the marker is what this quality needs, the fill what the line gives.
+          column position="relative" height=6 border-radius=3 background-color="cinematic.track-strong" overflow="hidden"
+            column position="absolute" left=0 top=0 bottom=0 width="100%" border-radius=3 background-color=(stats.headroom >= 1 ? "ink.primary" : "brand.warm") translate=`${min(100, max(0, stats.headroom) * 50) - 100}% 0px` transition=(still ? "none" : "translate 600ms cubic-bezier(0.16, 1, 0.3, 1)")
+            column position="absolute" left="50%" top=0 bottom=0 width=2 background-color="cinematic.marker"
+          if stats.throughputHistory.length > 1
+            row height=24 align-items="flex-end" gap=2 aria-hidden=true
+              for v, i in stats.throughputHistory key=`${i}`
+                column flex=1 min-width=2 height=`${max(2, min(24, v * 24))}px` border-radius=1 background-color="cinematic.ink-track"
+      column display="grid" grid-template-columns="auto 1fr" column-gap=16 row-gap=6
+        InfoFact(name=t("player.info.buffer"), value=stats.bufferLabel)
+        InfoFact(name=t("player.info.resolution"), value=stats.resolutionLabel)
+        InfoFact(name=t("player.info.video"), value=stats.videoLabel)
+        InfoFact(name=t("player.info.delivery"), value=stats.deliveryLabel)
+        InfoFact(name=t("player.info.dropped"), value=stats.droppedLabel)
+
+component InfoFact
+  props
+    name: string
+    value: string
+  view
+    if value != ""
+      text name font-size=12 color="ink.quiet"
+      text value font-size=12 text-align="right" font-variant-numeric="tabular-nums"
