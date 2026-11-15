@@ -5,6 +5,7 @@ export interface NativeVideoFrame extends DecodedVideoFrame { kind: 'native'; fr
 
 /** Exact-config WebCodecs component. Vela owns input credits and output lifetime. */
 export class NativeVideoDecoder {
+  readonly metrics = {decoded:0};
   private decoder?: VideoDecoder;
   private epoch = 0;
   private held = 0;
@@ -26,6 +27,7 @@ export class NativeVideoDecoder {
     this.decoder = new VideoDecoder({
       output: frame => {
         if (generation !== this.generation) { frame.close(); return; }
+        this.metrics.decoded++;
         let released = false;
         const release = () => {
           if (released) return; released = true; frame.close();

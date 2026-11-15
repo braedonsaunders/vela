@@ -10,6 +10,7 @@ export interface Source {
   id: string; strategy: 'direct' | 'remux' | 'transcode'; delivery: 'file' | 'hls';
   url: string; mime: string; timeline: string; edition: string; audioTrackId?: string; recoveryAllowed?: boolean; boundaries?: number[];
   original?: boolean; originalVideo?: OriginalVideo;
+  sourceRevision?: string;
   timelineOriginSeconds?: number; audioRenditions?: AudioRendition[]; initialRenditionId?: string; renditions?: Rendition[];
 }
 export interface OnDemandSource { id: string; onDemand: true }

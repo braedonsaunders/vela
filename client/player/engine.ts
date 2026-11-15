@@ -14,6 +14,8 @@ export class PlaybackEngine {
   readonly controller = new SessionController();
   private session?: PlaybackSession; private source?: Source; private pipeline?: SegmentPipeline;
   private original?: OriginalBackend;
+  private originalJob?: AbortController;
+  private originalGeneration?: Generation;
   private originalStartTimer?: ReturnType<typeof setTimeout>;
   private localDecoderRetries = new Set<string>();
   private originalClosing: Promise<void> = Promise.resolve();
@@ -160,6 +162,8 @@ export class PlaybackEngine {
   async load(session: PlaybackSession) {
     if (!this.timer) this.timer = setInterval(() => { this.checkWaiting(); this.publish(); }, 1000);
     if (session.id !== this.session?.id || session.sourceGeneration !== this.controller.source || session.seekGeneration !== this.controller.seek) this.localDecoderRetries.clear();
+    const retained=session.sources.find(source=>source.id===session.selectedSourceId);
+    if(retained&&this.canRetainOriginal(session,retained)){await this.seekRetainedOriginal(session,retained);return;}
     const pending = this.pendingSwitch;
     const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId &&
       session.sourceGeneration !== undefined && session.seekGeneration !== undefined &&
@@ -190,6 +194,34 @@ export class PlaybackEngine {
     const source = this.candidates().find(s => s.id === session.selectedSourceId) ?? this.candidates().find(s => !this.audio || s.audioTrackId === this.audio) ?? this.candidates()[0];
     if (!source) { this.fail({ kind: 'unsupported', message: 'No browser-compatible source for this edition', recoverable: false }); return; }
     await this.activate(source, position, recovery, true);
+  }
+  private canRetainOriginal(session:PlaybackSession,source:Source):boolean{
+    const previous=this.session,current=this.source,original=this.original;
+    if(!previous||!current||!original?.retainsSource||!this.originalJob||this.originalJob.signal.aborted||
+      session.serverState==='ended'||session.id!==previous.id||session.mediaId!==previous.mediaId||
+      session.sourceGeneration!==this.controller.source||session.seekGeneration===this.controller.seek||
+      !source.original||source.id!==current.id||source.url!==current.url||source.edition!==current.edition||
+      source.timeline!==current.timeline||source.sourceRevision!==current.sourceRevision||source.timelineOriginSeconds!==current.timelineOriginSeconds||
+      (session.subtitleTrackId??null)!==this.subtitle)return false;
+    const identities=(tracks:PlaybackSession['audioTracks'])=>JSON.stringify(tracks.map(track=>[track.id,track.streamIndex]));
+    if(identities(session.audioTracks)!==identities(previous.audioTracks))return false;
+    const selected=this.audioPreference&&session.audioTracks.some(track=>track.id===this.audioPreference)?this.audioPreference:session.audioTrackId??null;
+    return selected===original.readout.audioTrackId;
+  }
+  private async seekRetainedOriginal(session:PlaybackSession,source:Source){
+    const original=this.original!;
+    const previous=this.session?.serverState;
+    const token=this.controller.start(session.id,session.sourceGeneration,session.seekGeneration);
+    this.originalGeneration=token;this.session=session;this.source=source;this.pendingTracks=undefined;this.pendingSwitch=undefined;
+    this.pendingSeek={position:session.position??0,startedAt:performance.now(),authorized:true};
+    this.status='buffering';this.failure=null;this.lastObservation=-Infinity;
+    this.applyServerState(session.serverState,previous);this.publish();
+    try{
+      if(this.wantsPlay)original.resume();else original.pause();
+      await original.seek(session.position??0);
+      if(!this.controller.current(token)||this.original!==original)return;
+      this.pendingSeek=undefined;this.status=original.readout.state;this.lastObservation=-Infinity;this.publish();
+    }catch(error){if(this.controller.current(token)&&this.original===original)await this.recover(error,token);}
   }
   /** A server readiness/observation revision is not a new playback attempt. */
   updateSession(session: PlaybackSession) {
@@ -242,7 +274,7 @@ export class PlaybackEngine {
   }
   private releaseOriginal() {
     if (this.originalStartTimer) clearTimeout(this.originalStartTimer); this.originalStartTimer = undefined;
-    const original = this.original; this.original = undefined;
+    const original = this.original; this.original = undefined;this.originalJob?.abort();this.originalJob=undefined;this.originalGeneration=undefined;
     if (original) this.originalClosing = original.dispose().catch(() => {});
   }
   private resetMedia() {
@@ -275,10 +307,12 @@ export class PlaybackEngine {
         this.backend = 'webgpu'; this.startupDeadlineMs = 8000;
         const parent = this.video.parentElement;
         if (!(parent instanceof HTMLDivElement)) throw new Error('Original renderer surface is missing');
-        const original = await loadOriginalRuntime({ surface:{container:parent,video:this.video}, signal:token.signal, retry,
-          onFailure: reason => { if (this.controller.current(token)) void this.recover(new PlaybackFault(reason,'decoder'),token); },
+        const job=this.originalJob=new AbortController();this.originalGeneration=token;
+        const current=()=>this.originalJob===job&&!job.signal.aborted&&!!this.originalGeneration&&this.controller.current(this.originalGeneration);
+        const original = await loadOriginalRuntime({ surface:{container:parent,video:this.video}, signal:job.signal, retry,
+          onFailure: reason => { if (current()) void this.recover(new PlaybackFault(reason,'decoder'),this.originalGeneration!); },
           onEvent: event => {
-            if (!this.controller.current(token) || !this.original) return;
+            if (!current() || !this.original) return;
             if (event.type === 'waiting') this.status = 'buffering';
             else if (event.type === 'playing' || event.type === 'statechange') {
               this.status = this.original.readout.state;

@@ -20,12 +20,12 @@ export interface CoreState {
   state:'idle'|'loading'|'playing'|'paused'|'buffering'|'ended'|'failed';
   epoch:number; positionUs:number; durationUs:number|null;
   tracks:readonly MediaTrack[]; videoTrackId:string|null; audioTrackId:string|null;
-  presented:number; dropped:number; failure:string|null;
+  decoded:number; presented:number; dropped:number; failure:string|null;
 }
 interface Epoch {
   id:number; abort:AbortController; demux:FileDemux; decoder:NativeVideoDecoder;
   firstFrame:Promise<void>; resolveFirst():void; videoEndUs:number; audioEndUs:number;
-  videoEnded:boolean; audioEnded:boolean;
+  videoEnded:boolean; audioEnded:boolean; audioTailReported:boolean; audioBufferedUntilUs:number;
 }
 
 /** Vela's direct-file orchestration. It deliberately has no upstream controller. */
@@ -40,13 +40,16 @@ export class PlaybackCore {
   private video?:VideoTrack;
   private audio?:AudioTrack;
   private requestedAudioId?:string;
+  private initialAudioOrdinal=0;
   private durationUs:number|null=null;
   private failure:string|null=null;
   private playing=true;
   private closed=false;
+  private disposing?:Promise<void>;
   private volume=1;
   private muted=false;
   private rate=1;
+  private decodedBeforeEpoch=0;
   private timer?:ReturnType<typeof setInterval>;
 
   constructor(private readonly presenter:CorePresenter,
@@ -64,28 +67,33 @@ export class PlaybackCore {
   snapshot():CoreState {
     return {state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
       tracks:this.tracks,videoTrackId:this.video?.id??null,audioTrackId:this.audio?.id??null,
-      presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
+      decoded:this.decodedBeforeEpoch+(this.epoch?.decoder.metrics.decoded??0),presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
   }
   private publish(){this.onState(this.snapshot());}
   private current(run:Epoch){return this.epoch===run&&!run.abort.signal.aborted&&!this.closed;}
 
-  async open(url:string,positionUs=0):Promise<void>{
+  async open(url:string,positionUs=0,audioOrdinal=0):Promise<void>{
     if(this.closed)throw new Error('Playback core is disposed');
     await this.closeSource();
+    this.decodedBeforeEpoch=0;Object.assign(this.scheduler.metrics,{presented:0,dropped:0,preroll:0});
     const abort=new AbortController(),reader=new RangeReader(url);
     const audio=this.createAudio({signal:abort.signal,onClock:anchor=>{
       if(this.clock.update(anchor)){
+        const run=this.epoch;
+        if(run&&run.id===anchor.epoch){run.audioBufferedUntilUs=anchor.bufferedUntilUs;if(run.audioEnded)run.audioTailReported=true;}
         if(this.playing&&(this.state==='playing'||this.state==='buffering'))this.state=anchor.playing?'playing':'buffering';
         this.checkEnded();
       }
     },onFailure:failure=>{if(this.epoch?.id===failure.epoch)this.fail(new Error(`Audio ${failure.stage}: ${failure.message}`));}});
     this.source={abort,reader,audio};this.failure=null;this.tracks=[];this.video=undefined;this.audio=undefined;this.requestedAudioId=undefined;this.durationUs=null;
+    this.initialAudioOrdinal=Number.isSafeInteger(audioOrdinal)&&audioOrdinal>=0?audioOrdinal:0;
     await this.startEpoch(positionUs);
   }
 
   private async startEpoch(positionUs:number):Promise<void>{
     const source=this.source;if(!source)throw new Error('Playback source is absent');
     if(!Number.isFinite(positionUs)||positionUs<0)throw new Error('Invalid seek target');
+    this.decodedBeforeEpoch+=this.epoch?.decoder.metrics.decoded??0;
     this.epoch?.abort.abort();this.epoch?.decoder.dispose();this.epoch?.demux.dispose();
     source.audio.pause();
     const abort=new AbortController(),id=++this.nextEpoch;
@@ -93,7 +101,7 @@ export class PlaybackCore {
     const demux=new FileDemux(source.reader,signal);
     let resolveFirst!:()=>void;
     const firstFrame=new Promise<void>(resolve=>{resolveFirst=resolve;});
-    const run:Epoch={id,abort,demux,firstFrame,resolveFirst,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,
+    const run:Epoch={id,abort,demux,firstFrame,resolveFirst,videoEndUs:positionUs,audioEndUs:positionUs,videoEnded:false,audioEnded:false,audioTailReported:false,audioBufferedUntilUs:positionUs,
       decoder:new NativeVideoDecoder(frame=>{if(this.current(run))this.scheduler.push(frame);else frame.release();},error=>{if(this.current(run))this.fail(error);})};
     this.epoch=run;this.scheduler.reset(id,positionUs,!this.playing);this.state='loading';this.failure=null;
     this.clock.reset(positionUs,id,!!this.audio);this.clock.setPlaying(false);this.publish();
@@ -105,13 +113,14 @@ export class PlaybackCore {
         ?? metadata.tracks.find((track):track is VideoTrack=>track.kind==='video');
       if(!video)throw new Error('Source contains no video track');
       const audio=metadata.tracks.find((track):track is AudioTrack=>track.kind==='audio'&&track.id===(this.requestedAudioId??this.audio?.id))
+        ?? metadata.tracks.filter((track):track is AudioTrack=>track.kind==='audio')[this.initialAudioOrdinal]
         ?? metadata.tracks.find((track):track is AudioTrack=>track.kind==='audio');
       const sameAudio=!!this.audio&&this.audio.id===audio?.id;
       this.tracks=metadata.tracks;this.video=video;this.audio=audio;this.durationUs=metadata.durationUs;
       this.clock.reset(positionUs,id,!!audio);
       await abortable(Promise.all([
         run.decoder.configure(video,id,startup),this.presenter.prepare(video,id,startup),
-        audio?(async()=>{if(!sameAudio)await source.audio.configure(audio,id,startup);await source.audio.flush(positionUs,id,startup);})():Promise.resolve(),
+        audio?(async()=>{if(!sameAudio)await source.audio.configure(audio,id,startup);if(sameAudio||positionUs!==0)await source.audio.flush(positionUs,id,startup);})():Promise.resolve(),
       ]),startup);
       if(!this.current(run))return;
       source.audio.setVolume(this.volume,this.muted);source.audio.setRate(this.rate);
@@ -121,8 +130,10 @@ export class PlaybackCore {
       if(this.playing){if(audio)await abortable(source.audio.play(),startup);this.clock.setPlaying(true);}
       else source.audio.pause();
       await abortable(firstFrame,startup);
-      if(this.current(run)){this.state=this.playing?'playing':'paused';this.publish();}
-      if(!this.timer)this.timer=setInterval(()=>{this.checkEnded();this.publish();},250);
+      if(this.current(run)){
+        this.state=this.playing?'playing':'paused';this.publish();
+        if(!this.timer)this.timer=setInterval(()=>{this.checkEnded();this.publish();},250);
+      }
     }catch(error){if(this.current(run))this.fail(error);throw error;}
   }
 
@@ -149,8 +160,9 @@ export class PlaybackCore {
   }
   private checkEnded(){
     const run=this.epoch;if(!run||!this.current(run)||!run.videoEnded||!run.audioEnded||this.scheduler.buffer.length)return;
-    const end=this.audio?run.audioEndUs:run.videoEndUs;
-    if(this.clock.time()+20000<end)return;
+    if(this.audio&&!run.audioTailReported)return;
+    const end=this.audio?run.audioBufferedUntilUs:run.videoEndUs;
+    if(this.clock.time()+1000<end)return;
     this.clock.setPlaying(false);this.source?.audio.pause();this.scheduler.stop();this.state='ended';this.publish();
   }
   async seek(positionUs:number){await this.startEpoch(positionUs);}
@@ -161,7 +173,7 @@ export class PlaybackCore {
     await this.startEpoch(position);
   }
   pause(){this.playing=false;this.clock.setPlaying(false);this.source?.audio.pause();if(this.state==='playing')this.state='paused';this.publish();}
-  async play(){this.playing=true;if(this.audio)await this.source?.audio.play();this.clock.setPlaying(true);this.scheduler.start();if(this.state==='paused')this.state='playing';this.publish();}
+  async play(){const run=this.epoch;this.playing=true;if(this.audio)await this.source?.audio.play();if(this.epoch!==run||this.closed)return;this.clock.setPlaying(true);this.scheduler.start();if(this.state==='paused')this.state='playing';this.publish();}
   setVolume(volume:number,muted:boolean){if(!Number.isFinite(volume)||volume<0||volume>1)throw new Error('Invalid volume');this.volume=volume;this.muted=muted;this.source?.audio.setVolume(volume,muted);}
   setRate(rate:number){if(!Number.isFinite(rate)||rate<0.5||rate>2)throw new Error('Unsupported playback speed');this.rate=rate;this.source?.audio.setRate(rate);this.clock.setRate(rate);}
   private fail(error:unknown){
@@ -180,5 +192,10 @@ export class PlaybackCore {
     source?.abort.abort();source?.reader.dispose();
     if(source)await abortable(source.audio.dispose(),AbortSignal.timeout(3500)).catch(()=>{});
   }
-  async dispose(){if(this.closed)return;this.closed=true;await this.closeSource();this.presenter.dispose();this.scheduler.dispose();}
+  dispose():Promise<void>{
+    if(this.disposing)return this.disposing;
+    this.closed=true;
+    this.disposing=(async()=>{await this.closeSource();this.presenter.dispose();this.scheduler.dispose();})();
+    return this.disposing;
+  }
 }

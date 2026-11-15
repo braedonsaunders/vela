@@ -100,3 +100,28 @@ is retained only as ignored reference; it is not the new core.
 MIT notice, MPL corresponding sources and separately loaded LGPL packages/source
 offers remain in every verified runtime payload. New libass/fonts/subtitle assets
 need their own pinned licences and corresponding source inventory.
+
+## First direct-file component milestone
+
+The native-view adapter now runs Vela's RangeReader/FileDemux, native WebCodecs
+video decoder, audio specialist's CoreAudioOutput, MediaClock and VideoScheduler,
+and the upstream WebGPUPresenter solely as a rendering component. The bundled
+candidate has no CustomPlaybackController or CustomPlaybackFrameLoop class.
+`tools/player/prepare-upstream.ts --core` explicitly builds this local migration
+candidate; production continues using the qualified entry until parity passes.
+
+One local same-origin640×360 H.264/AAC fixture drive measured first GPU frame
+348.6ms. An engine seek immediately exposed target4s/buffering, then resumed with
+a new presented frame in87.7ms including40ms of simulated authority latency.
+The runtime and32MiB reader cache were retained across the seek generation. Four
+HTTP ranges transferred943524bytes across that source lifetime. Physical-audio
+EOF produced ended at8.010895s after the audio tail;206video frames were decoded
+including seek preroll. One presentation drop occurred during startup; it remained
+one at EOF. Chrome and the owned local asset server were closed.
+
+These are local synthetic measurements, not LAN or new-core HEVC/HDR parity.
+An earlier same-core API seek measured38.5ms without the simulated command trip.
+Native SDR is implemented; WGSL/HDR route integration, subtitles, HLS/live and
+quality continuity are still migration work. The new core is not yet selected by
+the production build. Source-scoped abort jobs retain cache/device across seeks;
+source replacement, stop and failed startup cancel them and bound teardown.
