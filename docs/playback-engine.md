@@ -1718,3 +1718,23 @@ headers. Immutable original-file readers still validate ranges/revisions and
 retain their same-source cache for direct seeks. This is client containment;
 it cannot turn a reused server resource into the correct seek-generation bytes.
 A new 1917 seek qualification waits for Ether's generation-unique producer fix.
+
+### Local offset-HLS generation check
+
+Candidate `9e1e4578186740d8` passed one generated local native-view transition
+from the old wrapped-AAC HLS fixture to a new source/seek generation whose
+`timelineOriginSeconds` is 4. Real FFmpeg output had first video PTS/DTS 4.000 s
+and two 2 s fMP4 segments with distinct generation-prefixed names. The new core
+runtime presented the target at title time 4.000 s in **86 ms**, zero drops and
+no failure. The initial wrapped-AAC source started in 288 ms, zero drops, and
+reported its exact priming correction. Seek intent immediately showed target 4
+and buffering. This establishes local offset mapping with a genuinely replaced
+HLS source; the earlier same-source cached seek was a different case.
+
+The first fixture construction was discarded before playback because its only
+video keyframe preceded the requested offset: stream copy kept the whole 8 s
+video while audio started at 4 s. The corrected fixture explicitly has 2 s video
+keyframes and its raw packet timestamps were checked before the single drive.
+No lab media or credentials were used. The native view, named Chrome and owned
+local server were disposed/closed. Lab.21 requalification remains pending the
+packager's first slot.
