@@ -299,7 +299,8 @@ Without `routes.library` the foundation's library page shows.
   `press.focus` land on the control. Route action `home`.
 - **Pressed**: a pressable box with control states shows Exact's pressed state while held: the
   whole box at .65 opacity (its ground, ring and content; a hover ground stays), with or without a
-  ground of its own. An `active` overlay replaces it (author over platform), as a bound opacity does.
+  ground of its own. An `active` overlay replaces it (author over platform), as a bound opacity or a `hover`
+  opacity does.
 - **Focus ring**: no inline outline unless the node suppresses the ring (`outline: none`, or a
   focus/groupFocus overlay without `outline: auto`), so Exact's own focus-visible ring is
   drawn exactly as on a compiled button.
