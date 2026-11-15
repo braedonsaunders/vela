@@ -260,7 +260,6 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     case 'image': level.t = 'image'; level.src = parts(asset(node.src, r), undefined, true); level.label = parts(node.alt, r); level.fade = node.fade === true; break;
     case 'icon': {
       level.t = 'icon';
-      // A platform symbol, or a document SVG painted as a mask in the current colour.
       // A platform symbol, or the document's own glyph: SVG path data painted in the current colour.
       const glyph = node as { paths?: string[]; viewBox?: string };
       if (glyph.paths?.length) {

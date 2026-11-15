@@ -148,8 +148,8 @@ Renderer 3 is the live home above; a document using anything here names `rendere
 - `layoutTransition: "300ms ease-out"`, `sharedElement: "<name>"`, `exit: "<motion>"`.
 - `below: { "<px>": Style }` and `above: { "<px>": Style }`: viewport overrides at the
   document's own breakpoints (`small`/`wide` remain as 640/1200 shorthands).
-- Icons from the document: `{ type: "icon", src: "<appearance asset>.svg" }` paints the SVG
-  as a mask in `currentColor`, so it follows colour, hover and states like a platform symbol.
+- Icons from the document: `{ type: "icon", paths: ["<SVG path data>", …], viewBox?, fillRule? }`
+  (up to 8 paths) painted in `currentColor`, so they follow colour, hover and states like a platform symbol.
 - Document keyframes: `keyframes: { name: { "0%": { opacity?, translate?, scale?, rotate? }, … } }`
   (numbers and px/% only); a motion preset names one as `keyframes: "doc:<name>"`.
 - Focus: `focus` is keyboard focus (focus-visible); `groupFocus` beside `groupHover`; a group's
