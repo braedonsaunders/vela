@@ -1,5 +1,5 @@
 import { clock, number, msg, setLocale } from '../foundation/i18n';
-import type { PlaybackPlan, Track } from '../../protocol/v0/types';
+import type { PlaybackPlan, Track } from '../wire/v0/types';
 import type { Snapshot } from './model';
 const snapshots = new Map<string, Snapshot>();
 const errors = new Map<string, string>();
