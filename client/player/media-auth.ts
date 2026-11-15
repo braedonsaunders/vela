@@ -77,7 +77,7 @@ export class MediaAccess implements MediaRequestPolicy {
     if(this.disposed)throw aborted();if(json===this.json)return false;
     let next:MediaAuthorization|undefined;
     try{next=parseMediaAuthorization(json);}catch(error){this.retired.abort();this.cancel();this.value=undefined;this.json='';throw error;}
-    const changed=next?.handle!==this.value?.handle;
+    const changed=next?.handle!==this.value?.handle||JSON.stringify(next)!==JSON.stringify(this.value);
     this.retired.abort();this.retired=new AbortController();this.cancel();this.value=next;this.json=json;
     return changed;
   }
