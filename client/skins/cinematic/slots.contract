@@ -429,7 +429,8 @@ component SearchSurface
   derive upcoming = (p.loading or p.error ? [] : p.model.liveProgrammes.filter(entry => not entry.airing))
   derive channels = (p.loading or p.error ? [] : p.model.liveChannels)
   derive liveFound = channels.length > 0 or airing.length > 0 or upcoming.length > 0
-  derive aiRunning = p.aiState == "loading" or (p.aiState == "ready" and (p.ai.aiStatus == "queued" or p.ai.aiStatus == "running"))
+  // A partial answer is still running: its items show while the job continues.
+  derive aiRunning = p.aiState == "loading" or (p.aiState == "ready" and (p.ai.aiStatus == "queued" or p.ai.aiStatus == "running" or p.ai.aiStatus == "partial"))
   derive aiFailed = p.aiState == "failed" or (p.aiState == "ready" and p.ai.aiStatus == "failed")
   derive aiShown = p.aiAvailable and (aiRunning or aiFailed or (p.aiState == "ready" and p.ai.aiStatus == "complete"))
   view
@@ -586,6 +587,8 @@ component SearchField
 component Status
   props
     p: StatusProps
+  inject
+    retry: action
   view
     if p.kind == "home"
       column role="status" aria-label=p.message animation=(p.still ? "dissolve 240ms linear both" : "dissolve 500ms ease-out both")
@@ -623,4 +626,9 @@ component Status
               Pulse(still=p.still)
               text p.message color="ink.secondary" font-size=15
           else
-            EmptyState(icon="symbol:alert", title=t("ui.somethingWentQuiet"), message=p.message, still=p.still)
+            column gap=4
+              EmptyState(icon="symbol:alert", title=t("ui.somethingWentQuiet"), message=p.message, still=p.still)
+              if p.canRetry
+                row justify-content="center"
+                  button press=retry() class=PrimaryPill height=44 padding="0px 24px" font-size=14
+                    text t("ui.tryAgain")
