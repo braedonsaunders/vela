@@ -61,7 +61,7 @@ export class ServerCredentials {
   constructor(private readonly store: SecretStore, readonly device: import('../../wire/v0/types').Device,
     readonly refreshKey: () => string, private readonly id: string) {}
   private all(): Record<string, import('../../wire/v0/types').Tokens> {
-    const raw = this.store.get('vela.serverSessions');
+    const raw = this.store.get('vela.server-sessions');
     if (!raw) return {};
     const value = JSON.parse(raw);
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid server sessions');
@@ -75,6 +75,6 @@ export class ServerCredentials {
     const sessions = this.all();
     if (tokens) sessions[this.id] = tokens;
     else delete sessions[this.id];
-    this.store.set('vela.serverSessions', JSON.stringify(sessions));
+    this.store.set('vela.server-sessions', JSON.stringify(sessions));
   }
 }
