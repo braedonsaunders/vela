@@ -23,7 +23,7 @@ export interface CoreState {
   epoch:number; positionUs:number; durationUs:number|null;
   tracks:readonly MediaTrack[]; videoTrackId:string|null; audioTrackId:string|null;
   bufferAheadSeconds:number|null;throughputBps:number|null;throughputHistory:number[];
-  decoded:number; presented:number; dropped:number; failure:string|null;
+  decoded:number; presented:number; dropped:number; failure:string|null;diagnostics:string[];
 }
 interface Epoch {
   id:number; abort:AbortController; demux:PacketDemux; decoder:VideoBackend;
@@ -76,7 +76,7 @@ export class PlaybackCore {
     const videoEnd=this.scheduler.bufferedEnd(position);
     const bufferedEnd=this.audio?Math.min(videoEnd,run?.audioBufferedUntilUs??position):videoEnd;
     const network=this.source?.kind==='file'?this.source.reader.bandwidth:this.source?.segments.bandwidth;
-    return {bufferAheadSeconds:run?Math.max(0,(bufferedEnd-position)/1e6):null,throughputBps:network?.bps??null,throughputHistory:network?.history??[],state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
+    return {diagnostics:run?.demux.diagnostics.slice()??[],bufferAheadSeconds:run?Math.max(0,(bufferedEnd-position)/1e6):null,throughputBps:network?.bps??null,throughputHistory:network?.history??[],state:this.state,epoch:this.epoch?.id??this.nextEpoch,positionUs:this.clock.time(),durationUs:this.durationUs,
       tracks:this.tracks,videoTrackId:this.video?.id??null,audioTrackId:this.audio?.id??null,
       decoded:this.decodedBeforeEpoch+(this.epoch?.decoder.metrics.decoded??0),presented:this.scheduler.metrics.presented,dropped:this.scheduler.metrics.dropped,failure:this.failure};
   }

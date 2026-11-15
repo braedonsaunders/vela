@@ -1639,5 +1639,8 @@ Its seek spent only 1.1 ms in metadata and 10.1 ms in configure; the remaining
 
 Screenshots are `client/.exact/lab-core-*.png`; content-free numeric drive records
 are `client/.exact/core-lab18-results.json`. No original source bytes, credentials,
-grants or private request headers were captured. The corrected priming build and
-further lab qualification are paused for the owner-facing 0.1.33 build priority.
+grants or private request headers were captured. The local generated wrapped-AAC fixture subsequently played through the core
+(635 ms first frame, 482 ms authorized seek) and reported the exact correction.
+That drive exposed four drops from a separate idle-warmup/active-playback race;
+its guard and performance work remain separate qualification gates. The 0.1.33
+release hold is now lifted; no production core switch is claimed.
