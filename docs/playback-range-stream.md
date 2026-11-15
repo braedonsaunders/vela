@@ -398,3 +398,40 @@ The old failed pair is not retroactively qualified by this cache fix. The core
 remains gated until cold-ramp admission is reliable and the requested repeated
 parity evidence is clean. Production, catalog, service worker and defaults are
 unchanged.
+
+## Short capture after Ether's dial-spacing change
+
+Ether then changed to integration `977550aa9`, keeping signed 0.1.43 and core
+`b76cabc0b114bf77` unchanged. One separately reset, bounded core capture
+(`YJD6QBG56XQ2S4FBAL6X5AAHX4`) reached its first image at 8.905 seconds,
+playable at 9.004 seconds (plan 1.977 seconds), and cold-seek playing at 4.271
+seconds. Startup plus five playing seconds had zero underruns/drops; the next
+20.005 seconds after seek 900 had zero underruns, drops, buffering, recovery
+or repeated pages. This is a short capture, not another eight-minute pair.
+
+Its playback HTTP reply started at **1395.25 seconds**, although the operator
+had requested the same 1390.5-second reset. The four preceding pair halves'
+HTTP replies all independently show 1390.5. That drift was reported to Ether
+before requesting any further controlled comparison. The different initial
+position and uncontrolled CDN timing prevent attributing startup/seek timing
+changes to the dial-spacing patch alone. No client reserve or reader tuning
+was made between these captures.
+
+UI stop and grant revoke returned 200; mounted players were zero and the own
+Chrome/context/profile closed. The architect was released. Operator unpin and
+producer correlation were requested; no further stream or reset was requested.
+The production wrapper remains the default.
+
+Operator correlation confirmed the staircase **still exists** on `977550aa9`:
+open waits of 0.32/0.56 seconds, then 0.25/0.50/0.75 seconds after an early end;
+the seek also paid 0.50/0.75 seconds. Buffer ahead was zero in the first two
+throughput samples. The patch exempts foreground dials, but this streamed reader
+joins read-ahead runs, which remain paced. Ether is implementing a separate
+low-water/open/seek exception for those runs. Thus the clean twenty-second
+capture does not prove that the proposed connection mechanism was fixed.
+
+The operator's reset-time Plex metadata did report 1,390,500 ms, whereas Vela's
+revision-1 playback reply reported 1395.25 seconds. The Vela resume read path
+remains under investigation; neither stale state nor snapping has been proven.
+Unpin returned 204, the independent pin list is empty, and the operator confirmed
+zero sessions. No additional reset or playback was requested.
