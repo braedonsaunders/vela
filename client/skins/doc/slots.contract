@@ -109,7 +109,7 @@ component Shell
     if name == "open"
       flags = (flags.includes(arg) ? flags : flags.concat([arg]))
     if name == "close"
-      flags = flags.filter(x => x != arg)
+      flags = flags.filter(x => not arg.split(" ").includes(x))
     if name == "openPicker"
       flags = flags.filter(f => f.startsWith("keep-"))
       pickerOpen = true
@@ -284,7 +284,7 @@ component Route
     if name == "open"
       flags = (flags.includes(arg) ? flags : flags.concat([arg]))
     if name == "close"
-      flags = flags.filter(x => x != arg)
+      flags = flags.filter(x => not arg.split(" ").includes(x))
     if name == "only"
       flags = (flags.includes(arg) ? flags.filter(f => f != arg) : flags.filter(f => f.startsWith("keep-")).concat([arg]))
     if name == "reset"

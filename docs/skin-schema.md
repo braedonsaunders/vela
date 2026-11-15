@@ -289,6 +289,9 @@ Without `routes.library` the foundation's library page shows.
 - **states** may carry a `label`: the press button's name while that state holds (one node can
   flip Ascending/Descending and keep its animation).
 - Route flag actions `open`, `close`, `only`, `reset` (as the shell's).
+- `escape` acts only while one of its flags is open and may name several (`"menu drawer"`), so it
+  can sit on a whole bar; a pressable box's `id` is its press button's, so `returnFocus` and
+  `press.focus` land on the control. Route action `home`.
 - **Pressed**: a pressable box with control states dims its content to .65 while pressed when
   it has no ground, and shows Exact's pressed wash (`--exact-tertiary-fill`) when it has one.
 - **Focus ring**: no inline outline unless the node suppresses the ring (`outline: none`, or a
