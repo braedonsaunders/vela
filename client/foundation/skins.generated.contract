@@ -176,8 +176,10 @@ component Detail
   inject
     activeSkin: string
     observeDetail: action
+    toggleThemeMusic: action
   provide
     observe = observeDetail
+    toggleTheme = toggleThemeMusic
   view
     if activeSkin == "index"
       IndexDetail(p=p)

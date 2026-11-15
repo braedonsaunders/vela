@@ -444,5 +444,6 @@
   "player.info.resolution": "Resolution",
   "player.info.video": "Video",
   "player.info.delivery": "Delivery",
-  "player.info.dropped": "Dropped frames"
+  "player.info.dropped": "Dropped frames",
+  "detail.themeMusic": "Theme music"
 }

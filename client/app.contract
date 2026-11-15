@@ -23,6 +23,7 @@ component Client
   members "./foundation/live.contract"
   members "./foundation/appearance.contract"
   members "./foundation/launch.contract"
+  members "./foundation/theme.contract"
   // What every skin slot reads besides its record: the active skin, the server's skin
   // document, and the app's actions by their own names. Each slot's generated dispatch
   // (foundation/skins.generated.contract) offers these to its skin under the slot ABI's names.
@@ -74,6 +75,7 @@ component Client
     editWatch
     closeWatch
     toggleWatchInfo
+    toggleThemeMusic
     editUsername
     editPassword
     submitSignIn
@@ -183,7 +185,7 @@ component Client
                     for slotProps in [StatusProps(kind="detail", canRetry=false, message=t("ui.openingTitle"), small=small, still=still)] key="status"
                       Status(p=slotProps)
                   else
-                    for slotProps in [DetailProps(model=detailSurface, small=small, still=still, season=detailSeason)] key="detail"
+                    for slotProps in [DetailProps(model=detailSurface, themeMusic=themeMusicOn, small=small, still=still, season=detailSeason)] key="detail"
                       Detail(p=slotProps)
         if e.name == "collection"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor color=inkColor
@@ -221,6 +223,9 @@ component Client
                   column position="absolute" left=(small ? 16 : 40) top="50%" translate="0px -50%" z-index=3
                     for slotProps in [MiniGuideProps(model=guide, playing=playingId, target=zapTarget, small=small, still=still)] key="miniGuide"
                       MiniGuide(p=slotProps)
+      // The show's theme, while its title page is the visible screen (foundation/theme.contract).
+      if themePlaying
+        audio themeUrl autoplay=true volume=themeVolume width=0 height=0 aria-hidden=true
       // The launch splash, over everything while boot and sign-in are pending; it leaves as the first screen is ready.
       if launching
         VelaSplash(still=still, ground=pageColor, paper=splashOnPaper, label=t("ui.connectingToYourLibrary"))

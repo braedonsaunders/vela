@@ -64,6 +64,8 @@ shape DetailProps
   still: bool
   // The visit's ?season= (empty: the title's default season); season tabs highlight it.
   season: string
+  // The viewer lets a show's theme music play on its title page (toggleTheme switches it).
+  themeMusic: bool
 
 shape StatusProps
   // "home", "library", "detail", "loading" or "failure".

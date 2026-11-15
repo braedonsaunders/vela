@@ -25,7 +25,7 @@ export const SLOTS: SlotSpec[] = [
   { name: 'Home', record: 'HomeProps', children: true, actions: { selectTitle: 'selectTitle', observe: 'observe', pickHero: 'pickHero', reachEnd: 'loadMoreHome', reachRowEnd: 'loadMoreRow', previewIntent: 'previewIntent', playHero: 'playHero', openLibrary: 'openLibrary', live: 'openLive' } },
   { name: 'SearchSurface', record: 'SearchProps', actions: { openLiveProgramme: 'openLiveProgramme', retryDescriptive: 'retryDescriptive', selectTitle: 'selectTitle', observe: 'observe' } },
   { name: 'SearchField', record: 'SearchFieldProps', actions: { edit: 'edit' } },
-  { name: 'Detail', record: 'DetailProps', actions: { play: 'play', playExtra: 'playExtra', selectTitle: 'selectTitle', observe: 'observeDetail' } },
+  { name: 'Detail', record: 'DetailProps', actions: { play: 'play', playExtra: 'playExtra', selectTitle: 'selectTitle', observe: 'observeDetail', toggleTheme: 'toggleThemeMusic' } },
   { name: 'Status', record: 'StatusProps', actions: { retry: 'retryFailed' } },
   { name: 'Collection', record: 'CollectionProps', actions: { close: 'close', selectTitle: 'selectTitle', observe: 'observe' } },
   { name: 'Library', record: 'LibraryProps', actions: { close: 'goHome', setSort: 'setLibrarySort', setFilter: 'setLibraryFilter', more: 'moreLibrary', selectTitle: 'selectTitle', observe: 'observe' } },
