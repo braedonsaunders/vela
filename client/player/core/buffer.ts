@@ -8,6 +8,7 @@ export class VideoBuffer<T extends DecodedVideoFrame> {
   }
   get length(): number { return this.frames.length; }
   get full(): boolean { return this.length >= this.capacity; }
+  get nextTimestampUs(): number | null { return this.frames[0]?.timestampUs ?? null; }
   push(frame: T, epoch: number): boolean {
     if (frame.epoch !== epoch || !Number.isFinite(frame.timestampUs) || !Number.isFinite(frame.durationUs) || frame.durationUs < 0) {
       frame.release(); return false;
@@ -22,7 +23,7 @@ export class VideoBuffer<T extends DecodedVideoFrame> {
     let frame: T | null = null, dropped = 0;
     while (this.frames.length && this.frames[0].timestampUs <= positionUs) {
       const next = this.frames.shift()!;
-      if (next.epoch !== epoch || next.timestampUs + next.durationUs <= minimumUs) { next.release(); continue; }
+      if (next.epoch !== epoch || next.timestampUs < minimumUs && next.timestampUs + next.durationUs <= minimumUs) { next.release(); continue; }
       if (frame) { frame.release(); dropped++; }
       frame = next;
     }

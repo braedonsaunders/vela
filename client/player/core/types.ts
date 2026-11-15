@@ -39,6 +39,8 @@ export interface AudioTrack extends TrackIdentity {
   channels: number;
   channelMask: number | null;
   config: AudioDecoderConfig | null;
+  codecPrivate?: Uint8Array | null;
+  waveFormat?: Uint8Array | null;
   /** Matroska codec IDs / WAVE tags remain available to package selection. */
   internalCodecId: string | number | Uint8Array | null;
 }
@@ -57,6 +59,8 @@ export interface AudioOutput {
   /** Resolves when accepted; implementations apply bounded queue backpressure. */
   decode(packet: EncodedPacket, signal: AbortSignal): Promise<void>;
   flush(positionUs: number, epoch: number, signal: AbortSignal): Promise<void>;
+  /** Decode EOF tails into the bounded output queue; does not await playback. */
+  drain?(signal: AbortSignal): Promise<void>;
   play(): Promise<void>;
   pause(): void;
   setVolume(volume: number, muted: boolean): void;

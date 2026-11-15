@@ -7,6 +7,7 @@ export interface UniversalReadout {
   position: number; duration: number | null; frames: number; dropped: number; audioTrackId: string | null; metadataDiscrepancies: string[]; presentedFrames: number; decoderReady: boolean;
 }
 export interface OriginalBackend {
+  readonly retainsSource?: boolean;
   position: number; readout: UniversalReadout;
   open(media: OriginalMedia): Promise<void>; pause(): void; resume(): void;
   setVolume(volume: number): void; setMuted(muted: boolean): void;

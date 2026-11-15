@@ -1392,6 +1392,8 @@ class PlaybackEngine {
   source;
   pipeline;
   original;
+  originalJob;
+  originalGeneration;
   originalStartTimer;
   localDecoderRetries = new Set;
   originalClosing = Promise.resolve();
@@ -1584,6 +1586,7 @@ class PlaybackEngine {
       speed: this.speed,
       speeds: this.original && !this.original.setSpeed ? [] : [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
       pendingSubtitleTrackId: this.pendingTracks?.subtitle ?? null,
+      chapters: this.session?.chapters ?? [],
       live: this.liveSnapshot(),
       seekTarget: this.pendingSeek?.position ?? null,
       waiting: !!this.pendingSeek || ["loading", "buffering", "recovering"].includes(this.status) || this.wantsPlay && this.video.seeking,
@@ -1677,8 +1680,13 @@ class PlaybackEngine {
       }, 1000);
     if (session.id !== this.session?.id || session.sourceGeneration !== this.controller.source || session.seekGeneration !== this.controller.seek)
       this.localDecoderRetries.clear();
+    const retained = session.sources.find((source) => source.id === session.selectedSourceId);
+    if (retained && this.canRetainOriginal(session, retained)) {
+      await this.seekRetainedOriginal(session, retained);
+      return;
+    }
     const pending = this.pendingSwitch;
-    const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && (pending.source + 1 === session.sourceGeneration && pending.seek === session.seekGeneration || pending.source === session.sourceGeneration && pending.seek + 1 === session.seekGeneration);
+    const handoff = pending && pending.sessionId === session.id && pending.sourceId === session.selectedSourceId && session.sourceGeneration !== undefined && session.seekGeneration !== undefined && session.sourceGeneration >= pending.source && session.sourceGeneration <= pending.source + 1 && session.seekGeneration >= pending.seek && session.seekGeneration <= pending.seek + 1 && (session.sourceGeneration > pending.source || session.seekGeneration > pending.seek);
     const position = handoff ? Math.max(pending.position, this.position()) : session.position ?? 0;
     const recovery = !!handoff && pending.recovery;
     this.pendingSwitch = undefined;
@@ -1687,6 +1695,8 @@ class PlaybackEngine {
     else if (this.pendingSeek && session.seekGeneration !== this.controller.seek)
       this.pendingSeek = { ...this.pendingSeek, position: session.position ?? this.pendingSeek.position, authorized: true };
     const previousServerState = session.id === this.session?.id ? this.session.serverState : undefined;
+    if (session.id !== this.session?.id || session.selectedSourceId !== this.source?.id)
+      this.manualQuality = null;
     if (session.id !== this.session?.id) {
       this.audioPreference = undefined;
       this.lowDelayOverride = undefined;
@@ -1718,6 +1728,48 @@ class PlaybackEngine {
       return;
     }
     await this.activate(source, position, recovery, true);
+  }
+  canRetainOriginal(session, source) {
+    const previous = this.session, current = this.source, original = this.original;
+    if (!previous || !current || !original?.retainsSource || !this.originalJob || this.originalJob.signal.aborted || session.serverState === "ended" || session.id !== previous.id || session.mediaId !== previous.mediaId || session.sourceGeneration !== this.controller.source || session.seekGeneration === this.controller.seek || !source.original || source.id !== current.id || source.url !== current.url || source.edition !== current.edition || source.timeline !== current.timeline || source.sourceRevision !== current.sourceRevision || source.timelineOriginSeconds !== current.timelineOriginSeconds || (session.subtitleTrackId ?? null) !== this.subtitle)
+      return false;
+    const identities = (tracks) => JSON.stringify(tracks.map((track) => [track.id, track.streamIndex]));
+    if (identities(session.audioTracks) !== identities(previous.audioTracks))
+      return false;
+    const selected = this.audioPreference && session.audioTracks.some((track) => track.id === this.audioPreference) ? this.audioPreference : session.audioTrackId ?? null;
+    return selected === original.readout.audioTrackId;
+  }
+  async seekRetainedOriginal(session, source) {
+    const original = this.original;
+    const previous = this.session?.serverState;
+    const token = this.controller.start(session.id, session.sourceGeneration, session.seekGeneration);
+    this.originalGeneration = token;
+    this.session = session;
+    this.source = source;
+    this.pendingTracks = undefined;
+    this.pendingSwitch = undefined;
+    this.pendingSeek = { position: session.position ?? 0, startedAt: performance.now(), authorized: true };
+    this.status = "buffering";
+    this.failure = null;
+    this.lastObservation = -Infinity;
+    this.applyServerState(session.serverState, previous);
+    this.publish();
+    try {
+      if (this.wantsPlay)
+        original.resume();
+      else
+        original.pause();
+      await original.seek(session.position ?? 0);
+      if (!this.controller.current(token) || this.original !== original)
+        return;
+      this.pendingSeek = undefined;
+      this.status = original.readout.state;
+      this.lastObservation = -Infinity;
+      this.publish();
+    } catch (error) {
+      if (this.controller.current(token) && this.original === original)
+        await this.recover(error, token);
+    }
   }
   updateSession(session) {
     if (session.id !== this.session?.id)
@@ -1812,6 +1864,9 @@ class PlaybackEngine {
     this.originalStartTimer = undefined;
     const original = this.original;
     this.original = undefined;
+    this.originalJob?.abort();
+    this.originalJob = undefined;
+    this.originalGeneration = undefined;
     if (original)
       this.originalClosing = original.dispose().catch(() => {});
   }
@@ -1874,16 +1929,19 @@ class PlaybackEngine {
         const parent = this.video.parentElement;
         if (!(parent instanceof HTMLDivElement))
           throw new Error("Original renderer surface is missing");
+        const job = this.originalJob = new AbortController;
+        this.originalGeneration = token;
+        const current = () => this.originalJob === job && !job.signal.aborted && !!this.originalGeneration && this.controller.current(this.originalGeneration);
         const original = await loadOriginalRuntime({
           surface: { container: parent, video: this.video },
-          signal: token.signal,
+          signal: job.signal,
           retry,
           onFailure: (reason) => {
-            if (this.controller.current(token))
-              this.recover(new PlaybackFault(reason, "decoder"), token);
+            if (current())
+              this.recover(new PlaybackFault(reason, "decoder"), this.originalGeneration);
           },
           onEvent: (event) => {
-            if (!this.controller.current(token) || !this.original)
+            if (!current() || !this.original)
               return;
             if (event.type === "waiting")
               this.status = "buffering";
@@ -2391,8 +2449,12 @@ class PlaybackEngine {
             this.requestTracks({ subtitle: command.trackId });
             break;
           }
+          if (this.original && command.trackId && this.session?.serverControlled) {
+            this.requestTracks({ subtitle: command.trackId });
+            break;
+          }
           if (this.original && command.trackId)
-            throw new Error("Original subtitle overlay is not available");
+            throw new Error("This source has no installed subtitle renderer");
           if (command.trackId && !this.session?.subtitleTracks.some((t) => t.id === command.trackId && t.url))
             throw new Error("Unknown WebVTT track");
           this.subtitle = command.trackId;
@@ -2475,6 +2537,7 @@ function sessionFromPlan(plan) {
     seekGeneration: plan.seekGeneration,
     audioTrackId: plan.selectedAudioTrackId,
     subtitleTrackId: plan.selectedSubtitleTrackId ?? undefined,
+    chapters: plan.chapters,
     audioTracks: plan.audioTracks.map((t) => ({ id: t.id, label: t.name, language: t.language, codec: t.codec, channels: t.channels, streamIndex: t.streamIndex })),
     subtitleTracks: plan.subtitleTracks.map((t) => ({
       id: t.id,
@@ -2501,6 +2564,7 @@ function sessionFromPlan(plan) {
       recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some((b) => b.independent && (b.compatibility === "verified-timeline" || b.compatibility === "same-source" && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
       original: p.original,
       originalVideo: p.originalVideo,
+      sourceRevision: p.sourceId,
       timelineOriginSeconds: p.timelineOriginSeconds,
       initialRenditionId: p.initialRenditionId,
       audioRenditions: p.audioRenditions,
