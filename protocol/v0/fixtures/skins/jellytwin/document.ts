@@ -349,7 +349,8 @@ const choice = (label: string, on: Condition, press: Press, when: Condition[] = 
     { type: 'text', text: label, style: { 'line-clamp': '1' } },
   ] } as Node);
 const menuHeading = (text: string, when: Condition[] = [], pad = '8px 16px 4px'): Node => ({ type: 'text', text, when, style: { 'font-size': '13px', 'font-weight': '600', color: '$secondary', padding: pad } });
-const divider = (when: Condition[] = []): Node => ({ type: 'box', when, style: { height: '1px', 'flex-shrink': '0', 'background-color': '$line', margin: '6px 0px' } });
+// A hairline between menu groups (like the compiled one it gives way when the menu overflows and scrolls).
+const divider = (when: Condition[] = []): Node => ({ type: 'box', when, style: { height: '1px', 'background-color': '$line', margin: '6px 0px' } });
 const hasFilters: Condition[][] = [[{ test: 'library.canPlayed' }], [{ test: 'library.genreCount', is: 'gt', value: '0' }], [{ test: 'library.canYear' }]];
 const filtering: Condition[][] = [[{ test: 'library.playedFilter' }], [{ test: 'library.genreFilter' }], [{ test: 'library.year', is: 'gt', value: '0' }]];
 // A menu sheet, anchored under its toolbar button (its right edge 16px inside the button's), the width of the phone less a margin.
