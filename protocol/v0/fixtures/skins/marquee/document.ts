@@ -707,4 +707,6 @@ export default {
   slots: { shell, home },
   routes: { title, library: libraryRoute },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },
+  // Sections switch in place (no sideways pan), and pages run under an opaque bar, as compiled.
+  traits: { barMask: false, panSections: false },
 } satisfies SkinDocument;
