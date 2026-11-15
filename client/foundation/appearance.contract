@@ -69,3 +69,7 @@ members Client
   derive activeDoc = (docReady ? skinDocument : emptyDoc())
   // The routes the active document draws whole (the route view); others use the slots.
   derive docRoutes = (activeSkin == "doc" ? activeDoc.routes.map(t => t.name) : [])
+  // The appearance picker lists the skin documents (built-in and the server's) beside the engines;
+  // while a document is drawn, it is the current entry.
+  derive docManifests = appearance.docs.map(d => SkinManifest(id=d.id, name=d.name, tagline=d.tagline, preview=d.preview, swatches=d.swatches))
+  derive currentDocManifest = docManifests.filter(m => m.id == requestedSkin)

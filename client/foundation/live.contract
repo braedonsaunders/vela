@@ -1,4 +1,4 @@
-use GuideModel, LiveStatus, LiveIdentity, LiveTile, GuideFocus, GuideFocusTime from "../live/models.contract"
+use GuideModel, GuideChannel, LiveStatus, LiveIdentity, LiveTile, GuideFocus, GuideFocusTime from "../live/models.contract"
 use PlaybackModel from "./models.contract"
 use PlayerView, PlayerCommandReply from "./player-models.contract"
 
@@ -6,7 +6,10 @@ members Client
   state guideDay = 0
   // The one place that says the guide is on screen: everything live (listings, clock, the preview
   // tile and its release) follows it, so moving the guide to another surface changes only this line.
-  derive guideOpen = top(nav).name == "home" and libraryId == "@live"
+  // A skin document may make home itself a live surface (`live.home`): home then holds the
+  // guide's listings, clock and the same one preview tile, under the same release rules.
+  derive liveHome = activeDoc.liveHome and current(home) and home.liveAvailable
+  derive guideOpen = top(nav).name == "home" and (libraryId == "@live" or (libraryId == "" and liveHome))
   state guideZoom = 1 persist
   // A search hand-off (/?lib=@live&ch=&prog=&at=) carries only server facts; the data module
   // places `at` in the guide's local days, and the guide opens on that day, row and time.
@@ -97,7 +100,8 @@ members Client
   derive tileCandidates = (tileRemembered != "" and guide.tuneOrder.includes(tileRemembered) ? [tileRemembered] : []).concat(guide.tuneOrder.filter(id => id != tileRemembered))
   derive tileTarget = (tileChannel != "" ? tileChannel : match first(tileCandidates.slice(tileAttempt, tileAttempt + 1)) { case some(id) => id, case none => "" })
   derive tileAllowed = tileManual or (not still and not saveData)
-  derive tileWanted = auth.authenticated and guideOpen and page.visibilityState == "visible" and guideReady and tileAllowed and tileTarget != "" and pendingWatch == "" and not tileGivenUp
+  // A live home gives the screen to search results while a query is open.
+  derive tileWanted = auth.authenticated and guideOpen and (libraryId == "@live" or query == "") and page.visibilityState == "visible" and guideReady and tileAllowed and tileTarget != "" and pendingWatch == "" and not tileGivenUp
   resource tilePlayback = uiPlayback(tileTarget, "channel", time.epochAtZero, `tile-${tileGen}`, "", 0, 0, 0) when tileWanted as shape PlaybackModel transient
   derive tilePlan = (tileWanted and current(tilePlayback) ? tilePlayback.planJson : "")
   resource tileModel = uiPlayer(tilePlan, tileEvent, "", localeJSON) when tilePlan != "" as shape PlayerView
@@ -152,6 +156,44 @@ members Client
     if id != ""
       pendingWatch = ""
       openLiveWatch(id)
+  // A live home's monitor flicks like the watch stage: up/down move a pending target through
+  // the guide's order and it retunes once the viewer pauses, so a held key opens one session.
+  state tileZapTarget = ""
+  state tileZapSeq = 0
+  task tileZapCommit when tileZapTarget != "" key=tileZapSeq
+    after(800, commitTileZap)
+  task tileZapForget when tileZapTarget != "" and not guideOpen
+    after(1, forgetTileZap)
+  action zapTile(step: number)
+    let ids = guide.channels.map(c => c.id)
+    let n = ids.length
+    if n > 0 and guideOpen
+      let i = ids.indexOf(tileZapTarget != "" ? tileZapTarget : tileTarget)
+      let j = ((i < 0 ? 0 : i + step) % n + n) % n
+      tileZapTarget = match first(ids.slice(j, j + 1)) { case some(id) => id, case none => "" }
+      tileZapSeq = tileZapSeq + 1
+  action commitTileZap
+    let target = tileZapTarget
+    tileZapTarget = ""
+    if target != "" and guideOpen
+      previewChannel(target)
+  action forgetTileZap
+    tileZapTarget = ""
+  // On a live home the monitor's channel is the viewer's current channel: it is remembered.
+  action previewChannel(id: string)
+    retuneTile(id)
+    if liveHome and tileViewer != ""
+      tileLast = `${tileViewer}\n${id}`
+  action homeKey(k: string, event: KeyboardEvent)
+    if guideOpen and libraryId == "" and not event.metaKey and not event.ctrlKey and not event.altKey and (k == "ChannelUp" or k == "ChannelDown")
+      preventDefault()
+      zapTile(k == "ChannelUp" ? -1 : 1)
+  // What a live home's document reads, each bound once: the listings, the tile and the
+  // channel on the monitor (the one being dialled while flicking).
+  derive homeGuide = (liveHome and guideReady ? [guide] : [])
+  derive homeTile = (liveHome ? [tile] : [])
+  derive homeTuned = (liveHome ? guide.channels.filter(c => c.id == (tileZapTarget != "" ? tileZapTarget : tileTarget)).slice(0, 1) : [])
+  derive homeZapping = (tileZapTarget == "" ? "" : match first(guide.channels.filter(c => c.id == tileZapTarget)) { case some(c) => c.number, case none => "" })
   action tileMessage(json: string)
     tileEvent = json
   action tileUnmute
