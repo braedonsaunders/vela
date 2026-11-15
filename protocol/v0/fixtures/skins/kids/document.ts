@@ -3,8 +3,8 @@
 // (Watch, Shows, Movies), very little text, gentle bouncy motion that goes calm under
 // reduced motion, and a grown-ups corner behind a two-question gate so settings and
 // sign-out stay out of small hands. Assets are this document's own, served beside it
-// from protocol/v0/fixtures/skins/kids/ (drawn for Vela, no third-party art).
-import type { BoxNode, Node, SkinDocument, Style } from '../../skin';
+// from kids/assets/ (all drawn for Vela; no third-party art, so no licences to record).
+import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
 const version = '1.0.0';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
@@ -250,7 +250,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 const calm = { keyframes: 'dissolve', duration: 220 };
-export const kidsDoc: SkinDocument = {
+const kids: SkinDocument = {
   schema: 1, renderer: 1, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
   preview: art('preview.jpg'), swatches: ['#FFF8EE', '#1B2550', '#FFC93C', '#3FA9F5', '#FF6B57'],
   tokens: {
@@ -283,3 +283,4 @@ export const kidsDoc: SkinDocument = {
   slots: { shell, home },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
 };
+export default kids;
