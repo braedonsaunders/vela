@@ -113,3 +113,55 @@ properties and keys from the lists above only. A value containing `url(`,
 `expression(`, `javascript:`, `@import`, `;`, braces, angle brackets or a backslash is
 refused (document assets go through `image`). Unknown actions, collections, widgets,
 keyframes, templates and properties are refused with their name.
+
+## Renderer 3 (in progress: names are final, write documents against them)
+
+Requests from the converters (Index, Jelly Twin, Marquee, Mochi, Cinematic) and the new
+skins, merged into one set. The bar is a pixel-identical match, so each is taken.
+
+**Node features**
+- `states: [{ when: Condition[], style: Style, hover?, focus?, groupHover? }]`: the first
+  state whose conditions hold replaces `style` (variants still apply), on the same element,
+  so transitions run (dot widths, padding while searching, on/off pills).
+- `layoutTransition: "300ms ease-out"`, `sharedElement: "<name>"`, `exit: "<motion>"`.
+- `below: { "<px>": Style }` and `above: { "<px>": Style }`: viewport overrides at the
+  document's own breakpoints (`small`/`wide` remain as 640/1200 shorthands).
+- Icons from the document: `{ type: "icon", src: "<appearance asset>.svg" }` paints the SVG
+  as a mask in `currentColor`, so it follows colour, hover and states like a platform symbol.
+- Document keyframes: `keyframes: { name: { "0%": { opacity?, translate?, scale?, rotate? }, … } }`
+  (numbers and px/% only); a motion preset names one as `keyframes: "doc:<name>"`.
+- Focus: `focus` is keyboard focus (focus-visible); `groupFocus` beside `groupHover`; a group's
+  focus includes focus inside it.
+- Press: `press: { action, arg?, hold?: ms, focus?: "<id>" }`; `disabled: Condition[]` with a
+  `disabled` style overlay; `a11y: { expanded?, selected?, current?, pressed?: Condition[],
+  haspopup?, controls?, title?: Template, role? }` on the press button.
+- `escape: "<flag>"` on a node: Escape clears the flag and returns focus to `returnFocus`.
+- Flags named `keep-…` survive navigation actions; shell `reset` clears all others.
+- The slot box takes every style row (position, z-index, background, backdrop…).
+- Rows: `color-scheme`, `column-gap`, `row-gap`, `scroll-behavior`, `scroll-padding-left`,
+  `border-left-width/color`. Under reduced motion overlays also drop `rotate` and `animation`.
+- Fonts: `weight` may be a range (`"300 700"`) for variable faces.
+- Per-document `traits`: `page`, `ink`, `flatDetail`, `panSections`, `barMask`, `splashOnPaper`,
+  detail frame tokens.
+
+**Vocabulary**
+`*.seed` (id length; `person.seed` name length) and `*.nameLength` for card/hero/row/person/dest/
+detail/extra; `card.seasonNumber`, `card.episodeNumber`, `card.seasonNumberLabel`,
+`card.unwatched`; `hero.label`, `hero.genresLine`, `hero.metaLine`; collections `hero.genres`,
+`detail.genres` (`genre.text`), `detail.trailers`, `detail.crew` (`person.*`);
+`detail.yearLabel/year/rating/played/durationLabel/resumePosition/seasonCount/seasonName/
+hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`, `row.resume`,
+`row.previewOnFocus`, `row.loadingMore`, `row.hasMore`; `dest.backdrop`; `env.width`,
+`env.skinCount`, `env.libraryCount`, `env.hasLiveLibrary`, `env.homeMoreLoading`,
+`env.homeHasMore`, `env.searchFocused`, `env.clock`, `env.clock12`.
+
+**Widgets** (leaf nodes drawn only in the first levels): `searchInput` (the bare input with
+`params` for type and ink; the document draws the field around it; `env.searchFocused`,
+actions `clearSearch`, `focusSearch`), `sentinel` (`params.on`: `row` or `home`, with margins:
+calls the foundation's continuation), `heroPreview`, `cardPreview` (with the card's intent on
+hover/focus in preview rows), `pager` (a row's scroller with `pagePrev`/`pageNext` and
+`pager.overflows/atStart/atEnd`).
+
+**Routes next** (each with its vocabulary): search (lanes, status), status, collection,
+library (toolbar menus, sort/filter), auth (sign-in fields, quick connect), player chrome
+(scrubber, menus, volume), live (guide grid widget, controls, tile).

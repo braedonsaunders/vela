@@ -8,7 +8,7 @@
 export interface ThemeHandle { theme: true; sheet: HTMLStyleElement; fonts: FontFace[]; json: string; docFonts: FontFace[]; docFontsJson: string }
 
 /** A skin document's font file (src/skin validated it: same-origin, appearance tree, font type). */
-interface DocFont { family: string; url: string; weight: number; style: string; sizeAdjust: number }
+interface DocFont { family: string; url: string; weight: string; style: string; sizeAdjust: number }
 
 /** Each engine's palette roles, by the Tamber token whose house value anchors the role. */
 const ENGINES: Record<string, { roles: Record<string, string>; prefixes: string[] }> = {
@@ -114,8 +114,10 @@ function documentFonts(handle: ThemeHandle, json: string) {
 }
 
 function apply(handle: ThemeHandle, json: string) {
-  const props = JSON.parse(json) as { pack?: string; fonts?: string };
+  const props = JSON.parse(json) as { pack?: string; fonts?: string; keyframes?: string };
   if (props.fonts !== undefined) { documentFonts(handle, props.fonts); return; }
+  // A skin document's keyframes: CSS the data module built from validated numbers and lengths.
+  if (props.keyframes !== undefined) { handle.sheet.textContent = /^[@a-zA-Z0-9{}:;.%\s,()-]*$/.test(props.keyframes) ? props.keyframes : ''; return; }
   const packJson = props.pack ?? '';
   if (packJson === handle.json) return;
   handle.json = packJson;
