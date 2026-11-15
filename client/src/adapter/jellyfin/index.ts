@@ -158,9 +158,10 @@ export class JellyfinAdapter implements ServerAdapter {
         const q = await this.request<{
             Secret: string;
             Code: string;
+            DateAdded: string;
         }>('POST', 'QuickConnect/Initiate', undefined, false);
         return {
-            secret: q.Secret, code: q.Code, expiresAt: new Date(Date.now() + 600000).toISOString(), pollIntervalSeconds: 5
+            secret: q.Secret, code: q.Code, expiresAt: new Date(Date.parse(q.DateAdded) + 600000).toISOString(), pollIntervalSeconds: 5
         };
     }
     async pollQuickConnect(r: V.QuickPollRequest): Promise<V.GrantPoll> {
