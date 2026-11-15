@@ -2,10 +2,12 @@ import { configureEngineAssets } from '../../../vendor/webgpu-player/src/EngineA
 import { createCoreAudioOutput } from '../universal/audio/core-output';
 import type { OriginalBackend, OriginalRuntimeOptions, UniversalReadout } from '../universal/loader';
 import type { OriginalMedia } from '../universal/source';
-import { NativeSDRPresenter } from './render/native-presenter';
+import { CoreVideoPresenter } from './render/video-presenter';
 import { PlaybackCore, type CoreState } from './runtime';
 import type { AudioTrack } from './types';
 import { canonicalAudioCodec } from '../universal/audio/packages';
+import { VideoPackages } from '../universal/video/packages';
+import { VideoDecoderRouter } from './decode/video';
 
 /** Same native-view boundary; all orchestration beneath it belongs to Vela. */
 export class UniversalRuntime implements OriginalBackend {
@@ -23,11 +25,12 @@ export class UniversalRuntime implements OriginalBackend {
   constructor(private readonly options:OriginalRuntimeOptions){
     this.volume=options.surface.video.volume;this.muted=options.surface.video.muted;
     configureEngineAssets({baseURL:options.assets.baseURL,cacheKey:options.assets.assetKey});
-    const presenter=new NativeSDRPresenter(options.surface,error=>this.failed(error));
+    const presenter=new CoreVideoPresenter(options.surface,error=>this.failed(error));
+    const packages=new VideoPackages(options.assets.videoDecoderURL);
     this.core=new PlaybackCore(presenter,audio=>createCoreAudioOutput({...audio,libraryBaseURL:options.assets.baseURL,
       assetKey:options.assets.assetKey,forceSoftware:options.retry?.audio}),state=>this.publish(state),(error,position)=>{
       if(!this.disposed)options.onFailure(error.message,position/1e6);
-    });
+    },callbacks=>new VideoDecoderRouter(presenter,packages,callbacks,options.retry?.video));
     this.core.setVolume(this.volume,this.muted);
     options.signal.addEventListener('abort',this.abort,{once:true});
   }
