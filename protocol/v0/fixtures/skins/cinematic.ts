@@ -179,7 +179,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 export const cinematicDoc: SkinDocument = {
-  schema: 1, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
+  schema: 1, renderer: 1, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg', swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
   strings: { en: { velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles' } },
   motion: {

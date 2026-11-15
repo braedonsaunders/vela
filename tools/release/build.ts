@@ -56,7 +56,9 @@ try {
   await writeFile(join(dist,'sw.js'),sw);const swBytes=await readFile(join(dist,'sw.js'));files.push({path:'sw.js',bytes:swBytes.length,sha256:hash(swBytes)});
   await run(['tar','--format=ustar','-czf',join(output,archiveName),'-C',dist,'.']);
   const archive=await readFile(join(output,archiveName));
-  const manifest={schemaVersion:1,version,protocolVersions:[0],exactRevision:(await readFile(join(root,'EXACT_REVISION'),'utf8')).trim(),buildTime:new Date().toISOString(),sourceRevision:revision,sourceDirty:false,apiOrigin:'same-origin',basePath:'/vela/',serviceWorker:{path:'/vela/sw.js',scope:'/vela',headers:{'Service-Worker-Allowed':'/vela','Cache-Control':'no-cache'}},engines,universalAssets,archive:{file:archiveName,bytes:archive.length,sha256:hash(archive)},files};
+  // What skin documents this release draws (docs/distribution.md, "Skin document compatibility").
+  const skinRenderer={schema:1,...JSON.parse(await readFile(join(root,'client/renderer/version.json'),'utf8'))};
+  const manifest={schemaVersion:1,version,protocolVersions:[0],skinRenderer,exactRevision:(await readFile(join(root,'EXACT_REVISION'),'utf8')).trim(),buildTime:new Date().toISOString(),sourceRevision:revision,sourceDirty:false,apiOrigin:'same-origin',basePath:'/vela/',serviceWorker:{path:'/vela/sw.js',scope:'/vela',headers:{'Service-Worker-Allowed':'/vela','Cache-Control':'no-cache'}},engines,universalAssets,archive:{file:archiveName,bytes:archive.length,sha256:hash(archive)},files};
   const json=JSON.stringify(manifest,null,2)+'\n';await writeFile(join(output,manifestName),json);
   await writeFile(join(output,`${archiveName}.sha256`),`${hash(archive)}  ${archiveName}\n`);await writeFile(join(output,`${manifestName}.sha256`),`${hash(json)}  ${manifestName}\n`);
   console.log(JSON.stringify({archive:join(output,archiveName),sha256:hash(archive),manifest:join(output,manifestName),manifestSha256:hash(json),engines},null,2));

@@ -188,6 +188,34 @@ An update activates through the existing explicit update action, clears obsolete
 version caches and claims clients. The artifact remains one archive and manifest;
 Ether performs the same atomic installation and rollback as before.
 
+## Skin document compatibility
+
+Skins are documents (`protocol/v0/skin.ts`, `docs/skin-schema.md`) drawn by the
+client's one renderer. Two numbers decide whether a client may draw a document:
+
+- `schema` (document field, now `1`): the document language. A client draws only
+  the schema it implements; a breaking change to the language is a new schema.
+- `renderer` (document field) against the client's `RENDERER_VERSION`
+  (`client/src/skin/vocabulary.ts`, generated): the vocabulary keys, style rows and
+  motion presets a document may use. Additions bump the version; a document names
+  the lowest version it needs, and a client draws it only when
+  `document.renderer <= RENDERER_VERSION`. `tools/renderer.ts` keeps the tables'
+  digest in `client/renderer/version.json` and refuses to regenerate changed tables
+  without `--bump`, so the number cannot drift from the code.
+
+The release manifest records `skinRenderer: {schema, version, digest}`, so Ether can
+refuse to install, offer or make default a document this release cannot draw, and
+can say which client release it needs. The client refuses such a document too (the
+data module rejects it before the renderer sees it).
+
+**Built-in default.** Every release ships the cinematic document and its assets as
+versioned static files beside the app. The client draws it whenever the server's
+default or the viewer's pick is unavailable: before `/appearance` answers (first
+paint never waits on Ether), offline, for an unknown or incompatible document, or a
+document that fails validation. The viewer's own pick is kept and retried when the
+server next answers. Until the compiled skins are removed, the fallback is the
+compiled cinematic engine.
+
 ## Planned single-renderer release
 
 The end state is one compiled Exact app plus skin documents conforming to
