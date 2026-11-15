@@ -329,3 +329,72 @@ full eight-minute AV proof above used `973a2fa0aef90a31`.
 Neither local proof qualifies the real cold debrid pairs. The matching runtime
 must be staged and both alternating pairs rerun before any default proposal.
 Production remains the wrapper.
+
+## Pinned-cache real-app pairs on signed 0.1.43
+
+Runtime `b76cabc0b114bf77` was staged additively, with archive SHA
+`aa95006c8fbc81a68c8752511a879e5089030978b012315f20b55e48e0485fff`
+and payload-manifest SHA
+`7951d3ec01a7b4cf88c16ab89855273fbe278a0d48b1f0e7f8636d4b0552b596`.
+The installed signed host remained `70623c5d…a567`, production wrapper remained
+`3c579f70de6e1cfe`, and Ether remained integration `58e86491a` throughout.
+Before every half, the operator set resume to 1390.5 seconds, deleted only the
+pinned Inception release's disk cache, restarted that same binary to clear RAM,
+and independently verified the exact `525f3640…` pin and zero sessions. CDN-side
+warmth and response timing are outside our control. A dedicated headed Chrome
+context blocked service workers and disabled browser cache. The same read-only
+host audit was used for both engines; only the core half's in-memory runtime
+descriptor differed. There were no detail-page prewarm visits.
+
+| Half, order | Plan | First image (post-plan) | Playable | Cold seek 900 | Startup underruns / drops | Post-seek sample |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 2A core first | 2.071 s | 7.776 s (5.705 s) | 7.850 s | 2.578 s | 0 / 0 | 480 s: 0 underruns, 0 drops, 0 buffering |
+| 2B wrapper second | 2.020 s | 7.269 s (5.248 s) | 7.271 s | 3.120 s | 0 / 0 | 480 s: 0 underruns, 0 drops, 0 buffering |
+| 3A wrapper first | 1.955 s | 8.048 s (6.094 s) | 8.054 s | 2.737 s | 0 / 1 | 480 s: 1 underrun (101 ms), 4 drops, 1.007 s buffering |
+| 3B core second | 1.825 s | 6.175 s (4.350 s) | 7.012 s | Not attempted | 2 (285 ms) / 1 | Stopped before seek while buffering |
+
+All four halves had zero retries and no server-HLS fallback. The driver labels
+3B's stop as "Recovery before seek invalidates pair"; the recorded state is
+**buffering with an empty PCM queue**, not a route recovery. Its history is empty.
+The sample stopped rather than proceeding to the cold seek. The completed 3A
+wrapper trace includes one buffering interval at post-seek 1.015–2.021 seconds;
+an interim message saying zero stalls was corrected after reading that trace.
+
+The cache correction is proven on the real remux: core 2A completed startup,
+the cold seek and all 480 playing seconds with zero repeated completed pages,
+zero underruns, zero drops and zero buffering. It issued 76 requests, validated
+4,098,665,968 bytes and received 4,101,287,408 body bytes (0.064% overhead), with
+15,251 unique pages and zero repeated pages in the final epoch. Ether delivered
+4,119,195,120 bytes and confirmed direct original playback with zero transcodes.
+This replaces the previous 5,492 repeated pages at only 152 seconds. The final
+playing screenshot was inspected. Source demand now follows media consumption.
+
+The remaining failure is the cold ramp's reserve, not duplicate acquisition.
+Core 3B released the clock with 2.000 seconds of actual PCM, after holding it
+807 ms; the policy target was 1.8 seconds, measured headroom 0.708 and maximum
+TTFB 1.076 seconds. Five seconds later the queue was empty, position 1395.25,
+with two underruns totaling 13,664 output frames. It had validated 62,434,800
+bytes over 15 requests, 239 unique pages, zero repeats, and no recovery.
+Ether measured 50.0-Mbps goodput over the first ten seconds against the title's
+65.6-Mbps average, only 0.5 MB ahead, and fresh dials queued at 250-ms spacing.
+That below-consumption ramp also appeared in wrapper 3A, whose buffer was only
+1.6 MB at the early underrun. The producer-side connection/refill improvement
+is a separate Ether item; changing it during these halves would invalidate the
+comparison. A fixed two-second PCM reserve does not establish that the refill
+has reached sustainable throughput.
+
+Raw private evidence is `paired43e-{core,wrapper}.json` and
+`paired43f-{wrapper,core}.json` under the worktree's scratch-backed client output.
+All four UI stop commands returned 200/ended; all four exact browser grants were
+revoked with 200; mounted players were zero; all dedicated contexts, Chrome
+processes and profiles closed. The operator independently confirmed pins empty,
+zero sessions and zero Ether FFmpeg processes, and released the server hold.
+The architect was notified that performance tracing could resume. No reset or
+additional playback was requested after 3B.
+
+**No default switch is proposed.** Pair 2's core startup was about half a second
+slower, and pair 3's core did not satisfy the zero-underrun startup condition.
+The old failed pair is not retroactively qualified by this cache fix. The core
+remains gated until cold-ramp admission is reliable and the requested repeated
+parity evidence is clean. Production, catalog, service worker and defaults are
+unchanged.
