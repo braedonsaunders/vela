@@ -13,6 +13,7 @@ export interface ServerAdapter {
   pollQuickConnect(request: V.QuickPollRequest): Promise<V.GrantPoll>;
   revoke(request: V.RevokeRequest): Promise<V.Ack>;
   bootstrap(): Promise<V.Bootstrap>;
+  bootstrapFresh(): Promise<V.Bootstrap>;
   rows(query: V.RowsQuery): Promise<V.Page<V.Row>>;
   row(id: string, cursor?: string, limit?: number): Promise<V.Row>;
   libraries(query: V.LibrariesQuery): Promise<V.Page<V.Library>>;
