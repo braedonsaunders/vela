@@ -135,8 +135,20 @@ shape CastPerson
   role: string
   portrait: string
 
+shape Rating
+  source: string
+  label: string
+  value: string
+  score: number
+  state: string
+
 shape DetailModel
   title: Card[]
+  ratings: Rating[]
+  trailerId: string
+  trailerReady: bool
+  themeMusicUrl: string
+  themeMusicExpiresAt: number
   canPlay: bool
   resumePosition: string
   resumeSeconds: number
@@ -162,6 +174,7 @@ shape Viewport
 shape PlaybackModel
   planJson: string
   sessionId: string
+  preparing: bool
   errorCode: string
   errorMessage: string
   retryAllowed: bool

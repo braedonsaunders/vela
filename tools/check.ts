@@ -14,6 +14,7 @@ import { engines, prepareEngine } from './engine';
 import { generateLocales } from './locales';
 
 const root = resolve(import.meta.dir, '..');
+const ENGINES = await engines(join(root, 'client'));
 const lock = '/Users/braedonsaunders/.bb/thread-storage/vela-orch/locked.sh';
 const [engine, ...rest] = process.argv.slice(2);
 const installed = await engines(join(root, 'client'));

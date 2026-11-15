@@ -239,8 +239,14 @@ component Detail
 component Status
   props
     p: StatusProps
+  inject
+    retry: action
   view
-    text p.message padding=32 role="status"
+    column gap=12 padding=32 align-items="flex-start"
+      text p.message role="status"
+      if p.canRetry
+        button press=retry() padding="8px 16px"
+          text t("ui.tryAgain")
 
 // A collection's titles in server order, under a way back.
 component Collection

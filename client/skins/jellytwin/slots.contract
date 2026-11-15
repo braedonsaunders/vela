@@ -555,10 +555,17 @@ component SearchSurface
 component Status
   props
     p: StatusProps
+  inject
+    retry: action
   view
     if p.kind == "failure"
       column font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif"
-        EmptyState(icon="symbol:alert", title=t("ui.somethingWentQuiet"), message=p.message)
+        column gap=4
+          EmptyState(icon="symbol:alert", title=t("ui.somethingWentQuiet"), message=p.message)
+          if p.canRetry
+            row justify-content="center"
+              button press=retry() class=Submit height=42
+                text t("ui.tryAgain")
     else
       column role="status" aria-label=p.message align-items="center" justify-content="center" gap=16 padding-top=(p.kind == "detail" ? 220 : 140) padding-bottom=80 font-family="\"Noto Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif" animation=(p.still ? "none" : "jtFade 300ms ease-out 200ms both")
         Spinner(size=(p.small ? 44 : 54), still=p.still)

@@ -215,6 +215,16 @@ members Client
   // Home has been answered at least once (a failed or revalidating request keeps its last
   // answer): the page stays drawn from it; only a home never answered shows a failure.
   derive homeKnown = current(home) or home.viewer != ""
+  // The viewer's Try again on a failure: ask again for whatever failed.
+  action retryFailed
+    if failed(home)
+      retryHome()
+    if failed(libraryModel)
+      refresh libraryModel
+    if failed(detail)
+      refresh detail
+    if failed(collection)
+      refresh collection
   derive homeSurface = HomeModel(home, rows=allHomeRows, nextCursor=homeMoreCursor, previews=(previewRow == "@hero" and cardPreview.cardId != "" ? [HeroPreview(id=cardPreview.cardId, url=cardPreview.url, expiresAt=cardPreview.expiresAt)] : []))
   state previewTarget = ""
   state previewRow = ""
@@ -440,9 +450,11 @@ members Client
   state playbackRetryAt = 0
   state playbackRetryEntry = ""
   state playbackRetryOwner = ""
+  state playbackPreparation = 0
   derive activePlaybackManual = (playbackRetryOwner == `${top(nav).id}` ? playbackManual : 0)
   derive activePlaybackRetry = (playbackRetryOwner == `${top(nav).id}` ? playbackRetry : 0)
-  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero, `${top(nav).id}`, searchParam(top(nav), "position"), activePlaybackManual, activePlaybackRetry) when auth.authenticated and playingId != "" as shape PlaybackModel transient
+  derive activePlaybackPreparation = (playbackRetryOwner == `${top(nav).id}` ? playbackPreparation : 0)
+  resource playback = uiPlayback(playingId, top(nav).name == "extra" ? "extra" : top(nav).name == "liveWatch" ? "channel" : "title", time.epochAtZero, `${top(nav).id}`, searchParam(top(nav), "position"), activePlaybackManual, activePlaybackRetry, activePlaybackPreparation) when auth.authenticated and playingId != "" as shape PlaybackModel transient
   task playbackBackoff when playingId != ""
     every(1000, tickPlaybackBackoff)
   action tickPlaybackBackoff
@@ -462,7 +474,25 @@ members Client
       playbackManual = activePlaybackManual + 1
       playbackRetryOwner = `${top(nav).id}`
       playbackRetry = 0
+      playbackPreparation = 0
       playbackRetryAt = 0
+  state extraRetryAt = 0
+  state extraRetryEntry = ""
+  task pollExtraPreparation when top(nav).name == "extra" and playingId != ""
+    every(1000, retryExtraPreparation)
+  action retryExtraPreparation
+    if current(playback) and playback.preparing and not pending(playback)
+      let entry = `${top(nav).id}`
+      let now = time.epochAtZero + performanceNow()
+      if extraRetryEntry != entry or extraRetryAt == 0
+        extraRetryEntry = entry
+        extraRetryAt = now + max(1, playback.retryAfterSeconds) * 1000
+      else if now >= extraRetryAt
+        extraRetryAt = 0
+        playbackPreparation = activePlaybackPreparation + 1
+        playbackRetry = activePlaybackRetry
+        playbackManual = activePlaybackManual
+        playbackRetryOwner = `${top(nav).id}`
   state streamAttempt = 0
   resource sessionUpdate = sessionEvents(playback.sessionId, streamAttempt) when auth.authenticated and playingId != "" and playback.sessionId != "" as shape PlaybackModel
   derive currentPlan = (current(sessionUpdate) and sessionUpdate.sessionId == playback.sessionId and sessionUpdate.planJson != "" ? sessionUpdate.planJson : playback.planJson)
@@ -503,7 +533,7 @@ members Client
   task descriptivePolling when auth.authenticated and query.trim() != "" and home.descriptiveAvailable
     every(1000, tickDescriptive)
   action tickDescriptive
-    if current(descriptive) and descriptive.query == query and descriptive.generation == generation and not pending(descriptive) and descriptive.descriptiveRetryAllowed and (descriptive.descriptiveStatus == "pending" or descriptive.descriptiveStatus == "busy" or descriptive.descriptiveStatus == "failed")
+    if current(descriptive) and descriptive.query == query and descriptive.generation == generation and not pending(descriptive) and descriptive.descriptiveRetryAllowed and (descriptive.descriptiveStatus == "pending" or descriptive.descriptiveStatus == "busy" or descriptive.descriptiveStatus == "partial" or descriptive.descriptiveStatus == "failed")
       let currentKey = `${query}:${generation}:${descriptive.descriptiveStatus}:${descriptive.descriptiveRetryAfter}`
       let now = time.epochAtZero + performanceNow()
       if descriptiveRetryKey != currentKey or descriptiveRetryAt == 0
@@ -522,7 +552,7 @@ members Client
       descriptiveRetryReady = false
       refresh descriptive
 
-  task searchUpdates when auth.authenticated and query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running")
+  task searchUpdates when auth.authenticated and query.trim() != "" and home.aiAvailable and (ai.aiStatus == "queued" or ai.aiStatus == "running" or ai.aiStatus == "partial")
     every(1500, updateSearch)
 
   action updateSearch

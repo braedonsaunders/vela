@@ -66,9 +66,9 @@ let activeQuick = "";
 let authVersion = 0;
 const homeReads = new Map<string, Promise<Bootstrap>>();
 const homeFailures = new Map<string, { at: number; attempt: number; allowed: boolean; delaySeconds: number; retryLimit: number }>();
-const detailReads = new Map<string, Promise<Awaited<ReturnType<EtherAdapter['detail']>>>>();
+const detailReads = new Map<string, Promise<[Awaited<ReturnType<EtherAdapter['detail']>>, Awaited<ReturnType<EtherAdapter['capabilities']>>]>>();
 const playbackDeclarations = new Map<string, ClientCapabilities>();
-const playbackReads = new Map<string, Promise<{ planJson: string; sessionId: string; errorCode: string; errorMessage: string; retryAllowed: boolean; retryAfterSeconds: number; retryLimit: number }>>();
+const playbackReads = new Map<string, Promise<{ planJson: string; sessionId: string; preparing: boolean; errorCode: string; errorMessage: string; retryAllowed: boolean; retryAfterSeconds: number; retryLimit: number }>>();
 let previewEpoch = 0;
 let previews: PreviewCoordinator | undefined;
 // Successful panel answers are kept only for this authentication session and display context.
@@ -411,7 +411,7 @@ const sources: Sources = {
   cancelAISearch: async (_args, store) => {
     const previous = ai;
     ai = undefined;
-    if (previous?.job && (previous.job.status === 'queued' || previous.job.status === 'running'))
+    if (previous?.job && (previous.job.status === 'queued' || previous.job.status === 'running' || previous.job.status === 'partial'))
       await (await session(store)).cancelAI(previous.job.id, { generation: previous.generation, idempotencyKey: `cancel-${previous.epoch}-${previous.generation}` });
     // A start still in flight detects that it was superseded and cancels itself.
     return { accepted: true };
@@ -427,13 +427,13 @@ const sources: Sources = {
     const cacheKey = JSON.stringify([version, tokens?.viewer.id, tokens?.viewer.policyRevision, id, entryId]);
     let read = detailReads.get(cacheKey);
     if (!read) {
-      read = api.detail(id);
+      read = Promise.all([api.detail(id), api.capabilities()]);
       detailReads.set(cacheKey, read);
       if (detailReads.size > 64) detailReads.delete(detailReads.keys().next().value!);
     }
-    const detail = await read;
+    const [detail, capabilities] = await read;
     if (version !== authVersion) throw new Error('Session changed during detail read');
-    return withLocale(localeJSON, () => detailModel(detail, API, artWidth));
+    return withLocale(localeJSON, () => detailModel(detail, API, artWidth, capabilities.features.extraPlayback?.available === true, capabilities.features.themeMusic?.available === true));
   },
   uiSearch: async ([query, generation, epoch, at, localeJSON, artWidth], store) => {
     const api = await session(store);
@@ -455,7 +455,7 @@ const sources: Sources = {
       const previous = ai;
       const current = { epoch, generation, query } as NonNullable<typeof ai>;
       ai = current;
-      const previousJobId = previous?.job && (previous.job.status === 'running' || previous.job.status === 'queued') ? previous.job.id : undefined;
+      const previousJobId = previous?.job && (previous.job.status === 'running' || previous.job.status === 'queued' || previous.job.status === 'partial') ? previous.job.id : undefined;
       current.starting = api.startAI({ query, generation, ...(previousJobId ? { previousJobId } : {}), idempotencyKey: `ai-${epoch}-${generation}` });
       current.job = await current.starting;
       current.starting = undefined;
@@ -465,13 +465,14 @@ const sources: Sources = {
       }
     } else if (ai.starting) {
       await ai.starting;
-    } else if (ai.job && (ai.job.status === 'queued' || ai.job.status === 'running')) {
+    } else if (ai.job && (ai.job.status === 'queued' || ai.job.status === 'running' || ai.job.status === 'partial')) {
       const current = ai;
       const job = await api.aiJob(ai.job.id);
       if (ai === current) current.job = job;
     }
     if (!ai || ai.epoch !== epoch || ai.generation !== generation || !ai.job || ai.job.generation !== generation) return lane(query, generation);
     const job = ai.job;
+    if (job.results && (job.results.query !== query || job.results.generation !== generation)) return lane(query, generation);
     return withLocale(localeJSON, () => ({ ...lane(query, generation), items: (job.results?.items ?? []).map(t => card(t, '', API, artWidth)), aiStatus: job.status }));
   },
   interaction: async ([receipt, kind, at], store) => {
@@ -482,7 +483,7 @@ const sources: Sources = {
     if (kind !== 'visible' || interactions.size >= 16) await interactions.flush(key(store), at);
     return { accepted: !interactions.disabled };
   },
-  uiPlayback: async ([id, kind, epoch, entryId, positionText, manual, attempt], store) => {
+  uiPlayback: async ([id, kind, epoch, entryId, positionText, manual, attempt, preparationAttempt], store) => {
     const api = await session(store);
     await ensureNegotiated(api, store);
     if (kind !== 'title' && kind !== 'extra' && kind !== 'channel') throw new Error('Unsupported playback target');
@@ -496,15 +497,19 @@ const sources: Sources = {
       playbackDeclarations.set(declarationKey, declared);
       if (playbackDeclarations.size > 64) playbackDeclarations.delete(playbackDeclarations.keys().next().value!);
     }
-    const cacheKey = JSON.stringify([version, entryId, kind, id, positionText, manual, attempt]);
+    const cacheKey = JSON.stringify([version, entryId, kind, id, positionText, manual, attempt, preparationAttempt]);
     let read = playbackReads.get(cacheKey);
     if (!read) {
       read = (async () => {
         try {
           const plan = await api.playback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client: declared!, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}-${manual}` });
           if (version !== authVersion) throw new Error('Session changed during playback');
+          if (plan.state === 'preparing') {
+            if (kind !== 'extra' || !Number.isFinite(plan.retryAfterSeconds) || plan.retryAfterSeconds < 1) throw new Error('Invalid playback preparation response');
+            return { planJson: '', sessionId: '', preparing: true, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: Math.ceil(plan.retryAfterSeconds), retryLimit: 0 };
+          }
           detailReads.clear();
-          return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: 0, retryLimit: 0 };
+          return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId, preparing: false, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: 0, retryLimit: 0 };
         } catch (error) {
           if (!(error instanceof VelaError)) throw error;
           const retry = error.detail.retry;
@@ -512,7 +517,7 @@ const sources: Sources = {
           const hint = Number.isFinite(retry.afterSeconds) ? Math.max(0, retry.afterSeconds!) : 0;
           const seconds = Math.max(2 ** Math.min(attempt, 5), hint, Number.isFinite(header) ? header : 0, 1);
           const limit = Math.max(0, Math.min(2, (Number.isFinite(retry.maxAttempts) ? Math.floor(retry.maxAttempts!) : 3) - 1));
-          return { planJson: '', sessionId: '', errorCode: error.detail.code, errorMessage: error.message, retryAllowed: retry.allowed === true && seconds <= 60, retryAfterSeconds: seconds, retryLimit: limit };
+          return { planJson: '', sessionId: '', preparing: false, errorCode: error.detail.code, errorMessage: error.message, retryAllowed: retry.allowed === true && seconds <= 60, retryAfterSeconds: seconds, retryLimit: limit };
         }
       })();
       playbackReads.set(cacheKey, read);

@@ -502,3 +502,16 @@ is true after `retry.afterSeconds` (whole seconds, minimum one). Failed results
 may be retried only when allowed. Every retry uses a fresh idempotency key.
 The descriptive lane uses Collections AI; it has no lexicon or popular-picks
 fallback.
+
+### Ratings and extra playback
+
+`Title.ratings` contains only known, policy-permitted server ratings, in server
+order. Each record gives its source, critic or audience kind, raw value and
+scale; state, vote count and source URL are optional and never inferred.
+`POST /playback` for an extra may return HTTP 202 `PlaybackPreparing` with no
+session; retry after the indicated seconds using the identical request and
+idempotency key until a 200 `PlaybackPlan` is ready. A 202 is not a final
+idempotent response. Trailer playback uses the existing `extraId` playback target, gated by the
+`extraPlayback` capability. An unresolved trailer can be started on explicit
+request. Its independent broker session does not update watch history, resume,
+Continue Watching or scrobbles. Other extras remain unavailable unless offered.
