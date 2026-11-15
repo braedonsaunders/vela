@@ -1,4 +1,4 @@
-// client/player/timing.ts
+// player/timing.ts
 var key = Symbol.for("vela.playback.timing");
 var state = Reflect.get(globalThis, key) ?? { points: [], attempt: 0, mounted: 0, source: 0, firstSource: -1 };
 Reflect.set(globalThis, key, state);
@@ -22,7 +22,7 @@ function playbackTimings() {
 var playIntent = (event) => {
   const target = event.composedPath().find((node) => node instanceof HTMLElement && node.hasAttribute("data-testid"));
   const id = target?.getAttribute("data-testid") ?? "";
-  if (!id.startsWith("player-") && /(^|[-_])(play|watch)([-_]|$)/.test(id))
+  if (id === "hero-primary" || !id.startsWith("player-") && /(^|[-_])(play|watch)([-_]|$)/.test(id))
     playbackMark("play");
 };
 function mountPlaybackTiming() {
@@ -40,7 +40,7 @@ function mountPlaybackTiming() {
   };
 }
 
-// client/player/core/async.ts
+// player/core/async.ts
 function abortable(value, signal) {
   signal.throwIfAborted();
   return new Promise((resolve, reject) => {
@@ -60,11 +60,11 @@ function abortable(value, signal) {
   });
 }
 
-// client/player/universal/qualified.ts
+// player/universal/qualified.ts
 var QUALIFIED_ORIGINAL_VIDEO = ["h264", "hevc"];
 var QUALIFIED_ORIGINAL_AUDIO = ["aac", "ac3", "eac3", "truehd", "dts", "flac", "opus", "vorbis", "mp3", "alac", "mp2", "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le", "pcm_f64le"];
 
-// client/player/universal/loader.ts
+// player/universal/loader.ts
 function assetLocation() {
   const descriptor = window.velaUniversalAssets;
   if (descriptor === undefined)
@@ -189,7 +189,7 @@ async function originalPlaybackCapabilities(signal) {
   return { ...declaration, videoDecoders, audioDecoders: declaration.audioDecoders.filter((codec) => QUALIFIED_ORIGINAL_AUDIO.includes(codec)) };
 }
 
-// client/player/media-capabilities.ts
+// player/media-capabilities.ts
 var cached;
 async function mediaCapabilities(signal) {
   const identity = capabilityIdentity();
@@ -237,7 +237,7 @@ async function probe(signal) {
   };
 }
 
-// client/player/install.ts
+// player/install.ts
 function createInstall(element, json, event) {
   let runtime = window.velaPwa;
   const button = document.createElement("button");
@@ -292,7 +292,7 @@ function createInstall(element, json, event) {
   } };
 }
 
-// client/player/preview.ts
+// player/preview.ts
 function apply(handle) {
   const video = handle.video;
   if (handle.expiryTimer)
@@ -383,7 +383,7 @@ function destroyPreview(handle) {
   handle.video.remove();
 }
 
-// client/player/theme.ts
+// player/theme.ts
 var ENGINES = {
   cinematic: {
     roles: {
@@ -494,8 +494,36 @@ function fontFaces(pack, name) {
     return [face];
   });
 }
+function documentFonts(handle, json) {
+  if (json === handle.docFontsJson)
+    return;
+  handle.docFontsJson = json;
+  for (const face of handle.docFonts)
+    document.fonts.delete(face);
+  handle.docFonts = [];
+  if (!json || typeof FontFace !== "function")
+    return;
+  for (const f of JSON.parse(json)) {
+    let url;
+    try {
+      url = new URL(f.url, location.href);
+    } catch {
+      continue;
+    }
+    if (!/^[A-Za-z0-9 ]{1,48}$/.test(f.family) || !url.pathname.startsWith("/vela/v0/appearance/") || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname))
+      continue;
+    const face = new FontFace(f.family, `url("${url.href.replace(/["\\]/g, "")}")`, { weight: String(f.weight), style: f.style === "italic" ? "italic" : "normal", display: "swap", sizeAdjust: `${Math.min(150, Math.max(50, f.sizeAdjust || 100))}%` });
+    document.fonts.add(face);
+    face.load().catch(() => document.fonts.delete(face));
+    handle.docFonts.push(face);
+  }
+}
 function apply2(handle, json) {
   const props = JSON.parse(json);
+  if (props.fonts !== undefined) {
+    documentFonts(handle, props.fonts);
+    return;
+  }
   const packJson = props.pack ?? "";
   if (packJson === handle.json)
     return;
@@ -521,18 +549,18 @@ function createTheme(json) {
   const sheet = document.createElement("style");
   sheet.setAttribute("data-vela-pack", "");
   document.head.append(sheet);
-  const handle = { theme: true, sheet, fonts: [], json: "" };
+  const handle = { theme: true, sheet, fonts: [], json: "", docFonts: [], docFontsJson: "" };
   apply2(handle, json);
   return handle;
 }
 var setTheme = apply2;
 function destroyTheme(handle) {
-  for (const face of handle.fonts)
+  for (const face of [...handle.fonts, ...handle.docFonts])
     document.fonts.delete(face);
   handle.sheet.remove();
 }
 
-// client/player/engine-handoff.ts
+// player/engine-handoff.ts
 var CHOSEN = "vela.engine";
 var DEFAULT = "vela.engine.default";
 var HANDOFF = "vela.handoff";
@@ -655,46 +683,53 @@ function destroyEngine(handle) {
     handle.overlay?.remove();
 }
 
-// client/player/universal/retry.ts
-function decoderRetry(reason) {
-  if (!reason.startsWith("Original decode: decode-failed") && !reason.startsWith("Original first-frame deadline"))
-    return null;
-  return { audio: true, video: true };
+// player/video-info.ts
+var QUALITY_HEADROOM = 1.25;
+function codecFamily(value) {
+  const token = value.split(".")[0].toLowerCase();
+  return { avc1: "h264", avc3: "h264", hvc1: "hevc", hev1: "hevc", dvh1: "hevc", dvhe: "hevc", av01: "av1", vp09: "vp9" }[token] ?? token;
 }
 
-// client/player/universal/subtitles/types.ts
-var defaultSubtitlePreferences = { subtitleSize: "medium", subtitleBackground: "shadow", subtitleColor: "white", subtitlePosition: "bottom", offsetSeconds: 0 };
-
-// client/player/universal/subtitles/preferences.ts
-var choices = { subtitleSize: ["small", "medium", "large", "xl"], subtitleBackground: ["none", "shadow", "box"], subtitleColor: ["white", "yellow"], subtitlePosition: ["bottom", "raised"] };
-function readSubtitlePreferences() {
-  const result = { ...defaultSubtitlePreferences };
-  try {
-    for (const name of Object.keys(choices)) {
-      const value = localStorage.getItem(`vela.player.${name}`);
-      if (value && choices[name].includes(value))
-        Object.assign(result, { [name]: value });
+// player/hls.ts
+function parsePlaylist(text, base) {
+  if (!text.trimStart().startsWith("#EXTM3U"))
+    throw new Error("Invalid HLS playlist");
+  if (/#EXT-X-(KEY|BYTERANGE|DISCONTINUITY|STREAM-INF)/m.test(text))
+    throw new Error("Requires clear, continuous fMP4 media playlist (not master/TS/encrypted/byte-range HLS)");
+  let sequence = 0, start = 0, duration = 0, init = "", targetDuration = 6;
+  const segments = [];
+  let gap = false;
+  for (const line of text.split(/\r?\n/).map((l) => l.trim())) {
+    if (line.startsWith("#EXT-X-MEDIA-SEQUENCE:"))
+      sequence = Number(line.split(":")[1]);
+    else if (line.startsWith("#EXT-X-TARGETDURATION:"))
+      targetDuration = Number(line.split(":")[1]);
+    else if (line === "#EXT-X-GAP")
+      gap = true;
+    else if (line.startsWith("#EXT-X-MAP:")) {
+      if (/BYTERANGE=/.test(line))
+        throw new Error("Byte-range initialization is unsupported");
+      const uri = /URI="([^"]+)"/.exec(line)?.[1];
+      if (!uri)
+        throw new Error("Missing initialization URI");
+      init = new URL(uri, base).href;
+    } else if (line.startsWith("#EXTINF:"))
+      duration = Number(line.slice(8).split(",")[0]);
+    else if (line && !line.startsWith("#")) {
+      if (!init || !Number.isFinite(duration) || duration <= 0)
+        throw new Error("Invalid fMP4 segment");
+      segments.push({ sequence: sequence++, url: new URL(line, base).href, start, duration, init, gap });
+      start += duration;
+      duration = 0;
+      gap = false;
     }
-  } catch {}
-  return result;
-}
-function updateSubtitlePreference(current, command) {
-  const match = /^(subtitleSize|subtitleBackground|subtitleColor|subtitlePosition)=([a-z]+)$/.exec(command);
-  if (!match || !choices[match[1]].includes(match[2]))
-    throw new Error("Invalid subtitle appearance preference");
-  const next = { ...current, [match[1]]: match[2] };
-  try {
-    localStorage.setItem(`vela.player.${match[1]}`, match[2]);
-  } catch {}
-  return next;
+  }
+  if (!Number.isFinite(sequence) || !Number.isFinite(targetDuration) || targetDuration <= 0 || !segments.length)
+    throw new Error("Empty/invalid playlist");
+  return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
 }
 
-// client/player/model.ts
-function codecKnown(rendition) {
-  return rendition.codecStatus !== "pending" && /codecs="[^"]+"/.test(rendition.mime);
-}
-
-// client/player/session.ts
+// player/session.ts
 class SessionController {
   sessionId = "";
   source = 0;
@@ -756,46 +791,7 @@ function delay(ms, signal) {
   });
 }
 
-// client/player/hls.ts
-function parsePlaylist(text, base) {
-  if (!text.trimStart().startsWith("#EXTM3U"))
-    throw new Error("Invalid HLS playlist");
-  if (/#EXT-X-(KEY|BYTERANGE|DISCONTINUITY|STREAM-INF)/m.test(text))
-    throw new Error("Requires clear, continuous fMP4 media playlist (not master/TS/encrypted/byte-range HLS)");
-  let sequence = 0, start = 0, duration = 0, init = "", targetDuration = 6;
-  const segments = [];
-  let gap = false;
-  for (const line of text.split(/\r?\n/).map((l) => l.trim())) {
-    if (line.startsWith("#EXT-X-MEDIA-SEQUENCE:"))
-      sequence = Number(line.split(":")[1]);
-    else if (line.startsWith("#EXT-X-TARGETDURATION:"))
-      targetDuration = Number(line.split(":")[1]);
-    else if (line === "#EXT-X-GAP")
-      gap = true;
-    else if (line.startsWith("#EXT-X-MAP:")) {
-      if (/BYTERANGE=/.test(line))
-        throw new Error("Byte-range initialization is unsupported");
-      const uri = /URI="([^"]+)"/.exec(line)?.[1];
-      if (!uri)
-        throw new Error("Missing initialization URI");
-      init = new URL(uri, base).href;
-    } else if (line.startsWith("#EXTINF:"))
-      duration = Number(line.slice(8).split(",")[0]);
-    else if (line && !line.startsWith("#")) {
-      if (!init || !Number.isFinite(duration) || duration <= 0)
-        throw new Error("Invalid fMP4 segment");
-      segments.push({ sequence: sequence++, url: new URL(line, base).href, start, duration, init, gap });
-      start += duration;
-      duration = 0;
-      gap = false;
-    }
-  }
-  if (!Number.isFinite(sequence) || !Number.isFinite(targetDuration) || targetDuration <= 0 || !segments.length)
-    throw new Error("Empty/invalid playlist");
-  return { segments, ended: text.includes("#EXT-X-ENDLIST"), targetDuration };
-}
-
-// client/player/buffer.ts
+// player/buffer.ts
 class PlaybackFault extends Error {
   kind;
   retryable;
@@ -850,7 +846,7 @@ async function appendBuffer(buffer, bytes, video, signal) {
   }
 }
 
-// client/player/audio.ts
+// player/audio.ts
 class AudioBuffer {
   media;
   video;
@@ -1011,10 +1007,14 @@ class AudioBuffer {
       await mutation(this.buffer, signal, () => this.buffer.remove(0, before));
   }
 }
-// client/player/abr.ts
+// player/abr.ts
 class BandwidthEstimator {
   fast = 0;
   slow = 0;
+  samples = [];
+  get history() {
+    return [...this.samples];
+  }
   get bps() {
     return this.fast ? Math.min(this.fast, this.slow) : null;
   }
@@ -1025,6 +1025,9 @@ class BandwidthEstimator {
     const blend = (old, halfLife) => old ? old + (rate - old) * (1 - 2 ** (-seconds / halfLife)) : rate;
     this.fast = blend(this.fast, 3);
     this.slow = blend(this.slow, 10);
+    this.samples.push(this.bps);
+    if (this.samples.length > 30)
+      this.samples.shift();
   }
 }
 
@@ -1083,7 +1086,12 @@ class AdaptiveBitrate {
   }
 }
 
-// client/player/pipeline.ts
+// player/model.ts
+function codecKnown(rendition) {
+  return rendition.codecStatus !== "pending" && /codecs="[^"]+"/.test(rendition.mime);
+}
+
+// player/pipeline.ts
 function mediaSourceClass() {
   return globalThis.ManagedMediaSource ?? globalThis.MediaSource;
 }
@@ -1509,7 +1517,41 @@ class SegmentPipeline {
   }
 }
 
-// client/player/native-hls.ts
+// player/universal/retry.ts
+function decoderRetry(reason) {
+  if (!reason.startsWith("Original decode: decode-failed") && !reason.startsWith("Original first-frame deadline"))
+    return null;
+  return { audio: true, video: true };
+}
+
+// player/universal/subtitles/types.ts
+var defaultSubtitlePreferences = { subtitleSize: "medium", subtitleBackground: "shadow", subtitleColor: "white", subtitlePosition: "bottom", offsetSeconds: 0 };
+
+// player/universal/subtitles/preferences.ts
+var choices = { subtitleSize: ["small", "medium", "large", "xl"], subtitleBackground: ["none", "shadow", "box"], subtitleColor: ["white", "yellow"], subtitlePosition: ["bottom", "raised"] };
+function readSubtitlePreferences() {
+  const result = { ...defaultSubtitlePreferences };
+  try {
+    for (const name of Object.keys(choices)) {
+      const value = localStorage.getItem(`vela.player.${name}`);
+      if (value && choices[name].includes(value))
+        Object.assign(result, { [name]: value });
+    }
+  } catch {}
+  return result;
+}
+function updateSubtitlePreference(current, command) {
+  const match = /^(subtitleSize|subtitleBackground|subtitleColor|subtitlePosition)=([a-z]+)$/.exec(command);
+  if (!match || !choices[match[1]].includes(match[2]))
+    throw new Error("Invalid subtitle appearance preference");
+  const next = { ...current, [match[1]]: match[2] };
+  try {
+    localStorage.setItem(`vela.player.${match[1]}`, match[2]);
+  } catch {}
+  return next;
+}
+
+// player/native-hls.ts
 async function nativeMediaPlaylist(url, signal, depth = 0) {
   if (depth > 1)
     throw new Error("Nested HLS masters are unsupported");
@@ -1536,7 +1578,7 @@ async function nativeMediaPlaylist(url, signal, depth = 0) {
   return nativeMediaPlaylist(variant.href, signal, depth + 1);
 }
 
-// client/src/protocol/id.ts
+// src/protocol/id.ts
 function randomId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = bytes[6] & 15 | 64;
@@ -1544,7 +1586,7 @@ function randomId() {
   return Array.from(bytes, (b, i) => `${i === 4 || i === 6 || i === 8 || i === 10 ? "-" : ""}${b.toString(16).padStart(2, "0")}`).join("");
 }
 
-// client/player/engine.ts
+// player/engine.ts
 class PlaybackEngine {
   video;
   deliver;
@@ -1752,6 +1794,17 @@ class PlaybackEngine {
     const subtitleId = this.overlay && !burned ? this.overlay.selected : this.subtitle;
     const selectedSubtitle = this.overlay?.tracks.find((track) => track.id === subtitleId);
     const audioId = this.original?.readout.audioTrackId ?? this.pipeline?.audioTrackId ?? this.audio;
+    const readout = this.original?.readout;
+    const rendition = this.pipeline?.current ?? this.source?.renditions?.find((r) => r.id === (this.manualQuality ?? this.source?.initialRenditionId));
+    const bitrate = rendition?.bandwidth ?? this.source?.quality?.bitrate;
+    const currentBitrateBps = bitrate && Number.isFinite(bitrate) && bitrate > 0 ? bitrate : null;
+    const video = readout?.video ?? (this.video.videoWidth > 0 ? {
+      width: this.video.videoWidth,
+      height: this.video.videoHeight,
+      codec: rendition?.codec ?? "",
+      dynamicRange: rendition?.dynamicRange ?? null
+    } : null);
+    const ahead = this.original ? readout?.bufferAheadSeconds ?? null : this.video.readyState >= 1 ? bufferAhead(this.video) : null;
     return {
       sessionId: this.session?.id ?? null,
       sourceGeneration: this.controller.source,
@@ -1767,7 +1820,12 @@ class PlaybackEngine {
       lockedQuality: this.manualQuality,
       audioTracks: this.original?.supportsLocalAudioSwitch !== false ? this.original?.audioTracks ?? this.session?.audioTracks ?? [] : this.session?.audioTracks ?? [],
       subtitleTracks,
-      renditions: this.source?.renditions?.map(({ url, ...rendition }) => rendition) ?? [],
+      renditions: this.source?.renditions?.map(({ url, ...rendition }) => ({ ...rendition, bitrateBps: rendition.bandwidth, requiredBandwidthBps: rendition.bandwidth * QUALITY_HEADROOM })) ?? [],
+      video,
+      currentBitrateBps,
+      requiredBandwidthBps: currentBitrateBps === null ? null : currentBitrateBps * QUALITY_HEADROOM,
+      bufferAheadSeconds: ahead,
+      throughputHistory: this.pipeline?.bandwidth.history ?? readout?.throughputHistory ?? [],
       speed: this.speed,
       speeds: this.original && !this.original.setSpeed ? [] : [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
       pendingSubtitleTrackId: this.pendingTracks?.subtitle ?? this.overlay?.pending ?? null,
@@ -1786,8 +1844,8 @@ class PlaybackEngine {
       preparation: ["loading", "buffering"].includes(this.status) && (this.original?.readout.frames ?? quality?.totalVideoFrames ?? 0) === 0 ? this.video.readyState < 1 ? "media-metadata" : this.video.paused ? "starting" : "initial-buffer" : null,
       position: this.position(),
       duration: this.duration(),
-      playable: Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: this.nativeOrigin + ranges.start(i), end: this.nativeOrigin + ranges.end(i) })),
-      throughputBps: this.pipeline?.bandwidth.bps ?? null,
+      playable: this.original ? ahead !== null && ahead > 0 ? [{ start: this.position(), end: this.position() + ahead }] : [] : Array.from({ length: Math.min(ranges.length, 32) }, (_, i) => ({ start: this.nativeOrigin + ranges.start(i), end: this.nativeOrigin + ranges.end(i) })),
+      throughputBps: this.pipeline?.bandwidth.bps ?? readout?.throughputBps ?? null,
       droppedFrames: this.terminalMedia?.dropped ?? this.original?.readout.dropped ?? quality?.droppedVideoFrames ?? null,
       totalFrames: this.terminalMedia?.frames ?? this.original?.readout.frames ?? quality?.totalVideoFrames ?? null,
       audioTrackIds,
@@ -2892,7 +2950,7 @@ class PlaybackEngine {
   }
 }
 
-// client/player/protocol.ts
+// player/protocol.ts
 function sessionFromPlan(plan) {
   const selected = plan.paths.find((p) => p.id === plan.selectedPathId);
   if (!selected)
@@ -2941,6 +2999,7 @@ function sessionFromPlan(plan) {
       audioTrackId: plan.selectedAudioTrackId,
       boundaries: p.boundaries.filter((b) => b.independent).map((b) => b.atSeconds),
       recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some((b) => b.independent && (b.compatibility === "verified-timeline" || b.compatibility === "same-source" && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
+      quality: p.quality,
       original: p.original,
       originalVideo: p.originalVideo,
       sourceRevision: p.sourceId,
@@ -2952,6 +3011,10 @@ function sessionFromPlan(plan) {
         url: q.url,
         bandwidth: q.bitrate,
         height: q.height,
+        width: q.width,
+        codec: q.codec ?? codecFamily(q.videoCodec),
+        dynamicRange: q.dynamicRange,
+        averageBitrate: q.averageBitrate,
         audioGroupId: q.audioGroupId,
         codecStatus: q.codecStatus === "pending" || !q.videoCodec.trim() ? "pending" : "verified",
         mime: `video/mp4; codecs="${q.videoCodec}${q.audioCodec ? `,${q.audioCodec}` : ""}"`
@@ -2981,7 +3044,7 @@ function observation(snapshot, sequence) {
   };
 }
 
-// client/player/web-module.ts
+// player/web-module.ts
 var abi = 1;
 var roster = { "vela-player": { snapshot: false }, "vela-context": { snapshot: false }, "vela-preview": { snapshot: false }, "vela-install": { snapshot: false }, "vela-theme": { snapshot: false }, "vela-engine": { snapshot: false } };
 function create(tag, element, json, event) {

@@ -147,6 +147,7 @@ export class EtherAdapter implements ServerAdapter {
   }
   trailerPreview(id: string, request: V.TrailerPreviewRequest) { return this.request<V.TrailerPreviewResponse>('POST', `/titles/${encodeURIComponent(id)}/trailer-preview`, request); }
   bootstrap() { return this.request<V.Bootstrap>('GET', '/bootstrap', undefined, true, true); }
+  bootstrapFresh() { return this.request<V.Bootstrap>('GET', '/bootstrap'); }
   rows(q: V.RowsQuery) { return this.request<V.Page<V.Row>>('GET', `/rows${query(q)}`, undefined, true, true); }
   row(id: string, cursor?: string, limit?: number) { return this.request<V.Row>('GET', `/rows/${encodeURIComponent(id)}${query({ cursor, limit })}`, undefined, true, true); }
   libraries(q: V.LibrariesQuery) { return this.request<V.Page<V.Library>>('GET', `/libraries${query(q)}`, undefined, true, true); }

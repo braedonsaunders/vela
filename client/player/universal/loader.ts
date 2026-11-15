@@ -1,3 +1,4 @@
+import type {VideoInfo} from '../video-info';
 import { abortable } from '../core/async';
 import {playbackMark} from '../timing';
 import { QUALIFIED_ORIGINAL_VIDEO, QUALIFIED_ORIGINAL_AUDIO } from './qualified';
@@ -9,6 +10,7 @@ import type { SubtitleSession,SubtitleSessionOptions } from './subtitles/session
 import type {Track} from '../model';
 export interface UniversalReadout {
   state: 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'failed';
+  video?:VideoInfo|null;bufferAheadSeconds?:number|null;throughputBps?:number|null;throughputHistory?:number[];
   position: number; duration: number | null; frames: number; dropped: number; audioTrackId: string | null; metadataDiscrepancies: string[]; presentedFrames: number; decoderReady: boolean;
 }
 export interface OriginalBackend {

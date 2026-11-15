@@ -72,10 +72,12 @@ export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; d
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID }
 export interface SearchRequest extends Mutation { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
 export interface LiveSearchResults { channels: Channel[]; programmes: Programme[]; programmeChannels?: Channel[] }
-export interface DescriptiveSearchState { state: 'ready' | 'pending' | 'busy' | 'failed'; retry?: { allowed: boolean; afterSeconds?: number } }
+export interface DescriptiveSearchState { state: 'ready' | 'pending' | 'partial' | 'busy' | 'failed'; retry?: { allowed: boolean; afterSeconds?: number } }
 export interface SearchResponse extends Page<Title> { query: string; generation: number; receiptToken?: string; live?: LiveSearchResults; descriptive?: DescriptiveSearchState }
 export interface AISearchRequest extends Mutation { query: string; generation: number; previousJobId?: ID }
-export interface AISearchJob { id: ID; generation: number; status: 'queued' | 'running' | 'complete' | 'cancelled' | 'failed'; results?: SearchResponse; error?: ProtocolError }
+export interface AISearchJob { id: ID; generation: number; status: 'queued' | 'running' | 'partial' | 'complete' | 'cancelled' | 'failed';
+  /** Required for partial: provisional results replaced by the final response. */
+  results?: SearchResponse; error?: ProtocolError }
 export interface CancelRequest extends Mutation { generation: number }
 export interface Interaction { receiptToken: string; kind: 'visible' | 'selected' | 'played'; occurredAt: Timestamp;
   /** Visible means actually in the visible viewport; never merely prefetched. */

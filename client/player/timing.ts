@@ -21,7 +21,7 @@ export function playbackTimings(){return state.points.map(point=>({...point}));}
 const playIntent=(event:Event)=>{
   const target=event.composedPath().find(node=>node instanceof HTMLElement&&node.hasAttribute('data-testid')) as HTMLElement|undefined;
   const id=target?.getAttribute('data-testid')??'';
-  if(!id.startsWith('player-')&&/(^|[-_])(play|watch)([-_]|$)/.test(id))playbackMark('play');
+  if(id==='hero-primary'||!id.startsWith('player-')&&/(^|[-_])(play|watch)([-_]|$)/.test(id))playbackMark('play');
 };
 /** The root media-context view is present before detail/hero Play is available. */
 export function mountPlaybackTiming():()=>void{

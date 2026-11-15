@@ -32,6 +32,7 @@ fidelity proof, cinematic as a document: `protocol/v0/fixtures/skins/cinematic.t
   motion?: { name: MotionPreset },
   templates?: { name: Node },             // `{ type: "use", template: name }`, inlined
   slots: { shell?: Node, home?: Node },    // a slot left out uses cinematic's compiled one
+  routes: { title?: Node, … },             // a route drawn whole by the route view (one call site)
   detail?: { wide?, small?: "fullscreen" | "modal" | "stack" } }
 ```
 
@@ -66,6 +67,17 @@ Templates are text with `{key}` holes. Keys: `card.*` and `hero.*` (`id`, `kind`
 actionDetail/action/targetId/playable/progressPct/hasProgress`, `dest.id/name/kind/on`,
 `env.viewer/viewerInitial/section/query/small/still/searching/canLive/heroCount/
 heroIndex/rotating/rowCount`, `index`, `index.label`, `index.current`, `flag:<name>`.
+Detail (route `title`): `detail.*` (`id`, `kind`, `kindLabel`, `kindId`, `name`, `summary`,
+`facts`, `factsLine`, `poster`, `backdrop`, `logo`, `accent`, `receipt`, `canPlay`, `playLabel`,
+`hasResume`, `resumePct`, `hasSeasons`, `hasEpisodes`, `hasCast`, `crewLine`, `hasExtras`,
+`hasRelated`, `selectedSeason`); collections `detail.seasons` and `detail.episodes` and
+`detail.upNext` (card context, plus `season.on`, `season.pick`, `episode.numberTitle`,
+`episode.upNextLabel`, `episode.playLabel`), `detail.extras` (`extra.*`), `detail.cast`
+(`person.name/role/portrait/initials`), `detail.mediaFacts` (`fact.text`), `detail.related`
+(row context). `env.route`, `env.load` (`loading`, `failed`, `ready`), `env.entry` (the stack
+entry id: name a route's scroll box `{env.route}-scroll-{env.entry}` with `id` so navigation
+restores it), `env.tv` (viewport from 1600 px), `card.episodeNumberLabel`, `card.durationLabel`.
+
 Bindable style rows (a template in the value): `width`, `background-color`,
 `background-image`, `color`, `opacity`, `translate`.
 
@@ -74,16 +86,25 @@ Conditions: `{ test: key, is?: "set" | "eq" | "ne" | "gt" | "lt", value?, not? }
 
 Actions: shell `home`, `search`, `live`, `library {dest.id}`, `toggle/open/close <flag>`,
 `openPicker`, `signOut`; home `select {card.kindId}`, `play {hero.id}`,
-`pickHero {index}`, `toggle <flag>`. Flags are the slot's own UI state (a menu open).
+`pickHero {index}`, `toggle <flag>`; routes `select`, `play {card.id | detail.id}`,
+`playExtra {extra.id}`, `back`, `toggle`. A season tab selects with `select {season.pick}`. Flags are the slot's own UI state (a menu open).
 
 ## Motion
 
 `{ keyframes, duration, delay?, easing?, fill?, iterations?, direction?, still? }`.
 Keyframes: `rise`, `dissolve`, `vanish`, `pop`, `open`, `expose`, `drift`, `fill`,
 `shimmer`, `spin`, `breathe`, `glow`, `float`, `bounce`, `twinkle`, `slideUp`, `slideIn`,
-`zoom`, `wiggle`, `auroraA/B/C`, `scan`, or `none`. Under reduced motion the renderer
+`zoom`, `wiggle`, `auroraA/B/C`, `scan`, `sway`, `sheen`, `tick`, or `none`. Under reduced motion the renderer
 plays `still` (default: none). `stagger {step, cap}` adds `min(index, cap) * step` ms.
 Bespoke motion (a mascot's walk, sparkles) belongs in animated SVG assets.
+
+## Fonts
+
+`fonts: { name: { family, files: [{ url, weight, style }], sizeAdjust? } }`: same-origin
+woff2/woff/ttf/otf under `/vela/v0/appearance/`, at most 8 families of 4 files. The client
+registers each under its `family`, so styles name it as usual
+(`font-family: "Barlow Condensed", sans-serif`). A pressable box with a `focus` or
+`groupHover` overlay draws its own focus indicator: its press button has no outline.
 
 ## Limits
 

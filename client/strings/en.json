@@ -431,5 +431,9 @@
   "ratings.imdb": "IMDb",
   "ratings.metacritic": "Metacritic",
   "ratings.tmdb": "TMDB",
-  "ratings.letterboxd": "Letterboxd"
+  "ratings.letterboxd": "Letterboxd",
+  "data.statsDirect": "Direct",
+  "data.statsConverted": "Converted",
+  "data.frameCount": "{dropped} of {decoded}",
+  "data.needsBandwidth": "needs ~{bandwidth}"
 }

@@ -5,7 +5,10 @@
 // between the house look and the pack instantly. It writes only values it derives
 // from colours, pixel lengths and same-origin font files: never pack-supplied text.
 
-export interface ThemeHandle { theme: true; sheet: HTMLStyleElement; fonts: FontFace[]; json: string }
+export interface ThemeHandle { theme: true; sheet: HTMLStyleElement; fonts: FontFace[]; json: string; docFonts: FontFace[]; docFontsJson: string }
+
+/** A skin document's font file (src/skin validated it: same-origin, appearance tree, font type). */
+interface DocFont { family: string; url: string; weight: number; style: string; sizeAdjust: number }
 
 /** Each engine's palette roles, by the Tamber token whose house value anchors the role. */
 const ENGINES: Record<string, { roles: Record<string, string>; prefixes: string[] }> = {
@@ -92,8 +95,27 @@ function fontFaces(pack: Pack, name: string): FontFace[] {
   });
 }
 
+/** A skin document's fonts, registered under the families its styles name. */
+function documentFonts(handle: ThemeHandle, json: string) {
+  if (json === handle.docFontsJson) return;
+  handle.docFontsJson = json;
+  for (const face of handle.docFonts) document.fonts.delete(face);
+  handle.docFonts = [];
+  if (!json || typeof FontFace !== 'function') return;
+  for (const f of JSON.parse(json) as DocFont[]) {
+    let url: URL;
+    try { url = new URL(f.url, location.href); } catch { continue; }
+    if (!/^[A-Za-z0-9 ]{1,48}$/.test(f.family) || !url.pathname.startsWith('/vela/v0/appearance/') || !/\.(woff2|woff|ttf|otf)$/.test(url.pathname)) continue;
+    const face = new FontFace(f.family, `url("${url.href.replace(/["\\]/g, '')}")`, { weight: String(f.weight), style: f.style === 'italic' ? 'italic' : 'normal', display: 'swap', sizeAdjust: `${Math.min(150, Math.max(50, f.sizeAdjust || 100))}%` });
+    document.fonts.add(face);
+    void face.load().catch(() => document.fonts.delete(face));
+    handle.docFonts.push(face);
+  }
+}
+
 function apply(handle: ThemeHandle, json: string) {
-  const props = JSON.parse(json) as { pack?: string };
+  const props = JSON.parse(json) as { pack?: string; fonts?: string };
+  if (props.fonts !== undefined) { documentFonts(handle, props.fonts); return; }
   const packJson = props.pack ?? '';
   if (packJson === handle.json) return;
   handle.json = packJson;
@@ -112,12 +134,12 @@ export function createTheme(json: string): ThemeHandle {
   const sheet = document.createElement('style');
   sheet.setAttribute('data-vela-pack', '');
   document.head.append(sheet);
-  const handle: ThemeHandle = { theme: true, sheet, fonts: [], json: '' };
+  const handle: ThemeHandle = { theme: true, sheet, fonts: [], json: '', docFonts: [], docFontsJson: '' };
   apply(handle, json);
   return handle;
 }
 export const setTheme = apply;
 export function destroyTheme(handle: ThemeHandle) {
-  for (const face of handle.fonts) document.fonts.delete(face);
+  for (const face of [...handle.fonts, ...handle.docFonts]) document.fonts.delete(face);
   handle.sheet.remove();
 }

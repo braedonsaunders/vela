@@ -29,7 +29,10 @@ All new orchestration lives in `client/player/core/` (playback lead).
   bounds, backpressure and frame deadlines. Audio-rendered timestamps are master;
   monotonic time is used only for silent/video-only playback. Pause/seek/rate
   changes reset anchors atomically. Present the newest due frame and release
-  superseded/preroll frames. A seek keeps the same source cache/device/pipelines.
+  superseded/preroll frames. Prime the target video frame before starting audio;
+  loading-time Play/Pause changes intent without reviving a retired epoch. A seek
+  keeps the same source cache/device/pipelines. Presentation counters record frame
+  age against the physical audio clock; they do not claim human lipsync accuracy.
 - `session.ts`, `recovery.ts`, `quality.ts`, `live.ts`: Vela owns Ether authority,
   generations, plans/SSE/observations, retries, rendition/source switches and live
   edge policy. URL/timeline/edition/source revision must remain compatible across
