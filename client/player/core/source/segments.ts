@@ -1,3 +1,4 @@
+import {BandwidthEstimator} from '../../abr';
 import { CustomPathedSource, CustomSource } from 'mediabunny';
 import { abortable, delay } from '../async';
 
@@ -14,6 +15,7 @@ export class SegmentReader {
   private active=0;
   private cached=0;
   private root:string;
+  readonly bandwidth=new BandwidthEstimator();
   readonly metrics={requests:0,bytes:0,cacheHits:0,milliseconds:0};
   constructor(url:string,private readonly fetcher:typeof fetch=(...args)=>fetch(...args)){
     this.root=this.scoped(url);
@@ -117,6 +119,7 @@ export class SegmentReader {
       }finally{if(!complete)await reader.cancel().catch(()=>{});reader.releaseLock();}
       if(length!==null&&size!==length)throw new TypeError('Segment response was truncated');
       const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+      if(!playlist)this.bandwidth.sample(size,performance.now()-at,Number(response.headers.get('Age')??0)>0||/hit/i.test(response.headers.get('X-Cache')??''));
       this.metrics.bytes+=size;this.metrics.milliseconds+=performance.now()-at;
       return{bytes,playlist};
     }catch(error){if(!response.body?.locked)await response.body?.cancel().catch(()=>{});throw error;}

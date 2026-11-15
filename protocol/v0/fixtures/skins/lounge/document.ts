@@ -2,7 +2,7 @@
 // TV overscan margins and a remote-first focus language: the focused poster lifts,
 // grows and glows, and the full-screen backdrop behind the rows belongs to the title
 // on the top shelf. Every affordance is a pressable box, so focus reaches it.
-import type { Node, SkinDocument, Style } from '../../skin';
+import type { Node, SkinDocument, Style } from '../../../skin';
 
 // Ten-foot geometry: sizes scale with the screen between a 1280 laptop and a 1920 TV,
 // and the gutters keep the TV's 5% overscan margin (Apple TV's 90 px at 1080p).
@@ -230,7 +230,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 
 const rise = (delay: number) => ({ keyframes: 'rise', duration: 760, delay, easing: ease, fill: 'both' as const, still: { keyframes: 'dissolve', duration: 220 } });
 
-export const loungeDoc: SkinDocument = {
+const lounge: SkinDocument = {
   schema: 1, renderer: 1, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.0/preview.jpg', swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
   tokens: { ground: '#05060a', raised: '#1a1d24', ink: '#f5f1e9', 'ink-dim': 'rgba(245, 241, 233, 0.78)', 'ink-quiet': 'rgba(245, 241, 233, 0.52)', amber: '#f2c27e' },
@@ -250,3 +250,5 @@ export const loungeDoc: SkinDocument = {
   slots: { shell, home },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
 };
+
+export default lounge;

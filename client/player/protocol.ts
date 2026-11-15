@@ -1,3 +1,4 @@
+import {codecFamily} from './video-info';
 import type { PlaybackPlan, PlaybackPath, PlayerObservation } from '../../protocol/v0/types';
 import type { PlaybackSession, Snapshot } from './model';
 /** Protocol paths contain server-qualified codec strings, never guessed capabilities. */
@@ -20,8 +21,8 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
       audioTrackId: plan.selectedAudioTrackId,
       boundaries: p.boundaries.filter(b => b.independent).map(b => b.atSeconds),
       recoveryAllowed: p.id === selected.id || !!selected.timelineId && !!p.timelineId && p.boundaries.some(b => b.independent && (b.compatibility === 'verified-timeline' || b.compatibility === 'same-source' && !!p.sourceId && p.sourceId === selected.sourceId) && b.timelineId === selected.timelineId && (!plan.selectedAudioTrackId || b.audioTrackIds.includes(plan.selectedAudioTrackId)) && (!plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(plan.selectedSubtitleTrackId))),
-      original: p.original, originalVideo: p.originalVideo, sourceRevision: p.sourceId, timelineOriginSeconds: p.timelineOriginSeconds, initialRenditionId: p.initialRenditionId, audioRenditions: p.audioRenditions,
-      renditions: p.qualities.map(q => ({ id: q.id, url: q.url, bandwidth: q.bitrate, height: q.height, audioGroupId: q.audioGroupId, codecStatus: q.codecStatus === 'pending' || !q.videoCodec.trim() ? 'pending' : 'verified',
+      quality:p.quality,original: p.original, originalVideo: p.originalVideo, sourceRevision: p.sourceId, timelineOriginSeconds: p.timelineOriginSeconds, initialRenditionId: p.initialRenditionId, audioRenditions: p.audioRenditions,
+      renditions: p.qualities.map(q => ({ id: q.id, url: q.url, bandwidth: q.bitrate, height: q.height,width:q.width,codec:q.codec??codecFamily(q.videoCodec),dynamicRange:q.dynamicRange,averageBitrate:q.averageBitrate, audioGroupId: q.audioGroupId, codecStatus: q.codecStatus === 'pending' || !q.videoCodec.trim() ? 'pending' : 'verified',
         mime: `video/mp4; codecs="${q.videoCodec}${q.audioCodec ? `,${q.audioCodec}` : ''}"` })),
     })),
   };
