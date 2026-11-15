@@ -263,6 +263,10 @@ let lastLive = { sessionId: '', reconnecting: false, delivery: 'unknown', drift:
 /** The last applied skin document (raw, by path): one entry, at most a document's own limit. */
 const SKIN_DOC_KEY = 'vela.skin-doc';
 const SKIN_DOC_MAX = 600 * 1024;
+async function sha256(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+}
 function keptSkinDoc(store: { get(key: string): string | null }, path: string): unknown {
   try {
     const kept = JSON.parse(store.get(SKIN_DOC_KEY) || 'null') as { path?: string; doc?: unknown } | null;
@@ -668,13 +672,14 @@ const sources: Sources = {
     }
     return read;
   },
-  uiSkinDoc: async ([url, width, localeJSON], store) => {
+  uiSkinDoc: async ([url, width, cold, localeJSON], store) => {
     const path = new URL(url).pathname;
     const locale = String(JSON.parse(localeJSON).locale ?? 'en');
     const resolve = (doc: unknown) => skinDoc(doc as Parameters<typeof skinDoc>[0], width, API, locale) as unknown as Awaited<ReturnType<Sources['uiSkinDoc']>>;
-    // The last applied document, kept so a cold start draws it before the server answers
-    // (document URLs are versioned, so a kept copy of the same URL is the same document).
-    const kept = keptSkinDoc(store, path);
+    // The last applied document, kept so a cold start draws it before the server answers.
+    // Once the server has answered the document is read fresh (an edit under the same version
+    // reaches the client) and the kept copy follows it.
+    const kept = cold ? keptSkinDoc(store, path) : undefined;
     if (kept !== undefined) {
       try { return resolve(kept); } catch { store.set(SKIN_DOC_KEY, ''); }
     }
@@ -692,7 +697,7 @@ const sources: Sources = {
     }
     // The model is built from the same tables tools/renderer.ts generates its shapes from.
     const model = resolve(raw);
-    const text = JSON.stringify({ path, doc: raw });
+    const text = JSON.stringify({ path, sha256: await sha256(JSON.stringify(raw)), doc: raw });
     if (text.length <= SKIN_DOC_MAX) store.set(SKIN_DOC_KEY, text);
     return model;
   },
