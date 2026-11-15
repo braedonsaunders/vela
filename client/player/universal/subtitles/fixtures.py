@@ -1,6 +1,6 @@
 from pathlib import Path
 from struct import pack
-import argparse, subprocess
+import argparse, subprocess, zlib
 parser=argparse.ArgumentParser(description='Generate public synthetic subtitle fixtures; optional generated AVC input is remuxed locally.')
 parser.add_argument('--output',required=True)
 parser.add_argument('--video')
@@ -51,7 +51,36 @@ clear=pcs(3,False)+seg(0x80,b'',3)
 show2=pcs(4,True)+seg(0x80,b'',4)
 clear2=pcs(7,False)+seg(0x80,b'',7)
 (root/'sample.sup').write_bytes(show+clear+show2+clear2)
-print('Generated SRT, VTT, ASS and PGS/SUP fixtures')
+
+# Minimal Matroska files exercise the exact PGS block bytes through each common
+# ContentCompression representation without depending on a particular muxer.
+def ebml_size(value):
+ for length in range(1,9):
+  if value < (1 << (7*length))-1:return ((1 << (7*length))|value).to_bytes(length,'big')
+ raise ValueError('EBML fixture element is too large')
+def ebml_id(value):return value.to_bytes((value.bit_length()+7)//8,'big')
+def element(identifier,data):return ebml_id(identifier)+ebml_size(len(data))+data
+def unsigned(identifier,value):return element(identifier,value.to_bytes(max(1,(value.bit_length()+7)//8),'big'))
+def content_encoding(algorithm,settings=b''):
+ compression=unsigned(0x4254,algorithm)+(element(0x4255,settings) if settings else b'')
+ encoding=unsigned(0x5031,0)+unsigned(0x5032,1)+unsigned(0x5033,0)+element(0x5034,compression)
+ return element(0x6d80,element(0x6240,encoding))
+def pgs_segment(kind,data):return pack('>BH',kind,len(data))+data
+pgs_frame=(pgs_segment(0x16,pack('>HHBHBBBB',640,360,0x10,0,0x80,0,0,1)+pack('>HBBHH',0,0,0,210,280))+
+ pgs_segment(0x17,bytes([1])+pack('>BHHHH',0,210,280,w,h))+pgs_segment(0x14,palette)+pgs_segment(0x15,ods)+pgs_segment(0x80,b''))
+def pgs_mkv(stored,encodings=b''):
+ header=element(0x1a45dfa3,unsigned(0x4286,1)+unsigned(0x42f7,1)+unsigned(0x42f2,4)+unsigned(0x42f3,8)+element(0x4282,b'matroska')+unsigned(0x4287,4)+unsigned(0x4285,2))
+ info=element(0x1549a966,unsigned(0x2ad7b1,1_000_000))
+ track=unsigned(0xd7,1)+unsigned(0x73c5,1)+unsigned(0x83,17)+element(0x86,b'S_HDMV/PGS')+element(0x22b59c,b'eng')+encodings
+ tracks=element(0x1654ae6b,element(0xae,track))
+ block=bytes([0x81])+pack('>hB',0,0)+stored
+ cluster=element(0x1f43b675,unsigned(0xe7,1000)+element(0xa3,block))
+ return header+element(0x18538067,info+tracks+cluster)
+header_strip=pgs_frame[:7]
+(root/'pgs-plain.mkv').write_bytes(pgs_mkv(pgs_frame))
+(root/'pgs-header-strip.mkv').write_bytes(pgs_mkv(pgs_frame[len(header_strip):],content_encoding(3,header_strip)))
+(root/'pgs-zlib.mkv').write_bytes(pgs_mkv(zlib.compress(pgs_frame),content_encoding(0)))
+print('Generated SRT, VTT, ASS, PGS/SUP and plain/header-stripped/zlib PGS Matroska fixtures')
 
 if args.video:
     for name,extension,codec in [('srt','mkv','copy'),('ass','mkv','copy'),('sup','mkv','copy'),('srt','mp4','mov_text')]:
