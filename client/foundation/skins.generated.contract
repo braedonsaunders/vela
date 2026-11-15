@@ -340,11 +340,13 @@ component PlayerChrome
     watchSeek: action
     editWatch: action
     closeWatch: action
+    toggleWatchInfo: action
   provide
     command = watchControl
     seek = watchSeek
     editing = editWatch
     close = closeWatch
+    toggleInfo = toggleWatchInfo
   view
     if activeSkin == "index"
       IndexPlayerChrome(p=p)

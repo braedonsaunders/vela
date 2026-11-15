@@ -218,7 +218,7 @@ members Client
   // The viewer's Try again on a failure: ask again for whatever failed.
   action retryFailed
     if failed(home)
-      refresh home
+      retryHome()
     if failed(libraryModel)
       refresh libraryModel
     if failed(detail)

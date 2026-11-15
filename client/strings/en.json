@@ -86,7 +86,6 @@
   "ui.thisCollectionCouldnTBeOpened": "This collection couldn't be opened.",
   "ui.openingCollection": "Opening collection…",
   "ui.playbackCouldnTBeStarted": "Playback couldn't be started.",
-  "ui.backToTitle": "Back to title",
   "ui.year": ", {year}",
   "ui.watched": ", watched",
   "ui.progressComplete": ", {progress} complete",
@@ -435,5 +434,15 @@
   "data.statsDirect": "Direct",
   "data.statsConverted": "Converted",
   "data.frameCount": "{dropped} of {decoded}",
-  "data.needsBandwidth": "needs ~{bandwidth}"
+  "data.needsBandwidth": "needs ~{bandwidth}",
+  "player.capacity": "All streams are in use on this server.",
+  "player.info": "Playback info",
+  "player.info.bitrate": "Bitrate",
+  "player.info.connection": "Connection",
+  "player.info.versus": "{measured} · needs {needed}",
+  "player.info.buffer": "Buffer",
+  "player.info.resolution": "Resolution",
+  "player.info.video": "Video",
+  "player.info.delivery": "Delivery",
+  "player.info.dropped": "Dropped frames"
 }

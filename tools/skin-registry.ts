@@ -32,7 +32,7 @@ export const SLOTS: SlotSpec[] = [
   { name: 'Guide', record: 'GuideProps', frame: 'column flex=1 min-height=0', actions: { watch: 'watchChannel', previous: 'earlierGuide', next: 'laterGuide', chooseDay: 'chooseGuideDay', setZoom: 'setGuideZoom', tileMessage: 'tileMessage', tileUnmute: 'tileUnmute', tileTuneIn: 'tileTuneIn', retune: 'retuneTile' } },
   { name: 'LiveControls', record: 'LiveControlsProps', actions: { toggleLowDelay: 'toggleLowDelay', catchUp: 'catchUpLive', zap: 'zap' } },
   { name: 'MiniGuide', record: 'MiniGuideProps', actions: { tune: 'tuneZap' } },
-  { name: 'PlayerChrome', record: 'PlayerProps', actions: { command: 'watchControl', seek: 'watchSeek', editing: 'editWatch', close: 'closeWatch' } },
+  { name: 'PlayerChrome', record: 'PlayerProps', actions: { command: 'watchControl', seek: 'watchSeek', editing: 'editWatch', close: 'closeWatch', toggleInfo: 'toggleWatchInfo' } },
   { name: 'AuthStage', record: 'AuthStageProps', children: true, actions: {} },
   { name: 'AuthNotice', record: 'AuthNoticeProps', actions: {} },
   { name: 'SignIn', record: 'SignInProps', actions: { editUsername: 'editUsername', editPassword: 'editPassword', submit: 'submitSignIn', quick: 'startCode', goSecure: 'goSecure' } },
