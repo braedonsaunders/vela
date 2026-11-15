@@ -19,26 +19,26 @@ export type StyleProperty =
   | 'flex' | 'flex-grow' | 'flex-basis' | 'order' | 'flex-direction' | 'flex-wrap' | 'flex-shrink' | 'align-items' | 'align-self' | 'justify-content' | 'gap'
   | 'grid-template-columns' | 'grid-template-rows' | 'grid-column' | 'grid-row'
   | 'margin' | 'padding' | 'padding-top' | 'padding-right' | 'padding-bottom' | 'padding-left' | 'margin-top' | 'margin-right' | 'margin-bottom' | 'margin-left' | 'overflow' | 'overflow-x' | 'overflow-y' | 'scroll-snap-type' | 'scroll-snap-align' | 'scrollbar-width'
-  | 'color' | 'background-color' | 'background-image' | 'opacity' | 'mix-blend-mode'
-  | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'outline' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
+  | 'color' | 'background-color' | 'background-image' | 'opacity'
+  | 'border' | 'border-width' | 'border-style' | 'border-color' | 'border-radius' | 'border-top-width' | 'border-top-color' | 'border-bottom-width' | 'border-bottom-color' | 'outline' | 'box-shadow' | 'filter' | 'backdrop-filter' | 'mask-image'
   | 'font-family' | 'font-size' | 'font-weight' | 'font-style' | 'line-height' | 'letter-spacing' | 'text-transform'
-  | 'text-align' | 'text-shadow' | '-webkit-text-stroke' | 'line-clamp' | 'white-space' | 'font-variant-numeric'
-  | 'object-fit' | 'transform-origin' | 'translate' | 'scale' | 'rotate'
+  | 'text-align' | 'text-shadow' | '-webkit-text-stroke' | 'text-overflow' | 'line-clamp' | 'white-space' | 'font-variant-numeric'
+  | 'object-fit' | 'transform-origin' | 'translate' | 'scale' | 'rotate' | 'perspective'
   | 'transition' | 'animation' | 'pointer-events' | 'cursor';
 
 /** One test on the binding vocabulary or the skin's own flags; a node's `when` list must all hold. */
 export interface Condition {
   /** A binding key (`card.played`, `hero.backdrop`, `env.small`), or `flag:<name>`. */
   test: string;
-  /** set: non-empty / true / non-zero (default). eq/ne: equals `value`. gt/lt: numeric. */
-  is?: 'set' | 'eq' | 'ne' | 'gt' | 'lt';
+  /** set: non-empty / true / non-zero (default). eq/ne: equals `value`. gt/lt: numeric. mod: `value` "n:r", the number % n == r. */
+  is?: 'set' | 'eq' | 'ne' | 'gt' | 'lt' | 'mod';
   value?: string;
   not?: boolean;
 }
 
 export type Action =
   | 'select' | 'play' | 'pickHero' | 'home' | 'search' | 'live' | 'library'
-  | 'toggle' | 'open' | 'close' | 'openPicker' | 'signOut' | 'moreRow';
+  | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'signOut' | 'moreRow' | 'playExtra' | 'back';
 
 interface NodeBase {
   /** Overrides by viewport: `small` under 640 px, `wide` from 1200 px. */
@@ -51,6 +51,8 @@ interface NodeBase {
   /** A motion preset by name (`motion` table), its delay staggered by the item index. */
   motion?: string; stagger?: { step: number; cap: number };
   role?: string; label?: Template; level?: number; testId?: Template;
+  /** A box's element id (`detail-scroll-{env.entry}`: the route's scroll the navigation restores). */
+  id?: Template;
 }
 export interface BoxNode extends NodeBase {
   type: 'box';
@@ -97,6 +99,8 @@ export interface SkinDocument {
   templates?: Record<string, Node>;
   /** One tree per foundation slot; a slot left out uses cinematic's compiled one. */
   slots: Partial<Record<'shell' | 'home' | 'row' | 'card' | 'status', Node>>;
+  /** A tree per route the document draws whole (the route view); a route left out uses the slots, then cinematic. */
+  routes?: Partial<Record<'home' | 'title' | 'collection' | 'library' | 'live' | 'watch', Node>>;
   /** Detail route presentation per viewport class. */
   detail?: { small?: 'fullscreen' | 'modal' | 'stack'; wide?: 'fullscreen' | 'modal' | 'stack'; split?: string };
 }

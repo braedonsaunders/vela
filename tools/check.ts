@@ -10,13 +10,14 @@
  */
 import { cp, lstat, mkdir, readlink, rm, symlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { ENGINES, prepareEngine } from './engine';
+import { engines, prepareEngine } from './engine';
 import { generateLocales } from './locales';
 
 const root = resolve(import.meta.dir, '..');
 const lock = '/Users/braedonsaunders/.bb/thread-storage/vela-orch/locked.sh';
 const [engine, ...rest] = process.argv.slice(2);
-if (!engine || !ENGINES.includes(engine)) throw new Error(`Usage: bun tools/check.ts <${ENGINES.join('|')}> [--agent <ops…>]`);
+const installed = await engines(join(root, 'client'));
+if (!engine || !installed.includes(engine)) throw new Error(`Usage: bun tools/check.ts <${installed.join('|')}> [--agent <ops…>]`);
 const stage = join(root, '.artifacts/check', engine);
 
 const git = Bun.spawnSync(['git', 'ls-files', '-co', '--exclude-standard', '-z', '--', 'client', 'protocol'], { cwd: root });
