@@ -3,6 +3,11 @@ import type { PlaybackPlan } from '../wire/v0/types';
 import type { Snapshot } from './model';
 const snapshots = new Map<string, Snapshot>();
 const errors = new Map<string, string>();
+function trackLabel(track: {name?:string;label?:string;language?:string;codec?:string;channels?:number;forced?:boolean;hearingImpaired?:boolean}) {
+  const parts = [track.name??track.label??'', track.language && track.language !== 'und' ? track.language : '', (track.codec??'').toUpperCase(),
+    track.channels ? `${track.channels} ch` : '', track.forced ? 'Forced' : '', track.hearingImpaired ? 'SDH' : ''];
+  return parts.filter((value,index) => value && !parts.slice(0,index).some(previous => previous.toLowerCase().includes(value.toLowerCase()))).join(' · ');
+}
 /** Pure presentation projection for Exact's data realm: no browser API or clock. */
 export function playerPresentation(planJson: string, eventJson: string, replyJson: string, localeJSON: string) {
   setLocale(localeJSON);
@@ -28,7 +33,7 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
   const quality = path?.qualities.find(q => q.id === snapshot?.renditionId);
   const capability = snapshot?.capabilities;
   const selectedAudio = plan?.audioTracks.find(t => t.id === snapshot?.audioTrackId || !snapshot && t.id === plan.selectedAudioTrackId);
-  const subtitles = (snapshot?.backend === 'webgpu' ? [] : plan?.subtitleTracks ?? []).filter(t => !!t.url && ['webvtt', 'vtt'].includes(t.codec.toLowerCase()));
+  const subtitles = snapshot?.subtitleTracks??plan?.subtitleTracks ?? [];
   const sourceGeneration = snapshot?.sourceGeneration ?? plan?.sourceGeneration ?? 0;
   const seekGeneration = snapshot?.seekGeneration ?? plan?.seekGeneration ?? 0;
   return {
@@ -36,21 +41,35 @@ export function playerPresentation(planJson: string, eventJson: string, replyJso
     stopCommandJson: plan && plan.state !== 'ended' ? JSON.stringify({ type: 'session-command', sessionId: plan.sessionId,
       command: { kind: 'stop', sourceGeneration, seekGeneration, idempotencyKey: `stop-${plan.sessionId}-${sourceGeneration}-${seekGeneration}` } }) : '',
     waiting: snapshot?.waiting ?? state === 'loading', volume: snapshot?.volume ?? 1, muted: snapshot?.muted ?? false,
+    speed: snapshot?.speed ?? 1, speeds: snapshot?.speeds ?? [],
+    pendingSubtitleId:snapshot?.pendingSubtitleTrackId??'',subtitleError:snapshot?.subtitleError??'',
+    subtitleStyleAvailable:snapshot?.subtitleStyleAvailable??false,
+    subtitleSize:snapshot?.subtitleStyle?.subtitleSize??'medium',subtitleBackground:snapshot?.subtitleStyle?.subtitleBackground??'shadow',
+    subtitleColor:snapshot?.subtitleStyle?.subtitleColor??'white',subtitlePosition:snapshot?.subtitleStyle?.subtitlePosition??'bottom',
     preparation: snapshot?.preparation ? msg(`data.preparation.${snapshot.preparation}`) : !snapshot ? msg('data.preparation.media-metadata') : '',
     ready: !!snapshot && !['idle','loading'].includes(state), state, playing: state === 'playing', position, duration,
     elapsed: clock(position), remaining: duration > 0 ? clock(Math.max(0, duration - position)) : msg('data.live'),
     progress: duration > 0 ? Math.min(100, position / duration * 100) : 0,
     reason: snapshot?.failure?.message ?? '', actionError: plan ? errors.get(errorKey) ?? '' : '',
     path: snapshot?.strategy || path?.kind ? msg(`data.${snapshot?.strategy ?? path?.kind}`) : '', backend: snapshot?.backend ?? '',
-    quality: quality ? `${number(quality.height, {useGrouping:false})}p` : path?.kind === 'direct' ? msg('data.original') : snapshot?.backend === 'native-hls' ? msg('data.fixedQuality') : msg('data.starting'),
-    lockedQuality: snapshot?.lockedQuality ?? '',
+    quality: quality || path?.quality ? `${number((quality ?? path!.quality!).height, {useGrouping:false})}p` : path?.id === 'primary' || path?.kind === 'direct' ? msg('data.original') : snapshot?.backend === 'native-hls' ? msg('data.fixedQuality') : msg('data.starting'),
+    lockedQuality: path?.original || path && !path.qualities.length && (path.id === 'primary' || path.quality) ? `path:${path.id}` : snapshot?.lockedQuality ?? '',
+    qualityAuto: snapshot?.backend === 'mse' && (path?.qualities.length ?? 0) > 1,
     pendingAudioId: snapshot?.pendingAudioTrackId ?? '',
-    audioId: snapshot?.audioTrackId ?? plan?.selectedAudioTrackId ?? '', audioLabel: selectedAudio?.name ?? msg('data.originalAudio'),
-    subtitleId: snapshot?.subtitleTrackId ?? '',
-    audio: capability?.audioSwitch ? (plan?.audioTracks ?? []).filter(t => snapshot?.audioTrackIds?.includes(t.id) ?? true).map(t => ({ id: t.id, label: t.name })) : [],
-    subtitles: subtitles.map(t => ({ id: t.id, label: t.name })),
-    qualities: snapshot?.backend === 'mse' ? (path?.qualities ?? []).filter(q => snapshot?.qualityIds?.includes(q.id)).map(q => ({ id: q.id, label: `${number(q.height, {useGrouping:false})}p` })) : [],
-    paths: (plan?.paths ?? []).filter(p => p.readiness === 'ready' && (p.id === plan?.selectedPathId || p.boundaries.some(b => b.independent))).map(p => ({ id: p.id, label: msg(`data.${p.kind}`) })),
+    audioId: snapshot?snapshot.audioTrackId??'':plan?.selectedAudioTrackId??'', audioLabel: selectedAudio?.name ?? msg('data.originalAudio'),
+    subtitleId: snapshot?snapshot.subtitleTrackId??'':plan?.selectedSubtitleTrackId??'',
+    audio: (snapshot?.audioTracks??plan?.audioTracks ?? []).map(t => ({ id: t.id, label: trackLabel(t) })),
+    subtitles: subtitles.map(t => ({ id: t.id, label: trackLabel(t) })),
+    qualities: [
+      ...(plan?.paths ?? []).filter(p => p.original || p.id === 'primary').map(p => ({id:`path:${p.id}`,label:msg('data.original')})),
+      ...(path?.qualities ?? []).map(q => ({id:q.id,label:`${number(q.height,{useGrouping:false})}p${q.codecStatus === 'pending' ? ` · ${msg('data.starting')}` : ''}`})),
+      ...(plan?.paths ?? []).filter(p => (p.id !== path?.id || !p.qualities.length) && (p.readiness === 'on-demand' || p.readiness === 'ready') && p.quality &&
+        !!path?.sourceId && p.sourceId === path.sourceId && !!path?.timelineId && p.timelineId === path.timelineId && (p.edition ?? '') === (path.edition ?? ''))
+        .map(p => ({id:`path:${p.id}`,label:`${number(p.quality!.height,{useGrouping:false})}p`})),
+    ],
+    paths: (plan?.paths ?? []).filter(p => (p.readiness === 'ready' || p.readiness === 'on-demand') &&
+      (p.id === path?.id || !!path?.sourceId && p.sourceId === path.sourceId && !!path?.timelineId && p.timelineId === path.timelineId && (p.edition ?? '') === (path.edition ?? '')))
+      .map(p => ({ id: p.id, label: p.original ? msg('data.original') : p.quality ? `${number(p.quality.height,{useGrouping:false})}p · ${msg(`data.${p.kind}`)}` : msg(`data.${p.kind}`) })),
     pathId: path?.id ?? '',
     chapters: (plan?.chapters ?? []).map(c => ({ id: c.id, label: `${clock(c.startSeconds)} · ${c.name}`, seconds: c.startSeconds, percent: duration > 0 ? c.startSeconds / duration * 100 : 0 })),
     buffered: (snapshot?.playable ?? []).map((r,i) => ({ id: String(i), left: duration > 0 ? Math.max(0, r.start / duration * 100) : 0, width: duration > 0 ? Math.min(100, (r.end - r.start) / duration * 100) : 0 })),

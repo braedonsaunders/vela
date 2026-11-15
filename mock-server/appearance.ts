@@ -2,6 +2,7 @@
 // runtime skin packs, with the viewer-level event stream that pushes changes live.
 // Ether's equivalent is the Vela Apps card (docs/skin-distribution.md, "Ether side").
 import type * as V from '../protocol/v0/types';
+import { cinematicDoc } from '../protocol/v0/fixtures/skins/cinematic';
 
 const harbor: V.SkinPack = {
   schema: 1, id: 'harbor', version: '1.0.0', name: 'Harbor', tagline: 'Sea-glass light over a night harbour.', engine: 'cinematic',
@@ -14,7 +15,10 @@ const harbor: V.SkinPack = {
 };
 const packs = [harbor];
 const engines = ['cinematic', 'index', 'jellytwin', 'mochi', 'marquee', 'example'];
-let state: V.Appearance = { revision: 1, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs };
+// Skin documents (protocol/v0/skin.ts): whole skins as data, drawn by the client's doc engine.
+const documents: V.SkinDocumentRef[] = [{ id: cinematicDoc.id, name: cinematicDoc.name, version: cinematicDoc.version, tagline: cinematicDoc.tagline,
+  url: `/vela/v0/appearance/skins/${cinematicDoc.id}/${cinematicDoc.version}.json`, preview: cinematicDoc.preview, swatches: cinematicDoc.swatches }];
+let state: V.Appearance = { revision: 1, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs, documents };
 const listeners = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const encode = (a: V.Appearance) => new TextEncoder().encode(`id: ${a.revision}\ndata: ${JSON.stringify({ type: 'appearance', cursor: String(a.revision), appearance: a } satisfies V.ServerEvent)}\n\n`);
 
@@ -23,9 +27,9 @@ export const appearance = () => state;
 /** The owner's change (Ether: the Apps card). Every connected viewer hears it at once. */
 export function setAppearance(change: { defaultSkinId?: unknown; force?: unknown }): V.Appearance {
   const id = typeof change.defaultSkinId === 'string' ? change.defaultSkinId : state.defaultSkinId;
-  const pack = packs.find(p => p.id === id);
-  if (!pack && !engines.includes(id)) throw Response.json({ error: { class: 'request', code: 'unknown_skin', message: 'Not an installed engine or pack', retry: { allowed: false } } }, { status: 400 });
-  state = { ...state, revision: state.revision + 1, defaultSkinId: id, defaultEngineId: pack ? pack.engine : id, force: typeof change.force === 'boolean' ? change.force : state.force };
+  const pack = packs.find(p => p.id === id), doc = documents.find(d => d.id === id);
+  if (!pack && !doc && !engines.includes(id)) throw Response.json({ error: { class: 'request', code: 'unknown_skin', message: 'Not an installed engine or pack', retry: { allowed: false } } }, { status: 400 });
+  state = { ...state, revision: state.revision + 1, defaultSkinId: id, defaultEngineId: pack ? pack.engine : doc ? 'doc' : id, force: typeof change.force === 'boolean' ? change.force : state.force };
   const frame = encode(state);
   for (const c of listeners) try { c.enqueue(frame); } catch { listeners.delete(c); }
   return state;
@@ -48,8 +52,10 @@ const fontFile = new URL('../client/assets/fonts/mochi/Fredoka.ttf', import.meta
 const svg = (body: string, w: number, h: number) => new Response(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${body}</svg>`, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=31536000, immutable' } });
 const sea = `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b2a3a"/><stop offset="1" stop-color="#06121a"/></linearGradient><radialGradient id="m" cx=".72" cy=".22" r=".5"><stop offset="0" stop-color="#7fd6cb" stop-opacity=".55"/><stop offset="1" stop-color="#7fd6cb" stop-opacity="0"/></radialGradient></defs><rect width="1600" height="1000" fill="url(#g)"/><rect width="1600" height="1000" fill="url(#m)"/>${[0, 1, 2, 3, 4].map(i => `<path d="M0 ${620 + i * 70} C 300 ${580 + i * 70}, 500 ${680 + i * 70}, 800 ${630 + i * 70} S 1300 ${590 + i * 70}, 1600 ${640 + i * 70} V 1000 H 0 Z" fill="#139c8f" fill-opacity="${0.08 + i * 0.05}"/>`).join('')}`;
 
-/** Pack assets: immutable per pack version, public like the appearance itself. */
+/** Pack and skin-document assets: immutable per version, public like the appearance itself. */
 export async function packAsset(path: string): Promise<Response | undefined> {
+  if (path === documents[0].url) return new Response(JSON.stringify(cinematicDoc), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=31536000, immutable' } });
+  if (path === cinematicDoc.preview) return new Response(Bun.file(new URL('../client/assets/skins/cinematic.jpg', import.meta.url)), { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable' } });
   const m = /^\/vela\/v0\/appearance\/packs\/([a-z0-9-]+)\/([0-9.]+)\/([a-z]+\.(?:svg|ttf))$/.exec(path);
   const pack = m && packs.find(p => p.id === m[1] && p.version === m[2]);
   if (!m || !pack) return undefined;

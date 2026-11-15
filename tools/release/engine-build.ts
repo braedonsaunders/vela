@@ -31,9 +31,9 @@ async function run(cmd: string[], cwd = root, env: Record<string, string | undef
 const actualExact = (await run(['git', '-C', join(root, 'vendor/exact'), 'rev-parse', 'HEAD'])).trim();
 if (actualExact !== exactRevision) throw new Error(`Exact checkout is ${actualExact}, expected ${exactRevision}`);
 const sourceRevision = (await run(['git', 'rev-parse', 'HEAD'])).trim();
-const toolDirty = !!(await run(['git', 'status', '--porcelain', '--', 'tools/release', 'tools/engine.ts', 'tools/locales.ts', 'EXACT_REVISION'])).trim();
+const toolDirty = !!(await run(['git', 'status', '--porcelain', '--', 'tools/release', 'tools/engine.ts', 'tools/skin-registry.ts', 'tools/locales.ts', 'EXACT_REVISION'])).trim();
 if (committed && toolDirty) throw new Error('Commit release tooling before building a committed snapshot');
-const sourceDirty = committed ? false : !!(await run(['git', 'status', '--porcelain', '--', 'client', 'protocol', 'tools/release', 'tools/engine.ts', 'tools/locales.ts', 'EXACT_REVISION'])).trim();
+const sourceDirty = committed ? false : !!(await run(['git', 'status', '--porcelain', '--', 'client', 'protocol', 'tools/release', 'tools/engine.ts', 'tools/skin-registry.ts', 'tools/locales.ts', 'EXACT_REVISION'])).trim();
 await mkdir(releases, { recursive: true });
 const archiveName = `vela-${version}-${engine}.tar.gz`, manifestName = `vela-${version}-${engine}.manifest.json`;
 for (const name of [archiveName, manifestName, `${archiveName}.sha256`, `${manifestName}.sha256`]) {

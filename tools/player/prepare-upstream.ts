@@ -7,6 +7,9 @@ import { audioPackages } from '../../client/player/universal/audio/packages';
 import decoderPins from '../../vendor/webgpu-player/tools/pinned-releases.json';
 import { stageUniversalAssets } from '../release/universal-assets';
 import { transformUpstreamAudio } from '../../client/player/universal/audio/ffmpeg/upstream-transform';
+import { transformUpstreamVideo } from '../../client/player/universal/video/upstream-transform';
+import { installSubtitleAssets } from '../../client/player/universal/subtitles/install';
+import subtitleManifest from '../../client/player/universal/subtitles/assets.json';
 const root = resolve(import.meta.dir, '../..');
 const upstream = join(root, 'vendor/webgpu-player');
 const revision = 'a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2';
@@ -49,7 +52,10 @@ await copyFile(join(bunny, 'LICENSE'), join(sourceDir, 'Mediabunny-LICENSE'));
 const { build } = await import(pathToFileURL(join(upstream, 'node_modules/esbuild/lib/main.js')).href);
 const plugin = { name:'vela-audio', setup(builder: any) {
   builder.onLoad({filter:/\.ts$/}, async ({path}: {path:string}) => {
-    const transformed = transformUpstreamAudio(path, await readFile(path, 'utf8'));
+    const original = await readFile(path, 'utf8');
+    const audio = transformUpstreamAudio(path, original);
+    const video = transformUpstreamVideo(path, audio ?? original);
+    const transformed = video ?? audio;
     if (transformed !== null) return {contents:transformed, loader:'ts', resolveDir:dirname(path)};
   });
 }};
@@ -59,12 +65,18 @@ const { getWorkerEntryPoints } = await import(pathToFileURL(join(upstream, 'scri
 for (const [target, entry] of getWorkerEntryPoints()) {
   await build({...common, entryPoints:[entry], format:'iife', outfile:join(libraries,target)});
 }
-await build({...common, entryPoints:[join(root,'client/player/universal/runtime.ts')], format:'esm', outfile:join(destination,'runtime.js')});
+// Explicit local migration candidate. Production stays on the qualified entry
+// until the Vela-owned core passes its direct H.264/HEVC parity gate.
+const runtimeEntry=Bun.argv.includes('--core')?'client/player/core/adapter.ts':'client/player/universal/runtime.ts';
+await build({...common, entryPoints:[join(root,runtimeEntry)], format:'esm', outfile:join(destination,'runtime.js')});
 await cp(join(root,'client/player/universal/audio/ffmpeg'), join(sourceDir,'vela-audio-hooks'), {recursive:true});
+await copyFile(join(root,'client/player/universal/video/upstream-transform.ts'), join(sourceDir,'vela-video-transform.ts'));
 const audioDirectory = Bun.argv.find(arg => arg.startsWith('--audio-dir='))?.slice(12);
 if (audioDirectory) await run([process.execPath, join(root,'client/player/universal/audio/install-packages.ts'), join(libraries,'audio-decoders'), `--from=${resolve(audioDirectory)}`], root);
 const videoDirectory = Bun.argv.find(arg => arg.startsWith('--video-dir='))?.slice(12);
 if (videoDirectory) await run([process.execPath, join(root,'client/player/universal/video/install-packages.ts'), join(libraries,'video-decoders'), `--from=${resolve(videoDirectory)}`], root);
+const subtitleDirectory=Bun.argv.find(arg=>arg.startsWith('--subtitle-dir='))?.slice(15);
+if(subtitleDirectory)await installSubtitleAssets(join(libraries,'subtitles'),resolve(subtitleDirectory));
 const hash = createHash('sha256');
 async function hashFiles(directory: string) {
   for (const entry of (await readdir(directory,{withFileTypes:true})).sort((a,b)=>a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
@@ -93,5 +105,8 @@ const originalPlayback = completeAudio && installedVideo.includes('hevc') ? {
   videoDecoders:[...new Set(['h264','hevc','vp9','av1',...installedVideo])],
   audioDecoders:['aac','ac3','eac3','truehd','dts','flac','opus','vorbis','mp3','alac','mp1','mp2','pcm_s16le','pcm_s24le','pcm_s32le','pcm_f32le','pcm_f64le'],
 } : undefined;
-await Bun.write(join(destination, 'assets.json'), JSON.stringify({ version:1, upstreamRevision:revision, assetKey, libraries:'./libraries/', sources:'./sources/', originalPlayback },null,2)+'\n');
+const completeSubtitles=(await Promise.all(Object.entries(subtitleManifest.files).map(([file,fact])=>verified('subtitles',file,fact.sha256)))).every(Boolean);
+const subtitleAssets=completeSubtitles?{assetKey:subtitleManifest.assetKey,directory:'libraries/subtitles/'}:undefined;
+const originalSubtitleFormats=completeSubtitles&&Bun.argv.includes('--core')?['srt','webvtt','ass','ssa','pgs','tx3g']:undefined;
+await Bun.write(join(destination, 'assets.json'), JSON.stringify({ version:1, upstreamRevision:revision, assetKey, libraries:'./libraries/', sources:'./sources/', originalPlayback,subtitleAssets,originalSubtitleFormats },null,2)+'\n');
 console.log(`Universal runtime assets assembled at ${destination}, key ${assetKey}`);

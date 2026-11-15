@@ -1,26 +1,36 @@
-# Vela skin contract, v0
+# Vela skin contract (slot ABI 2)
 
-Skins are compiled Contract packages, selected by the foundation. They execute no
-JavaScript, hold no credentials, make no requests, and never rank or reorder data.
-The cinematic implementation is `client/skins/cinematic/slots.contract`.
-A replacement exports the same component names and prop names/types. Shared records
-are imported from `client/foundation/models.contract`; these are total projections
-of `protocol/v0/types.ts`, not a second wire protocol. The data module alone converts
+Skins are compiled Contract packages in `client/skins/<id>/`, each with a `skin.json`.
+They execute no JavaScript, hold no credentials, make no requests, and never rank or
+reorder data. Official and third-party skins are installed the same way: the generator
+(`bun tools/skin.ts generate`, run by dev, release and package builds) writes
+`client/foundation/skins.generated.contract` from the installed packages: the skin
+list, picker manifests, each skin's traits and one dispatch component per slot. The
+foundation and the root never name a skin. See [skin-authoring.md](skin-authoring.md).
+
+Each slot takes one record prop `p` (the shapes in `client/foundation/slot-api.contract`)
+and receives its actions by injection under the slot's names (`selectTitle`, `observe`,
+`command`, `close`, ...; the `SLOTS` table in `tools/skin-registry.ts`). The root
+`provide`s the app's actions by their own names; each generated slot component maps
+them to the slot's names, so `observe` inside Detail is the title page's observer and
+`close` inside PlayerChrome closes the player. Shared records are imported from
+`client/foundation/models.contract`; these are total projections of
+`protocol/v0/types.ts`, not a second wire protocol. The data module alone converts
 optional artwork, metadata and capabilities to these presentation records.
 
-| Slot | Props and content |
+| Slot | Record and content |
 | --- | --- |
-| Shell | `viewer:string`, `skin:string`, `skins:string[]`, `chooseSkin(string)`, `signOut()`; one children slot containing the route scroll surface |
-| Home | `model:HomeModel`, `query:string`, `small:bool`, `still:bool`, `selectTitle(id,kind,receipt)`, `observe(receipt,IntersectionObserverEntry)`; children slot holds the foundation search field |
-| SearchSurface | `query:string`, `model:SearchModel`, `descriptive:SearchModel`, `ai:SearchModel`, `generation:number`, `loading:bool`, `error:bool`, `aiAvailable:bool`, `small`, `still`, `selectTitle`, `observe` |
-| Row | `row:FeedRow`, `small`, `still`, `selectTitle`, `observe` |
-| TitleCard | `card:Card`, `small`, `still`, `selectTitle`, `observe` |
-| Detail | `model:DetailModel`, `small`, `still`, `play(id)`, `playExtra(id)`, `selectTitle`, `observe` |
-| PlayerChrome | `model:PlayerView`, `title:string`, `visible:bool`, `small:bool`, `still:bool`, `serverError:string`, `busy:bool`, `command(kind,value)`, `seek(seconds)`, `editing(bool)`, `close()`; presentation-only cinematic controls over engine observations and server-authorized seeks/path changes |
-| Guide | `model:GuideModel`, `small:bool`, `watch(channelId)`, `previous()`, `next()`; the model is one local day (`day` 0-6 from today): channels in server order with favourites first, programmes by start time with `at`/`span` in minutes from the day's start, re-projected every minute (airing, progress, now/next) without refetching. Cinematic also takes `still`, `zoom` (0-2, persisted) with `setZoom(z)`, and `chooseDay(offset)`, and owns its scroll containers; other skins are wrapped in a route scroll. |
+| Shell | ShellProps (active skin and its manifest, picker manifests, viewer, viewport, destinations, secure switch); one children slot containing the route scroll surface |
+| Home | HomeProps (model, query, small, still, hero index, paging, card preview); children slot holds the skin's SearchField |
+| SearchSurface | SearchProps (fast, descriptive and AI SearchModel values, generation, loading/error, lane states) |
+| Detail | DetailProps (model, small, still, the visit's season) |
+| PlayerChrome | PlayerProps (PlayerView, title, visible, small, still, busy, serverError); presentation-only controls over engine observations and server-authorized commands |
+| Guide | GuideProps (one local day of channels and programmes, zoom, tile, focus); laid out in a `flex=1` column, a skin that scrolls the guide as a page draws its own scroll |
+| Status, Collection, Library, SearchField, LiveControls, MiniGuide, AuthStage, AuthNotice, SignIn, QuickConnect | their records in slot-api.contract |
 
-Action props are declared `action` in Exact; arguments above document their inferred
-signatures. Every prop is required. See models.contract for exact field definitions.
+A skin implements any of these; the default skin (Cinematic) draws the rest. The
+root reads the active skin's `traits` (page and ink tokens, plain or framed title page,
+section motion, the framed page's scrim, shadow and close button) instead of its name.
 
 Card IDs remain protocol identities: movies, shows, seasons and episodes are distinct.
 `kind` preserves that distinction. A blank artwork URL means absent, not a request to
@@ -49,19 +59,16 @@ Hero artwork always appears immediately. A preview is mounted only for a server-
 
 Colors are Tamber tokens in `client/app.tamber`. A skin may add its own namespaced
 tokens and choose entirely different layout, typography and geometry. Asset access
-continues to follow server viewer policy. Unknown skin IDs fall back to cinematic.
-Both compiled skins are dispatched by the foundation state.
+continues to follow server viewer policy. Unknown skin IDs fall back to the default skin.
 
-Auth slots (cinematic only, used for every skin before sign-in): `AuthStage(still)` is the
-ambient stage with one children slot; inside it the foundation shows `AuthNotice(kind, still)`
-(`offline`, `connecting`, `redeeming` a web code), `SignIn` (username, password,
-passwordAvailable, quickAvailable, error, busy, still and editUsername/editPassword/submit/quick
-actions) or `QuickConnect` (model:QuickModel, error, still, cancel). Foundation owns auth
-state, silent webCode redemption, URL cleanup, server poll interval and terminal grant handling.
+Auth slots draw every skin's signed-out moments: `AuthStage` is the ambient stage with
+one children slot; inside it the foundation shows `AuthNotice` (`offline`, `connecting`,
+`redeeming` a web code), `SignIn` or `QuickConnect`. Foundation owns auth state, silent
+webCode redemption, URL cleanup, server poll interval and terminal grant handling.
 
-`Status(skin, kind, message, small, still)` presents waiting and failure moments the
-foundation reports (`home`, `detail` skeletons, `loading`, `failure`). Cinematic draws
-shimmer skeletons and designed failures; Index and example keep a plain status line.
+`Status` presents waiting and failure moments the foundation reports (`home`,
+`detail` skeletons, `loading`, `failure`). Cinematic draws shimmer skeletons and
+designed failures; Index and example keep a plain status line.
 
 PlaybackModel carries `sessionId` and serialized `planJson`. The foundation seeds the
 engine from uiPlayback, then uses matching sessionEvents stream plans. Stream failures
@@ -69,13 +76,10 @@ retry at most three times. Chrome never interprets the transport or invents reco
 
 ## Complete slot API
 
-Shell also receives `viewport:Viewport`, `canLive:bool`, `canLibrary:bool` and
-`home()`, `search()`, `live()`, `library()` navigation callbacks. Omit unsupported
-destinations using capabilities; Library currently has no route and stays hidden.
-`SearchField(query:string, edit(string))` owns all field presentation. Home's content
-slot receives that skin's SearchField, with shared behaviour in the foundation.
+Shell's destinations come from capabilities; unsupported ones are omitted. Home's
+content slot receives that skin's SearchField, with shared behaviour in the foundation.
 
-Each skin exports `detailPresentation(width:number):string` (modal, fullscreen or
+A skin may export `detailPresentation(width:number):string` (modal, fullscreen or
 empty for ordinary stack presentation) and `detailSplit(width:number):string`
 (none or the split list width). The root binds these to Exact navigation attributes.
 Index splits at 900 pixels; cinematic uses a fullscreen route with a 90vw by 90vh artwork overlay on desktop and a full-screen mobile sheet.
@@ -87,10 +91,10 @@ labels; use structured fields for semantic columns. Selection callbacks now take
 `selectTitle(id, kind, receipt)` so title, channel and collection identities route
 correctly. Collection contents are supplied in server order via uiCollection.
 
-Foundation dispatch supports installed cinematic and index packages, with editorial
-as an alias for index for older mock bootstrap responses. Unknown skin IDs use
-cinematic. The persisted picker overrides the server bootstrap default. Switching
-skins preserves the foundation's current query, navigation and receipt deduplication.
+The generated registry resolves ids and aliases (`editorial` is Index's older id);
+unknown ids use the default skin. The persisted picker overrides the server bootstrap
+default. Switching skins preserves the foundation's current query, navigation and
+receipt deduplication.
 
 PlayerView is declared in `client/foundation/player-models.contract`. It exposes
 actual playable buffer ranges, position, duration, backend/path/quality, available

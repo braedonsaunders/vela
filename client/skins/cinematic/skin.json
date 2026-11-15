@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "cinematic",
+  "name": "Cinematic",
+  "nameKey": "ui.cinematic",
+  "tagline": "Near-black, full-bleed artwork and slow, cinematic motion.",
+  "taglineKey": "skin.cinematic.tagline",
+  "preview": "assets/skins/cinematic.jpg",
+  "swatches": [
+    "#090b0e",
+    "#f5f1e9",
+    "#dcb998",
+    "#c0703f",
+    "#1f5a6b"
+  ],
+  "order": 10,
+  "offer": "always",
+  "default": true,
+  "traits": {
+    "page": "surface.page",
+    "ink": "ink.primary",
+    "flatDetail": false,
+    "panSections": true,
+    "barMask": true,
+    "splashOnPaper": false,
+    "detailScrim": "media.overlay",
+    "detailShadow": "0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)",
+    "closeBorderWidth": 1,
+    "closeBorderColor": "surface.line",
+    "closeBackground": "surface.glass",
+    "closeInk": "ink.primary"
+  }
+}

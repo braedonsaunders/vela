@@ -162,6 +162,9 @@ bridge it without exposing credentials or arbitrary DOM access to skins.
 
 ## Per-engine release layout
 
+This is the temporary shipping layout. The planned replacement below takes over
+when all installed skins have been converted to documents.
+
 The release packager compiles each installed layout engine as a separate supported
 static Exact app. `engines.json` lists their immutable versioned bases under
 `/vela/engines/<engine>/<version>/`, entry bytes and gzip9 bytes. The root
@@ -185,34 +188,108 @@ An update activates through the existing explicit update action, clears obsolete
 version caches and claims clients. The artifact remains one archive and manifest;
 Ether performs the same atomic installation and rollback as before.
 
+## Skin document compatibility
 
-## Explicit Universal beta payload (gated)
+Skins are documents (`protocol/v0/skin.ts`, `docs/skin-schema.md`) drawn by the
+client's one renderer. Two numbers decide whether a client may draw a document:
 
-Normal builds do not assemble or fetch Universal assets. After the owner’s beta
-proof and UI/data gate, the packager may accept
+- `schema` (document field, now `1`): the document language. A client draws only
+  the schema it implements; a breaking change to the language is a new schema.
+- `renderer` (document field) against the client's `RENDERER_VERSION`
+  (`client/src/skin/vocabulary.ts`, generated): the vocabulary keys, style rows and
+  motion presets a document may use. Additions bump the version; a document names
+  the lowest version it needs, and a client draws it only when
+  `document.renderer <= RENDERER_VERSION`. `tools/renderer.ts` keeps the tables'
+  digest in `client/renderer/version.json` and refuses to regenerate changed tables
+  without `--bump`, so the number cannot drift from the code.
+
+The release manifest records `skinRenderer: {schema, version, digest}`, so Ether can
+refuse to install, offer or make default a document this release cannot draw, and
+can say which client release it needs. The client refuses such a document too (the
+data module rejects it before the renderer sees it).
+
+**Built-in default.** Every release ships the cinematic document and its assets as
+versioned static files beside the app. The client draws it whenever the server's
+default or the viewer's pick is unavailable: before `/appearance` answers (first
+paint never waits on Ether), offline, for an unknown or incompatible document, or a
+document that fails validation. The viewer's own pick is kept and retried when the
+server next answers. Until the compiled skins are removed, the fallback is the
+compiled cinematic engine.
+
+## Planned single-renderer release
+
+The end state is one compiled Exact app plus skin documents conforming to
+`protocol/v0/skin.ts`. Skin selection changes data within that app. Compiled
+per-skin implementations, per-engine profiles and engine-switch reloads are
+removed together once the conversion is complete; the current release path
+continues to ship until then.
+
+The release transition is one coherent change:
+
+1. Compile the shared foundation, document renderer and native player host once
+   from the captured committed source. Every route and interactive slot must be
+   supported without falling back to an old skin's compiled implementation.
+2. Emit bundled skin JSON and its image/font assets as separate versioned static
+   files. Include their schema, renderer compatibility and content hashes in the
+   release inventory; keep document contents out of the JavaScript entry. Reuse
+   the canonical document validation and asset admission rules rather than
+   introducing a second skin language in the packager.
+3. Replace the engine selector with a single-app entry. Publish the validated
+   Universal payload descriptor before importing the native host. The foundation
+   resolves the viewer's skin preference and server appearance default, applies
+   document updates in place and keeps the current route, scroll and session.
+   Include a compatible bundled default document for startup or an unavailable
+   server document; it must also use the shared renderer.
+4. Generate one shell/asset cache inventory. Bundled immutable skin documents and
+   assets may enter the exact digest allowlist on request; server appearance API
+   responses, artwork grants and media continue to bypass the worker. Keep the
+   explicit update/activation and offline-page behavior.
+5. Remove `engines.json`, engine-specific output roots, `prepareEngine`, engine
+   handoff code and per-engine build loops after their consumers have migrated.
+   Convert the skin package builder to emit validated JSON plus assets, with no
+   Exact app or per-skin JavaScript bundle.
+
+The archive, trusted manifest/hash inputs, atomic install and rollback contract
+remain unchanged. Preserve skin identities and viewer preferences through the
+conversion; agree the final renderer/document compatibility metadata with the
+skin-distribution owner before changing the manifest. The required player payload
+remains shared and independently hash-verified.
+
+Before switching the release path, the conversion owner confirms route/slot and
+skin fidelity, including controls and accessibility. Packaging then performs one
+production compile, records renderer entry raw/gzip bytes separately from JSON,
+fonts, images and player payload, and takes one cold-load/skin-switch look. No
+per-engine measurements or duplicated app compilation remain in that pipeline.
+
+
+## Required player payload
+
+Vela has one player: the Universal engine. Every production release requires
 `bun tools/release/build.ts --committed --universal-assets=<prepared-payload-dir>`.
-The directory is the diagnostic payload root with `DIAGNOSTIC-MANIFEST.json`,
-`index.js` and `universal/`. Every listed file, byte size and digest is verified;
-extra files, links and unsafe paths fail closed. The runtime’s reviewed upstream
-revision, asset key and aggregate library/runtime hash must match. The supplied
-native diagnostic host is validated but never replaces the production host,
-which always comes from committed Vela source.
+There is no player toggle or persisted player choice. Secure capable devices
+advertise originalPlayback after the host capability probe. Native/MSE backends
+are internal automatic fallbacks; Ether HLS is the last resort.
 
-The complete runtime, workers, codec packages, notices and corresponding sources
-are copied once to `/vela/universal/<assetKey>/`. Their individual digests remain
-in the release file inventory, and the release manifest records upstream revision
-and payload-manifest SHA-256. `engines.json` includes optional
-`universalAssets: {baseURL,assetKey}`. Before engine import the tiny loader validates
-that descriptor and publishes `window.velaUniversalAssets`; it does not fetch the
-runtime. The native host separately validates origin, exact key-addressed path and
-runtime manifest identity before use. No descriptor is published when the option
-is absent. Direct engine-build invocations cannot silently accept this option.
+The directory contains `DIAGNOSTIC-MANIFEST.json`, `index.js` and `universal/`.
+Every listed file, byte size and digest is verified; extra files, links and unsafe
+paths fail closed. The reviewed upstream revision, asset key and aggregate
+library/runtime hash must match. The diagnostic host is validated but never
+replaces the production host, which comes from committed Vela source.
 
-The worker caches these immutable URLs only when requested (including the exact
-`?v=<assetKey>` alias). Neither runtime packages nor other engines are prefetched
-while beta is off. The descriptor does not by itself enable or qualify codecs,
-HDR, Dolby Vision or Universal playback; those remain native admission and release
-gates. No artifact build or installation is implied by adding this pipeline.
+Runtime, workers, codec packages, notices and corresponding sources are copied
+once to `/vela/universal/<assetKey>/`. Their digests remain in the release
+inventory; the manifest records upstream revision and payload-manifest SHA-256.
+`engines.json` always supplies `universalAssets: {baseURL,assetKey}`. Before engine
+import the entry validates and publishes `window.velaUniversalAssets`; a missing
+or invalid descriptor fails closed. The native host also validates origin, the
+exact key-addressed path and runtime identity. Direct engine-build invocations
+cannot produce a standalone production release without this shared payload.
+
+The service worker caches immutable URLs only on request, including exact
+`?v=<assetKey>` aliases. Unused codec packages and layout engines are not eagerly
+prefetched. Installed codec families still undergo per-stream admission; payload
+presence is not a promise of HDR, Dolby Vision or every format's support. Release
+qualification and stream clearance remain separate from payload preparation.
 
 Release output and temporary engine builds now live under `.artifacts/release/`
 in the current internal checkout. This directory is ignored. Worktrees and build

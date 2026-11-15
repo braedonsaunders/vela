@@ -1,5 +1,5 @@
 use DetailModel from "./models.contract"
-use PlayerView, PlayerCommandReply from "./player-models.contract"
+use PlayerView, PlayerCommandReply, loadingPlayerView from "./player-models.contract"
 
 members Client
   state watchEvent = ""
@@ -17,6 +17,8 @@ members Client
   derive watchPlan = (watchReply.sessionId == playback.sessionId and watchReply.planJson != "" ? watchReply.planJson : currentPlan)
   resource watchModel = uiPlayer(currentPlan, watchEvent, watchReply.planJson, localeJSON) when playingId != "" and watchPlan != "" as shape PlayerView
   resource watchIdentity = uiDetail(playingId) with localeJSON, artWidth when auth.authenticated and top(nav).name == "watch" and playingId != "" as shape DetailModel
+  // What the chrome shows: the engine's view once the session exists, a loading view before.
+  derive watchView = (current(playback) and current(watchModel) ? watchModel : loadingPlayerView())
   derive watchTitle = match first(watchIdentity.title) { case some(item) => (item.kind == "episode" and item.seasonNumber > 0 and item.episodeNumber > 0 ? t("ui.sSeasonEEpisodeTitle", season=item.seasonNumberLabel, episode=item.episodeNumberLabel, title=item.name) : item.name), case none => match first(detail.title) { case some(item) => item.name, case none => t("ui.nowPlaying") } }
   state watchHidden = false
   derive watchChromeVisible = not watchHidden or not watchModel.playing or watchEditing or watchModel.state != "playing"
@@ -30,6 +32,12 @@ members Client
     watchEditing = false
   task hideWatch when playingId != "" and watchModel.playing and not watchEditing key=watchTouched
     after(3500, hideWatchChrome)
+  // Keys reach the player from the first frame: the stage takes focus whenever a
+  // watch route opens (the button that opened it is gone).
+  task focusWatchStage when top(nav).name == "watch" or top(nav).name == "extra" or top(nav).name == "liveWatch" key=top(nav).id
+    after(1, focusStage)
+  action focusStage
+    focus("watch-stage")
   action hideWatchChrome
     watchHidden = true
   action touchWatch

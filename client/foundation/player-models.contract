@@ -16,6 +16,8 @@ shape PlayerView
   waiting: bool
   volume: number
   muted: bool
+  speed: number
+  speeds: number[]
   preparation: string
   ready: bool
   state: string
@@ -31,7 +33,15 @@ shape PlayerView
   backend: string
   quality: string
   lockedQuality: string
+  qualityAuto: bool
   pendingAudioId: string
+  pendingSubtitleId: string
+  subtitleError: string
+  subtitleStyleAvailable: bool
+  subtitleSize: string
+  subtitleBackground: string
+  subtitleColor: string
+  subtitlePosition: string
   audioId: string
   audioLabel: string
   subtitleId: string
@@ -44,6 +54,10 @@ shape PlayerView
   buffered: PlayerBuffer[]
   pip: bool
   fullscreen: bool
+// The player before the engine reports: loading, nothing to choose yet. The chrome draws
+// it from the moment Play is pressed, so its spinner runs on into the engine's own phases.
+fn loadingPlayerView(): PlayerView = PlayerView(planJson="", stopCommandJson="", waiting=true, volume=1, muted=false, speed=1, speeds=[], preparation="", ready=false, state="loading", playing=false, position=0, duration=0, elapsed="", remaining="", progress=0, reason="", actionError="", path="", backend="", quality="", lockedQuality="", qualityAuto=false, pendingAudioId="", pendingSubtitleId="", subtitleError="", subtitleStyleAvailable=false, subtitleSize="medium", subtitleBackground="shadow", subtitleColor="white", subtitlePosition="bottom", audioId="", audioLabel="", subtitleId="", audio=[], subtitles=[], qualities=[], paths=[], pathId="", chapters=[], buffered=[], pip=false, fullscreen=false)
+
 shape PlayerCommandReply
   planJson: string
   sessionId: string

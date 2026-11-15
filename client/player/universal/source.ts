@@ -7,9 +7,10 @@ export interface OriginalVideo {
   colorSpace?: string; colorRange?: string; dvProfile?: number; dvLevel?: number;
   dvBlSignalCompatibilityId?: number; rpuPresent?: boolean; elPresent?: boolean; blPresent?: boolean;
 }
-export interface OriginalAudio { id: string; codec: string; channels?: number; sampleRate?: number; language?: string; channelMask?: number | null; nativeSupported?: boolean; streamIndex: number }
+export interface OriginalAudio { id: string; label?:string; codec: string; channels?: number; sampleRate?: number; language?: string; channelMask?: number | null; nativeSupported?: boolean; streamIndex: number }
 export interface OriginalMedia {
-  url: string; container: string; duration: number | null; position: number;
+  hls?:{originSeconds:number};
+  url: string; container: string; duration: number | null; position: number; audioTrackCount?: number; discrepancies?: string[];
   video: OriginalVideo; audio: OriginalAudio[]; selectedAudioId: string | null;
 }
 const flag = (value: boolean | undefined) => value === undefined ? null : Number(value);
@@ -19,11 +20,8 @@ export function upstreamOptions(media: OriginalMedia) {
   const v = media.video;
   if (!v.codec || !Number.isSafeInteger(v.width) || v.width <= 0 || !Number.isSafeInteger(v.height) || v.height <= 0)
     throw new Error('Original video configuration is incomplete');
-  if (media.audio.some(a => !Number.isSafeInteger(a.streamIndex) || a.streamIndex < 0))
-    throw new Error('Original audio stream identity is incomplete');
-  const audio = [...media.audio].sort((a,b) => a.streamIndex - b.streamIndex);
-  const selected = audio.find(a => a.id === media.selectedAudioId);
-  if (media.selectedAudioId && !selected) throw new Error('Selected original audio track is absent');
+  const selected = media.audio.find(a => a.id === media.selectedAudioId) ?? media.audio[0];
+  const audio = selected ? [selected] : [];
   const transfer = v.colorTransfer?.toLowerCase();
   const hdr = v.dvProfile !== undefined || transfer === 'smpte2084' || transfer === 'arib-std-b67';
   return {

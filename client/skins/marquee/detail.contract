@@ -1,6 +1,7 @@
 use Card, FeedRow, DetailModel, ExtraModel, CastPerson, cardName from "../../foundation/models.contract"
 use Shelf, noPreview, unwatched, progressPct, subLine from "./slots.contract"
 use Glyph, Solid, Art, Primary, Secondary, Round, gutter, arrive, kindLabel from "./look.contract"
+use DetailProps from "../../foundation/slot-api.contract"
 
 fn initials(name: string): string = name.split(" ").filter(w => w != "").slice(0, 2).map(w => w.slice(0, 1).toUpperCase()).join("")
 
@@ -9,44 +10,43 @@ fn initials(name: string): string = name.split(" ").filter(w => w != "").slice(0
 // extras, cast and related hubs.
 component Detail
   props
-    model: DetailModel
-    small: bool
-    still: bool
+    p: DetailProps
+  inject
     play: action
     playExtra: action
     selectTitle: action
     observe: action
   state asked = false
-  derive upNext = model.episodes.filter(e => not e.played).slice(0, 1)
+  derive upNext = p.model.episodes.filter(e => not e.played).slice(0, 1)
   // The season on show: the one whose episodes the foundation supplied (the show's ?season= choice),
   // else the season page itself, else the first season.
-  derive episodesSeason = match first(model.episodes) { case some(e) => e.seasonId, case none => "" }
-  derive seasonId = episodesSeason != "" ? episodesSeason : match first(model.title) { case some(t) => (t.kind == "season" ? t.id : match first(model.seasons) { case some(s) => s.id, case none => "" }), case none => "" }
-  derive seasonName = match first(model.seasons.filter(s => s.id == seasonId)) { case some(s) => s.name, case none => t("ui.episodes") }
+  derive episodesSeason = match first(p.model.episodes) { case some(e) => e.seasonId, case none => "" }
+  derive seasonId = episodesSeason != "" ? episodesSeason : match first(p.model.title) { case some(t) => (t.kind == "season" ? t.id : match first(p.model.seasons) { case some(s) => s.id, case none => "" }), case none => "" }
+  derive seasonName = match first(p.model.seasons.filter(s => s.id == seasonId)) { case some(s) => s.name, case none => t("ui.episodes") }
   // Title pages never preview.
   action quiet(cardId: string, rowId: string, on: bool)
     asked = on
   view
     column position="relative" min-height="100%" padding-bottom=60 overflow-x="hidden"
-      for title in model.title key=title.id
+      for title in p.model.title key=title.id
         // The backdrop: dimmed and faded into the page.
-        column position="absolute" top=0 left=0 right=0 height=(small ? "420px" : "100vh") max-height=(small ? "none" : "900px") overflow="hidden" pointer-events="none" aria-hidden=true
+        column position="absolute" top=0 left=0 right=0 height=(p.small ? "420px" : "100vh") max-height=(p.small ? "none" : "900px") overflow="hidden" pointer-events="none" aria-hidden=true
           if title.backdrop != ""
-            Art(src=title.backdrop, still=still)
+            Art(src=title.backdrop, still=p.still)
           column position="absolute" inset=0 background-image="linear-gradient(180deg, var(--marquee.page-veil) 0%, var(--marquee.page-veil) 45%, var(--marquee.page) 100%), linear-gradient(90deg, var(--marquee.page-veil) 0%, var(--marquee.page-clear) 100%)"
-        if small
-          column position="relative" gap=16 padding="76px 16px 8px" animation=arrive(still, 0)
+        if p.small
+          column position="relative" gap=16 padding="76px 16px 8px" animation=arrive(p.still, 0)
             row gap=16 align-items="flex-end"
-              Poster(card=title, width="38%", still=still)
+              Poster(card=title, width="38%", still=p.still)
               column flex=1 min-width=0 gap=6 padding-bottom=4
                 text kindLabel(title.kind) font-size=12 font-weight=700 letter-spacing="0.06em" text-transform="uppercase" color="marquee.amber"
                 text title.name role="heading" aria-level=1 font-size=24 font-weight=700 line-height=1.15
                 if title.facts != ""
                   text title.facts font-size=14 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
-            Facts(model=model, title=title, upNext=upNext, small=small, still=still, play=play, playExtra=playExtra)
+            Facts(model=p.model, title=title, upNext=upNext, small=p.small, still=p.still, play=play, playExtra=playExtra)
         else
-          row position="relative" gap=44 align-items="flex-start" padding="96px 48px 12px" animation=arrive(still, 0)
-            Poster(card=title, width="clamp(220px, 21vw, 300px)", still=still)
+          row position="relative" gap=44 align-items="flex-start" padding="96px 48px 12px" animation=arrive(p.still, 0)
+            Poster(card=title, width="clamp(220px, 21vw, 300px)", still=p.still)
             column flex=1 min-width=0 gap=14 max-width="62rem" padding-top=6
               text kindLabel(title.kind) font-size=13 font-weight=700 letter-spacing="0.06em" text-transform="uppercase" color="marquee.amber"
               text title.name role="heading" aria-level=1 font-size=36 font-weight=700 line-height=1.12 letter-spacing="-0.01em"
@@ -55,44 +55,44 @@ component Detail
                   text title.yearLabel font-size=20 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
                 if title.kind == "episode" and title.episodeNumber > 0
                   text subLine(title) font-size=16 color="marquee.ink-dim" font-variant-numeric="tabular-nums"
-              Facts(model=model, title=title, upNext=upNext, small=small, still=still, play=play, playExtra=playExtra)
-      column position="relative" gap=(small ? 8 : 14) padding-top=(small ? 16 : 28)
-        if model.seasons.length > 0
-          column gap=(small ? 10 : 14) padding-bottom=(small ? 16 : 24)
-            text t("ui.seasons") role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 padding-left=gutter(small) padding-right=gutter(small)
+              Facts(model=p.model, title=title, upNext=upNext, small=p.small, still=p.still, play=play, playExtra=playExtra)
+      column position="relative" gap=(p.small ? 8 : 14) padding-top=(p.small ? 16 : 28)
+        if p.model.seasons.length > 0
+          column gap=(p.small ? 10 : 14) padding-bottom=(p.small ? 16 : 24)
+            text t("ui.seasons") role="heading" aria-level=2 font-size=(p.small ? 17 : 19) font-weight=700 padding-left=gutter(p.small) padding-right=gutter(p.small)
             scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
-              row gap=(small ? 10 : 16) padding-left=gutter(small) padding-right=gutter(small) padding-top=4 padding-bottom=4 role="group" aria-label=t("ui.season") testId="season-picker"
-                for season in model.seasons key=season.id
-                  SeasonCard(season=season, on=(season.id == seasonId), small=small, still=still, selectTitle=selectTitle)
-        if model.episodes.length > 0
-          column gap=(small ? 10 : 14) padding-bottom=(small ? 20 : 30)
-            text seasonName role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 padding-left=gutter(small) padding-right=gutter(small)
-            column display="grid" grid-template-columns=(small ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))") column-gap=20 row-gap=(small ? 14 : 26) padding-left=gutter(small) padding-right=gutter(small)
-              for episode in model.episodes key=episode.id
-                EpisodeCard(episode=episode, small=small, still=still, play=play, selectTitle=selectTitle)
-        if model.extras.length > 0
-          column gap=(small ? 10 : 14) padding-bottom=(small ? 20 : 30)
-            text t("ui.extras") role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 padding-left=gutter(small) padding-right=gutter(small)
+              row gap=(p.small ? 10 : 16) padding-left=gutter(p.small) padding-right=gutter(p.small) padding-top=4 padding-bottom=4 role="group" aria-label=t("ui.season") testId="season-picker"
+                for season in p.model.seasons key=season.id
+                  SeasonCard(season=season, on=(season.id == seasonId), small=p.small, still=p.still, selectTitle=selectTitle)
+        if p.model.episodes.length > 0
+          column gap=(p.small ? 10 : 14) padding-bottom=(p.small ? 20 : 30)
+            text seasonName role="heading" aria-level=2 font-size=(p.small ? 17 : 19) font-weight=700 padding-left=gutter(p.small) padding-right=gutter(p.small)
+            column display="grid" grid-template-columns=(p.small ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))") column-gap=20 row-gap=(p.small ? 14 : 26) padding-left=gutter(p.small) padding-right=gutter(p.small)
+              for episode in p.model.episodes key=episode.id
+                EpisodeCard(episode=episode, small=p.small, still=p.still, play=play, selectTitle=selectTitle)
+        if p.model.extras.length > 0
+          column gap=(p.small ? 10 : 14) padding-bottom=(p.small ? 20 : 30)
+            text t("ui.extras") role="heading" aria-level=2 font-size=(p.small ? 17 : 19) font-weight=700 padding-left=gutter(p.small) padding-right=gutter(p.small)
             scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
-              row gap=16 padding-left=gutter(small) padding-right=gutter(small) padding-bottom=4
-                for extra in model.extras key=extra.id
-                  ExtraCard(extra=extra, small=small, playExtra=playExtra)
-        if model.castPeople.length > 0
-          column gap=(small ? 10 : 14) padding-bottom=(small ? 20 : 30)
-            text t("marquee.castAndCrew") role="heading" aria-level=2 font-size=(small ? 17 : 19) font-weight=700 padding-left=gutter(small) padding-right=gutter(small)
+              row gap=16 padding-left=gutter(p.small) padding-right=gutter(p.small) padding-bottom=4
+                for extra in p.model.extras key=extra.id
+                  ExtraCard(extra=extra, small=p.small, playExtra=playExtra)
+        if p.model.castPeople.length > 0
+          column gap=(p.small ? 10 : 14) padding-bottom=(p.small ? 20 : 30)
+            text t("marquee.castAndCrew") role="heading" aria-level=2 font-size=(p.small ? 17 : 19) font-weight=700 padding-left=gutter(p.small) padding-right=gutter(p.small)
             scroll overflow-x="auto" overflow-y="hidden" scrollbar-width="none"
-              row gap=(small ? 14 : 22) padding-left=gutter(small) padding-right=gutter(small) padding-bottom=4 role="list"
-                for person, i in model.castPeople key=`${i}-${person.name}`
-                  Person(person=person, small=small, still=still)
-        if model.crewPeople.length > 0
-          column gap=6 padding-left=gutter(small) padding-right=gutter(small) padding-bottom=(small ? 20 : 30) max-width="60rem"
-            for person, i in model.crewPeople key=`${i}-${person.name}`
+              row gap=(p.small ? 14 : 22) padding-left=gutter(p.small) padding-right=gutter(p.small) padding-bottom=4 role="list"
+                for person, i in p.model.castPeople key=`${i}-${person.name}`
+                  Person(person=person, small=p.small, still=p.still)
+        if p.model.crewPeople.length > 0
+          column gap=6 padding-left=gutter(p.small) padding-right=gutter(p.small) padding-bottom=(p.small ? 20 : 30) max-width="60rem"
+            for person, i in p.model.crewPeople key=`${i}-${person.name}`
               row gap=10 align-items="baseline"
                 text person.name font-size=14 font-weight=600
                 if person.role != ""
                   text person.role font-size=14 color="marquee.ink-faint"
-        for related in model.related key=related.id
-          Shelf(row=related, place="detail", small=small, still=still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
+        for related in p.model.related key=related.id
+          Shelf(row=related, place="detail", small=p.small, still=p.still, selectTitle=selectTitle, observe=observe, preview=noPreview(), intent=quiet)
 
 component Poster
   props

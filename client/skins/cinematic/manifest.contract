@@ -1,3 +1,0 @@
-use SkinManifest from "../../foundation/models.contract"
-
-fn manifest(): SkinManifest = SkinManifest(id="cinematic", name=t("ui.cinematic"), tagline=t("skin.cinematic.tagline"), preview="assets/skins/cinematic.jpg", swatches=["#090b0e", "#f5f1e9", "#dcb998", "#c0703f", "#1f5a6b"])

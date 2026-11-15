@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "jassub": {
+    "version": "1.8.8",
+    "revision": "ca27d60a672612b2b8a80d0728092c2164e32a07",
+    "source": "https://github.com/ThaUnknown/jassub",
+    "npmIntegrity": "sha512-Vtw27Z0/hN2Tm2Qs4HAR+eONwwSD5ULo/hisPvmiaW9Ya6aFCt7esvWQSZy6nvBASbRyKmpghgeioIPqXGHA0Q=="
+  },
+  "font": {
+    "revision": "2984c575fdce412ee02b2baaba67672b9a9434d8",
+    "url": "https://raw.githubusercontent.com/google/fonts/2984c575fdce412ee02b2baaba67672b9a9434d8/ofl/notosans/NotoSans%5Bwdth,wght%5D.ttf",
+    "sha256": "bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d",
+    "bytes": 2049096
+  },
+  "correspondingSources": [
+    {
+      "name": "brotli",
+      "revision": "e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
+      "url": "https://codeload.github.com/google/brotli/tar.gz/e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
+      "file": "brotli-e61745a6b7add50d380cfd7d3883dd6c62fc2c71.tar.gz",
+      "sha256": "280a7d0963ff6302f003c0bb4f414405924e1393ca70d5c61cc30d98ddaf2f49",
+      "bytes": 487278
+    },
+    {
+      "name": "freetype",
+      "revision": "801cd842e27c85cb1d5000f6397f382ffe295daa",
+      "url": "https://codeload.github.com/freetype/freetype/tar.gz/801cd842e27c85cb1d5000f6397f382ffe295daa",
+      "file": "freetype-801cd842e27c85cb1d5000f6397f382ffe295daa.tar.gz",
+      "sha256": "644c4eb98677385b70412af59c03f5504587d5ce02387b1bcaac12abe1aadbc7",
+      "bytes": 2182957
+    },
+    {
+      "name": "fribidi",
+      "revision": "247fddc3599e3fe7b1b5cc21020c9eb51e662637",
+      "url": "https://codeload.github.com/fribidi/fribidi/tar.gz/247fddc3599e3fe7b1b5cc21020c9eb51e662637",
+      "file": "fribidi-247fddc3599e3fe7b1b5cc21020c9eb51e662637.tar.gz",
+      "sha256": "63f084af582f8a67126ecccdaaa1da469330fe50475647c56c27a23306078cd5",
+      "bytes": 2109905
+    },
+    {
+      "name": "harfbuzz",
+      "revision": "afcae83a064843d71d47624bc162e121cc56c08b",
+      "url": "https://codeload.github.com/harfbuzz/harfbuzz/tar.gz/afcae83a064843d71d47624bc162e121cc56c08b",
+      "file": "harfbuzz-afcae83a064843d71d47624bc162e121cc56c08b.tar.gz",
+      "sha256": "2aa7aeb1e67bf453a69977376245dac8fe0a740276bc4db1adc98dd04e7f6455",
+      "bytes": 36360414
+    },
+    {
+      "name": "libass",
+      "revision": "695509365f152bd28720a0c0e036d46836ee9345",
+      "url": "https://codeload.github.com/libass/libass/tar.gz/695509365f152bd28720a0c0e036d46836ee9345",
+      "file": "libass-695509365f152bd28720a0c0e036d46836ee9345.tar.gz",
+      "sha256": "e1aa0eb912a2cc3d8f90e2d8c15ad57acf6a6563cea7e993fedc6277e0bf2d44",
+      "bytes": 337784
+    }
+  ],
+  "files": {
+    "jassub.js": {
+      "sha256": "dd25d6534ccf4c7701477518064effcf81af27f1f32bc00aa18a9cf2ff102c62",
+      "bytes": 32803
+    },
+    "jassub-worker.js": {
+      "sha256": "0fb9a83f96fc39426e733a94f3e7fe4e37099324c08328450ba032b653e85707",
+      "bytes": 31069
+    },
+    "jassub-worker.wasm": {
+      "sha256": "b6e9d3b1a6318ecfb9728c03a763b1e60796ca59d454820913deec62eebb8927",
+      "bytes": 1969177
+    },
+    "NotoSans.ttf": {
+      "sha256": "bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d",
+      "bytes": 2049096
+    },
+    "JASSUB-LICENSE.txt": {
+      "sha256": "f300758600ecf59b736407f80f6dc8338a9879a062c6bcb16cc739d14814ec75",
+      "bytes": 1167
+    },
+    "JASSUB-COPYRIGHT.txt": {
+      "sha256": "420f27cc7703563bb12842b10244f4a4951dc8bbcc5456050e696db96533edfb",
+      "bytes": 70157
+    },
+    "NotoSans-OFL.txt": {
+      "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a",
+      "bytes": 4396
+    },
+    "jassub-1.8.8-source.tar.gz": {
+      "sha256": "9042a2d10981067f31b267b9d516013f84ed2bbe8727f5b136502ce176395b58",
+      "bytes": 3079671
+    },
+    "jassub-1.8.8-npm.tar.gz": {
+      "sha256": "92668938b5f8ca47b26a1641a6dddf649a8c3e72a27bc54c4e7da3558c38b1bf",
+      "bytes": 3027890
+    },
+    "brotli-e61745a6b7add50d380cfd7d3883dd6c62fc2c71.tar.gz": {
+      "sha256": "280a7d0963ff6302f003c0bb4f414405924e1393ca70d5c61cc30d98ddaf2f49",
+      "bytes": 487278
+    },
+    "freetype-801cd842e27c85cb1d5000f6397f382ffe295daa.tar.gz": {
+      "sha256": "644c4eb98677385b70412af59c03f5504587d5ce02387b1bcaac12abe1aadbc7",
+      "bytes": 2182957
+    },
+    "fribidi-247fddc3599e3fe7b1b5cc21020c9eb51e662637.tar.gz": {
+      "sha256": "63f084af582f8a67126ecccdaaa1da469330fe50475647c56c27a23306078cd5",
+      "bytes": 2109905
+    },
+    "harfbuzz-afcae83a064843d71d47624bc162e121cc56c08b.tar.gz": {
+      "sha256": "2aa7aeb1e67bf453a69977376245dac8fe0a740276bc4db1adc98dd04e7f6455",
+      "bytes": 36360414
+    },
+    "libass-695509365f152bd28720a0c0e036d46836ee9345.tar.gz": {
+      "sha256": "e1aa0eb912a2cc3d8f90e2d8c15ad57acf6a6563cea7e993fedc6277e0bf2d44",
+      "bytes": 337784
+    }
+  },
+  "assetKey": "36f3166bb40db112"
+}

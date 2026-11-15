@@ -324,30 +324,54 @@ actual track facts. It does not touch a controller, video or active output. The
 lead can call setAudioStreamIndex only after successful preparation, leaving old
 audio intact when preparation fails.
 
-The helper requires a complete broker audio inventory with unique IDs/source
-stream indices, checks it against the actual audio inventory in file order, and
-compares codec, count/rate/mask and optional expected language for each track.
-Two/three-letter language aliases are normalized; declared regional distinctions
-are retained. It never substitutes another track. Actual source masks remain
-nullable; unknown multichannel PCM positions and unqualified masks are rejected.
-It reads actual decoder configuration and native canDecode support before choosing
-an on-demand package; sample rate and output layout must have a qualified route.
+Broker audio entries are descriptions, not admission gates. The helper first
+maps the requested description to actual source order (`InputTrack.id - 1`, not
+containerTrackId), then tries its described audio ordinal, then the first actual
+audio track. Empty or stale inventories are accepted. Only the chosen actual
+track is prepared, so unrelated unsupported tracks cannot block playback.
+Codec, channel count, rate, mask and language differences produce bounded,
+fixed-vocabulary `discrepancies` notes; the returned `mapping` records the route.
+Actual track fields and decoder configuration determine decoder selection.
+An unmatched actual track gets a local `demux-audio-<id>` identifier, which must
+not be reported as a server track ID. Source masks remain nullable: an
+unqualified mask is omitted so the compressed decoder can establish its layout;
+unknown multichannel raw PCM positions remain unsafe and require fallback.
+No speaker positions are inferred from a broker description.
 
-It opens the ORIGINAL through UrlSource with upstream HTTP range validation:
+With only a URL it opens the ORIGINAL through UrlSource with upstream HTTP range validation:
 actual HTTP requests capped at 256 KiB, cache 8 MiB, total metadata-read budget
 32 MiB, finite retries, per-read deadlines and a 30s preparation bound. A changed
 resource length/ETag refuses preparation. Range-ignored whole-file fallback is
-rejected, and the Input is always disposed before returning. No sink speaker mask
+rejected, and the owned Input is always disposed before returning. No sink speaker mask
 is invented. Night algorithm changes still use the controller's existing output
 reconfiguration API; the upstream track-switch API omits that field.
+
+The optional `input?: Input` borrows an already-open, validated source, allowing
+the video probe and audio preparation to share its demux/cache. This path uses
+the caller's common signal without adding an abort listener, creating another
+source or disposing the Input on any path. The caller must keep it alive until
+both operations settle, own cancellation of its reads, and bound its wait on
+unabortable browser support checks. Actual audio mapping, format validation and
+decoder selection are unchanged. Compressed native audio uses one exact
+`AudioDecoder.isConfigSupported` check; it no longer repeats that same check via
+`track.canDecode`. PCM retains its Mediabunny decodability check. The helper's
+return shape is unchanged; sharing an Input does not share decoder state.
 
 A read-only source-integration drive exercised real file bytes and the pinned
 demuxer through an in-process range-response adapter (not a network/server
 qualification). ALAC Matroska/MP4, MP2 Matroska and WMA v2 ASF returned ordinal 0,
 actual 48kHz format and their correct software package in a runtime without
-AudioDecoder. A mismatched expected FLAC codec for an ALAC track was refused.
+AudioDecoder. That earlier drive predates the policy of recording descriptive
+mismatches rather than refusing them.
 Eight metadata range requests were made, none larger than 262,144 bytes. Browser
 native support, a real mid-play switch and pending-state UI remain lead-owned.
+
+The current metadata-only check used the local synthetic HEVC/E-AC-3 fixture.
+Wrong codec, channel count, rate, mask, language and inventory descriptions all
+returned the actual E-AC-3 5.1(side), 48kHz track and discrepancy notes. Empty
+inventories, unknown requested IDs and missing source indices/ordinals also
+prepared actual audio. The selected helper type-checked and bundled. This did
+not open a browser, lab stream, provider fetch or capture private source data.
 
 ## Nested-worker asset diagnosis
 
@@ -375,3 +399,51 @@ zero late frames and worst measured frame/audio-clock lag 13.151ms. This was the
 synthetic eight-second mock source. It confirms native-view custom playback with
 real nested-worker assets; it does not qualify every decoder family, a human
 listening/lip-sync pass, a lab stream or physical surround output.
+
+## Vela core audio adapter
+
+`audio/core-output.ts` implements the Vela-owned `core/types.AudioOutput`; it
+imports no upstream playback controller. Construct `createCoreAudioOutput` in the
+play gesture with `{libraryBaseURL, assetKey?, signal?, onClock, onFailure}`.
+The base is the verified payload's `libraries/` directory. Optional forceSoftware
+and nightMode select a route/processing policy, not another player.
+
+The instance owns its AudioContext, AudioWorklet and one audio decode worker.
+It reuses the pinned audio worker, downmix, limiter, resampler and time-stretcher
+as components. Exact native AudioDecoder configuration is tried once, then an
+installed verified package. Real codecPrivate/WAVE bytes feed the VLA1 metadata
+envelope; unknown multichannel raw PCM positions remain unsafe. Decoder failure
+is reported with epoch, actual track ID and stage, so core recovery can retry
+software or an authorized Ether audio conversion without replacing video.
+A failed native track is remembered for the instance's next configure/flush.
+
+Input credits and the2s worklet bound apply backpressure; native PCM staging is
+capped at16MiB. Raw PCM packets split on actual sample-frame boundaries. Seek
+flush creates a new decoder attempt and producer channel on the same context;
+late callbacks retain their old attempt and cannot advance the new epoch.
+Playback primes80ms before running the worklet, with a short EOF exception.
+Credit waits are cancellable and exclude paused time from their8s stall bound;
+native input without PCM fails after2s of packet time or256 packets. Every
+resource/probe operation has a separate finite bound. `drain` flushes true EOF
+tails into the bounded queue; it does not replace the core's end scheduling.
+
+`onClock` reports physical output points using getOutputTimestamp, worklet media
+and context timestamps, and the buffered end. Core MediaClock owns extrapolation
+and playback intent. Pause, gain/mute,0.25–4x pitch-preserving rate and disposal
+are explicit; no independent media-time animation loop is introduced.
+
+A generated-file local Chrome measurement used the actual core RangeReader and
+FileDemux. Native AAC stereo44.1kHz and forced-package E-AC-3 six-channel48kHz both
+advanced the PCM output clock, paused, and sought to4s on the same audio output.
+The first moving physical anchor was36.4/24.4ms after the measurement start;
+the seek anchor was8.0/6.6ms after seek began. Those are audio component timings,
+not whole-player first-frame timings. Steady media/performance anchor phase
+spread was147/161µs, and145/169µs after seek, over these short measurement windows.
+Both passes reported0 dropped frames,0 overflow and0 underflow before and after
+seek, with no decoder failures. Source reads reused the same reader cache.
+
+TypeScript and the browser bundle compiled; the bundle input list contained no
+upstream CustomPlaybackController. The dedicated Chrome and owned8796 fixture
+server were closed. This does not claim a human listening or A/V lip-sync pass,
+all codec coverage through the new adapter, true EOF-tail qualification or the
+new core's completed runtime integration. Those remain integration gates.

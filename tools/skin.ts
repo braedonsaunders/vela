@@ -1,6 +1,8 @@
 /**
  * Vela skin packages: check, build and sign a third-party skin as its own engine build.
  *
+ *   bun tools/skin.ts generate [<client>] [--only <id>]  regenerate client/foundation/skins.generated.contract
+ *                                                from the installed packages (client/skins/<id>/)
  *   bun tools/skin.ts init <dir> [--id <id>]     scaffold a package from the reference (example) skin
  *   bun tools/skin.ts check <dir>                validate a package without building
  *   bun tools/skin.ts keygen <key-id>            make an Ed25519 signing key (~/.config/vela/keys)
@@ -8,10 +10,11 @@
  *                                                pinned Exact into a signed single-engine build (/vela/engines/<id>/<version>/)
  *
  * A package is source, not code that runs at build time: Contract files against the
- * extension slot ABI, a skin.json manifest, optional strings and assets. The build
- * installs it into the extension slot of a staged, committed Vela snapshot (never the
- * working tree), compiles it with Exact's production web build and signs the result.
- * See docs/skin-distribution.md.
+ * slot ABI (foundation/slot-api.contract), a skin.json manifest, optional strings and
+ * assets. Official skins are packages too (client/skins/<id>/), installed by the same
+ * generator. The build installs a package as client/skins/<id>/ in a staged, committed
+ * Vela snapshot (never the working tree), generates that build's registry, compiles it
+ * with Exact's production web build and signs the result. See docs/skin-authoring.md.
  */
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
 import { cp, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -19,18 +22,15 @@ import { homedir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { generateLocales } from './locales';
 import { mountRoutes, prepareEngine } from './engine';
+import { SLOT_API, SLOTS, FUNCTIONS, generateRegistry, installed } from './skin-registry';
 import { finalizeEngineRoot } from './release/engine-root';
 
 const root = resolve(import.meta.dir, '..');
-const out = join(homedir(), '.scratch/tmp/vela/skins');
+// Build output stays on the internal disk, inside the checkout (gitignored), never on ~/.scratch.
+const out = join(root, '.artifacts/skins');
 const keys = join(homedir(), '.config/vela/keys');
-/** The extension slot ABI a package implements (foundation/skin.contract's example dispatch). */
-const SLOT_API = 1;
-const SLOTS = ['Shell', 'Home', 'SearchSurface', 'Row', 'Detail', 'SearchField', 'PlayerChrome', 'Guide', 'LiveControls'];
-const FUNCTIONS = ['detailPresentation', 'detailSplit'];
-const BUILTIN = ['cinematic', 'index', 'editorial', 'example', 'jellytwin', 'mochi', 'marquee'];
-/** Shared models and built-in engines a package may import, as written from its own directory. */
-const IMPORTS = /^(\.\/[a-z0-9-]+\.contract|\.\.\/\.\.\/foundation\/(models|player-models|skin-picker)\.contract|\.\.\/\.\.\/live\/models\.contract|\.\.\/(cinematic|index|jellytwin|mochi|marquee)\/[a-z0-9-]+\.contract)$/;
+/** Shared models, the slot records and official skins' parts a package may import, as written from its own directory. */
+const IMPORTS = /^(\.\/[a-z0-9-]+\.contract|\.\.\/\.\.\/foundation\/(models|player-models|skin-picker|slot-api)\.contract|\.\.\/\.\.\/live\/models\.contract|\.\.\/(cinematic|index|jellytwin|mochi|marquee)\/[a-z0-9-]+\.contract)$/;
 /** Contract a skin may not write: data access, persistence, native views, foreign origins. */
 const FORBIDDEN: [RegExp, string][] = [
   [/^\s*(resource|mutation|members)\b/m, 'declares data access (resource, mutation or members)'],
@@ -71,7 +71,8 @@ async function check(dir: string): Promise<{ skin: SkinJson; list: string[] }> {
   const problems: string[] = [];
   const skin = JSON.parse(await readFile(join(dir, 'skin.json'), 'utf8')) as SkinJson;
   if (skin.schema !== 1) problems.push('skin.json: schema must be 1');
-  if (!/^[a-z][a-z0-9-]{1,31}$/.test(skin.id ?? '') || BUILTIN.includes(skin.id)) problems.push('skin.json: id must be a new lowercase name, not a built-in engine');
+  const builtIn = (await installed(join(root, 'client'))).flatMap(f => [f.skin.id, ...(f.skin.aliases ?? [])]);
+  if (!/^[a-z][a-z0-9-]{1,31}$/.test(skin.id ?? '') || builtIn.includes(skin.id)) problems.push('skin.json: id must be a new lowercase name, not an installed skin');
   if (typeof skin.name !== 'string' || !skin.name || skin.name.length > 40) problems.push('skin.json: name is 1-40 characters');
   if (!/^\d+\.\d+\.\d+$/.test(skin.version ?? '')) problems.push('skin.json: version is semver x.y.z');
   if (skin.slotApi !== SLOT_API) problems.push(`skin.json: slotApi ${skin.slotApi} is not this Vela's (${SLOT_API})`);
@@ -104,16 +105,20 @@ async function check(dir: string): Promise<{ skin: SkinJson; list: string[] }> {
     const strings = JSON.parse(await readFile(join(dir, path), 'utf8')) as Record<string, unknown>;
     for (const [k, v] of Object.entries(strings)) if (!k.startsWith(`skin.${skin.id}.`) || typeof v !== 'string') problems.push(`${path}: ${k} must be a skin.${skin.id}.* string`);
   }
-  const slots = list.includes('slots.contract') ? await readFile(join(dir, 'slots.contract'), 'utf8') : '';
-  for (const name of SLOTS) if (!new RegExp(`^component ${name}$`, 'm').test(slots)) problems.push(`slots.contract: missing component ${name}`);
-  for (const name of FUNCTIONS) if (!new RegExp(`^fn ${name}\\(`, 'm').test(slots)) problems.push(`slots.contract: missing fn ${name}`);
+  // A package implements any slots it likes (the default skin draws the rest); each takes the slot's record.
+  const sources = await Promise.all(list.filter(p => p.endsWith('.contract')).map(async path => [path, await readFile(join(dir, path), 'utf8')] as const));
+  for (const slot of SLOTS) for (const [path, text] of sources) {
+    const m = new RegExp(`^component ${slot.name}\\n  props\\n((?:    .*\\n)+)`, 'm').exec(text);
+    if (m && !new RegExp(`^    p: ${slot.record}$`, 'm').test(m[1])) problems.push(`${path}: component ${slot.name} takes one prop, p: ${slot.record} (slot API ${SLOT_API})`);
+  }
+  if (!sources.some(([, text]) => SLOTS.some(slot => new RegExp(`^component ${slot.name}$`, 'm').test(text)) || Object.keys(FUNCTIONS).some(name => new RegExp(`^fn ${name}\\(`, 'm').test(text)))) problems.push('implements no slot');
   if (problems.length) throw new Error(`${skin.id ?? basename(dir)} is not a valid skin package:\n- ${problems.join('\n- ')}`);
   return { skin, list };
 }
 
-/** Install the package as the extension slot of a staged client, under its own id. */
+/** Install the package into a staged client as client/skins/<id>/, then generate that build's registry for it alone. */
 async function install(client: string, dir: string, skin: SkinJson, list: string[]) {
-  const slot = join(client, 'skins/example');
+  const slot = join(client, 'skins', skin.id);
   await rm(slot, { recursive: true, force: true });
   await mkdir(slot, { recursive: true });
   for (const path of list.filter(p => p.endsWith('.contract'))) {
@@ -122,7 +127,7 @@ async function install(client: string, dir: string, skin: SkinJson, list: string
     await writeFile(join(slot, path), text);
   }
   const preview = skin.preview ? `assets/skins/${skin.id}/${skin.preview.replace(/^assets\//, '')}` : '';
-  await writeFile(join(slot, 'manifest.contract'), `use SkinManifest from "../../foundation/models.contract"\n\nfn manifest(): SkinManifest = SkinManifest(id=${JSON.stringify(skin.id)}, name=${JSON.stringify(skin.name)}, tagline=${JSON.stringify(skin.tagline ?? '')}, preview=${JSON.stringify(preview)}, swatches=${JSON.stringify(skin.swatches)})\n`);
+  await writeFile(join(slot, 'skin.json'), JSON.stringify({ schema: 1, id: skin.id, name: skin.name, tagline: skin.tagline ?? '', preview, swatches: skin.swatches, offer: 'server' }, null, 2) + '\n');
   for (const path of list.filter(p => p.startsWith('assets/'))) {
     const to = join(client, 'assets/skins', skin.id, path.slice('assets/'.length));
     await mkdir(dirname(to), { recursive: true });
@@ -133,13 +138,9 @@ async function install(client: string, dir: string, skin: SkinJson, list: string
     const base = JSON.parse(await readFile(target, 'utf8').catch(() => '{}'));
     await writeFile(target, JSON.stringify({ ...base, ...JSON.parse(await readFile(join(dir, path), 'utf8')) }, null, 2) + '\n');
   }
-  // The foundation dispatches the extension slot by the id "example": give it the package's.
-  // A single-engine build: only the extension slot (and the cinematic slots it falls back to).
-  await prepareEngine(client, 'example');
-  for (const path of ['app.contract', 'foundation/skin.contract', 'foundation/behavior.contract', 'foundation/skin-picker.contract', 'foundation/models.contract', 'foundation/engine.contract']) {
-    const file = join(client, path);
-    await writeFile(file, (await readFile(file, 'utf8')).replaceAll('"example"', JSON.stringify(skin.id)));
-  }
+  // A single-engine build of the package (and the default skin's slots it falls back to),
+  // installed by the same generator as every official skin.
+  await prepareEngine(client, skin.id);
 }
 
 async function build(dir: string, keyId: string) {
@@ -216,14 +217,21 @@ async function keygen(id: string) {
   console.log(JSON.stringify({ keyId: id, ed25519: Buffer.from(raw).toString('base64'), privateKey: pem }));
 }
 
-const [command, target, ...rest] = process.argv.slice(2);
-const flag = (name: string, fallback: string) => { const i = rest.indexOf(name); return i >= 0 && rest[i + 1] ? rest[i + 1] : fallback; };
+const [command, target] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const flag = (name: string, fallback: string) => { const i = args.indexOf(name); return i >= 0 && args[i + 1] ? args[i + 1] : fallback; };
 try {
-  if (command === 'init' && target) await init(resolve(target), flag('--id', basename(resolve(target))));
+  if (command === 'generate') {
+    const client = target && !target.startsWith('--') ? resolve(target) : join(root, 'client');
+    const only = flag('--only', '') || undefined;
+    await generateRegistry(client, only);
+    console.log(`${relative(root, join(client, 'foundation/skins.generated.contract'))}: ${(await installed(client)).map(f => f.skin.id).join(', ')}${only ? ` (dispatching ${only})` : ''}`);
+  }
+  else if (command === 'init' && target) await init(resolve(target), flag('--id', basename(resolve(target))));
   else if (command === 'check' && target) { const { skin, list } = await check(resolve(target)); console.log(`${skin.id} ${skin.version}: valid (${list.length} files)`); }
   else if (command === 'build' && target) await build(resolve(target), flag('--key', 'local'));
   else if (command === 'keygen' && target) await keygen(target);
-  else throw new Error('Usage: bun tools/skin.ts init|check|build <dir> [--id <id>] [--key <key-id>] · keygen <key-id>');
+  else throw new Error('Usage: bun tools/skin.ts generate [<client>] [--only <id>] · init|check|build <dir> [--id <id>] [--key <key-id>] · keygen <key-id>');
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
