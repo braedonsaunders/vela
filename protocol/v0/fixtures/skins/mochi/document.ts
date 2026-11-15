@@ -247,15 +247,15 @@ const menu: Node = { type: 'box', id: 'viewer-settings', role: 'dialog', label: 
     ] },
   ] };
 
-const shell: Node = { type: 'box', style: { ...col, position: 'relative', height: '100%', 'min-height': '0px', 'background-color': '$page', color: '$ink', 'color-scheme': 'light', 'font-family': fredoka },
-  states: [{ when: [is('env.section', 'live')], style: { ...col, position: 'relative', height: '100%', 'min-height': '0px', 'background-color': '$night', color: '$ink', 'color-scheme': 'light', 'font-family': fredoka } }], children: [
-    // The dotted paper (not on Live TV, which draws its own night sky).
-    { type: 'image', when: [{ test: 'env.section', is: 'ne', value: 'live' }], src: asset('dots.svg'), alt: '', style: { ...inset0, width: '100%', height: '100%', 'object-fit': 'fill', 'pointer-events': 'none' } },
-    nav,
-    menu,
-    { type: 'slot', slot: 'children', style: { ...col, flex: '1', 'min-height': '0px', position: 'relative' } as Style,
-      inner: { ...col, 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } },
-  ] };
+const shell: Node = { type: 'box', style: { ...col, position: 'relative', height: '100%', 'min-height': '0px', 'background-color': '$page', color: '$ink', 'color-scheme': 'light', 'font-family': fredoka }, children: [
+  // The dotted paper, or on Live TV the night's ground, behind everything (the route sits at z 1).
+  { type: 'image', when: [{ test: 'env.section', is: 'ne', value: 'live' }], src: asset('dots.svg'), alt: '', style: { ...inset0, width: '100%', height: '100%', 'object-fit': 'fill', 'pointer-events': 'none', 'z-index': '0' } },
+  { type: 'box', when: [is('env.section', 'live')], style: { ...inset0, 'background-color': '$night', 'pointer-events': 'none', 'z-index': '0' } },
+  nav,
+  menu,
+  { type: 'slot', slot: 'children', style: { ...col, flex: '1', 'min-height': '0px', position: 'relative', 'z-index': '1' } as Style,
+    inner: { ...col, 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } },
+] };
 
 // ---------------------------------------------------------------- cards and rows
 
