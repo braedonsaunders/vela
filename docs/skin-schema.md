@@ -245,7 +245,22 @@ framed title page's scrim and blur belong to the route frame (the doc engine's t
 to the document's title root: a route is its own backdrop root, so a blur inside it cannot see
 home beneath.
 
-## Next (renderer 9, names final)
+## Renderer 9: library pages
+
+`routes.library` draws every library section of home (they pan beside home as before, one
+route view for all). Its environment: `library.id/name/kind/backdrop`, `library.sort`,
+`library.direction`, `library.sortLabel`, `library.canFlip`, `library.kindFilter`,
+`library.genreFilter`, `library.playedFilter`, `library.favoriteFilter`, `library.year`,
+`library.canYear/canPlayed/canFavorite`, `library.more`, `library.itemCount`,
+`env.libraryLoading`, `env.libraryMoreLoading`; `env.load` is `loading`/`failed` until the
+page's first answer (with `status: true` semantics: draw them). Collections: `library.items`
+(cards, `card.*`), `library.kinds`, `library.genres`, `library.sorts` (`opt.id`, `opt.label`,
+`opt.of`, `opt.on`). Actions: `librarySort {opt.id}` (keeps the direction when the option has
+it), `librarySortFlip`, `libraryFilter "kind|{opt.id}"` (`genre|…`, `played|true`/`false`/``,
+`favorite|true`/``), `select` for a title; widget `sentinel` with `on: "library"` loads more.
+Without `routes.library` the foundation's library page shows.
+
+## Next (renderer 10, names final)
 
 - Per-document `traits`: `page`, `ink`, `splashOnPaper`. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 
