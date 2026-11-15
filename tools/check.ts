@@ -17,7 +17,8 @@ const root = resolve(import.meta.dir, '..');
 const ENGINES = await engines(join(root, 'client'));
 const lock = '/Users/braedonsaunders/.bb/thread-storage/vela-orch/locked.sh';
 const [engine, ...rest] = process.argv.slice(2);
-if (!engine || !ENGINES.includes(engine)) throw new Error(`Usage: bun tools/check.ts <${ENGINES.join('|')}> [--agent <ops…>]`);
+const installed = await engines(join(root, 'client'));
+if (!engine || !installed.includes(engine)) throw new Error(`Usage: bun tools/check.ts <${installed.join('|')}> [--agent <ops…>]`);
 const stage = join(root, '.artifacts/check', engine);
 
 const git = Bun.spawnSync(['git', 'ls-files', '-co', '--exclude-standard', '-z', '--', 'client', 'protocol'], { cwd: root });

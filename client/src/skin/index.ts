@@ -25,28 +25,29 @@ const STYLE: [string, string][] = [
   ['gridTemplateColumns', 'grid-template-columns'], ['gridTemplateRows', 'grid-template-rows'], ['gridColumn', 'grid-column'], ['gridRow', 'grid-row'],
   ['paddingTop', 'padding-top'], ['paddingRight', 'padding-right'], ['paddingBottom', 'padding-bottom'], ['paddingLeft', 'padding-left'], ['marginTop', 'margin-top'], ['marginRight', 'margin-right'], ['marginBottom', 'margin-bottom'], ['marginLeft', 'margin-left'], ['overflowX', 'overflow-x'], ['overflowY', 'overflow-y'], ['scrollSnapType', 'scroll-snap-type'], ['scrollSnapAlign', 'scroll-snap-align'], ['scrollbarWidth', 'scrollbar-width'],
   ['color', 'color'], ['backgroundColor', 'background-color'], ['backgroundImage', 'background-image'], ['opacity', 'opacity'],
-  ['borderWidth', 'border-width'], ['borderStyle', 'border-style'], ['borderColor', 'border-color'], ['borderRadius', 'border-radius'], ['boxShadow', 'box-shadow'], ['filter', 'filter'], ['backdropFilter', 'backdrop-filter'], ['maskImage', 'mask-image'],
+  ['borderWidth', 'border-width'], ['borderStyle', 'border-style'], ['borderColor', 'border-color'], ['borderRadius', 'border-radius'], ['borderTopWidth', 'border-top-width'], ['borderTopColor', 'border-top-color'], ['borderBottomWidth', 'border-bottom-width'], ['borderBottomColor', 'border-bottom-color'],  ['boxShadow', 'box-shadow'], ['filter', 'filter'], ['backdropFilter', 'backdrop-filter'], ['maskImage', 'mask-image'],
   ['fontFamily', 'font-family'], ['fontSize', 'font-size'], ['fontWeight', 'font-weight'], ['fontStyle', 'font-style'], ['lineHeight', 'line-height'], ['letterSpacing', 'letter-spacing'], ['textTransform', 'text-transform'],
-  ['textAlign', 'text-align'], ['textShadow', 'text-shadow'], ['textStroke', '-webkit-text-stroke'], ['lineClamp', 'line-clamp'], ['whiteSpace', 'white-space'], ['fontVariantNumeric', 'font-variant-numeric'],
-  ['objectFit', 'object-fit'], ['transformOrigin', 'transform-origin'], ['translate', 'translate'], ['scale', 'scale'],
+  ['textAlign', 'text-align'], ['textShadow', 'text-shadow'], ['textStroke', '-webkit-text-stroke'], ['textOverflow', 'text-overflow'], ['lineClamp', 'line-clamp'], ['whiteSpace', 'white-space'], ['fontVariantNumeric', 'font-variant-numeric'],
+  ['objectFit', 'object-fit'], ['transformOrigin', 'transform-origin'], ['translate', 'translate'], ['scale', 'scale'], ['rotate', 'rotate'], ['perspective', 'perspective'],
   ['transition', 'transition'], ['animation', 'animation'], ['pointerEvents', 'pointer-events'], ['cursor', 'cursor'],
 ];
 /** Number rows and their CSS defaults; font-weight is inherited, resolved down the tree here. */
-const NUMERIC: Record<string, number> = { opacity: 1, order: 0, 'flex-grow': 0, 'flex-shrink': 1, 'font-weight': 400, 'line-clamp': 0, scale: 1 };
+const NUMERIC: Record<string, number> = { opacity: 1, order: 0, 'flex-grow': 0, 'flex-shrink': 1, 'font-weight': 400, 'line-clamp': 0, scale: 1, rotate: 0 };
 const ROW_TO_FIELD = new Map(STYLE.map(([field, row]) => [row, field]));
 /** Inherited rows: an unset value must inherit, not reset (an empty row resets to the default). */
 const INHERITED = new Set(['color', 'font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing', 'text-transform', 'text-align', 'white-space', 'cursor', 'font-variant-numeric']);
 const BINDABLE: Record<string, string> = { width: 'dw', 'background-color': 'dbg', 'background-image': 'dbi', color: 'dc', opacity: 'dop', translate: 'dtr' };
-const KEYFRAMES = new Set(['rise', 'dissolve', 'vanish', 'pop', 'open', 'expose', 'drift', 'fill', 'shimmer', 'spin', 'breathe', 'glow', 'float', 'bounce', 'twinkle', 'slideUp', 'slideIn', 'zoom', 'wiggle', 'auroraA', 'auroraB', 'auroraC', 'scan']);
+const KEYFRAMES = new Set(['rise', 'dissolve', 'vanish', 'pop', 'open', 'expose', 'drift', 'fill', 'shimmer', 'spin', 'breathe', 'glow', 'float', 'bounce', 'twinkle', 'slideUp', 'slideIn', 'zoom', 'wiggle', 'auroraA', 'auroraB', 'auroraC', 'scan', 'sway', 'sheen', 'tick', 'tvOn', 'jitter']);
 const keyframes = (name: string) => name === 'none' ? '' : `vr-${name}`;
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow']);
-const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset']);
+const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related']);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
 type Part = { l: string; k: number; f: string };
 type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; root: number; slotStyle: number; slotInner: number; slotOrder: string; nodes: Level[] }
-export interface SkinDocModel { id: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; detailWide: string; detailSmall: string }
+export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
+export interface SkinDocModel { id: string; fontsJson: string; styles: Record<string, string | number>[]; shell: DocSlot; home: DocSlot; routes: RouteTree[]; detailWide: string; detailSmall: string }
 interface Resolve { doc: SkinDocument; small: boolean; wide: boolean; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
@@ -140,7 +141,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   // Text, images and icons are drawn inside a box of their own (the renderer's one element): a block.
   const boxy = node.type === 'box' || node.type === 'repeat';
   const variant = [boxy ? { display: 'flex', 'flex-direction': 'column' } as Style : { display: 'block' } as Style, node.style, r.small ? node.small : undefined, r.wide ? node.wide : undefined];
-  const level: Level = { t: 'box', parts: [], src: [], label: parts(node.label, r), arg: [], sym: '', act: '', role: node.role ?? '', level: node.level ?? 0, test: parts(node.testId, r), rep: '', lim: 1000,
+  const level: Level = { t: 'box', parts: [], src: [], label: parts(node.label, r), arg: [], sym: '', act: '', role: node.role ?? '', level: node.level ?? 0, test: parts(node.testId, r), dom: parts(node.id, r), rep: '', lim: 1000,
     mk: '', md: 0, mdl: 0, me: '', mf: '', mit: '', mdir: '', msk: '', msd: 0, step: node.stagger?.step ?? 0, cap: node.stagger?.cap ?? 0, cond: conds(node.when) };
   for (const f of Object.values(BINDABLE)) level[f] = [];
   const base = style(variant, r, level, weight);
@@ -212,6 +213,13 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
   const strings = { ...doc.strings?.en, ...doc.strings?.[locale.split('-')[0]], ...doc.strings?.[locale] };
   const r: Resolve = { doc, small: width < 640, wide: width >= 1200, count: 0, assets: origin, strings, styles: [], index: new Map() };
   const shell = slot(doc.slots.shell, r, 'children', SHELL_FROM), home = slot(doc.slots.home, r, 'searchField');
-  return { id: doc.id, styles: r.styles, shell, home,
+  // A route tree is a slot without `present` (a route is drawn only when the document has it).
+  const routes = Object.entries(doc.routes ?? {}).map(([name, tree]) => { const { present: _, ...rest } = slot(tree, r, 'children'); return { name, ...rest }; });
+  // Document fonts: same-origin appearance files, registered by the vela-theme view under their family names.
+  const fonts = Object.values(doc.fonts ?? {}).slice(0, 8).flatMap(f => /^[A-Za-z0-9 ]{1,48}$/.test(f?.family ?? '') ? (f.files ?? []).slice(0, 4).flatMap(file => {
+    const url = file && typeof file.url === 'string' && file.url.startsWith('/vela/v0/appearance/') && /\.(woff2|woff|ttf|otf)$/.test(file.url) && !/[?#\\]/.test(file.url) ? `${origin}${file.url}` : '';
+    return url ? [{ family: f.family, url, weight: Number(file.weight) || 400, style: file.style === 'italic' ? 'italic' : 'normal', sizeAdjust: Number(f.sizeAdjust) || 100 }] : [];
+  }) : []);
+  return { id: doc.id, fontsJson: fonts.length ? JSON.stringify(fonts) : '', styles: r.styles, shell, home, routes,
     detailWide: doc.detail?.wide === 'stack' ? '' : doc.detail?.wide ?? 'fullscreen', detailSmall: doc.detail?.small === 'stack' ? '' : doc.detail?.small ?? 'fullscreen' };
 }

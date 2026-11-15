@@ -3,7 +3,8 @@
 // Every installed engine is dispatched.
 use SkinManifest from "./models.contract"
 use SkinTraits, ShellProps, HomeProps, SearchProps, SearchFieldProps, DetailProps, StatusProps, CollectionProps, LibraryProps, GuideProps, LiveControlsProps, MiniGuideProps, PlayerProps, AuthStageProps, AuthNoticeProps, SignInProps, QuickConnectProps from "./slot-api.contract"
-use SkinDoc from "../renderer/shapes.contract"
+use SkinDoc, RouteProps from "../renderer/shapes.contract"
+use Route as DocumentsRoute from "../skins/doc/slots.contract"
 use AuthStage as CinematicAuthStage, AuthNotice as CinematicAuthNotice, SignIn as CinematicSignIn, QuickConnect as CinematicQuickConnect from "../skins/cinematic/auth.contract"
 use Collection as CinematicCollection from "../skins/cinematic/browse.contract"
 use Detail as CinematicDetail from "../skins/cinematic/detail.contract"
@@ -433,3 +434,14 @@ component QuickConnect
       MarqueeQuickConnect(p=p)
     else
       CinematicQuickConnect(p=p)
+
+// The route view: the one place the renderer draws a whole route.
+component DocRoute
+  props
+    p: RouteProps
+  inject
+    close: action
+  provide
+    leave = close
+  view
+    DocumentsRoute(p=p)

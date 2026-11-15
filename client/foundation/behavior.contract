@@ -473,6 +473,22 @@ members Client
       playbackRetryOwner = `${top(nav).id}`
       playbackRetry = 0
       playbackRetryAt = 0
+  state extraRetryAt = 0
+  state extraRetryEntry = ""
+  task pollExtraPreparation when top(nav).name == "extra" and playingId != ""
+    every(1000, retryExtraPreparation)
+  action retryExtraPreparation
+    if current(playback) and playback.preparing and not pending(playback)
+      let entry = `${top(nav).id}`
+      let now = time.epochAtZero + performanceNow()
+      if extraRetryEntry != entry or extraRetryAt == 0
+        extraRetryEntry = entry
+        extraRetryAt = now + max(1, playback.retryAfterSeconds) * 1000
+      else if now >= extraRetryAt
+        extraRetryAt = 0
+        playbackRetry = activePlaybackRetry + 1
+        playbackManual = activePlaybackManual
+        playbackRetryOwner = `${top(nav).id}`
   state streamAttempt = 0
   resource sessionUpdate = sessionEvents(playback.sessionId, streamAttempt) when auth.authenticated and playingId != "" and playback.sessionId != "" as shape PlaybackModel
   derive currentPlan = (current(sessionUpdate) and sessionUpdate.sessionId == playback.sessionId and sessionUpdate.planJson != "" ? sessionUpdate.planJson : playback.planJson)

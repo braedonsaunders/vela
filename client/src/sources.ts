@@ -66,9 +66,9 @@ let activeQuick = "";
 let authVersion = 0;
 const homeReads = new Map<string, Promise<Bootstrap>>();
 const homeFailures = new Map<string, { at: number; attempt: number; allowed: boolean; delaySeconds: number; retryLimit: number }>();
-const detailReads = new Map<string, Promise<Awaited<ReturnType<EtherAdapter['detail']>>>>();
+const detailReads = new Map<string, Promise<[Awaited<ReturnType<EtherAdapter['detail']>>, Awaited<ReturnType<EtherAdapter['capabilities']>>]>>();
 const playbackDeclarations = new Map<string, ClientCapabilities>();
-const playbackReads = new Map<string, Promise<{ planJson: string; sessionId: string; errorCode: string; errorMessage: string; retryAllowed: boolean; retryAfterSeconds: number; retryLimit: number }>>();
+const playbackReads = new Map<string, Promise<{ planJson: string; sessionId: string; preparing: boolean; errorCode: string; errorMessage: string; retryAllowed: boolean; retryAfterSeconds: number; retryLimit: number }>>();
 let previewEpoch = 0;
 let previews: PreviewCoordinator | undefined;
 // Successful panel answers are kept only for this authentication session and display context.
@@ -427,13 +427,13 @@ const sources: Sources = {
     const cacheKey = JSON.stringify([version, tokens?.viewer.id, tokens?.viewer.policyRevision, id, entryId]);
     let read = detailReads.get(cacheKey);
     if (!read) {
-      read = api.detail(id);
+      read = Promise.all([api.detail(id), api.capabilities()]);
       detailReads.set(cacheKey, read);
       if (detailReads.size > 64) detailReads.delete(detailReads.keys().next().value!);
     }
-    const detail = await read;
+    const [detail, capabilities] = await read;
     if (version !== authVersion) throw new Error('Session changed during detail read');
-    return withLocale(localeJSON, () => detailModel(detail, API, artWidth));
+    return withLocale(localeJSON, () => detailModel(detail, API, artWidth, capabilities.features.extraPlayback?.available === true, capabilities.features.themeMusic?.available === true));
   },
   uiSearch: async ([query, generation, epoch, at, localeJSON, artWidth], store) => {
     const api = await session(store);
@@ -503,8 +503,12 @@ const sources: Sources = {
         try {
           const plan = await api.playback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id, liveMode: 'adaptive' as const } : { titleId: id }), client: declared!, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}-${manual}` });
           if (version !== authVersion) throw new Error('Session changed during playback');
+          if (plan.state === 'preparing') {
+            if (kind !== 'extra' || !Number.isFinite(plan.retryAfterSeconds) || plan.retryAfterSeconds < 1) throw new Error('Invalid playback preparation response');
+            return { planJson: '', sessionId: '', preparing: true, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: Math.ceil(plan.retryAfterSeconds), retryLimit: 0 };
+          }
           detailReads.clear();
-          return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: 0, retryLimit: 0 };
+          return { planJson: JSON.stringify(mediaPlan(plan, API)), sessionId: plan.sessionId, preparing: false, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: 0, retryLimit: 0 };
         } catch (error) {
           if (!(error instanceof VelaError)) throw error;
           const retry = error.detail.retry;
@@ -512,7 +516,7 @@ const sources: Sources = {
           const hint = Number.isFinite(retry.afterSeconds) ? Math.max(0, retry.afterSeconds!) : 0;
           const seconds = Math.max(2 ** Math.min(attempt, 5), hint, Number.isFinite(header) ? header : 0, 1);
           const limit = Math.max(0, Math.min(2, (Number.isFinite(retry.maxAttempts) ? Math.floor(retry.maxAttempts!) : 3) - 1));
-          return { planJson: '', sessionId: '', errorCode: error.detail.code, errorMessage: error.message, retryAllowed: retry.allowed === true && seconds <= 60, retryAfterSeconds: seconds, retryLimit: limit };
+          return { planJson: '', sessionId: '', preparing: false, errorCode: error.detail.code, errorMessage: error.message, retryAllowed: retry.allowed === true && seconds <= 60, retryAfterSeconds: seconds, retryLimit: limit };
         }
       })();
       playbackReads.set(cacheKey, read);

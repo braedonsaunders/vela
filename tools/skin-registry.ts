@@ -205,6 +205,18 @@ export async function generateRegistry(client: string, only?: string): Promise<s
       lines.push(`${at}else`, ...draw(fallback, `${at}  `));
     }
   }
+  // The route view (docs/skin-distribution.md, "End state"): the documents skin's Route,
+  // when that skin is part of this build; otherwise a route is never handed to it.
+  const docs = engines.find(f => f.skin.documents);
+  // `close` is a host command too: the route view gets the app's close as `leave`.
+  lines.push('', '// The route view: the one place the renderer draws a whole route.', 'component DocRoute', '  props', '    p: RouteProps', '  inject', '    close: action', '  provide', '    leave = close', '  view');
+  if (docs) {
+    lines.splice(lines.indexOf('use SkinDoc from "../renderer/shapes.contract"'), 1, 'use SkinDoc, RouteProps from "../renderer/shapes.contract"', `use Route as DocumentsRoute from "../skins/${docs.skin.id}/slots.contract"`);
+    lines.push('    DocumentsRoute(p=p)');
+  } else {
+    lines.splice(lines.indexOf('use SkinDoc from "../renderer/shapes.contract"'), 1, 'use SkinDoc, RouteProps from "../renderer/shapes.contract"');
+    lines.push('    column display="none" aria-hidden=true');
+  }
   const text = lines.join('\n') + '\n';
   await writeFile(join(client, 'foundation/skins.generated.contract'), text);
   return text;
