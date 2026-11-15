@@ -59,7 +59,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
             small: { padding: '4px' }, children: [
               tab('{s:home}', { action: 'home' }, [{ test: 'env.section', is: 'eq', value: 'home' }], 'nav-home'),
               { type: 'repeat', over: 'nav.destinations', item: libraryTab },
-              { type: 'box', press: { action: 'search' }, label: '{s:search}', testId: 'nav-search',
+              { type: 'box', press: { action: 'search', focus: 'vela-search' }, label: '{s:search}', testId: 'nav-search',
                 style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '10px', height: 'clamp(44px, 3.4vw, 62px)', 'box-sizing': 'border-box', padding: '0px clamp(18px, 1.5vw, 28px)', 'border-radius': '999px', color: '$ink-dim', 'font-size': 'clamp(16px, 1.25vw, 24px)', 'font-weight': '600', 'flex-shrink': '0', transition: lift },
                 focus: { 'background-color': '$ink', color: '$ground', scale: '1.08', 'box-shadow': '0px 14px 34px -10px rgba(0, 0, 0, 0.7)' }, hover: { color: '$ink', 'background-color': 'rgba(255, 255, 255, 0.12)' },
                 small: { height: '40px', padding: '0px 12px' }, children: [
@@ -109,9 +109,10 @@ function sheetFocus(): Style { return { 'background-color': '$ink', color: '$gro
 
 // ---------------------------------------------------------------- home
 
-// The backdrop: full-screen, pinned behind everything while the rows scroll over it.
+// The backdrop: full-screen, pinned behind everything while the rows scroll over it. It
+// leaves while a query is open (it would cover the results that follow the home).
 // Each featured title mounts its own layer, which dissolves in over the last.
-const backdrop: Node = { type: 'box', style: { position: 'sticky', top: '0px', height: '100vh', 'margin-bottom': '-100vh', 'z-index': '0', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'pointer-events': 'none', 'background-color': '$ground' }, children: [
+const backdrop: Node = { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'sticky', top: '0px', height: '100vh', 'margin-bottom': '-100vh', 'z-index': '0', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'pointer-events': 'none', 'background-color': '$ground' }, children: [
   { type: 'repeat', over: 'home.hero', item: { type: 'box', motion: 'backdropIn', style: { position: 'absolute', inset: '0px' }, children: [
     { type: 'box', when: [{ test: 'hero.backdrop' }], motion: 'drift', style: { position: 'absolute', inset: '0px', 'transform-origin': '70% 30%' }, children: [
       { type: 'image', src: '{hero.backdrop}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
@@ -122,8 +123,6 @@ const backdrop: Node = { type: 'box', style: { position: 'sticky', top: '0px', h
   ] } },
   // Shade: the copy's side, the floor the rows sit on, and a vignette.
   { type: 'box', style: { position: 'absolute', inset: '0px', 'background-image': 'linear-gradient(90deg, rgba(5, 6, 9, 0.88) 0%, rgba(5, 6, 9, 0.55) 30%, rgba(5, 6, 9, 0) 62%), linear-gradient(0deg, rgba(5, 6, 9, 0.96) 0%, rgba(5, 6, 9, 0.72) 30%, rgba(5, 6, 9, 0) 62%), radial-gradient(ellipse 120% 90% at 65% 30%, rgba(5, 6, 9, 0) 55%, rgba(5, 6, 9, 0.6) 100%)' } },
-  // While searching the backdrop sinks into the ground.
-  { type: 'box', when: [{ test: 'env.searching' }], motion: 'fadeIn', style: { position: 'absolute', inset: '0px', 'background-color': 'rgba(5, 6, 9, 0.84)', 'backdrop-filter': 'blur(40px)' } },
 ] };
 
 const heroPlay: Node = { type: 'box', press: { action: 'play', arg: '{hero.id}' }, label: '{heroAct.actionLabel}', testId: 'hero-primary', when: [{ test: 'heroAct.playable' }],
@@ -231,7 +230,13 @@ const ranked: Node = { type: 'box', style: { position: 'relative', display: 'fle
   { type: 'use', template: 'poster' },
 ] };
 
-const row: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-bottom': 'clamp(8px, 1vw, 20px)' }, children: [
+const pageEnd: Node[] = [
+  { type: 'box', when: [{ test: 'row.hasMore' }, { test: 'row.presentation', is: 'ne', value: 'ranked' }], style: { position: 'relative', 'align-self': 'stretch', width: '2px', 'flex-shrink': '0' }, children: [{ type: 'widget', widget: 'sentinel', params: { on: 'row' } }] },
+  { type: 'box', when: [{ test: 'row.loadingMore' }], role: 'status', label: '{s:loadingMore}', motion: 'pulse', style: { width: 'clamp(150px, 11.2vw, 252px)', 'aspect-ratio': '2 / 3', 'flex-shrink': '0', 'border-radius': 'clamp(12px, 0.9vw, 18px)', 'background-color': 'rgba(255, 255, 255, 0.06)', 'box-shadow': 'inset 0px 0px 0px 1px rgba(255, 255, 255, 0.08)' }, small: { width: '128px' } },
+];
+// A row of the home feed pages in more items as its end comes into view; related rows on a
+// title page show what they have.
+const rowOf = (paged: boolean): Node => ({ type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-bottom': 'clamp(8px, 1vw, 20px)' }, children: [
   { type: 'text', text: '{row.name}', role: 'heading', level: 2, style: { 'font-size': 'clamp(21px, 1.6vw, 32px)', 'font-weight': '700', 'letter-spacing': '-0.01em', 'text-shadow': '0px 1px 12px rgba(0, 0, 0, 0.5)', ...gutter }, small: { 'font-size': '19px', ...gutterSmall } },
   // Room above and below the track lets a focused poster grow without being clipped.
   { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
@@ -239,18 +244,39 @@ const row: Node = { type: 'box', style: { position: 'relative', display: 'flex',
       { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'ne', value: 'ranked' }, { test: 'row.landscape', not: true }], item: { type: 'use', template: 'poster', motion: 'cardIn', stagger: { step: 40, cap: 8 } } },
       { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'ne', value: 'ranked' }, { test: 'row.landscape' }], item: { type: 'use', template: 'wide', motion: 'cardIn', stagger: { step: 40, cap: 8 } } },
       { type: 'repeat', over: 'row.items', limit: 10, when: [{ test: 'row.presentation', is: 'eq', value: 'ranked' }], item: { type: 'use', template: 'ranked', motion: 'cardIn', stagger: { step: 40, cap: 8 } } },
+      ...(paged ? pageEnd : []),
     ] },
   ] },
-] };
+] });
+const row = rowOf(true), relatedRow = rowOf(false);
 
-const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'min-height': '100%', 'padding-bottom': 'max(48px, 6vh)', color: '$ink', 'font-family': sans }, children: [
+// No minimum height: while a query is open the home is only its search bar, and the results
+// follow right under it.
+const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', color: '$ink', 'font-family': sans }, children: [
   backdrop,
   shelf,
   // Search: a wide field between the shelf and the rows; it rises to the top while a query is open.
-  { type: 'slot', slot: 'searchField', style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-top': '0px', 'padding-bottom': 'clamp(4px, 0.6vw, 12px)', ...gutter } as Style,
-    small: { ...gutterSmall, 'padding-top': '8px' } as Style, inner: { width: '100%', 'max-width': '960px' } },
-  { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column' }, children: [
+  // Search: Lounge's own ten-foot bar between the shelf and the rows; with a query open the
+  // shelf and rows give way and it rises under the top bar.
+  { type: 'box', style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-bottom': 'clamp(4px, 0.6vw, 12px)', ...gutter } as Style,
+    small: { ...gutterSmall, 'padding-top': '8px' } as Style,
+    states: [{ when: [{ test: 'env.searching' }], style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-top': 'clamp(120px, 10.5vw, 200px)', 'padding-bottom': 'clamp(10px, 1vw, 20px)', ...gutter } as Style }], children: [
+    { type: 'box', role: 'search', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: 'clamp(14px, 1.1vw, 22px)', width: '100%', 'max-width': '1100px', 'box-sizing': 'border-box', height: 'clamp(60px, 4.6vw, 88px)', padding: '0px clamp(10px, 0.8vw, 14px) 0px clamp(22px, 1.7vw, 32px)', 'border-radius': '999px', 'background-color': 'rgba(18, 20, 26, 0.62)', 'backdrop-filter': 'blur(30px) saturate(1.4)', 'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.12), 0px 20px 50px -20px rgba(0, 0, 0, 0.8)', transition: lift },
+      small: { height: '54px' },
+      states: [{ when: [{ test: 'env.searchFocused' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: 'clamp(14px, 1.1vw, 22px)', width: '100%', 'max-width': '1100px', 'box-sizing': 'border-box', height: 'clamp(60px, 4.6vw, 88px)', padding: '0px clamp(10px, 0.8vw, 14px) 0px clamp(22px, 1.7vw, 32px)', 'border-radius': '999px', 'background-color': 'rgba(30, 33, 41, 0.86)', 'backdrop-filter': 'blur(30px) saturate(1.4)', 'box-shadow': ring, transition: lift } }], children: [
+        { type: 'icon', symbol: 'search', style: { width: 'clamp(20px, 1.5vw, 30px)', height: 'clamp(20px, 1.5vw, 30px)', 'flex-shrink': '0', color: '$ink-dim' } },
+        { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:searchPlaceholder}', label: '{s:search}', placeholderColor: 'rgba(245, 241, 233, 0.5)' }, style: { flex: '1', 'min-width': '0px', color: '$ink', 'font-size': 'clamp(19px, 1.45vw, 30px)', 'font-weight': '550' }, small: { 'font-size': '17px' } },
+        { type: 'box', when: [{ test: 'env.searching' }], press: { action: 'clearSearch', focus: 'vela-search' }, label: '{s:clear}', testId: 'search-clear',
+          style: { ...capsule('clamp(42px, 3.2vw, 62px)'), 'background-color': 'rgba(255, 255, 255, 0.12)', 'font-size': 'clamp(15px, 1.1vw, 21px)' }, focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.22)' }, children: [
+            { type: 'icon', symbol: 'close', style: { width: 'clamp(14px, 1vw, 20px)', height: 'clamp(14px, 1vw, 20px)' } },
+            { type: 'text', text: '{s:clear}', small: { display: 'none' } },
+          ] },
+      ] },
+  ] },
+  { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'padding-bottom': 'max(48px, 6vh)' }, children: [
     { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'row', motion: 'rowIn', stagger: { step: 80, cap: 4 } } },
+    { type: 'box', when: [{ test: 'env.homeHasMore' }], style: { position: 'relative', height: '2px' }, children: [{ type: 'widget', widget: 'sentinel', params: { on: 'home' } }] },
+    { type: 'text', when: [{ test: 'env.homeMoreLoading' }], text: '{s:loadingMore}', role: 'status', motion: 'pulse', style: { 'font-size': 'clamp(15px, 1.1vw, 21px)', color: '$ink-quiet', ...gutter, 'padding-top': '12px' } },
   ] },
 ] };
 
@@ -381,7 +407,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
       ]),
       section('{s:extras}', [{ test: 'detail.hasExtras' }], [track({ type: 'repeat', over: 'detail.extras', item: extra }, 'clamp(14px, 1.2vw, 24px)')]),
       section('{s:cast}', [{ test: 'detail.hasCast' }], [track({ type: 'repeat', over: 'detail.cast', item: person }, 'clamp(18px, 1.6vw, 32px)')]),
-      { type: 'repeat', over: 'detail.related', item: { type: 'use', template: 'row' } },
+      { type: 'repeat', over: 'detail.related', item: { type: 'use', template: 'relatedRow' } },
     ] },
   ] },
 ] };
@@ -389,13 +415,14 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
 const rise = (delay: number) => ({ keyframes: 'rise', duration: 760, delay, easing: ease, fill: 'both' as const, still: { keyframes: 'dissolve', duration: 220 } });
 
 const lounge: SkinDocument = {
-  schema: 1, renderer: 4, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
+  schema: 1, renderer: 7, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.0/preview.jpg', swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
   tokens: { ground: '#05060a', raised: '#1a1d24', ink: '#f5f1e9', 'ink-dim': 'rgba(245, 241, 233, 0.78)', 'ink-quiet': 'rgba(245, 241, 233, 0.52)', amber: '#f2c27e' },
-  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew' } },
+  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew', searchPlaceholder: 'Search films, shows, people and channels', clear: 'Clear', loadingMore: 'Loading more…' } },
   motion: {
     navIn: { keyframes: 'dissolve', duration: 700, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 200 } },
     sheet: { keyframes: 'pop', duration: 380, easing: ease, still: { keyframes: 'dissolve', duration: 160 } },
+    pulse: { keyframes: 'breathe', duration: 1600, easing: 'ease-in-out', iterations: 'infinite', fill: 'none', still: { keyframes: 'none', duration: 0 } },
     fadeIn: { keyframes: 'dissolve', duration: 420, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 160 } },
     backdropIn: { keyframes: 'dissolve', duration: 1200, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', still: { keyframes: 'dissolve', duration: 300 } },
     drift: { keyframes: 'drift', duration: 40000, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', direction: 'alternate', fill: 'none', still: { keyframes: 'none', duration: 0 } },
@@ -404,7 +431,7 @@ const lounge: SkinDocument = {
     cardIn: { keyframes: 'rise', duration: 700, easing: ease, still: { keyframes: 'dissolve', duration: 220 } },
     rowIn: { keyframes: 'rise', duration: 760, delay: 380, easing: ease, still: { keyframes: 'dissolve', duration: 220 } },
   },
-  templates: { poster, wide, ranked, row },
+  templates: { poster, wide, ranked, row, relatedRow },
   slots: { shell, home },
   routes: { title },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
