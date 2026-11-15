@@ -14,7 +14,6 @@ component LiveControls
   props
     p: LiveControlsProps
   inject
-    toggleLowDelay: action
     catchUp: action
     zap: action
   view
@@ -23,7 +22,7 @@ component LiveControls
         row gap=6 align-items="center" padding="3px 8px" border-radius=6 background-color="cinematic.guide-now"
           column width=6 height=6 border-radius=3 background-color="ink.primary" aria-hidden=true
           text t("live.liveBadge") font-size=10 font-weight=750 letter-spacing="0.14em"
-        text (p.lowDelay ? t("live.lowDelay") : t("live.adaptive")) font-size=13 font-weight=600 color="ink.secondary" flex=1
+        column flex=1
         row gap=4
           button press=zap(-1) aria-label=t("live.channelUp") class=ZapButton
             image "symbol:back" width=13 height=13 rotate="90deg" aria-hidden=true
@@ -40,8 +39,6 @@ component LiveControls
       if p.drift > 0
         text t("live.behind", seconds=p.driftLabel) role="status" font-size=13 color="ink.secondary" font-variant-numeric="tabular-nums"
       row gap=8
-        button press=toggleLowDelay aria-label=t("ui.toggleLowDelay") aria-pressed=p.lowDelay class=LivePill background-color=(p.lowDelay ? "ink.primary" : "cinematic.control") color=(p.lowDelay ? "ink.inverse" : "ink.primary")
-          text (p.lowDelay ? t("ui.lowDelayOn") : t("ui.useLowDelay")) font-size=13 font-weight=600
         if p.canCatchUp and p.drift > 0
           button press=catchUp class=LivePill background-color="cinematic.control" color="ink.primary"
             text t("live.catchUp") font-size=13 font-weight=600
@@ -77,9 +74,9 @@ component MiniGuideCard
   view
     button press=tune aria-label=t("ui.watchChannel", channel=channel.name) class=ZapCard
       row gap=14 align-items="center" width="100%"
-        column position="relative" width=88 height=54 flex-shrink=0 border-radius=10 overflow="hidden" align-items="center" justify-content="center" background-color="cinematic.guide-logo" border="1px solid var(--cinematic.hairline)"
+        column position="relative" width=88 height=54 flex-shrink=0 border-radius=10 overflow="hidden" padding=6 box-sizing="border-box" align-items="center" justify-content="center" background-color="cinematic.guide-logo" border="1px solid var(--cinematic.hairline)"
           if channel.logo != ""
-            image channel.logo alt="" width="100%" height="100%" object-fit="cover"
+            image channel.logo alt="" width="100%" height="100%" object-fit="contain"
           else
             text channel.name.slice(0, 2).toUpperCase() font-size=16 font-weight=750 color="ink.secondary"
         column flex=1 min-width=0 gap=5

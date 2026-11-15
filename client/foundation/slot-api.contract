@@ -99,7 +99,6 @@ shape GuideProps
   focus: GuideFocus
 
 shape LiveControlsProps
-  lowDelay: bool
   reconnecting: bool
   delivery: string
   drift: number

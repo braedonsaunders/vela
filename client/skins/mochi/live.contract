@@ -14,7 +14,6 @@ component LiveControls
   props
     p: LiveControlsProps
   inject
-    toggleLowDelay: action
     catchUp: action
     zap: action
   view
@@ -23,7 +22,7 @@ component LiveControls
         row gap=6 align-items="center" padding="3px 10px" border-radius=999 background-color="mochi.pink" color="mochi.ink" border="2px solid var(--mochi.ink)"
           PixelIcon(name="heart", size=9)
           text t("live.liveBadge") class=Pixel font-size=11
-        text (p.lowDelay ? t("live.lowDelay") : t("live.adaptive")) font-size=14 font-weight=600 color="mochi.night-soft" flex=1
+        column flex=1
         row gap=6
           button press=zap(-1) aria-label=t("live.channelUp") class=NightBubble width=34 height=34 padding=0 display="flex" align-items="center" justify-content="center"
             column rotate="90deg"
@@ -42,8 +41,6 @@ component LiveControls
       if p.drift > 0
         text t("live.behind", seconds=p.driftLabel) role="status" font-size=13 color="mochi.night-soft" font-variant-numeric="tabular-nums"
       row gap=8 flex-wrap="wrap"
-        button press=toggleLowDelay aria-label=t("ui.toggleLowDelay") aria-pressed=p.lowDelay class=LivePill background-color=(p.lowDelay ? "mochi.mint" : "mochi.night-card") color=(p.lowDelay ? "mochi.ink" : "mochi.night-ink") border-color=(p.lowDelay ? "mochi.ink" : "mochi.night-edge-strong")
-          text (p.lowDelay ? t("ui.lowDelayOn") : t("ui.useLowDelay")) font-size=14 font-weight=600
         if p.canCatchUp and p.drift > 0
           button press=catchUp class=LivePill background-color="mochi.pink" color="mochi.ink" border-color="mochi.ink"
             text t("live.catchUp") font-size=14 font-weight=600
@@ -79,9 +76,9 @@ component MiniGuideCard
   view
     button press=tune aria-label=t("ui.watchChannel", channel=channel.name) class=ZapCard
       row gap=14 align-items="center" width="100%"
-        column position="relative" width=88 height=54 flex-shrink=0 border-radius=14 overflow="hidden" align-items="center" justify-content="center" background-color="mochi.night-card" border="2px solid var(--mochi.card)"
+        column position="relative" width=88 height=54 flex-shrink=0 border-radius=14 overflow="hidden" padding=6 box-sizing="border-box" align-items="center" justify-content="center" background-color="mochi.night-card" border="2px solid var(--mochi.card)"
           if channel.logo != ""
-            image channel.logo alt="" width="100%" height="100%" object-fit="cover"
+            image channel.logo alt="" width="100%" height="100%" object-fit="contain"
           else
             text channel.name.slice(0, 2).toUpperCase() class=Pixel font-size=18 color="mochi.night-soft"
         column flex=1 min-width=0 gap=5

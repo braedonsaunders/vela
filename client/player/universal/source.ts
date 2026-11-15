@@ -9,6 +9,7 @@ export interface OriginalVideo {
 }
 export interface OriginalAudio { id: string; label?:string; codec: string; channels?: number; sampleRate?: number; language?: string; channelMask?: number | null; nativeSupported?: boolean; streamIndex: number }
 export interface OriginalMedia {
+  authority?:{sourceGeneration:number;seekGeneration:number};
   hls?:{originSeconds:number};
   url: string; container: string; duration: number | null; position: number; audioTrackCount?: number; discrepancies?: string[];
   video: OriginalVideo; audio: OriginalAudio[]; selectedAudioId: string | null;

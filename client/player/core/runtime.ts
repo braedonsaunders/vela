@@ -89,11 +89,11 @@ export class PlaybackCore {
   private current(run:Epoch){return this.epoch===run&&!run.abort.signal.aborted&&!this.closed;}
 
   open(url:string,positionUs=0,audioOrdinal=0):Promise<void>{return this.openSource({kind:'file',url},positionUs,audioOrdinal);}
-  openHls(url:string,positionUs:number,originUs:number,audioOrdinal=0):Promise<void>{
+  openHls(url:string,positionUs:number,originUs:number,audioOrdinal=0,authority?:{sourceGeneration:number;seekGeneration:number}):Promise<void>{
     if(!Number.isSafeInteger(originUs)||originUs<0||positionUs<originUs)throw new Error('Invalid HLS source timeline');
-    return this.openSource({kind:'hls',url,originUs},positionUs,audioOrdinal);
+    return this.openSource({kind:'hls',url,originUs,cacheIdentity:authority?`${authority.sourceGeneration}:${authority.seekGeneration}`:`local:${this.nextEpoch+1}`},positionUs,audioOrdinal);
   }
-  private async openSource(input:{kind:'file';url:string}|{kind:'hls';url:string;originUs:number},positionUs:number,audioOrdinal:number):Promise<void>{
+  private async openSource(input:{kind:'file';url:string}|{kind:'hls';url:string;originUs:number;cacheIdentity:string},positionUs:number,audioOrdinal:number):Promise<void>{
     if(this.closed)throw new Error('Playback core is disposed');
     await this.closeSource();
     this.decodedBeforeEpoch=0;this.scheduler.dropEvents.length=0;Object.assign(this.scheduler.metrics,{presented:0,dropped:0,preroll:0,lastLagUs:0,maxLagUs:0});
@@ -107,7 +107,7 @@ export class PlaybackCore {
       }
     },onFailure:failure=>{if(this.epoch?.id===failure.epoch)this.fail(new Error(`Audio ${failure.stage}: ${failure.message}`));}});
     const allowed=this.mediaRequests?.allows.bind(this.mediaRequests);
-    const source:SourceState=input.kind==='file'?{kind:'file',abort,audio,reader:new RangeReader(input.url,this.mediaRequests?.fetch,allowed)}:{kind:'hls',abort,audio,segments:new SegmentReader(input.url,this.mediaRequests?.fetch,allowed),originUs:input.originUs};
+    const source:SourceState=input.kind==='file'?{kind:'file',abort,audio,reader:new RangeReader(input.url,this.mediaRequests?.fetch,allowed)}:{kind:'hls',abort,audio,segments:new SegmentReader(input.url,this.mediaRequests?.fetch,allowed,input.cacheIdentity),originUs:input.originUs};
     this.source=source;this.failure=null;this.tracks=[];this.video=undefined;this.audio=undefined;this.requestedAudioId=undefined;this.durationUs=null;
     this.initialAudioOrdinal=Number.isSafeInteger(audioOrdinal)&&audioOrdinal>=0?audioOrdinal:0;
     try{
