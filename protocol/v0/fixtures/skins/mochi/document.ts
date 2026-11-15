@@ -28,7 +28,7 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 10 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// Renderer 11 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
 const pending = (fields: Record<string, unknown>) => fields as object;
@@ -515,19 +515,16 @@ const toolbar: Node = { type: 'box', motion: 'hop90', style: { ...row, position:
         icon('heart', 14, on ? 'ink' : 'pink-deep'),
         { type: 'text', text: '{s:favourites}', style: { 'font-size': '15px', 'font-weight': '600' } },
       ] } as Node)),
-    { type: 'widget', widget: 'select', when: [{ test: 'library.genreCount', is: 'gt', value: '0' }], params: { options: 'library.genres', action: 'libraryFilter', arg: 'genre|{opt.id}', none: '{s:anyGenre}', noneArg: 'genre|', label: '{s:genre}' }, style: Picker },
+    { type: 'widget', widget: 'select', when: [{ test: 'library.genreCount', is: 'gt', value: '0' }], params: { options: 'library.genres', action: 'libraryFilter', arg: 'genre|{value}', none: '{s:anyGenre}', label: '{s:genre}' }, style: Picker },
     { type: 'box', style: { flex: '1' } },
     { type: 'box', when: [{ test: 'library.sortCount', is: 'gt', value: '1' }], style: { ...row, gap: '8px', 'align-items': 'center', 'flex-shrink': '0' }, children: [
       { type: 'text', text: '{s:sortBy}', style: { ...Label, 'font-size': '11px', color: '$ink-soft' } },
-      { type: 'widget', widget: 'select', params: { options: 'library.sorts', action: 'librarySort', arg: '{opt.id}', label: '{s:sortBy}' }, style: Picker },
-      // The flip turns its arrow over with a bounce; its name says the current direction.
-      { type: 'box', when: [set('library.canFlip')], press: { action: 'librarySortFlip' as Action }, label: '{library.directionLabel}', style: { ...Bubble, ...sz(44) }, ...bubble, children: [
-        { type: 'box', style: { ...col, rotate: '0', transition: `rotate 320ms ${boing}` }, states: [
-          { when: [stillC, is('library.direction', 'asc')], style: { ...col, rotate: '180', transition: 'none' } },
-          { when: [stillC], style: { ...col, rotate: '0', transition: 'none' } },
-          { when: [is('library.direction', 'asc')], style: { ...col, rotate: '180', transition: `rotate 320ms ${boing}` } },
-        ], children: [icon('sort', 15)] },
-      ] },
+      { type: 'widget', widget: 'select', params: { options: 'library.sorts', action: 'librarySort', label: '{s:sortBy}' }, style: Picker },
+      // The flip names the current direction (one node per direction, so the arrow's turn
+      // is not animated yet: states cannot carry a label).
+      ...(['asc', 'desc'] as const).map(d => ({ type: 'box', when: [set('library.canFlip'), is('library.direction', d)], press: { action: 'librarySortFlip' as Action }, label: d === 'asc' ? '{s:ascending}' : '{s:descending}', style: { ...Bubble, ...sz(44) }, ...bubble, children: [
+        { type: 'box', style: { ...col, rotate: d === 'asc' ? '180' : '0' }, children: [icon('sort', 15)] },
+      ] } as Node)),
     ] },
   ] };
 
@@ -782,7 +779,7 @@ const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds 
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
 export default {
-  schema: 1, renderer: 10, id, name: 'Mochi', version,
+  schema: 1, renderer: 11, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true, flatDetail: false },
@@ -810,7 +807,7 @@ export default {
     watchTrailer: 'Watch trailer', watchProgress: 'Watch progress', watchProgressOf: 'Watch progress:', episodes: 'Episodes', season: 'Season', episode: 'Episode',
     extras: 'Extras', featuring: 'Featuring', behindTheStory: 'Behind the story', play: 'Play', resume: 'Resume', watched: 'Watched', notAvailable: 'Not available', notAvailableYet: 'Not available yet', tryAgain: 'Try again',
     findingYourEvening: 'Finding your evening…', findingTitles: 'Finding titles…', library: 'Library', all: 'All', unwatched: 'Unwatched', watchedFilter: 'Watched', favourites: 'Favourites',
-    genre: 'Genre', anyGenre: 'Any genre', sortBy: 'Sort by', loadMore: 'Show more', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.',
+    genre: 'Genre', anyGenre: 'Any genre', sortBy: 'Sort by', ascending: 'Ascending', descending: 'Descending', loadMore: 'Show more', libraryEmpty: 'Nothing matches these filters', libraryEmptyHint: 'Try another genre or clear a filter.',
     libraryFailed: "This library couldn't be opened. Check your connection and try again.", homeFailed: "Your library couldn't be reached. Check your server connection.",
   } },
   fonts: {
