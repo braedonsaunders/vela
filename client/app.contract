@@ -64,6 +64,12 @@ component Client
     tileUnmute
     tileTuneIn
     retuneTile
+    previewChannel
+    zapTile
+    homeGuide
+    homeTile
+    homeTuned
+    homeZapping
     toggleLowDelay
     catchUpLive
     zap
@@ -88,7 +94,7 @@ component Client
       vela-context probe="network" message=receiveNetwork width=0 height=0 aria-hidden=true
       for e in stack(nav) key=e.id
         if e.name == "home"
-          column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width, activeDoc) : "none") navigationScroll="home-scroll" position="absolute" inset=0
+          column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width, activeDoc) : "none") navigationScroll="home-scroll" key=homeKey position="absolute" inset=0
             for slotProps in [ShellProps(skin=activeSkin, current=skinManifest(activeSkin), skins=(auth.authenticated and current(home) ? pickerSkins(home.skins) : []), viewer=(auth.authenticated and current(home) ? home.viewer : ""), viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section=(libraryId == "" ? "home" : libraryId == "@live" ? "live" : libraryId), secureOrigin=(auth.authenticated and current(home) ? auth.secureOrigin : ""), secureBusy=secureBusy, secureError=secureError)] key="shell"
               Shell(p=slotProps)
                 if failed(auth) or not current(auth) or not auth.authenticated
