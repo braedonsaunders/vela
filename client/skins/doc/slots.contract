@@ -125,7 +125,7 @@ component Shell
     pickerOpen = false
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env0 in [Env(styles=doc.styles, dflt=noStyle(), route="shell", entry="", load="ready", detail=[], season="", home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query=query, heroIndex=0, small=p.viewport.width < 640, tv=p.viewport.width >= 1600, width=p.viewport.width, skinCount=p.skins.length, rowLoading=[], homeLoading=false, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags, guide=homeGuide, tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0, pagers=[], ev=[])] key="env0"
+    for env0 in [Env(styles=doc.styles, dflt=noStyle(), route="shell", entry="", load="ready", detail=[], season="", home=[], libraries=p.libraries, viewer=p.viewer, section=p.section, query=query, heroIndex=0, small=p.viewport.width < 640, tv=p.viewport.width >= 1600, width=p.viewport.width, skinCount=p.skins.length, rowLoading=[], homeLoading=false, still=p.viewport.prefersReducedMotion, canLive=p.canLive, flags=flags, guide=homeGuide, tile=[], tuned=[], tunedId="", zapping="", favoriteCount=0, library=[], libraryLoading=false, libraryMoreLoading=false, pagers=[], ev=[])] key="env0"
       for env in [Env(env0, ev=envBinds(env0))] key="env"
         for rv in [binds(rootCtx(), env)] key="rv"
           for rs in [stateOf(doc.shell.rootSts, doc.shell.rootBase, rv, env)] key="rs"
@@ -183,6 +183,8 @@ component Route
     homeTile: LiveTile[]
     homeTuned: GuideChannel[]
     homeZapping: string
+    setLibrarySort: action
+    setLibraryFilter: action
   slot
   state flags: string[] = []
   state pagers: string[] = []
@@ -230,6 +232,25 @@ component Route
         openLive()
       else
         openLibrary(arg)
+    // A library page: sort by an option (keeping its direction when the option allows it), flip, filter name|value.
+    if name == "librarySort"
+      match first(p.library)
+        case some(l)
+          match first(l.sorts.filter(o => o.id == arg))
+            case some(o)
+              setLibrarySort(arg, (o.directions.includes(l.direction) ? l.direction : match first(o.directions) { case some(x) => x, case none => "" }))
+            case none
+              setLibrarySort(arg, "")
+        case none
+          flags = flags
+    if name == "librarySortFlip"
+      match first(p.library)
+        case some(l)
+          setLibrarySort(l.sort, (l.direction == "asc" ? "desc" : "asc"))
+        case none
+          flags = flags
+    if name == "libraryFilter"
+      setLibraryFilter(part(arg, 0), part(arg, 1))
     if name == "pickHero"
       pickHero(match parseNumber(arg) { case some(x) => x, case none => 0 })
     // A pager edge: rowId|s or e|visible|inset|peek; the record is rowId|start|end|inset|peek.
@@ -254,7 +275,7 @@ component Route
       focus("vela-search")
   view
     // One Env, bound once (Exact expands a derive at every use). Home reads the home pane's width.
-    for env0 in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=p.home, libraries=p.libraries, viewer=p.home.map(h => h.viewer).join(""), section=p.route, query=p.query, heroIndex=p.heroIndex, small=p.small, tv=(onHome ? homeWidth >= 1600 : p.tv), width=(onHome ? homeWidth : p.width), skinCount=0, rowLoading=p.rowMoreLoading, homeLoading=p.homeMoreLoading, still=p.still, canLive=p.home.map(h => h.liveAvailable).includes(true), flags=flags, guide=(onHome ? homeGuide : []), tile=(onHome ? homeTile : []), tuned=(onHome ? homeTuned : []), tunedId=(onHome ? homeTuned.map(c => c.id).join("") : ""), zapping=(onHome ? homeZapping : ""), favoriteCount=(onHome ? match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 } : 0), pagers=pagers, ev=[])] key="env0"
+    for env0 in [Env(styles=doc.styles, dflt=noStyle(), route=p.route, entry=p.entry, load=p.load, detail=p.detail, season=selectedSeason(p.detail, p.season), home=p.home, libraries=p.libraries, viewer=p.home.map(h => h.viewer).join(""), section=p.route, query=p.query, heroIndex=p.heroIndex, small=p.small, tv=(onHome ? homeWidth >= 1600 : p.tv), width=(onHome ? homeWidth : p.width), skinCount=0, rowLoading=p.rowMoreLoading, homeLoading=p.homeMoreLoading, still=p.still, canLive=p.home.map(h => h.liveAvailable).includes(true), flags=flags, guide=(onHome ? homeGuide : []), tile=(onHome ? homeTile : []), tuned=(onHome ? homeTuned : []), tunedId=(onHome ? homeTuned.map(c => c.id).join("") : ""), zapping=(onHome ? homeZapping : ""), favoriteCount=(onHome ? match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 } : 0), library=p.library, libraryLoading=p.libraryLoading, libraryMoreLoading=p.libraryMoreLoading, pagers=pagers, ev=[])] key="env0"
       for env in [Env(env0, ev=envBinds(env0))] key="env"
         for tree in doc.routes.filter(t => t.name == p.route) key=tree.name
           for rv in [binds(rootCtx(), env)] key="rv"
