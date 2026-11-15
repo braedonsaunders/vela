@@ -41,6 +41,8 @@ export type Action =
   | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
   /** A failed route asks again for what failed (`env.canRetry`). */
   | 'retry'
+  /** Shell: open this flag alone, closing the others (keep- flags stay); pressed again it closes. */
+  | 'only'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
 

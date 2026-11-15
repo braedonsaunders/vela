@@ -111,6 +111,7 @@ shape Cond
 shape StateRef
   cond: Cond[]
   s: number
+  pos: number
   hs: number
   fs: number
   gs: number
@@ -179,7 +180,6 @@ shape N10
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -239,7 +239,6 @@ shape N9
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -300,7 +299,6 @@ shape N8
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -361,7 +359,6 @@ shape N7
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -422,7 +419,6 @@ shape N6
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -483,7 +479,6 @@ shape N5
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -544,7 +539,6 @@ shape N4
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -605,7 +599,6 @@ shape N3
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -666,7 +659,6 @@ shape N2
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]
@@ -727,7 +719,6 @@ shape N1
   hg: bool
   gf: bool
   fade: bool
-  pos: number
   dis: Cond[]
   aexp: Cond[]
   asel: Cond[]

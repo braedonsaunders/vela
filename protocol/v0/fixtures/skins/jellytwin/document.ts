@@ -4,7 +4,7 @@
 // My Media tiles, poster and wide-thumbnail rows, and the flat title page.
 import type { Action, Condition, Node, SkinDocument, Style } from '../../../skin';
 
-type Press = { action: Action; arg?: string };
+type Press = { action: Action; arg?: string; focus?: string };
 
 const id = 'jellytwin', version = '1.0.0';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
@@ -17,26 +17,33 @@ const sideSmall: Style = { 'padding-left': '14px', 'padding-right': '14px' };
 const row = (s: Style = {}): Style => ({ display: 'flex', 'flex-direction': 'row', ...s });
 const col = (s: Style = {}): Style => ({ display: 'flex', 'flex-direction': 'column', ...s });
 const fill: Style = { position: 'absolute', inset: '0px' };
-// A solid border on every side. The top and bottom are written out too: the renderer binds them
-// separately, and an unset side would reset to the browser default instead of following `border`.
-const edge = (width: string, color: string): Style => ({ border: `${width} solid ${color}`, 'border-top-width': width, 'border-top-color': color, 'border-bottom-width': width, 'border-bottom-color': color });
+// The shell recomposes under 800px (the compiled skin's `compact`); pages under 640px (`small`).
+const COMPACT = '800';
 // A bottom hairline (the other sides stay unbordered).
-const hairline: Style = { 'border-width': '0px', 'border-style': 'solid', 'border-top-width': '0px', 'border-bottom-width': '1px', 'border-bottom-color': '$line' };
+const hairline: Style = { 'border-width': '0px', 'border-style': 'solid', 'border-bottom-width': '1px', 'border-bottom-color': '$line' };
+const not = (c: Condition): Condition => ({ ...c, not: !c.not });
 
-// Glyphs: platform symbols, and the skin's own line icons for kinds and transport.
+// Glyphs: platform symbols, and the skin's own single-path line icons painted in currentColor.
 const glyph = (symbol: string, size: number, extra: Partial<Node> = {}): Node => ({ type: 'icon', symbol, style: { width: `${size}px`, height: `${size}px`, 'flex-shrink': '0' }, ...extra } as Node);
-const jelly = (name: string) => `icon.jelly-${name}`;
-// A library or title kind's glyph, one icon node per kind (only the matching one shows).
+const PATHS: Record<string, [string, boolean]> = {
+  film: ['M3 4h18v16H3Z M8 6h8v12H8Z M4.5 6h2v2h-2Z M4.5 11h2v2h-2Z M4.5 16h2v2h-2Z M17.5 6h2v2h-2Z M17.5 11h2v2h-2Z M17.5 16h2v2h-2Z', true],
+  tv: ['M2 5h20v13H2Z M4 7h16v9H4Z M11.2 18h1.6v2h-1.6Z M7.5 20h9v1.6h-9Z', true],
+  folder: ['M3 5h6.2l2 2.5H21V19H3Z M5 9.5h14V17H5Z', true],
+  live: ['M2 5h20v13H2Z M4 7h16v9H4Z M12 9.2a2.3 2.3 0 1 0 0 4.6a2.3 2.3 0 1 0 0-4.6Z M11.2 18h1.6v2h-1.6Z M7.5 20h9v1.6h-9Z M8.4 1.2 12 4.2 15.6 1.2 16.6 2.4 12.9 5.4h-1.8L7.4 2.4Z', true],
+  left: ['M15.4 5.4 14 4l-8 8 8 8 1.4-1.4L8.8 12Z', false],
+  right: ['M8.6 5.4 10 4l8 8-8 8-1.4-1.4 6.6-6.6Z', false],
+};
+const jelly = (name: string, size: number, extra: Partial<Node> = {}): Node => ({ type: 'icon', paths: [PATHS[name][0]], viewBox: '0 0 24 24', fillRule: PATHS[name][1] ? 'evenodd' : 'nonzero', style: { width: `${size}px`, height: `${size}px`, 'flex-shrink': '0' }, ...extra } as unknown as Node);
+// A library or title kind's glyph: film, television, live or a folder (only the matching one shows).
+const KINDS: [string, string[]][] = [['film', ['movies', 'movie']], ['tv', ['shows', 'show', 'season', 'episode']], ['live', ['live']]];
 const kindGlyphs = (key: string, size: number, style: Style = {}): Node[] => [
-  { ...glyph(jelly('film'), size), when: [{ test: key, is: 'eq', value: 'movies' }] },
-  { ...glyph(jelly('film'), size), when: [{ test: key, is: 'eq', value: 'movie' }] },
-  ...['shows', 'show', 'season', 'episode'].map(k => ({ ...glyph(jelly('tv'), size), when: [{ test: key, is: 'eq', value: k }] } as Node)),
-  { ...glyph(jelly('live'), size), when: [{ test: key, is: 'eq', value: 'live' }] },
-  { ...glyph(jelly('folder'), size), when: ['movies', 'movie', 'shows', 'show', 'season', 'episode', 'live'].map(k => ({ test: key, is: 'ne' as const, value: k })) },
+  ...KINDS.flatMap(([icon, kinds]) => kinds.map(k => jelly(icon, size, { when: [{ test: key, is: 'eq', value: k }] }))),
+  jelly('folder', size, { when: KINDS.flatMap(([, kinds]) => kinds).map(k => ({ test: key, is: 'ne' as const, value: k })) }),
 ].map(n => ({ ...n, style: { ...n.style, ...style } } as Node));
 
-// The placeholder tile colour, stable per identity (id length mod 5).
-const tile = (seed: string, extra: Style = {}): Node[] => [1, 2, 3, 4, 5].map(i => ({ type: 'box', when: [{ test: seed, is: 'mod', value: `5:${i - 1}` }], style: { ...fill, 'background-color': `$tile-${i}`, ...extra } } as Node));
+// The placeholder tile colour, stable per identity: one of five, by the identity's length.
+const tile = (seed: string, extra: Style = {}, when: Condition[] = []): Node => ({ type: 'box', style: { ...fill, 'background-color': '$tile-5', ...extra },
+  states: [1, 2, 3, 4].map(i => ({ when: [{ test: seed, is: 'mod', value: `5:${i - 1}` }], style: { ...fill, 'background-color': `$tile-${i}`, ...extra } })), when } as Node);
 
 // The shared control looks (look.contract).
 const iconBtn = (size: number): Style => ({ position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', 'flex-shrink': '0', width: `${size}px`, height: `${size}px`, padding: '0px', 'border-radius': '999px', 'background-color': 'transparent', color: '$ink-strong', cursor: 'pointer', transition: 'background-color 160ms linear, color 160ms linear' });
@@ -44,106 +51,115 @@ const iconBtnHover: Style = { color: '$accent', 'background-color': '$accent-sof
 const menuRow: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '14px', 'box-sizing': 'border-box', width: '100%', 'min-height': '44px', padding: '0px 16px', 'border-radius': '4px', 'background-color': 'transparent', color: '$ink-strong', 'font-size': '15px', 'text-align': 'left', cursor: 'pointer' };
 const submit: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', gap: '10px', 'box-sizing': 'border-box', height: '46px', padding: '0px 20px', 'border-radius': '4px', 'background-color': '$accent', color: '$ink-strong', 'font-size': '15px', 'font-weight': '600', cursor: 'pointer' };
 const submitFocus: Style = { 'box-shadow': '0px 0px 0px 2px $page, 0px 0px 0px 4px $accent' };
-const tab: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'box-sizing': 'border-box', height: '40px', padding: '0px 14px', 'background-color': 'transparent', color: '$ink', 'font-size': '15px', 'white-space': 'nowrap', 'flex-shrink': '0', cursor: 'pointer' };
+const tab: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'box-sizing': 'border-box', height: '40px', padding: '0px 14px', 'background-color': 'transparent', color: '$ink', 'font-size': '15px', 'font-weight': '400', 'white-space': 'nowrap', 'flex-shrink': '0', cursor: 'pointer' };
 const sheet: Style = { 'box-sizing': 'border-box', padding: '8px 0px', 'border-radius': '6px', 'background-color': '$popup', color: '$ink-strong', 'box-shadow': '0px 12px 40px $shadow' };
 const initial = (size: number, font: number): Node => ({ type: 'text', text: '{env.viewerInitial}', style: { width: `${size}px`, height: `${size}px`, 'border-radius': `${size / 2}px`, display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': `${font}px`, 'font-weight': '600', color: '$ink-strong', 'background-image': gradient, 'flex-shrink': '0' } });
 const wordmark: Node = { type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: `${28 * 2.629}px`, height: '28px', 'flex-shrink': '0' } };
-const underline = (bottom: number): Node => ({ type: 'box', style: { position: 'absolute', left: '12px', right: '12px', bottom: `${bottom}px`, height: '3px', 'border-radius': '2px', 'background-image': gradient } });
+// A tab: quiet until hovered, accent and semibold when current, with the gradient bar that slides between tabs.
+const tabNode = (label: string, on: Condition, press: Press, bar: { name: string; bottom: number }, extra: Partial<Node> = {}): Node => ({
+  type: 'box', press, label, style: tab, hover: { color: '$accent' }, focus: { color: '$accent' },
+  states: [{ when: [on], style: { ...tab, color: '$accent', 'font-weight': '600' }, hover: { color: '$accent' }, focus: { color: '$accent' } }],
+  a11y: { role: 'tab', selected: [on] },
+  children: [
+    { type: 'text', text: label },
+    { type: 'box', when: [on], sharedElement: bar.name, layoutTransition: '300ms ease-out', style: { position: 'absolute', left: '12px', right: '12px', bottom: `${bar.bottom}px`, height: '3px', 'border-radius': '2px', 'background-image': gradient } },
+  ], ...extra } as Node);
 // The indeterminate spinner: an accent arc turning on a faint ring.
-const spinner = (size: number, extra: Partial<Node> = {}): Node => ({ type: 'box', motion: 'spin', style: { width: `${size}px`, height: `${size}px`, 'box-sizing': 'border-box', 'flex-shrink': '0', 'border-radius': '999px', ...edge('3px', '$track'), 'border-top-color': '$accent' }, ...extra } as Node);
+const spinner = (size: number, extra: Partial<Node> = {}): Node => ({ type: 'box', motion: 'spin', style: { width: `${size}px`, height: `${size}px`, 'box-sizing': 'border-box', 'flex-shrink': '0', 'border-radius': '999px', border: '3px solid $track', 'border-top-color': '$accent' }, ...extra } as Node);
+const emptyState = (icon: Node, title: string, message: string, when: Condition[]): Node => ({ type: 'box', when, role: 'status', style: col({ 'align-items': 'center', 'text-align': 'center', gap: '10px', padding: '64px 24px', color: '$secondary' }), children: [
+  icon,
+  { type: 'text', text: title, style: { 'margin-top': '6px', 'font-size': '20px', 'font-weight': '600', color: '$ink-strong' } },
+  { type: 'text', text: message, style: { 'max-width': '30rem', 'font-size': '15px', 'line-height': '1.5' } },
+] });
 
 // ---------------------------------------------------------------- Shell
 
-// A section tab in the header: Home, each library, Live TV.
-const sectionTab = (label: string, on: Condition, press: Press, when: Condition[] = []): Node => ({
-  type: 'box', press, label, role: 'tab', testId: `nav-${label}`, when,
-  style: tab, hover: { color: '$accent' }, focus: { color: '$accent' },
-  children: [
-    // The selected tab: accent and semibold, with the gradient bar.
-    { type: 'text', text: label, when: [on], style: { color: '$accent', 'font-weight': '600' } },
-    { type: 'text', text: label, when: [{ ...on, not: true }] },
-    { ...underline(2), when: [on] },
-  ] });
-// The tab list scrolls sideways when it overflows; spacers centre it when it does not.
-const sections = (style: Style, small: Style | undefined): Node => ({ type: 'box', role: 'tablist', label: '{s:sections}', style: row({ 'align-items': 'center', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', ...style }), small, children: [
+const isLive: Condition = { test: 'dest.kind', is: 'eq', value: 'live' };
+const onLive: Condition = { test: 'env.section', is: 'eq', value: 'live' };
+const onHome: Condition = { test: 'env.section', is: 'eq', value: 'home' };
+// The header's sections: Home, the server's libraries in order (live only when offered), and Live TV when no library is live.
+const sectionBar = { name: 'jt-tab', bottom: 2 };
+const sections = (style: Style, below: Style): Node => ({ type: 'box', role: 'tablist', label: '{s:sections}', style: row({ 'align-items': 'center', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', ...style }), below: { [COMPACT]: below }, children: [
   { type: 'box', style: { flex: '1' } },
-  sectionTab('{s:home}', { test: 'env.section', is: 'eq', value: 'home' }, { action: 'home' }),
+  tabNode('{s:home}', onHome, { action: 'home' }, sectionBar, { testId: 'nav-{s:home}' }),
   { type: 'repeat', over: 'nav.destinations', item: { type: 'box', style: row({ 'flex-shrink': '0' }), children: [
-    sectionTab('{dest.name}', { test: 'env.section', is: 'eq', value: 'live' }, { action: 'live' }, [{ test: 'dest.kind', is: 'eq', value: 'live' }, { test: 'env.canLive' }]),
-    sectionTab('{dest.name}', { test: 'dest.on' }, { action: 'library', arg: '{dest.id}' }, [{ test: 'dest.kind', is: 'ne', value: 'live' }]),
+    tabNode('{dest.name}', onLive, { action: 'live' }, sectionBar, { testId: 'nav-{dest.name}', when: [isLive, { test: 'env.canLive' }] }),
+    tabNode('{dest.name}', { test: 'dest.on' }, { action: 'library', arg: '{dest.id}' }, sectionBar, { testId: 'nav-{dest.name}', when: [not(isLive)] }),
   ] } },
+  tabNode('{s:liveTv}', onLive, { action: 'live' }, sectionBar, { testId: 'nav-{s:liveTv}', when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }] }),
   { type: 'box', style: { flex: '1' } },
 ] });
 
+const headerHeight = { style: { height: '58px' }, below: { [COMPACT]: { height: '52px' } } };
 const header: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}', when: [{ test: 'env.viewer' }],
   style: col({ position: 'relative', 'flex-shrink': '0', 'z-index': '20', 'background-color': '$header', 'backdrop-filter': 'blur(12px)', 'box-shadow': '0px 2px 6px $shadow' }), children: [
-    { type: 'box', style: row({ height: '58px', 'box-sizing': 'border-box', 'padding-left': '10px', 'padding-right': '14px', 'align-items': 'center', gap: '6px' }),
-      small: { height: '52px', 'padding-left': '4px', 'padding-right': '6px', gap: '2px' }, children: [
-        { type: 'box', press: { action: 'open', arg: 'drawer' }, label: '{s:openMenu}', testId: 'jt-menu', style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [glyph('menu', 24)] },
+    { type: 'box', style: row({ ...headerHeight.style, 'box-sizing': 'border-box', 'padding-left': '10px', 'padding-right': '14px', 'align-items': 'center', gap: '6px' }),
+      below: { [COMPACT]: { ...headerHeight.below[COMPACT], 'padding-left': '4px', 'padding-right': '6px', gap: '2px' } }, children: [
+        { type: 'box', id: 'jt-menu', press: { action: 'open', arg: 'drawer', focus: 'jt-drawer-home' }, label: '{s:openMenu}', testId: 'jt-menu', a11y: { expanded: [{ test: 'flag:drawer' }] },
+          style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [glyph('menu', 24)] },
         { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', padding: '0px 8px', 'flex-shrink': '0', color: '$ink-strong' }, children: [wordmark] },
         sections({ flex: '1' }, { display: 'none' }),
-        { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1' } },
-        { type: 'box', press: { action: 'search' }, label: '{s:search}', testId: 'jt-search-button', style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [glyph('search', 23)] },
-        { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [initial(30, 14)] },
+        { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { display: 'flex', flex: '1' } } },
+        { type: 'box', press: { action: 'search', focus: 'jt-search' }, label: '{s:search}', testId: 'jt-search-button', style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [glyph('search', 23)] },
+        { type: 'box', id: 'jt-user', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', a11y: { expanded: [{ test: 'flag:menu' }] },
+          style: iconBtn(44), hover: iconBtnHover, focus: iconBtnHover, children: [initial(30, 14)] },
       ] },
-    // On a phone the tabs take their own line under the bar, centred.
+    // Under 800px the tabs take their own line under the bar, centred.
     sections({ display: 'none' }, { display: 'flex', 'padding-left': '6px', 'padding-right': '6px' }),
   ] };
 
 const userMenu: Node[] = [
   { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], press: { action: 'close', arg: 'menu' }, label: '{s:close}', style: { ...fill, 'z-index': '29', 'background-color': 'transparent' } },
-  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], role: 'dialog', label: '{s:profile}', motion: 'pop',
-    style: { ...sheet, ...col({ position: 'absolute', top: '56px', right: '14px', 'z-index': '30', width: '260px', padding: '8px', gap: '4px', 'transform-origin': 'top right' }) }, small: { top: '50px', right: '8px' }, children: [
+  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], id: 'jt-user-menu', role: 'dialog', label: '{s:profile}', motion: 'menuIn', exit: 'menuOut', escape: 'menu', returnFocus: 'jt-user',
+    style: { ...sheet, ...col({ position: 'absolute', top: '56px', right: '14px', 'z-index': '30', width: '260px', padding: '8px', gap: '4px', 'transform-origin': 'top right' }) }, below: { [COMPACT]: { top: '50px', right: '8px' } }, children: [
       { type: 'box', style: row({ gap: '12px', 'align-items': 'center', padding: '10px 12px 12px' }), children: [
         initial(40, 17),
         { type: 'text', text: '{env.viewer}', style: { 'font-size': '16px', 'font-weight': '600', flex: '1', 'min-width': '0px', 'line-clamp': '1' } },
       ] },
       { type: 'box', style: { height: '1px', 'background-color': '$line', margin: '0px 8px 6px' } },
-      { type: 'box', press: { action: 'openPicker' }, label: '{s:appearance}', testId: 'skin-picker', style: menuRow, hover: { 'background-color': '$hover' }, focus: { 'background-color': '$hover' }, children: [
-        glyph('sparkles', 20), { type: 'text', text: '{s:appearance}' },
-      ] },
+      { type: 'box', when: [{ test: 'env.skinCount', is: 'gt', value: '1' }], press: { action: 'openPicker' }, label: '{s:appearance}', testId: 'skin-picker', a11y: { haspopup: 'dialog' },
+        style: menuRow, hover: { 'background-color': '$hover' }, focus: { 'background-color': '$hover' }, children: [glyph('sparkles', 20), { type: 'text', text: '{s:appearance}' }] },
       { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
       { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-      { type: 'box', press: { action: 'signOut' }, label: '{s:signOut}', style: menuRow, hover: { 'background-color': '$hover' }, focus: { 'background-color': '$hover' }, children: [
-        glyph('sign-out', 20), { type: 'text', text: '{s:signOut}' },
-      ] },
+      { type: 'box', press: { action: 'signOut' }, label: '{s:signOut}', style: menuRow, hover: { 'background-color': '$hover' }, focus: { 'background-color': '$hover' }, children: [glyph('sign-out', 20), { type: 'text', text: '{s:signOut}' }] },
     ] },
 ];
 
 // A drawer entry: its glyph and name, accent on a soft accent ground when current.
-const drawerItem = (label: string, glyphs: Node[], on: Condition | undefined, press: Press, when: Condition[] = []): Node => {
-  const content = (color: string, when: Condition[]): Node => ({ type: 'box', when, style: row({ position: 'relative', 'align-items': 'center', gap: '18px', color, 'min-width': '0px' }), children: [...glyphs, { type: 'text', text: label, style: { 'font-size': '15px', 'line-clamp': '1' } }] });
-  return { type: 'box', press, label, when, style: { ...menuRow, 'border-radius': '0px', padding: '0px 20px', 'min-height': '48px', gap: '18px' },
-    hover: { 'background-color': '$hover' }, focus: { 'background-color': '$hover' },
-    children: on ? [{ type: 'box', when: [on], style: { ...fill, 'background-color': '$accent-soft' } }, content('$accent', [on]), content('$ink-strong', [{ ...on, not: true }])] : [content('$ink-strong', [])] };
-};
-const drawerHeading = (text: string, when: Condition[] = []): Node => ({ type: 'text', text, when, style: { 'font-size': '13px', 'font-weight': '600', color: '$secondary', padding: '16px 20px 6px' } });
+const drawerRow: Style = { ...menuRow, 'border-radius': '0px', padding: '0px 20px', 'min-height': '48px', gap: '18px' };
+const drawerItem = (domId: string, label: string, glyphs: Node[], on: Condition | undefined, press: Press, when: Condition[] = []): Node => ({
+  type: 'box', id: domId, press, label, when, style: drawerRow, hover: { 'background-color': '$hover' }, focus: { 'background-color': '$hover' },
+  ...(on ? { a11y: { current: [on] }, states: [{ when: [on], style: { ...drawerRow, 'background-color': '$accent-soft', color: '$accent' }, hover: { 'background-color': '$accent-soft' }, focus: { 'background-color': '$accent-soft' } }] } : {}),
+  children: [...glyphs, { type: 'text', text: label, style: { 'font-size': '15px', 'line-clamp': '1' } }] } as Node);
+const drawerHeading = (text: string): Node => ({ type: 'text', text, style: { 'font-size': '13px', 'font-weight': '600', color: '$secondary', padding: '16px 20px 6px' } });
 
 const drawer: Node[] = [
-  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:drawer' }], press: { action: 'close', arg: 'drawer' }, label: '{s:closeMenu}', motion: 'scrimIn', style: { ...fill, 'z-index': '40', 'background-color': '$overlay' } },
-  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:drawer' }], role: 'dialog', label: '{s:menu}', motion: 'drawerIn',
-    style: col({ position: 'absolute', top: '0px', left: '0px', bottom: '0px', 'z-index': '40', width: '300px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'background-color': '$drawer', 'box-shadow': '4px 0px 24px $shadow' }), small: { width: 'min(300px, 84vw)' }, children: [
+  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:drawer' }], press: { action: 'close', arg: 'drawer', focus: 'jt-menu' }, label: '{s:closeMenu}', motion: 'scrimIn', exit: 'scrimOut', style: { ...fill, 'z-index': '40', 'background-color': '$overlay' } },
+  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:drawer' }], role: 'dialog', label: '{s:menu}', motion: 'drawerIn', exit: 'drawerOut', escape: 'drawer', returnFocus: 'jt-menu',
+    style: col({ position: 'absolute', top: '0px', left: '0px', bottom: '0px', 'z-index': '40', width: '300px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'background-color': '$drawer', 'box-shadow': '4px 0px 24px $shadow' }), below: { [COMPACT]: { width: 'min(300px, 84vw)' } }, children: [
       { type: 'box', style: col({ 'padding-bottom': '24px' }), children: [
-        { type: 'box', style: row({ height: '58px', 'align-items': 'center', 'padding-left': '18px', gap: '10px', ...hairline, 'margin-bottom': '8px', 'flex-shrink': '0' }), small: { height: '52px' }, children: [wordmark] },
-        drawerItem('{s:home}', [glyph('home', 22)], { test: 'env.section', is: 'eq', value: 'home' }, { action: 'home' }),
-        drawerHeading('{s:media}'),
+        { type: 'box', style: row({ ...headerHeight.style, 'align-items': 'center', 'padding-left': '18px', gap: '10px', ...hairline, 'margin-bottom': '8px', 'flex-shrink': '0' }), below: headerHeight.below, children: [wordmark] },
+        drawerItem('jt-drawer-home', '{s:home}', [glyph('home', 22)], onHome, { action: 'home' }),
+        { ...drawerHeading('{s:media}'), when: [{ test: 'env.libraryCount', is: 'gt', value: '0' }] } as Node,
+        { ...drawerHeading('{s:media}'), when: [{ test: 'env.libraryCount', is: 'eq', value: '0' }, { test: 'env.canLive' }] } as Node,
         { type: 'repeat', over: 'nav.destinations', item: { type: 'box', style: col(), children: [
-          drawerItem('{dest.name}', [glyph(jelly('live'), 22)], { test: 'env.section', is: 'eq', value: 'live' }, { action: 'live' }, [{ test: 'dest.kind', is: 'eq', value: 'live' }, { test: 'env.canLive' }]),
-          drawerItem('{dest.name}', kindGlyphs('dest.kind', 22), { test: 'dest.on' }, { action: 'library', arg: '{dest.id}' }, [{ test: 'dest.kind', is: 'ne', value: 'live' }]),
+          drawerItem('jt-drawer-{dest.id}', '{dest.name}', [jelly('live', 22)], onLive, { action: 'live' }, [isLive, { test: 'env.canLive' }]),
+          drawerItem('jt-drawer-{dest.id}', '{dest.name}', kindGlyphs('dest.kind', 22), { test: 'dest.on' }, { action: 'library', arg: '{dest.id}' }, [not(isLive)]),
         ] } },
+        drawerItem('jt-drawer-live', '{s:liveTv}', [jelly('live', 22)], onLive, { action: 'live' }, [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }]),
         drawerHeading('{s:user}'),
         { type: 'box', style: row({ gap: '12px', 'align-items': 'center', padding: '6px 20px 10px' }), children: [
           glyph('person', 22), { type: 'text', text: '{env.viewer}', style: { 'font-size': '15px', 'line-clamp': '1' } },
         ] },
-        drawerItem('{s:appearance}', [glyph('sparkles', 22)], undefined, { action: 'openPicker' }),
-        drawerItem('{s:signOut}', [glyph('sign-out', 22)], undefined, { action: 'signOut' }),
+        drawerItem('jt-drawer-appearance', '{s:appearance}', [glyph('sparkles', 22)], undefined, { action: 'openPicker' }, [{ test: 'env.skinCount', is: 'gt', value: '1' }]),
+        drawerItem('jt-drawer-signout', '{s:signOut}', [glyph('sign-out', 22)], undefined, { action: 'signOut' }),
       ] },
     ] },
 ];
 
-const shell: Node = { type: 'box', style: col({ height: '100%', 'min-height': '0px', 'background-color': '$page', color: '$ink', 'font-family': sans }), children: [
+const shell: Node = { type: 'box', style: col({ position: 'relative', height: '100%', 'min-height': '0px', 'background-color': '$page', color: '$ink', 'color-scheme': 'dark', 'font-family': sans }), children: [
   header,
-  { type: 'slot', slot: 'children', style: col({ flex: '1', 'min-height': '0px' }), inner: col({ 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' }) },
+  { type: 'slot', slot: 'children', style: col({ position: 'relative', flex: '1', 'min-height': '0px' }), inner: col({ 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' }) },
   ...userMenu,
   ...drawer,
 ] };
@@ -151,16 +167,25 @@ const shell: Node = { type: 'box', style: col({ height: '100%', 'min-height': '0
 // ---------------------------------------------------------------- Cards and rows
 
 // The card every row draws: artwork with the played mark and progress, the name and its subline.
-const card = (wide: boolean): Node => {
+// Posters and wide thumbnails scale with the window; a row of episodes or part-watched titles is wide.
+const posterW = { style: 'clamp(128px, 11.6vw, 220px)', small: '31vw' };
+const wideW = { style: 'clamp(240px, 21.5vw, 400px)', small: '62vw' };
+const subline: Style = { width: '100%', 'min-height': '1.3em', 'font-size': '13px', color: '$secondary', 'line-clamp': '1', 'font-variant-numeric': 'tabular-nums' };
+const isEpisode: Condition = { test: 'card.kind', is: 'eq', value: 'episode' };
+const hasSE: Condition[] = [isEpisode, { test: 'card.seasonNumberLabel' }, { test: 'card.episodeNumberLabel' }];
+// "Not an episode with both numbers", written as the three ways it can hold.
+const noSE: Condition[][] = [[not(isEpisode)], [isEpisode, { test: 'card.seasonNumberLabel', not: true }], [isEpisode, { test: 'card.seasonNumberLabel' }, { test: 'card.episodeNumberLabel', not: true }]];
+const card = (wide: boolean, width = wide ? wideW : posterW): Node => {
   const art = wide ? ['card.backdrop', 'card.poster'] : ['card.poster', 'card.backdrop'];
-  const noArt = [{ test: 'card.poster', not: true }, { test: 'card.backdrop', not: true }];
-  return { type: 'box', style: col({ position: 'relative', width: wide ? 'clamp(240px, 21.5vw, 400px)' : 'clamp(128px, 11.6vw, 220px)', 'flex-shrink': '0', gap: '1px', 'align-items': 'center', 'text-align': 'center' }),
-    small: { width: wide ? '62vw' : '31vw' }, children: [
+  const noArt: Condition[] = [{ test: 'card.poster', not: true }, { test: 'card.backdrop', not: true }];
+  const ring: Style = { 'box-shadow': '0px 0px 0px 3px $accent', filter: 'brightness(0.75)' };
+  return { type: 'box', id: 'jt-{row.id}-{index}', style: col({ position: 'relative', width: width.style, 'flex-shrink': '0', gap: '1px', 'align-items': 'center', 'text-align': 'center' }),
+    small: { width: width.small }, children: [
       { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
       { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}',
         style: { position: 'relative', width: '100%', 'aspect-ratio': wide ? '16 / 9' : '2 / 3', 'border-radius': '5px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', color: '$ink-strong', cursor: 'pointer', 'background-color': '$card', 'box-shadow': '0px 2px 6px $shadow', filter: 'none', transition: 'box-shadow 140ms linear' },
-        groupHover: { 'box-shadow': '0px 0px 0px 3px $accent', filter: 'brightness(0.75)' }, children: [
-          ...tile('card.id', { 'z-index': '0' }).map(t => ({ ...t, when: [...(t.when ?? []), ...noArt] } as Node)),
+        groupHover: ring, groupFocus: ring, children: [
+          tile('card.seed', {}, noArt),
           { type: 'image', when: [{ test: art[0] }], src: `{${art[0]}}`, alt: '', style: { ...fill, width: '100%', height: '100%', 'object-fit': 'cover' } },
           { type: 'image', when: [{ test: art[0], not: true }, { test: art[1] }], src: `{${art[1]}}`, alt: '', style: { ...fill, width: '100%', height: '100%', 'object-fit': 'cover' } },
           { type: 'box', when: noArt, style: { position: 'absolute', top: '34%', left: '34%', width: '32%', height: '32%', color: '$secondary' }, children: kindGlyphs('card.kind', 0, { width: '100%', height: '100%' }) },
@@ -168,33 +193,35 @@ const card = (wide: boolean): Node => {
           { type: 'box', when: [{ test: 'card.hasProgress' }], style: { position: 'absolute', left: '0px', right: '0px', bottom: '0px', height: '5px', 'background-color': '$overlay', 'background-image': 'linear-gradient(90deg, $accent {card.progressPct}%, transparent 0%)' } },
         ] },
       { type: 'text', text: '{card.name}', style: { width: '100%', 'margin-top': '6px', 'font-size': '14px', 'font-weight': '500', color: '$ink-strong', 'line-clamp': '1' } },
-      // The year, else the facts.
-      { type: 'text', when: [{ test: 'card.yearLabel' }], text: '{card.yearLabel}', style: subline },
-      { type: 'text', when: [{ test: 'card.yearLabel', not: true }], text: '{card.facts}', style: subline },
+      // S1:E3 for an episode, else the year, else the facts.
+      { type: 'text', when: hasSE, text: '{s:seasonEpisode}', style: subline },
+      ...noSE.map(w => ({ type: 'text', when: [...w, { test: 'card.yearLabel' }], text: '{card.yearLabel}', style: subline } as Node)),
+      ...noSE.map(w => ({ type: 'text', when: [...w, { test: 'card.yearLabel', not: true }], text: '{card.facts}', style: subline } as Node)),
     ] };
 };
-const subline: Style = { width: '100%', 'min-height': '1.3em', 'font-size': '13px', color: '$secondary', 'line-clamp': '1', 'font-variant-numeric': 'tabular-nums' };
 
-// A section: its heading, then one line of cards.
-const section = (items: string, heading: Node): Node => ({ type: 'box', style: col({ gap: '8px', 'padding-bottom': '26px' }), small: { gap: '6px', 'padding-bottom': '18px' }, children: [
-  { type: 'box', style: row({ 'align-items': 'center', gap: '8px', ...side, 'min-height': '40px' }), small: sideSmall, children: [heading] },
-  { type: 'box', style: row({ 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }), children: [
+// A section: its heading, then one line of cards (wide thumbnails for a landscape row).
+const section = (items: string, heading: Node[], landscape: Condition | undefined): Node => ({ type: 'box', style: col({ gap: '8px', 'padding-bottom': '26px' }), small: { gap: '6px', 'padding-bottom': '18px' }, children: [
+  { type: 'box', style: row({ 'align-items': 'center', gap: '8px', ...side, 'min-height': '40px' }), small: sideSmall, children: heading },
+  { type: 'box', style: row({ 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'scroll-padding-left': '3.3%' }), small: { 'scroll-padding-left': '14px' }, children: [
     { type: 'box', style: row({ gap: '16px', 'align-items': 'flex-start', 'padding-top': '4px', 'padding-bottom': '6px', ...side }), small: { gap: '10px', ...sideSmall }, children: [
-      { type: 'repeat', over: items, item: { type: 'use', template: 'poster' } },
+      { type: 'repeat', over: items, when: landscape ? [not(landscape)] : [], item: { type: 'use', template: 'poster' } },
+      ...(landscape ? [{ type: 'repeat', over: items, when: [landscape], item: { type: 'use', template: 'wide' } } as Node] : []),
     ] },
   ] },
 ] });
-const sectionTitle = (text: string): Node => ({ type: 'text', text, role: 'heading', level: 2, style: { flex: '1', 'min-width': '0px', 'font-size': '20px', 'font-weight': '600', color: '$ink-strong', 'line-clamp': '1' } });
+const sectionTitle = (text: string, when: Condition[] = []): Node => ({ type: 'text', text, when, role: 'heading', level: 2, style: { flex: '1', 'min-width': '0px', 'font-size': '20px', 'font-weight': '600', color: '$ink-strong', 'line-clamp': '1' } });
 
 // ---------------------------------------------------------------- Home
 
 // The featured banner: full-bleed artwork, the logo or name, facts, the overview and dots.
+const dot: Style = { position: 'relative', width: '9px', height: '9px', 'border-radius': '5px', cursor: 'pointer', 'background-color': '$track', 'background-image': 'none' };
 const mediaBar: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.searching', not: true }], item: {
   type: 'box', motion: 'fadeIn', style: col({ position: 'relative', height: 'min(54vh, 500px)', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'margin-bottom': '22px', 'flex-shrink': '0' }),
   small: { height: '300px', 'margin-bottom': '14px' }, children: [
     { type: 'widget', widget: 'observe', params: { receipt: '{hero.receipt}' } },
     { type: 'image', when: [{ test: 'hero.backdrop' }], src: '{hero.backdrop}', alt: '', style: { ...fill, width: '100%', height: '100%', 'object-fit': 'cover' } },
-    { type: 'box', when: [{ test: 'hero.backdrop', not: true }], style: fill, children: tile('hero.id') },
+    tile('hero.seed', {}, [{ test: 'hero.backdrop', not: true }]),
     { type: 'box', style: { ...fill, 'background-image': 'linear-gradient(90deg, $scrim 0%, $scrim-clear 65%), linear-gradient(0deg, $page 0%, $scrim-clear 45%)' } },
     { type: 'box', style: col({ position: 'relative', height: '100%', 'justify-content': 'flex-end', 'box-sizing': 'border-box', ...side, 'padding-bottom': '34px', gap: '12px', 'max-width': '48rem' }),
       small: { ...sideSmall, 'padding-bottom': '18px', gap: '8px', 'max-width': 'none' }, children: [
@@ -202,49 +229,70 @@ const mediaBar: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.
         { type: 'text', when: [{ test: 'hero.logo', not: true }], text: '{hero.name}', role: 'heading', level: 1, style: { 'font-size': '46px', 'font-weight': '700', color: '$ink-strong', 'line-clamp': '2', 'text-shadow': '0px 2px 12px $shadow' }, small: { 'font-size': '28px' } },
         { type: 'box', style: row({ gap: '14px', 'align-items': 'center', 'flex-wrap': 'wrap' }), children: [
           { type: 'text', when: [{ test: 'hero.yearLabel' }], text: '{hero.yearLabel}', style: { 'font-size': '14px', color: '$ink-strong' } },
-          { type: 'text', when: [{ test: 'hero.rating' }], text: '{hero.rating}', style: { 'font-size': '12px', padding: '1px 6px', ...edge('1px', '$secondary'), 'border-radius': '3px', color: '$ink' } },
+          { type: 'text', when: [{ test: 'hero.rating' }], text: '{hero.rating}', style: { 'font-size': '12px', padding: '1px 6px', border: '1px solid $secondary', 'border-radius': '3px', color: '$ink' } },
+          { type: 'text', when: [{ test: 'hero.genresLine' }], text: '{hero.genresLine}', style: { 'font-size': '14px', color: '$ink' } },
         ] },
         { type: 'text', when: [{ test: 'hero.summary' }, { test: 'env.small', not: true }], text: '{hero.summary}', style: { 'font-size': '15px', 'line-height': '1.5', color: '$ink', 'line-clamp': '3', 'max-width': '40rem' } },
         { type: 'box', style: row({ gap: '10px', 'margin-top': '4px' }), children: [
-          { type: 'box', press: { action: 'select', arg: '{hero.kindId}' }, label: '{hero.name}', style: { ...submit, height: '44px' }, small: { height: '40px' }, hover: { opacity: '0.9' }, focus: submitFocus, children: [
+          { type: 'box', press: { action: 'select', arg: '{hero.kindId}' }, label: '{hero.label}', style: { ...submit, height: '44px' }, small: { height: '40px' }, hover: { opacity: '0.9' }, focus: submitFocus, children: [
             glyph('info', 19), { type: 'text', text: '{s:moreInfo}' },
           ] },
         ] },
       ] },
     { type: 'box', when: [{ test: 'env.heroCount', is: 'gt', value: '1' }], role: 'group', label: '{s:featured}', style: row({ position: 'absolute', right: '3.3%', bottom: '38px', gap: '8px' }), small: { right: '14px', bottom: '22px' }, children: [
-      { type: 'repeat', over: 'home.heroes', item: { type: 'box', style: row(), children: [
-        { type: 'box', when: [{ test: 'index.current' }], press: { action: 'pickHero', arg: '{index}' }, label: '{s:featuredOf}', style: { position: 'relative', width: '22px', height: '9px', 'border-radius': '5px', cursor: 'pointer', 'background-color': '$accent', 'background-image': gradient }, focus: { 'box-shadow': '0px 0px 0px 2px $ink-strong' } },
-        { type: 'box', when: [{ test: 'index.current', not: true }], press: { action: 'pickHero', arg: '{index}' }, label: '{s:featuredOf}', style: { position: 'relative', width: '9px', height: '9px', 'border-radius': '5px', cursor: 'pointer', 'background-color': '$track' }, focus: { 'box-shadow': '0px 0px 0px 2px $ink-strong' } },
-      ] } },
+      { type: 'repeat', over: 'home.heroes', item: { type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{s:featuredOf}', a11y: { current: [{ test: 'index.current' }] }, layoutTransition: '260ms ease-out',
+        style: dot, focus: { 'box-shadow': '0px 0px 0px 2px $ink-strong' },
+        states: [{ when: [{ test: 'index.current' }], style: { ...dot, width: '22px', 'background-color': '$accent', 'background-image': gradient }, focus: { 'box-shadow': '0px 0px 0px 2px $ink-strong' } }] } },
     ] },
   ] } };
+
+// My Media: one wide tile per library, its artwork behind its name.
+const libraryTile = (press: Press, when: Condition[]): Node => ({ type: 'box', when, style: col({ width: wideW.style, 'flex-shrink': '0', gap: '7px' }), small: { width: wideW.small, gap: '5px' }, children: [
+  { type: 'box', group: true, press, label: '{dest.name}', testId: 'library-{dest.id}',
+    style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'border-radius': '6px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', color: '$ink-strong', cursor: 'pointer', 'box-shadow': '0px 2px 6px $shadow', transition: 'box-shadow 140ms linear' },
+    small: { 'border-radius': '4px' }, groupHover: { 'box-shadow': '0px 0px 0px 3px $accent' }, groupFocus: { 'box-shadow': '0px 0px 0px 3px $accent' }, children: [
+      tile('dest.seed'),
+      { type: 'image', when: [{ test: 'dest.backdrop' }], src: '{dest.backdrop}', alt: '', style: { ...fill, width: '100%', height: '100%', 'object-fit': 'cover' } },
+      { type: 'box', when: [{ test: 'dest.backdrop', not: true }], style: col({ ...fill, 'align-items': 'center', 'justify-content': 'center', color: '$secondary' }), children: kindGlyphs('dest.kind', 48, {}).map(n => ({ ...n, small: { width: '34px', height: '34px' } } as Node)) },
+      { type: 'box', style: { ...fill, 'background-color': '$overlay', opacity: '0', transition: 'opacity 160ms linear' }, groupHover: { opacity: '0.4' }, groupFocus: { opacity: '0.4' } },
+    ] },
+  { type: 'text', text: '{dest.name}', style: { 'font-size': '14px', 'font-weight': '500', color: '$ink-strong', 'text-align': 'center', 'line-clamp': '1' }, small: { 'font-size': '13px' } },
+] });
+const myMedia: Node = { type: 'box', when: [{ test: 'env.searching', not: true }, { test: 'env.libraryCount', is: 'gt', value: '0' }], style: col({ gap: '8px', 'padding-bottom': '26px' }), small: { gap: '6px', 'padding-bottom': '18px' }, children: [
+  { type: 'text', text: '{s:myMedia}', role: 'heading', level: 2, style: { 'font-size': '21px', 'font-weight': '600', color: '$ink-strong', ...side, 'min-height': '40px', display: 'flex', 'align-items': 'center' }, small: { 'font-size': '17px', ...sideSmall } },
+  { type: 'box', style: row({ 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }), children: [
+    { type: 'box', style: row({ gap: '16px', 'padding-top': '4px', 'padding-bottom': '6px', ...side }), small: { gap: '10px', ...sideSmall }, children: [
+      { type: 'repeat', over: 'nav.destinations', item: { type: 'box', style: row({ 'flex-shrink': '0' }), children: [
+        libraryTile({ action: 'live' }, [isLive, { test: 'env.canLive' }]),
+        libraryTile({ action: 'library', arg: '{dest.id}' }, [not(isLive)]),
+      ] } },
+    ] },
+  ] },
+] };
 
 const home: Node = { type: 'box', style: col({ 'padding-bottom': '40px', color: '$ink', 'font-family': sans }), children: [
   { type: 'slot', slot: 'searchField', style: col() },
   mediaBar,
   { type: 'box', when: [{ test: 'env.searching', not: true }, { test: 'env.heroCount', is: 'eq', value: '0' }], style: { height: '22px', 'flex-shrink': '0' }, small: { height: '14px' } },
-  { type: 'repeat', over: 'home.rows', when: [{ test: 'env.searching', not: true }], item: section('row.items', sectionTitle('{row.name}')) },
-  { type: 'box', when: [{ test: 'env.searching', not: true }, { test: 'env.rowCount', is: 'eq', value: '0' }, { test: 'env.heroCount', is: 'eq', value: '0' }], role: 'status',
-    style: col({ 'align-items': 'center', 'text-align': 'center', gap: '10px', padding: '64px 24px', color: '$secondary' }), children: [
-      glyph(jelly('folder'), 44),
-      { type: 'text', text: '{s:nothingHere}', style: { 'margin-top': '6px', 'font-size': '20px', 'font-weight': '600', color: '$ink-strong' } },
-      { type: 'text', text: '{s:noRows}', style: { 'max-width': '30rem', 'font-size': '15px', 'line-height': '1.5' } },
-    ] },
+  myMedia,
+  { type: 'repeat', over: 'home.rows', when: [{ test: 'env.searching', not: true }], item: section('row.items', [sectionTitle('{row.name}')], { test: 'row.landscape' }) },
+  emptyState(jelly('folder', 44), '{s:nothingHere}', '{s:noRows}', [{ test: 'env.searching', not: true }, { test: 'env.rowCount', is: 'eq', value: '0' }, { test: 'env.heroCount', is: 'eq', value: '0' }]),
 ] };
 
 // ---------------------------------------------------------------- Title
 
 const heading2: Style = { 'font-size': '21px', 'font-weight': '600', color: '$ink-strong' };
 const heading2Small: Style = { 'font-size': '17px' };
+const heading20: Style = { 'font-size': '20px', 'font-weight': '600', color: '$ink-strong' };
 const block: Style = col({ 'padding-bottom': '26px' });
 
 // A round action under the title: the play circle carries the gradient.
-const roundAction = (label: string, symbol: string, primary: boolean, press: Press, testId: string, when: Condition[] = []): Node => ({
+const roundAction = (label: string, icon: Node, primary: boolean, press: Press, testId: string, when: Condition[] = []): Node => ({
   type: 'box', press, label, testId, when, style: col({ position: 'relative', 'align-items': 'center', gap: '6px', padding: '0px', 'border-radius': '8px', color: '$ink-strong', cursor: 'pointer' }),
   hover: { opacity: '0.88' }, focus: { 'box-shadow': '0px 0px 0px 2px $accent' }, children: [
     { type: 'box', style: { width: '58px', height: '58px', 'border-radius': '999px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', 'box-shadow': '0px 4px 14px $shadow',
-      ...(primary ? { 'background-color': '$accent', 'background-image': gradient } : { 'background-color': '$raised', ...edge('1px', '$line') }) }, small: { width: '54px', height: '54px' },
-      children: [glyph(symbol, primary ? 28 : 24)] },
+      ...(primary ? { 'background-color': '$accent', 'background-image': gradient } : { 'background-color': '$raised', border: '1px solid $line' }) }, small: { width: '54px', height: '54px' },
+      children: [icon] },
     { type: 'text', text: label, style: { 'font-size': '12px', color: '$secondary' } },
   ] });
 const infoLine = (label: string, value: string, when: Condition[]): Node => ({ type: 'box', when, style: row({ gap: '10px', 'align-items': 'baseline' }), children: [
@@ -254,14 +302,14 @@ const infoLine = (label: string, value: string, when: Condition[]): Node => ({ t
 
 const titleTop: Node = { type: 'box', style: col({ position: 'relative' }), children: [
   { type: 'box', style: col({ position: 'relative', height: 'min(56vh, 520px)', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$card' }), small: { height: '230px' }, children: [
-    { type: 'box', when: [{ test: 'detail.backdrop', not: true }], style: fill, children: tile('detail.id') },
+    tile('detail.seed', {}, [{ test: 'detail.backdrop', not: true }]),
     { type: 'image', when: [{ test: 'detail.backdrop' }], src: '{detail.backdrop}', alt: '', style: { ...fill, width: '100%', height: '100%', 'object-fit': 'cover' } },
     { type: 'box', style: { ...fill, 'background-image': 'linear-gradient(0deg, $page 0%, $scrim-page 18%, $scrim-clear 60%), linear-gradient(180deg, $scrim 0%, $scrim-clear 30%)' } },
   ] },
   { type: 'box', style: row({ position: 'relative', gap: '36px', 'align-items': 'flex-start', ...side, 'margin-top': '-190px' }), small: { gap: '0px', ...sideSmall, 'margin-top': '-60px' }, children: [
     { type: 'box', style: col({ position: 'relative', width: 'clamp(180px, 17vw, 300px)', 'flex-shrink': '0', 'aspect-ratio': '2 / 3', 'border-radius': '6px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$card', 'box-shadow': '0px 8px 30px $shadow', 'align-items': 'center', 'justify-content': 'center', color: '$secondary' }),
       small: { display: 'none' }, children: [
-        { type: 'box', when: [{ test: 'detail.poster', not: true }], style: fill, children: tile('detail.id') },
+        tile('detail.seed', {}, [{ test: 'detail.poster', not: true }]),
         { type: 'image', when: [{ test: 'detail.poster' }], src: '{detail.poster}', alt: '', style: { width: '100%', height: '100%', 'object-fit': 'cover' } },
         { type: 'box', when: [{ test: 'detail.poster', not: true }], style: { position: 'relative', width: '56px', height: '56px' }, children: kindGlyphs('detail.kind', 0, { width: '100%', height: '100%' }) },
       ] },
@@ -270,21 +318,27 @@ const titleTop: Node = { type: 'box', style: col({ position: 'relative' }), chil
       { type: 'text', when: [{ test: 'detail.logo', not: true }], text: '{detail.name}', role: 'heading', level: 1, style: { 'font-size': '40px', 'font-weight': '700', color: '$ink-strong', 'line-height': '1.15', 'text-shadow': '0px 2px 10px $shadow' }, small: { 'font-size': '28px' } },
       { type: 'box', style: row({ gap: '14px', 'align-items': 'center', 'flex-wrap': 'wrap', 'justify-content': 'flex-start', 'font-size': '15px' }), small: { 'justify-content': 'center' }, children: [
         { type: 'text', text: '{detail.kindLabel}', style: { color: '$secondary' } },
+        { type: 'text', when: [{ test: 'detail.yearLabel' }], text: '{detail.yearLabel}', style: { color: '$ink-strong' } },
+        { type: 'text', when: [{ test: 'detail.durationLabel' }, { test: 'detail.kind', is: 'ne', value: 'show' }], text: '{detail.durationLabel}', style: { color: '$ink-strong' } },
+        { type: 'text', when: [{ test: 'detail.rating' }], text: '{detail.rating}', style: { 'font-size': '12px', padding: '1px 6px', border: '1px solid $secondary', 'border-radius': '3px' } },
+        { type: 'box', when: [{ test: 'detail.played' }], style: row({ gap: '4px', 'align-items': 'center', color: '$accent' }), children: [glyph('checkmark', 16), { type: 'text', text: '{s:played}', style: { 'font-size': '14px' } }] },
       ] },
       { type: 'box', style: row({ gap: '12px', 'align-items': 'flex-start', 'flex-wrap': 'wrap', 'justify-content': 'flex-start', 'margin-top': '4px' }), small: { gap: '14px', 'justify-content': 'center' }, children: [
-        roundAction('{s:resume}', 'play-fill', true, { action: 'play', arg: '{detail.id}' }, 'detail-play', [{ test: 'detail.canPlay' }, { test: 'detail.hasResume' }]),
-        roundAction('{s:play}', 'play-fill', true, { action: 'play', arg: '{detail.id}' }, 'detail-play', [{ test: 'detail.canPlay' }, { test: 'detail.hasResume', not: true }]),
-        { type: 'repeat', over: 'detail.extras', item: roundAction('{s:trailer}', jelly('film'), false, { action: 'playExtra', arg: '{extra.id}' }, 'detail-trailer-{extra.id}', [{ test: 'extra.kind', is: 'eq', value: 'trailer' }, { test: 'extra.ready' }]) },
+        roundAction('{s:resume}', glyph('play-fill', 28), true, { action: 'play', arg: '{detail.id}' }, 'detail-play', [{ test: 'detail.canPlay' }, { test: 'detail.hasResume' }]),
+        roundAction('{s:play}', glyph('play-fill', 28), true, { action: 'play', arg: '{detail.id}' }, 'detail-play', [{ test: 'detail.canPlay' }, { test: 'detail.hasResume', not: true }]),
+        { type: 'repeat', over: 'detail.trailers', item: roundAction('{s:trailer}', jelly('film', 24), false, { action: 'playExtra', arg: '{extra.id}' }, 'detail-trailer-{extra.id}') },
       ] },
-      { type: 'box', when: [{ test: 'detail.hasResume' }], style: col({ gap: '6px', width: '320px' }), small: { width: '70%' }, children: [
-        { type: 'box', label: '{s:watchProgress}', style: { height: '5px', 'border-radius': '3px', 'background-color': '$track', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
+      { type: 'box', when: [{ test: 'detail.hasResume' }, { test: 'detail.durationLabel' }], style: col({ gap: '6px', width: '320px' }), small: { width: '70%' }, children: [
+        { type: 'box', role: 'progressbar', label: '{s:watchProgress}', style: { height: '5px', 'border-radius': '3px', 'background-color': '$track', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
           { type: 'box', style: { height: '5px', width: '{detail.resumePct}%', 'background-color': '$accent' } },
         ] },
+        { type: 'text', text: '{s:resumeFrom}', style: { 'font-size': '13px', color: '$secondary' } },
       ] },
       { type: 'text', when: [{ test: 'detail.summary' }], text: '{detail.summary}', style: { 'font-size': '16px', 'line-height': '1.6', color: '$ink', 'max-width': '52rem', 'text-align': 'left' }, small: { 'font-size': '15px' } },
       { type: 'box', style: col({ gap: '6px', 'font-size': '14px', 'max-width': '52rem', 'align-self': 'stretch', 'text-align': 'left' }), children: [
-        infoLine('{s:crew}', '{detail.crewLine}', [{ test: 'detail.crewLine' }]),
-        { type: 'box', style: row({ gap: '8px', 'flex-wrap': 'wrap', 'margin-top': '6px' }), children: [
+        infoLine('{s:genres}', '{detail.genresLine}', [{ test: 'detail.genresLine' }]),
+        infoLine('{s:crew}', '{detail.crewLineComma}', [{ test: 'detail.crewLineComma' }]),
+        { type: 'box', when: [{ test: 'detail.hasMediaFacts' }], style: row({ gap: '8px', 'flex-wrap': 'wrap', 'margin-top': '6px' }), children: [
           { type: 'repeat', over: 'detail.mediaFacts', item: { type: 'text', text: '{fact.text}', style: { 'font-size': '12px', 'font-weight': '600', padding: '4px 8px', 'border-radius': '4px', 'background-color': '$raised', color: '$ink' } } },
         ] },
       ] },
@@ -294,12 +348,12 @@ const titleTop: Node = { type: 'box', style: col({ position: 'relative' }), chil
 
 // One episode in a season's list: its still, number and name, facts and overview.
 const episodeRow: Node = { type: 'box', group: true, style: row({ position: 'relative', gap: '20px', 'align-items': 'center', padding: '12px 8px', 'border-radius': '6px', 'background-color': 'transparent' }),
-  small: { gap: '12px', 'align-items': 'flex-start' }, groupHover: { 'background-color': '$hover' }, children: [
+  small: { gap: '12px', 'align-items': 'flex-start' }, groupHover: { 'background-color': '$hover' }, groupFocus: { 'background-color': '$hover' }, children: [
     { type: 'box', press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}', style: { position: 'relative', width: '220px', 'aspect-ratio': '16 / 9', 'flex-shrink': '0', 'border-radius': '4px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$card', color: '$ink-strong', cursor: 'pointer' },
       small: { width: '130px' }, focus: { 'box-shadow': '0px 0px 0px 3px $accent' }, children: [
-        { type: 'box', when: [{ test: 'card.backdrop', not: true }], style: fill, children: tile('card.id') },
+        tile('card.seed', {}, [{ test: 'card.backdrop', not: true }]),
         { type: 'image', when: [{ test: 'card.backdrop' }], src: '{card.backdrop}', alt: '', style: { ...fill, width: '100%', height: '100%', 'object-fit': 'cover' } },
-        { type: 'box', style: { ...fill, display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$overlay', opacity: '0', transition: 'opacity 140ms linear' }, groupHover: { opacity: '1' }, children: [
+        { type: 'box', style: { ...fill, display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$overlay', opacity: '0', transition: 'opacity 140ms linear' }, groupHover: { opacity: '1' }, groupFocus: { opacity: '1' }, children: [
           { type: 'box', style: { width: '44px', height: '44px', 'border-radius': '22px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$accent' }, children: [glyph('play-fill', 24)] },
         ] },
         { type: 'box', when: [{ test: 'card.played' }], style: { position: 'absolute', top: '6px', right: '6px', width: '24px', height: '24px', 'border-radius': '12px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$accent', color: '$ink-strong' }, children: [glyph('checkmark', 14)] },
@@ -316,19 +370,17 @@ const episodeRow: Node = { type: 'box', group: true, style: row({ position: 'rel
     ] },
   ] };
 
-const seasonTab: Node = { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', role: 'tab', style: tab, hover: { color: '$accent' }, focus: { color: '$accent' }, children: [
-  { type: 'text', when: [{ test: 'season.on' }], text: '{card.name}', style: { color: '$accent', 'font-weight': '600' } },
-  { type: 'text', when: [{ test: 'season.on', not: true }], text: '{card.name}' },
-  { ...underline(0), when: [{ test: 'season.on' }] },
-] };
+const seasonTab = tabNode('{card.name}', { test: 'season.on' }, { action: 'select', arg: '{season.pick}' }, { name: 'jt-season-tab', bottom: 0 });
 
+// An extra: a wide tile that plays, or says it is not available yet.
+const extraFace = (ready: boolean): Node => ({ type: 'box', when: [{ test: 'extra.ready', not: !ready }], press: { action: 'playExtra', arg: '{extra.id}' }, label: ready ? '{s:playExtra}' : '{s:extraNotAvailable}', disabled: ready ? [] : [{ test: 'extra.ready', not: true }],
+  style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'border-radius': '6px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', display: 'flex', 'align-items': 'center', 'justify-content': 'center', color: '$ink-strong', cursor: ready ? 'pointer' : 'default' },
+  hover: { 'box-shadow': '0px 0px 0px 3px $accent' }, focus: { 'box-shadow': '0px 0px 0px 3px $accent' }, children: [
+    tile('extra.seed'),
+    { type: 'box', style: { position: 'relative', width: '48px', height: '48px', 'border-radius': '24px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': ready ? '$accent' : '$raised', opacity: ready ? '1' : '0.6' }, children: [glyph(ready ? 'play-fill' : 'info', 24)] },
+  ] } as Node);
 const extraCard: Node = { type: 'box', style: col({ width: 'clamp(220px, 18vw, 320px)', 'flex-shrink': '0', gap: '6px' }), small: { width: '52vw' }, children: [
-  { type: 'box', press: { action: 'playExtra', arg: '{extra.id}' }, label: '{extra.name}', style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'border-radius': '6px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', display: 'flex', 'align-items': 'center', 'justify-content': 'center', color: '$ink-strong', cursor: 'pointer' },
-    hover: { 'box-shadow': '0px 0px 0px 3px $accent' }, focus: { 'box-shadow': '0px 0px 0px 3px $accent' }, children: [
-      ...tile('extra.id'),
-      { type: 'box', when: [{ test: 'extra.ready' }], style: { position: 'relative', width: '48px', height: '48px', 'border-radius': '24px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$accent' }, children: [glyph('play-fill', 24)] },
-      { type: 'box', when: [{ test: 'extra.ready', not: true }], style: { position: 'relative', width: '48px', height: '48px', 'border-radius': '24px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$raised', opacity: '0.6' }, children: [glyph('info', 24)] },
-    ] },
+  extraFace(true), extraFace(false),
   { type: 'text', text: '{extra.name}', style: { 'font-size': '13px', 'font-weight': '500', color: '$ink-strong', 'text-align': 'center', 'line-clamp': '1' } },
   { type: 'text', when: [{ test: 'extra.ready', not: true }], text: '{s:notYet}', style: { 'font-size': '12px', color: '$secondary', 'text-align': 'center' } },
 ] };
@@ -336,8 +388,8 @@ const extraCard: Node = { type: 'box', style: col({ width: 'clamp(220px, 18vw, 3
 const person: Node = { type: 'box', role: 'listitem', style: col({ width: 'clamp(110px, 8.6vw, 160px)', 'flex-shrink': '0', gap: '2px', 'align-items': 'center', 'text-align': 'center' }), small: { width: '26vw' }, children: [
   { type: 'image', when: [{ test: 'person.portrait' }], src: '{person.portrait}', alt: '', style: { width: '100%', 'aspect-ratio': '2 / 3', 'border-radius': '6px', 'object-fit': 'cover', 'margin-bottom': '4px', 'overflow-x': 'hidden', 'overflow-y': 'hidden' } },
   { type: 'box', when: [{ test: 'person.portrait', not: true }], style: col({ position: 'relative', width: '100%', 'aspect-ratio': '2 / 3', 'border-radius': '6px', 'margin-bottom': '4px', 'align-items': 'center', 'justify-content': 'center', color: '$secondary', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }), children: [
-    ...tile('person.name'),
-    { ...glyph('person', 46), style: { position: 'relative', width: '46px', height: '46px' }, small: { width: '34px', height: '34px' } } as Node,
+    tile('person.seed'),
+    glyph('person', 46, { style: { position: 'relative', width: '46px', height: '46px' }, small: { width: '34px', height: '34px' } }),
   ] },
   { type: 'text', text: '{person.name}', style: { width: '100%', 'font-size': '13px', 'font-weight': '500', color: '$ink-strong', 'line-clamp': '2' } },
   { type: 'text', when: [{ test: 'person.role' }], text: '{person.role}', style: { width: '100%', 'font-size': '12px', color: '$secondary', 'line-clamp': '1' } },
@@ -347,7 +399,7 @@ const hscroll = (children: Node[], role?: string): Node => ({ type: 'box', style
   { type: 'box', role, style: row({ gap: '16px', ...side, 'padding-bottom': '6px' }), small: { gap: '10px', ...sideSmall }, children },
 ] });
 
-const titleRest: Node = { type: 'box', style: col({ 'padding-top': '40px' }), small: { 'padding-top': '26px' }, children: [
+const titleRest: Node = { type: 'box', style: col({ 'padding-top': '40px', 'padding-bottom': '56px' }), small: { 'padding-top': '26px' }, children: [
   { type: 'repeat', over: 'detail.upNext', item: { type: 'box', style: col({ gap: '10px', ...side, ...block }), small: { ...sideSmall, 'padding-bottom': '18px' }, children: [
     { type: 'text', text: '{s:nextUp}', role: 'heading', level: 2, style: heading2, small: heading2Small },
     { type: 'box', style: row({ gap: '14px', 'align-items': 'center' }), children: [
@@ -355,10 +407,11 @@ const titleRest: Node = { type: 'box', style: col({ 'padding-top': '40px' }), sm
       { type: 'box', when: [{ test: 'env.small', not: true }], press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}', style: { ...iconBtn(56), 'background-color': '$raised' }, hover: iconBtnHover, focus: iconBtnHover, children: [glyph('play-fill', 28)] },
     ] },
   ] } },
+  { ...section('detail.seasons', [sectionTitle('{s:seasons}')], undefined), when: [{ test: 'detail.seasonCount', is: 'gt', value: '0' }, { test: 'detail.hasEpisodes', not: true }] } as Node,
   { type: 'box', when: [{ test: 'detail.hasEpisodes' }], style: col({ gap: '4px', ...side, ...block }), small: { ...sideSmall, 'padding-bottom': '18px' }, children: [
-    { type: 'text', text: '{s:episodes}', role: 'heading', level: 2, style: { 'font-size': '20px', 'font-weight': '600', color: '$ink-strong', 'padding-bottom': '4px' } },
-    { type: 'box', when: [{ test: 'detail.hasSeasons' }], style: row({ 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'margin-bottom': '8px', ...hairline }), children: [
-      { type: 'box', role: 'tablist', label: '{s:seasons}', testId: 'season-picker', style: row(), children: [{ type: 'repeat', over: 'detail.seasons', item: seasonTab }] },
+    { type: 'text', text: '{s:episodes}', role: 'heading', level: 2, style: { ...heading20, 'padding-bottom': '4px' } },
+    { type: 'box', when: [{ test: 'detail.seasonCount', is: 'gt', value: '1' }], role: 'tablist', label: '{s:seasons}', testId: 'season-picker', style: row({ 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'margin-bottom': '8px', ...hairline }), children: [
+      { type: 'repeat', over: 'detail.seasons', item: seasonTab },
     ] },
     { type: 'repeat', over: 'detail.episodes', item: episodeRow },
   ] },
@@ -367,63 +420,75 @@ const titleRest: Node = { type: 'box', style: col({ 'padding-top': '40px' }), sm
     hscroll([{ type: 'repeat', over: 'detail.extras', item: extraCard }]),
   ] },
   { type: 'box', when: [{ test: 'detail.hasCast' }], style: col({ gap: '10px', ...block }), small: { 'padding-bottom': '18px' }, children: [
-    { type: 'text', text: '{s:cast}', role: 'heading', level: 2, style: { 'font-size': '20px', 'font-weight': '600', color: '$ink-strong', ...side }, small: sideSmall },
+    { type: 'text', text: '{s:cast}', role: 'heading', level: 2, style: { ...heading20, ...side }, small: sideSmall },
     hscroll([{ type: 'repeat', over: 'detail.cast', item: person }], 'list'),
   ] },
-  { type: 'repeat', over: 'detail.related', item: section('row.items', sectionTitle('{row.name}')) },
+  { type: 'repeat', over: 'detail.related', item: section('row.items', [sectionTitle('{row.name}', [{ test: 'row.name' }]), sectionTitle('{s:moreLikeThis}', [{ test: 'row.name', not: true }])], { test: 'row.landscape' }) },
 ] };
 
-// The waiting state: the accent spinner, fading in after a beat.
+// The waiting state: the accent spinner, fading in after a beat; a failure is a centred message.
 const waiting: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], role: 'status', label: '{s:opening}', motion: 'statusIn',
   style: col({ 'align-items': 'center', 'justify-content': 'center', gap: '16px', 'padding-top': '220px', 'padding-bottom': '80px' }), children: [spinner(54, { small: { width: '44px', height: '44px' } })] };
-const failure: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], role: 'status', style: col({ 'align-items': 'center', 'text-align': 'center', gap: '10px', padding: '64px 24px', color: '$secondary' }), children: [
-  glyph('alert', 44),
-  { type: 'text', text: '{s:quiet}', style: { 'margin-top': '6px', 'font-size': '20px', 'font-weight': '600', color: '$ink-strong' } },
-  { type: 'text', text: '{s:titleFailed}', style: { 'max-width': '30rem', 'font-size': '15px', 'line-height': '1.5' } },
-] };
 
+const ready: Condition = { test: 'env.load', is: 'eq', value: 'ready' };
 const title: Node = { type: 'box', style: col({ position: 'relative', height: '100%', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$page', color: '$ink' }), children: [
-  { type: 'box', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', 'box-sizing': 'border-box', width: '44px', height: '44px', ...edge('1px', 'surface.line'), 'border-radius': '22px', padding: '13px', 'background-color': 'surface.glass', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: 'ink.primary' },
+  { type: 'box', id: 'back', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', 'box-sizing': 'border-box', width: '44px', height: '44px', border: '1px solid surface.line', 'border-radius': '22px', padding: '13px', 'background-color': 'surface.glass', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: 'ink.primary' },
     children: [{ type: 'icon', symbol: 'close', style: { width: '100%', height: '100%' } }] },
   { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{s:titleDetails}', style: col({ flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'font-family': sans }), children: [
     waiting,
-    failure,
-    { ...titleTop, when: [{ test: 'env.load', is: 'eq', value: 'ready' }], motion: 'fadeIn' } as Node,
-    { ...titleRest, when: [{ test: 'env.load', is: 'eq', value: 'ready' }], motion: 'fadeIn', style: { ...(titleRest as { style: Style }).style, 'padding-bottom': '56px' } } as Node,
+    // A failure: the centred message, and a way to ask again when the foundation can.
+    { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], style: col({ gap: '4px' }), children: [
+      emptyState(glyph('alert', 44), '{s:quiet}', '{s:titleFailed}', []),
+      { type: 'box', when: [{ test: 'env.canRetry' }], style: row({ 'justify-content': 'center' }), children: [
+        { type: 'box', press: { action: 'retry' }, label: '{s:tryAgain}', style: { ...submit, height: '42px' }, hover: { opacity: '0.9' }, focus: submitFocus, children: [{ type: 'text', text: '{s:tryAgain}' }] },
+      ] },
+    ] },
+    { ...titleTop, when: [ready], motion: 'fadeIn' } as Node,
+    { ...titleRest, when: [ready], motion: 'fadeIn' } as Node,
   ] },
 ] };
 
 export default {
-  schema: 1, renderer: 2, id, name: 'Jelly Twin', version,
+  schema: 1, renderer: 4, id, name: 'Jelly Twin', version,
   tagline: 'A familiar home-media client: near-black, cyan accents, card rows.',
   preview: asset('preview.jpg'), swatches: ['#101010', '#ffffff', '#00a4dc', '#aa5cc3', '#292929'],
   tokens: {
     page: '#101010', header: '#101010f2', drawer: '#1c1c1c', raised: '#292929', 'raised-hover': '#383838', card: '#242424', field: '#292929',
     line: '#ffffff1f', ink: '#ffffffde', 'ink-strong': '#ffffff', secondary: '#ffffff99', quiet: '#ffffff66',
-    accent: '#00a4dc', 'accent-soft': '#00a4dc33', violet: '#aa5cc3', 'violet-soft': '#aa5cc340', hover: '#ffffff14',
-    overlay: '#00000099', scrim: '#000000b3', 'scrim-clear': '#10101000', 'scrim-page': '#101010d9', 'osd-top': '#000000b3', 'osd-bottom': '#000000d9',
-    track: '#ffffff40', buffer: '#ffffff73', popup: '#202020f7', shadow: '#000000a6', danger: '#cb272a',
+    accent: '#00a4dc', 'accent-soft': '#00a4dc33', violet: '#aa5cc3', hover: '#ffffff14',
+    overlay: '#00000099', scrim: '#000000b3', 'scrim-clear': '#10101000', 'scrim-page': '#101010d9',
+    track: '#ffffff40', popup: '#202020f7', shadow: '#000000a6',
     'tile-1': '#00455c', 'tile-2': '#44007e', 'tile-3': '#1e5631', 'tile-4': '#6b2c1f', 'tile-5': '#234a7a',
   },
   strings: { en: {
     mainNavigation: 'Main navigation', velaHome: 'Vela home', search: 'Search', profile: 'Profile and appearance', close: 'Close',
     openMenu: 'Open menu', closeMenu: 'Close menu', menu: 'Menu', media: 'Media', user: 'User', sections: 'Sections', liveTv: 'Live TV',
     home: 'Home', appearance: 'Change appearance', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out',
-    moreInfo: 'More info', featured: 'Featured titles', featuredOf: 'Featured title {index.label} of {env.heroCount}: {hero.name}',
+    moreInfo: 'More info', featured: 'Featured titles', featuredOf: 'Featured title {index.label} of {env.heroCount}: {hero.name}', myMedia: 'My Media',
+    seasonEpisode: 'S{card.seasonNumberLabel}:E{card.episodeNumberLabel}',
     nothingHere: 'Nothing here yet', noRows: 'Your library hasn\'t offered any rows yet. Titles appear here as your server adds them.',
-    play: 'Play', resume: 'Resume', trailer: 'Trailer', watchProgress: 'Watch progress', crew: 'Crew', genres: 'Genres', played: 'Played',
+    play: 'Play', resume: 'Resume', resumeFrom: 'Resume from {detail.resumePosition}', trailer: 'Trailer', watchProgress: 'Watch progress', crew: 'Crew', genres: 'Genres', played: 'Played',
     nextUp: 'Next Up', episodes: 'Episodes', seasons: 'Seasons', specialFeatures: 'Special Features', cast: 'Cast', moreLikeThis: 'More Like This', notYet: 'Not available yet',
-    closeTitle: 'Close title', titleDetails: 'Title details', opening: 'Opening title…', quiet: 'Something went quiet', titleFailed: 'This title couldn\'t be opened. It may no longer be available.',
+    playExtra: 'Play {extra.name}', extraNotAvailable: '{extra.name} · Not available',
+    tryAgain: 'Try again', closeTitle: 'Close title', titleDetails: 'Title details', opening: 'Opening title…', quiet: 'Something went quiet', titleFailed: 'This title couldn\'t be opened. It may no longer be available.',
   } },
+  keyframes: {
+    drawerIn: { '0%': { translate: '-100% 0px' } },
+    drawerOut: { '100%': { translate: '-100% 0px' } },
+    popIn: { '0%': { opacity: 0, scale: 0.96 } },
+  },
   motion: {
     fadeIn: { keyframes: 'dissolve', duration: 260, easing: 'ease-out', fill: 'both' },
     statusIn: { keyframes: 'dissolve', duration: 300, delay: 200, easing: 'ease-out', fill: 'both' },
     spin: { keyframes: 'spin', duration: 900, easing: 'linear', iterations: 'infinite', fill: 'none' },
-    pop: { keyframes: 'pop', duration: 200, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 160 } },
+    menuIn: { keyframes: 'doc:popIn', duration: 200, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 160 } },
+    menuOut: { keyframes: 'vanish', duration: 140, easing: 'ease-in', fill: 'both', still: { keyframes: 'vanish', duration: 100 } },
     scrimIn: { keyframes: 'dissolve', duration: 220, easing: 'ease-out', fill: 'both' },
-    drawerIn: { keyframes: 'slideIn', duration: 260, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'both', still: { keyframes: 'dissolve', duration: 160 } },
+    scrimOut: { keyframes: 'vanish', duration: 200, easing: 'ease-in', fill: 'both', still: { keyframes: 'vanish', duration: 100 } },
+    drawerIn: { keyframes: 'doc:drawerIn', duration: 260, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'both', still: { keyframes: 'dissolve', duration: 160 } },
+    drawerOut: { keyframes: 'doc:drawerOut', duration: 200, easing: 'ease-in', fill: 'both', still: { keyframes: 'vanish', duration: 100 } },
   },
-  templates: { poster: card(false), upNext: { ...card(true), style: { ...card(true).style, width: 'clamp(240px, 21.5vw, 400px)' }, small: { width: '58vw' } } },
+  templates: { poster: card(false), wide: card(true), upNext: card(true, { style: wideW.style, small: '58vw' }) },
   slots: { shell, home },
   routes: { title },
   detail: { wide: 'fullscreen', small: 'fullscreen' },

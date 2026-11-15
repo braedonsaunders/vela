@@ -1,5 +1,5 @@
-use Shell, Home, SearchSurface, Detail, SearchField, Status, Collection, Library, Guide, LiveControls, MiniGuide, PlayerChrome, AuthStage, AuthNotice, SignIn, QuickConnect, skinDetailPresentation, skinDetailSplit, skinManifest, pickerSkins, resolveSkin from "./foundation/skins.generated.contract"
-use ShellProps, HomeProps, SearchProps, SearchFieldProps, DetailProps, StatusProps, CollectionProps, LibraryProps, GuideProps, LiveControlsProps, MiniGuideProps, PlayerProps, AuthStageProps, AuthNoticeProps, SignInProps, QuickConnectProps from "./foundation/slot-api.contract"
+use Shell, Home, SearchSurface, Detail, SearchField, Status, Collection, Library, Guide, LiveControls, MiniGuide, PlayerChrome, AuthStage, AuthNotice, SignIn, QuickConnect, Connect, skinDetailPresentation, skinDetailSplit, skinManifest, pickerSkins, resolveSkin from "./foundation/skins.generated.contract"
+use ShellProps, ConnectProps, HomeProps, SearchProps, SearchFieldProps, DetailProps, StatusProps, CollectionProps, LibraryProps, GuideProps, LiveControlsProps, MiniGuideProps, PlayerProps, AuthStageProps, AuthNoticeProps, SignInProps, QuickConnectProps from "./foundation/slot-api.contract"
 use Card, FeedRow, HomeModel, SearchModel, DetailModel, ReceiptReply, Viewport, PlaybackModel from "./foundation/models.contract"
 use dissolve, open, vanish from "./foundation/motion.contract"
 use buildEngine from "./foundation/engine.contract"
@@ -83,6 +83,17 @@ component Client
     homeTuned
     homeZapping
     retryTileStop
+    probeServer
+    addServer
+    selectServer
+    removeServer
+    startPlexLink
+    choosePlexServer
+    cancelPlexLink
+    signInJellyfin
+    startJellyfinQuick
+    cancelJellyfinQuick
+    openConnect
     catchUpLive
     zap
     tuneZap
@@ -110,7 +121,7 @@ component Client
       for e in stack(nav) key=e.id
         if e.name == "home"
           column navigationKey=`${e.id}` navigationSplit=(top(nav).name == "title" ? skinDetailSplit(activeSkin, viewport.width, activeDoc) : "none") navigationScroll="home-scroll" key=homeKey position="absolute" inset=0
-            for slotProps in [ShellProps(skin=activeSkin, current=(docReady ? match first(currentDocManifest) { case some(m) => m, case none => skinManifest(activeSkin) } : skinManifest(activeSkin)), skins=(auth.authenticated and current(home) ? pickerSkins(home.skins).concat(docManifests) : []), viewer=(auth.authenticated and current(home) ? home.viewer : ""), viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section=(libraryId == "" ? "home" : libraryId == "@live" ? "live" : libraryId), secureOrigin=(auth.authenticated and current(home) ? auth.secureOrigin : ""), secureBusy=secureBusy, secureError=secureError)] key="shell"
+            for slotProps in [ShellProps(skin=activeSkin, current=(docReady ? match first(currentDocManifest) { case some(m) => m, case none => skinManifest(activeSkin) } : skinManifest(activeSkin)), skins=(auth.authenticated and current(home) ? pickerSkins(home.skins).concat(docManifests) : []), viewer=(auth.authenticated and current(home) ? home.viewer : ""), viewport=shellViewport, canLive=(auth.authenticated and current(home) and home.liveAvailable), canLibrary=false, libraries=(auth.authenticated and current(home) and current(libraries) ? libraries : []), section=(libraryId == "" ? "home" : libraryId == "@live" ? "live" : libraryId), secureOrigin=(auth.authenticated and current(home) ? auth.secureOrigin : ""), secureBusy=secureBusy, secureError=secureError, servers=(current(servers) ? servers.servers : []))] key="shell"
               Shell(p=slotProps)
                 if failed(auth) or not current(auth) or not auth.authenticated
                   scroll id="home-scroll" role="region" aria-label=t("ui.browseAndSearch") flex=1 min-height=0
@@ -124,7 +135,11 @@ component Client
                             for slotProps in [AuthNoticeProps(kind=(webCode != "" ? "redeeming" : "connecting"), still=still)] key="authNotice"
                               AuthNotice(p=slotProps)
                           else
-                            if quickSecret != ""
+                            // A signed-out Plex server links with a code; others take the sign-in below.
+                            if auth.serverKind == "plex"
+                              for slotProps in [ConnectProps(serverId=auth.serverId, servers=(current(servers) ? servers.servers : []), probe=probe, addedServerId=addedServerId, addServerError=addServerError, serverError=serverError, plexLink=plexLink, plexServers=(current(plexServers) ? plexServers : []), plexError=plexError, jellyQuick=jellyQuickModel, jellyQuickError=jellyQuickError, jellySignInError=jellySignInError, busy=(pending(serverAdded) or pending(serverChange) or pending(plexStarted) or pending(plexChoice) or pending(jellySignIn) or pending(jellyQuick)), canClose=false, small=small, still=still)] key="connect"
+                                Connect(p=slotProps)
+                            else if quickSecret != ""
                               for slotProps in [QuickConnectProps(model=quickModel, error=quickError, still=still)] key="quickConnect"
                                 QuickConnect(p=slotProps)
                             else
@@ -217,6 +232,14 @@ component Client
                 else
                   for slotProps in [CollectionProps(id=e.params.id, name=collection.name, items=collection.items, more=(current(collection) and collection.more), moreLoading=collectionMoreLoading, complete=collection.complete, small=small, still=still)] key="collection"
                     Collection(p=slotProps)
+        // Connecting a server: adding one, or signing in to one the viewer chose.
+        if e.name == "connect" or e.name == "connectServer"
+          column navigationKey=`${e.id}` navigationPresentation="fullscreen" position="absolute" inset=0 background-color=pageColor color=inkColor
+            scroll id=`connect-scroll-${e.id}` flex=1 min-height=0
+              for slotProps in [AuthStageProps(still=still, backdrop=packBackdrop, wordmark=packWordmark)] key="authStage"
+                AuthStage(p=slotProps)
+                  for slotProps in [ConnectProps(serverId=(e.name == "connectServer" ? e.params.id : ""), servers=(current(servers) ? servers.servers : []), probe=probe, addedServerId=addedServerId, addServerError=addServerError, serverError=serverError, plexLink=plexLink, plexServers=(current(plexServers) ? plexServers : []), plexError=plexError, jellyQuick=jellyQuickModel, jellyQuickError=jellyQuickError, jellySignInError=jellySignInError, busy=(pending(serverAdded) or pending(serverChange) or pending(plexStarted) or pending(plexChoice) or pending(jellySignIn) or pending(jellyQuick)), canClose=true, small=small, still=still)] key=`connect-${e.id}`
+                    Connect(p=slotProps)
         if e.name == "library"
           column navigationKey=`${e.id}` position="absolute" inset=0 background-color=pageColor
         if e.name == "watch" or e.name == "extra" or e.name == "liveWatch"

@@ -87,6 +87,9 @@ component Shell
         openLibrary(arg)
     if name == "toggle"
       flags = toggled(flags, arg)
+    // One open panel at a time: this flag alone (keep- flags stay).
+    if name == "only"
+      flags = (flags.includes(arg) ? flags.filter(f => f != arg) : flags.filter(f => f.startsWith("keep-")).concat([arg]))
     if name == "reset"
       flags = flags.filter(f => f.startsWith("keep-"))
     if name == "open"
@@ -129,6 +132,7 @@ component Home
     pickHero: action
     playHero: action
     openLive: action
+    openLibrary: action
     watchChannel: action
     previewChannel: action
     zapTile: action
@@ -155,6 +159,14 @@ component Home
       tileUnmute()
     if name == "guide"
       openLive()
+    if name == "live"
+      openLive()
+    // A live library is the Live TV section (as in the shell).
+    if name == "library"
+      if p.libraries.filter(l => l.id == arg and l.kind == "live").length > 0
+        openLive()
+      else
+        openLibrary(arg)
     if name == "play"
       playHero(heroActFor(p.model, arg).map(a => a.targetId).join(""), num(heroActFor(p.model, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(p.model, arg).map(a => a.hasPosition).includes(true))
     if name == "pickHero"
@@ -163,7 +175,7 @@ component Home
       flags = toggled(flags, arg)
   view
     // One Env, bound once (Exact expands a derive at every use).
-    for env in [Env(styles=doc.styles, dflt=noStyle(), route="home", entry="", load="ready", detail=[], season="", home=[p.model], libraries=[], viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, tv=homeWidth >= 1600, width=homeWidth, skinCount=0, rowLoading=p.rowMoreLoading, homeLoading=p.homeMoreLoading, still=p.still, canLive=p.model.liveAvailable, flags=flags, guide=homeGuide, tile=homeTile, tuned=homeTuned, tunedId=homeTuned.map(c => c.id).join(""), zapping=homeZapping, favoriteCount=match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 })] key="env"
+    for env in [Env(styles=doc.styles, dflt=noStyle(), route="home", entry="", load="ready", detail=[], season="", home=[p.model], libraries=p.libraries, viewer=p.model.viewer, section="home", query=p.query, heroIndex=p.heroIndex, small=p.small, tv=homeWidth >= 1600, width=homeWidth, skinCount=0, rowLoading=p.rowMoreLoading, homeLoading=p.homeMoreLoading, still=p.still, canLive=p.model.liveAvailable, flags=flags, guide=homeGuide, tile=homeTile, tuned=homeTuned, tunedId=homeTuned.map(c => c.id).join(""), zapping=homeZapping, favoriteCount=match first(homeGuide) { case some(g) => g.channels.filter(c => c.favorite).length, case none => 0 })] key="env"
       Root(s=styleAt(env, doc.home.root), pos=(doc.home.rootPos == 1 ? "absolute" : doc.home.rootPos == 2 ? "sticky" : "relative"), e=env)
         SlotBox(order=doc.home.slotOrder, pos=(doc.home.slotPos == 1 ? "absolute" : doc.home.slotPos == 2 ? "sticky" : "relative"), s=styleAt(env, doc.home.slotStyle), inner=styleAt(env, doc.home.slotInner), e=env)
           children

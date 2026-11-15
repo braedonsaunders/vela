@@ -298,6 +298,18 @@ export class PlaybackEngine {
   /** A server readiness/observation revision is not a new playback attempt. */
   updateSession(session: PlaybackSession) {
     if (session.id !== this.session?.id) throw new Error('Cannot update a different session');
+    const next=session.sources.find(source=>source.id===this.source?.id),current=this.source;
+    if(next&&current&&(next.url!==current.url||next.delivery!==current.delivery||
+      next.sourceRevision!==current.sourceRevision||next.timeline!==current.timeline||
+      next.timelineOriginSeconds!==current.timelineOriginSeconds)){
+      // A measured copy origin can arrive after lazy preparation, in a newer
+      // same-generation plan. Existing demux/native clocks cannot be relabelled
+      // in place. Reopen at the viewer's intended title position, not at zero.
+      const replacement={...session,position:this.pendingSeek?.position??this.position()};
+      void this.load(replacement).catch(error=>{
+        if(!this.disposed&&this.session===replacement)this.fail({kind:'source',message:error instanceof Error?error.message:'Updated media source could not be opened',recoverable:true});
+      });return;
+    }
     const previousState = this.session?.serverState;
     this.session = session;
     if (this.pendingTracks && (this.pendingTracks.audio === undefined || this.pendingTracks.audio === session.audioTrackId) &&
