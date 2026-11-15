@@ -135,10 +135,11 @@ properties and keys from the lists above only. A value containing `url(`,
 refused (document assets go through `image`). Unknown actions, collections, widgets,
 keyframes, templates and properties are refused with their name.
 
-## Renderer 3 (in progress: names are final, write documents against them)
+## Renderer 4
 
 Requests from the converters (Index, Jelly Twin, Marquee, Mochi, Cinematic) and the new
 skins, merged into one set. The bar is a pixel-identical match, so each is taken.
+Renderer 3 is the live home above; a document using anything here names `renderer: 4`.
 
 **Node features**
 - `states: [{ when: Condition[], style: Style, hover?, focus?, groupHover? }]`: the first
@@ -162,8 +163,10 @@ skins, merged into one set. The bar is a pixel-identical match, so each is taken
 - Rows: `color-scheme`, `column-gap`, `row-gap`, `scroll-behavior`, `scroll-padding-left`,
   `border-left-width/color`. Under reduced motion overlays also drop `rotate` and `animation`.
 - Fonts: `weight` may be a range (`"300 700"`) for variable faces.
-- Per-document `traits`: `page`, `ink`, `flatDetail`, `panSections`, `barMask`, `splashOnPaper`,
-  detail frame tokens.
+- A text node's `overflow-x: hidden` and `text-overflow: ellipsis` apply to its characters,
+  so a one-line ellipsis draws "…".
+- A route's root box takes every style row and a position: a full-bleed page is
+  `position: absolute` with `inset: 0`, or `width`/`height: 100%`.
 
 **Vocabulary**
 `*.seed` (id length; `person.seed` name length) and `*.nameLength` for card/hero/row/person/dest/
@@ -174,7 +177,12 @@ detail/extra; `card.seasonNumber`, `card.episodeNumber`, `card.seasonNumberLabel
 hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`, `row.resume`,
 `row.previewOnFocus`, `row.loadingMore`, `row.hasMore`; `dest.backdrop`; `env.width`,
 `env.skinCount`, `env.libraryCount`, `env.hasLiveLibrary`, `env.homeMoreLoading`,
-`env.homeHasMore`, `env.searchFocused`, `env.clock`, `env.clock12`.
+`env.homeHasMore`, `env.clock`; `detail.hasMediaFacts` beside the other `detail.has*`.
+
+## Next (renderer 5, names final)
+
+- Per-document `traits`: `page`, `ink`, `flatDetail`, `panSections`, `barMask`, `splashOnPaper`,
+  detail frame tokens. `env.searchFocused`, `env.clock12`, `rotate-axis`.
 
 **Widgets** (leaf nodes drawn only in the first levels): `searchInput` (the bare input with
 `params` for type and ink; the document draws the field around it; `env.searchFocused`,
