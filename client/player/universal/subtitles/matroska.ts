@@ -3,9 +3,29 @@ import {SubtitleReadScope,integer,text,vint,type Element} from './binary';
 import {subtitleIdentity} from './identity';
 import type {SubtitleContainer,SubtitleDescription,SubtitleFont,SubtitlePacket,SubtitlePacketWindow,SubtitleTrack,SubtitleCodec} from './types';
 const ID={segment:0x18538067,info:0x1549a966,tracks:0x1654ae6b,cluster:0x1f43b675,cues:0x1c53bb6b,attachments:0x1941a469,seekHead:0x114d9b74};
-interface Track {public:SubtitleTrack;number:number;configuration:Uint8Array|null;defaultDuration:number|null;unsupported:string|null}
+interface ContentEncoding {order:number;scope:number;algorithm:number;settings:Uint8Array}
+interface Track {public:SubtitleTrack;number:number;configuration:Uint8Array|null;defaultDuration:number|null;encodings:ContentEncoding[];unsupported:string|null}
 interface Cue {time:number;cluster:number;track:number;duration:number|null}
+class UnsupportedContentEncoding extends Error {}
 const codecs:Record<string,SubtitleCodec>={'S_TEXT/UTF8':'srt','S_TEXT/ASS':'ass','S_TEXT/SSA':'ssa','S_HDMV/PGS':'pgs'};
+const MAX_PACKET_BYTES=16*1024*1024;
+async function inflate(data:Uint8Array,max:number,signal:AbortSignal){
+  signal.throwIfAborted();const stream=new Blob([data.slice().buffer]).stream().pipeThrough(new DecompressionStream('deflate')),reader=stream.getReader(),chunks:Uint8Array[]=[];let size=0;
+  const abort=()=>reader.cancel(signal.reason).catch(()=>{});signal.addEventListener('abort',abort,{once:true});
+  try{
+    for(;;){const part=await reader.read();signal.throwIfAborted();if(part.done)break;size+=part.value.length;if(size>max){await reader.cancel();throw new Error('Decoded subtitle frame exceeds size bound')}chunks.push(part.value)}
+  }catch(error){signal.throwIfAborted();if(error instanceof Error&&error.message==='Decoded subtitle frame exceeds size bound')throw error;throw new Error('Invalid zlib-compressed subtitle frame')
+  }finally{signal.removeEventListener('abort',abort);reader.releaseLock()}
+  const result=new Uint8Array(size);let at=0;for(const chunk of chunks){result.set(chunk,at);at+=chunk.length}return result;
+}
+async function decodeContent(data:Uint8Array,encodings:readonly ContentEncoding[],scope:number,max:number,signal:AbortSignal){
+  let result=data;
+  for(const encoding of encodings){if(!(encoding.scope&scope))continue;
+    if(encoding.algorithm===3){if(encoding.settings.length+result.length>max)throw new Error('Decoded subtitle frame exceeds size bound');const joined=new Uint8Array(encoding.settings.length+result.length);joined.set(encoding.settings);joined.set(result,encoding.settings.length);result=joined}
+    else result=await inflate(result,max,signal);
+  }
+  return result;
+}
 /** Subtitle-only EBML parser over the core's borrowed source/cache. */
 export class MatroskaSubtitles implements SubtitleContainer {
   readonly tracks:SubtitleTrack[]=[];readonly fonts:SubtitleFont[]=[];
@@ -39,22 +59,46 @@ export class MatroskaSubtitles implements SubtitleContainer {
     // All TrackEntry records count, including AV, subtitles and unrecognized types.
     let streamIndex=0;const numbers=new Set<number>();
     await scope.children(element,async entry=>{
-      if(entry.id!==0xae)return;const index=streamIndex++;let number=0,type=0,codec='',language='und',ietf='',label='',defaultTrack=true,forced=false,privateElement:Element|null=null,defaultDuration:number|null=null,encoded=false,transformed=false;
+      if(entry.id!==0xae)return;const index=streamIndex++;let number=0,type=0,codec='',language='und',ietf='',label='',defaultTrack=true,forced=false,privateElement:Element|null=null,defaultDuration:number|null=null,transformed=false;const encodingElements:Element[]=[];
       await scope.children(entry,async item=>{
         switch(item.id){case 0xd7:number=await scope.number(item);break;case 0x83:type=await scope.number(item);break;case 0x86:codec=text(await scope.value(item,256));break;
           case 0x22b59c:language=text(await scope.value(item,64));break;case 0x22b59d:ietf=text(await scope.value(item,64));break;case 0x536e:label=text(await scope.value(item,512));break;
           case 0x88:defaultTrack=!!await scope.number(item);break;case 0x55aa:forced=!!await scope.number(item);break;case 0x63a2:privateElement=item;break;
-          case 0x23e383:defaultDuration=await scope.number(item)/1e9;break;case 0x6d80:encoded=true;break;
+          case 0x23e383:defaultDuration=await scope.number(item)/1e9;break;case 0x6d80:encodingElements.push(item);break;
           case 0x56aa:case 0x537f:transformed ||= !!await scope.number(item);break;
           case 0x23314f:{const bytes=await scope.value(item,8),view=new DataView(bytes.buffer,bytes.byteOffset,bytes.length);transformed ||= (bytes.length===4?view.getFloat32(0):bytes.length===8?view.getFloat64(0):NaN)!==1;break}
         }
       });
       if(number<=0||numbers.has(number))throw new Error('Ambiguous Matroska subtitle track number');numbers.add(number);
       if(type!==17||!codecs[codec])return;
-      const configuration=privateElement?await scope.value(privateElement,4*1024*1024):null;
+      let encodings:ContentEncoding[]=[],unsupported:string|null=null;
+      if(encodingElements.length){try{if(encodingElements.length!==1)throw new Error('duplicate ContentEncodings');encodings=await this.contentEncodings(scope,encodingElements[0])}catch(error){scope.signal.throwIfAborted();unsupported=error instanceof UnsupportedContentEncoding?error.message:`Malformed subtitle ContentEncodings require server rendering (${error instanceof Error?error.message:'invalid metadata'})`}}
+      if(!unsupported){const bad=encodings.find(value=>value.scope&4||![0,3].includes(value.algorithm));if(bad)unsupported=bad.scope&4?'Chained subtitle ContentEncodings require server rendering':bad.algorithm===1?'Bzlib-compressed subtitle track requires server rendering':bad.algorithm===2?'LZO-compressed subtitle track requires server rendering':'Unknown subtitle compression requires server rendering'}
+      let configuration=privateElement?await scope.value(privateElement,4*1024*1024):null;
+      if(configuration&&!unsupported)try{configuration=await decodeContent(configuration,encodings,2,4*1024*1024,scope.signal)}catch(error){scope.signal.throwIfAborted();unsupported=`Malformed encoded subtitle configuration requires server rendering (${error instanceof Error?error.message:'invalid data'})`}
       const actual=subtitleIdentity('mkv',number,index,codecs[codec],ietf||language,label,defaultTrack,forced,this.descriptions);
-      this.tracks.push(actual);this.actual.set(actual.id,{public:actual,number,configuration,defaultDuration,unsupported:encoded?'Encoded/encrypted subtitle track requires server rendering':transformed?'Nonstandard subtitle track time transform requires server rendering':null});
+      this.tracks.push(actual);this.actual.set(actual.id,{public:actual,number,configuration,defaultDuration,encodings,unsupported:unsupported??(transformed?'Nonstandard subtitle track time transform requires server rendering':null)});
     });
+  }
+  private async contentEncodings(scope:SubtitleReadScope,root:Element):Promise<ContentEncoding[]>{
+    const result:ContentEncoding[]=[];
+    await scope.children(root,async element=>{
+      if(element.id!==0x6240)throw new Error('unexpected ContentEncodings child');if(result.length>=8)throw new Error('too many ContentEncoding entries');
+      let order=0,encodingScope=1,type=0,compression:Element|null=null,encryption=false;const seen=new Set<number>();
+      await scope.children(element,async item=>{if(seen.has(item.id))throw new Error('duplicate ContentEncoding field');seen.add(item.id);
+        if(item.id===0x5031)order=await scope.number(item);else if(item.id===0x5032)encodingScope=await scope.number(item);else if(item.id===0x5033)type=await scope.number(item);else if(item.id===0x5034)compression=item;else if(item.id===0x5035)encryption=true;
+      });
+      if(!Number.isSafeInteger(order)||order<0||order>255||!Number.isSafeInteger(encodingScope)||encodingScope<1||encodingScope>7)throw new Error('invalid ContentEncoding order or scope');
+      if(type===1){if(!encryption||compression)throw new Error('malformed encrypted ContentEncoding');throw new UnsupportedContentEncoding('Encrypted subtitle track requires server rendering')}
+      if(type!==0||!compression){if(type!==0)throw new UnsupportedContentEncoding('Unknown subtitle encoding type requires server rendering');throw new Error('missing ContentCompression')}
+      let algorithm=0,settings:Uint8Array=new Uint8Array(),hasAlgorithm=false,hasSettings=false;
+      await scope.children(compression,async item=>{if(item.id===0x4254){if(hasAlgorithm)throw new Error('duplicate ContentCompAlgo');hasAlgorithm=true;algorithm=await scope.number(item)}else if(item.id===0x4255){if(hasSettings)throw new Error('duplicate ContentCompSettings');hasSettings=true;settings=await scope.value(item,1024*1024)}});
+      if(!Number.isSafeInteger(algorithm)||algorithm<0||algorithm>255)throw new UnsupportedContentEncoding('Unknown subtitle compression requires server rendering');
+      if(algorithm===0&&settings.length)throw new UnsupportedContentEncoding('Zlib subtitle dictionary requires server rendering');
+      result.push({order,scope:encodingScope,algorithm,settings});
+    });
+    if(!result.length)throw new Error('empty ContentEncodings');const orders=new Set(result.map(value=>value.order));if(orders.size!==result.length)throw new Error('duplicate ContentEncodingOrder');
+    return result.sort((a,b)=>b.order-a.order);
   }
   private async readFonts(scope:SubtitleReadScope,element:Element){
     await scope.children(element,async file=>{if(file.id!==0x61a7)return;let name='',mime='',data:Element|null=null;
@@ -81,7 +125,8 @@ export class MatroskaSubtitles implements SubtitleContainer {
     if(id.value!==track.number)return null;const at=id.length;if(header.length<at+3)throw new Error('Truncated subtitle block');
     if(header[at+2]&6)throw new Error('Laced subtitle blocks require server rendering');
     const relative=new DataView(header.buffer,header.byteOffset+at,2).getInt16(0),offset=at+3;
-    return {time:(clusterTime+relative)*this.scale,duration:duration===null?track.defaultDuration:duration*this.scale,data:await scope.read(element.data+offset,length-offset)};
+    const encoded=await scope.read(element.data+offset,length-offset),data=await decodeContent(encoded,track.encodings,1,MAX_PACKET_BYTES,scope.signal);
+    return {time:(clusterTime+relative)*this.scale,duration:duration===null?track.defaultDuration:duration*this.scale,data};
   }
   private async cluster(scope:SubtitleReadScope,position:number,track:Track,begin:number,end:number):Promise<{next:number;time:number;packets:SubtitlePacket[]}>{
     const cluster=await scope.ebml(position,this.segment.end);if(cluster.id!==ID.cluster)return {next:cluster.end,time:Infinity,packets:[]};

@@ -7,7 +7,7 @@ const gutter: Style = { 'padding-left': 'max(28px, 4vw)', 'padding-right': 'max(
 const gutterSmall = { 'padding-left': '18px', 'padding-right': '18px' } as Style;
 const sans = 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif';
 const enter = (delay: number) => `enter${delay}`;
-const enterPresets = Object.fromEntries([0, 220, 300, 380, 420, 440, 500, 520, 560].map(d => [enter(d), { keyframes: 'rise', duration: 640, delay: d, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' as const, still: { keyframes: 'dissolve', duration: 240 } }]));
+const enterPresets = Object.fromEntries([0, 140, 200, 220, 260, 280, 300, 340, 380, 400, 420, 440, 480, 500, 520, 560, 580, 600].map(d => [enter(d), { keyframes: 'rise', duration: 640, delay: d, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' as const, still: { keyframes: 'dissolve', duration: 240 } }]));
 
 const pill = (primary: boolean): Style => ({
   display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', height: '56px', 'border-radius': '999px',
@@ -39,7 +39,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
           { type: 'repeat', over: 'nav.destinations', item: navItem },
         ] },
       { type: 'box', small: { flex: '1' } },
-      { type: 'box', press: { action: 'search' }, label: '{s:search}', style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '10px', 'border-radius': '999px', border: '1px solid cinematic.glass-edge', 'background-color': 'cinematic.control', 'flex-shrink': '0' }, hover: { 'background-color': 'cinematic.control-hover' },
+      { type: 'box', press: { action: 'search' }, label: '{s:search}', style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '10px', 'border-radius': '999px', border: '1px solid var(--cinematic.glass-edge)', 'background-color': 'cinematic.control', 'flex-shrink': '0' }, hover: { 'background-color': 'cinematic.control-hover' },
         children: [{ type: 'icon', symbol: 'search', style: { width: '18px', height: '18px' } }] },
       { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', padding: '4px 14px 4px 4px', 'border-radius': '999px', 'flex-shrink': '0', color: 'ink.secondary', 'font-weight': '550' },
         hover: { 'background-color': 'cinematic.control', color: 'ink.primary' }, small: { padding: '4px' }, children: [
@@ -48,7 +48,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
         ] },
     ] },
   ] },
-  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'pop', style: { position: 'absolute', top: '78px', right: 'max(28px, 4vw)', 'z-index': '30', width: '260px', 'box-sizing': 'border-box', padding: '20px', display: 'flex', 'flex-direction': 'column', gap: '16px', border: '1px solid cinematic.glass-edge', 'border-radius': '20px', 'background-color': 'cinematic.popover', 'backdrop-filter': 'blur(24px)', 'box-shadow': '0px 24px 70px var(--cinematic.shadow)' },
+  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'pop', style: { position: 'absolute', top: '78px', right: 'max(28px, 4vw)', 'z-index': '30', width: '260px', 'box-sizing': 'border-box', padding: '20px', display: 'flex', 'flex-direction': 'column', gap: '16px', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '20px', 'background-color': 'cinematic.popover', 'backdrop-filter': 'blur(24px)', 'box-shadow': '0px 24px 70px var(--cinematic.shadow)' },
     small: { top: '104px', right: '12px' }, children: [
       { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center' }, children: [
         { type: 'text', text: '{env.viewerInitial}', style: { width: '40px', height: '40px', 'border-radius': '20px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-size': '17px', 'font-weight': '650', 'background-image': 'linear-gradient(135deg, var(--cinematic.ember) 0%, var(--cinematic.dusk) 100%)' } },
@@ -110,7 +110,7 @@ const heroMore = (primary: boolean): Node => ({ type: 'box', press: { action: 's
 
 const heroCopy: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.searching', not: true }], item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', ...gutter, gap: '16px', 'max-width': '46rem' }, small: { ...gutterSmall, gap: '12px', 'max-width': 'none' }, children: [
   { type: 'widget', widget: 'observe', params: { receipt: '{hero.receipt}' } },
-  { type: 'box', motion: enter(220), style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', 'align-self': 'flex-start', padding: '6px 12px 6px 10px', 'border-radius': '999px', 'background-color': 'cinematic.glass', 'backdrop-filter': 'blur(14px)', border: '1px solid cinematic.glass-edge' }, children: [
+  { type: 'box', motion: enter(220), style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', 'align-self': 'flex-start', padding: '6px 12px 6px 10px', 'border-radius': '999px', 'background-color': 'cinematic.glass', 'backdrop-filter': 'blur(14px)', border: '1px solid var(--cinematic.glass-edge)' }, children: [
     { type: 'box', style: { width: '6px', height: '6px', 'border-radius': '3px', 'background-color': 'brand.warm' } },
     { type: 'text', text: '{heroAct.reasonLabel}', style: { 'font-size': '11px', 'font-weight': '650', 'letter-spacing': '0.08em', 'text-transform': 'uppercase', color: 'ink.primary' } },
   ] },
@@ -159,13 +159,23 @@ const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '
     ] },
   ] };
 
+// A Top 10 row's numeral: large, outlined, fading toward its foot, the poster overlapping
+// its right edge. "10" sits tighter so both digits fit beside the card.
+const numeral = (ten: boolean): Node => ({ type: 'text', text: '{index.label}', when: [{ test: 'row.presentation', is: 'eq', value: 'ranked' }, { test: 'index', is: ten ? 'eq' : 'lt', value: '9' }],
+  style: { 'font-family': '"Arial Black", "Helvetica Neue", Arial, sans-serif', 'font-weight': '900', 'font-size': '348px', 'line-height': '0.74', 'letter-spacing': ten ? '-0.2em' : '-0.09em',
+    color: 'cinematic.rank-fill', '-webkit-text-stroke': '5px var(--cinematic.rank-stroke)', 'mask-image': 'linear-gradient(180deg, black 0%, black 50%, rgba(0, 0, 0, 0.25) 100%)',
+    'margin-right': '-50px', 'padding-bottom': '52px', 'flex-shrink': '0' },
+  small: { 'font-size': '220px', '-webkit-text-stroke': '3px var(--cinematic.rank-stroke)', 'margin-right': '-30px', 'padding-bottom': '44px' } });
+const rowItem: Node = { type: 'box', motion: 'card', stagger: { step: 45, cap: 8 }, style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end' },
+  children: [numeral(false), numeral(true), { type: 'use', template: 'card' }] };
+// Ranked rows space their cards wider, room for the numerals.
+const shelf = (ranked: boolean): Node => ({ type: 'box', when: [{ test: 'row.presentation', is: ranked ? 'eq' : 'ne', value: 'ranked' }],
+  style: { display: 'flex', 'flex-direction': 'row', gap: ranked ? '40px' : '18px', 'align-items': 'flex-start', 'padding-top': '16px', 'padding-bottom': '22px', ...gutter },
+  small: { gap: ranked ? '22px' : '12px', 'padding-top': '14px', 'padding-bottom': '18px', ...gutterSmall }, children: [{ type: 'repeat', over: 'row.items', item: rowItem }] });
+
 const row: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '4px', 'padding-bottom': '28px' }, small: { gap: '2px', 'padding-bottom': '18px' }, children: [
   { type: 'text', text: '{row.name}', role: 'heading', level: 2, style: { 'font-size': '21px', 'font-weight': '650', 'letter-spacing': '-0.012em', ...gutter }, small: { 'font-size': '18px', ...gutterSmall } },
-  { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 94%, transparent 100%)' }, children: [
-    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '18px', 'align-items': 'flex-start', 'padding-top': '16px', 'padding-bottom': '22px', ...gutter }, small: { gap: '12px', 'padding-top': '14px', 'padding-bottom': '18px', ...gutterSmall }, children: [
-      { type: 'repeat', over: 'row.items', item: { type: 'box', motion: 'card', stagger: { step: 45, cap: 8 }, style: { position: 'relative' }, children: [{ type: 'use', template: 'card' }] } },
-    ] },
-  ] },
+  { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 94%, transparent 100%)' }, children: [shelf(false), shelf(true)] },
 ] };
 
 const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column' }, children: [
@@ -179,47 +189,195 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 // The title page as a route (a first cut: the full Detail is the UI lead's conversion).
-const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', padding: '4vh 4vw', 'box-sizing': 'border-box', 'background-color': 'media.overlay', 'backdrop-filter': 'blur(18px) saturate(1.1)' },
+// The title page, as compiled cinematic draws it (skins/cinematic/detail.contract).
+const side: Style = { 'padding-left': 'max(32px, 5.5vw)', 'padding-right': 'max(32px, 5.5vw)' } as Style;
+const sideSmall: Style = { 'padding-left': '20px', 'padding-right': '20px' } as Style;
+const display: Style = { 'font-family': 'cinematic.display', 'font-weight': '400', 'letter-spacing': '-0.01em', 'line-height': '0.98' } as Style;
+const eyebrow: Style = { 'font-size': '11px', 'font-weight': '600', 'letter-spacing': '0.24em', 'text-transform': 'uppercase' } as Style;
+const focusRing = '0px 0px 0px 2px var(--surface.page), 0px 0px 0px 4px var(--brand.warm)';
+const ghost: Style = { border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'background-color': 'cinematic.control', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: 'ink.primary', 'font-weight': '600', transition: 'background-color 180ms linear' } as Style;
+const sectionHeading = (key: string): Node => ({ type: 'text', text: `{s:${key}}`, role: 'heading', level: 2, style: { ...display, 'font-size': '34px' }, small: { 'font-size': '28px' } });
+
+const band: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'min-height': 'min(80vh, 780px)', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, small: { 'min-height': '600px' }, children: [
+  { type: 'box', motion: 'expose', style: { position: 'absolute', inset: '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'mask-image': 'linear-gradient(180deg, black 0%, black 78%, transparent 100%)' }, children: [
+    { type: 'box', when: [{ test: 'detail.backdrop' }], motion: 'drift', style: { position: 'absolute', inset: '0px', 'transform-origin': '58% 40%' }, children: [
+      { type: 'image', src: '{detail.backdrop}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover', transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)' } },
+    ] },
+    { type: 'box', when: [{ test: 'detail.accent' }], style: { position: 'absolute', left: '-12%', bottom: '0%', width: '70%', height: '80%', 'background-color': '{detail.accent}', opacity: '0.18', 'mask-image': 'radial-gradient(closest-side, black 0%, transparent 100%)' } },
+    { type: 'box', when: [{ test: 'detail.accent', not: true }], style: { position: 'absolute', left: '-12%', bottom: '0%', width: '70%', height: '80%', 'background-color': 'brand.warm', opacity: '0.18', 'mask-image': 'radial-gradient(closest-side, black 0%, transparent 100%)' } },
+    { type: 'box', style: { position: 'absolute', inset: '0px', 'background-image': 'linear-gradient(90deg, var(--cinematic.scrim-deep) 0%, var(--cinematic.scrim-mid) 38%, var(--cinematic.scrim-clear) 72%), linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-strong) 20%, var(--cinematic.scrim-clear) 60%), linear-gradient(180deg, var(--cinematic.nav-scrim) 0%, var(--cinematic.scrim-clear) 22%)' } },
+    { type: 'image', src: 'assets/grain.svg', alt: '', style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'fill', opacity: '0.05' } },
+  ] },
+  { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '18px', 'padding-top': '120px', 'padding-bottom': '12px', ...side, 'max-width': '58rem' }, small: { gap: '14px', 'padding-top': '96px', 'padding-bottom': '8px', ...sideSmall }, children: [
+    { type: 'box', motion: enter(140), style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
+      { type: 'box', when: [{ test: 'detail.accent' }], style: { width: '24px', height: '2px', 'border-radius': '1px', 'background-color': '{detail.accent}' } },
+      { type: 'box', when: [{ test: 'detail.accent', not: true }], style: { width: '24px', height: '2px', 'border-radius': '1px', 'background-color': 'brand.warm' } },
+      { type: 'text', text: '{detail.kindLabel}', style: { ...eyebrow, 'font-size': '10px', color: 'brand.warm' } },
+    ] },
+    { type: 'image', when: [{ test: 'detail.logo' }], src: '{detail.logo}', alt: '{detail.name}', role: 'heading', level: 1, motion: enter(200), style: { height: '150px', width: 'auto', 'max-width': 'min(560px, 80%)', 'object-fit': 'contain', 'align-self': 'flex-start' }, small: { height: '92px', 'max-width': '80%' } },
+    { type: 'text', when: [{ test: 'detail.logo', not: true }], text: '{detail.name}', role: 'heading', level: 1, motion: enter(200), style: { ...display, 'font-size': '84px', 'text-shadow': '0px 4px 40px var(--cinematic.shadow)' }, small: { 'font-size': '46px' } },
+    { type: 'text', text: '{detail.factsLine}', motion: enter(260), style: { 'font-size': '14px', color: 'ink.secondary', 'font-variant-numeric': 'tabular-nums' } },
+    { type: 'box', when: [{ test: 'detail.hasMediaFacts' }], motion: enter(300), style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'flex-wrap': 'wrap' }, children: [
+      { type: 'repeat', over: 'detail.mediaFacts', item: { type: 'text', text: '{fact.text}', style: { 'font-size': '11px', 'font-weight': '650', 'letter-spacing': '0.06em', color: 'ink.primary', padding: '5px 9px', 'border-radius': '6px', border: '1px solid var(--cinematic.glass-edge-strong)', 'background-color': 'cinematic.control', 'backdrop-filter': 'blur(12px)' } } },
+    ] },
+    { type: 'text', when: [{ test: 'detail.summary' }], text: '{detail.summary}', motion: enter(340), style: { color: 'ink.primary', opacity: '0.88', 'font-size': '17px', 'line-height': '1.6', 'max-width': '42rem' }, small: { 'font-size': '15px' } },
+    { type: 'box', motion: enter(400), style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center', 'flex-wrap': 'wrap', 'margin-top': '10px' }, small: { 'margin-top': '6px' }, children: [
+      { type: 'box', when: [{ test: 'detail.canPlay' }], press: { action: 'play', arg: '{detail.id}' }, label: '{detail.playLabel}', testId: 'detail-play',
+        style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '56px', 'box-sizing': 'border-box', 'padding-left': '30px', 'padding-right': '34px', 'border-radius': '999px', 'background-color': 'ink.primary', color: 'ink.inverse', 'font-weight': '650', transition: 'background-color 180ms linear' },
+        small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px' }, hover: { 'background-color': 'cinematic.primary-hover' }, focus: { 'box-shadow': focusRing }, children: [
+          { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
+            { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' } },
+            { type: 'text', text: '{detail.playLabel}', style: { 'font-size': '16px' } },
+          ] },
+        ] },
+      { type: 'box', when: [{ test: 'detail.trailerReady' }], press: { action: 'playExtra', arg: '{detail.trailerId}' }, label: '{s:watchTrailer}', testId: 'detail-trailer',
+        style: { ...ghost, position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '56px', 'box-sizing': 'border-box', 'padding-left': '22px', 'padding-right': '26px' },
+        small: { height: '50px' }, hover: { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing }, children: [
+          { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
+            { type: 'icon', symbol: 'play', style: { width: '16px', height: '16px' } },
+            { type: 'text', text: '{s:watchTrailer}', style: { 'font-size': '15px' } },
+          ] },
+        ] },
+    ] },
+    { type: 'box', when: [{ test: 'detail.canPlay' }, { test: 'detail.hasResume' }], motion: enter(440), style: { width: '260px', height: '3px', 'border-radius': '2px', 'background-color': 'cinematic.track-strong', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, small: { width: '60%' }, children: [
+      { type: 'box', style: { height: '3px', width: '{detail.resumePct}%', 'background-color': 'brand.warm' } },
+    ] },
+  ] },
+] };
+
+// One episode: a still that lifts and shows a play mark on hover or focus, then its text.
+const episodeRow: Node = { type: 'box', group: true, motion: 'episode', stagger: { step: 40, cap: 8 }, style: { display: 'flex', 'flex-direction': 'row', gap: '24px', 'align-items': 'center', padding: '18px 0px', 'border-style': 'none none solid none', 'border-bottom-width': '1px', 'border-bottom-color': 'cinematic.hairline' }, small: { gap: '14px', 'align-items': 'flex-start' }, children: [
+  { type: 'box', press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'episode-{card.id}',
+    style: { position: 'relative', width: '220px', 'aspect-ratio': '16 / 9', 'border-radius': '10px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': 'surface.raised', 'flex-shrink': '0', scale: '1', 'box-shadow': '0px 0px 0px 1px var(--cinematic.hairline)', transition: 'scale 360ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 360ms cubic-bezier(0.16, 1, 0.3, 1)' },
+    small: { width: '128px' }, groupHover: { scale: '1.03', 'box-shadow': '0px 20px 40px -14px var(--cinematic.card-shadow), 0px 0px 0px 1px var(--cinematic.ring)' }, focus: { 'box-shadow': '0px 0px 0px 3px var(--ink.primary)' }, children: [
+      { type: 'image', when: [{ test: 'card.backdrop' }], src: '{card.backdrop}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover', transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)' } },
+      { type: 'box', when: [{ test: 'card.backdrop', not: true }], style: { position: 'absolute', inset: '0px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-image': 'linear-gradient(160deg, var(--cinematic.placeholder-top) 0%, var(--cinematic.placeholder-bottom) 100%)' }, children: [
+        { type: 'text', text: '{card.episodeNumberLabel}', style: { ...display, 'font-size': '34px', color: 'ink.secondary' }, small: { 'font-size': '26px' } },
+      ] },
+      { type: 'box', style: { position: 'absolute', inset: '0px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': 'cinematic.scrim-soft', opacity: '0', transition: 'opacity 360ms cubic-bezier(0.16, 1, 0.3, 1)' }, groupHover: { opacity: '1' }, children: [
+        { type: 'box', style: { width: '44px', height: '44px', 'border-radius': '22px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': 'cinematic.glass', 'backdrop-filter': 'blur(10px)', border: '1px solid var(--cinematic.glass-edge-strong)' }, children: [
+          { type: 'icon', symbol: 'play-fill', style: { width: '16px', height: '16px', color: 'ink.primary' } },
+        ] },
+      ] },
+      { type: 'box', when: [{ test: 'card.hasProgress' }], style: { position: 'absolute', left: '8px', right: '8px', bottom: '8px', height: '3px', 'border-radius': '2px', 'background-color': 'cinematic.track-strong', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
+        { type: 'box', style: { height: '3px', width: '{card.progressPct}%', 'background-color': 'brand.warm' } },
+      ] },
+    ] },
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-width': '0px', gap: '6px' }, children: [
+    { type: 'text', text: '{episode.numberTitle}', role: 'heading', level: 3, style: { 'font-size': '18px', 'font-weight': '600', 'line-clamp': '2' }, small: { 'font-size': '15px' } },
+    { type: 'text', text: '{card.facts}', style: { color: 'ink.quiet', 'font-size': '12px', 'font-variant-numeric': 'tabular-nums' } },
+    { type: 'text', when: [{ test: 'card.summary' }, { test: 'env.small', not: true }], text: '{card.summary}', style: { color: 'ink.secondary', 'font-size': '14px', 'line-clamp': '2', 'line-height': '1.55', 'max-width': '46rem' } },
+  ] },
+  { type: 'box', when: [{ test: 'env.small', not: true }], press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}', style: { position: 'relative', width: '44px', height: '44px', 'box-sizing': 'border-box', padding: '13px', 'flex-shrink': '0', 'border-radius': '999px', border: '1px solid var(--cinematic.glass-edge)', 'background-color': 'cinematic.control', 'backdrop-filter': 'blur(20px) saturate(1.3)' },
+    hover: { 'background-color': 'cinematic.control-hover' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'icon', symbol: 'play-fill', style: { width: '16px', height: '16px' } }] },
+] };
+
+// The next episode to watch, as a glass card above the list.
+const upNext: Node = { type: 'repeat', over: 'detail.upNext', item: { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '24px', padding: '20px', 'border-radius': '20px', 'background-color': 'cinematic.glass', border: '1px solid var(--cinematic.glass-edge)', 'box-shadow': 'inset 0px 1px 0px var(--cinematic.ring), 0px 24px 60px -20px var(--cinematic.card-shadow)' },
+  small: { 'flex-direction': 'column', 'align-items': 'stretch', gap: '16px', padding: '16px' }, children: [
+    { type: 'image', when: [{ test: 'card.backdrop' }], src: '{card.backdrop}', alt: '', style: { width: '220px', 'aspect-ratio': '16 / 9', 'object-fit': 'cover', 'border-radius': '12px', 'flex-shrink': '0' }, small: { width: '100%' } },
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', flex: '1', 'min-width': '0px' }, children: [
+      { type: 'text', text: '{episode.upNextLabel}', style: { ...eyebrow, 'font-size': '10px', color: 'brand.warm' } },
+      { type: 'text', text: '{episode.numberTitle}', role: 'heading', level: 3, style: { ...display, 'font-size': '30px' }, small: { 'font-size': '24px' } },
+      { type: 'text', when: [{ test: 'card.facts' }], text: '{card.facts}', style: { 'font-size': '13px', color: 'ink.secondary' } },
+    ] },
+    { type: 'box', press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'align-self': 'center', height: '50px', 'box-sizing': 'border-box', 'padding-left': '22px', 'padding-right': '26px', 'flex-shrink': '0', 'border-radius': '999px', 'background-color': 'ink.primary', color: 'ink.inverse', 'font-weight': '650', transition: 'background-color 180ms linear' },
+      small: { 'align-self': 'stretch' }, hover: { 'background-color': 'cinematic.primary-hover' }, focus: { 'box-shadow': focusRing }, children: [
+        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', 'justify-content': 'center' }, children: [
+          { type: 'icon', symbol: 'play-fill', style: { width: '16px', height: '16px' } },
+          { type: 'text', text: '{episode.playLabel}', style: { 'font-size': '15px' } },
+        ] },
+      ] },
+  ] } };
+
+const seasonTab = (on: boolean): Node => ({ type: 'box', when: [{ test: 'season.on', not: !on }], press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}',
+  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', height: '40px', padding: '0px 18px', 'box-sizing': 'border-box', border: '1px solid var(--cinematic.glass-edge)', 'border-radius': '999px', 'font-weight': '600', 'flex-shrink': '0',
+    'background-color': on ? 'ink.primary' : 'cinematic.control', color: on ? 'ink.inverse' : 'ink.primary', transition: 'background-color 180ms linear, color 180ms linear' },
+  hover: { 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': '0px 0px 0px 2px var(--brand.warm)' }, children: [{ type: 'text', text: '{card.name}', style: { 'font-size': '14px' } }] });
+
+const episodes: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'detail.hasEpisodes' }], motion: enter(480), style: { display: 'flex', 'flex-direction': 'column', gap: '24px', ...side }, small: { gap: '18px', ...sideSmall }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end', 'justify-content': 'space-between', 'flex-wrap': 'wrap', gap: '16px' }, children: [
+    { type: 'text', text: '{s:episodes}', role: 'heading', level: 2, style: { ...display, 'font-size': '38px' }, small: { 'font-size': '30px' } },
+  ] },
+  // The season tabs: a sticky glass bar that scrolls sideways.
+  { type: 'box', when: [{ test: 'detail.hasSeasons' }], role: 'group', label: '{s:season}', testId: 'season-picker',
+    style: { position: 'sticky', top: '0px', 'z-index': '4', display: 'flex', 'flex-direction': 'row', gap: '8px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'margin-left': '-12px', 'margin-right': '-12px', 'padding-left': '12px', 'padding-right': '12px', 'padding-top': '10px', 'padding-bottom': '10px', 'border-radius': '16px', 'background-color': 'cinematic.toolbar', 'backdrop-filter': 'blur(20px) saturate(1.3)' },
+    small: { 'margin-left': '-20px', 'margin-right': '-20px', 'padding-left': '20px', 'padding-right': '20px', 'border-radius': '0px' }, children: [
+      { type: 'repeat', over: 'detail.seasons', item: { type: 'box', style: { display: 'flex', 'flex-shrink': '0' }, children: [seasonTab(true), seasonTab(false)] } },
+    ] },
+  upNext,
+  // The episodes sit flush (each row draws its own padding and rule).
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: [{ type: 'repeat', over: 'detail.episodes', item: episodeRow }] },
+] };
+
+// An extra (trailer, featurette): a glass tile that plays, or says it is unavailable.
+const extraTile = (ready: boolean): Node => ({ type: 'box', when: [{ test: 'extra.ready', not: !ready }], ...(ready ? { press: { action: 'playExtra', arg: '{extra.id}' } } : {}), label: '{extra.name}',
+  style: { ...ghost, position: 'relative', 'border-radius': '16px', width: '280px', height: '110px', padding: '18px', 'box-sizing': 'border-box', 'flex-shrink': '0', ...(ready ? {} : { opacity: '0.42' }) },
+  small: { width: '220px', height: '96px' }, ...(ready ? { hover: { 'background-color': 'cinematic.control-hover', 'border-color': 'cinematic.glass-edge-strong' }, focus: { 'box-shadow': focusRing } } : {}), children: [
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'align-items': 'center', height: '100%' }, children: [
+      { type: 'box', style: { width: '40px', height: '40px', 'border-radius': '20px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': ready ? 'ink.primary' : 'cinematic.control', 'flex-shrink': '0' }, children: [
+        { type: 'icon', symbol: ready ? 'play-fill' : 'lock', style: { width: '14px', height: '14px', color: ready ? 'ink.inverse' : 'ink.quiet' } },
+      ] },
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '4px', flex: '1', 'min-width': '0px', 'text-align': 'left' }, children: [
+        { type: 'text', text: '{extra.name}', style: { 'font-size': '15px', 'font-weight': '600', 'line-clamp': '2' } },
+        ...(ready ? [] : [{ type: 'text', text: '{s:notAvailableYet}', style: { 'font-size': '12px', color: 'ink.quiet' } } as Node]),
+      ] },
+    ] },
+  ] } as Node);
+const extras: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'detail.hasExtras' }], motion: enter(520), style: { display: 'flex', 'flex-direction': 'column', gap: '16px' }, children: [
+  { ...sectionHeading('extras'), style: { ...display, 'font-size': '34px', ...side }, small: { 'font-size': '28px', ...sideSmall } } as Node,
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', ...side, 'padding-top': '4px', 'padding-bottom': '8px' }, small: { ...sideSmall }, children: [
+    { type: 'repeat', over: 'detail.extras', item: { type: 'box', style: { display: 'flex', 'flex-shrink': '0' }, children: [extraTile(true), extraTile(false)] } },
+  ] },
+] };
+
+// The cast: round portraits (or initials) with names and roles.
+const cast: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'detail.hasCast' }], motion: enter(560), style: { display: 'flex', 'flex-direction': 'column', gap: '16px' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'space-between', ...side }, small: { ...sideSmall }, children: [sectionHeading('featuring')] },
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '20px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 94%, transparent 100%)', ...side, 'padding-top': '4px', 'padding-bottom': '8px' }, small: { gap: '14px', ...sideSmall }, children: [
+      { type: 'repeat', over: 'detail.cast', item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', width: '112px', 'flex-shrink': '0', gap: '8px', 'align-items': 'center', 'text-align': 'center' }, small: { width: '84px' }, children: [
+        { type: 'box', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '100px', height: '100px', 'border-radius': '999px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-image': 'linear-gradient(135deg, var(--cinematic.placeholder-top) 0%, var(--cinematic.placeholder-bottom) 100%)', 'box-shadow': '0px 0px 0px 1px var(--cinematic.ring), 0px 12px 28px -14px var(--cinematic.card-shadow)' },
+          small: { width: '76px', height: '76px' }, children: [
+            { type: 'image', when: [{ test: 'person.portrait' }], src: '{person.portrait}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover', transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)' } },
+            { type: 'text', when: [{ test: 'person.portrait', not: true }], text: '{person.initials}', style: { ...display, 'font-size': '36px', color: 'ink.secondary' }, small: { 'font-size': '28px' } },
+          ] },
+        { type: 'text', text: '{person.name}', style: { 'font-size': '13px', 'font-weight': '600', 'line-clamp': '2', color: 'ink.primary' } },
+        { type: 'text', when: [{ test: 'person.role' }], text: '{person.role}', style: { 'font-size': '12px', color: 'ink.quiet', 'line-clamp': '2' } },
+      ] } },
+  ] },
+] };
+
+const crew: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'detail.crewLine' }], motion: enter(580), style: { display: 'flex', 'flex-direction': 'column', gap: '12px', ...side }, small: { ...sideSmall }, children: [
+  sectionHeading('behindTheStory'),
+  { type: 'text', text: '{detail.crewLine}', style: { 'font-size': '15px', color: 'ink.secondary', 'line-height': '1.7', 'max-width': '48rem' } },
+] };
+
+const related: Node = { type: 'repeat', over: 'detail.related', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], item: { type: 'use', template: 'row', motion: enter(600) } };
+
+const detailSections: Node[] = [band, episodes, extras, cast, crew, related];
+
+const title: Node = { type: 'box', motion: 'frameIn', style: { position: 'absolute', inset: '0px', display: 'flex', 'flex-direction': 'column', padding: '4vh 4vw', 'box-sizing': 'border-box', 'background-color': 'media.overlay', 'backdrop-filter': 'blur(18px) saturate(1.1)' },
   small: { padding: '0px' }, children: [
     { type: 'box', motion: 'open', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': 'surface.page', 'box-shadow': '0px 50px 160px var(--media.ground), 0px 0px 0px 1px var(--cinematic.glass-edge)' },
       small: { 'border-radius': '0px' }, children: [
-        { type: 'box', press: { action: 'back' }, label: '{s:close}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', width: '44px', height: '44px', 'box-sizing': 'border-box', padding: '13px', 'border-radius': '22px', border: '1px solid surface.line', 'background-color': 'surface.glass', 'backdrop-filter': 'blur(20px) saturate(1.3)' },
+        { type: 'box', press: { action: 'back' }, label: '{s:close}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', width: '44px', height: '44px', 'box-sizing': 'border-box', padding: '13px', 'border-radius': '22px', border: '1px solid var(--surface.line)', 'background-color': 'surface.glass', 'backdrop-filter': 'blur(20px) saturate(1.3)' },
           children: [{ type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } }] },
-        { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', style: { flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden' }, children: [
+        { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', style: { flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden', display: 'flex', 'flex-direction': 'column', gap: '52px', 'padding-bottom': '72px' }, small: { gap: '36px' }, children: [
           { type: 'text', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], text: '{s:opening}', style: { padding: '64px', color: 'ink.secondary' } },
           { type: 'text', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], text: '{s:failed}', role: 'alert', style: { padding: '64px', color: 'ink.secondary' } },
-          { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], style: { position: 'relative', 'min-height': '70vh' }, children: [
-            { type: 'image', when: [{ test: 'detail.backdrop' }], src: '{detail.backdrop}', alt: '', fade: true, motion: 'expose', style: { position: 'absolute', inset: '0px', width: '100%', height: '70vh', 'object-fit': 'cover' } },
-            { type: 'box', style: { position: 'absolute', inset: '0px', height: '70vh', 'background-image': 'linear-gradient(0deg, var(--surface.page) 0%, var(--cinematic.scrim-clear) 70%)' } },
-            { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '14px', padding: '38vh 56px 48px', 'max-width': '46rem' }, small: { padding: '42vh 20px 32px' }, children: [
-              { type: 'text', text: '{detail.kindLabel}', style: { 'font-size': '10px', 'font-weight': '600', 'letter-spacing': '0.18em', 'text-transform': 'uppercase', color: 'brand.warm' } },
-              { type: 'text', text: '{detail.name}', role: 'heading', level: 1, style: { 'font-family': 'cinematic.display', 'font-size': '64px', 'line-height': '0.98' }, small: { 'font-size': '40px' } },
-              { type: 'text', text: '{detail.factsLine}', style: { 'font-size': '14px', color: 'ink.secondary' } },
-              { type: 'text', when: [{ test: 'detail.summary' }], text: '{detail.summary}', style: { 'font-size': '16px', 'line-height': '1.55', color: 'ink.secondary' } },
-              { type: 'box', when: [{ test: 'detail.canPlay' }], press: { action: 'play', arg: '{detail.id}' }, label: '{detail.playLabel}', testId: 'detail-play', style: { ...pill(true), position: 'relative', 'align-self': 'flex-start' }, children: [
-                { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' }, children: [
-                  { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' } },
-                  { type: 'text', text: '{detail.playLabel}', style: { 'font-size': '16px' } },
-                ] },
-              ] },
-            ] },
-            { type: 'box', when: [{ test: 'detail.hasEpisodes' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '10px', padding: '0px 56px 56px' }, small: { padding: '0px 20px 40px' }, children: [
-              { type: 'repeat', over: 'detail.episodes', item: { type: 'box', press: { action: 'play', arg: '{card.id}' }, label: '{card.label}', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '16px', padding: '12px', 'border-radius': '14px' }, hover: { 'background-color': 'cinematic.control' }, children: [
-                { type: 'text', text: '{episode.numberTitle}', style: { 'font-size': '15px', 'font-weight': '600' } },
-                { type: 'text', text: '{card.facts}', style: { 'font-size': '13px', color: 'ink.quiet' } },
-              ] } },
-            ] },
-          ] },
+          ...detailSections,
         ] },
       ] },
   ] };
 
 export const cinematicDoc: SkinDocument = {
-  schema: 1, renderer: 1, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
+  schema: 1, renderer: 6, id: 'cinematic-doc', name: 'Cinematic (data)', version: '1.0.0', tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg', swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
-  strings: { en: { velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', opening: 'Opening title…', failed: 'This title could not be opened.' } },
+  strings: { en: { velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Cinematic (data)', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', close: 'Close', opening: 'Opening title…', failed: 'This title could not be opened.' , episodes: "Episodes", season: "Season", extras: "Extras", featuring: "Featuring", behindTheStory: "Behind the story", notAvailableYet: "Not available yet" , watchTrailer: "Watch trailer" } },
   motion: {
     ...enterPresets,
+    frameIn: { keyframes: 'dissolve', duration: 420, easing: 'ease-out', fill: 'both', still: { keyframes: 'dissolve', duration: 200 } },
+    episode: { keyframes: 'rise', duration: 640, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both', still: { keyframes: 'dissolve', duration: 240 } },
     navIn: { keyframes: 'dissolve', duration: 900, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 240 } },
     open: { keyframes: 'open', duration: 640, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 240 } },
     pop: { keyframes: 'pop', duration: 360, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', still: { keyframes: 'dissolve', duration: 160 } },
