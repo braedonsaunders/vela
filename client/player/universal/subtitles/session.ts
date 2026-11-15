@@ -7,10 +7,12 @@ import {SubtitleCueIndex,parseTextSubtitles,type SubtitleTextCue} from './text';
 import {paintPGS,paintText,type SubtitleViewport} from './canvas';
 import {PGSDecoder,type PGSDisplay} from './pgs';
 import {createAssOutput,type AssOutput} from './ass';
+import {streamingPGS} from './streaming-pgs';
 import {readSubtitlePreferences,validateSubtitlePreferences,updateSubtitlePreference} from './preferences';
-import type {SubtitleContainer,SubtitleDescription,SubtitleFailure,SubtitlePacket,SubtitlePreferences,SubtitleSource,SubtitleTrack} from './types';
+import type {SubtitleContainer,SubtitleDescription,SubtitleFailure,SubtitlePacket,SubtitlePreferences,SubtitleSource,SubtitleTrack,SubtitleClusterStream} from './types';
 export interface SubtitleSessionOptions {
   mediaRequests?:import('../../media-auth').MediaRequestPolicy;
+  clusterStream?:SubtitleClusterStream;
   surface:HTMLDivElement;reader?:ByteReader;source:SubtitleSource;epoch:number;clock:()=>number;
   assetBaseURL:string;describedTracks?:readonly SubtitleDescription[];signal:AbortSignal;
   getViewport?:()=>SubtitleViewport;onTracks?:(tracks:readonly SubtitleTrack[])=>void;
@@ -71,7 +73,7 @@ export class SubtitleSession {
     try{
       const tracks=await wait(this.discover(),operation.signal);operation.signal.throwIfAborted();const track=tracks.find(item=>item.id===trackId);
       if(!track)throw new Error('Subtitle track is unavailable');
-      const prepared=await this.prepare(track,position??this.now(),operation.signal);operation.signal.throwIfAborted();this.install(prepared);
+      const prepared=await this.prepare(track,position??this.now(),operation.signal);if(operation.signal.aborted){prepared.dispose();operation.signal.throwIfAborted()}this.install(prepared);
       this.pending=null;this.selected=trackId;this.changed();this.tick();
     }catch(error){if(!operation.signal.aborted)this.fail(trackId,error);else if(this.operation===operation)throw error}
   }
@@ -112,6 +114,11 @@ export class SubtitleSession {
   }
   private async prepare(track:SubtitleTrack,time:number,signal:AbortSignal):Promise<Prepared>{
     signal.throwIfAborted();if(track.delivery.kind==='burn-in')throw new Error('Subtitle track requires server burn-in');
+    if(track.codec==='pgs'&&track.delivery.kind==='embedded'&&this.container instanceof MatroskaSubtitles){
+      if(!this.options.clusterStream)throw new Error('Streaming subtitle source is unavailable');
+      return streamingPGS({container:this.container,trackId:track.id,stream:this.options.clusterStream,surface:this.canvas(false),position:Math.max(0,time),clock:()=>this.now(),signal,
+        onFailure:error=>{if(!signal.aborted)this.fail(track.id,error)}});
+    }
     let packets:SubtitlePacket[]=[],end=Infinity,fromStart=true,history=true,content:string|undefined;
     if(track.delivery.kind==='external'){
       if(track.delivery.format==='webvtt-window')return this.progressive(track,time,signal);

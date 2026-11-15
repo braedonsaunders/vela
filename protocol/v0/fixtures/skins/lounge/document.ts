@@ -29,7 +29,7 @@ const capsuleFocus: Style = { 'background-color': '$ink', color: '$ground', scal
 // ---------------------------------------------------------------- shell: the top bar
 
 const tab = (label: string, press: { action: 'home' | 'library'; arg?: string }, on: Node['when'], testId: string): Node => ({
-  type: 'box', press, label, testId, a11y: { current: on },
+  type: 'box', press, controlStates: false, label, testId, a11y: { current: on },
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '10px', height: 'clamp(44px, 3.4vw, 62px)', 'box-sizing': 'border-box', padding: '0px clamp(18px, 1.5vw, 28px)', 'border-radius': '999px', color: '$ink-dim', 'font-size': 'clamp(16px, 1.25vw, 24px)', 'font-weight': '600', 'white-space': 'nowrap', 'flex-shrink': '0', transition: lift },
   focus: { 'background-color': '$ink', color: '$ground', scale: '1.08', 'box-shadow': '0px 14px 34px -10px rgba(0, 0, 0, 0.7)' },
   hover: { color: '$ink', 'background-color': 'rgba(255, 255, 255, 0.12)' },
@@ -49,7 +49,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
     { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', height: '150%', 'pointer-events': 'none', 'background-image': 'linear-gradient(180deg, rgba(5, 6, 9, 0.9) 0%, rgba(5, 6, 9, 0.72) 55%, rgba(5, 6, 9, 0) 100%)', 'backdrop-filter': 'blur(22px) saturate(1.2)', 'mask-image': 'linear-gradient(180deg, black 0%, black 58%, transparent 100%)' } },
     { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '18px', 'box-sizing': 'border-box', height: 'calc(clamp(84px, 7vw, 132px) + max(0px, env(safe-area-inset-top)))', 'padding-top': 'max(14px, 2.4vh)', ...gutter },
       small: { height: '64px', 'padding-top': '0px', gap: '10px', ...gutterSmall }, children: [
-        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', testId: 'nav-brand', style: { position: 'relative', display: 'flex', 'align-items': 'center', padding: '10px 14px', margin: '0px -14px', 'border-radius': '18px', 'flex-shrink': '0', transition: lift },
+        { type: 'box', press: { action: 'home' }, controlStates: false, label: '{s:velaHome}', testId: 'nav-brand', style: { position: 'relative', display: 'flex', 'align-items': 'center', padding: '10px 14px', margin: '0px -14px', 'border-radius': '18px', 'flex-shrink': '0', transition: lift },
           focus: { 'background-color': 'rgba(255, 255, 255, 0.14)', scale: '1.06' }, children: [
             { type: 'image', src: 'assets/brand/vela-lockup.svg', alt: '', style: { width: 'clamp(92px, 7.4vw, 142px)', height: 'clamp(35px, 2.8vw, 54px)' }, small: { width: '74px', height: '28px' } },
           ] },
@@ -59,7 +59,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
             small: { padding: '4px' }, children: [
               tab('{s:home}', { action: 'home' }, [{ test: 'env.section', is: 'eq', value: 'home' }], 'nav-home'),
               { type: 'repeat', over: 'nav.destinations', item: libraryTab },
-              { type: 'box', press: { action: 'search' }, label: '{s:search}', testId: 'nav-search',
+              { type: 'box', press: { action: 'search', focus: 'vela-search' }, controlStates: false, label: '{s:search}', testId: 'nav-search',
                 style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '10px', height: 'clamp(44px, 3.4vw, 62px)', 'box-sizing': 'border-box', padding: '0px clamp(18px, 1.5vw, 28px)', 'border-radius': '999px', color: '$ink-dim', 'font-size': 'clamp(16px, 1.25vw, 24px)', 'font-weight': '600', 'flex-shrink': '0', transition: lift },
                 focus: { 'background-color': '$ink', color: '$ground', scale: '1.08', 'box-shadow': '0px 14px 34px -10px rgba(0, 0, 0, 0.7)' }, hover: { color: '$ink', 'background-color': 'rgba(255, 255, 255, 0.12)' },
                 small: { height: '40px', padding: '0px 12px' }, children: [
@@ -68,7 +68,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
                 ] },
             ] },
         ] },
-        { type: 'box', id: 'lounge-profile', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', a11y: { expanded: [{ test: 'flag:menu' }], haspopup: 'dialog' }, style: { position: 'relative', display: 'flex', 'flex-shrink': '0', 'border-radius': '999px', transition: lift },
+        { type: 'box', id: 'lounge-profile', press: { action: 'toggle', arg: 'menu' }, controlStates: false, label: '{s:profile}', testId: 'profile-menu', a11y: { expanded: [{ test: 'flag:menu' }], haspopup: 'dialog' }, style: { position: 'relative', display: 'flex', 'flex-shrink': '0', 'border-radius': '999px', transition: lift },
           focus: { scale: '1.12', 'box-shadow': '0px 0px 0px 4px rgba(255, 255, 255, 0.94), 0px 0px 40px 4px rgba(220, 185, 152, 0.4)' }, hover: { scale: '1.06' }, children: [
             { type: 'text', text: '{env.viewerInitial}', style: { display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: 'clamp(44px, 3.4vw, 62px)', height: 'clamp(44px, 3.4vw, 62px)', 'border-radius': '999px', 'font-size': 'clamp(18px, 1.35vw, 26px)', 'font-weight': '700', color: '$ground', 'background-image': 'linear-gradient(140deg, #f5f1e9 0%, #dcb998 100%)' },
               small: { width: '40px', height: '40px', 'font-size': '16px' } },
@@ -86,7 +86,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
           { type: 'text', text: '{s:watchingAs}', style: { 'font-size': 'clamp(14px, 1vw, 18px)', color: '$ink-quiet' } },
         ] },
       ] },
-      { type: 'box', press: { action: 'openPicker' }, label: '{s:appearance}', testId: 'skin-picker', style: { ...sheetRow() }, focus: sheetFocus(), hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' }, children: [
+      { type: 'box', press: { action: 'openPicker' }, controlStates: false, label: '{s:appearance}', testId: 'skin-picker', style: { ...sheetRow() }, focus: sheetFocus(), hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' }, children: [
         { type: 'icon', symbol: 'layers', style: { width: '24px', height: '24px' } },
         { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '2px', flex: '1' }, children: [
           { type: 'text', text: '{s:appearance}', style: { 'font-weight': '650' } },
@@ -96,7 +96,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       ] },
       { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
       { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-      { type: 'box', press: { action: 'signOut' }, label: '{s:signOut}', style: { ...sheetRow() }, focus: sheetFocus(), hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' }, children: [
+      { type: 'box', press: { action: 'signOut' }, controlStates: false, label: '{s:signOut}', style: { ...sheetRow() }, focus: sheetFocus(), hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' }, children: [
         { type: 'icon', symbol: 'sign-out', style: { width: '24px', height: '24px' } },
         { type: 'text', text: '{s:signOut}', style: { 'font-weight': '650' } },
       ] },
@@ -109,9 +109,10 @@ function sheetFocus(): Style { return { 'background-color': '$ink', color: '$gro
 
 // ---------------------------------------------------------------- home
 
-// The backdrop: full-screen, pinned behind everything while the rows scroll over it.
+// The backdrop: full-screen, pinned behind everything while the rows scroll over it. It
+// leaves while a query is open (it would cover the results that follow the home).
 // Each featured title mounts its own layer, which dissolves in over the last.
-const backdrop: Node = { type: 'box', style: { position: 'sticky', top: '0px', height: '100vh', 'margin-bottom': '-100vh', 'z-index': '0', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'pointer-events': 'none', 'background-color': '$ground' }, children: [
+const backdrop: Node = { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'sticky', top: '0px', height: '100vh', 'margin-bottom': '-100vh', 'z-index': '0', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'pointer-events': 'none', 'background-color': '$ground' }, children: [
   { type: 'repeat', over: 'home.hero', item: { type: 'box', motion: 'backdropIn', style: { position: 'absolute', inset: '0px' }, children: [
     { type: 'box', when: [{ test: 'hero.backdrop' }], motion: 'drift', style: { position: 'absolute', inset: '0px', 'transform-origin': '70% 30%' }, children: [
       { type: 'image', src: '{hero.backdrop}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
@@ -122,11 +123,9 @@ const backdrop: Node = { type: 'box', style: { position: 'sticky', top: '0px', h
   ] } },
   // Shade: the copy's side, the floor the rows sit on, and a vignette.
   { type: 'box', style: { position: 'absolute', inset: '0px', 'background-image': 'linear-gradient(90deg, rgba(5, 6, 9, 0.88) 0%, rgba(5, 6, 9, 0.55) 30%, rgba(5, 6, 9, 0) 62%), linear-gradient(0deg, rgba(5, 6, 9, 0.96) 0%, rgba(5, 6, 9, 0.72) 30%, rgba(5, 6, 9, 0) 62%), radial-gradient(ellipse 120% 90% at 65% 30%, rgba(5, 6, 9, 0) 55%, rgba(5, 6, 9, 0.6) 100%)' } },
-  // While searching the backdrop sinks into the ground.
-  { type: 'box', when: [{ test: 'env.searching' }], motion: 'fadeIn', style: { position: 'absolute', inset: '0px', 'background-color': 'rgba(5, 6, 9, 0.84)', 'backdrop-filter': 'blur(40px)' } },
 ] };
 
-const heroPlay: Node = { type: 'box', press: { action: 'play', arg: '{hero.id}' }, label: '{heroAct.actionLabel}', testId: 'hero-primary', when: [{ test: 'heroAct.playable' }],
+const heroPlay: Node = { type: 'box', press: { action: 'play', arg: '{hero.id}' }, controlStates: false, label: '{heroAct.actionLabel}', testId: 'hero-primary', when: [{ test: 'heroAct.playable' }],
   style: { ...capsule('clamp(58px, 4.4vw, 84px)'), 'background-color': 'rgba(245, 241, 233, 0.92)', color: '$ground' }, focus: capsuleFocus, hover: { 'background-color': '$ink' }, small: { height: '54px' }, children: [
     { type: 'icon', symbol: 'play-fill', style: { width: 'clamp(18px, 1.3vw, 26px)', height: 'clamp(18px, 1.3vw, 26px)' } },
     { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px', 'align-items': 'flex-start' }, children: [
@@ -137,7 +136,7 @@ const heroPlay: Node = { type: 'box', press: { action: 'play', arg: '{hero.id}' 
       { type: 'box', style: { height: '5px', width: '{heroAct.progressPct}%', 'background-color': '$ground' } },
     ] },
   ] };
-const heroMore = (primary: boolean): Node => ({ type: 'box', press: { action: 'select', arg: '{hero.kindId}' }, label: '{s:moreInfo}', testId: 'hero-more', when: [{ test: 'heroAct.playable', not: primary }],
+const heroMore = (primary: boolean): Node => ({ type: 'box', press: { action: 'select', arg: '{hero.kindId}' }, controlStates: false, label: '{s:moreInfo}', testId: 'hero-more', when: [{ test: 'heroAct.playable', not: primary }],
   style: capsule('clamp(58px, 4.4vw, 84px)'), focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.24)' }, small: { height: '54px' }, children: [
     { type: 'icon', symbol: 'info', style: { width: 'clamp(18px, 1.3vw, 26px)', height: 'clamp(18px, 1.3vw, 26px)' } },
     { type: 'text', text: '{s:moreInfo}' },
@@ -157,7 +156,7 @@ const shelf: Node = { type: 'box', when: [{ test: 'env.searching', not: true }],
     ] } },
     // Featured titles: one large focusable dot each, the current one long and filling.
     { type: 'box', role: 'group', label: '{s:featured}', when: [{ test: 'env.heroCount', is: 'gt', value: '1' }], motion: 'copy3', style: { display: 'flex', 'flex-direction': 'row', gap: '6px', 'align-items': 'center', 'margin-top': 'clamp(14px, 1.6vw, 30px)', 'margin-left': '-8px' } as Style, children: [
-      { type: 'repeat', over: 'home.heroes', item: { type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{hero.name}', a11y: { current: [{ test: 'index.current' }] }, style: { position: 'relative', display: 'flex', 'align-items': 'center', padding: '10px 8px', 'border-radius': '999px', transition: lift },
+      { type: 'repeat', over: 'home.heroes', item: { type: 'box', press: { action: 'pickHero', arg: '{index}' }, controlStates: false, label: '{hero.name}', a11y: { current: [{ test: 'index.current' }] }, style: { position: 'relative', display: 'flex', 'align-items': 'center', padding: '10px 8px', 'border-radius': '999px', transition: lift },
         focus: { 'background-color': 'rgba(255, 255, 255, 0.16)', scale: '1.15' }, children: [
           { type: 'box', when: [{ test: 'index.current' }], style: { position: 'relative', width: 'clamp(36px, 2.6vw, 52px)', height: 'clamp(7px, 0.5vw, 10px)', 'border-radius': '999px', 'background-color': 'rgba(255, 255, 255, 0.28)', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
             { type: 'box', when: [{ test: 'env.rotating' }], motion: 'heroFill', style: { position: 'absolute', inset: '0px', 'background-color': '$ink' } },
@@ -170,7 +169,7 @@ const shelf: Node = { type: 'box', when: [{ test: 'env.searching', not: true }],
 
 // A poster: the focused one lifts, grows and catches the light; the art inside moves
 // against the frame, which reads as depth (the remote's parallax).
-const poster: Node = { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}',
+const poster: Node = { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, controlStates: false, label: '{card.label}', testId: 'title-{card.id}',
   style: { position: 'relative', display: 'flex', 'flex-direction': 'column', width: 'clamp(150px, 11.2vw, 252px)', 'flex-shrink': '0', gap: 'clamp(12px, 1vw, 20px)' }, small: { width: '128px', gap: '10px' }, children: [
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '2 / 3', 'border-radius': 'clamp(12px, 0.9vw, 18px)', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised', 'box-shadow': rest, scale: '1', translate: '0px 0px', transition: lift },
@@ -201,7 +200,7 @@ const poster: Node = { type: 'box', group: true, press: { action: 'select', arg:
 
 // A row of things in progress (continue watching, next up) draws wide 16:9 stills:
 // the frame you left, the time left, and the episode under it.
-const wide: Node = { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}',
+const wide: Node = { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, controlStates: false, label: '{card.label}', testId: 'title-{card.id}',
   style: { position: 'relative', display: 'flex', 'flex-direction': 'column', width: 'clamp(280px, 22vw, 470px)', 'flex-shrink': '0', gap: 'clamp(12px, 1vw, 20px)' }, small: { width: '240px', gap: '10px' }, children: [
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'border-radius': 'clamp(12px, 0.9vw, 18px)', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised', 'box-shadow': rest, scale: '1', translate: '0px 0px', transition: lift },
@@ -231,7 +230,13 @@ const ranked: Node = { type: 'box', style: { position: 'relative', display: 'fle
   { type: 'use', template: 'poster' },
 ] };
 
-const row: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-bottom': 'clamp(8px, 1vw, 20px)' }, children: [
+const pageEnd: Node[] = [
+  { type: 'box', when: [{ test: 'row.hasMore' }, { test: 'row.presentation', is: 'ne', value: 'ranked' }], style: { position: 'relative', 'align-self': 'stretch', width: '2px', 'flex-shrink': '0' }, children: [{ type: 'widget', widget: 'sentinel', params: { on: 'row' } }] },
+  { type: 'box', when: [{ test: 'row.loadingMore' }], role: 'status', label: '{s:loadingMore}', motion: 'pulse', style: { width: 'clamp(150px, 11.2vw, 252px)', 'aspect-ratio': '2 / 3', 'flex-shrink': '0', 'border-radius': 'clamp(12px, 0.9vw, 18px)', 'background-color': 'rgba(255, 255, 255, 0.06)', 'box-shadow': 'inset 0px 0px 0px 1px rgba(255, 255, 255, 0.08)' }, small: { width: '128px' } },
+];
+// A row of the home feed pages in more items as its end comes into view; related rows on a
+// title page show what they have.
+const rowOf = (paged: boolean): Node => ({ type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-bottom': 'clamp(8px, 1vw, 20px)' }, children: [
   { type: 'text', text: '{row.name}', role: 'heading', level: 2, style: { 'font-size': 'clamp(21px, 1.6vw, 32px)', 'font-weight': '700', 'letter-spacing': '-0.01em', 'text-shadow': '0px 1px 12px rgba(0, 0, 0, 0.5)', ...gutter }, small: { 'font-size': '19px', ...gutterSmall } },
   // Room above and below the track lets a focused poster grow without being clipped.
   { type: 'box', style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' }, children: [
@@ -239,18 +244,70 @@ const row: Node = { type: 'box', style: { position: 'relative', display: 'flex',
       { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'ne', value: 'ranked' }, { test: 'row.landscape', not: true }], item: { type: 'use', template: 'poster', motion: 'cardIn', stagger: { step: 40, cap: 8 } } },
       { type: 'repeat', over: 'row.items', when: [{ test: 'row.presentation', is: 'ne', value: 'ranked' }, { test: 'row.landscape' }], item: { type: 'use', template: 'wide', motion: 'cardIn', stagger: { step: 40, cap: 8 } } },
       { type: 'repeat', over: 'row.items', limit: 10, when: [{ test: 'row.presentation', is: 'eq', value: 'ranked' }], item: { type: 'use', template: 'ranked', motion: 'cardIn', stagger: { step: 40, cap: 8 } } },
+      ...(paged ? pageEnd : []),
     ] },
+  ] },
+] });
+const row = rowOf(true), relatedRow = rowOf(false);
+
+// Home before it has anything to show: the shelf and two rows in outline, breathing; and if
+// the server can't be reached, one sentence and a large Try again a remote can land on.
+const bone = (style: Style): Node => ({ type: 'box', motion: 'pulse', style: { 'border-radius': '999px', 'background-color': 'rgba(245, 241, 233, 0.08)', ...style } as Style });
+const posterBone: Node = { type: 'box', motion: 'pulse', style: { width: 'clamp(150px, 11.2vw, 252px)', 'aspect-ratio': '2 / 3', 'flex-shrink': '0', 'border-radius': 'clamp(12px, 0.9vw, 18px)', 'background-color': 'rgba(245, 241, 233, 0.06)' }, small: { width: '128px' } };
+const boneRow: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: 'clamp(22px, 2vw, 40px)', 'padding-bottom': 'clamp(30px, 2.6vw, 52px)', 'overflow-x': 'hidden', ...gutter }, small: { ...gutterSmall }, children: [
+  bone({ width: 'clamp(160px, 14vw, 280px)', height: 'clamp(18px, 1.4vw, 28px)' } as Style),
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: 'clamp(20px, 1.9vw, 40px)' }, small: { gap: '14px' }, children: Array.from({ length: 8 }, () => posterBone) },
+] };
+const loading: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], role: 'status', label: '{s:loadingHome}', style: { display: 'flex', 'flex-direction': 'column', 'min-height': '100vh', 'overflow-y': 'hidden' }, children: [
+  { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', gap: 'clamp(16px, 1.4vw, 26px)', 'box-sizing': 'border-box', 'min-height': 'max(500px, 64vh)', 'padding-bottom': 'clamp(40px, 4vw, 80px)', ...gutter }, small: { 'min-height': '470px', ...gutterSmall }, children: [
+    bone({ width: 'clamp(120px, 9vw, 180px)', height: 'clamp(12px, 0.9vw, 18px)' } as Style),
+    bone({ width: 'min(640px, 70vw)', height: 'clamp(52px, 5vw, 100px)', 'border-radius': '20px' } as Style),
+    bone({ width: 'min(420px, 60vw)', height: 'clamp(16px, 1.25vw, 24px)' } as Style),
+    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: 'clamp(14px, 1.2vw, 24px)', 'margin-top': 'clamp(8px, 1vw, 18px)' } as Style, children: [
+      bone({ width: 'clamp(160px, 12vw, 240px)', height: 'clamp(58px, 4.4vw, 84px)' } as Style),
+      bone({ width: 'clamp(140px, 10vw, 200px)', height: 'clamp(58px, 4.4vw, 84px)' } as Style),
+    ] },
+  ] },
+  boneRow, boneRow,
+] };
+const failed: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], role: 'alert', motion: 'fadeIn', style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-start', 'justify-content': 'center', gap: 'clamp(18px, 1.6vw, 30px)', 'box-sizing': 'border-box', 'min-height': '100vh', ...gutter }, small: { ...gutterSmall }, children: [
+  { type: 'image', src: 'assets/brand/vela-symbol.svg', alt: '', style: { width: 'clamp(44px, 3.4vw, 64px)', height: 'clamp(44px, 3.4vw, 64px)', opacity: '0.9' } },
+  { type: 'text', text: '{s:homeFailed}', role: 'heading', level: 1, style: { 'font-size': 'clamp(32px, 3vw, 60px)', 'font-weight': '800', 'letter-spacing': '-0.02em', 'line-height': '1.05', 'max-width': '22ch' } },
+  { type: 'text', text: '{s:homeFailedDetail}', style: { 'font-size': 'clamp(17px, 1.3vw, 25px)', 'line-height': '1.45', color: '$ink-dim', 'max-width': '40rem' } },
+  { type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, controlStates: false, label: '{s:tryAgain}', testId: 'home-retry', style: { ...capsule('clamp(58px, 4.4vw, 84px)'), 'background-color': 'rgba(245, 241, 233, 0.92)', color: '$ground', 'margin-top': 'clamp(6px, 0.8vw, 14px)' } as Style, focus: capsuleFocus, hover: { 'background-color': '$ink' }, children: [
+    { type: 'text', text: '{s:tryAgain}', style: { 'font-weight': '700' } },
   ] },
 ] };
 
-const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'min-height': '100%', 'padding-bottom': 'max(48px, 6vh)', color: '$ink', 'font-family': sans }, children: [
+// No minimum height: while a query is open the home is only its search bar, and the results
+// follow right under it.
+const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', color: '$ink', 'font-family': sans }, children: [
+  loading,
+  failed,
   backdrop,
   shelf,
   // Search: a wide field between the shelf and the rows; it rises to the top while a query is open.
-  { type: 'slot', slot: 'searchField', style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-top': '0px', 'padding-bottom': 'clamp(4px, 0.6vw, 12px)', ...gutter } as Style,
-    small: { ...gutterSmall, 'padding-top': '8px' } as Style, inner: { width: '100%', 'max-width': '960px' } },
-  { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column' }, children: [
+  // Search: Lounge's own ten-foot bar between the shelf and the rows; with a query open the
+  // shelf and rows give way and it rises under the top bar.
+  { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-bottom': 'clamp(4px, 0.6vw, 12px)', ...gutter } as Style,
+    small: { ...gutterSmall, 'padding-top': '8px' } as Style,
+    states: [{ when: [{ test: 'env.searching' }], style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-top': 'clamp(120px, 10.5vw, 200px)', 'padding-bottom': 'clamp(10px, 1vw, 20px)', ...gutter } as Style }], children: [
+    { type: 'box', role: 'search', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: 'clamp(14px, 1.1vw, 22px)', width: '100%', 'max-width': '1100px', 'box-sizing': 'border-box', height: 'clamp(60px, 4.6vw, 88px)', padding: '0px clamp(10px, 0.8vw, 14px) 0px clamp(22px, 1.7vw, 32px)', 'border-radius': '999px', 'background-color': 'rgba(18, 20, 26, 0.62)', 'backdrop-filter': 'blur(30px) saturate(1.4)', 'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.12), 0px 20px 50px -20px rgba(0, 0, 0, 0.8)', transition: lift },
+      small: { height: '54px' },
+      states: [{ when: [{ test: 'env.searchFocused' }], style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: 'clamp(14px, 1.1vw, 22px)', width: '100%', 'max-width': '1100px', 'box-sizing': 'border-box', height: 'clamp(60px, 4.6vw, 88px)', padding: '0px clamp(10px, 0.8vw, 14px) 0px clamp(22px, 1.7vw, 32px)', 'border-radius': '999px', 'background-color': 'rgba(30, 33, 41, 0.86)', 'backdrop-filter': 'blur(30px) saturate(1.4)', 'box-shadow': ring, transition: lift } }], children: [
+        { type: 'icon', symbol: 'search', style: { width: 'clamp(20px, 1.5vw, 30px)', height: 'clamp(20px, 1.5vw, 30px)', 'flex-shrink': '0', color: '$ink-dim' } },
+        { type: 'widget', widget: 'searchInput', params: { placeholder: '{s:searchPlaceholder}', label: '{s:search}', placeholderColor: 'rgba(245, 241, 233, 0.5)' }, style: { flex: '1', 'min-width': '0px', outline: 'none', color: '$ink', 'font-size': 'clamp(19px, 1.45vw, 30px)', 'font-weight': '550' }, small: { 'font-size': '17px' } },
+        { type: 'box', when: [{ test: 'env.searching' }], press: { action: 'clearSearch', focus: 'vela-search' }, controlStates: false, label: '{s:clear}', testId: 'search-clear',
+          style: { ...capsule('clamp(42px, 3.2vw, 62px)'), 'background-color': 'rgba(255, 255, 255, 0.12)', 'font-size': 'clamp(15px, 1.1vw, 21px)' }, focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.22)' }, children: [
+            { type: 'icon', symbol: 'close', style: { width: 'clamp(14px, 1vw, 20px)', height: 'clamp(14px, 1vw, 20px)' } },
+            { type: 'text', text: '{s:clear}', small: { display: 'none' } },
+          ] },
+      ] },
+  ] },
+  { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'column', 'padding-bottom': 'max(48px, 6vh)' }, children: [
     { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'row', motion: 'rowIn', stagger: { step: 80, cap: 4 } } },
+    { type: 'box', when: [{ test: 'env.homeHasMore' }], style: { position: 'relative', height: '2px' }, children: [{ type: 'widget', widget: 'sentinel', params: { on: 'home' } }] },
+    { type: 'text', when: [{ test: 'env.homeMoreLoading' }], text: '{s:loadingMore}', role: 'status', motion: 'pulse', style: { 'font-size': 'clamp(15px, 1.1vw, 21px)', color: '$ink-quiet', ...gutter, 'padding-top': '12px' } },
   ] },
 ] };
 
@@ -266,7 +323,7 @@ const track = (items: Node, gap = 'clamp(20px, 1.9vw, 40px)'): Node => ({ type: 
 ] });
 
 // An episode: a 16:9 still, its number and name, and the time left.
-const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}: {card.label}', testId: 'episode-{card.id}',
+const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: '{card.id}' }, controlStates: false, label: '{episode.playLabel}: {card.label}', testId: 'episode-{card.id}',
   style: { position: 'relative', display: 'flex', 'flex-direction': 'column', width: 'clamp(260px, 21vw, 440px)', 'flex-shrink': '0', gap: 'clamp(12px, 1vw, 20px)' }, small: { width: '240px', gap: '10px' }, children: [
     { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '16 / 9', 'border-radius': 'clamp(12px, 0.9vw, 18px)', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$raised', 'box-shadow': rest, scale: '1', translate: '0px 0px', transition: lift },
       groupHover: { scale: '1.08', translate: '0px -8px', 'box-shadow': ring }, children: [
@@ -294,7 +351,7 @@ const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: 
   ] };
 
 // The season picker: capsules, the selected one filled.
-const season: Node = { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', testId: 'season-{card.id}', a11y: { selected: [{ test: 'season.on' }] },
+const season: Node = { type: 'box', press: { action: 'select', arg: '{season.pick}' }, controlStates: false, label: '{card.name}', testId: 'season-{card.id}', a11y: { selected: [{ test: 'season.on' }] },
   style: { ...capsule('clamp(46px, 3.4vw, 64px)'), 'background-color': 'rgba(255, 255, 255, 0.08)', color: '$ink-dim', 'font-size': 'clamp(15px, 1.15vw, 22px)' }, focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.18)' }, children: [
     // The chosen season, or the first while none is chosen yet.
     { type: 'box', when: [{ test: 'season.on' }], style: { position: 'absolute', inset: '0px', 'border-radius': '999px', 'background-color': 'rgba(255, 255, 255, 0.2)', 'box-shadow': 'inset 0px 0px 0px 2px rgba(255, 255, 255, 0.5)' } },
@@ -311,7 +368,7 @@ const person: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 
   { type: 'text', when: [{ test: 'person.role' }], text: '{person.role}', style: { 'font-size': 'clamp(12px, 0.85vw, 17px)', color: '$ink-quiet', 'line-clamp': '1' } },
 ] };
 
-const extra: Node = { type: 'box', when: [{ test: 'extra.ready' }], press: { action: 'playExtra', arg: '{extra.id}' }, label: '{s:playExtra}: {extra.name}', testId: 'extra-{extra.id}',
+const extra: Node = { type: 'box', when: [{ test: 'extra.ready' }], press: { action: 'playExtra', arg: '{extra.id}' }, controlStates: false, label: '{s:playExtra}: {extra.name}', testId: 'extra-{extra.id}',
   style: { ...capsule('clamp(54px, 4vw, 76px)'), 'justify-content': 'flex-start', 'max-width': 'clamp(260px, 24vw, 460px)' }, focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.24)' }, children: [
     { type: 'icon', symbol: 'play-fill', style: { width: 'clamp(16px, 1.1vw, 22px)', height: 'clamp(16px, 1.1vw, 22px)', 'flex-shrink': '0' } },
     { type: 'text', text: '{extra.name}', style: { 'line-clamp': '1' } },
@@ -327,7 +384,7 @@ const titleCopy: Node = { type: 'box', style: { display: 'flex', 'flex-direction
     { type: 'text', when: [{ test: 'detail.summary' }], text: '{detail.summary}', motion: 'copy2', style: { 'font-size': 'clamp(17px, 1.3vw, 25px)', 'line-height': '1.45', color: '$ink-dim', 'line-clamp': '4', 'max-width': '46rem', 'text-shadow': '0px 1px 16px rgba(0, 0, 0, 0.7)' }, small: { 'font-size': '15px' } },
     { type: 'text', when: [{ test: 'detail.crewLine' }], text: '{detail.crewLine}', motion: 'copy2', style: { 'font-size': 'clamp(14px, 1vw, 19px)', color: '$ink-quiet', 'max-width': '46rem', 'line-clamp': '2' } },
     { type: 'box', motion: 'copy3', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: 'clamp(14px, 1.2vw, 24px)', 'align-items': 'center', 'margin-top': 'clamp(8px, 1vw, 18px)' } as Style, children: [
-      { type: 'box', when: [{ test: 'detail.canPlay' }], press: { action: 'play', arg: '{detail.id}' }, label: '{detail.playLabel}', testId: 'detail-play',
+      { type: 'box', when: [{ test: 'detail.canPlay' }], press: { action: 'play', arg: '{detail.id}' }, controlStates: false, label: '{detail.playLabel}', testId: 'detail-play',
         style: { ...capsule('clamp(58px, 4.4vw, 84px)'), 'background-color': 'rgba(245, 241, 233, 0.92)', color: '$ground' }, focus: capsuleFocus, hover: { 'background-color': '$ink' }, small: { height: '54px' }, children: [
           { type: 'icon', symbol: 'play-fill', style: { width: 'clamp(18px, 1.3vw, 26px)', height: 'clamp(18px, 1.3vw, 26px)' } },
           { type: 'text', text: '{detail.playLabel}', style: { 'font-weight': '700' } },
@@ -335,7 +392,7 @@ const titleCopy: Node = { type: 'box', style: { display: 'flex', 'flex-direction
             { type: 'box', style: { height: '5px', width: '{detail.resumePct}%', 'background-color': '$ground' } },
           ] },
         ] },
-      { type: 'repeat', over: 'detail.upNext', when: [{ test: 'detail.canPlay', not: true }], item: { type: 'box', press: { action: 'play', arg: '{card.id}' }, label: '{episode.playLabel}: {card.label}', testId: 'detail-up-next',
+      { type: 'repeat', over: 'detail.upNext', when: [{ test: 'detail.canPlay', not: true }], item: { type: 'box', press: { action: 'play', arg: '{card.id}' }, controlStates: false, label: '{episode.playLabel}: {card.label}', testId: 'detail-up-next',
         style: { ...capsule('clamp(58px, 4.4vw, 84px)'), 'background-color': 'rgba(245, 241, 233, 0.92)', color: '$ground', 'max-width': 'min(640px, 80vw)' }, focus: capsuleFocus, hover: { 'background-color': '$ink' }, small: { height: '54px' }, children: [
           { type: 'icon', symbol: 'play-fill', style: { width: 'clamp(18px, 1.3vw, 26px)', height: 'clamp(18px, 1.3vw, 26px)', 'flex-shrink': '0' } },
           { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px', 'align-items': 'flex-start', 'min-width': '0px' }, children: [
@@ -346,7 +403,7 @@ const titleCopy: Node = { type: 'box', style: { display: 'flex', 'flex-direction
             { type: 'box', style: { height: '5px', width: '{card.progressPct}%', 'background-color': '$ground' } },
           ] },
         ] } },
-      { type: 'box', press: { action: 'back' }, label: '{s:back}', testId: 'detail-back', style: capsule('clamp(58px, 4.4vw, 84px)'), focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.24)' }, small: { height: '54px' }, children: [
+      { type: 'box', press: { action: 'back' }, controlStates: false, label: '{s:back}', testId: 'detail-back', style: capsule('clamp(58px, 4.4vw, 84px)'), focus: capsuleFocus, hover: { 'background-color': 'rgba(255, 255, 255, 0.24)' }, small: { height: '54px' }, children: [
         { type: 'icon', symbol: 'back', style: { width: 'clamp(16px, 1.2vw, 24px)', height: 'clamp(16px, 1.2vw, 24px)' } },
         { type: 'text', text: '{s:back}' },
       ] },
@@ -367,7 +424,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
     { type: 'text', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], text: '{s:opening}', role: 'status', motion: 'fadeIn', style: { padding: `clamp(140px, 14vw, 240px) ${side}`, 'font-size': 'clamp(18px, 1.4vw, 28px)', color: '$ink-quiet' } },
     { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'failed' }], role: 'alert', style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-start', gap: '28px', padding: `clamp(140px, 14vw, 240px) ${side}` }, children: [
       { type: 'text', text: '{s:failed}', style: { 'font-size': 'clamp(22px, 1.8vw, 36px)', 'font-weight': '700' } },
-      { type: 'box', press: { action: 'back' }, label: '{s:back}', style: capsule('clamp(58px, 4.4vw, 84px)'), focus: capsuleFocus, children: [{ type: 'icon', symbol: 'back', style: { width: '22px', height: '22px' } }, { type: 'text', text: '{s:back}' }] },
+      { type: 'box', press: { action: 'back' }, controlStates: false, label: '{s:back}', style: capsule('clamp(58px, 4.4vw, 84px)'), focus: capsuleFocus, children: [{ type: 'icon', symbol: 'back', style: { width: '22px', height: '22px' } }, { type: 'text', text: '{s:back}' }] },
     ] },
     { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'ready' }], style: { display: 'flex', 'flex-direction': 'column' }, children: [
       titleCopy,
@@ -381,7 +438,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
       ]),
       section('{s:extras}', [{ test: 'detail.hasExtras' }], [track({ type: 'repeat', over: 'detail.extras', item: extra }, 'clamp(14px, 1.2vw, 24px)')]),
       section('{s:cast}', [{ test: 'detail.hasCast' }], [track({ type: 'repeat', over: 'detail.cast', item: person }, 'clamp(18px, 1.6vw, 32px)')]),
-      { type: 'repeat', over: 'detail.related', item: { type: 'use', template: 'row' } },
+      { type: 'repeat', over: 'detail.related', item: { type: 'use', template: 'relatedRow' } },
     ] },
   ] },
 ] };
@@ -389,13 +446,14 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
 const rise = (delay: number) => ({ keyframes: 'rise', duration: 760, delay, easing: ease, fill: 'both' as const, still: { keyframes: 'dissolve', duration: 220 } });
 
 const lounge: SkinDocument = {
-  schema: 1, renderer: 4, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
+  schema: 1, renderer: 8, id: 'lounge', name: 'Lounge', version: '1.0.0', tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.0/preview.jpg', swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
   tokens: { ground: '#05060a', raised: '#1a1d24', ink: '#f5f1e9', 'ink-dim': 'rgba(245, 241, 233, 0.78)', 'ink-quiet': 'rgba(245, 241, 233, 0.52)', amber: '#f2c27e' },
-  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew' } },
+  strings: { en: { mainNav: 'Main', velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', watchingAs: 'Watching on this screen', appearance: 'Appearance', skinName: 'Lounge', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', moreInfo: 'More info', featured: 'Featured titles', back: 'Back', opening: 'Opening…', failed: 'This title couldn’t be opened.', seasons: 'Seasons', episodes: 'Episodes', extras: 'Trailers and extras', playExtra: 'Play', cast: 'Cast and crew', loadingHome: 'Getting your library ready', homeFailed: 'Your library couldn’t be reached', homeFailedDetail: 'Vela couldn’t connect to your server. Check that it’s on and connected, then try again.', tryAgain: 'Try again', searchPlaceholder: 'Search films, shows, people and channels', clear: 'Clear', loadingMore: 'Loading more…' } },
   motion: {
     navIn: { keyframes: 'dissolve', duration: 700, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 200 } },
     sheet: { keyframes: 'pop', duration: 380, easing: ease, still: { keyframes: 'dissolve', duration: 160 } },
+    pulse: { keyframes: 'breathe', duration: 1600, easing: 'ease-in-out', iterations: 'infinite', fill: 'none', still: { keyframes: 'none', duration: 0 } },
     fadeIn: { keyframes: 'dissolve', duration: 420, easing: 'ease-out', still: { keyframes: 'dissolve', duration: 160 } },
     backdropIn: { keyframes: 'dissolve', duration: 1200, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', still: { keyframes: 'dissolve', duration: 300 } },
     drift: { keyframes: 'drift', duration: 40000, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', direction: 'alternate', fill: 'none', still: { keyframes: 'none', duration: 0 } },
@@ -404,10 +462,12 @@ const lounge: SkinDocument = {
     cardIn: { keyframes: 'rise', duration: 700, easing: ease, still: { keyframes: 'dissolve', duration: 220 } },
     rowIn: { keyframes: 'rise', duration: 760, delay: 380, easing: ease, still: { keyframes: 'dissolve', duration: 220 } },
   },
-  templates: { poster, wide, ranked, row },
+  templates: { poster, wide, ranked, row, relatedRow },
   slots: { shell, home },
   routes: { title },
-  detail: { wide: 'fullscreen', small: 'fullscreen' },
+  // The title page is a full screen of its own: no frame drawn over home behind it.
+  detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },
+  status: true,
 };
 
 export default lounge;

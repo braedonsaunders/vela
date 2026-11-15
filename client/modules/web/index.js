@@ -2075,6 +2075,7 @@ class PlaybackEngine {
   original;
   coreQuality = new CoreQuality;
   deferredPath = null;
+  deferredPosition = 0;
   browserFallbacks = new Set;
   originalJob;
   originalGeneration;
@@ -2084,6 +2085,7 @@ class PlaybackEngine {
   overlayEpoch = 0;
   subtitleStyle = readSubtitlePreferences();
   subtitleFailures = new Set;
+  subtitleFailureNotes = [];
   originalStartTimer;
   localDecoderRetries = new Set;
   originalClosing = Promise.resolve();
@@ -2217,7 +2219,10 @@ class PlaybackEngine {
   }
   checkWaiting() {
     if (this.pendingTracks && performance.now() - this.pendingTracks.startedAt > 15000) {
+      if (this.pendingTracks.subtitle !== undefined)
+        this.subtitlePreference = this.pendingTracks.previousSubtitlePreference;
       this.pendingTracks = undefined;
+      this.deferredPath = null;
       this.emit({ type: "error", failure: { kind: "action", message: "Track selection authorization timed out", recoverable: true } });
     }
     if (this.pendingSeek && !this.pendingSeek.authorized && performance.now() - this.pendingSeek.startedAt > 15000) {
@@ -2336,7 +2341,7 @@ class PlaybackEngine {
       state: this.pendingSeek ? "buffering" : this.status,
       sourceId: this.source?.id ?? null,
       strategy: this.source?.strategy ?? null,
-      diagnostics: this.original ? { implementation: this.original.implementation, metadataDiscrepancies: this.original.readout.metadataDiscrepancies } : undefined,
+      diagnostics: this.original || this.subtitleFailureNotes.length ? { implementation: this.original?.implementation, metadataDiscrepancies: this.original?.readout.metadataDiscrepancies ?? [], subtitleFailures: [...this.subtitleFailureNotes] } : undefined,
       backend: this.backend,
       renditionId: this.pipeline?.current?.id ?? (this.backend === "webgpu" ? this.coreQuality.id : this.backend === "native-hls" ? this.manualQuality ?? this.source?.initialRenditionId ?? null : null),
       qualityIds: this.pipeline?.qualityIds ?? (this.backend === "webgpu" ? this.source?.renditions?.map((r) => r.id) ?? [] : []),
@@ -2506,6 +2511,7 @@ class PlaybackEngine {
     if (session.id !== this.session?.id) {
       this.browserFallbacks.clear();
       this.subtitleFailures.clear();
+      this.subtitleFailureNotes = [];
       this.subtitlePreference = undefined;
       this.deferredPath = null;
       this.audioPreference = undefined;
@@ -2544,7 +2550,7 @@ class PlaybackEngine {
       if (id !== source.id && (session.sources.some((s) => s.id === id) || session.onDemandSources?.some((s) => s.id === id))) {
         this.source = source;
         this.status = "buffering";
-        this.requestSwitch({ id, onDemand: true }, position);
+        this.requestSwitch({ id, onDemand: true }, Math.max(position, this.deferredPosition));
         this.publish();
         return;
       }
@@ -2935,6 +2941,8 @@ class PlaybackEngine {
   }
   rejectCommand(message) {
     if (this.pendingTracks) {
+      if (this.pendingTracks.subtitle !== undefined)
+        this.subtitlePreference = this.pendingTracks.previousSubtitlePreference;
       this.pendingTracks = undefined;
       this.deferredPath = null;
       if (message)
@@ -2951,7 +2959,9 @@ class PlaybackEngine {
       throw new Error("Server track selection is unavailable");
     if (this.pendingTracks)
       throw new Error("A track selection is already pending");
-    this.pendingTracks = { ...tracks, startedAt: performance.now() };
+    this.pendingTracks = { ...tracks, previousSubtitlePreference: this.subtitlePreference, startedAt: performance.now() };
+    if (tracks.subtitle !== undefined)
+      this.subtitlePreference = tracks.subtitle;
     this.emit({ type: "session-command", sessionId: this.session.id, command: {
       kind: "tracks",
       sourceGeneration: this.controller.source,
@@ -3171,6 +3181,7 @@ class PlaybackEngine {
       const overlay = await loadSubtitleSession({
         surface,
         reader: original?.supportsSubtitles ? original.byteReader : undefined,
+        clusterStream: original?.subtitleClusters,
         mediaRequests: this.mediaAccess,
         source: { url: source.url, container: original?.sourceContainer ?? source.delivery, sessionId: session.id, sourceGeneration: this.controller.source, seekGeneration: this.controller.seek },
         epoch: ++this.overlayEpoch,
@@ -3236,6 +3247,13 @@ class PlaybackEngine {
     }
   }
   subtitleFailed(failure) {
+    const note = failure.message.replace(/https?:\/\/\S+/g, "[source]").slice(0, 256);
+    if (!this.subtitleFailureNotes.includes(note)) {
+      this.subtitleFailureNotes.push(note);
+      if (this.subtitleFailureNotes.length > 8)
+        this.subtitleFailureNotes.shift();
+    }
+    this.publish(true);
     const serverId = failure.serverId;
     const key = `${this.session?.id}:${this.source?.sourceRevision ?? this.source?.timeline}:${failure.trackId}`;
     if (serverId && this.session?.serverControlled && this.overlay?.tracks.some((track) => track.id === failure.trackId && track.delivery.kind === "embedded") && this.session.subtitleTracks.some((track) => track.id === serverId) && !this.subtitleFailures.has(key) && !this.pendingTracks && !this.pendingSwitch && !this.recovering && !["failed", "ended"].includes(this.status)) {
@@ -3330,6 +3348,7 @@ class PlaybackEngine {
             const burn = subtitle?.delivery.kind === "embedded" && subtitle.codec === "pgs" ? subtitle.serverId : undefined;
             if (audio || burn) {
               this.deferredPath = source.id;
+              this.deferredPosition = this.position();
               this.requestTracks({ ...audio ? { audio } : {}, ...burn ? { subtitle: burn } : {} });
             } else
               this.requestSwitch({ id: source.id, onDemand: true }, this.position());
