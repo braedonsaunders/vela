@@ -5,6 +5,8 @@
 import { msg } from '@vela/core';
 import type { detailModel, entry, homeModel } from '@vela/core';
 import type { Hit, SearchView } from './widgets/search/model';
+import type { AuthView } from './widgets/auth/model';
+import { AUTH_VOCABULARY, quickChars } from './widgets/auth/vocabulary';
 import { SEARCH_VOCABULARY, searchCollection } from './widgets/search/vocabulary';
 
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
@@ -46,6 +48,8 @@ export interface Env {
   pagers: Record<string, { atStart: boolean; atEnd: boolean }>;
   /** The open query's search answer (routes.search); none while no query is open. */
   search?: SearchView;
+  /** The signed-out page (routes.auth); none while signed in. */
+  auth?: AuthView;
 }
 
 /** The binding context: the item a node is repeated over, and its position. */
@@ -96,8 +100,8 @@ function detail(read: (d: DetailModel, e: Env) => string, none = ''): Accessor {
 
 const CARD_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rating', 'progressLabel', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
 const DETAIL_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
-const NO_MODEL = ['ch.', 'tile.', 'library.', 'opt.', 'signin.', 'collection.', 'quick.', 'char.', 'env.auth', 'env.library', 'env.collection',
-  'env.clock', 'env.liveReady', 'env.channelCount', 'env.favoriteCount', 'env.hasLiveLibrary', 'env.authBackdrop', 'env.authWordmark'];
+const NO_MODEL = ['ch.', 'tile.', 'library.', 'opt.', 'collection.', 'env.library', 'env.collection',
+  'env.clock', 'env.liveReady', 'env.channelCount', 'env.favoriteCount', 'env.hasLiveLibrary'];
 
 export const VOCABULARY: Record<string, Accessor> = {
   ...Object.fromEntries(CARD_FIELDS.flatMap(f => [[`card.${f}`, from('card', x => String(x[f]))], [`hero.${f}`, from('hero', x => String(x[f]))]])),
@@ -241,6 +245,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.hasRelated': detail(d => yes(d.related.length > 0), 'false'),
   'detail.selectedSeason': (_, e) => e.season,
   ...SEARCH_VOCABULARY,
+  ...AUTH_VOCABULARY,
 };
 
 /** A key's accessor, or undefined for a key no document may name. */
@@ -258,6 +263,7 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
   const d = e.detail;
   const search = searchCollection(over, c, e, limit);
   if (search) return search;
+  if (over === 'quick.chars') return quickChars(c, e, limit);
   switch (over) {
     case 'home.rows': return at(e.home?.rows ?? [], row => ({ row }));
     case 'row.items': return at(c.row?.items ?? [], card => ({ card }));
