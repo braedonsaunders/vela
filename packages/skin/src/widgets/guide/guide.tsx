@@ -104,8 +104,8 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     if (runOff !== 0) pickDay(model.day + runOff);
   };
 
-  const headerHeight = small ? 168 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
-  const tileHeight = small ? 60 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
+  const headerHeight = small ? 196 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
+  const tileHeight = small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
   const landing = {
     minute: handOff && handOff.minute >= 0 ? handOff.minute : model.landing,
     channelId: handOff?.channelId ?? '',
@@ -143,7 +143,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
             />
           ) : null}
           {view.tile.state !== 'off' ? (
-            <View style={{ position: 'absolute', right: side, bottom: 8, zIndex: 2 }}>
+            <View style={{ position: 'absolute', right: side, bottom: small ? 12 : 8, zIndex: 2 }}>
               <GuideTile
                 look={look}
                 tile={view.tile}

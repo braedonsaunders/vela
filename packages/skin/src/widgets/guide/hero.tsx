@@ -49,7 +49,7 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
           justifyContent: 'flex-end',
           paddingLeft: side,
           paddingRight: inset,
-          paddingBottom: 8,
+          paddingBottom: small ? 12 : 8,
         }}
       >
         <Animated.View
