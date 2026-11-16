@@ -60,11 +60,12 @@ final class VelaPlayerView: ExpoView {
 
     required init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
-        backgroundColor = .black
+        backgroundColor = .clear
         clipsToBounds = true
         metalLayer.contentsScale = UIScreen.main.nativeScale
         metalLayer.framebufferOnly = true
         metalLayer.backgroundColor = UIColor.black.cgColor
+        metalLayer.isHidden = true
         layer.addSublayer(metalLayer)
     }
 
@@ -100,9 +101,13 @@ final class VelaPlayerView: ExpoView {
     }
 
     func setPreview(_ map: [String: Any]?) {
+        let hadPreview = previewSource != nil
         previewSource = PreviewPlayback.Source(map)
         if previewSource != nil {
             stop()
+            backgroundColor = .clear
+        } else if hadPreview {
+            preview.stop()
         }
         updatePreview()
     }
@@ -113,6 +118,9 @@ final class VelaPlayerView: ExpoView {
     }
 
     private func updatePreview() {
+        guard previewSource != nil else {
+            return
+        }
         preview.update(previewSource, wanted: previewActive && window != nil)
     }
 
@@ -131,6 +139,8 @@ final class VelaPlayerView: ExpoView {
         guard previewSource == nil, let object, let next = VelaPlan.decode(object) else {
             return
         }
+        backgroundColor = .black
+        metalLayer.isHidden = false
         let previous = plan
         if let previous, previous.sessionId == next.sessionId {
             let stale = next.revision <= previous.revision

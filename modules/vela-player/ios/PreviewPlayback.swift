@@ -56,6 +56,7 @@ final class PreviewPlayback {
     }
 
     func stop() {
+        layer.isHidden = true
         expiry?.invalidate()
         expiry = nil
         playing = nil
@@ -69,6 +70,7 @@ final class PreviewPlayback {
     private func start(_ source: Source) {
         guard let url = resolve(source.url) else {
             onFailure?("The preview's address is not usable")
+            onState?("failed")
             return
         }
         let client: MPVClient
@@ -88,11 +90,18 @@ final class PreviewPlayback {
             ])
         } catch {
             onFailure?("\(error)")
+            onState?("failed")
             return
         }
         mpv = client
         playing = source
         client.observe("pause", format: MPV_FORMAT_FLAG)
+        client.observe("video-pts", format: MPV_FORMAT_DOUBLE)
+        client.onProperty = { [weak self] name, value in
+            if name == "video-pts", value is Double {
+                self?.layer.isHidden = false
+            }
+        }
         client.onEvent = { [weak self] event in
             self?.event(event)
         }
@@ -121,6 +130,7 @@ final class PreviewPlayback {
         case .endFile(let reason, _):
             // MPV_END_FILE_REASON_ERROR (4); EOF (0) when it does not loop.
             if reason == 4 {
+                stop()
                 onFailure?("The preview could not be played")
                 onState?("failed")
             } else if reason == 0 {

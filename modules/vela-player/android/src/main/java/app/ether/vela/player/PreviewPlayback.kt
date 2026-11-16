@@ -14,6 +14,7 @@ internal class PreviewPlayback(
   private val context: Context,
   private val host: PlayerHost,
   private val report: PlayerReport,
+  private val showVideo: (Boolean) -> Unit,
 ) {
   private val main = Handler(Looper.getMainLooper())
   private val expire = Runnable { expired() }
@@ -127,6 +128,9 @@ internal class PreviewPlayback(
     }
     mpv = client
     client.onProperty = { name, value ->
+      if (name == "video-pts" && value is Double) {
+        showVideo(true)
+      }
       state.update(name, value)
       report.publish(state, null)
     }
@@ -134,6 +138,7 @@ internal class PreviewPlayback(
     for ((name, format) in PlayerState.observed) {
       client.observe(name, format)
     }
+    client.observe("video-pts", MpvFormat.DOUBLE)
     host.surface?.let { client.attach(it) }
     // A credentialed URL's redirects are resolved first, as for a plan (MediaRedirects).
     MediaRedirects.resolve(url) { media ->
@@ -154,7 +159,11 @@ internal class PreviewPlayback(
         state.failureKind = if (event.error == MpvEvent.ERROR_LOADING_FAILED) "network" else "source"
       }
       // A refused preview grant fails the preview; the host asks for a new grant, the view never retries.
-      MpvClient.Event.SeekDone, is MpvClient.Event.Refused -> Unit
+      is MpvClient.Event.Refused -> {
+        state.failure = "The preview's grant was refused"
+        state.failureKind = "network"
+      }
+      MpvClient.Event.SeekDone -> Unit
     }
     report.publish(state, null, force = true)
     if (state.phase == PlayerState.Phase.ENDED || state.phase == PlayerState.Phase.FAILED) {
@@ -175,12 +184,14 @@ internal class PreviewPlayback(
   }
 
   private fun fail(message: String) {
+    stop()
     state.failure = message
     state.failureKind = "source"
     report.publish(state, null, force = true)
   }
 
   private fun stop() {
+    showVideo(false)
     main.removeCallbacks(expire)
     val client = mpv ?: return
     mpv = null

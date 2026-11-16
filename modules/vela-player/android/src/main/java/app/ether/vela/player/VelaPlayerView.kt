@@ -1,12 +1,13 @@
-// VelaPlayerView on Android and Android TV: libmpv drawing into a SurfaceView, driven by the
+// VelaPlayerView on Android and Android TV: libmpv drawing into a TextureView, driven by the
 // contract's props: a plan through PlayerController, or a trailer preview through PreviewPlayback.
 // Chrome is drawn by JavaScript above it.
 package app.ether.vela.player
 
 import android.content.Context
 import android.graphics.Color
-import android.view.SurfaceHolder
-import android.view.SurfaceView
+import android.graphics.SurfaceTexture
+import android.view.Surface
+import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import expo.modules.kotlin.AppContext
@@ -21,7 +22,8 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private val onSessionCommand by EventDispatcher<Map<String, Any?>>()
   private val onSessionRefresh by EventDispatcher<Map<String, Any?>>()
 
-  private val video = SurfaceView(context)
+  private val video = TextureView(context)
+  private var videoSurface: Surface? = null
   private val report = PlayerReport(
     emitSnapshot = { onSnapshot(it) },
     emitObservation = { onObservation(it) },
@@ -30,29 +32,41 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     emitSessionRefresh = { onSessionRefresh(it) },
   )
   private val controller = PlayerController(context, this, report)
-  private val preview = PreviewPlayback(context, this, report)
+  private val preview = PreviewPlayback(context, this, report) { visible ->
+    video.alpha = if (visible) 1f else 0f
+  }
 
-  // The SurfaceView fills the view by Android layout; React Native sizes this view.
+  // The TextureView fills the view by Android layout; React Native sizes this view.
   override val shouldUseAndroidLayout = true
 
   init {
-    setBackgroundColor(Color.BLACK)
-    video.holder.addCallback(object : SurfaceHolder.Callback {
-      override fun surfaceCreated(holder: SurfaceHolder) {
-        controller.surfaceCreated(holder.surface)
+    setBackgroundColor(Color.TRANSPARENT)
+    video.isOpaque = false
+    video.alpha = 0f
+    video.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+      override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
+        videoSurface = Surface(texture)
+        controller.surfaceCreated(videoSurface!!)
         preview.surfaceCreated()
-      }
-
-      override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         controller.surfaceChanged(width, height)
         preview.surfaceChanged(width, height)
       }
 
-      override fun surfaceDestroyed(holder: SurfaceHolder) {
+      override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
+        controller.surfaceChanged(width, height)
+        preview.surfaceChanged(width, height)
+      }
+
+      override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
         controller.surfaceDestroyed()
         preview.surfaceDestroyed()
+        videoSurface?.release()
+        videoSurface = null
+        return true
       }
-    })
+
+      override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
+    }
     addView(video, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     live.add(this)
   }
@@ -63,14 +77,23 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     controller.ambient = value
   }
 
-  fun setPlan(plan: Map<String, Any?>?) = controller.setPlan(plan)
+  fun setPlan(plan: Map<String, Any?>?) {
+    if (plan != null && !preview.isSet) {
+      setBackgroundColor(Color.BLACK)
+      video.alpha = 1f
+    }
+    controller.setPlan(plan)
+  }
 
   fun setPreview(value: Map<String, Any?>?) {
     if (value != null) {
       // A preview excludes a plan.
       controller.release()
+      setBackgroundColor(Color.TRANSPARENT)
     }
-    preview.setPreview(value)
+    if (value != null || preview.isSet) {
+      preview.setPreview(value)
+    }
   }
 
   fun setActive(value: Boolean) = preview.setActive(value)
@@ -112,7 +135,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   // PlayerHost
 
   override val surface
-    get() = video.holder.surface?.takeIf { it.isValid }
+    get() = videoSurface?.takeIf { it.isValid }
 
   override fun preferDisplay(facts: VideoFacts?) =
     DisplayMatching.prefer(facts, surface, appContext.currentActivity)
