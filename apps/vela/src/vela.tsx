@@ -93,16 +93,15 @@ function AppProvider({ store, children }: { store: Store; children: ReactNode })
     [servers, store],
   );
 
-  const app = (
-    <AppHost store={store} state={state} live={live}>
-      {children}
-    </AppHost>
-  );
-  const withServers = signedIn ? <ServersProvider value={serverSwitch}>{app}</ServersProvider> : app;
-  if (!live) return withServers;
+  // The providers wrap the app whether or not they have a value: wrapping on sign-in would remount
+  // every route under them (a watch route would start its session again).
   return (
     <LiveProvider controller={live} Player={VelaPlayerView}>
-      {withServers}
+      <ServersProvider value={signedIn ? serverSwitch : null}>
+        <AppHost store={store} state={state} live={live}>
+          {children}
+        </AppHost>
+      </ServersProvider>
     </LiveProvider>
   );
 }
