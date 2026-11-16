@@ -28,7 +28,7 @@ export function TextInput({ params }: WidgetProps) {
     alignSelf: 'stretch',
     minWidth: 0,
     padding: 0,
-    ...(Platform.OS === 'web' ? ({ outlineWidth: 0 } as TextStyle) : {}),
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as TextStyle) : {}),
   };
   return (
     <NativeInput

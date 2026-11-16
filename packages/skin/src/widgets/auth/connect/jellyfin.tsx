@@ -40,7 +40,7 @@ export function JellyfinStep({
       <View style={{ gap: 18, alignItems: 'center' }}>
         <CodeTiles code={quick.code} testID="jelly-code" />
         {failed ? <Alert>{failed}</Alert> : <Waiting>{msg('connect.quick.waiting')}</Waiting>}
-        <Pill label={msg('ui.cancel')} height={46} stretch={false} onPress={onCancelQuick} />
+        <Pill label={msg('ui.cancel')} height={46} align="center" onPress={onCancelQuick} />
       </View>
     );
   }

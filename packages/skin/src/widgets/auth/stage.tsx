@@ -48,6 +48,7 @@ const AURORAS: { motion: string; rows: Css }[] = [
 
 const CARD: Css = {
   width: '100%',
+  'flex-shrink': '0',
   'max-width': '448px',
   padding: 'clamp(28px, 5vw, 44px) clamp(22px, 4.5vw, 40px)',
   'border-radius': '$ui.radiusPanel',
