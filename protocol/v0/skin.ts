@@ -151,8 +151,9 @@ export interface SkinDocument {
   templates?: Record<string, Node>;
   /** One tree per foundation slot; a slot left out uses cinematic's compiled one. */
   slots: Partial<Record<'shell' | 'home' | 'row' | 'card' | 'status', Node>>;
-  /** A tree per route the document draws whole (the route view); a route left out uses the slots, then cinematic. */
-  routes?: Partial<Record<'home' | 'title' | 'collection' | 'library' | 'live' | 'watch' | 'auth', Node>>;
+  /** A tree per route the document draws whole (the route view); a route left out is the Vela base's.
+   *  `search` is drawn in home's view, after home's nodes, while a query is open. */
+  routes?: Partial<Record<'home' | 'search' | 'title' | 'collection' | 'library' | 'live' | 'watch' | 'auth', Node>>;
   /** `home: true` makes home a live surface: the guide's listings, clock and one preview tile run there (docs/skin-schema.md, "Live home"). */
   live?: { home?: boolean };
   /** Detail route presentation per viewport class. */

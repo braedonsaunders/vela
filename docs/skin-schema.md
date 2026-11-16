@@ -362,9 +362,35 @@ document's `ui` block. A document draws what it wants to own and inherits the re
   A document's own text stays `{s:key}`.
 - `env.skinName`: the document's name.
 
-These are resolver features: whatever renderer draws the resolved document gets them. Renderer 14
-(arrow-key focus and `routes.search`, built for the Exact renderer) is held on a branch, so main
-has no renderer 14 features.
+These are resolver features: whatever renderer draws the resolved document gets them. The version
+number 14 went to the Exact renderer's arrow-key focus, which is held on a branch; main skips it.
+
+### Search (`routes.search`)
+
+Search is drawn in home's view, after home's nodes, while a query is open: the search field (home's
+holder) stays put and focused as the answers arrive below it. Home's own nodes step aside with
+`env.searching`. The Vela base draws search for a document that does not.
+
+| Vocabulary | Meaning |
+| --- | --- |
+| `env.search` | The title lane: `loading`, `failed`, `ready` (empty with no query). |
+| `search.titleCount`, `search.descriptiveCount`, `search.aiCount` | How many titles each lane shows (the title lane none while it loads or failed). |
+| `search.describing` | The query reads as a description (several words, descriptive search on): an empty answer is about the mood, not the name. |
+| `search.descriptiveState`, `search.canRetry` | The descriptive lane: `off`, `loading`, `failed` (it keeps what it found), `ready`; whether `retryDescriptive` may run. |
+| `search.aiState` | Discovery: `off`, `running` (its partial answer shows), `failed`, `complete`. |
+| `search.onNowCount`, `search.comingUpCount` | Live hits: channels and programmes airing, and programmes coming up. |
+| `hit.*` | A live hit: `id`, `kind` (`channel`, `programme`), `ref` (for `openHit`), `name`, `channelName`, `channelNumber`, `logo`, `artwork`, `episode`, `live`, `progressPct`, `detail` (localized: channel and until when), `chip` (when it starts), `navigable`. |
+| collections | `search.titles`, `search.descriptive`, `search.ai` (cards, `card.*`), `search.onNow`, `search.comingUp` (`hit.*`). |
+| actions | `select {card.kindId}`, `openHit {hit.ref}` (a channel's page, or a programme: watch it if airing), `retryDescriptive`. |
+
+### The style matrix
+
+Skins draw on React Native as well as the web (docs/rn-migration.md, "Style matrix"). `bun tools/skin.ts
+check <document>` refuses the rows native cannot draw (`-webkit-text-stroke`, `position: fixed`, `sticky`
+or `static`, `box-sizing: content-box`, `display: block`, `inline` or `contents`, several text shadows,
+`mask-image: url()`, grid placement) and notes the approximated ones (`backdrop-filter`, gradient
+`mask-image`, grid columns, `filter`, `corner-shape`, scroll snapping). The web still draws a refused
+row, with a console warning naming it.
 
 ## Next (renderer 16, names final)
 

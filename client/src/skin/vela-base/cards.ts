@@ -208,7 +208,7 @@ export const numeral = (ten: boolean): Node => ({
     'line-height': '0.74',
     'letter-spacing': ten ? '-0.2em' : '-0.09em',
     color: '#0e1116',
-    '-webkit-text-stroke': '5px #d9d3c7',
+    'text-shadow': '0px 0px 5px #d9d3c7',
     'mask-image': 'linear-gradient(180deg, black 0%, black 50%, rgba(0, 0, 0, 0.25) 100%)',
     'margin-right': '-50px',
     'padding-bottom': '52px',
@@ -216,7 +216,7 @@ export const numeral = (ten: boolean): Node => ({
   },
   small: {
     'font-size': '220px',
-    '-webkit-text-stroke': '3px #d9d3c7',
+    'text-shadow': '0px 0px 3px #d9d3c7',
     'margin-right': '-30px',
     'padding-bottom': '44px',
   },

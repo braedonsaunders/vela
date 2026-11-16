@@ -3,6 +3,8 @@
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
 import { perfReport } from './budget';
+import { portabilityReport } from './portability';
+import { SEARCH_ACTIONS, SEARCH_COLLECTIONS, SEARCH_KEYS } from './search-vocabulary';
 import { withClientStrings } from './client-strings';
 import { withBase } from './inherit';
 import { resolveUi, uiValue } from './ui';
@@ -10,7 +12,8 @@ import type { UiTokens } from './ui-defaults';
 import { velaBase } from './base';
 import { BOUND_ROWS, DEPTH, FIELD_DEPTH, MOTION_DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
 
-const KEY = new Map(VOCAB.map((key, i) => [key, i]));
+// Search's keys follow the shared vocabulary (search-vocabulary.ts).
+const KEY = new Map([...VOCAB, ...SEARCH_KEYS].map((key, i) => [key, i]));
 /** A vocabulary key's index, a flag, or a refusal: documents name only known keys. */
 function key(name: string): { k: number; f: string } {
   if (name.startsWith('flag:') && /^flag:[a-z0-9-]{1,32}$/.test(name)) return { k: -1, f: name.slice(5) };
@@ -53,8 +56,8 @@ function keyframesCss(doc: SkinDocument): string {
     return `@keyframes dk-${docId}-${name}{${body}}`;
   }).join('');
 }
-const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'librarySort', 'librarySortFlip', 'libraryFilter', 'libraryMore', 'signIn', 'startQuick', 'cancelQuick', 'goSecure', 'collectionMore', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide']);
-const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites', 'library.items', 'library.kinds', 'library.genres', 'library.sorts', 'quick.chars', 'collection.items']);
+const ACTIONS = new Set(['select', 'play', 'pickHero', 'home', 'search', 'live', 'library', 'toggle', 'open', 'close', 'openPicker', 'signOut', 'moreRow', 'playTitle', 'playExtra', 'back', 'reset', 'only', 'retry', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev', 'librarySort', 'librarySortFlip', 'libraryFilter', 'libraryMore', 'signIn', 'startQuick', 'cancelQuick', 'goSecure', 'collectionMore', 'watch', 'preview', 'zap', 'tuneIn', 'unmute', 'guide', ...SEARCH_ACTIONS]);
+const COLLECTIONS = new Set(['home.rows', 'row.items', 'home.heroes', 'home.hero', 'nav.destinations', 'detail.seasons', 'detail.episodes', 'detail.upNext', 'detail.extras', 'detail.cast', 'detail.mediaFacts', 'detail.related', 'detail.genres', 'detail.trailers', 'detail.crew', 'hero.genres', 'live.channels', 'live.favorites', 'library.items', 'library.kinds', 'library.genres', 'library.sorts', 'quick.chars', 'collection.items', ...SEARCH_COLLECTIONS]);
 const UNSAFE = /url\(|expression\(|javascript:|@import|[;{}<>\\]/i;
 
 type Part = { l: string; k: number; f: string };
@@ -82,7 +85,7 @@ function intern(s: Record<string, string | number>, r: Resolve): number {
 
 /** Bindings whose value is an image URL (Plex puts a short-lived token in its query): only an
  * image source or a background-image may read them, never text, labels, ids or press arguments. */
-const URL_KEYS = /^(card|hero|detail|dest|person|ch|tile)\.(poster|backdrop|logo|portrait|nowArt)$/;
+const URL_KEYS = /^((card|hero|detail|dest|person|ch|tile)\.(poster|backdrop|logo|portrait|nowArt)|hit\.(logo|artwork))$/;
 function parts(template: string | undefined, r?: Resolve, urls = false): Part[] {
   const out: Part[] = [];
   // Client strings ({t:}) and the document's own ({s:}) are resolved now, for the viewer's locale.
@@ -494,7 +497,19 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
   // Over a performance limit (src/skin/budget.ts), the document is refused, as any invalid one.
   const over = perfReport(model).findings.filter(f => f.level === 'error');
   if (over.length) throw new Error(`Skin document over its performance budget: ${over.map(f => `${f.route}: ${f.message}`).join('; ')}`);
+  warnUnportable(doc);
   return model;
+}
+
+/** Rows React Native cannot draw (docs/rn-migration.md, "Style matrix") are named once per
+ *  document: they still draw on the web, and `bun tools/skin.ts check` refuses them. */
+const warnedUnportable = new Set<string>();
+function warnUnportable(doc: SkinDocument): void {
+  const key = `${doc.id}@${doc.version}`;
+  if (warnedUnportable.has(key)) return;
+  warnedUnportable.add(key);
+  const rows = new Set(portabilityReport(doc).filter(f => f.level === 'error').map(f => `${f.row}: ${f.value}`));
+  if (rows.size > 0) console.warn(`Skin document ${doc.id} uses rows React Native cannot draw: ${[...rows].join('; ')}`);
 }
 
 function resolveDoc(own: SkinDocument, width: number, origin: string, locale: string): SkinDocModel {
