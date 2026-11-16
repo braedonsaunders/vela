@@ -377,16 +377,29 @@ ready trailer for 1917 or Inception: `trailer_unavailable`).
 
 `ios/SystemMediaControls.swift` holds MPRemoteCommandCenter and MPNowPlayingInfoCenter for the one full-screen
 view that claims them (on load; released on stop and unmount). Now Playing is republished only when the title,
-rate or duration changes or the position jumps; the system extrapolates the rest. On Basement the info is
-published with the title and the Playback audio session active, but the Apple TV's MediaRemote still names the
-last app (YouTube) as the Now Playing app, so a MediaRemote play or pause (pyatv over AirPlay) never reaches the
-command center. Not yet explained; the physical remote's play/pause reaches the chrome through React Native's
-TV events either way. `MPNowPlayingSession` (tvOS 14) only takes AVPlayers, so it is not an option for mpv.
+rate or duration changes or the position jumps; the system extrapolates the rest.
+
+tvOS's MediaRemote only makes Vela the Now Playing app when mpv's audio goes through AVFoundation (`ao=avfoundation`,
+AVSampleBufferAudioRenderer). With mpv's default `audiounit` output it never did, even with audible 7.1 playback, an
+active Playback session, Now Playing republished every 4 s, `beginReceivingRemoteControlEvents`, an
+`MPNowPlayingSession` around a placeholder AVPlayer, `UIBackgroundModes=audio`, or a freshly rebooted Apple TV whose
+MediaRemote named no app. A pyatv AirPlay stream proved MediaRemote's own view was live. With `avfoundation`
+on Basement (2026-11-16): MediaRemote reports "1917, Playing, 1625/7139 s, app Vela". MediaRemote pause, play
+and skip forward reach the view (skip +10 s). One remote play/pause press toggles exactly once. TrueHD 7.1 plays
+as 7.1 s32 at 48 kHz with A/V sync in microseconds and no dropped frames. Ambient views keep `audiounit` so they
+never claim Now Playing. tvOS 27's Control Center shows no Now Playing tile either way, so it is not evidence.
 
 `usePlaybackSession` (`packages/skin/src/widgets/player/session.ts`) stops the server session when a native app
 goes to the background (it may be suspended and killed there without running JavaScript) and starts a new
 plan at the last position when it is active again; 'inactive' keeps it and the web keeps its session. Verified
 on Basement: stop at 577 s on the TV button, a new session decoding from 577 s on return.
+
+Ether ends a session it has not heard from in two minutes, and a paused or stalled mpv changes nothing that
+reports, so the view sends an observation at least every 10 s whatever the state (`PlayerReport.heartbeat`).
+When the server has ended a session anyway (refresh finds it ended or unreadable, or an observation answers 404
+or 410), the watch starts a new session at the last position, paused if it was paused. Verified on Basement:
+paused past two minutes, observations every 10 to 15 s with no media requests, and the session stayed alive.
+A server restart mid-pause brought a new session at the same position, still paused, and Play resumed it.
 
 #### Releasing a build with libmpv (LGPL-2.1-or-later)
 
