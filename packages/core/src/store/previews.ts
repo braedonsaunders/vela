@@ -38,7 +38,8 @@ export class Previews {
     if (epoch !== this.session.epoch || generation !== this.generation || !offered || !hasTrailerPreviews(adapter)) {
       return none(generation);
     }
-    this.coordinator ??= new PreviewCoordinator(adapter, connection.record.origin, this.session.client, () => this.session.key());
+    const client = await this.session.declared();
+    this.coordinator ??= new PreviewCoordinator(adapter, connection.record.origin, client, () => this.session.key());
     return this.coordinator.request(cardId, generation, Date.now());
   }
 

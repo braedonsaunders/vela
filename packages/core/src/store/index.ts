@@ -54,8 +54,8 @@ export interface Vela {
   setLocale(context: LocaleContext): void;
   /** The player's capabilities changed (a new engine, an output change): servers are told again. */
   setMedia(media: MediaCapabilities): void;
-  /** What this client declares it can play (as negotiated with servers). */
-  client(): ClientCapabilities;
+  /** What this client declares it can play (as negotiated with servers), once the player has said. */
+  client(): Promise<ClientCapabilities>;
   /** The width artwork is sized for; reads after this use it. */
   setArtWidth(width: number): void;
   auth: Auth;
@@ -111,7 +111,7 @@ export function createVela(options: VelaOptions): Vela {
       session.setMedia(media);
       previews.setClient(session.client);
     },
-    client: () => session.client,
+    client: () => session.declared(),
     setArtWidth(next) {
       artWidth = bucket(next);
     },
