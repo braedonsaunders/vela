@@ -43,6 +43,11 @@ final class VelaPlayerView: ExpoView {
     private var previewSource: PreviewPlayback.Source?
     private var previewActive = true
 
+    // What Now Playing shows (`metadata`); the title is required by the system.
+    private var nowPlayingTitle = ""
+    private var nowPlayingSubtitle: String?
+    private var nowPlayingArtwork: String?
+
     /// Direct play: the playing source is an original file, so seeks and its tracks are the view's own.
     private var playsOriginal: Bool {
         plan?.selectedPath?.isOriginalFile == true
@@ -80,6 +85,13 @@ final class VelaPlayerView: ExpoView {
 
     func setAmbient(_ value: Bool) {
         ambient = value
+    }
+
+    func setMetadata(_ map: [String: Any]?) {
+        nowPlayingTitle = map?["title"] as? String ?? ""
+        nowPlayingSubtitle = map?["subtitle"] as? String
+        nowPlayingArtwork = map?["artworkUrl"] as? String
+        updateNowPlaying()
     }
 
     func setPreview(_ map: [String: Any]?) {
@@ -166,6 +178,26 @@ final class VelaPlayerView: ExpoView {
         }
         onCommand(result)
         report.publish(state, seekTarget: pendingSeek, force: true)
+        updateNowPlaying()
+    }
+
+    // MARK: System media controls
+
+    private func updateNowPlaying() {
+        guard !ambient, previewSource == nil, mpv != nil, state.loaded else {
+            return
+        }
+        let artwork = nowPlayingArtwork.flatMap(resolve)
+        let title = nowPlayingTitle.isEmpty ? "Vela" : nowPlayingTitle
+        let now = NowPlayingState(
+            title: title,
+            subtitle: nowPlayingSubtitle,
+            artworkURL: artwork,
+            duration: state.duration,
+            position: pendingSeek ?? state.position,
+            playing: state.phase == .playing
+        )
+        SystemMediaControls.shared.update(now, from: self)
     }
 
     // MARK: Playback
@@ -195,6 +227,9 @@ final class VelaPlayerView: ExpoView {
             return
         }
         mpv = client
+        if !ambient {
+            SystemMediaControls.shared.claim(self)
+        }
         client.onProperty = { [weak self] name, value in
             self?.propertyChanged(name, value)
         }
@@ -238,6 +273,7 @@ final class VelaPlayerView: ExpoView {
         }
         mpv = nil
         client.destroy()
+        SystemMediaControls.shared.release(self)
         if !ambient {
             DisplayMatching.prefer(nil, in: window)
         }
@@ -276,6 +312,7 @@ final class VelaPlayerView: ExpoView {
             pendingSeek = nil
         }
         report.publish(state, seekTarget: pendingSeek)
+        updateNowPlaying()
     }
 
     private func event(_ event: MPVClient.Event) {
@@ -521,5 +558,25 @@ final class PlayerMetalLayer: CAMetalLayer {
                 super.drawableSize = newValue
             }
         }
+    }
+}
+
+extension VelaPlayerView: SystemMediaOwner {
+    /// The Siri Remote's or Control Center's command, through the same paths as the `command` prop.
+    func systemMediaCommand(_ command: SystemMediaCommand) {
+        switch command {
+        case .play:
+            _ = perform(["type": "play"])
+        case .pause:
+            _ = perform(["type": "pause"])
+        case .toggle:
+            _ = perform(["type": state.phase == .playing ? "pause" : "play"])
+        case .skip(let seconds):
+            _ = perform(["type": "seekBy", "seconds": seconds])
+        case .seek(let position):
+            _ = perform(["type": "seek", "seconds": position])
+        }
+        report.publish(state, seekTarget: pendingSeek, force: true)
+        updateNowPlaying()
     }
 }

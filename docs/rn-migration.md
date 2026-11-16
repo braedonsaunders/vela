@@ -233,6 +233,13 @@ Commands: `play`, `pause`, `seek {seconds}`, `volume {value}`, `audio {trackId}`
 `fullscreen`. Snapshot fields are those of `model.ts` (`Snapshot`); a value the
 implementation cannot observe is `null`, never estimated.
 
+**System media controls** (`metadata={{ title, subtitle?, artworkUrl? }}`). A full-screen watch's view
+claims the platform's media controls (on Apple: MPRemoteCommandCenter and MPNowPlayingInfoCenter, so the
+Siri Remote's media buttons and Control Center reach it) and shows `metadata` as Now Playing. Ambient and
+preview views never claim them. Play, pause, toggle, skip ±10 s and a scrub from the system take the same
+paths as the `command` prop (a skip on a server path is still an `onSessionCommand`) and show up in the next
+snapshot. Implementations without system controls ignore `metadata`.
+
 **Media credentials** never travel through props, snapshots, errors or logs. The trusted
 host (the app's playback controller, not skin code) calls
 `VelaPlayer.setMediaAccess({ origin, pathPrefix, headers })` before loading. The
@@ -353,6 +360,21 @@ false, the view is in a window and the grant is unexpired; mpv is destroyed at o
 when `preview` is unset and on unmount. Snapshots carry only `state` (loading, playing, ended, failed);
 commands are play and pause. Verified on Basement against the mock server's preview grant (the lab had no
 ready trailer for 1917 or Inception: `trailer_unavailable`).
+
+#### System media controls and the app leaving the foreground (2026-11-16)
+
+`ios/SystemMediaControls.swift` holds MPRemoteCommandCenter and MPNowPlayingInfoCenter for the one full-screen
+view that claims them (on load; released on stop and unmount). Now Playing is republished only when the title,
+rate or duration changes or the position jumps; the system extrapolates the rest. On Basement the info is
+published with the title and the Playback audio session active, but the Apple TV's MediaRemote still names the
+last app (YouTube) as the Now Playing app, so a MediaRemote play or pause (pyatv over AirPlay) never reaches the
+command center. Not yet explained; the physical remote's play/pause reaches the chrome through React Native's
+TV events either way. `MPNowPlayingSession` (tvOS 14) only takes AVPlayers, so it is not an option for mpv.
+
+`usePlaybackSession` (`packages/skin/src/widgets/player/session.ts`) stops the server session when a native app
+goes to the background (it may be suspended and killed there without running JavaScript) and starts a new
+plan at the last position when it is active again; 'inactive' keeps it and the web keeps its session. Verified
+on Basement: stop at 577 s on the TV button, a new session decoding from 577 s on return.
 
 #### Releasing a build with libmpv (LGPL-2.1-or-later)
 

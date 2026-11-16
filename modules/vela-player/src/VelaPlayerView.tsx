@@ -11,6 +11,7 @@ import type {
   PlaybackPlan,
   PreviewSource,
   PlayerCapabilities,
+  PlayerMetadata,
   PlayerObservation,
   SessionCommand,
   Snapshot,
@@ -34,6 +35,7 @@ interface NativeViewProps {
   plan?: PlaybackPlan;
   preview?: PreviewSource;
   active?: boolean;
+  metadata?: PlayerMetadata;
   command?: Command;
   ambient?: boolean;
   serverError?: Failure | null;
@@ -85,6 +87,7 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
     plan: props.plan,
     preview: props.preview,
     active: props.active,
+    metadata: props.metadata,
     command: props.command,
     ambient: props.ambient,
     serverError: props.serverError ?? null,
