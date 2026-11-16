@@ -9,14 +9,16 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TVFocusGuideView, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TVFocusGuideView, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
 import { EscapeScope, focusElement, focusTarget, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
-import { WIDGETS } from './widgets';
+import { RouteFocusContext, useRouteFocus, useRouteFocusContext } from './route-focus';
+import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
+import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
 import { resolveUi } from '../../../client/src/skin/ui';
@@ -59,9 +61,12 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
 /** A route tree: its root's children scroll in the route's own vertical ScrollView. `after` is a
  * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is open). */
 export function SkinRoute({ host, node, after }: { host: SkinHost; node: RNode; after?: RNode }) {
+  const focus = useRouteFocus();
   return (
     <Host.Provider value={host}>
-      <SkinNode node={node} ctx={{ index: 0 }} route after={after} />
+      <RouteFocusContext.Provider value={focus}>
+        <SkinNode node={node} ctx={{ index: 0 }} route after={after} />
+      </RouteFocusContext.Provider>
     </Host.Provider>
   );
 }
@@ -201,6 +206,10 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const buttonRef = useRef<Focusable | null>(null);
   const guideRef = useRef<Focusable | null>(null);
   const band = useContext(Band);
+  const routeFocus = useRouteFocusContext();
+  const reveal = useContext(RevealContext);
+  const offsetY = useRef(0);
+  const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY) : null), [route]);
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
   const rows = rowsFor(node, ctx, env, ui, parentGroup, disabled);
@@ -272,12 +281,16 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     const horizontal = !route && !!fx.scrollX && !fx.scrollY;
     const [contentStyle, outerStyle] = partition(boxStyleFinal, CONTENT);
     const sticky = horizontal ? undefined : node.children.flatMap((child, i) => (child.base.style.position === 'sticky' && holds(child.when, ctx, env) ? [i] : []));
-    const onScroll = node.pager && rowId ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const onPagerScroll = node.pager && rowId ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
       const pager = pagers.get(rowId);
       if (pager) { pager.x = contentOffset.x; pager.width = layoutMeasurement.width; }
       host.setPager(rowId, { atStart: contentOffset.x <= 1, atEnd: contentOffset.x + layoutMeasurement.width >= contentSize.width - 1 });
     } : undefined;
+    // Android TV: the route's offset, for keeping focused controls below the shell's bar.
+    const onScroll = routeReveal ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      offsetY.current = e.nativeEvent.contentOffset.y;
+    } : onPagerScroll;
     element = (
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
         contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
@@ -297,6 +310,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
       buttonRef.current = target;
       const unregister = registerButton(target);
       const untrack = trackButton(target);
+      if (target && press) routeFocus?.offer(target, press.action);
       return () => {
         unregister?.();
         untrack?.();
@@ -314,17 +328,25 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     const button = press ? (
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, ownFocusLook(node) ? NO_RING : null]} disabled={disabled}
         onPress={onPress}
-        onFocus={() => set('focus', true)} onBlur={() => set('focus', false)}
+        onFocus={() => {
+          set('focus', true);
+          routeFocus?.focused();
+          if (reveal && buttonRef.current) reveal(buttonRef.current);
+        }}
+        onBlur={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
         accessibilityRole={a11y.accessibilityRole ?? 'button'} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={a11y.accessibilityState}
         testID={a11y.testID} />
     ) : null;
     const guide = tvGuide(node, env.flags, band);
+    const barLayout = revealing && node.role === 'navigation'
+      ? { onLayout: (e: LayoutChangeEvent) => noteTopBar(e.nativeEvent.layout.height, style.position === 'absolute') }
+      : {};
     const Frame = (guide ? AGuide : AView) as typeof AView;
     element = (
       <Frame ref={guide ? (guideRef as never) : undefined} style={boxStyleFinal as ViewStyle} {...(guide as object)}
-        {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)}>
+        {...barLayout} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)}>
         {layers}
         {content}
         {button}
@@ -345,7 +367,9 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     <Inherited.Provider value={text}>
       <Group.Provider value={groupValue}>
         <Direction.Provider value={direction}>
-          <Band.Provider value={!!route}>{element}</Band.Provider>
+          <Band.Provider value={!!route}>
+            {routeReveal ? <RevealContext.Provider value={routeReveal}>{element}</RevealContext.Provider> : element}
+          </Band.Provider>
         </Direction.Provider>
       </Group.Provider>
     </Inherited.Provider>
@@ -357,12 +381,15 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
  * under a bar whose items sit at its edges) lands on the item last focused there, else the first.
  * So is each band of a route (a direct child of the route's box with something focusable in it:
  * home's hero copy, its search field, its rows), so up and down move band by band whatever the
- * horizontal offsets. An escape scope (a menu, a drawer) is one too, and while open it keeps
- * focus inside: moving off its edges stays on its items rather than reaching the page behind. */
+ * horizontal offsets. Bands are tvOS's alone: its focus engine only moves to what lies in line,
+ * while Android's focus search takes the nearest item in the direction anyway, and there a band
+ * around the sign-in card kept the first D-pad press from reaching its fields. An escape scope
+ * (a menu, a drawer) is one too, and while open it keeps focus inside: moving off its edges stays
+ * on its items rather than reaching the page behind. */
 function tvGuide(node: Extract<RNode, { kind: 'box' }>, flags: string[], band: boolean) {
   if (!Platform.isTV) return undefined;
   const scope = !!node.escape?.length;
-  const region = node.role === 'navigation' || (band && focusableWithin(node));
+  const region = node.role === 'navigation' || (band && Platform.OS === 'ios' && focusableWithin(node));
   if (!scope && !region) return undefined;
   const trap = scope && scopeOpen(node.escape!, flags);
   return { autoFocus: true, trapFocusUp: trap, trapFocusDown: trap, trapFocusLeft: trap, trapFocusRight: trap };
@@ -379,7 +406,7 @@ function focusableWithin(node: RNode): boolean {
     case 'box': found = !!node.press || node.children.some(focusableWithin); break;
     case 'repeat': found = focusableWithin(node.item); break;
     case 'slot': found = node.slot === 'searchField'; break;
-    case 'widget': found = true; break;
+    case 'widget': found = FOCUSABLE_WIDGETS.has(node.widget); break;
     default: found = false;
   }
   focusables.set(node, found);
