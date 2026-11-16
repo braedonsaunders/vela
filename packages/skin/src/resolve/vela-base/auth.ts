@@ -3,6 +3,8 @@ import { display, enter, eyebrow, focusRing, is, pill, pulse, veil } from './loo
 
 // The signed-out page (compiled cinematic's AuthStage with its notices, SignIn and
 // QuickConnect): drifting light behind a centred glass card that resizes with its content.
+// Spacing tightens with the viewport's height so the card fits a short window, and the route
+// scrolls when it still does not (the light is clipped by its own layer, never the route).
 export const authIs = (v: string): Condition => is('env.auth', v);
 export const aurora = (name: string, style: Style): Node => ({
   type: 'box',
@@ -97,7 +99,7 @@ export const signIn: Node = {
   when: [authIs('signin')],
   motion: enter(60),
   exit: authLeave,
-  style: { display: 'flex', 'flex-direction': 'column', gap: '26px' },
+  style: { display: 'flex', 'flex-direction': 'column', gap: 'clamp(16px, 2.8vh, 26px)' },
   children: [
     {
       type: 'box',
@@ -108,7 +110,7 @@ export const signIn: Node = {
           text: '{t:ui.welcomeToYourEvening}',
           role: 'heading',
           level: 1,
-          style: { ...display, 'font-size': '42px' },
+          style: { ...display, 'font-size': 'clamp(32px, 5vh, 42px)' },
         },
         {
           type: 'text',
@@ -338,7 +340,7 @@ export const quickConnect: Node = {
   style: {
     display: 'flex',
     'flex-direction': 'column',
-    gap: '26px',
+    gap: 'clamp(16px, 2.8vh, 26px)',
     'align-items': 'center',
     'text-align': 'center',
   },
@@ -352,7 +354,7 @@ export const quickConnect: Node = {
           text: '{t:ui.anEasierWayIn}',
           role: 'heading',
           level: 1,
-          style: { ...display, 'font-size': '42px' },
+          style: { ...display, 'font-size': 'clamp(32px, 5vh, 42px)' },
         },
         {
           type: 'text',
@@ -468,9 +470,7 @@ export const auth: Node = {
     'min-height': '100dvh',
     width: '100%',
     'box-sizing': 'border-box',
-    'overflow-x': 'hidden',
-    'overflow-y': 'hidden',
-    padding: 'max(28px, 7vh) 16px',
+    padding: 'clamp(16px, 4vh, 56px) 16px',
     'background-color': '$ui.page',
     color: '$ui.ink',
   } as Style,
@@ -478,7 +478,7 @@ export const auth: Node = {
     {
       type: 'box',
       a11y: { hidden: true },
-      style: { position: 'absolute', inset: '0px', 'pointer-events': 'none' },
+      style: { position: 'absolute', inset: '0px', overflow: 'hidden', 'pointer-events': 'none' },
       children: [
         {
           type: 'image',
@@ -543,7 +543,7 @@ export const auth: Node = {
         'flex-direction': 'column',
         width: '100%',
         'max-width': '448px',
-        gap: '32px',
+        gap: 'clamp(16px, 3.5vh, 32px)',
         'align-items': 'center',
       },
       children: [
@@ -553,7 +553,7 @@ export const auth: Node = {
           src: '{env.authWordmark}',
           alt: '',
           a11y: { hidden: true },
-          style: { height: '56px', width: 'auto', 'max-width': '100%' },
+          style: { height: 'clamp(40px, 7vh, 56px)', width: 'auto', 'max-width': '100%' },
         },
         {
           type: 'image',
@@ -561,7 +561,7 @@ export const auth: Node = {
           src: 'assets/brand/vela-stacked.svg',
           alt: '',
           a11y: { hidden: true },
-          style: { width: '60px', height: '104px' },
+          style: { width: 'clamp(36px, 6vh, 60px)', height: 'clamp(62px, 10.4vh, 104px)' },
         },
         {
           type: 'box',
@@ -571,7 +571,7 @@ export const auth: Node = {
             'flex-direction': 'column',
             width: '100%',
             'box-sizing': 'border-box',
-            padding: 'clamp(28px, 5vw, 44px) clamp(22px, 4.5vw, 40px)',
+            padding: 'clamp(22px, 4vh, 44px) clamp(22px, 4.5vw, 40px)',
             'border-radius': '$ui.radiusPanel',
             'background-color': '$ui.glass',
             'backdrop-filter': 'blur(28px) saturate(1.4)',
