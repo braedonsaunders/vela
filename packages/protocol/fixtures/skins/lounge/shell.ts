@@ -132,6 +132,7 @@ export const shell: Node = {
                 transition: lift,
               },
               focus: { 'background-color': 'rgba(255, 255, 255, 0.14)', scale: '1.06' },
+              small: { padding: '4px', margin: '0px' },
               children: [
                 {
                   type: 'image',
