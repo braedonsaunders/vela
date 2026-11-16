@@ -18,7 +18,7 @@ import {
   label,
   oneLine,
 } from './look';
-import { block, art, progress, corner, subLine } from './cards';
+import { block, art, progress, corner, subLine, posterArt } from './cards';
 import { failure } from './home';
 
 const heading2: Style = { 'font-size': '19px', 'font-weight': '700', ...gutter };
@@ -382,10 +382,10 @@ const seasonCard: Node = {
         'background-color': '$raised',
       },
       children: [
-        { ...art('{card.poster}'), when: [set('card.poster')] },
+        ...posterArt,
         {
           type: 'box',
-          when: [unset('card.poster')],
+          when: [unset('card.poster'), unset('card.backdrop')],
           style: {
             ...fill,
             display: 'flex',

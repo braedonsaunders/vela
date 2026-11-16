@@ -93,10 +93,19 @@ export const sticker = (): Node => {
             fade: true,
             style: fadeIn,
           },
-          // No poster: the name on a soft wash under a pixel star.
+          // No poster: the landscape art (an episode's still) cropped to the sticker.
+          {
+            type: 'image',
+            when: [not('card.poster'), set('card.backdrop')],
+            src: '{card.backdrop}',
+            alt: '',
+            fade: true,
+            style: fadeIn,
+          },
+          // No art at all: the name on a soft wash under a pixel star.
           {
             type: 'box',
-            when: [not('card.poster')],
+            when: [not('card.poster'), not('card.backdrop')],
             style: {
               ...col,
               ...inset0,

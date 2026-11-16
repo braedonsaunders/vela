@@ -101,7 +101,7 @@ export const corner = (size: number, sizeSmall = size): Node => ({
 // Artwork is absent: the kind's icon and the title on a quiet panel.
 const placeholder: Node = {
   type: 'box',
-  when: [unset('card.poster')],
+  when: [unset('card.poster'), unset('card.backdrop')],
   style: {
     ...fill,
     display: 'flex',
@@ -244,8 +244,14 @@ const cardShell = (w: number, wSmall: number, ratio: string, artwork: Node[]): N
     caption,
   ],
 });
-export const card = cardShell(152, 112, '2 / 3', [
+// Portrait art: the poster (an episode's is its series poster), else the landscape art (an
+// episode's still) cropped to the portrait frame; the panel only without art.
+export const posterArt: Node[] = [
   { ...art('{card.poster}'), when: [set('card.poster')] },
+  { ...art('{card.backdrop}'), when: [unset('card.poster'), set('card.backdrop')] },
+];
+export const card = cardShell(152, 112, '2 / 3', [
+  ...posterArt,
   placeholder,
   corner(22, 18),
 ]);

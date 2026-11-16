@@ -39,9 +39,10 @@ export const poster: Node = {
       groupHover: { scale: '1.12', translate: '0px -10px', 'box-shadow': ring },
       small: { 'border-radius': '10px' },
       children: [
+        // The portrait art drifting on hover: the poster, else the landscape art (an episode's
+        // still) cropped to the portrait frame.
         {
           type: 'box',
-          when: [{ test: 'card.poster' }],
           style: {
             position: 'absolute',
             inset: '0px',
@@ -53,16 +54,26 @@ export const poster: Node = {
           children: [
             {
               type: 'image',
+              when: [{ test: 'card.poster' }],
               src: '{card.poster}',
+              alt: '',
+              fade: true,
+              style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' },
+            },
+            {
+              type: 'image',
+              when: [{ test: 'card.poster', not: true }, { test: 'card.backdrop' }],
+              src: '{card.backdrop}',
               alt: '',
               fade: true,
               style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' },
             },
           ],
         },
+        // No art at all: the name.
         {
           type: 'box',
-          when: [{ test: 'card.poster', not: true }],
+          when: [{ test: 'card.poster', not: true }, { test: 'card.backdrop', not: true }],
           style: {
             position: 'absolute',
             inset: '0px',
