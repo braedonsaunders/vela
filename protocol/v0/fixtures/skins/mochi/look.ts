@@ -31,14 +31,15 @@ export const Label: Style = {
   'text-transform': 'uppercase',
 };
 // Surfaces (look.contract): a candy (pink) and a puffy (white) pill, a round bubble.
-// Exact boxes are content-box unless they say otherwise: a 54px candy with its 3px edge is 60px.
+// Heights include the edge (border-box): a candy written 60px is the compiled 54px plus its 3px edge.
+// Browsers draw a 2.5px edge as 2px, so controls with one are 4px taller than their content.
 export const Candy: Style = {
   position: 'relative',
   display: 'flex',
   'flex-direction': 'row',
   'align-items': 'center',
   'justify-content': 'center',
-  'box-sizing': 'content-box',
+  'box-sizing': 'border-box',
   border: '3px solid $ink',
   'border-radius': '999px',
   'background-color': '$pink',

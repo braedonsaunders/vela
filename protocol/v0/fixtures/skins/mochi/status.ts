@@ -130,7 +130,7 @@ export const retryButton: Node = {
       type: 'box',
       press: { action: 'retry' },
       label: '{s:tryAgain}',
-      style: { ...Candy, height: '46px', padding: '0px 24px' },
+      style: { ...Candy, height: '52px', padding: '0px 24px' },
       ...candy,
       children: [{ type: 'text', text: '{s:tryAgain}' }],
     },

@@ -23,6 +23,9 @@ export interface MediaRequestPolicy {
   /** A private copy for a dedicated demux worker, not a UI/telemetry DTO. */
   authorization(): MediaAuthorization | undefined;
 }
+export interface BrowserMediaAccess extends MediaRequestPolicy {
+  nativeURL(url: string, signal: AbortSignal): Promise<string>;
+}
 // Plex identifies its playback client with these headers as well as the token.
 // Keep the set explicit: no caller-controlled transport or routing headers.
 const headerName =
@@ -160,7 +163,7 @@ export function redactMediaError(message: string): string {
 }
 
 /** One element's in-memory authorization and native-attach requests. */
-export class MediaAccess implements MediaRequestPolicy {
+export class MediaAccess implements BrowserMediaAccess {
   private value: MediaAuthorization | undefined;
   private json = '';
   private retired = new AbortController();

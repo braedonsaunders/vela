@@ -2140,3 +2140,77 @@ its virtual clock is a different boundary; cinematic's normal-motion headless
 Home drive also rendered/tapped successfully but never mounted a preview because
 its deferred timer awaited another clock commit. No user-agent or GPU-disable
 workaround was added to playback.
+
+### Browser host and core responsibility split (2026-11-16)
+
+The web core remains independent of Exact and React. `core/runtime.ts` is a public
+facade; source/session lifetime, decode epochs and packet delivery, clock admission,
+live-window handling, transport, and telemetry have separate modules with typed
+state. `engine.ts` is the browser host facade, with browser events, source activation,
+track commands, recovery, startup watchdogs, observations and lifecycle in `host/`.
+`browser-view.ts` owns the DOM surface and the existing props/event adaptation;
+`web-module.ts` temporarily registers it with Exact. Expo will mount the same host
+through a typed React view, and Metro will bundle its JavaScript. Only decoder,
+worker, worklet, subtitle and other static assets need the separate immutable export.
+The old runtime loader is still present until the approved excision; this refactor
+has not selected a new production default.
+
+A generated 640×360 H.264 Matroska fixture with two AAC tracks and embedded PGS
+was driven before and after the structural split in dedicated headed Chrome contexts.
+Both started, paused, sought to 1.5 and 4.5 seconds, painted 3,168 opaque subtitle
+pixels at each target, switched to the second audio track, cleared subtitles, and
+resumed. Both reported zero audio underflows, video drops, recoveries and repeated
+source pages; both requested 1,941,345 physical bytes. The scoped TypeScript compile,
+core asset assembly and browser host build passed. These are local correctness
+proofs, not the pending real-title matrix or a controlled speed comparison: Ballast
+rose from WARNING to CRITICAL during the proof window. Every owned context and the
+fixture server was closed afterwards.
+
+Readability inventory over the same surviving source scope, including new modules:
+
+| Stage | Files | Lines >120 columns | Lines >200 columns |
+| --- | ---: | ---: | ---: |
+| Before formatting | 77 | 1,210 | 247 |
+| Mechanical formatting | 77 | 35 | 7 |
+| Responsibility split | 112 | 32 | 6 |
+
+The browser engine class changed from 61 fields in 843 compressed lines (2,035
+formatted lines) to one context field behind a small public facade. The former
+718-line formatted core class likewise has one context field. The largest remaining
+file is `core/demux/matroska-stream.ts` (934 lines); the largest remaining class is
+`RangeReader` (864 formatted lines, 34 fields). The remaining long lines are mostly
+literal dependency-source transforms and imports that the direct-dependency cutover
+must replace, not compressed playback control flow.
+
+### Expo browser seam
+
+`createWebPlayerHost` in `client/player/host.ts` implements the runtime-neutral
+`packages/player-api/src/types.ts` contract. React Native's view style is added only
+by the package's `index.ts`. The DOM host accepts typed plans/sessions, consumes each
+command id once, publishes snapshots and observations, and separates server command
+requests from local command completion. An ambient change requires a remount.
+
+The trusted controller provides `options.access()`, not a credential prop. It must
+replace that object and update the host on a server, principal or credential change.
+The host retires the old request scope, rejects stale async replies, constrains every
+media request to the origin/path, refuses redirects, and confines native URL
+credentials to element attachment. The scoped header snapshot needed by dedicated
+workers remains private and is dropped on disposal.
+
+The Expo host injects core and subtitle constructors imported into the application
+JavaScript graph. It does not import a remote `runtime.js`. Its asset base is a
+same-origin `player/<64-hex-digest>/` directory containing decoder, worklet, subtitle
+and other static assets. The agreed `PLAYER-ASSETS-MANIFEST.json` digest is SHA-256
+of bytewise-path-sorted records `path + NUL + bytes + NUL + sha256 + newline`,
+excluding the manifest itself. The final release inventories and signs the manifest.
+The source-complete static builder and direct-dependency excision are still pending;
+the current local proof bundle uses the existing pinned dependency adaptations.
+
+The typed host was bundled locally and driven in headed Chrome against the same
+short two-audio/PGS fixture: start, both seeks, 3,168 caption pixels, audio switching,
+command deduplication and a truthful invalid-command acknowledgment passed. Scoped
+header fetches succeeded; redirect/cross-scope requests were refused with zero
+requests reaching the outside route; credential query parameters were stripped
+from header-authenticated fetches. Native query credentials remained attachment-only.
+No `runtime.js` was requested, and disposal left zero media nodes. This is a DOM-host
+proof, not yet an Expo export or real-app release qualification.
