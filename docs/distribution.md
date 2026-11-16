@@ -28,8 +28,9 @@ source tools/env.sh
 bun tools/release/build.ts --player-assets=<payload-directory> --committed
 ```
 
-`<payload-directory>` contains `PLAYER-ASSETS-MANIFEST.json` and its exact inventoried
-files. This is the new static player payload, not an old diagnostic/runtime archive.
+`<payload-directory>` is `<out>/player/<digest>` and contains only its exact inventoried
+files. The exporter writes provenance to `<out>/PLAYER-ASSETS-MANIFEST.json`; packaging
+places it at the release root, covered by the signed inventory. This is the new static player payload, not an old diagnostic/runtime archive.
 The default command captures HEAD and refuses dirty build inputs; `--committed`
 allows unrelated working edits while still using HEAD only. Release tooling itself
 must be committed. Version comes from captured `apps/vela/package.json`.
@@ -126,7 +127,9 @@ aggregate excludes it. Playback confirmed the filename
 `PLAYER-ASSETS-MANIFEST.json` and fields `schemaVersion:1`, `digest`,
 `sourceRevision`, `sourceDirty`, `dependencies` and `files`. The builder is now
 `bun modules/vela-player/web/assets/export-assets.ts --libraries=<prepared-libraries> --out=<staging>`.
-It writes `player/<digest>/PLAYER-ASSETS-MANIFEST.json` and prints the digest.
+It writes `<staging>/PLAYER-ASSETS-MANIFEST.json` and prints the payload digest.
+Revision-bearing provenance stays outside `player/<digest>/`, so identical payloads
+retain byte-identical URLs across app releases.
 The app export uses public `EXPO_PUBLIC_VELA_PLAYER_ASSETS=<digest>` to address that
 same tree. A qualified prepared input and actual app playback remain delivery gates. A diagnostic payload or host seam proof is not a release
 input. The old Exact runtime-key algorithm and CORE-MANIFEST input are not carried
