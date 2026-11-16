@@ -189,7 +189,7 @@ internal class MpvClient(options: Map<String, String>) {
       "vo" to "null",
       "gpu-context" to "android",
       "opengl-es" to "yes",
-      "hwdec" to "mediacodec,mediacodec-copy",
+      "hwdec" to if (Emulator.running) "no" else "mediacodec,mediacodec-copy",
       "hwdec-codecs" to "all",
       "ao" to "audiotrack,opensles",
       "keep-open" to "yes",
@@ -200,6 +200,8 @@ internal class MpvClient(options: Map<String, String>) {
       "demuxer-readahead-secs" to "20",
       "audio-channels" to "auto-safe",
       "sub-auto" to "no",
+      // No youtube-dl hook: a URL that fails to open is a failure, not a page to scrape.
+      "ytdl" to "no",
       "input-default-bindings" to "no",
       "input-vo-keyboard" to "no",
       "terminal" to "no",

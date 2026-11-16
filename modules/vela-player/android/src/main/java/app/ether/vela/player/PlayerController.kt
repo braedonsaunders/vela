@@ -177,7 +177,6 @@ internal class PlayerController(
       client.observe(name, format)
     }
     host.surface?.let { client.attach(it) }
-    client.setRequestHeaders(MediaAccessStore.headerFields(url))
     val subtitle = plan.subtitleTrack(report.subtitleTrackId)
     val options = mutableListOf("start=${plan.positionSeconds}")
     if (path.isOriginalFile) {
@@ -188,8 +187,22 @@ internal class PlayerController(
     if (!ambient) {
       host.preferDisplay(displayFacts)
     }
-    client.command("loadfile", url.toString(), "replace", "-1", options.joinToString(","))
     report.publish(state, null, force = true)
+    // A credentialed URL's redirects are resolved first; mpv loads where they end.
+    MediaRedirects.resolve(url) { media ->
+      if (activeSource == source && mpv === client) {
+        load(client, media, options)
+      }
+    }
+  }
+
+  /** Loads the resolved URL with its headers; with headers attached, no redirect is followed. */
+  private fun load(client: MpvClient, media: ResolvedMedia, options: List<String>) {
+    client.setRequestHeaders(media.headerFields)
+    // Never the URL or the headers: only what kind of request this is.
+    val access = if (media.headerFields.isEmpty()) "no media headers, redirects followed" else "media headers, no redirects"
+    Log.i(MpvClient.LOG_TAG, "load ${report.backend} from ${MediaAccess.originOf(media.url)} ($access)")
+    client.command("loadfile", media.url.toString(), "replace", "-1", options.joinToString(","))
   }
 
   private fun stop() {

@@ -135,8 +135,13 @@ internal class PreviewPlayback(
       client.observe(name, format)
     }
     host.surface?.let { client.attach(it) }
-    client.setRequestHeaders(MediaAccessStore.headerFields(url))
-    client.command("loadfile", url.toString(), "replace")
+    // A credentialed URL's redirects are resolved first, as for a plan (MediaRedirects).
+    MediaRedirects.resolve(url) { media ->
+      if (mpv === client) {
+        client.setRequestHeaders(media.headerFields)
+        client.command("loadfile", media.url.toString(), "replace")
+      }
+    }
     schedule(preview)
     report.publish(state, null, force = true)
   }

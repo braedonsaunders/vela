@@ -26,7 +26,9 @@ internal object PlayerCapabilities {
   private fun probe(): Map<String, Any> {
     val decoders = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder && hardware(it) }
     val decodable = decoders.flatMap { decoder -> decoder.supportedTypes.map { it.lowercase() } }.toSet()
-    val video = listOf("h264") + videoTypes.filter { (type, _) -> type in decodable }.map { it.second }
+    val hardwareVideo = listOf("h264") + videoTypes.filter { (type, _) -> type in decodable }.map { it.second }
+    // The emulator decodes in software (Emulator): FFmpeg and dav1d take every family.
+    val video = if (Emulator.running) listOf("h264") + videoTypes.map { it.second } else hardwareVideo
     return mapOf(
       // What the server's HLS may carry when an original cannot be played.
       "containers" to listOf("mp4"),
