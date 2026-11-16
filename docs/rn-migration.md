@@ -1,20 +1,39 @@
 # React Native migration
 
-Status: accepted direction (owner decision, 2026-11-16). This document is the plan for
-moving Vela from Exact to React Native + Expo, the spec for the two spikes that prove it,
-and the style matrix skin documents must stay inside. Architecture owner: thread
-`thr_b57w7znkf9`. Orchestration: `thr_ucqnvk37fq`.
+Status: migration in progress (2026-11-16). Current orchestration is
+`thr_4q8296jknz`; prior architecture/orchestration threads are archived. This file
+retains design decisions and dated spike observations, which qualify only the
+recorded revision/flow. They do not prove current main or every target.
+See [build-plan.md](build-plan.md) for current ownership and remaining delivery gates.
+
+## Current handoff
+
+- Source migration `thr_3iwkrbqy77` moved core helpers and i18n into `packages/core`,
+  resolver/base into `packages/skin`, `protocol/v0` into `packages/protocol`, and
+  `client/player` into `modules/vela-player/web/engine`. Consumers move with them;
+  do not remove Exact-era source merely because a destination exists.
+- Release worker `thr_88bpxte5e5` owns `tools/release`; the Expo artifact and its
+  installer/PWA qualification are separate from the old Exact release proof. The
+  agreed exporter CLI is `bun tools/release/build.ts --player-assets=<payload-directory>
+  --committed`; implementation is unbuilt/unqualified pending the parent.
+- Reported evidence: `c742d66` UI changes were typechecked and observed on web.
+  Native previews `f96f622` / `009c9d9` are new unverified work, with no new native
+  build/device proof. Earlier preview observations below do not qualify those commits.
+- Menu is unresolved; one saved run passed, which is insufficient to close it.
+  Ether cold-detail is merged but not deployed to the lab. Cold-title proof must
+  wait for the new deployment. Phone/tablet and affected Apple/Android playback
+  flows remain parent delivery gates, alongside integrated compile/web packaging.
 
 ## Why
 
 Exact renders natively, but Vela's player is a DOM web module (MSE, WebCodecs, WebGPU),
 so the framework's native hosts never reach the feature that matters most. Contract has
 no recursion, which is why the skin renderer is a generated, depth-unrolled interpreter
-with per-level copies and widget depth limits. React Native + Expo gives first-class
-iOS, Android, tvOS and Android TV from one app (react-native-tvos), web through
-react-native-web, and macOS/Windows through Microsoft's forks. The playback engine on
-native becomes libmpv, which already plays everything Vela's browser core was built to
-reach (MKV, HEVC Main10, Dolby Vision, PGS/ASS, TrueHD/DTS) with hardware decode.
+with per-level copies and widget depth limits. React Native + Expo is the chosen architecture
+for iOS, Android, tvOS and Android
+TV via react-native-tvos, and web via react-native-web. Dedicated macOS/Windows hosts
+are later scope. Native playback uses libmpv; format, hardware decode, HDR and audio
+behavior still require evidence from the actual host and stream.
 
 ## Targets and pins
 
@@ -28,7 +47,7 @@ reach (MKV, HEVC Main10, Dolby Vision, PGS/ASS, TrueHD/DTS) with hardware decode
 | Windows | react-native-windows host | After conversion |
 | Linux | The web/PWA build | No separate host |
 
-Pinned at spike start (checked against the registry 2026-11-16): Expo SDK 58
+Recorded spike pins (2026-11-16; current dependency truth is `apps/vela/package.json` and `bun.lock`): Expo SDK 58
 (`expo@58.0.25`), React 19.3.0, `react-native` aliased to `react-native-tvos@0.88.1-0`
 (upstream RN 0.88.1), react-native-web 0.21.4, Reanimated 4.7.1 + worklets 0.13.0,
 expo-image, expo-blur, expo-linear-gradient, expo-secure-store,
@@ -43,28 +62,35 @@ That is the reason for the package rule below: packages depend on `react` and
 ## Layout
 
 ```
-apps/vela/              Expo app: routes (expo-router), screens that draw document routes,
-                        platform storage, the player view wiring. Web, iOS, tvOS, Android, Android TV.
-packages/protocol/      Wire types (today protocol/v0/types.ts, skin.ts) and fixtures.
-packages/core/          Server adapters (Ether, Jellyfin, Plex), session and server registry,
-                        discovery models, search generations, live/guide, telemetry, i18n catalogs.
-                        No React, no DOM, no React Native.
-packages/skin/          Document resolver (validation, inheritance from the Vela base, tokens,
-                        variants, motion), the style translator, the React renderer, widgets.
-packages/player-api/    The player view contract (types only) shared by every implementation.
-modules/vela-player/    Expo module: Apple (Swift + MPVKit), Android (Kotlin + libmpv),
-                        web (the existing WebCodecs/WebGPU core).
-mock-server/            Unchanged.
+apps/vela/                     Expo app, expo-router routes, platform storage and view wiring
+packages/core/                 Adapters, session/store, discovery/search/live/telemetry, i18n
+packages/skin/                 Resolver/base, style translation, React renderer and widgets
+packages/protocol/             Wire types, skin schema and fixtures (moved from protocol/v0)
+packages/player-api/           Shared player view types/contract
+modules/vela-player/           Expo module: Apple, Android and Metro web view
+modules/vela-player/web/engine/ Web engine moved from client/player
+mock-server/                   Fixture-backed Bun v0 server
 ```
 
-Bun workspaces at the root. Metro needs a hoisted `node_modules`: set
-`[install] linker = "hoisted"` in `bunfig.toml`. Generated native projects (`ios/`,
-`android/`, CNG output) are not committed. DerivedData, Gradle caches and prebuild
-output live under `~/.scratch/vela-build/<worktree>/`.
+Source moves landed in `5d7a099`, `dfd862e`, `3b933a2` and `2394e9a`.
+The resolver/base is in `packages/skin/src/resolve`, app assets in `apps/vela/assets`.
+The Exact app/dispatch was removed in `d47098c`; remaining legacy tooling/release
+consumers still require cleanup and integrated compilation by the parent. Core's React
+subscription entry is separate from its data logic. Shared packages use host React/RN
+peers rather than introducing a second runtime. Bun workspaces use hoisted
+`node_modules` (`bunfig.toml`). Generated native projects are not committed;
+DerivedData, Gradle caches, export and prebuild output belong under
+`~/.scratch/vela-build/<worktree>/`.
 
-The routine compile check becomes `bun x tsc --noEmit -p apps/vela` (it covers the
-packages through project references), plus `bun x expo export --platform web` when the
-web bundle changed. Native builds are checked by building them, nothing more.
+The only routine app check is compile-only, once per coherent chunk:
+`bun x tsc --noEmit -p apps/vela` from the root. Its config includes package sources;
+it does not use project references. Standalone mock-server work uses
+`bun x tsc --noEmit -p mock-server`, web-player work
+`bun x tsc --noEmit -p modules/vela-player/web`. Respect task-specific no-check
+instructions. Expo exports and native builds belong to delivery gates, not the
+routine contributor loop. Do not add CI, tests, harnesses, coverage or lint machinery.
+The parent must observe changed UI/playback and drive a document using a changed
+renderer rule before announcing/shipping it; code-only workers hand off that gap.
 
 ## Web and PWA stay first-class
 
@@ -82,7 +108,7 @@ contract does not.
   (`routes.json`: `/vela/title/:id`, `/vela/watch/:id`, `/vela/collection/:id`, …) is
   generated from `apps/vela`'s route table, so Ether's index fallback and its asset 404s
   keep working.
-- **Release tree** (archive root, owned by the packager `thr_tgszknwfsb`):
+- **Release tree** (target archive root, release owner `thr_88bpxte5e5`):
 
   ```
   index.html                      Expo's single page entry
@@ -93,55 +119,30 @@ contract does not.
   manifest.webmanifest, icons, pwa.js, sw.js, routes.json    the packager's PWA shell and route list
   ```
 
-- The release manifest keeps `skinRenderer {schema, version, digest}`. The digest is now
-  that of the React renderer's vocabulary and style matrix.
-- The engine selector, `engines.json` and per-engine roots are gone. There is one app.
+- `tools/skin-renderer.ts` supplies `skinRenderer {schema, version, digest}` from
+  the React renderer source. Theme values live in `packages/skin/src/theme.ts`.
+- The RN release must have one app, without the engine selector, `engines.json` or per-engine roots.
+  Legacy packaging is not proof that this cutover is qualified.
 
-## What moves, what is rewritten, what is deleted
+## Conversion boundaries
 
-### Moves as is (by `git mv` at conversion, not during the spike)
+The source worker owns coordinated moves and import updates. The canonical wire
+source moved from `protocol/v0/` to `packages/protocol/`; core adapters, session,
+discovery/search/live/telemetry, models and foundation i18n/catalogs moved to
+`packages/core/`. Skin validation/resolver/base belongs in `packages/skin/` beside
+the recursive renderer. The web engine moved to `modules/vela-player/web/engine/`.
+Do not introduce duplicate canonical models to bypass a remaining import.
 
-- `protocol/v0/` → `packages/protocol/` (types, skin types, fixtures, skin documents).
-- `client/src/adapter/**`, `discovery/`, `live/`, `search/`, `telemetry/`, `protocol/`,
-  `session/servers.ts`, `appearance/` → `packages/core/`.
-- `client/src/skin/` resolver pieces (`base.ts`, `vela-base/`, `inherit.ts`, `ui*.ts`,
-  `client-strings.ts`, the validation half of `index.ts`) → `packages/skin/resolve/`.
-- `client/foundation/i18n.ts`, `catalogs.ts`, `client/strings/` → `packages/core/i18n/`.
-- `client/player/**` (the web core) → `modules/vela-player/web/`.
-- `mock-server/`, `tools/skin*.ts` (validator and packager), `tools/locales.ts`.
+The Exact dispatcher is replaced by core store actions and React subscriptions;
+credentials use a core storage interface with native secure storage and web-specific
+behavior. Fonts load through expo-font. Routes and platform storage stay in the app;
+player implementation stays behind the shared player contract.
 
-### Adapted
-
-- **Types generated from Contract.** Several files import `app.contract.d.ts` (the
-  `Sources`/`Answer`/`Store` types and the model shapes). Those shapes become hand-written
-  TypeScript in `packages/core/models.ts`, kept field-for-field so the adapters do not change.
-- **`client/src/sources.ts`** (the Exact answer dispatcher, 942 lines) is replaced by a
-  small store: `packages/core/store.ts` holds state and actions; React reads it through
-  `useSyncExternalStore` hooks. The logic inside each source (session, negotiation, origin
-  binding, server selection) moves into the store's actions, not into components.
-- **Storage.** Exact's `secret.keep` becomes a `SecretStore` interface in core:
-  expo-secure-store on native (Keychain on iOS and tvOS, Keystore on Android), and the
-  current web behaviour on web. Non-secret preferences use a plain key-value store.
-- **Fonts.** Document fonts load at run time with expo-font (`loadAsync` with a URL).
-
-### Rewritten
-
-- **The skin renderer** (`packages/skin/render/`): an ordinary recursive React renderer,
-  below. It replaces `client/renderer/*.contract`, `tools/renderer.ts`, the level
-  conversion in `client/src/skin/index.ts` and `vocabulary.ts`'s positional table.
-- **Widgets**: search field, scrubber and track/quality menus, guide time grid, sign-in
-  fields and quick-connect code, hero/card trailer previews, install/update, visibility
-  sentinels, appearance picker. Each is a React component registered by name.
-- **Foundation screens**: the route shell, navigation stack and restoration (scroll,
-  focus, query), detail presentation (fullscreen/modal/stack), player chrome host, guide.
-- **The native player** (spike b).
-
-### Deleted after conversion
-
-`client/` as an Exact app (`app.contract`, `foundation/*.contract`, `skins/`, `renderer/`,
-`app.tamber`, `exact.mjs`, `modules/web/index.js`), `vendor/exact`, `EXACT_REVISION`,
-`tools/check.ts`, `tools/engine.ts`, `tools/renderer.ts`, `tools/tvos.ts`, the Exact
-sections of `AGENTS.md`, and the docs that describe compiled skins or Contract workarounds.
+The Contract lowering was removed in `f2ddb75`, the Exact app/dispatch in `d47098c`.
+Remaining profile/engine build helpers retire with their release consumers. Keep
+`vendor/exact` untouched and pinned while needed; removal is a coordinated cleanup,
+not an instruction to edit the upstream checkout. Older paths in the dated spike
+notes below identify the implementation at the time, not new contributor paths.
 
 ## The skin renderer
 
@@ -364,7 +365,7 @@ On Basement against the same local pair: a redirect from A to B sent the probe t
 every request to B without it; a redirect within A's `/media/` kept it. A URL without headers (Ether's broker
 URLs) is loaded as is, redirects and all.
 
-#### Previews
+#### Previews (earlier Apple observation; current changes unverified)
 
 `preview` plays in its own mpv instance (`ios/PreviewPlayback.swift`): no audio track, no subtitles, no
 audio session, no display matching, a 16 MiB cache, `loop-file` when asked. It plays while `active` is not
@@ -402,6 +403,10 @@ paused past two minutes, observations every 10 to 15 s with no media requests, a
 A server restart mid-pause brought a new session at the same position, still paused, and Play resumed it.
 
 #### Releasing a build with libmpv (LGPL-2.1-or-later)
+
+Existing project release notes are retained below. This migration update adds no
+legal research or new licensing conclusions; the release owner must carry these
+recorded obligations forward before external distribution.
 
 MPVKit's LGPL product is linked as **static** libraries (libmpv, FFmpeg, libass, libplacebo, gnutls and the rest
 of `ios/mpvkit-1.0.0.txt`). A distributed app that statically links LGPL code must let its users relink it
@@ -444,7 +449,7 @@ swapped out, ANRs on input). It continues on a Linux machine with KVM.
   `PlayerCapabilities` (hardware decoders from `MediaCodecList`), `DisplayMatching`
   (`Surface.setFrameRate`, `preferredDisplayModeId`; SDR output only), `MediaAccess`, `TrustStore`
   (the device's CAs as one PEM file: mbedTLS cannot read Android's store). It compiles and is packaged;
-  it has **not played a file yet**.
+  that initial packaging observation preceded the later milestone below.
 - **Redirects with credentials** (open question above): mpv 0.42 carries http(s) over libcurl, not
   FFmpeg. While media access headers apply to a URL the view sets `curl-max-redirects=0` (and FFmpeg's
   `max_redirects=0`), so a credentialed request never follows any redirect. Ether's broker URLs carry no
@@ -460,7 +465,8 @@ swapped out, ANRs on input). It continues on a Linux machine with KVM.
   MediaCodec crashes the emulator process), so expect dropped frames there. `libmpv/build.sh` needs
   Meson 1.11+, which it pip-installs.
 
-Steps on a new machine (Linux x86_64 with KVM, or a Mac):
+Historical setup notes for the Android owner (not routine contributor checks).
+Emulator work stays on Linux with KVM, not the shared Mac:
 
 1. JDK 17 (`openjdk-17-jdk`, or Homebrew `openjdk@17`). Android command-line tools unpacked to
    `$ANDROID_HOME/cmdline-tools/latest` (default `~/.scratch/android-sdk`), then
@@ -485,7 +491,8 @@ playback lead is excising stay excised.
 
 ## Spike (a): the React skin renderer
 
-Owner: `thr_b57w7znkf9`. Location: `apps/vela`, `packages/skin`. It moves no existing file:
+Historical spike owner: archived `thr_b57w7znkf9`. Location: `apps/vela`, `packages/skin`.
+At spike time it moved no existing file:
 it imports `client/src`, `protocol/v0` and the Vela base by path alias.
 
 Scope: the home route and the title route of two documents, the Vela base as Cinematic
@@ -542,23 +549,22 @@ left out on TV and row-card backdrops capped at 1280 px.
 
 Open: the iOS (phone) Simulator pass, held behind the one-native-tool rule on this Mac.
 
-## After the spikes
+## Delivery after the spikes
 
-1. Move files into `packages/` with `git mv` once the adapter redesign has landed.
-2. Renderer to the full vocabulary and every route; all widgets.
-3. Player module integrated on iOS and tvOS; player chrome as widgets.
-4. Android and Android TV (player module in Kotlin).
-5. Web parity with the existing web core.
-6. Release and distribution: signed skin documents unchanged; app builds through
-   `xcodebuild`/Gradle locally (or EAS, owner's call).
-7. Delete the Exact client (list above).
-8. macOS host, Windows host.
+Source relocation and consumer cleanup are in progress, not future architecture work.
+The parent owns the integrated compile and Expo artifact, actual web/PWA and affected
+Apple/Android playback flows, cold-title against newly deployed Ether, and phone/tablet
+pass. Release qualification includes signed fixture install/update/rollback and static
+asset/PWA behavior. See [distribution.md](distribution.md) for the concrete contract.
+These gates do not prescribe an exhaustive matrix or imply current app completion.
+Residual Exact tooling retirement follows migrated consumers; app removal is already
+committed. Dedicated macOS/Windows hosts are later scope.
 
-## Open questions
+## Remaining playback questions
 
-- Whether mpv's HTTP stack can be held to "no headers after a cross-origin redirect", or
-  the host must resolve redirects before loading. Spike (b) answers this.
-- HDR/Dolby Vision output path on tvOS through MoltenVK (EDR, HDR10 passthrough). Spike
-  (b) records what it gets; full HDR may need a Metal presenter later.
-- Audio passthrough (TrueHD/DTS-HD bitstream) on tvOS is not available to third-party apps
-  in general; decoded multichannel PCM is the expected path.
+- Credentialed redirects have the dated Apple mitigation/proof above; Android's
+  implementation still needs its recorded redirect behavior exercised. Recheck any
+  changed transport before inheriting older proof.
+- HDR/Dolby Vision output through the actual native presenter remains stream/device
+  specific; the spike's observations are not a blanket HDR qualification.
+- The recorded tvOS expectation is decoded multichannel PCM, not a new passthrough claim.

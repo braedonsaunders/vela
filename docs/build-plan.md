@@ -1,80 +1,104 @@
 # Build plan
 
-Status: working plan for the first implementation. The orchestrator thread
-(`thr_ucqnvk37fq`) owns this file and decides conflicts. Product scope comes from
-[design.md](design.md) and [protocol-design.md](protocol-design.md).
+Status: RN/Expo migration in progress (2026-11-16), not a completed app release.
+The orchestrator is `thr_4q8296jknz`; prior orchestration threads are archived.
+Product scope comes from [design.md](design.md) and [protocol-design.md](protocol-design.md).
+[RN migration](rn-migration.md) records architecture and dated observations;
+[distribution](distribution.md) records release contracts and qualification gates.
 
-## Repository layout
+## Repository layout and ownership
 
-| Path | What | Owner |
+Source moves landed in `5d7a099`, `dfd862e`, `3b933a2` and `2394e9a`.
+Core is in `packages/core/src`, resolver/base in `packages/skin/src/resolve`, protocol
+in `packages/protocol`, web engine in `modules/vela-player/web/engine`, and app assets
+in `apps/vela/assets`. The Exact app/dispatch was removed in `d47098c`; residual
+tooling/release consumers
+still need closure. Theme values now live in `packages/skin/src/theme.ts`, and
+`tools/skin-renderer.ts` supplies React renderer release metadata. The parent owns
+integrated compilation after these moves.
+
+| Path | Responsibility | Current coordination |
 |---|---|---|
-| `client/` | The Exact app (`exact new client --name Vela`). `app.contract` is the root: routes, shell, skin selection. `app.ts` is the data-module entry and only re-exports from `client/src/`. | bootstrap, then shared |
-| `client/src/protocol/` | Typed Vela v0 client: HTTP, SSE events, auth/session, cache validation | data |
-| `client/src/adapter/` | `ServerAdapter` boundary and the server registry; one adapter per server protocol (`ether/`, `jellyfin/`, `plex/`) | data (boundary), adapter workers (`jellyfin/`, `plex/`) |
-| `client/src/discovery/`, `search/`, `telemetry/` | Bootstrap/home rows, search generations and AI lane, impression/interaction receipts | data |
-| `client/foundation/*.contract` | Shared, skin-independent Contract: search behaviour, detail state, playback chrome state, accessibility semantics | ui |
-| `client/skins/cinematic/*.contract` | The official skin | ui |
-| `client/skins/<other>/` | A second, radically different skin that proves the skin contract | skins |
-| `client/player/` | Playback engine (TypeScript): source selection, MSE/segment pipeline, ABR, recovery, tracks, PiP | playback |
-| `client/live/`, `client/skins/*/guide*` | Live TV and the channel guide | live |
-| `protocol/v0/` | The wire contract: `README.md` (spec), `types.ts` (single source of truth for shapes), `fixtures/` | protocol |
-| `mock-server/` | Bun dev server implementing v0 from fixtures, with fault injection for playback recovery | protocol |
+| `apps/vela/` | Expo app, expo-router routes, screen wiring, platform storage and player views | Parent coordinates app/UI workers |
+| `packages/core/` | Adapters (Ether, Jellyfin/Emby, Plex), session, discovery, search, live, telemetry, models, i18n; React subscription entry kept separate | Source migration `thr_3iwkrbqy77` |
+| `packages/skin/` | Resolver/base, vocabulary/style translation, recursive React renderer, interactive widgets | Source migration for moves; parent coordinates renderer/UI edits |
+| `packages/protocol/` | Wire types moved from `protocol/v0`,, skin schema and fixtures | Source migration; coordinate all wire changes |
+| `packages/player-api/` | Shared player view contract | Parent coordinates player owners |
+| `modules/vela-player/` | Expo module: Swift/MPVKit, Kotlin/libmpv and Metro web view | Parent coordinates playback workers |
+| `modules/vela-player/web/engine/` | Web engine moved from `client/player` | Source migration; coordinate with playback |
+| `mock-server/` | Fixture-backed Bun v0 server | Protocol owner through parent |
+| `tools/release/` | Expo export capture, payload inventory, signed distribution, PWA shell | Release worker `thr_88bpxte5e5` |
+| `AGENTS.md`, this file, `rn-migration.md`, `distribution.md`, root README | Current contributor/build documentation | Documentation slice `thr_4ny3ys7xke` |
+| Remaining `client/` files, Exact-specific tools, `vendor/exact` | Historical files/tools; app/dispatch removed in `d47098c` | Coordinate residual cleanup; never edit `vendor/exact` |
 
-## Decisions taken
+Root dependency files, shared exports, app wiring and generators require coordination
+before edits. Commit only owned paths on shared `main`; no push, stash, history rewrite
+or branch switch. Existing workers may be editing other paths at the same time.
 
-1. **Exact** is pinned at `EXACT_REVISION`, cloned to `vendor/exact` (gitignored). The app
-   consumes it by path. Moving the pin is a deliberate commit.
-2. **Wire format v0:** JSON over HTTPS under `/vela/v0/`, bearer access tokens from
-   Ether's existing identity services, `ETag`/`If-None-Match` on cacheable reads, one
-   Server-Sent Events stream per session for state/recovery events with cursors and
-   snapshot fallback. Binary encodings wait for measurements. `protocol/v0/types.ts`
-   is the single source of truth; the Ether implementation mirrors it.
-3. **Media delivery:** HTTP segments (fMP4/CMAF) through HLS-style playlists that Ether
-   already produces (`internal/transcode/dash_session.go`, `internal/hlsplay`). Direct
-   file playback for compatible originals. Vela's own session/recovery contract wraps
-   them; we do not invent a container.
-4. **(Superseded by 7.)** ~~Skins are compile-time Contract packages.~~ A skin is a directory of `.contract`
-   components that implement a fixed set of slots (`Home`, `SearchSurface`,
-   `TitleCard`, `Row`, `Detail`, `PlayerChrome`, `Guide`, `Shell`) over props supplied by
-   the foundation. The root selects the active skin by state; the server names the
-   default. Skins hold no credentials, issue no requests and cannot reorder server
-   rows: they receive rows already ordered and report visibility through foundation
-   callbacks. Third-party JavaScript in the client origin is not allowed.
-5. **Playback engine lives outside the data module** (Exact's data module has no DOM and
-   no clock). The playback worker decides the mechanism (Exact `video` element with
-   MSE object URLs from a package web module, a same-origin engine frame, or another
-   path Exact supports) and records the decision in `docs/playback-engine.md`.
-6. **Mock first, Ether in parallel.** The client develops against `mock-server/`. The
-   Ether orchestrator (`thr_daerp5pbp7`) implements `internal/frontends/vela` against
-   `protocol/v0/`. Server-side proactive fallback stays v0.3.11 per the spec.
+## Architecture
 
-7. **Skins are data (end state, owner directive).** Every skin, official or third-party
-   (Cinematic, Index, Jelly Twin, Marquee, Mochi, example), is a signed JSON skin
-   document plus assets (`protocol/v0/skin.ts`, `docs/skin-schema.md`) that Ether
-   serves and clients apply live. The client compiles exactly one build: the
-   foundation, the generic renderer (`client/renderer`, generated by
-   `tools/renderer.ts`) and the interactive widgets it styles from data (search
-   field, scrubber and player menus, guide grid, sign-in fields, previews,
-   install). No skin code is baked in. When the conversion is done these are
-   deleted: `client/skins/<id>/*.contract`, the per-skin dispatch in
-   `foundation/skin.contract`, the single-engine build profiles and hand-off
-   (`tools/engine.ts`, `client/player/engine-handoff.ts`, the engine loader), the
-   per-skin tokens, icons and strings in `app.tamber`/`strings/`, and the docs that
-   describe compiled skins. Order and sizes: `docs/skin-distribution.md`, "End state".
+- One Expo app targets web through react-native-web, Apple through the tvOS RN fork,
+  and Android/Android TV through the native host. Dedicated macOS/Windows hosts are
+  later scope; Linux uses web/PWA. Target intent is not device qualification.
+- Skins remain schema-1 JSON documents plus assets, resolved and drawn by the shared
+  React renderer. Skins hold no credentials and issue no requests. Compiled Exact
+  skins and per-engine reloads are legacy, not the RN design.
+- Server adapters present common v0 models and declared capabilities. Ether is the
+  reference/default; Jellyfin/Emby and Plex use the same boundary. Credentials stay
+  in platform storage/transport, outside skins and diagnostics.
+- Native playback uses the player module/libmpv; web retains the WebCodecs/WebGPU
+  engine with JavaScript in Metro and external assets addressed by payload digest.
+  A packaged backend is not proof of a particular stream or device capability.
+- Wire v0 retains HTTPS JSON, bearer sessions, cache validation and session events.
+  Media uses compatible originals or server-produced segments; migration does not
+  invent a media container or relax authenticated policy.
+- Web/PWA exports are served by Ether at `/vela`, with signed inventory, verified
+  installation, atomic activation and rollback. The old Exact release proof does
+  not qualify the new Expo artifact.
 
-8. **Vela is a client for any server protocol (owner directive).** Ether is one server
-   that speaks every client protocol; Vela is the reverse, one client that speaks every
-   server protocol. Ether (the v0 protocol) is the default and the reference; Jellyfin/Emby
-   and Plex are first-class adapters behind the same `ServerAdapter`, not a degraded mode.
-   Foundation, renderer and skins never know which server they talk to: they see v0
-   shapes and the capabilities the adapter declares. Media credentials never reach skins,
-   logs, diagnostics or URLs on header-capable paths (`docs/data-module.md`).
+## Contributor loop
 
-## Order of work
+Use the pinned Bun via `source tools/env.sh`. The root workspace hoists dependencies;
+`apps/vela/package.json` records Expo/React/RN pins. Compile a coherent chunk once:
 
-1. bootstrap: toolchain, scaffold `client/`, dev loop documented. **protocol** and
-   **playback research** run alongside.
-2. ui (home, search, detail, routes, cinematic skin) and data (`client/src`) once the
-   scaffold and `protocol/v0/types.ts` exist.
-3. playback engine + player chrome; live TV and guide; second skin.
-4. Wire to a real Ether once `internal/frontends/vela` serves v0.
+```sh
+bun x tsc --noEmit -p apps/vela
+# Only for changes to these standalone areas:
+bun x tsc --noEmit -p mock-server
+bun x tsc --noEmit -p modules/vela-player/web
+```
+
+Do not add CI, test suites, harnesses, coverage or lint machinery. Do not run Exact's
+maintainer checks. There is no routine Contract/profile build for RN contributions.
+For a coding-only assignment, do not run these checks if the task forbids them.
+
+The parent must look at an affected UI/playback flow before announcing it, and drive
+one document using any new renderer rule before shipping. Coding workers report the
+missing runtime look explicitly. Keep build/native/cache output scratch-backed as
+specified in [AGENTS.md](../AGENTS.md); do not commit generated native projects.
+
+## Release handoff
+
+Release owner confirmed `bun tools/release/build.ts --player-assets=<payload-directory>
+--committed` for the replacement implementation, where the directory contains
+`PLAYER-ASSETS-MANIFEST.json`. Version is captured `apps/vela/package.json`; one
+archive/manifest records `skinRenderer` and `playerAssetsDigest`. Catalog generation
+moves to `tools/skin-documents.ts`. This is unbuilt/unqualified coding work; see
+[distribution.md](distribution.md) before using it. It is not a routine check.
+
+## Current delivery ledger
+
+Owned and updated by orchestrator `thr_4q8296jknz` (2026-11-16). Each row closes
+only with evidence for the integrated revision, not inherited spike proof.
+
+| Area | Current state / next gate |
+|---|---|
+| Construction | Source moves committed (`5d7a099`, `dfd862e`, `3b933a2`, `2394e9a`), Exact app removed (`d47098c`); release integration and remaining legacy consumers still need closure, then integrated compile and real Expo artifact. |
+| UI/playback | `c742d66` has reported typecheck/web observation. Native previews `f96f622` / `009c9d9` remain unbuilt/unverified; Menu is unresolved despite one saved passing run. Parent still needs affected web/PWA and Apple/Android playback flows plus phone/tablet pass. |
+| Ether cold detail | Merged, not lab-deployed. Deploy first, then drive cold-title against that revision. |
+| Distribution | New Expo signed fixture still needs install/update/rollback, asset-retention and PWA qualification. Earlier Exact dry run is historical proof only. |
+| Publication | Release not yet publicly published. Exact-version owner approval remains required before deliberate production publication. |
+| Later scope | Dedicated macOS/Windows hosts; residual Exact cleanup follows migrated consumers and release path. |
+
+The parent selects concrete affected flows; this ledger is not an exhaustive matrix
+or a claim of broad app completion/device parity.

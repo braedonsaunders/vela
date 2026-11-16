@@ -1,48 +1,39 @@
 # Vela
 
-A cinematic, deeply skinnable viewing client for Ether, built with [Exact](https://github.com/expo/exact).
-
-**Status: early client scaffold.**
-
-Vela starts as a desktop/mobile web app and installable PWA. Ether serves its build as an app with its own protocol, Apps card, and configuration. The client lives in this separate repository. Native apps and adapters for other servers follow later.
-
-- [Product specification](docs/design.md)
-- [Proposed protocol architecture](docs/protocol-design.md)
-- [Protocol research and server coordination](docs/protocol-research.md)
-
-The official experience centers fast search over a cinematic backdrop, with Ether's automatic recommendations beneath it. Vela supplies the presentation and playback experience; Ether supplies identity, discovery, personalization, media, and server-side recovery.
-
+A cinematic, document-skinnable viewing client migrating to React Native + Expo.
+Ether is the reference server; Jellyfin/Emby and Plex adapters share the client boundary.
 Vela includes no media or provider credentials.
 
-## Develop
+**Status: migration in progress.** The RN app, renderer and player modules are present;
+individual historical observations do not establish current app or device completion.
+Web/PWA remains a delivery target alongside native apps. Dedicated desktop hosts come later.
 
-From the repository root:
+- [Contributor instructions](AGENTS.md)
+- [Current architecture, ownership and delivery gates](docs/build-plan.md)
+- [RN migration and dated evidence](docs/rn-migration.md)
+- [Web distribution and release obligations](docs/distribution.md)
+- [Product specification](docs/design.md)
+- [Protocol architecture](docs/protocol-design.md)
+
+## Contribute
+
+The root is a Bun workspace. `apps/vela` is the Expo app; shared code lives in
+`packages/`, and native/web playback in `modules/vela-player`. Source moves have landed;
+consumer/release cleanup continues. See the build plan before changing shared paths.
+
+From the repository root, compile a coherent chunk once:
 
 ```sh
 source tools/env.sh
-bun tools/dev.ts
+bun x tsc --noEmit -p apps/vela
 ```
 
-Use this single command for all local UI/playback work. It owns the mock on
-`http://127.0.0.1:7777` and Exact's web loop on `http://127.0.0.1:8765`, with
-`VELA_MOCK=1`, an explicit mock API origin and matching CORS. Sign in with
-**demo / vela**. It prints its owner PID, refuses a second instance or occupied
-ports, and shuts down both process groups on Ctrl-C or terminal exit.
+For standalone mock-server changes use `bun x tsc --noEmit -p mock-server`; the web
+player uses `bun x tsc --noEmit -p modules/vela-player/web`. Follow explicit coding-only
+restrictions when a task forbids checks. No CI, test suites, harnesses or lint machinery.
 
-From another terminal, `bun tools/dev.ts stop` requests shutdown of that owner.
-It never adopts or stops an unrelated listener. The owner record lives under
-`.tools/vela-dev/` (small metadata stays on the stable repository disk); a stale record is removed only when its PID is gone.
-Do not launch separate mock or Exact servers alongside this command.
-
-Generate synthetic media when no viewer is using it:
-`bun mock-server/scripts/make-media.ts`. See [mock controls](mock-server/README.md).
-
-The routine compile check remains `bun exact.mjs contract build app.contract
---json --errors-only` from `client/`. For a single visual look, use the running
-loop at port 8765. Distribution and PWA packaging are described in
-[distribution.md](docs/distribution.md).
-
-Language catalogs live in `client/strings/<locale>.json`. Dev startup and release
-packaging generate the TypeScript catalog registry automatically. After adding a
-locale during a running loop, run `bun tools/locales.ts` (or restart the dev
-command); edits to already imported catalogs use Exact's ordinary reload.
+Exact's app/dispatch was removed in `d47098c`. Contract/profile and former
+`tools/dev.ts` instructions are historical, not the RN contributor workflow. The parent
+coordinates an actual RN UI/playback look before
+announcing those changes. Expo export/native builds are delivery work, not routine checks.
+Keep bulky generated output under `~/.scratch/vela-build/<worktree>/`.

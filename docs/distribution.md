@@ -6,43 +6,58 @@ the production deployment. Build and signing commands never publish. Publishing 
 
 ## Expo web export migration plan
 
-Owner decision (2026-11-16): retain the web/PWA target alongside native apps. The
-web artifact becomes the `apps/vela` Expo export. Keep signed distribution and the
-Ether installer; Ether 0.3.13 itself ships without Vela. The Exact single-app
-cutover commits `75c76af`, `9b200e8` and `fd6a9cc` remain unmerged. Do not use them
-as the starting point for the Expo release implementation. The packaging contract
-below is agreed with the migration lead, who verified the first spike export's
-file tree and `/vela` URLs. Existing packaging sections below describe
-the current installed baseline until this replacement is qualified.
+Current orchestration: `thr_4q8296jknz`; release tooling: `thr_88bpxte5e5`.
+RN/Expo is the current architecture. Web/PWA remains a delivery target: Ether
+serves the `apps/vela` export at `/vela`. Ether 0.3.13 itself ships without Vela.
+The old Exact 0.1.42 installer result below is historical evidence, not Expo
+qualification. No new Expo release, native delivery or public publication is
+established by these documentation changes.
 
-### Captured inputs and export
+Source relocation landed in `5d7a099` / `dfd862e`, renderer identity in `3b933a2`.
+The Exact app/dispatch was removed in `d47098c`; final exporter integration is
+owned by the release worker. The legacy sections
+below preserve prior installer/signing contracts and proof; their Exact commands
+must not be used as the current RN build instructions.
 
-Capture one clean committed source revision into scratch-backed build output:
+### Expo packaging command and captured inputs
 
-- `apps/vela`, including app configuration and its owned route-table script;
-- `packages/*`, root `package.json`, `bun.lock` and `bunfig.toml`;
-- during the spike only, the imported `client/src`, foundation i18n/catalogs,
-  `client/strings` and `protocol/` inputs, until their planned package moves land.
+The release owner confirmed this CLI/contract for the replacement implementation.
+It is coding-only work: no built artifact or qualified flow has yet been reported.
+Use it only once the exporter implementation/tooling is committed:
 
-Use root Bun workspaces and the committed hoisted-linker configuration. Install
-from the frozen lockfile, then export from the staged `apps/vela` directory:
-
-```
-bun install --frozen-lockfile
-# cwd: apps/vela
-VELA_WEB_BASE=/vela bun x expo export --platform web --output-dir <staged-export>
+```sh
+source tools/env.sh
+bun tools/release/build.ts --player-assets=<payload-directory> --committed
 ```
 
-Expo and Metro come from that captured workspace/lockfile, never a floating CLI
-or the developer's global installation. Web output is a single-page app.
-`apps/vela/app.config.ts` sets the web base from the export-only, non-secret
-`VELA_WEB_BASE=/vela` value (confirmed in `a7fc60e`). Do not put a permanent
-`experiments.baseUrl` in app.json: it breaks native embedding. Native builds omit
-this setting and remain unprefixed. Apart from that explicit build-control value,
-only deliberately public `EXPO_PUBLIC_*` app configuration is admitted; no viewer
-credentials, private keys or other secrets belong in build values. Web builds need no Exact checkout, Contract
-lowering, skin profile, custom engine loader or native prebuild. Native iOS/Android
-binaries have their own distribution and are not placed in this web archive.
+`<payload-directory>` contains `PLAYER-ASSETS-MANIFEST.json` and its exact inventoried
+files. This is the new static player payload, not an old diagnostic/runtime archive.
+The default command captures HEAD and refuses dirty build inputs; `--committed`
+allows unrelated working edits while still using HEAD only. Release tooling itself
+must be committed. Version comes from captured `apps/vela/package.json`.
+
+Captured inputs are `apps/`, `packages/`, `modules/`, `tools/`, `brand/`, root
+`package.json`, `bun.lock`, `bunfig.toml` and `THIRD_PARTY_NOTICES`. Core is in
+`packages/core/src`, resolver/base in `packages/skin/src/resolve`, wire types and
+fixtures in `packages/protocol`, web engine in `modules/vela-player/web/engine`,
+and app assets in `apps/vela/assets`. No Exact checkout or native prebuild belongs
+in the web build graph.
+
+The staged build uses the frozen hoisted workspace install, app `assets.ts`,
+`routes.ts /vela`, `tools/skin-documents.ts <dist>/skins` and
+`tools/skin-renderer.ts`. Expo exports the single-page app with `VELA_WEB_BASE=/vela`
+and verified `EXPO_PUBLIC_VELA_PLAYER_ASSETS=<digest>`. It preserves Expo's HTML
+and import graph, adds `manifest.webmanifest`/PWA resources and the exact payload,
+then inventories the final root. There is one archive/full manifest, recording
+`skinRenderer` and `playerAssetsDigest`; no engines, Exact revision or universal key.
+The signed descriptor also uses `playerAssetsDigest` and drops `engines` and
+`universalRuntimeKey`.
+
+Expo/Metro come from the captured workspace/lockfile. The base is export-only:
+native builds omit it. Only deliberately public configuration belongs in
+`EXPO_PUBLIC_*`; credentials, private keys and mock sessions never enter a release.
+Native binaries have separate distribution and do not enter this web archive.
+Bulky capture/export/payload output stays under scratch-backed `.artifacts/release/`.
 
 ### Preserve the export graph
 
@@ -62,11 +77,12 @@ requested during an initial Home visit. Fixed-name `metadata.json` revalidates.
 SPA mode does not emit a route manifest. The app-owned exporter landed in
 `99b47e9`: run `bun apps/vela/scripts/routes.ts [base]` from the captured repository
 root; base defaults to `/vela`. Packaging writes its stdout as `routes.json` at
-the archive root. Verified output is `{schema:1, base:"/vela", routes:["/vela",
-"/vela/title/:id"]}`. It derives routes from the expo-router app directory: index
+the archive root. The initial spike output contained `/vela` and `/vela/title/:id`; the current
+route tree also has auth, watch, library, collection and live screens. Generate
+from the captured tree rather than copying that old two-route observation. It derives routes from the expo-router app directory: index
 maps to its directory, `[x]` maps to `:x`, route groups disappear, and `_layout`
 and `+` files are skipped. The table grows as real screens land; do not invent
-watch, collection or library routes before those screens exist.
+routes that are absent from the captured revision.
 
 Ether routes `/vela/v0/` before the SPA and returns index.html only for declared
 app routes. Missing static files remain 404s, not HTML. Confirm deep links and
@@ -110,16 +126,21 @@ corresponding source archives, licences and the complete safe-relative file list
 Its own bytes are covered by the signed full release inventory even though the
 aggregate excludes it. Playback confirmed the filename
 `PLAYER-ASSETS-MANIFEST.json` and fields `schemaVersion:1`, `digest`,
-`sourceRevision`, `sourceDirty`, `dependencies` and `files`. The final builder
-command and qualified input remain pending direct-dependency extraction and the
-required real-app matrix. A diagnostic payload or host seam proof is not a release
+`sourceRevision`, `sourceDirty`, `dependencies` and `files`. The builder is now
+`bun modules/vela-player/web/assets/export-assets.ts --libraries=<prepared-libraries> --out=<staging>`.
+It writes `player/<digest>/PLAYER-ASSETS-MANIFEST.json` and prints the digest.
+The app export uses public `EXPO_PUBLIC_VELA_PLAYER_ASSETS=<digest>` to address that
+same tree. A qualified prepared input and actual app playback remain delivery gates. A diagnostic payload or host seam proof is not a release
 input. The old Exact runtime-key algorithm and CORE-MANIFEST input are not carried
 forward.
 
-Built-in skin documents and their static assets remain data, with real ids/names,
-schema/renderer compatibility and the same complete release inventory. Agree their
-export/public-directory ownership with the migration lead so there is one catalog
-producer, not duplicate Metro and packager copies. Theme, artwork, API and media
+The release owner's replacement `tools/skin-documents.ts <out>` produces the catalog from
+`packages/protocol/fixtures/skins`. Built-in skin documents and assets remain data, with real ids/names,
+schema/renderer compatibility and the same complete release inventory. The release
+packager owns the single catalog output at `<dist>/skins`, avoiding duplicate Metro
+and packager copies. React renderer metadata comes
+from `tools/skin-renderer.ts`, not the deleted Contract tables; theme values live in
+`packages/skin/src/theme.ts`. Theme, artwork, API and media
 requests retain their current same-origin/privacy rules. A PWA worker may cache
 only digest-verified static resources; it must never cache API responses, artwork
 grants or media. Expo web install/update handling must be qualified explicitly.
@@ -129,7 +150,7 @@ grants or media. Expo web install/update handling must be qualified explicitly.
 Keep the existing Ed25519 exact-byte signature, dedicated production/test key
 separation, owner-triggered check/install, compatibility/expiry checks, complete
 tar verification, atomic activation, additive preservation and two-rollbacks
-policy. Build one archive and one finalized app manifest. Proposed app manifest
+policy. Build one archive and one finalized app manifest. The agreed app manifest
 `basePath` is `/vela/`; its files cover the final static root and agree exactly
 with the full build inventory. Both manifests stay outside the archive to avoid
 self-hashing. Preserve clean source and pinned workspace/toolchain provenance.
@@ -143,12 +164,12 @@ hold the Exact-specific app-schema change and keep the distribution implementati
 
 Implementation and qualification order:
 
-1. The first export tree, export-only base setting and app-owned route exporter
-   are verified. Migration lead confirms the final captured workspace inputs;
-   playback supplies the qualified non-Metro asset builder contract.
-2. Implement the exporter adapter from clean main, preserving the signing and
-   installer verification modules; retire the Exact build path coherently. Update
-   this document with observed paths and final metadata, not assumptions.
+1. The initial export/base/route spike has dated evidence. Source moves are now
+   committed; obtain an integrated compile and a fresh release artifact from the
+   final captured workspace and qualified player assets.
+2. Finish/commit the release worker's exporter and signing changes above, preserving
+   verification modules and retiring the Exact build path coherently. Implementation
+   is not artifact or installer qualification.
 3. Inspect the export for secret-free, same-origin URLs and complete dependencies;
    record entry raw/gzip and cold-load results. Drive deep links, login, skin
    switching, player asset loading, offline/update behavior and missing-asset 404s.
@@ -158,7 +179,16 @@ Implementation and qualification order:
 5. Obtain owner approval for the exact version before production signing and the
    deliberate public publish command. No public release is authorized by this plan.
 
-## Local packaging
+## Historical Exact packaging and installer reference
+
+Everything from this heading through the historical payload section records the
+Exact release baseline and its contracts. Per-engine manifests, `engines.json`,
+`universalRuntimeKey`, `client/renderer/version.json` and Exact build commands are
+legacy details. The Expo replacement uses one app and `playerAssetsDigest` as
+specified above. Preserve signing/verification, privacy, rollback and source/notice
+obligations; do not treat historical CLI examples as current migration instructions.
+
+### Legacy local packaging
 
 Run `source tools/env.sh` then `bun tools/release/build.ts` from this repository.
 For an approved committed release while other workers have edits in progress, use
@@ -195,7 +225,7 @@ The sourceDirty field records current edits included in a local build; publish
 only an artifact from an agreed, committed source revision. Generated release
 outputs are local scratch and must be copied to durable hosting before publishing.
 
-## Installer inputs and verification
+### Legacy installer inputs and verification
 
 The installer trusts two dedicated Vela Ed25519 public keys (current and next),
 pinned in the Ether binary through build ldflags, independently of Ether's own
@@ -269,7 +299,7 @@ size and SHA-256 against the manifest, including index.html. Never extract an
 unverified tarball over an active installation. Keep installer metadata outside the
 served static root.
 
-## Installation and serving
+### Legacy installation and serving
 
 Installer staging is `data/clients/.vela-staging-V`. The layout is:
 
@@ -302,7 +332,7 @@ files from different releases: retain the previous static tree through existing
 page lifetimes or use version-qualified asset roots before turning on aggressive
 caching. The packager emits the narrowly scoped shell service worker described below.
 
-## Compatibility and rollback
+### Legacy compatibility and rollback
 
 The client sends protocolVersions and device.appVersion in NegotiateRequest.
 The build version must match the packaged release version. The server returns
@@ -321,7 +351,7 @@ The installer must retain a known working release until the replacement has been
 opened successfully. Viewer credentials remain in the shared client identity
 store; changing static files must not create a different Ether viewer/device.
 
-## Runtime origin
+### Legacy runtime origin
 
 Release builds clear API_BASE_URL and VELA_MOCK. The data module takes the page's
 HTTP(S) origin once and pins API, event and media requests to it; dev builds may
@@ -331,7 +361,7 @@ is an application policy boundary, not an Exact native `self` grant. Artwork and
 media URLs must satisfy that boundary and redirects must not escape it. No
 installer rewriting, instance hostname or viewer token belongs in the archive.
 
-## PWA installation and updates
+### Legacy pWA installation and updates
 
 Exact emits the base manifest and icon links; it does not provide Vela's service
 worker or install-prompt lifecycle. The release adds original sail-mark SVG and
@@ -374,7 +404,7 @@ the prompt was accepted. `applyUpdate()` returns false when no worker is waiting
 Exact's data module cannot access this browser API directly; native-view controls
 bridge it without exposing credentials or arbitrary DOM access to skins.
 
-## Per-engine release layout
+### Legacy per-engine release layout
 
 This is the temporary shipping layout. The planned replacement below takes over
 when all installed skins have been converted to documents.
@@ -402,7 +432,7 @@ An update activates through the existing explicit update action, clears obsolete
 version caches and claims clients. The artifact remains one archive and manifest;
 Ether performs the same atomic installation and rollback as before.
 
-## Skin document compatibility
+### Legacy skin document compatibility
 
 Skins are documents (`protocol/v0/skin.ts`, `docs/skin-schema.md`) drawn by the
 client's one renderer. Two numbers decide whether a client may draw a document:
@@ -430,7 +460,7 @@ document that fails validation. The viewer's own pick is kept and retried when t
 server next answers. Until the compiled skins are removed, the fallback is the
 compiled cinematic engine.
 
-## Built-in skin documents
+### Legacy built-in skin documents
 
 A release ships every skin document in `protocol/v0/fixtures/skins/` as a built-in
 skin, so a viewer can pick a data skin with no server involvement:
@@ -464,53 +494,14 @@ versioned document/assets only on request; it never prefetches another skin.
 `catalog.json` stays network-only and should be served with revalidation. No server
 appearance API response or signed artwork/media grant enters this static cache.
 
-## Planned single-renderer release
+### Superseded Exact single-renderer proposal
 
-The end state is one compiled Exact app plus skin documents conforming to
-`protocol/v0/skin.ts`. Skin selection changes data within that app. Compiled
-per-skin implementations, per-engine profiles and engine-switch reloads are
-removed together once the conversion is complete; the current release path
-continues to ship until then.
+The Exact single-renderer proposal did not become the RN release architecture.
+The current replacement is the Expo export plan above: one Metro app, JSON skin
+assets, external player payload and one app manifest. Do not revive per-engine
+profiles or a compiled Exact renderer to complete this migration.
 
-The release transition is one coherent change:
-
-1. Compile the shared foundation, document renderer and native player host once
-   from the captured committed source. Every route and interactive slot must be
-   supported without falling back to an old skin's compiled implementation.
-2. Emit bundled skin JSON and its image/font assets as separate versioned static
-   files. Include their schema, renderer compatibility and content hashes in the
-   release inventory; keep document contents out of the JavaScript entry. Reuse
-   the canonical document validation and asset admission rules rather than
-   introducing a second skin language in the packager.
-3. Replace the engine selector with a single-app entry. Publish the validated
-   Universal payload descriptor before importing the native host. The foundation
-   resolves the viewer's skin preference and server appearance default, applies
-   document updates in place and keeps the current route, scroll and session.
-   Include a compatible bundled default document for startup or an unavailable
-   server document; it must also use the shared renderer.
-4. Generate one shell/asset cache inventory. Bundled immutable skin documents and
-   assets may enter the exact digest allowlist on request; server appearance API
-   responses, artwork grants and media continue to bypass the worker. Keep the
-   explicit update/activation and offline-page behavior.
-5. Remove `engines.json`, engine-specific output roots, `prepareEngine`, engine
-   handoff code and per-engine build loops after their consumers have migrated.
-   Convert the skin package builder to emit validated JSON plus assets, with no
-   Exact app or per-skin JavaScript bundle.
-
-The archive, trusted manifest/hash inputs, atomic install and rollback contract
-remain unchanged. Preserve skin identities and viewer preferences through the
-conversion; agree the final renderer/document compatibility metadata with the
-skin-distribution owner before changing the manifest. The required player payload
-remains shared and independently hash-verified.
-
-Before switching the release path, the conversion owner confirms route/slot and
-skin fidelity, including controls and accessibility. Packaging then performs one
-production compile, records renderer entry raw/gzip bytes separately from JSON,
-fonts, images and player payload, and takes one cold-load/skin-switch look. No
-per-engine measurements or duplicated app compilation remain in that pipeline.
-
-
-## Required player payload
+### Legacy required player payload
 
 Vela has one player: the Universal engine. Every production release requires
 `bun tools/release/build.ts --committed --universal-assets=<prepared-payload-dir>`.
@@ -554,6 +545,10 @@ Use exactly one universal input option per build.
 
 
 ## Signing and deliberate publication (Ether 0.3.13)
+
+These are the existing key/publication controls. Final Expo CLI/manifest integration
+belongs to the release worker; historical per-engine signing output below does not
+prove a signed Expo fixture. No public publication is authorized by this plan.
 
 `bun tools/release/signing.ts init production-v1` creates a **dedicated Vela**
 Ed25519 identity in the macOS login keychain, service
@@ -629,7 +624,8 @@ without hand repair:
 - The lab served signed 0.1.42; checked runtime URLs returned 200, with zero
   playback sessions and zero pins.
 
-**The local signed-distribution dry run is complete.** No public GitHub release or
+**The historical Exact local signed-distribution dry run is complete.**
+It does not qualify the replacement Expo artifact. No public GitHub release or
 stable channel has been published by these commands. Before a public release:
 
 1. Confirm the **production** Ether build pins the dedicated Vela production public
