@@ -20,13 +20,13 @@
       "name": "Vela",
       "backgroundColor": "#090b0e"
     },
-    "experiments": {
-      "baseUrl": "/vela"
-    },
     "plugins": [
       "expo-router",
       "expo-font",
-      ["@react-native-tvos/config-tv", {}]
+      [
+        "@react-native-tvos/config-tv",
+        {}
+      ]
     ]
   }
 }

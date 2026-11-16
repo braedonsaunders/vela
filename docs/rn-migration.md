@@ -76,7 +76,8 @@ signed manifest, verification, atomic install, two rollbacks and the shell servi
 contract does not.
 
 - **Build:** `expo export --platform web` with `web.output: "single"` (one SPA
-  `index.html`) and `experiments.baseUrl: "/vela"`, so every URL the export writes is
+  `index.html`) and `experiments.baseUrl: "/vela"` (set by `VELA_WEB_BASE=/vela` in the web export only; native builds
+  take no base URL), so every URL the export writes is
   under `/vela`. Routes are expo-router routes. The server-side route list
   (`routes.json`: `/vela/title/:id`, `/vela/watch/:id`, `/vela/collection/:id`, …) is
   generated from `apps/vela`'s route table, so Ether's index fallback and its asset 404s
