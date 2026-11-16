@@ -15,6 +15,14 @@ import {
   veil,
 } from './look';
 
+const previewVeil = (opacity: string): Style => ({
+  position: 'absolute',
+  inset: '0px',
+  'background-image': `linear-gradient(90deg, ${veil(94)} 0%, ${veil(85)} 34%, ${veil(55)} 52%, ${veil(0)} 78%)`,
+  opacity,
+  transition: 'opacity 900ms cubic-bezier(0.16, 1, 0.3, 1)',
+});
+
 // The artwork stage behind the hero and the first rows.
 export const stage: Node = {
   type: 'repeat',
@@ -79,6 +87,13 @@ export const stage: Node = {
               opacity: '0.7',
             },
           },
+          // The hero's muted trailer, over its art and under its scrims, while the preview plays.
+          {
+            type: 'widget',
+            widget: 'heroPreview',
+            when: [{ test: 'env.still', not: true }],
+            style: { position: 'absolute', inset: '0px' },
+          },
         ],
       },
       {
@@ -124,6 +139,12 @@ export const stage: Node = {
           'mask-image': 'radial-gradient(closest-side, black 0%, transparent 100%)',
         },
         when: [{ test: 'hero.accent', not: true }],
+      },
+      // While the trailer plays, a deeper veil keeps the hero's copy readable over moving pictures.
+      {
+        type: 'box',
+        style: previewVeil('0'),
+        states: [{ when: [{ test: 'hero.previewing' }], style: previewVeil('1') }],
       },
       {
         type: 'box',

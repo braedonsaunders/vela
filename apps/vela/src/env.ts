@@ -51,5 +51,6 @@ export function environment({ state, view, live, route, entry, width, skinCount,
     pagers: view.pagers,
     search: route === 'home' ? searchView(state.search) : undefined,
     live,
+    preview: { cardId: state.previews.cardId, heroId: state.previews.heroId },
   };
 }
