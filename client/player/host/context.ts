@@ -16,8 +16,8 @@ export function createHostContext(
   deliver: (event: EngineEvent) => void,
   fullscreenContainer: HTMLElement = video,
   ambient = false,
-  mediaAccess?: BrowserMediaAccess,
-  runtimes?: BrowserRuntimeServices,
+  mediaAccess: BrowserMediaAccess | undefined,
+  runtimes: BrowserRuntimeServices,
 ): HostContext {
   const controller = new SessionController();
   const coreQuality = new CoreQuality();

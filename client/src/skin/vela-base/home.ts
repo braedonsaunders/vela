@@ -12,6 +12,7 @@ import {
   ready,
   rowSkeleton,
   small,
+  veil,
 } from './look';
 
 // The artwork stage behind the hero and the first rows.
@@ -130,10 +131,10 @@ export const stage: Node = {
           position: 'absolute',
           inset: '0px',
           'background-image': [
-            'linear-gradient(90deg, #090b0ef0 0%, #090b0e70 32%, #090b0e00 68%)',
-            'linear-gradient(0deg, $ui.page 0%, #090b0ed9 22%, #090b0e00 58%)',
-            'linear-gradient(180deg, #07090cb3 0%, #090b0e00 20%)',
-            'radial-gradient(ellipse 120% 100% at 60% 35%, #090b0e00 50%, #000000b3 100%)',
+            `linear-gradient(90deg, ${veil(94)} 0%, ${veil(44)} 32%, ${veil(0)} 68%)`,
+            `linear-gradient(0deg, $ui.page 0%, ${veil(85)} 22%, ${veil(0)} 58%)`,
+            `linear-gradient(180deg, ${veil(70)} 0%, ${veil(0)} 20%)`,
+            `radial-gradient(ellipse 120% 100% at 60% 35%, ${veil(0)} 50%, ${veil(70)} 100%)`,
           ].join(', '),
         },
       },
@@ -158,7 +159,7 @@ export const stage: Node = {
 export const firstHeroHalo = (base: Style) => [
   {
     when: [{ test: 'env.heroIndex', is: 'eq', value: '0' }] as Condition[],
-    style: { ...base, 'box-shadow': '0px 14px 44px $ui.focusHalo, 0px 0px 0px 1px #ffffff2e' },
+    style: { ...base, 'box-shadow': '0px 14px 44px $ui.focusHalo, 0px 0px 0px 1px $ui.glassEdgeStrong' },
   },
 ];
 export const heroPrimary: Node = {
@@ -170,7 +171,7 @@ export const heroPrimary: Node = {
   style: { ...pill(true), position: 'relative' },
   states: firstHeroHalo({ ...pill(true), position: 'relative' }),
   small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px' },
-  hover: { 'background-color': '#ffffff' },
+  hover: { 'background-color': '$ui.inkHover' },
   focus: { 'box-shadow': focusRing },
   children: [
     {
@@ -202,7 +203,7 @@ export const heroPrimary: Node = {
             width: '44px',
             height: '3px',
             'border-radius': '2px',
-            'background-color': '#11141933',
+            'background-color': 'color-mix(in srgb, $ui.inkInverse 20%, transparent)',
             'overflow-x': 'hidden',
             'overflow-y': 'hidden',
           },
@@ -234,7 +235,7 @@ export const heroMore = (primary: boolean): Node => ({
     ? { height: '50px', 'padding-left': '22px', 'padding-right': '24px' }
     : { height: '52px', 'padding-left': '20px', 'padding-right': '22px' },
   hover: primary
-    ? { 'background-color': '#ffffff' }
+    ? { 'background-color': '$ui.inkHover' }
     : { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
   focus: { 'box-shadow': focusRing },
   children: [
@@ -535,7 +536,7 @@ export const homeLoading: Node = {
         gap: '16px',
         ...gutter,
         'box-sizing': 'border-box',
-        'background-image': 'radial-gradient(ellipse 80% 70% at 20% 40%, $ui.skeleton 0%, #090b0e00 70%)',
+        'background-image': `radial-gradient(ellipse 80% 70% at 20% 40%, $ui.skeleton 0%, ${veil(0)} 70%)`,
       } as Style,
       small: { height: '520px', ...gutterSmall } as Style,
       children: [

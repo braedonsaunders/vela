@@ -1,4 +1,4 @@
-import { canAttemptOriginal, hasCoreHls, hasCoreLive } from '../universal/loader';
+import { canAttemptOriginal } from '../original-support';
 import { codecKnown } from '../model';
 import type { Source } from '../model';
 import { mediaSourceClass } from '../pipeline';
@@ -39,9 +39,7 @@ export function usesPacketRuntime(context: HostContext, source: Source) {
     !context.recovery.browserFallbacks.has(routeKey(context, source)) &&
     ((source.original && canAttemptOriginal()) ||
       (source.delivery === 'hls' &&
-        (context.session.current?.live
-          ? (context.runtimes?.live ?? hasCoreLive())
-          : (context.runtimes?.hls ?? hasCoreHls()))))
+        (context.session.current?.live ? context.runtimes.live : context.runtimes.hls)))
   );
 }
 export function supportsSource(context: HostContext, source: Source) {
@@ -49,9 +47,7 @@ export function supportsSource(context: HostContext, source: Source) {
   if (source.delivery === 'file')
     return (source.original && canAttemptOriginal()) || !!context.surface.video.canPlayType(source.mime);
   return (
-    (context.session.current?.live
-      ? (context.runtimes?.live ?? hasCoreLive())
-      : (context.runtimes?.hls ?? hasCoreHls())) ||
+    (context.session.current?.live ? context.runtimes.live : context.runtimes.hls) ||
     !!context.surface.video.canPlayType('application/vnd.apple.mpegurl') ||
     !!source.renditions?.some(
       (r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass()!.isTypeSupported(r.mime)),

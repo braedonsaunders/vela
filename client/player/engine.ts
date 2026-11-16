@@ -16,8 +16,8 @@ export class PlaybackEngine {
     deliver: (event: EngineEvent) => void,
     fullscreenContainer: HTMLElement = video,
     ambient = false,
-    mediaAccess?: BrowserMediaAccess,
-    runtimes?: BrowserRuntimeServices,
+    mediaAccess: BrowserMediaAccess | undefined,
+    runtimes: BrowserRuntimeServices,
   ) {
     this.context = createHostContext(video, deliver, fullscreenContainer, ambient, mediaAccess, runtimes);
   }

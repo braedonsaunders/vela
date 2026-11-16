@@ -54,7 +54,9 @@ export type Action =
   /** A collection page: load its next titles. */
   | 'collectionMore'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
-  | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
+  | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide'
+  /** Search (`routes.search`): open a live hit by its `hit.ref`; ask the descriptive lane again. */
+  | 'openHit' | 'retryDescriptive';
 
 interface NodeBase extends Breakpoints {
   /** Overrides by viewport: `small` under 640 px, `wide` from 1200 px. */
@@ -124,7 +126,7 @@ export interface MotionPreset {
 export interface SkinFont { family: string; /** weight: a number, or a range "300 700" for a variable face. */ files: { url: string; weight: number | string; style: 'normal' | 'italic' }[]; sizeAdjust?: number }
 
 /** The keys of a document's `ui` block (client/src/skin/ui-defaults.ts holds Cinematic's values). */
-export type UiName = 'page' | 'raised' | 'ink' | 'inkSecondary' | 'inkQuiet' | 'inkInverse' | 'accent' | 'onAccent'
+export type UiName = 'page' | 'raised' | 'ink' | 'inkSecondary' | 'inkQuiet' | 'inkInverse' | 'inkHover' | 'accent' | 'onAccent'
   | 'control' | 'controlHover' | 'glass' | 'glassEdge' | 'glassEdgeStrong' | 'popover' | 'scrim' | 'track' | 'trackStrong'
   | 'focusHalo' | 'shadow' | 'skeleton' | 'skeletonLight' | 'alert' | 'live' | 'font' | 'fontDisplay'
   | 'radiusControl' | 'radiusCard' | 'radiusPanel';

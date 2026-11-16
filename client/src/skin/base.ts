@@ -8,6 +8,7 @@ import { collection } from './vela-base/collection';
 import { home } from './vela-base/home';
 import { library } from './vela-base/library';
 import { enterPresets, small } from './vela-base/look';
+import { search, searchMotion } from './vela-base/search';
 import { shell } from './vela-base/shell';
 import { title } from './vela-base/title';
 import { compiledControl } from './vela-base/controls';
@@ -23,6 +24,7 @@ export const velaBase: SkinDocument = {
   swatches: ['#090b0e', '#f5f1e9', '#dcb998'],
   motion: {
     ...enterPresets,
+    ...searchMotion,
     velaPulse0: {
       keyframes: 'breathe',
       duration: 1400,
@@ -171,7 +173,7 @@ export const velaBase: SkinDocument = {
   },
   templates: { velaCard: card, velaRow: row, velaRelatedRow: relatedRow },
   slots: { shell, home },
-  routes: { title, library, auth, collection },
+  routes: { title, library, auth, collection, search },
   // Home and the title page draw their own loading and failure; home fades under the floating bar.
   status: true,
   traits: { barMask: true },

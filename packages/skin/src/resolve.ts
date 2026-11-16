@@ -5,9 +5,10 @@
 import type { Action, Condition, Node, SkinDocument, Style } from '../../../protocol/v0/skin';
 import { velaBase } from '../../../client/src/skin/base';
 import { withBase } from '../../../client/src/skin/inherit';
-import { resolveUi, uiValue } from '../../../client/src/skin/ui';
+import { resolveUi, withUi } from '../../../client/src/skin/ui';
+import { mixColours } from '../../../client/src/skin/colour-mix';
 import { withClientStrings } from '../../../client/src/skin/client-strings';
-import { documentKeyframes, type Motion } from './motion';
+import { documentKeyframes, type Motion } from './keyframes';
 import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
 
 /** The highest document renderer version this renderer draws (docs/skin-schema.md). */
@@ -55,12 +56,15 @@ export type RNode = Common & (
   | { kind: 'widget'; widget: string; params: Record<string, string> }
 );
 
+export type RouteName = 'home' | 'title' | 'search' | 'collection' | 'library' | 'live' | 'watch' | 'auth';
+
 export interface ResolvedDocument {
   id: string;
   name: string;
   document: SkinDocument;
   shell?: RNode;
-  routes: Partial<Record<'home' | 'title', RNode>>;
+  /** Every route the document draws (home from slots.home or routes.home), resolved. */
+  routes: Partial<Record<RouteName, RNode>>;
   motion: Record<string, Motion>;
   keyframes: ReturnType<typeof documentKeyframes>;
   /** Rows the style matrix refuses, named once per document. */
@@ -68,7 +72,7 @@ export interface ResolvedDocument {
 }
 
 /** Image URLs (Plex puts a short-lived token in them) may be read only by an image source or a background image. */
-const URL_KEYS = /^(card|hero|detail|dest|person|ch|tile)\.(poster|backdrop|logo|portrait|nowArt)$/;
+const URL_KEYS = /^(card|hero|detail|dest|person|ch|tile|hit)\.(poster|backdrop|logo|portrait|nowArt|artwork)$/;
 const UNSAFE = /expression\(|javascript:|@import|[;{}<>\\]/i;
 
 interface Context {
@@ -80,11 +84,16 @@ interface Context {
   unsupported: Set<string>;
 }
 
-function compile(text: string | undefined, r: Context, urls = false): Template | undefined {
-  if (text === undefined) return undefined;
-  const filled = withClientStrings(text)
+/** Client strings (`{t:…}`), the document's own (`{s:…}`) and its name, filled for the viewer's locale. */
+function strings(text: string, r: Context): string {
+  return withClientStrings(text)
     .replace(/\{s:([a-zA-Z0-9.-]+)\}/g, (_, key: string) => r.strings[key] ?? '')
     .replace(/\{env\.skinName\}/g, () => r.doc.name);
+}
+
+function compile(text: string | undefined, r: Context, urls = false): Template | undefined {
+  if (text === undefined) return undefined;
+  const filled = strings(text, r);
   const parts: (string | Accessor)[] = [];
   let at = 0;
   for (const m of filled.matchAll(/\{([a-zA-Z.:-]+)\}/g)) {
@@ -142,13 +151,12 @@ function css(style: Style | undefined, r: Context): CssT {
   const out: CssT = {};
   for (const [row, raw] of Object.entries(style ?? {})) {
     if (raw === undefined) continue;
-    const text = String(raw)
-      .replace(/\$ui\.([A-Za-z]+)/g, (_, name: string) => uiValue(r.ui, name))
+    const text = mixColours(withUi(String(raw), r.ui)
       .replace(/\$([A-Za-z0-9_-]+)/g, (_, name: string) => {
         const v = r.doc.tokens?.[name];
         if (v === undefined) throw new Error(`Unknown token $${name}`);
         return v;
-      });
+      }));
     if (UNSAFE.test(text.replace(/\{[a-zA-Z.:-]+\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
     out[row] = compile(text, r, row === 'background-image')!;
   }
@@ -236,11 +244,8 @@ function convert(node: Node, depth: number, r: Context): RNode {
     case 'repeat': return { ...common, kind: 'repeat', over: node.over, limit: node.limit ?? 1000, item: convert(node.item, depth + 1, r) };
     case 'slot': return { ...common, kind: 'slot', slot: node.slot, inner: node.inner && css(node.inner, r) };
     case 'widget': {
-      // Parameters are text: client and document strings are filled now; a bound parameter stays as written.
-      const params = Object.fromEntries(Object.entries(node.params ?? {}).map(([k, v]) => {
-        const t = compile(v, r);
-        return [k, typeof t === 'string' ? t : v];
-      }));
+      // Parameters are text: client and document strings are filled now; holes (`{value}`, bindings) stay for the widget.
+      const params = Object.fromEntries(Object.entries(node.params ?? {}).map(([k, v]) => [k, strings(v, r)]));
       return { ...common, kind: 'widget', widget: node.widget, params };
     }
   }
@@ -260,10 +265,10 @@ export function resolveDocument(own: SkinDocument, width: number, locale = 'en')
     name: doc.name,
     document: doc,
     shell: doc.slots?.shell && convert(doc.slots.shell, 1, r),
-    routes: {
-      home: home && convert(home, 1, r),
-      title: doc.routes?.title && convert(doc.routes.title, 1, r),
-    },
+    routes: Object.fromEntries([
+      ...(home ? [['home', convert(home, 1, r)]] : []),
+      ...Object.entries(doc.routes ?? {}).filter(([name, tree]) => name !== 'home' && tree).map(([name, tree]) => [name, convert(tree as Node, 1, r)]),
+    ]) as ResolvedDocument['routes'],
     motion: (doc.motion ?? {}) as Record<string, Motion>,
     keyframes: documentKeyframes(doc.keyframes),
     unsupported: [...r.unsupported],

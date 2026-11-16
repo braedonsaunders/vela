@@ -1,5 +1,5 @@
 import type { BoxNode, Condition, Node, Style } from '../../../wire/v0/skin';
-import { display, focusRing, gutter, gutterSmall, is, navFocus, sans, small, wordmark } from './look';
+import { display, focusRing, gutter, gutterSmall, is, navFocus, sans, small, veil, wordmark } from './look';
 
 // A primary destination: the current one in full ink and weight, with the underline that
 // glides between destinations (a shared element).
@@ -180,7 +180,7 @@ export const shell: Node = {
             right: '0px',
             bottom: '0px',
             'pointer-events': 'none',
-            'background-image': 'linear-gradient(180deg, #07090cb3 0%, #090b0e00 100%)',
+            'background-image': `linear-gradient(180deg, ${veil(70)} 0%, ${veil(0)} 100%)`,
             'backdrop-filter': 'blur(16px) saturate(1.2)',
           },
           small: { bottom: '-18px' },
@@ -415,6 +415,8 @@ export const shell: Node = {
         },
         { type: 'widget', widget: 'install', params: { action: 'install', label: '{t:pwa.install}' } },
         { type: 'widget', widget: 'install', params: { action: 'update', label: '{t:pwa.update}' } },
+        // Your servers: the current one checked; choosing another switches, and Connect adds one.
+        { type: 'widget', widget: 'serverSwitcher' },
         {
           type: 'box',
           press: { action: 'signOut' },

@@ -3,9 +3,14 @@ import type { Condition, Node, Style } from '../../../wire/v0/skin';
 export const gutter: Style = { 'padding-left': 'max(28px, 4vw)', 'padding-right': 'max(28px, 4vw)' } as Style;
 export const gutterSmall = { 'padding-left': '18px', 'padding-right': '18px' } as Style;
 export const sans = '$ui.font';
+// The document's page at an alpha: veils and fades over art, so a light document fades to its paper.
+export const veil = (pct: number) => `color-mix(in srgb, $ui.page ${pct}%, transparent)`;
+// A card or still with no picture: the raised surface, lifted toward the ink at its top corner.
+export const placeholder = (angle: number) =>
+  `linear-gradient(${angle}deg, color-mix(in srgb, $ui.raised 86%, $ui.ink) 0%, $ui.raised 100%)`;
 export const enter = (delay: number) => `velaEnter${delay}`;
 export const enterPresets = Object.fromEntries(
-  [0, 60, 80, 120, 140, 200, 220, 260, 280, 300, 340, 380, 400, 420, 440, 480, 500, 520, 560, 580, 600].map(
+  [0, 60, 80, 120, 140, 160, 200, 220, 260, 280, 300, 340, 380, 400, 420, 440, 480, 500, 520, 560, 580, 600].map(
     d => [
       enter(d),
       {
@@ -102,7 +107,7 @@ export const skeleton = (style: Style, small?: Style): Node => ({
       style: {
         width: '100%',
         height: '100%',
-        'background-image': 'linear-gradient(90deg, #090b0e00 0%, $ui.skeletonLight 50%, #090b0e00 100%)',
+        'background-image': `linear-gradient(90deg, ${veil(0)} 0%, $ui.skeletonLight 50%, ${veil(0)} 100%)`,
       },
     },
   ],
@@ -220,7 +225,7 @@ export const emptyState = (icon: string, title: string, message: string): Node =
         'border-radius': '32px',
         'background-color': '$ui.glass',
         border: '1px solid $ui.glassEdge',
-        'box-shadow': 'inset 0px 1px 0px #ffffff2e',
+        'box-shadow': 'inset 0px 1px 0px $ui.glassEdgeStrong',
         'margin-bottom': '6px',
       } as Style,
       children: [
@@ -258,7 +263,7 @@ export const failure = (message: string): Node => ({
             'padding-right': '24px',
             'font-size': '14px',
           },
-          hover: { 'background-color': '#ffffff' },
+          hover: { 'background-color': '$ui.inkHover' },
           focus: { 'box-shadow': focusRing },
           children: [{ type: 'text', text: '{t:ui.tryAgain}' }],
         },

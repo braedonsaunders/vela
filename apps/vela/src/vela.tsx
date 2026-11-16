@@ -1,34 +1,41 @@
-// The spike's app state: one server session, the home model, title details, the two built-in
-// documents (the Vela base as Cinematic, and Mochi), and the view state documents read (env).
-// Presses arrive here as document actions; navigation goes through expo-router.
-import { router } from 'expo-router';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AccessibilityInfo, Platform, useWindowDimensions } from 'react-native';
+// The app's state for its routes: the core store (sessions, servers, catalogue, search, playback,
+// live TV) under core's provider, the built-in skin documents, and the host each route draws
+// with (the active document, the view state documents read, and what presses do). A signed-out
+// server sends the viewer to /sign-in.
+import { router, usePathname } from 'expo-router';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Action, SkinDocument } from '../../../protocol/v0/skin';
-import mochi from '../../../protocol/v0/fixtures/skins/mochi/document';
-import { velaBase } from '../../../client/src/skin/base';
-import { artworkURL, detailModel, homeModel } from '@vela/core';
-import { loadFonts, page, resolveDocument, type Destination, type DetailModel, type Env, type HomeModel, type ResolvedDocument, type SkinHost, type Viewport } from '@vela/skin';
-import { ASSETS } from './assets.generated';
-import { EtherClient } from './ether';
+import { createVela, type Vela as Store, type VelaState } from '@vela/core';
+import { VelaProvider as StoreProvider, useVelaState } from '@vela/core/react';
+import { VelaPlayerView } from '@vela/player';
+import {
+  loadFonts,
+  RENDERER_VERSION,
+  resolveDocument,
+  type ResolvedDocument,
+  type RouteName,
+  type SkinHost,
+  type Viewport,
+} from '@vela/skin';
+import { ServersProvider } from '@vela/skin/src/widgets/auth';
+import { LiveProvider, useLiveView } from '@vela/skin/src/widgets/guide';
+import { useDispatcher } from './actions';
+import { config } from './data/config';
+import { platform } from './data/platform';
+import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
+import { environment } from './env';
+import { useLiveController } from './live';
+import { useViewState } from './view-state';
 
-const SERVER = process.env.EXPO_PUBLIC_VELA_SERVER ?? 'http://127.0.0.1:7777';
-const USER = process.env.EXPO_PUBLIC_VELA_USER ?? 'demo';
-const PASSWORD = process.env.EXPO_PUBLIC_VELA_PASSWORD ?? 'vela';
-const DOCUMENTS: SkinDocument[] = [velaBase, mochi as SkinDocument];
-/** The app's own faces, which the Vela base's display type names. */
-const APP_FONTS = { instrument: { family: 'Instrument Serif', files: [
-  { url: 'assets/fonts/InstrumentSerif-Regular.ttf', weight: 400, style: 'normal' as const },
-  { url: 'assets/fonts/InstrumentSerif-Italic.ttf', weight: 400, style: 'italic' as const },
-] } };
-
-type Load = Env['load'];
-
-interface Vela {
-  host(route: 'home' | 'title', entry: string): SkinHost | null;
+export interface Vela {
+  /** The core store, for its actions (`vela.store.auth.signIn`, …). */
+  store: Store;
+  /** The host a route draws with; null until the document and its fonts are ready. */
+  host(route: RouteName, entry: string): SkinHost | null;
   doc: ResolvedDocument | null;
   docError: string | null;
+  /** Read a title's details (a title or watch route opened). */
   openTitle(id: string): void;
 }
 
@@ -40,154 +47,141 @@ export function useVela(): Vela {
   return vela;
 }
 
-/** The document to start with: `?skin=<id>` on the web, EXPO_PUBLIC_VELA_SKIN in a native build. */
-function initialDocument(): number {
-  const wanted = Platform.OS === 'web' && typeof location !== 'undefined' ? new URLSearchParams(location.search).get('skin') : process.env.EXPO_PUBLIC_VELA_SKIN;
-  return Math.max(0, DOCUMENTS.findIndex(doc => doc.id === wanted));
-}
-
-function source(path: string): string | number | undefined {
-  if (!path) return undefined;
-  if (ASSETS[path] !== undefined) return ASSETS[path];
-  if (/^https?:\/\//.test(path)) return path;
-  if (path.startsWith('/')) return `${SERVER}${path}`;
-  return undefined;
-}
+/** Routes a signed-out viewer may stay on. */
+const SIGNED_OUT_ROUTES = ['/sign-in', '/connect'];
 
 export function VelaProvider({ children }: { children: ReactNode }) {
-  const { width, height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const client = useRef(new EtherClient(SERVER)).current;
-  const [load, setLoad] = useState<Load>('loading');
-  const [home, setHome] = useState<HomeModel>();
-  const [viewer, setViewer] = useState('');
-  const [libraries, setLibraries] = useState<Destination[]>([]);
-  const [details, setDetails] = useState<Record<string, { load: Load; model?: DetailModel }>>({});
-  const [docIndex, setDocIndex] = useState(initialDocument);
-  const [query, setQuery] = useState('');
-  const [flags, setFlags] = useState<string[]>([]);
-  const [heroIndex, setHeroIndex] = useState(0);
-  const [season, setSeason] = useState('');
-  const [pagers, setPagers] = useState<Env['pagers']>({});
-  const [still, setStill] = useState(false);
-  const [fontsReady, setFontsReady] = useState(false);
-  const images = useMemo(() => ({ origin: SERVER }), []);
-  const artWidth = Math.ceil(Math.max(width, 960) * 2);
+  const [store] = useState(() => createVela({ ...platform(), rendererVersion: RENDERER_VERSION }));
+  useEffect(() => {
+    void start(store);
+  }, [store]);
+  return (
+    <StoreProvider vela={store}>
+      <AppProvider store={store}>{children}</AppProvider>
+    </StoreProvider>
+  );
+}
+
+/** Settle the session; a development or lab build may then sign in from its configuration. */
+async function start(store: Store): Promise<void> {
+  await store.start();
+  const auth = store.getState().auth;
+  if (config.user && config.password && auth.phase === 'signed-out' && auth.serverKind === 'ether') {
+    await store.auth.signIn(config.user, config.password);
+  }
+}
+
+function AppProvider({ store, children }: { store: Store; children: ReactNode }) {
+  const state = useVelaState(s => s);
+  const { auth, servers } = state;
+  const signedIn = auth.phase === 'signed-in';
+  const live = useLiveController(store, signedIn ? auth.revision : null);
+  useSignedOutGate(auth.phase);
 
   useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setStill);
-    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setStill);
-    return () => sub.remove();
-  }, []);
+    if (!signedIn) return;
+    void store.home.ensure();
+    store.home.ensureLibraries();
+  }, [store, signedIn, state.home.load, state.libraries.load]);
 
-  /** The signed-in, negotiated session every request waits for (a deep link may arrive first). */
-  const session = useRef<Promise<void> | null>(null);
-  const requested = useRef(new Set<string>());
+  const serverSwitch = useMemo(
+    () => ({ servers, actions: store.servers, openConnect: () => router.push('/connect') }),
+    [servers, store],
+  );
 
-  const start = useCallback(() => {
-    const run = connect();
-    session.current = run.catch(() => undefined);
-    return run;
-  }, []);
-  async function connect() {
-    setLoad('loading');
-    try {
-      if (!client.signedIn) setViewer((await client.signIn(USER, PASSWORD)).viewer.name);
-      await client.negotiate();
-      const [bootstrap, libraryPage] = await Promise.all([client.bootstrap(), client.libraries()]);
-      setHome(homeModel(bootstrap, images, Date.now(), artWidth));
-      setLibraries(libraryPage.items.map(({ id, name, kind, artwork }) => {
-        const backdrop = artwork.find(a => a.kind === 'backdrop');
-        return { id, name, kind, backdrop: backdrop ? artworkURL(backdrop, 960, 540, images) ?? '' : '' };
-      }));
-      setLoad('ready');
-    } catch (error) {
-      console.warn('Vela could not reach its server', error);
-      setLoad('failed');
-    }
-  }
+  const app = (
+    <AppHost store={store} state={state} live={live}>
+      {children}
+    </AppHost>
+  );
+  const withServers = signedIn ? <ServersProvider value={serverSwitch}>{app}</ServersProvider> : app;
+  if (!live) return withServers;
+  return (
+    <LiveProvider controller={live} Player={VelaPlayerView}>
+      {withServers}
+    </LiveProvider>
+  );
+}
 
-  // Child effects run first: a title opened by a deep link may already have started the session.
-  useEffect(() => { if (!session.current) start(); }, [start]);
+/** A signed-out server's viewer goes to its sign-in page; nothing else draws for them. */
+function useSignedOutGate(phase: VelaState['auth']['phase']): void {
+  const pathname = usePathname();
+  useEffect(() => {
+    if (phase === 'signed-out' && !SIGNED_OUT_ROUTES.includes(pathname)) router.replace('/sign-in');
+  }, [phase, pathname]);
+}
 
-  const openTitle = useCallback((id: string) => {
-    if (requested.current.has(id)) return;
-    requested.current.add(id);
-    setDetails(d => ({ ...d, [id]: { load: 'loading' } }));
-    if (!session.current) start();
-    session.current!.then(() => client.detail(id)).then(
-      data => setDetails(d => ({ ...d, [id]: { load: 'ready', model: detailModel(data, images, artWidth) } })),
-      () => { requested.current.delete(id); setDetails(d => ({ ...d, [id]: { load: 'failed' } })); },
-    );
-  }, [client, images, artWidth, start]);
+interface AppHostProps {
+  store: Store;
+  state: VelaState;
+  live: ReturnType<typeof useLiveController>;
+  children: ReactNode;
+}
 
-  const raw = DOCUMENTS[docIndex % DOCUMENTS.length];
+/** The active document and the hosts routes draw with. Inside LiveProvider, so env.live reads it. */
+function AppHost({ store, state, live, children }: AppHostProps) {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const liveView = useLiveView();
+  const view = useViewState(state.home.value?.hero.length ?? 0, state.search.query);
+  const [docIndex, setDocIndex] = useState(initialDocument);
+  const [fontsReady, setFontsReady] = useState(false);
+  const origin = state.servers.list.find(s => s.selected)?.origin ?? '';
+
+  const raw = DOCUMENTS[docIndex % DOCUMENTS.length]!;
   const resolved = useMemo(() => {
-    try { return { doc: resolveDocument(raw, width), error: null }; } catch (error) { return { doc: null, error: String(error) }; }
+    try {
+      return { doc: resolveDocument(raw, width), error: null };
+    } catch (error) {
+      return { doc: null, error: String(error) };
+    }
   }, [raw, width]);
 
   useEffect(() => {
     setFontsReady(false);
-    Promise.all([loadFonts(APP_FONTS, source), loadFonts(raw.fonts, source)]).finally(() => setFontsReady(true));
-  }, [raw]);
+    const source = (path: string) => assetSource(path, origin);
+    void Promise.all([loadFonts(APP_FONTS, source), loadFonts(raw.fonts, source)]).finally(() => setFontsReady(true));
+  }, [raw, origin]);
 
-  const rotating = !!home && home.hero.length > 1 && !still && query === '';
-  useEffect(() => {
-    if (!rotating || !home) return;
-    const timer = setInterval(() => setHeroIndex(i => (i + 1) % home.hero.length), 9000);
-    return () => clearInterval(timer);
-  }, [rotating, home, heroIndex]);
-
-  const setFlag = useCallback((flag: string, on: boolean) => {
-    setFlags(list => (on ? (list.includes(flag) ? list : [...list, flag]) : list.filter(f => f !== flag)));
-  }, []);
-
-  const dispatch = useCallback((action: Action, arg: string) => {
-    switch (action) {
-      case 'select': {
-        const [id, kind] = arg.split('|');
-        if (kind === 'season') { setSeason(id); return; }
-        if (id) router.push({ pathname: '/title/[id]', params: { id } });
-        return;
-      }
-      case 'pickHero': setHeroIndex(Number(arg) || 0); return;
-      case 'home': setQuery(''); router.dismissTo('/'); return;
-      case 'back': case 'close':
-        if (action === 'close' && arg) { setFlag(arg, false); return; }
-        if (router.canGoBack()) router.back();
-        return;
-      case 'toggle': setFlags(list => (list.includes(arg) ? list.filter(f => f !== arg) : [...list, arg])); return;
-      case 'open': setFlag(arg, true); return;
-      case 'only': setFlags(list => (list.includes(arg) ? list.filter(f => f !== arg) : [...list.filter(f => f.startsWith('keep-')), arg])); return;
-      case 'reset': setFlags(list => list.filter(f => f.startsWith('keep-'))); return;
-      case 'clearSearch': setQuery(''); return;
-      case 'search': case 'focusSearch': setFlag('search-focused', true); return;
-      case 'pageNext': page(arg, 1); return;
-      case 'pagePrev': page(arg, -1); return;
-      case 'openPicker': setDocIndex(i => i + 1); return;
-      case 'retry': start(); return;
-      default:
-        // Playback is spike (b); libraries, live TV, auth and collections follow at conversion.
-        console.info(`Vela spike: ${action} ${arg} is not part of spike (a)`);
-    }
-  }, [setFlag, start]);
-
+  const nextDocument = useCallback(() => setDocIndex(i => i + 1), []);
+  const { dispatch, loadMore } = useDispatcher({ store, view, live, nextDocument });
   const viewport: Viewport = useMemo(() => ({ width, height, insets }), [width, height, insets]);
+  const image = useCallback<SkinHost['image']>(path => {
+    const source = assetSource(path, origin);
+    if (source === undefined) return undefined;
+    return typeof source === 'number' ? source : { uri: source };
+  }, [origin]);
+  const setQuery = useCallback((query: string) => store.search.setQuery(query), [store]);
 
-  const host = useCallback((route: 'home' | 'title', entry: string): SkinHost | null => {
+  const host = useCallback((route: RouteName, entry: string): SkinHost | null => {
     if (!resolved.doc || !fontsReady) return null;
-    const detail = route === 'title' ? details[entry] : undefined;
-    const env: Env = {
-      viewer, section: 'home', query, small: width < 640, tv: width >= 1600 || Platform.isTV, still, canLive: home?.liveAvailable ?? false,
-      width, home, heroIndex: home ? heroIndex % Math.max(1, home.hero.length) : 0, libraries, skinCount: DOCUMENTS.length, skinName: resolved.doc.name,
-      homeLoading: false, detail: detail?.model, season, route, load: route === 'title' ? detail?.load ?? 'loading' : load, entry, flags, rowLoading: [], pagers,
-    };
+    const env = environment({
+      state,
+      view,
+      live: live ? liveView : undefined,
+      route,
+      entry,
+      width,
+      skinCount: DOCUMENTS.length,
+      skinName: resolved.doc.name,
+    });
     return {
-      doc: resolved.doc, env, viewport, dispatch, image: path => { const s = source(path); return s === undefined ? undefined : typeof s === 'number' ? s : { uri: s }; },
-      setQuery, setFlag, setPager: (rowId, state) => setPagers(p => (p[rowId]?.atStart === state.atStart && p[rowId]?.atEnd === state.atEnd ? p : { ...p, [rowId]: state })),
+      doc: resolved.doc,
+      env,
+      viewport,
+      dispatch: (action, arg) => dispatch({ route, entry }, action, arg),
+      image,
+      setQuery,
+      setFlag: view.setFlag,
+      setPager: view.setPager,
+      loadMore,
     };
-  }, [resolved.doc, fontsReady, details, viewer, query, width, still, home, heroIndex, libraries, season, load, flags, pagers, viewport, dispatch, setFlag]);
+  }, [resolved.doc, fontsReady, state, view, live, liveView, width, viewport, dispatch, image, setQuery, loadMore]);
 
-  const value = useMemo<Vela>(() => ({ host, doc: resolved.doc, docError: resolved.error, openTitle }), [host, resolved, openTitle]);
+  const openTitle = useCallback((id: string) => void store.catalogue.title(id), [store]);
+  const value = useMemo<Vela>(
+    () => ({ store, host, doc: resolved.doc, docError: resolved.error, openTitle }),
+    [store, host, resolved, openTitle],
+  );
   return <VelaContext.Provider value={value}>{children}</VelaContext.Provider>;
 }
