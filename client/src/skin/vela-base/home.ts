@@ -225,14 +225,14 @@ export const morePill = (primary: boolean): Style => ({
 export const heroMore = (primary: boolean): Node => ({
   type: 'box',
   press: { action: 'select', arg: '{hero.kindId}' },
-  label: '{t:jellytwin.moreInfo}',
+  label: '{t:hero.moreInfo}',
   testId: 'hero-more',
   when: [{ test: 'heroAct.playable', not: primary }],
   style: morePill(primary),
   states: primary ? firstHeroHalo(morePill(true)) : undefined,
   small: primary
     ? { height: '50px', 'padding-left': '22px', 'padding-right': '24px' }
-    : { height: '50px', 'padding-left': '20px', 'padding-right': '22px' },
+    : { height: '52px', 'padding-left': '20px', 'padding-right': '22px' },
   hover: primary
     ? { 'background-color': '#ffffff' }
     : { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
@@ -243,7 +243,7 @@ export const heroMore = (primary: boolean): Node => ({
       style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' },
       children: [
         { type: 'icon', symbol: 'info', style: { width: '17px', height: '17px' } },
-        { type: 'text', text: '{t:jellytwin.moreInfo}', style: { 'font-size': '15px' } },
+        { type: 'text', text: '{t:hero.moreInfo}', style: { 'font-size': '15px' } },
       ],
     },
   ],
