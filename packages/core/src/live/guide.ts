@@ -157,6 +157,9 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
     const date = new Intl.DateTimeFormat(localeContext().formatLocale, { timeZone: localeContext().timeZone, month: 'short', day: 'numeric' });
     const long = new Intl.DateTimeFormat(localeContext().formatLocale, { timeZone: localeContext().timeZone, weekday: 'long', month: 'long', day: 'numeric' });
     const dayName = (offset: number, at: number) => offset === 0 ? msg('live.today') : offset === 1 ? msg('live.tomorrow') : weekday.format(at);
+    // Computing a zoned midnight constructs several Intl formatters; do it once per
+    // projection, not once per programme in a potentially very large lineup.
+    const tomorrow = midnight(now, 1), dayAfterTomorrow = midnight(now, 2);
     const nowMinute = now >= start && now < end ? (now - start) / MINUTE : -1;
     const groups: string[] = [];
     const guides: { id: string; name: string }[] = [];
@@ -191,7 +194,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
             progress: onAir ? Math.round((now - a) / (b - a) * 1000) / 10 : 0,
             remainingLabel: onAir ? left(b - now) : '', durationLabel: minute(Math.round((b - a) / MINUTE)),
             startsLabel: a <= now ? '' : a - now < HOUR ? msg('live.startsIn', { minutes: number(Math.ceil((a - now) / MINUTE)) })
-              : a < midnight(now, 1) ? msg('live.startsAt', { time: time(a) }) : a < midnight(now, 2) ? msg('live.startsTomorrow', { time: time(a) }) : msg('live.startsOn', { day: weekday.format(a), time: time(a) }),
+              : a < tomorrow ? msg('live.startsAt', { time: time(a) }) : a < dayAfterTomorrow ? msg('live.startsTomorrow', { time: time(a) }) : msg('live.startsOn', { day: weekday.format(a), time: time(a) }),
             episode, rating: p.rating ?? '', genre, tone: tone(genre),
             art: picture(p.artwork, ['still', 'backdrop', 'poster'], 640, 360, images),
           };
