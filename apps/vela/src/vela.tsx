@@ -9,7 +9,7 @@ import type { Action, SkinDocument } from '../../../protocol/v0/skin';
 import mochi from '../../../protocol/v0/fixtures/skins/mochi/document';
 import { velaBase } from '../../../client/src/skin/base';
 import { artworkURL, detailModel, homeModel } from '@vela/core';
-import { loadFonts, page, resolveDocument, type Destination, type DetailModel, type Env, type HomeModel, type ResolvedDocument, type SkinHost, type Viewport } from '@vela/skin';
+import { loadFonts, page, resolveDocument, type Destination, type DetailModel, type Env, type HomeModel, type ResolvedDocument, type RouteName, type SkinHost, type Viewport } from '@vela/skin';
 import { ASSETS } from './assets.generated';
 import { EtherClient } from './ether';
 
@@ -26,7 +26,7 @@ const APP_FONTS = { instrument: { family: 'Instrument Serif', files: [
 type Load = Env['load'];
 
 interface Vela {
-  host(route: 'home' | 'title', entry: string): SkinHost | null;
+  host(route: RouteName, entry: string): SkinHost | null;
   doc: ResolvedDocument | null;
   docError: string | null;
   openTitle(id: string): void;
@@ -95,7 +95,7 @@ export function VelaProvider({ children }: { children: ReactNode }) {
       if (!client.signedIn) setViewer((await client.signIn(USER, PASSWORD)).viewer.name);
       await client.negotiate();
       const [bootstrap, libraryPage] = await Promise.all([client.bootstrap(), client.libraries()]);
-      setHome(homeModel(bootstrap, images, Date.now(), artWidth));
+      setHome(homeModel(bootstrap, images, artWidth));
       setLibraries(libraryPage.items.map(({ id, name, kind, artwork }) => {
         const backdrop = artwork.find(a => a.kind === 'backdrop');
         return { id, name, kind, backdrop: backdrop ? artworkURL(backdrop, 960, 540, images) ?? '' : '' };
@@ -174,7 +174,7 @@ export function VelaProvider({ children }: { children: ReactNode }) {
 
   const viewport: Viewport = useMemo(() => ({ width, height, insets }), [width, height, insets]);
 
-  const host = useCallback((route: 'home' | 'title', entry: string): SkinHost | null => {
+  const host = useCallback((route: RouteName, entry: string): SkinHost | null => {
     if (!resolved.doc || !fontsReady) return null;
     const detail = route === 'title' ? details[entry] : undefined;
     const env: Env = {
@@ -185,6 +185,8 @@ export function VelaProvider({ children }: { children: ReactNode }) {
     return {
       doc: resolved.doc, env, viewport, dispatch, image: path => { const s = source(path); return s === undefined ? undefined : typeof s === 'number' ? s : { uri: s }; },
       setQuery, setFlag, setPager: (rowId, state) => setPagers(p => (p[rowId]?.atStart === state.atStart && p[rowId]?.atEnd === state.atEnd ? p : { ...p, [rowId]: state })),
+      // Pages beyond the first arrive with packages/core's paging; the spike draws the first page.
+      loadMore: () => undefined,
     };
   }, [resolved.doc, fontsReady, details, viewer, query, width, still, home, heroIndex, libraries, season, load, flags, pagers, viewport, dispatch, setFlag]);
 

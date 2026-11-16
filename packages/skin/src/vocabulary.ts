@@ -20,8 +20,7 @@ export type Person = DetailModel['castPeople'][number];
 
 export interface Destination { id: string; name: string; kind: string; backdrop: string }
 
-/** The view state documents read. Routes the spike does not draw yet (library, live, auth,
- * collection) have no model here, so their keys read nothing. */
+/** The view state documents read. A key whose model is absent (an area not drawn yet) reads nothing. */
 export interface Env {
   viewer: string;
   section: string;
@@ -284,6 +283,13 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
     case 'detail.mediaFacts': return at(d?.mediaFacts ?? [], fact => ({ fact }));
     case 'detail.genres': return at(d?.title[0]?.genres ?? [], fact => ({ fact }));
     case 'detail.related': return at(d?.related ?? [], row => ({ row: row as Row }));
-    default: return [];
+    default:
+      return [];
   }
+}
+
+/** A stable key for a repeated item: its position and the id of the item it binds. */
+export function itemKey(c: Ctx): string {
+  const item = Object.values(c).find((v): v is { id: string } => typeof v === 'object' && v !== null && typeof (v as { id?: unknown }).id === 'string');
+  return `${c.index}:${item?.id ?? (typeof c.fact === 'string' ? c.fact : '')}`;
 }

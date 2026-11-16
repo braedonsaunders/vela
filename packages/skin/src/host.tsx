@@ -9,6 +9,8 @@ import type { ResolvedDocument } from './resolve';
 import { textStyle, type Css } from './translate';
 import type { Ctx, Env } from './vocabulary';
 
+/** What the app gives the renderer. Areas add their capabilities (a live controller, the player
+ * view) by augmenting this interface from their own files. */
 export interface SkinHost {
   doc: ResolvedDocument;
   env: Env;
@@ -19,6 +21,8 @@ export interface SkinHost {
   setQuery(query: string): void;
   setFlag(flag: string, on: boolean): void;
   setPager(rowId: string, state: { atStart: boolean; atEnd: boolean }): void;
+  /** Ask for the next page of a row, home, a library or a collection (the `sentinel` widget). */
+  loadMore(on: 'row' | 'home' | 'library' | 'collection', id: string): void;
   /** Where the shell draws the route (slot `children`). */
   children?: ReactNode;
 }
@@ -54,3 +58,11 @@ export interface WidgetProps {
   ctx: Ctx;
 }
 export type { Ctx, Env };
+
+/** A widget's own hover and focus, which its node's hover and focus looks follow (a text field's
+ * focus ring, say). Call report from the widget's own onFocus/onBlur and hover handlers. */
+export interface WidgetInteraction { report(kind: 'hover' | 'focus', on: boolean): void }
+export const WidgetInteractionContext = createContext<WidgetInteraction>({ report: () => undefined });
+export function useWidgetInteraction(): WidgetInteraction {
+  return useContext(WidgetInteractionContext);
+}
