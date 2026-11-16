@@ -474,8 +474,21 @@ the renderer, each a rule now:
   the viewport's size.
 - **A text drawn as a centring flex box** (a badge, an initial in a circle) centres its line.
 
+- **Native filters** keep only `brightness()` and `opacity()` (plus an image's own blur); other
+  functions render the box offscreen, which a full-screen stage cannot afford on a TV.
+- **Radial masks** draw natively as an SVG ellipse gradient over the box.
+- **Variable fonts** draw at their default weight natively: a face is registered once per file, and
+  native text cannot select a weight inside a variable font.
+
 Still differs from the Exact build: the framed title page draws as its own route, without home
-underneath.
+underneath. The tvOS text field is the platform's (a grey button that opens the TV keyboard).
+
+Lab builds: the lab admits client builds 0.1.0 up to, not including, 0.2.0 (`compatibleClientBuilds`).
+apps/vela reports 0.2.0 unless `EXPO_PUBLIC_VELA_APP_VERSION` says otherwise, so lab builds set it
+until Ether's range admits 0.2.x.
+
+Open: the iOS (phone) Simulator pass, held behind the one-native-tool rule on this Mac; and the
+Basement home route, which Jetsam killed on a build before 9315369 (resolution pending its next install).
 
 ## After the spikes
 
