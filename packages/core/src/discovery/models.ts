@@ -10,13 +10,15 @@ function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, hei
   return ref ? artworkURL(ref, width, height, images) ?? '' : '';
 }
 
-/** Poster, backdrop, logo and accent for one set of artwork, sized from the display's art width. */
+/** Poster, backdrop (or still), logo and accent for one set of artwork, sized from the display's art width. */
 function pictures(artwork: ArtworkRef[], images: Images | undefined, artWidth: number, backdropWidth = artWidth) {
   const posterWidth = Math.min(600, Math.ceil(artWidth / 6));
   const logoWidth = Math.min(800, Math.ceil(artWidth / 3));
   return {
     poster: art(artwork, 'poster', posterWidth, Math.ceil(posterWidth * 1.5), images),
-    backdrop: art(artwork, 'backdrop', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images),
+    // An episode often has only a still (a frame from it): that is its landscape art.
+    backdrop: art(artwork, 'backdrop', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images)
+      || art(artwork, 'still', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images),
     logo: art(artwork, 'logo', logoWidth, Math.ceil(logoWidth / 2), images),
     accent: artwork.find(a => a.color)?.color ?? '',
   };
