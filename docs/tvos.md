@@ -1,7 +1,16 @@
 # Vela on Apple TV
 
 Owner: the tvOS lead (`thr_dqxzwab7q6`).
-Status: phase 1 (a native Vela on the owner's Apple TV, with a native player for originals).
+
+Status: **stopped** (2026-11-16, owner decision). Vela moves to React Native + Expo and native playback
+to a libmpv-based Expo module (`docs/rn-migration.md`). This records what the Exact tvOS work built and learned.
+The Swift module, `tools/tvos.ts` and VelaMedia stay as a reference until the Expo app replaces them.
+
+What was reached: the app built for tvOS with Exact's Apple host and installed on the Apple TV "Basement".
+It was not launched there (the TV was in use), and no title was played on the device.
+The lab Ether does offer originals to these capabilities: 1917 (4K HEVC Main10 HDR10 with Dolby Vision
+profile 7, TrueHD Atmos 7.1, PGS) and Inception (DTS) got a ready `primary` path, `direct`, `file`,
+`original: true`, `range: true`, so nothing would be transcoded.
 
 ## What runs where
 
@@ -91,12 +100,38 @@ and the Hermes bundle for `aarch64-apple-tvos`.
 
 On tvOS the skin-document renderer is the whole UI.
 The web renderer binds ten style rows per box inline and leaves the rest, and every hover, press and focus look,
-to the document's stylesheet, which `vela-theme` injects. A native host has no stylesheet.
-`tools/renderer.ts` therefore gains a native emission (agreed with the skin architect):
-boxes bind every row inline, focus looks come from the focus engine through the renderer's existing
-focus state, press is Exact's pressed state, and there is no hover.
+to the document's stylesheet, which `vela-theme` injects. A native host has no stylesheet, so a document would lose
+most of its layout and all of its state looks.
+A native emission of `tools/renderer.ts` (every row bound inline, focus looks from the focus engine through the
+renderer's focus state) was agreed with the skin architect and started, then reverted with the stop:
+Exact's `lower-attr-value` check refused a bound `position` on the motion box (`MoBoxEl`) even as a ternary of
+`relative`/`absolute`/`sticky`, while the same binding passed on the plain box. Unresolved.
 
-## Known gaps
+## What was learned
+
+- **Signing.** Exact's device build (`exact.mjs ios --tvos --device`) only accepts iOS provisioning profiles
+  (`iosProfile()` in `host/apple/devices.mjs`), so it refuses the team's `tvOS Team Provisioning Profile: *`.
+  Build `--unsigned --json`, then embed the tvOS profile, sign nested frameworks inside-out and the app last with
+  `application-identifier`, `com.apple.developer.team-identifier`, `get-task-allow` and `keychain-access-groups`
+  (`tools/tvos.ts` step 6). The wildcard tvOS profile (team 9YL3YCJTNT) covers Basement (00008110-000238E12ED3801E).
+- **Install and screenshots.** `xcrun devicectl device install app --device <udid> <bundle>` installs over the
+  network; `devicectl device process launch --terminate-existing <bundle-id>` launches; and
+  `devicectl device capture screenshot --device <udid> --destination x.png` captures the TV at 3840x2160.
+  `xcrun devicectl list devices --json-output` names Apple TVs by `hardwareProperties.deviceType == appleTV`.
+- **Remote control.** pyatv (`atvremote`, Python 3.12; it fails on 3.15) finds Basement over Companion at
+  192.168.68.72; pairing shows a PIN on the TV, readable from a devicectl screenshot.
+- **Exact on tvOS.** It needs Rust's `aarch64-apple-tvos` std and the Hermes bundle for that target; it refuses
+  symlinked static app files anywhere in the app's path (stage on a real path); a staged app's Cargo target
+  directory must not move between paths. The focus engine reports focus and blur, Select presses, Menu goes back.
+- **HDR and frame rate.** `UIWindow.avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate:
+  formatDescription:)` (only when `isDisplayCriteriaMatchingEnabled`, the viewer's Match Content), then wait while
+  `isDisplayModeSwitchInProgress` before the first frame. The format description must carry the colour
+  extensions (primaries, PQ/HLG transfer, matrix, mastering display volume, content light level) and, for Dolby
+  Vision, codec type `dvh1` with `dvcC` (profile 5) or `dvvC` (profile 8). Profile 7 presents its base layer.
+- **Audio.** `AVAudioSession` `.playback`/`.moviePlayback`, `setSupportsMultichannelContent(true)` and
+  `setPreferredOutputNumberOfChannels(maximumOutputNumberOfChannels)` for up to 7.1 PCM over HDMI.
+
+## Known gaps (when stopped)
 
 - Document fonts (`fontsJson`) are not registered natively yet; text falls back to the system font.
 - Dolby Vision profile 7's enhancement layer is not reconstructed (as on every Apple device); its base layer plays.
