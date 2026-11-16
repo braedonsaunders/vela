@@ -348,14 +348,22 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     ) : null;
     const guide = tvGuide(node, env.flags, band);
     // A reading stop takes focus without doing anything, so the remote can scroll to it.
-    const stopProps = stop ? { focusable: true, onFocus: () => set('focus', true), onBlur: () => set('focus', false) } : {};
+    const stopProps = stop ? {
+      focusable: true,
+      onFocus: () => set('focus', true),
+      onBlur: () => set('focus', false),
+      // Screen readers read the section as one passage, by its label or else its text.
+      accessible: true,
+      accessibilityRole: 'summary' as const,
+      accessibilityLabel: a11y.accessibilityLabel ?? sectionText(node, ctx, env),
+    } : {};
     const barLayout = revealing && node.role === 'navigation'
       ? { onLayout: (e: LayoutChangeEvent) => noteTopBar(e.nativeEvent.layout.height, style.position === 'absolute') }
       : {};
     const Frame = (guide ? AGuide : AView) as typeof AView;
     element = (
       <Frame ref={guide ? (guideRef as never) : undefined} style={boxStyleFinal as ViewStyle} {...(guide as object)}
-        {...barLayout} {...stopProps} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)}>
+        {...barLayout} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)} {...stopProps}>
         {layers}
         {content}
         {button}
@@ -439,6 +447,24 @@ function readingStops(node: Extract<RNode, { kind: 'box' }>): Set<number> {
   });
   return stops;
 }
+
+/** The text a section draws, in order, for a reading stop's label (at most a few sentences). */
+function sectionText(node: RNode, ctx: Ctx, env: Env): string {
+  const parts: string[] = [];
+  const visit = (n: RNode, c: Ctx) => {
+    if (parts.join(' ').length > SECTION_TEXT_MAX) return;
+    if (n.kind === 'repeat') {
+      for (const item of collection(n.over, c, env, n.limit)) if (holds(n.when, item, env)) visit(n.item, item);
+      return;
+    }
+    if (!holds(n.when, c, env) || n.hidden) return;
+    if (n.kind === 'text') parts.push(fill(n.text, c, env));
+    if (n.kind === 'box') n.children.forEach(child => visit(child, c));
+  };
+  visit(node, ctx);
+  return parts.filter(Boolean).join(', ').slice(0, SECTION_TEXT_MAX);
+}
+const SECTION_TEXT_MAX = 600;
 
 /** Whether the document gives a press box a look for TV focus: its focus look, else its hover look,
  * or a group whose members show its focus. */
