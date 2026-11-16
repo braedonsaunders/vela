@@ -39,6 +39,10 @@
     "typescript": "~5.9.3"
   },
   "expo": {
-    "install": { "exclude": ["react-native"] }
+    "install": {
+      "exclude": [
+        "react-native"
+      ]
+    }
   }
 }

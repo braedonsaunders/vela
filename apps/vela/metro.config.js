@@ -12,4 +12,7 @@ const ignored = ['client/target', 'client/.exact', 'client/modules', 'client/nod
 config.watchFolders = [root];
 config.resolver.nodeModulesPaths = [path.join(__dirname, 'node_modules'), path.join(root, 'node_modules')];
 config.resolver.blockList = ignored;
+config.resolver.assetExts = config.resolver.assetExts.filter(ext => ext !== 'svg');
+config.resolver.sourceExts = [...config.resolver.sourceExts, 'svg'];
+config.transformer.babelTransformerPath = require.resolve('./svg-transformer.js');
 module.exports = config;
