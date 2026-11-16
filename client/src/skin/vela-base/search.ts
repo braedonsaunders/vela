@@ -251,7 +251,6 @@ const liveTile: Node = {
     ...column('10px'),
     width: 'clamp(240px, 19vw, 320px)',
     'flex-shrink': '0',
-    color: '$ui.ink',
     'text-align': 'left',
     translate: '0px 0px',
     transition: 'translate 360ms cubic-bezier(0.16, 1, 0.3, 1)',

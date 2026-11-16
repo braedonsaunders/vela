@@ -3,7 +3,7 @@
 // facts for the info card. Pure: no React, no clock. A value the engine has not reported stays
 // empty rather than estimated. (The compiled chrome read the same projection from
 // client/player/presentation.ts.)
-import { msg, number } from '@vela/core';
+import { msg, number, second } from '@vela/core';
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../client/player/video-info';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 
@@ -125,11 +125,16 @@ function resolutionOf(video: { width: number; height: number } | null | undefine
 
 function rangeName(range: Range | undefined): string {
   switch (range) {
-    case 'dv': return 'Dolby Vision';
-    case 'hdr10': return 'HDR10';
-    case 'hlg': return 'HLG';
-    case 'sdr': return 'SDR';
-    default: return '';
+    case 'dv':
+      return 'Dolby Vision';
+    case 'hdr10':
+      return 'HDR10';
+    case 'hlg':
+      return 'HLG';
+    case 'sdr':
+      return 'SDR';
+    default:
+      return '';
   }
 }
 
@@ -162,8 +167,10 @@ function trackOption(track: AnyTrack): TrackOption {
     track.forced ? 'Forced' : '',
     track.hearingImpaired ? 'SDH' : '',
   ];
-  const kept = parts.filter((value, index) =>
-    value && !parts.slice(0, index).some(previous => previous.toLowerCase().includes(value.toLowerCase())));
+  const kept = parts.filter(
+    (value, index) =>
+      value && !parts.slice(0, index).some(previous => previous.toLowerCase().includes(value.toLowerCase())),
+  );
   return { id: track.id, name: kept[0] ?? track.id, detail: kept.slice(1).join(' · ') };
 }
 
@@ -182,11 +189,16 @@ function stats(snapshot: Snapshot | null): PlayerStats {
     required: rate(required),
     headroom: throughput && required ? throughput / required : 0,
     history: peak ? samples.map(v => v / peak) : [],
-    buffer: ahead == null ? '' : number(ahead, { style: 'unit', unit: 'second', unitDisplay: 'short', maximumFractionDigits: 1 }),
+    buffer: ahead == null ? '' : second(ahead, 1),
     resolution: resolutionOf(video),
     video: [codecName(video?.codec), rangeName(video?.dynamicRange ?? undefined)].filter(Boolean).join(' · '),
-    delivery: snapshot?.strategy ? msg(snapshot.strategy === 'direct' ? 'data.statsDirect' : 'data.statsConverted') : '',
-    dropped: dropped == null || decoded == null ? '' : msg('data.frameCount', { dropped: number(dropped), decoded: number(decoded) }),
+    delivery: snapshot?.strategy
+      ? msg(snapshot.strategy === 'direct' ? 'data.statsDirect' : 'data.statsConverted')
+      : '',
+    dropped:
+      dropped == null || decoded == null
+        ? ''
+        : msg('data.frameCount', { dropped: number(dropped), decoded: number(decoded) }),
   };
 }
 
@@ -198,46 +210,54 @@ function needs(bitrate: number | undefined): string {
 /** Several paths may play the same title: the one playing, and those it can switch to. */
 function siblings(plan: PlaybackPlan, current: Path | undefined): Path[] {
   if (!current?.sourceId || !current.timelineId) return [];
-  return plan.paths.filter(p =>
-    p.sourceId === current.sourceId &&
-    p.timelineId === current.timelineId &&
-    (p.edition ?? '') === (current.edition ?? ''));
+  return plan.paths.filter(
+    p =>
+      p.sourceId === current.sourceId &&
+      p.timelineId === current.timelineId &&
+      (p.edition ?? '') === (current.edition ?? ''),
+  );
 }
 
 function qualities(plan: PlaybackPlan | null, current: Path | undefined): QualityOption[] {
   if (!plan) return [];
-  const originals = plan.paths.filter(p => p.original || p.id === 'primary').map((p): QualityOption => {
-    const facts = p.quality ?? videoInfo(p.originalVideo ?? {});
-    const range = p.quality?.dynamicRange ?? videoInfo(p.originalVideo ?? {})?.dynamicRange ?? undefined;
-    return {
-      id: `path:${p.id}`,
-      resolution: msg('data.original'),
-      traits: [resolutionOf(facts), rangeName(range)].filter(Boolean).join(' · '),
-      rate: rate(p.quality?.bitrate),
-      needs: '',
-      pending: false,
-    };
-  });
-  const renditions = (current?.qualities ?? []).map((q): QualityOption => ({
-    id: q.id,
-    resolution: resolutionOf(q),
-    traits: [q.videoCodec ? codecName(q.videoCodec) : '', rangeName(q.dynamicRange)].filter(Boolean).join(' · '),
-    rate: rate(q.bitrate),
-    needs: needs(q.bitrate),
-    pending: q.codecStatus === 'pending',
-  }));
+  const originals = plan.paths
+    .filter(p => p.original || p.id === 'primary')
+    .map((p): QualityOption => {
+      const facts = p.quality ?? videoInfo(p.originalVideo ?? {});
+      const range = p.quality?.dynamicRange ?? videoInfo(p.originalVideo ?? {})?.dynamicRange ?? undefined;
+      return {
+        id: `path:${p.id}`,
+        resolution: msg('data.original'),
+        traits: [resolutionOf(facts), rangeName(range)].filter(Boolean).join(' · '),
+        rate: rate(p.quality?.bitrate),
+        needs: '',
+        pending: false,
+      };
+    });
+  const renditions = (current?.qualities ?? []).map(
+    (q): QualityOption => ({
+      id: q.id,
+      resolution: resolutionOf(q),
+      traits: [q.videoCodec ? codecName(q.videoCodec) : '', rangeName(q.dynamicRange)].filter(Boolean).join(' · '),
+      rate: rate(q.bitrate),
+      needs: needs(q.bitrate),
+      pending: q.codecStatus === 'pending',
+    }),
+  );
   const switchable = siblings(plan, current)
     .filter(p => !p.original && p.id !== 'primary')
     .filter(p => p.id !== current?.id || !p.qualities.length)
     .filter(p => (p.readiness === 'on-demand' || p.readiness === 'ready') && p.quality)
-    .map((p): QualityOption => ({
-      id: `path:${p.id}`,
-      resolution: resolutionOf(p.quality!),
-      traits: [codecName(p.quality!.codec), rangeName(p.quality!.dynamicRange)].filter(Boolean).join(' · '),
-      rate: rate(p.quality!.bitrate),
-      needs: needs(p.quality!.bitrate),
-      pending: false,
-    }));
+    .map(
+      (p): QualityOption => ({
+        id: `path:${p.id}`,
+        resolution: resolutionOf(p.quality!),
+        traits: [codecName(p.quality!.codec), rangeName(p.quality!.dynamicRange)].filter(Boolean).join(' · '),
+        rate: rate(p.quality!.bitrate),
+        needs: needs(p.quality!.bitrate),
+        pending: false,
+      }),
+    );
   return [...originals, ...renditions, ...switchable];
 }
 
@@ -252,15 +272,18 @@ function playingQuality(snapshot: Snapshot | null, s: PlayerStats, path: Path | 
 
 function lockedQuality(snapshot: Snapshot | null, path: Path | undefined): string {
   const fixedPath = path && (path.original || (!path.qualities.length && (path.id === 'primary' || path.quality)));
-  return fixedPath ? `path:${path.id}` : snapshot?.lockedQuality ?? '';
+  return fixedPath ? `path:${path.id}` : (snapshot?.lockedQuality ?? '');
 }
 
 /** A snapshot belongs to the plan when it names its session and generations. */
 export function belongs(snapshot: Snapshot | null, plan: PlaybackPlan | null): snapshot is Snapshot {
-  return !!snapshot && !!plan &&
+  return (
+    !!snapshot &&
+    !!plan &&
     snapshot.sessionId === plan.sessionId &&
     snapshot.sourceGeneration === plan.sourceGeneration &&
-    snapshot.seekGeneration === plan.seekGeneration;
+    snapshot.seekGeneration === plan.seekGeneration
+  );
 }
 
 export function present(plan: PlaybackPlan | null, own: Snapshot | null): PlayerView {
@@ -268,7 +291,7 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
   const position = snapshot?.seekTarget ?? snapshot?.position ?? plan?.positionSeconds ?? 0;
   const duration = snapshot?.duration ?? plan?.durationSeconds ?? 0;
   const path = plan?.paths.find(p => p.id === (snapshot?.sourceId ?? plan.selectedPathId));
-  const state: Snapshot['state'] = snapshot?.seekTarget != null ? 'buffering' : snapshot?.state ?? 'loading';
+  const state: Snapshot['state'] = snapshot?.seekTarget != null ? 'buffering' : (snapshot?.state ?? 'loading');
   const facts = stats(snapshot);
   const style = snapshot?.subtitleStyle;
   const rendition = snapshot?.backend === 'mse' || snapshot?.diagnostics?.implementation === 'vela-core';
@@ -276,37 +299,49 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     state,
     playing: state === 'playing',
     ended: state === 'ended',
-    waiting: state !== 'failed' && ((snapshot?.waiting ?? true) || ['idle', 'loading', 'buffering', 'recovering'].includes(state)),
+    waiting:
+      state !== 'failed' &&
+      ((snapshot?.waiting ?? true) || ['idle', 'loading', 'buffering', 'recovering'].includes(state)),
     position,
     duration,
     progress: duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0,
     elapsed: timecode(position),
     remaining: duration > 0 ? `-${timecode(Math.max(0, duration - position))}` : msg('data.live'),
-    buffered: duration > 0 ? (snapshot?.playable ?? []).map(r => ({
-      start: Math.max(0, r.start / duration),
-      end: Math.min(1, r.end / duration),
-    })) : [],
+    buffered:
+      duration > 0
+        ? (snapshot?.playable ?? []).map(r => ({
+            start: Math.max(0, r.start / duration),
+            end: Math.min(1, r.end / duration),
+          }))
+        : [],
     volume: snapshot?.volume ?? 1,
     muted: snapshot?.muted ?? false,
     speed: snapshot?.speed ?? 1,
     speeds: snapshot?.speeds ?? [],
     audio: (snapshot?.audioTracks ?? plan?.audioTracks ?? []).map(trackOption),
-    audioId: snapshot ? snapshot.audioTrackId ?? '' : plan?.selectedAudioTrackId ?? '',
+    audioId: snapshot ? (snapshot.audioTrackId ?? '') : (plan?.selectedAudioTrackId ?? ''),
     pendingAudioId: snapshot?.pendingAudioTrackId ?? '',
     subtitles: (snapshot?.subtitleTracks ?? plan?.subtitleTracks ?? []).map(trackOption),
-    subtitleId: snapshot ? snapshot.subtitleTrackId ?? '' : plan?.selectedSubtitleTrackId ?? '',
+    subtitleId: snapshot ? (snapshot.subtitleTrackId ?? '') : (plan?.selectedSubtitleTrackId ?? ''),
     pendingSubtitleId: snapshot?.pendingSubtitleTrackId ?? '',
     subtitleError: snapshot?.subtitleError ?? '',
-    subtitleLook: snapshot?.subtitleStyleAvailable && style ? {
-      size: style.subtitleSize,
-      background: style.subtitleBackground,
-      color: style.subtitleColor,
-      position: style.subtitlePosition,
-    } : null,
+    subtitleLook:
+      snapshot?.subtitleStyleAvailable && style
+        ? {
+            size: style.subtitleSize,
+            background: style.subtitleBackground,
+            color: style.subtitleColor,
+            position: style.subtitlePosition,
+          }
+        : null,
     qualities: qualities(plan, path),
     qualityAuto: rendition && (path?.qualities.length ?? 0) > 1,
     lockedQuality: lockedQuality(snapshot, path),
-    qualityId: path?.qualities.some(q => q.id === snapshot?.renditionId) ? snapshot!.renditionId! : path ? `path:${path.id}` : '',
+    qualityId: path?.qualities.some(q => q.id === snapshot?.renditionId)
+      ? snapshot!.renditionId!
+      : path
+        ? `path:${path.id}`
+        : '',
     quality: playingQuality(snapshot, facts, path),
     path: snapshot?.strategy || path?.kind ? msg(`data.${snapshot?.strategy ?? path?.kind}`) : '',
     chapters: (plan?.chapters ?? []).map(c => ({

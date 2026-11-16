@@ -1,31 +1,23 @@
-// The watch route: a title played full screen through VelaPlayerView, under the player chrome
-// in the active document's look. The playback controller the app provides starts and stops the
-// session; without one, the route says playback could not start rather than pretending.
+// The watch route: a title played full screen through VelaPlayerView, under the player chrome in
+// the active document's look. Core's playback slice starts, follows and stops the session; this
+// route is the trusted host that hands the server's media authorization to the player.
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { msg } from '@vela/core';
-import { VelaPlayerView } from '@vela/player';
-import type { PlaybackController } from '@vela/skin/src/widgets/player';
-import { usePlaybackController, usePlaybackSession, WatchSurface } from '@vela/skin/src/widgets/player';
+import { useVela as useCore } from '@vela/core/react';
+import { VelaPlayer, VelaPlayerView } from '@vela/player';
 import type { DetailModel } from '@vela/skin';
+import { usePlaybackSession, WatchSurface } from '@vela/skin/src/widgets/player';
 import { useVela } from '../../src/vela';
-
-const UNAVAILABLE: PlaybackController = {
-  start: async () => ({ kind: 'refused', capacity: false, message: msg('ui.playbackCouldnTBeStarted') }),
-  command: async plan => plan,
-  refresh: async () => {
-    throw new Error('No playback controller');
-  },
-  observe: async () => undefined,
-};
 
 /** "S1 · E2 · Name" for an episode, the name otherwise. */
 function heading(detail: DetailModel | undefined): string {
   const title = detail?.title[0];
   if (!title) return msg('ui.nowPlaying');
   if (title.kind === 'episode' && title.seasonNumber > 0 && title.episodeNumber > 0) {
-    return msg('ui.sSeasonEEpisodeTitle', { season: title.seasonNumberLabel, episode: title.episodeNumberLabel, title: title.name });
+    const numbers = { season: title.seasonNumberLabel, episode: title.episodeNumberLabel };
+    return msg('ui.sSeasonEEpisodeTitle', { ...numbers, title: title.name });
   }
   return title.name;
 }
@@ -33,13 +25,31 @@ function heading(detail: DetailModel | undefined): string {
 export default function Watch() {
   const { id = '' } = useLocalSearchParams<{ id: string }>();
   const { host, openTitle } = useVela();
-  const controller = usePlaybackController() ?? UNAVAILABLE;
-  const session = usePlaybackSession(controller, id);
+  const core = useCore();
+  const target = useMemo(() => ({ kind: 'title' as const, id }), [id]);
+  const session = usePlaybackSession(target);
   const skin = host('title', id);
+  const sessionId = session.view.plan?.sessionId ?? '';
 
   useEffect(() => {
     if (id) openTitle(id);
   }, [id, openTitle]);
+
+  // Each session's media authorization goes straight to the player, never through props or state.
+  useEffect(() => {
+    if (!sessionId) return;
+    let live = true;
+    core.playback.mediaAccess().then(
+      grant => {
+        if (live) VelaPlayer.setMediaAccess(grant);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+      VelaPlayer.setMediaAccess(null);
+    };
+  }, [core, sessionId]);
 
   const { stop } = session;
   const close = useCallback(() => {

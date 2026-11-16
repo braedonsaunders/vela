@@ -16,7 +16,7 @@ import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
 import { SYMBOLS } from './icons';
 import { WIDGETS } from './widgets';
-import { SearchInput } from './widgets/search-input';
+import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
@@ -243,7 +243,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     } : undefined;
     element = (
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={route ? [{ flex: 1 }, outerStyle as ViewStyle] : (outerStyle as ViewStyle)}
-        contentContainerStyle={[contentStyle as ViewStyle, route ? { flexGrow: 1 } : null]} stickyHeaderIndices={sticky?.length ? sticky : undefined}
+        contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
         onLayout={onLayout} {...a11y}>
         {content}
@@ -380,7 +380,7 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const { style, text, fx } = useLeafStyle(node, ctx);
   const inner = node.inner ? translatedBox(split(filled(node.inner, ctx, host.env, false)).own, host.viewport, text.fontSize).style : undefined;
   if (fx.hidden) return null;
-  const content = node.slot === 'children' ? host.children : <SearchInput params={{}} ctx={ctx} />;
+  const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
   return (
     <Inherited.Provider value={text}>
       <AView style={style as ViewStyle}>

@@ -5,7 +5,7 @@
 import { Platform, TextInput as NativeInput, type TextStyle } from 'react-native';
 import { withClientStrings } from '../../../../../client/src/skin/client-strings';
 import { colour } from '../../css';
-import { useInheritedText, type WidgetProps } from '../../host';
+import { useInheritedText, useWidgetInteraction, type WidgetProps } from '../../host';
 import { useAuthForm, type AuthField } from './form';
 
 const FIELDS: Record<AuthField, { autoComplete: 'username' | 'current-password'; content: 'username' | 'password' }> =
@@ -17,6 +17,8 @@ const FIELDS: Record<AuthField, { autoComplete: 'username' | 'current-password';
 export function TextInput({ params }: WidgetProps) {
   const form = useAuthForm();
   const drawn = useInheritedText();
+  // The node's box shows its hover and focus looks (a field's accent ring) while these hold.
+  const interaction = useWidgetInteraction();
   const field: AuthField = params.field === 'password' ? 'password' : 'username';
   // Outside the signed-out screen there is no form to edit: draw nothing rather than a dead field.
   if (!form) return null;
@@ -28,13 +30,17 @@ export function TextInput({ params }: WidgetProps) {
     alignSelf: 'stretch',
     minWidth: 0,
     padding: 0,
-    ...(Platform.OS === 'web' ? ({ outlineWidth: 0 } as TextStyle) : {}),
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as TextStyle) : {}),
   };
   return (
     <NativeInput
       value={form.values[field]}
       onChangeText={value => form.edit(field, value)}
       onSubmitEditing={form.submit}
+      onFocus={() => interaction.report('focus', true)}
+      onBlur={() => interaction.report('focus', false)}
+      onPointerEnter={() => interaction.report('hover', true)}
+      onPointerLeave={() => interaction.report('hover', false)}
       secureTextEntry={field === 'password'}
       autoComplete={kind.autoComplete}
       textContentType={kind.content}

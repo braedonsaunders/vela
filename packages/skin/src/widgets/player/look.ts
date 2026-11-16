@@ -9,7 +9,9 @@ import { colour } from '../../css';
 import { fontFace } from '../../fonts';
 import { useHost } from '../../host';
 
-type Colours = { -readonly [K in keyof typeof uiDefaults as (typeof uiDefaults)[K] extends string ? K : never]: string };
+type Colours = {
+  -readonly [K in keyof typeof uiDefaults as (typeof uiDefaults)[K] extends string ? K : never]: string;
+};
 
 export interface PlayerLook extends Omit<Colours, 'font' | 'fontDisplay'> {
   radiusControl: number;
@@ -30,8 +32,9 @@ export interface PlayerLook extends Omit<Colours, 'font' | 'fontDisplay'> {
   display(px: number, color?: string): TextStyle;
 }
 
-const COLOUR_KEYS = Object.keys(uiDefaults).filter(k => typeof uiDefaults[k as keyof typeof uiDefaults] === 'string' &&
-  k !== 'font' && k !== 'fontDisplay') as (keyof Colours)[];
+const COLOUR_KEYS = Object.keys(uiDefaults).filter(
+  k => typeof uiDefaults[k as keyof typeof uiDefaults] === 'string' && k !== 'font' && k !== 'fontDisplay',
+) as (keyof Colours)[];
 
 export function usePlayerLook(): PlayerLook {
   const { doc, env, viewport } = useHost();
