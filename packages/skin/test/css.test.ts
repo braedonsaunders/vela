@@ -172,3 +172,8 @@ describe('gradients', () => {
     expect(farthest.locations).toEqual([0, 0.7]);
   });
 });
+
+test('explicit inherit keeps the parent text rows', async () => {
+  const { inheritRows } = await import('../src/inherit-rows');
+  expect(inheritRows({ color: '#eee', 'font-weight': '600' }, { color: 'inherit', 'font-weight': '700' })).toEqual({ color: '#eee', 'font-weight': '700' });
+});

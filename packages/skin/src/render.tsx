@@ -1,3 +1,4 @@
+import { inheritRows } from './inherit-rows';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
 // overlays in force, translated per the style matrix (translate.ts); text rows inherit down the
@@ -162,8 +163,9 @@ function translatedBox(rows: Css, viewport: Viewport, fontSize: number) {
 /** The text context children inherit: the parent's rows with this node's inherited rows over them. */
 function inheritFrom(parent: { rows: Css; fontSize: number }, inherited: Css, viewport: Viewport) {
   if (!Object.keys(inherited).length) return parent;
-  const fontSize = fontSizeOf(inherited['font-size'], parent.fontSize, measure(viewport, parent.fontSize));
-  return { rows: { ...parent.rows, ...inherited, 'font-size': `${fontSize}px` }, fontSize };
+  const rows = inheritRows(parent.rows, inherited);
+  const fontSize = fontSizeOf(rows['font-size'], parent.fontSize, measure(viewport, parent.fontSize));
+  return { rows: { ...rows, 'font-size': `${fontSize}px` }, fontSize };
 }
 
 function a11yProps(node: RNode, c: Ctx, e: Env) {
