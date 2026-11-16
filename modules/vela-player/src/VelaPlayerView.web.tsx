@@ -12,7 +12,13 @@ import { playerCapabilities } from '../web/capabilities';
 import { currentMediaAccess, onMediaAccessChange, setMediaAccess } from '../web/media-access';
 import { createWebPreview } from '../web/preview';
 
-export const VelaPlayer: VelaPlayerModule = { setMediaAccess, capabilities: playerCapabilities };
+import { isWindowsHost, setWindowsMediaAccess, windowsCapabilities } from './windows/bridge';
+import { createWindowsPlayerHost } from './windows/host';
+
+export const VelaPlayer: VelaPlayerModule = {
+  setMediaAccess(access) { setWindowsMediaAccess(access); setMediaAccess(access); },
+  capabilities: () => isWindowsHost() ? windowsCapabilities() : playerCapabilities(),
+};
 
 /** What a view mounts into its DOM node: the playback host or a preview. */
 interface Mounted {
@@ -32,6 +38,7 @@ function unsupported(message: string): Failure {
 }
 
 const mountPlayback: Mount = (node, props) => {
+  if (!props.ambient && isWindowsHost()) return createWindowsPlayerHost(node, props);
   const assetBaseURL = playerAssetBase();
   if (!assetBaseURL) throw new Error('This build has no player assets');
   return createWebPlayerHost(node, props, { assetBaseURL, access: currentMediaAccess });
