@@ -2,18 +2,19 @@
 // focused route the guide holds Live TV open (clock, listings and the one preview tile); pushing
 // full watch over it or leaving releases the tile. A search hand-off (`?ch=&prog=&at=`) opens
 // the guide on that programme's day, channel and time.
-import { useIsFocused, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import { guideFocus } from '@vela/core';
 import { Guide, useLiveContext, useLiveSurface, useLiveView, type GuideFocus } from '@vela/skin/src/widgets/guide';
 import { useVela } from '../../src/vela';
+import { useSectionFocus } from '../../src/section-focus';
 
 export default function Live() {
   const { ch = '', prog = '', at = '' } = useLocalSearchParams<{ ch?: string; prog?: string; at?: string }>();
   const vela = useVela();
   const host = vela.host('live', 'live');
-  useLiveSurface('guide', useIsFocused());
+  useLiveSurface('guide', useSectionFocus() ?? false);
   const focus = useHandOff(ch, prog, at);
   if (!host) return <View style={{ flex: 1 }} />;
   const content = <Guide focus={focus} />;

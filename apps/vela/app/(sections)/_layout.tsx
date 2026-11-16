@@ -1,8 +1,9 @@
-import { Navigator, usePathname } from 'expo-router';
+import { Navigator, useIsFocused, usePathname } from 'expo-router';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { AccessibilityInfo, Animated, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, Animated, Platform, useWindowDimensions, View } from 'react-native';
 import { SkinRoot } from '@vela/skin';
 import { useVela } from '../../src/vela';
+import { SectionFocusContext } from '../../src/section-focus';
 
 type Section = { route: 'home' | 'library' | 'live'; entry: string };
 
@@ -17,6 +18,7 @@ function sectionForPath(path: string): Section | null {
 
 export default function SectionsLayout() {
   const pathname = usePathname();
+  const focused = useIsFocused();
   const section = useRef<Section>({ route: 'home', entry: 'home' });
   section.current = sectionForPath(pathname) ?? section.current;
   const vela = useVela();
@@ -51,8 +53,8 @@ export default function SectionsLayout() {
       offset.setValue(direction * width);
       outgoingOffset.setValue(0);
       Animated.parallel([
-        Animated.timing(offset, { toValue: 0, duration: 260, useNativeDriver: true }),
-        Animated.timing(outgoingOffset, { toValue: -direction * width, duration: 260, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 0, duration: 260, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(outgoingOffset, { toValue: -direction * width, duration: 260, useNativeDriver: Platform.OS !== 'web' }),
       ]).start();
     } else {
       offset.setValue(0);
@@ -65,7 +67,7 @@ export default function SectionsLayout() {
   const content = (
     <View style={{ flex: 1, overflow: 'hidden' }}>
       <Navigator>
-        <SectionScenes sectionKey={key} offset={offset} outgoingOffset={outgoingOffset} reducedMotion={reducedMotion} />
+        <SectionScenes focused={focused} sectionKey={key} offset={offset} outgoingOffset={outgoingOffset} reducedMotion={reducedMotion} />
       </Navigator>
     </View>
   );
@@ -74,7 +76,8 @@ export default function SectionsLayout() {
 }
 
 /** Retain the previous navigator descriptor briefly so both pages move together. */
-function SectionScenes({ sectionKey, offset, outgoingOffset, reducedMotion }: {
+function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMotion }: {
+  focused: boolean;
   sectionKey: string;
   offset: Animated.Value;
   outgoingOffset: Animated.Value;
@@ -122,7 +125,9 @@ function SectionScenes({ sectionKey, offset, outgoingOffset, reducedMotion }: {
               transform: [{ translateX: isCurrent ? offset : outgoingOffset }],
             }}
           >
-            {scene.content}
+            <SectionFocusContext.Provider value={focused && isCurrent}>
+              {scene.content}
+            </SectionFocusContext.Provider>
           </Animated.View>
         );
       })}

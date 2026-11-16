@@ -5,6 +5,7 @@ import { useIsFocused } from 'expo-router';
 import { Text, View } from 'react-native';
 import { SkinRoot, SkinRoute, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import { useVela } from './vela';
+import { useSectionFocus } from './section-focus';
 
 interface Props {
   route: RouteName;
@@ -18,7 +19,9 @@ export function DocumentScreen({ route, entry, page, sharedShell = false }: Prop
   const app = vela.host(route, entry);
   const host = app && page ? page(app) : app;
   // On TV, focus returns to the card or button that opened the route above when it closes.
-  useReturnFocus(useIsFocused());
+  const navigationFocused = useIsFocused();
+  const sectionFocused = useSectionFocus();
+  useReturnFocus(sectionFocused ?? navigationFocused);
   if (vela.docError) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
