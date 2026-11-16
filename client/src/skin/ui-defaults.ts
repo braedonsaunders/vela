@@ -1,7 +1,6 @@
-// The foundation widgets' look when a skin document leaves a `ui` key out: Cinematic's values,
-// so a document that sets nothing reads like Cinematic. The resolver fills each missing key
-// from here; foundation/ui.contract's cinematicUi() carries the same values for the moments
-// no document is loaded. Keep the two in step.
+// A skin document's `ui` look where it leaves a key out: Cinematic's values, so a document that
+// sets nothing reads like Cinematic. The resolver fills each missing key from here, and the Vela
+// base (base.ts) styles itself with these keys as $ui.<name>.
 export const uiDefaults = {
   page: '#090b0e',
   raised: '#15191e',

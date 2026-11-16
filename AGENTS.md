@@ -29,6 +29,10 @@ Vela is a greenfield client. Speed of high-quality code is the priority. Read
   takes three tries, stop and report the blocker.
 - Highest quality means: correct semantics, clean module boundaries, honest states, no
   placeholders pretending to be features, no dead code, no speculative abstraction.
+- Write for human maintainers: one statement per line, ordinary formatting and whitespace,
+  lines under about 120 characters, descriptive names, and small modules with one job each
+  (no god classes with dozens of private fields). Dense or minified-looking source is a
+  defect, not a style.
 - Never touch `vendor/exact` (pinned upstream checkout, gitignored). If Exact lacks
   something, work around it in Vela and note it for the orchestrator.
 - Stay inside the paths you own (build plan). Shared files (`client/app.contract`,

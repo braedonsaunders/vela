@@ -1,16 +1,12 @@
 import type * as V from '../../../wire/v0/types';
-import type { ServerAdapter } from '../index';
-import { VelaError, type Credentials } from '../ether';
+import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
+import type { ClientDeclaration, LiveTv, PasswordSignIn, QuickConnectSignIn } from '../capabilities';
+import { VelaError } from '../errors';
 import type { Item, Result, User, Auth, Info, MediaSource } from './types';
 const seconds = (ticks?: number) => ticks === undefined ? undefined : ticks / 10000000;
 const ticks = (value: number) => Math.round(value * 10000000);
 const e = encodeURIComponent;
-const absent = {
-    available: false, reason: 'Not provided by this server adapter'
-};
-const supported = {
-    available: true
-};
+const offered: V.Feature = { available: true };
 const fields = 'Overview,Genres,MediaSources,Chapters,People,PrimaryImageAspectRatio,UserData';
 const kinds: Record<string, V.TitleKind> = {
     Movie: 'movie', Series: 'show', Season: 'season', Episode: 'episode'
@@ -30,17 +26,16 @@ interface Session {
  * Media URLs contain no account credential. The host supplies scoped media headers.
  * Jellyfin has no refresh tokens: the token is validated, never fictitiously rotated.
  */
-export class JellyfinAdapter implements ServerAdapter {
+export class JellyfinAdapter
+    implements ServerAdapter, PasswordSignIn, QuickConnectSignIn, ClientDeclaration, LiveTv {
     private base: URL;
     private sessions = new Map<string, Session>();
     private starts = new Map<string, Promise<V.PlaybackPlan>>();
-    constructor(origin: string, private credentials: Credentials, _capabilityContext = '', private onSessionRejected?: () => void) {
+    constructor(origin: string, private credentials: Credentials, private onSessionRejected?: () => void) {
         this.base = new URL(origin);
         if (!['https:', 'http:'].includes(this.base.protocol) || this.base.username || this.base.password || this.base.search || this.base.hash)
             throw new Error('Invalid server address');
         this.base.pathname = this.base.pathname.replace(/\/*$/, '/');
-    }
-    setCapabilityContext(_context: string): void {
     }
     private url(path: string): URL {
         const url = new URL(path.replace(/^\//, ''), this.base);
@@ -97,9 +92,6 @@ export class JellyfinAdapter implements ServerAdapter {
             }
         }, status);
     }
-    private unsupported(feature: string): never {
-        throw this.error('request', 'unsupported', `${feature} is unavailable`);
-    }
     private async userPath() {
         const t = await this.credentials.get();
         if (!t)
@@ -129,12 +121,12 @@ export class JellyfinAdapter implements ServerAdapter {
         await this.credentials.set(next);
         return next;
     }
-    async signIn(r: V.SignInRequest) {
+    async signInWithPassword(r: V.SignInRequest) {
         return this.tokens(await this.request<Auth>('POST', 'Users/AuthenticateByName', {
             Username: r.username, Pw: r.password
         }, false));
     }
-    async revoke(_r: V.RevokeRequest): Promise<V.Ack> {
+    async revokeSession(_r: V.RevokeRequest): Promise<V.Ack> {
         await this.request('POST', 'Sessions/Logout');
         this.sessions.clear();
         this.starts.clear();
@@ -142,19 +134,7 @@ export class JellyfinAdapter implements ServerAdapter {
             accepted: true
         };
     }
-    issueWebCode(_r: V.WebCodeIssueRequest): Promise<V.WebCodeIssueResponse> {
-        return Promise.reject(this.error('request', 'unsupported', 'Web codes are unavailable'));
-    }
-    redeemWebCode(_r: V.WebCodeRedeemRequest): Promise<V.Tokens> {
-        return Promise.reject(this.error('request', 'unsupported', 'Web codes are unavailable'));
-    }
-    async deviceGrant(_r: V.DeviceGrantRequest): Promise<V.DeviceGrant> {
-        return this.unsupported('Device grants');
-    }
-    async pollDevice(_r: V.DevicePollRequest): Promise<V.GrantPoll> {
-        return this.unsupported('Device grants');
-    }
-    async quickConnect(_r: V.DeviceGrantRequest): Promise<V.QuickConnect> {
+    async startQuickConnect(_r: V.DeviceGrantRequest): Promise<V.QuickConnect> {
         const q = await this.request<{
             Secret: string;
             Code: string;
@@ -180,7 +160,7 @@ export class JellyfinAdapter implements ServerAdapter {
             }, false))
         };
     }
-    async capabilities(): Promise<V.ServerCapabilities> {
+    async describe(): Promise<ServerDescription> {
         const info = await this.request<Info>('GET', 'System/Info/Public', undefined, false);
         const quick = await this.request<boolean>('GET', 'QuickConnect/Enabled', undefined, false).catch(() => false);
         const token = await this.credentials.get();
@@ -198,27 +178,22 @@ export class JellyfinAdapter implements ServerAdapter {
             protocolVersion: 0, server: {
                 id: info.Id, name: info.ServerName, version: info.Version
             }, features: {
-                passwordSignIn: supported, deviceGrant: absent, quickConnect: quick ? supported : absent, descriptiveSearch: absent, aiSearch: absent, proactiveFallback: absent, liveTV: hasLive ? supported : absent, extras: supported, extraPlayback: supported, trailerPreview: absent, themeMusic: absent, audioFallback: absent, initialTrackSelection: supported, sessionTrackChanges: absent
+                passwordSignIn: offered,
+                quickConnect: quick ? offered : { available: false, reason: 'Quick Connect is turned off' },
+                liveTV: hasLive ? offered : { available: false, reason: 'No live TV tuner is configured' },
+                extras: offered,
+                extraPlayback: offered,
+                initialTrackSelection: offered,
             }, skins: [{
                     id: 'cinematic', name: 'Cinematic'
                 }], defaultSkinId: 'cinematic'
         };
     }
-    async negotiate(r: V.NegotiateRequest): Promise<V.NegotiateResponse> {
+    /** The server shapes transcodes to the client's device profile. */
+    async declareClient(r: V.NegotiateRequest): Promise<void> {
         await this.request('POST', 'Sessions/Capabilities/Full', {
             PlayableMediaTypes: ['Video', 'Audio'], SupportsMediaControl: false, SupportsPersistentIdentifier: true, DeviceProfile: this.profile(r.client)
         });
-        return {
-            capabilities: await this.capabilities(), client: r.client
-        };
-    }
-    async appearance(): Promise<V.Appearance> {
-        return {
-            revision: 0, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs: []
-        };
-    }
-    async skinDocument(_path: string): Promise<never> {
-        return this.unsupported('Server skin documents');
     }
     private image(id: string, type: string, tag: string, kind: V.ArtworkRef['kind']): V.ArtworkRef {
         return {
@@ -276,16 +251,13 @@ export class JellyfinAdapter implements ServerAdapter {
             StartIndex: start, Limit: limit
         };
     }
-    async bootstrap(): Promise<V.Bootstrap> {
+    async home(): Promise<Home> {
         const token = await this.credentials.get();
         if (!token)
             throw this.error('auth', 'sign_in_required', 'Sign in required', 401);
         return {
-            viewer: token.viewer, capabilities: await this.capabilities(), defaultSkinId: 'cinematic', heroes: [], rows: (await this.rows({})).items
+            viewer: token.viewer, capabilities: await this.describe(), defaultSkinId: 'cinematic', heroes: [], rows: (await this.rows({})).items
         };
-    }
-    bootstrapFresh() {
-        return this.bootstrap();
     }
     async rows(q: V.RowsQuery): Promise<V.Page<V.Row>> {
         if (q.placement === 'detail' && q.titleId) {
@@ -414,17 +386,7 @@ export class JellyfinAdapter implements ServerAdapter {
             id: i.Id, parentId, kind, name: i.Name, durationSeconds: seconds(i.RunTimeTicks), artwork: this.artwork(i)[0], availability: 'ready'
         };
     }
-    async trailerPreview(_id: string, _r: V.TrailerPreviewRequest): Promise<V.TrailerPreviewResponse> {
-        return {
-            state: 'unavailable', reason: 'No scoped trailer-preview grants'
-        };
-    }
-    trailerPreviewStatus(id: string): Promise<V.TrailerPreviewResponse> {
-        return this.trailerPreview(id, undefined!);
-    }
-    async search(r: V.SearchRequest): Promise<V.SearchResponse> {
-        if (r.mode !== 'fast')
-            return this.unsupported('Descriptive search');
+    async search(r: CatalogueSearch): Promise<V.SearchResponse> {
         const p = this.paging(r.cursor, r.limit);
         const result = await this.request<Result>('GET', `${await this.userPath()}/Items${query({
             ...p, SearchTerm: r.query, Recursive: true, IncludeItemTypes: 'Movie,Series,Season,Episode', Fields: fields
@@ -432,18 +394,6 @@ export class JellyfinAdapter implements ServerAdapter {
         return {
             query: r.query, generation: r.generation, ...this.page(result.Items.filter(i => kinds[i.Type ?? '']).map(i => this.title(i)), result, p.StartIndex)
         };
-    }
-    async startAI(_r: V.AISearchRequest): Promise<V.AISearchJob> {
-        return this.unsupported('AI search');
-    }
-    async aiJob(_id: string): Promise<V.AISearchJob> {
-        return this.unsupported('AI search');
-    }
-    async cancelAI(_id: string, _r: V.CancelRequest): Promise<V.AISearchJob> {
-        return this.unsupported('AI search');
-    }
-    async interactions(_r: V.InteractionsRequest): Promise<V.Ack> {
-        return this.unsupported('Ranking receipts');
     }
     async mediaHeaders(): Promise<Record<string, string>> {
         const token = await this.credentials.get();
@@ -476,7 +426,7 @@ export class JellyfinAdapter implements ServerAdapter {
                 }]
         };
     }
-    playback(r: V.PlaybackRequest): Promise<V.PlaybackPlan> {
+    startPlayback(r: V.PlaybackRequest): Promise<V.PlaybackPlan> {
         let work = this.starts.get(r.idempotencyKey);
         if (!work) {
             work = this.open(r);
@@ -611,7 +561,7 @@ export class JellyfinAdapter implements ServerAdapter {
             })}`);
         }
     }
-    async observe(id: string, r: V.PlayerObservation): Promise<V.Ack> {
+    async reportObservation(id: string, r: V.PlayerObservation): Promise<V.Ack> {
         const s = this.session(id);
         this.generation(s, r);
         if (s.stopped || r.sequence <= s.sequence)
@@ -629,16 +579,14 @@ export class JellyfinAdapter implements ServerAdapter {
             accepted: true
         };
     }
-    async command(id: string, r: V.SessionCommand): Promise<V.PlaybackPlan> {
+    async command(id: string, r: TransportCommand): Promise<V.PlaybackPlan> {
         const s = this.session(id);
         this.generation(s, r);
-        if (r.kind === 'tracks' || r.kind === 'prepare-fallback' || r.kind === 'switch')
-            return this.unsupported('Session source/track changes');
         if (r.kind === 'seek') {
             if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0)
                 throw this.error('request', 'invalid_position', 'Invalid playback position');
             if (s.plan.channelId)
-                return this.unsupported('Seeking live TV');
+                throw this.error('request', 'unsupported', 'Seeking live TV is unavailable');
             s.plan = {
                 ...s.plan, paths: s.plan.paths.map(path => {
                     if (path.transport !== 'hls' || path.readiness === 'on-demand')
@@ -665,19 +613,13 @@ export class JellyfinAdapter implements ServerAdapter {
             await this.report(s, r.kind === 'stop');
         return s.plan;
     }
-    async snapshot(id: string): Promise<V.SessionSnapshot> {
+    async sessionSnapshot(id: string): Promise<V.SessionSnapshot> {
         const s = this.session(id);
         return {
             cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: [], ...(s.sequence >= 0 ? {
                 lastObservationSequence: s.sequence
             } : {})
         };
-    }
-    async createAudioFallback(_id: string, _r: V.AudioFallbackRequest): Promise<V.AudioFallbackResponse> {
-        return this.unsupported('Audio fallback');
-    }
-    async cancelAudioFallback(_id: string, _audio: string, _r: V.Mutation): Promise<V.Ack> {
-        return this.unsupported('Audio fallback');
     }
     private channel(i: Item): V.Channel {
         return {

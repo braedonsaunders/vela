@@ -23,10 +23,14 @@ export class MediaClock {
   }
 
   update(anchor: AudioClockAnchor): boolean {
-    if (anchor.epoch !== this.epoch || !this.audio ||
-        ![anchor.mediaTimeUs, anchor.performanceTimeMs, anchor.bufferedUntilUs].every(Number.isFinite) ||
-        anchor.bufferedUntilUs < anchor.mediaTimeUs ||
-        this.anchor && anchor.performanceTimeMs < this.anchor.performanceTimeMs) return false;
+    if (
+      anchor.epoch !== this.epoch ||
+      !this.audio ||
+      ![anchor.mediaTimeUs, anchor.performanceTimeMs, anchor.bufferedUntilUs].every(Number.isFinite) ||
+      anchor.bufferedUntilUs < anchor.mediaTimeUs ||
+      (this.anchor && anchor.performanceTimeMs < this.anchor.performanceTimeMs)
+    )
+      return false;
     this.anchor = { ...anchor };
     return true;
   }
@@ -36,7 +40,9 @@ export class MediaClock {
     let candidate = this.positionUs;
     if (this.audio) {
       if (this.playing && this.anchor) {
-        const elapsed = this.anchor.playing ? Math.max(0, now - this.anchor.performanceTimeMs) * 1000 * this.rate : 0;
+        const elapsed = this.anchor.playing
+          ? Math.max(0, now - this.anchor.performanceTimeMs) * 1000 * this.rate
+          : 0;
         candidate = Math.min(this.anchor.bufferedUntilUs, this.anchor.mediaTimeUs + elapsed);
       }
     } else if (this.playing) candidate += Math.max(0, now - this.anchoredAtMs) * 1000 * this.rate;

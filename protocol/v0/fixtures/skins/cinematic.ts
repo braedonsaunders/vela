@@ -232,9 +232,9 @@ const rowSkeleton: Node = { type: 'box', style: { display: 'flex', 'flex-directi
 // its right edge. "10" sits tighter so both digits fit beside the card.
 const numeral = (ten: boolean): Node => ({ type: 'text', text: '{index.label}', when: [{ test: 'row.presentation', is: 'eq', value: 'ranked' }, { test: 'index', is: ten ? 'eq' : 'lt', value: '9' }],
   style: { 'font-family': '"Arial Black", "Helvetica Neue", Arial, sans-serif', 'font-weight': '900', 'font-size': '348px', 'line-height': '0.74', 'letter-spacing': ten ? '-0.2em' : '-0.09em',
-    color: 'cinematic.rank-fill', '-webkit-text-stroke': '5px var(--cinematic.rank-stroke)', 'mask-image': 'linear-gradient(180deg, black 0%, black 50%, rgba(0, 0, 0, 0.25) 100%)',
+    color: 'cinematic.rank-fill', 'text-shadow': '0px 0px 5px var(--cinematic.rank-stroke)', 'mask-image': 'linear-gradient(180deg, black 0%, black 50%, rgba(0, 0, 0, 0.25) 100%)',
     'margin-right': '-50px', 'padding-bottom': '52px', 'flex-shrink': '0' },
-  small: { 'font-size': '220px', '-webkit-text-stroke': '3px var(--cinematic.rank-stroke)', 'margin-right': '-30px', 'padding-bottom': '44px' } });
+  small: { 'font-size': '220px', 'text-shadow': '0px 0px 3px var(--cinematic.rank-stroke)', 'margin-right': '-30px', 'padding-bottom': '44px' } });
 const rowItem: Node = { type: 'box', motion: 'card', stagger: { step: 45, cap: 8 }, style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end' },
   children: [numeral(false), numeral(true), { type: 'use', template: 'card' }] };
 // The row's end cell: its next page loads as the end comes near (home rows only).

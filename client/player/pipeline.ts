@@ -9,10 +9,15 @@ import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 
 type MediaSourceClass = typeof MediaSource;
 export function mediaSourceClass(): MediaSourceClass | undefined {
-  return (globalThis as typeof globalThis & { ManagedMediaSource?: MediaSourceClass }).ManagedMediaSource ?? globalThis.MediaSource;
+  return (
+    (globalThis as typeof globalThis & { ManagedMediaSource?: MediaSourceClass }).ManagedMediaSource ??
+    globalThis.MediaSource
+  );
 }
 export function bufferAhead(video: HTMLVideoElement) {
-  for (let i = 0; i < video.buffered.length; i++) if (video.currentTime >= video.buffered.start(i) - 0.05 && video.currentTime < video.buffered.end(i)) return video.buffered.end(i) - video.currentTime;
+  for (let i = 0; i < video.buffered.length; i++)
+    if (video.currentTime >= video.buffered.start(i) - 0.05 && video.currentTime < video.buffered.end(i))
+      return video.buffered.end(i) - video.currentTime;
   return 0;
 }
 /** Single producer serializes append/remove. No append can outlive its source. */
@@ -20,159 +25,308 @@ export class SegmentPipeline {
   readonly bandwidth = new BandwidthEstimator();
   readonly abr = new AdaptiveBitrate();
   private ladder: Rendition[] = [];
-  updateRenditions(ladder: Rendition[]) { this.ladder = [...ladder]; }
-  private playable() { const MS = mediaSourceClass(); return this.ladder.filter(r => codecKnown(r) && MS?.isTypeSupported(r.mime)); }
-  get qualityIds() { return this.playable().filter(r => !this.current || r.mime === this.current.mime && r.audioGroupId === this.current.audioGroupId).map(r => r.id); }
+  updateRenditions(ladder: Rendition[]) {
+    this.ladder = [...ladder];
+  }
+  private playable() {
+    const MS = mediaSourceClass();
+    return this.ladder.filter((r) => codecKnown(r) && MS?.isTypeSupported(r.mime));
+  }
+  get qualityIds() {
+    return this.playable()
+      .filter(
+        (r) =>
+          !this.current || (r.mime === this.current.mime && r.audioGroupId === this.current.audioGroupId),
+      )
+      .map((r) => r.id);
+  }
   private async verified(expected: Rendition, signal: AbortSignal) {
-    const started = performance.now(), deadline = started + 2000;
+    const started = performance.now(),
+      deadline = started + 2000;
     let refreshed = false;
     for (;;) {
       cancelled(signal);
-      const rendition = this.ladder.find(r => r.id === expected.id && r.url === expected.url);
+      const rendition = this.ladder.find((r) => r.id === expected.id && r.url === expected.url);
       if (!rendition) throw new PlaybackFault('Prepared rendition identity changed', 'source');
       if (codecKnown(rendition)) {
-        if (!mediaSourceClass()?.isTypeSupported(rendition.mime)) throw new PlaybackFault('Prepared codec is not supported by this browser', 'source');
+        if (!mediaSourceClass()?.isTypeSupported(rendition.mime))
+          throw new PlaybackFault('Prepared codec is not supported by this browser', 'source');
         return rendition;
       }
-      if (performance.now() >= deadline) throw new PlaybackFault('Codec verification did not arrive after initialization', 'source');
-      if (!refreshed && performance.now() - started >= 500) { refreshed = true; this.refreshPlan(); }
+      if (performance.now() >= deadline)
+        throw new PlaybackFault('Codec verification did not arrive after initialization', 'source');
+      if (!refreshed && performance.now() - started >= 500) {
+        refreshed = true;
+        this.refreshPlan();
+      }
       await delay(100, signal);
     }
   }
-  current?: Rendition; audioRenditions: AudioRendition[] = []; initialAudioTrackId: string | null = null;
+  current?: Rendition;
+  audioRenditions: AudioRendition[] = [];
+  initialAudioTrackId: string | null = null;
   private audio?: AudioBuffer;
-  get audioTrackId() { return this.audio?.trackId ?? null; }
-  get pendingAudioTrackId() { return this.audio?.pendingTrackId ?? null; }
-  get audioTracks() { return this.current?.audioGroupId ? this.audio?.available(this.current.audioGroupId) ?? [] : []; }
-  selectAudio(trackId: string) { return this.audio ? this.audio.select(trackId) : Promise.reject(new Error('No alternate audio buffer')); }
-  liveTargetSeconds = 12; livePlaybackRate = 1;
-  expensiveSwitches = false; initialRenditionId?: string;
-  timelineOriginSeconds = 0; liveWindowStart: number | null = null; maxLiveDrift = 45;
-  publishedEdge: number | null = null; publishedStart: number | null = null;
-  retrying = false; networkRetries = 0;
+  get audioTrackId() {
+    return this.audio?.trackId ?? null;
+  }
+  get pendingAudioTrackId() {
+    return this.audio?.pendingTrackId ?? null;
+  }
+  get audioTracks() {
+    return this.current?.audioGroupId ? (this.audio?.available(this.current.audioGroupId) ?? []) : [];
+  }
+  selectAudio(trackId: string) {
+    return this.audio ? this.audio.select(trackId) : Promise.reject(new Error('No alternate audio buffer'));
+  }
+  liveTargetSeconds = 12;
+  livePlaybackRate = 1;
+  expensiveSwitches = false;
+  initialRenditionId?: string;
+  timelineOriginSeconds = 0;
+  liveWindowStart: number | null = null;
+  maxLiveDrift = 45;
+  publishedEdge: number | null = null;
+  publishedStart: number | null = null;
+  retrying = false;
+  networkRetries = 0;
   nominalSegmentSeconds = 2;
-  private publicationPending = false; private upstreamGap = false;
-  private segmentStarted: number | null = null; private segmentDuration = 0;
+  private publicationPending = false;
+  private upstreamGap = false;
+  private segmentStarted: number | null = null;
+  private segmentDuration = 0;
   get delivery(): LiveSnapshot['delivery'] {
     if (this.upstreamGap) return 'upstream-gap';
-    if (this.segmentStarted !== null && (this.retrying || performance.now() - this.segmentStarted > Math.max(1000, this.segmentDuration * 1000))) return 'segment-delayed';
+    if (
+      this.segmentStarted !== null &&
+      (this.retrying || performance.now() - this.segmentStarted > Math.max(1000, this.segmentDuration * 1000))
+    )
+      return 'segment-delayed';
     if (this.publicationPending) return 'waiting-for-publication';
     return this.publishedEdge === null ? 'unknown' : 'available';
   }
   private published(list: Playlist) {
     this.nominalSegmentSeconds = list.targetDuration;
     this.publishedStart = list.segments[0]?.start ?? null;
-    const last = list.segments.at(-1); this.publishedEdge = last ? last.start + last.duration : null;
+    const last = list.segments.at(-1);
+    this.publishedEdge = last ? last.start + last.duration : null;
   }
-  private streamingAllowed = true; private request?: AbortController; private detachStreaming?: () => void;
-  private media?: MediaSource; private objectUrl?: string; private buffer?: SourceBuffer;
-  private dropPrevious = { dropped: 0, total: 0 }; private dropRatio = 0;
-  constructor(private video: HTMLVideoElement, private onRendition: (r: Rendition) => void, private refreshPlan: () => void,private readonly fetcher:typeof fetch=(...args)=>fetch(...args)) {}
+  private streamingAllowed = true;
+  private request?: AbortController;
+  private detachStreaming?: () => void;
+  private media?: MediaSource;
+  private objectUrl?: string;
+  private buffer?: SourceBuffer;
+  private dropPrevious = { dropped: 0, total: 0 };
+  private dropRatio = 0;
+  constructor(
+    private video: HTMLVideoElement,
+    private onRendition: (r: Rendition) => void,
+    private refreshPlan: () => void,
+    private readonly fetcher: typeof fetch = (...args) => fetch(...args),
+  ) {}
   dispose() {
-    this.audio?.dispose(); this.audio = undefined;
-    this.detachStreaming?.(); this.detachStreaming = undefined; this.request?.abort(); this.request = undefined;
-    if (this.buffer?.updating) { try { this.buffer.abort(); } catch {} }
+    this.audio?.dispose();
+    this.audio = undefined;
+    this.detachStreaming?.();
+    this.detachStreaming = undefined;
+    this.request?.abort();
+    this.request = undefined;
+    if (this.buffer?.updating) {
+      try {
+        this.buffer.abort();
+      } catch {}
+    }
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
-    this.buffer = undefined; this.media = undefined; this.objectUrl = undefined;
+    this.buffer = undefined;
+    this.media = undefined;
+    this.objectUrl = undefined;
   }
-  private async fetchBytes(url: string, signal: AbortSignal, progress?: (bytes: number, elapsed: number) => void, timeoutMs = 12000): Promise<ArrayBuffer> {
+  private async fetchBytes(
+    url: string,
+    signal: AbortSignal,
+    progress?: (bytes: number, elapsed: number) => void,
+    timeoutMs = 12000,
+  ): Promise<ArrayBuffer> {
     const started = performance.now();
-    const response = await this.fetcher(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]), credentials: 'same-origin' });
-    if (!response.ok) throw new PlaybackFault(`Media HTTP ${response.status}`, 'network', response.status === 408 || response.status === 429 || response.status >= 500 || response.status === 404);
-    const chunks: Uint8Array[] = []; let size = 0;
+    const response = await this.fetcher(url, {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+      credentials: 'same-origin',
+    });
+    if (!response.ok)
+      throw new PlaybackFault(
+        `Media HTTP ${response.status}`,
+        'network',
+        response.status === 408 ||
+          response.status === 429 ||
+          response.status >= 500 ||
+          response.status === 404,
+      );
+    const chunks: Uint8Array[] = [];
+    let size = 0;
     if (response.body) {
       const reader = response.body.getReader();
       try {
         for (;;) {
-          const { done, value } = await reader.read(); if (done) break;
+          const { done, value } = await reader.read();
+          if (done) break;
           size += value.byteLength;
           if (size > 64 * 1024 * 1024) throw new PlaybackFault('Segment exceeds 64 MiB budget', 'source');
-          chunks.push(value); progress?.(size, performance.now() - started);
+          chunks.push(value);
+          progress?.(size, performance.now() - started);
         }
-      } catch (error) { await reader.cancel().catch(() => {}); throw error; } finally { reader.releaseLock(); }
+      } catch (error) {
+        await reader.cancel().catch(() => {});
+        throw error;
+      } finally {
+        reader.releaseLock();
+      }
     }
     cancelled(signal);
-    const bytes = new Uint8Array(size); let at = 0;
-    for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.byteLength; }
+    const bytes = new Uint8Array(size);
+    let at = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, at);
+      at += chunk.byteLength;
+    }
     // ResourceTiming transferSize=0 is a cache hit only when timing is exposed.
     const timing = performance.getEntriesByName(response.url).at(-1) as PerformanceResourceTiming | undefined;
     const noStore = /(?:^|,)\s*no-store\b/i.test(response.headers.get('Cache-Control') ?? '');
     const sameOrigin = new URL(response.url, document.baseURI).origin === location.origin;
     // Cross-origin zero transferSize can be privacy redaction, especially in Firefox.
-    const cached = response.headers.get('X-Cache')?.toLowerCase() === 'hit' || !noStore && sameOrigin && !!(timing && timing.transferSize === 0 && timing.decodedBodySize > 0);
+    const cached =
+      response.headers.get('X-Cache')?.toLowerCase() === 'hit' ||
+      (!noStore && sameOrigin && !!(timing && timing.transferSize === 0 && timing.decodedBodySize > 0));
     this.bandwidth.sample(size, performance.now() - started, cached);
     return bytes.buffer;
   }
   private async bytes(url: string, signal: AbortSignal, progress?: (bytes: number, elapsed: number) => void) {
     const deadline = performance.now() + 12000;
-    try { for (let attempt = 0;; attempt++) {
-      try { return await this.fetchBytes(url, signal, progress); }
-      catch (error) {
-        cancelled(signal);
-        const retryable = error instanceof TypeError || error instanceof PlaybackFault && error.retryable;
-        if (!retryable || attempt >= 2 || performance.now() >= deadline) throw error;
-        this.retrying = true;
-        this.networkRetries++;
-        await delay(300 * 2 ** attempt, signal);
+    try {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await this.fetchBytes(url, signal, progress);
+        } catch (error) {
+          cancelled(signal);
+          const retryable = error instanceof TypeError || (error instanceof PlaybackFault && error.retryable);
+          if (!retryable || attempt >= 2 || performance.now() >= deadline) throw error;
+          this.retrying = true;
+          this.networkRetries++;
+          await delay(300 * 2 ** attempt, signal);
+        }
       }
-    } } finally { this.retrying = false; }
+    } finally {
+      this.retrying = false;
+    }
   }
   private async playlist(r: Rendition, signal: AbortSignal): Promise<Playlist> {
-    return parsePlaylist(new TextDecoder().decode(await this.bytes(r.url, signal)), new URL(r.url, document.baseURI).href);
+    return parsePlaylist(
+      new TextDecoder().decode(await this.bytes(r.url, signal)),
+      new URL(r.url, document.baseURI).href,
+    );
   }
   private append(bytes: ArrayBuffer, signal: AbortSignal) {
     return appendBuffer(this.buffer!, bytes, this.video, signal);
   }
   async run(ladder: Rendition[], position: number, live: boolean, signal: AbortSignal) {
-    const MS = mediaSourceClass(); if (!MS) throw new PlaybackFault('MediaSource unavailable', 'source');
+    const MS = mediaSourceClass();
+    if (!MS) throw new PlaybackFault('MediaSource unavailable', 'source');
     this.updateRenditions(ladder);
-    const candidates = ladder.filter(r => !codecKnown(r) || MS.isTypeSupported(r.mime));
+    const candidates = ladder.filter((r) => !codecKnown(r) || MS.isTypeSupported(r.mime));
     if (!candidates.length) throw new PlaybackFault('No supported segmented codec', 'source');
-    const media = this.media = new MS();
-    this.streamingAllowed = !('streaming' in media) || !!(media as MediaSource & { streaming: boolean }).streaming;
-    const start = () => { this.streamingAllowed = true; };
-    const stop = () => { this.streamingAllowed = false; this.request?.abort(new DOMException('Browser paused managed media loading', 'AbortError')); };
-    media.addEventListener('startstreaming', start); media.addEventListener('endstreaming', stop);
-    this.detachStreaming = () => { media.removeEventListener('startstreaming', start); media.removeEventListener('endstreaming', stop); };
+    const media = (this.media = new MS());
+    this.streamingAllowed =
+      !('streaming' in media) || !!(media as MediaSource & { streaming: boolean }).streaming;
+    const start = () => {
+      this.streamingAllowed = true;
+    };
+    const stop = () => {
+      this.streamingAllowed = false;
+      this.request?.abort(new DOMException('Browser paused managed media loading', 'AbortError'));
+    };
+    media.addEventListener('startstreaming', start);
+    media.addEventListener('endstreaming', stop);
+    this.detachStreaming = () => {
+      media.removeEventListener('startstreaming', start);
+      media.removeEventListener('endstreaming', stop);
+    };
     // ManagedMediaSource requires disabling remote playback before attachment.
     this.video.disableRemotePlayback = true;
-    this.objectUrl = URL.createObjectURL(media); this.video.src = this.objectUrl;
+    this.objectUrl = URL.createObjectURL(media);
+    this.video.src = this.objectUrl;
     await new Promise<void>((resolve, reject) => {
-      const clean = () => { media.removeEventListener('sourceopen', open); signal.removeEventListener('abort', abort); };
-      const open = () => { clean(); resolve(); }; const abort = () => { clean(); reject(new DOMException('Aborted', 'AbortError')); };
-      media.addEventListener('sourceopen', open, { once: true }); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort();
+      const clean = () => {
+        media.removeEventListener('sourceopen', open);
+        signal.removeEventListener('abort', abort);
+      };
+      const open = () => {
+        clean();
+        resolve();
+      };
+      const abort = () => {
+        clean();
+        reject(new DOMException('Aborted', 'AbortError'));
+      };
+      media.addEventListener('sourceopen', open, { once: true });
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
     });
     cancelled(signal);
-    let rendition = candidates.find(r => r.id === this.initialRenditionId) ?? candidates[0];
-    this.abr.expensive = this.expensiveSwitches; let startupBuffered = false;
+    let rendition = candidates.find((r) => r.id === this.initialRenditionId) ?? candidates[0];
+    this.abr.expensive = this.expensiveSwitches;
+    let startupBuffered = false;
     let list = await this.playlist(rendition, signal);
-    if (!live && this.timelineOriginSeconds) list.segments.forEach(s => { s.start += this.timelineOriginSeconds; });
-    if (live) { list.segments.forEach(s => { s.start += this.liveWindowStart ?? 0; }); this.published(list); }
+    if (!live && this.timelineOriginSeconds)
+      list.segments.forEach((s) => {
+        s.start += this.timelineOriginSeconds;
+      });
+    if (live) {
+      list.segments.forEach((s) => {
+        s.start += this.liveWindowStart ?? 0;
+      });
+      this.published(list);
+    }
     // Lazy encoders do not know their RFC6381 tokens until this exact init exists.
     // Starting one selected init is preparation, never speculative ABR probing.
     let preparedInit: { url: string; bytes: ArrayBuffer } | undefined;
     if (!codecKnown(rendition)) {
-      const url = list.segments.find(s => s.start + s.duration > position)?.init ?? list.segments[0].init;
+      const url = list.segments.find((s) => s.start + s.duration > position)?.init ?? list.segments[0].init;
       preparedInit = { url, bytes: await this.fetchBytes(url, signal, undefined, 50000) };
       rendition = await this.verified(rendition, signal);
     }
-    this.current = rendition; this.onRendition(rendition);
+    this.current = rendition;
+    this.onRendition(rendition);
     this.buffer = media.addSourceBuffer(rendition.mime);
     if (rendition.audioGroupId) {
-      this.audio = new AudioBuffer(media, this.video, this.audioRenditions, (url, signal) => this.bytes(url, signal), mime => MS.isTypeSupported(mime));
+      this.audio = new AudioBuffer(
+        media,
+        this.video,
+        this.audioRenditions,
+        (url, signal) => this.bytes(url, signal),
+        (mime) => MS.isTypeSupported(mime),
+      );
       await this.audio.start(rendition.audioGroupId, this.initialAudioTrackId, list, signal);
     }
-    if (!live && list.ended) media.duration = this.timelineOriginSeconds + list.segments.reduce((sum, s) => sum + s.duration, 0);
+    if (!live && list.ended)
+      media.duration = this.timelineOriginSeconds + list.segments.reduce((sum, s) => sum + s.duration, 0);
     const liveStart = Math.max(list.segments[0].start, (this.publishedEdge ?? 0) - this.liveTargetSeconds);
-    let next = live ? list.segments.find(s => s.start + s.duration > (position > 0 ? position : liveStart)) ?? list.segments.at(-1) : list.segments.find(s => s.start + s.duration > position) ?? (list.ended && position === media.duration ? list.segments.at(-1) : undefined);
+    let next = live
+      ? (list.segments.find((s) => s.start + s.duration > (position > 0 ? position : liveStart)) ??
+        list.segments.at(-1))
+      : (list.segments.find((s) => s.start + s.duration > position) ??
+        (list.ended && position === media.duration ? list.segments.at(-1) : undefined));
     if (!next) throw new PlaybackFault('Position outside source timeline', 'source');
-    let sequence = next.sequence, init = '', first = true;
+    let sequence = next.sequence,
+      init = '',
+      first = true;
     // Live sliding manifests are anchored by overlapping sequence, never reset to zero.
     while (!signal.aborted) {
       await this.audio?.applySelection(list, signal);
       const ahead = bufferAhead(this.video);
       const target = live ? this.liveTargetSeconds + this.nominalSegmentSeconds * 2 : 30;
-      if (ahead >= target || !this.streamingAllowed) { await delay(250, signal); continue; }
+      if (ahead >= target || !this.streamingAllowed) {
+        await delay(250, signal);
+        continue;
+      }
       const quality = this.video.getVideoPlaybackQuality?.();
       if (quality) {
         const total = quality.totalVideoFrames - this.dropPrevious.total;
@@ -183,81 +337,165 @@ export class SegmentPipeline {
       }
       if (ahead >= 12 && this.video.readyState >= 3 && !this.video.paused) startupBuffered = true;
       const playable = this.playable();
-      const proposed = this.abr.choose(playable.filter(r => r.mime === rendition.mime && r.audioGroupId === rendition.audioGroupId), rendition, ahead, this.bandwidth.bps, this.dropRatio, performance.now());
+      const proposed = this.abr.choose(
+        playable.filter((r) => r.mime === rendition.mime && r.audioGroupId === rendition.audioGroupId),
+        rendition,
+        ahead,
+        this.bandwidth.bps,
+        this.dropRatio,
+        performance.now(),
+      );
       const choice = startupBuffered || this.abr.manual ? proposed : rendition;
       if (choice.id !== rendition.id) {
         const candidate = await this.playlist(choice, signal);
-        const compatible = candidate.segments.find(s => s.sequence === sequence);
+        const compatible = candidate.segments.find((s) => s.sequence === sequence);
         // Plans promise aligned sequences; reject playlists lacking the boundary.
         if (compatible) {
-          const anchor = candidate.segments.find(s => list.segments.some(old => old.sequence === s.sequence));
+          const anchor = candidate.segments.find((s) =>
+            list.segments.some((old) => old.sequence === s.sequence),
+          );
           if (!anchor) throw new PlaybackFault('Rendition lost timeline overlap', 'source');
-          const offset = list.segments.find(s => s.sequence === anchor.sequence)!.start - anchor.start;
-          candidate.segments.forEach(s => { s.start += offset; });
-          rendition = choice; list = candidate; if (live) this.published(list); this.current = choice; this.onRendition(choice); init = ''; }
+          const offset = list.segments.find((s) => s.sequence === anchor.sequence)!.start - anchor.start;
+          candidate.segments.forEach((s) => {
+            s.start += offset;
+          });
+          rendition = choice;
+          list = candidate;
+          if (live) this.published(list);
+          this.current = choice;
+          this.onRendition(choice);
+          init = '';
+        }
       }
-      next = list.segments.find(s => s.sequence === sequence);
+      next = list.segments.find((s) => s.sequence === sequence);
       if (!next) {
         if (list.ended) {
           if (media.readyState === 'open') media.endOfStream();
           if (!this.audio) return;
           // Keep the audio producer available for a selection inside the buffered tail.
-          await delay(250, signal); continue;
+          await delay(250, signal);
+          continue;
         }
         this.publicationPending = true;
         await delay(Math.max(500, list.targetDuration * 500), signal);
         const fresh = await this.playlist(rendition, signal);
-        const overlap = fresh.segments.find(s => list.segments.some(old => old.sequence === s.sequence));
+        const overlap = fresh.segments.find((s) => list.segments.some((old) => old.sequence === s.sequence));
         if (!overlap) throw new PlaybackFault('Live playlist lost timeline overlap', 'source');
-        const offset = list.segments.find(s => s.sequence === overlap.sequence)!.start - overlap.start;
-        fresh.segments.forEach(s => { s.start += offset; }); list = fresh; if (live) this.published(list); continue;
+        const offset = list.segments.find((s) => s.sequence === overlap.sequence)!.start - overlap.start;
+        fresh.segments.forEach((s) => {
+          s.start += offset;
+        });
+        list = fresh;
+        if (live) this.published(list);
+        continue;
       }
       this.publicationPending = false;
-      if (next.gap) { this.upstreamGap = true; throw new PlaybackFault('Publisher marked segment unavailable (EXT-X-GAP)', 'source'); }
-      if (next.init !== init) { await this.append(preparedInit?.url === next.init ? preparedInit.bytes : await this.bytes(next.init, signal), signal); init = next.init; preparedInit = undefined; }
-      this.segmentStarted = performance.now(); this.segmentDuration = next.duration;
-      const request = this.request = new AbortController();
-      const abort = () => request.abort(); signal.addEventListener('abort', abort, { once: true });
+      if (next.gap) {
+        this.upstreamGap = true;
+        throw new PlaybackFault('Publisher marked segment unavailable (EXT-X-GAP)', 'source');
+      }
+      if (next.init !== init) {
+        await this.append(
+          preparedInit?.url === next.init ? preparedInit.bytes : await this.bytes(next.init, signal),
+          signal,
+        );
+        init = next.init;
+        preparedInit = undefined;
+      }
+      this.segmentStarted = performance.now();
+      this.segmentDuration = next.duration;
+      const request = (this.request = new AbortController());
+      const abort = () => request.abort();
+      signal.addEventListener('abort', abort, { once: true });
       let abandon: Rendition | undefined;
       let bytes: ArrayBuffer;
-      const timeout = setTimeout(() => request.abort(new PlaybackFault('Segment deadline exceeded', 'network', true)), 15000);
+      const timeout = setTimeout(
+        () => request.abort(new PlaybackFault('Segment deadline exceeded', 'network', true)),
+        15000,
+      );
       try {
         bytes = await this.bytes(next.url, request.signal, (received, elapsed) => {
-          const lower = [...playable].filter(r => r.mime === rendition.mime && r.audioGroupId === rendition.audioGroupId && r.bandwidth < rendition.bandwidth).sort((a,b) => a.bandwidth-b.bandwidth)[0];
-          if (startupBuffered && !this.expensiveSwitches && lower && this.abr.abandon(rendition, lower, next!.duration, received, elapsed, bufferAhead(this.video))) { abandon = lower; request.abort(); }
+          const lower = [...playable]
+            .filter(
+              (r) =>
+                r.mime === rendition.mime &&
+                r.audioGroupId === rendition.audioGroupId &&
+                r.bandwidth < rendition.bandwidth,
+            )
+            .sort((a, b) => a.bandwidth - b.bandwidth)[0];
+          if (
+            startupBuffered &&
+            !this.expensiveSwitches &&
+            lower &&
+            this.abr.abandon(rendition, lower, next!.duration, received, elapsed, bufferAhead(this.video))
+          ) {
+            abandon = lower;
+            request.abort();
+          }
         });
       } catch (error) {
         cancelled(signal);
         if (!this.streamingAllowed && request.signal.aborted) continue;
         if (!abandon) throw request.signal.reason instanceof PlaybackFault ? request.signal.reason : error;
         const candidate = await this.playlist(abandon, signal);
-        const anchor = candidate.segments.find(s => list.segments.some(old => old.sequence === s.sequence));
-        if (!anchor || !candidate.segments.some(s => s.sequence === sequence)) throw new PlaybackFault('Replacement rendition lacks next segment boundary', 'source');
-        const offset = list.segments.find(s => s.sequence === anchor.sequence)!.start - anchor.start;
-        candidate.segments.forEach(s => { s.start += offset; });
-        rendition = abandon; list = candidate; this.current = rendition; this.onRendition(rendition); init = ''; continue;
-      } finally { if (this.request === request) this.request = undefined; this.segmentStarted = null; clearTimeout(timeout); signal.removeEventListener('abort', abort); }
+        const anchor = candidate.segments.find((s) =>
+          list.segments.some((old) => old.sequence === s.sequence),
+        );
+        if (!anchor || !candidate.segments.some((s) => s.sequence === sequence))
+          throw new PlaybackFault('Replacement rendition lacks next segment boundary', 'source');
+        const offset = list.segments.find((s) => s.sequence === anchor.sequence)!.start - anchor.start;
+        candidate.segments.forEach((s) => {
+          s.start += offset;
+        });
+        rendition = abandon;
+        list = candidate;
+        this.current = rendition;
+        this.onRendition(rendition);
+        init = '';
+        continue;
+      } finally {
+        if (this.request === request) this.request = undefined;
+        this.segmentStarted = null;
+        clearTimeout(timeout);
+        signal.removeEventListener('abort', abort);
+      }
       await this.append(bytes, signal);
       await this.audio?.fill(next.start, next.start + next.duration, list, signal);
       if (first && live && this.liveWindowStart === null && this.buffer.buffered.length) {
         const offset = this.buffer.buffered.start(0) - next.start;
-        list.segments.forEach(s => { s.start += offset; }); this.published(list);
+        list.segments.forEach((s) => {
+          s.start += offset;
+        });
+        this.published(list);
       }
-      if (first) { this.video.currentTime = live ? Math.max(next.start, position) : position; first = false; }
+      if (first) {
+        this.video.currentTime = live ? Math.max(next.start, position) : position;
+        first = false;
+      }
       sequence++;
       const retain = live ? 15 : 30;
-      if (this.video.currentTime > retain && this.buffer.buffered.length && this.buffer.buffered.start(0) < this.video.currentTime - retain - 5) {
+      if (
+        this.video.currentTime > retain &&
+        this.buffer.buffered.length &&
+        this.buffer.buffered.start(0) < this.video.currentTime - retain - 5
+      ) {
         await mutation(this.buffer, signal, () => this.buffer!.remove(0, this.video.currentTime - retain));
       }
       await this.audio?.evict(this.video.currentTime - retain, signal);
       // Skip only tiny holes; large gaps go through visible recovery.
-      if (this.video.readyState < 3) for (let i = 0; i < this.video.buffered.length; i++) {
-        const gap = this.video.buffered.start(i) - this.video.currentTime;
-        if (gap > 0.02 && gap <= 0.25) { this.video.currentTime = this.video.buffered.start(i) + 0.01; break; }
-      }
+      if (this.video.readyState < 3)
+        for (let i = 0; i < this.video.buffered.length; i++) {
+          const gap = this.video.buffered.start(i) - this.video.currentTime;
+          if (gap > 0.02 && gap <= 0.25) {
+            this.video.currentTime = this.video.buffered.start(i) + 0.01;
+            break;
+          }
+        }
       if (live && this.video.buffered.length) {
         const drift = this.video.buffered.end(this.video.buffered.length - 1) - this.video.currentTime;
-        if (drift > Math.max(this.maxLiveDrift, this.liveTargetSeconds + 6)) this.video.currentTime = this.video.buffered.end(this.video.buffered.length - 1) - this.liveTargetSeconds;
+        if (drift > Math.max(this.maxLiveDrift, this.liveTargetSeconds + 6))
+          this.video.currentTime =
+            this.video.buffered.end(this.video.buffered.length - 1) - this.liveTargetSeconds;
         this.video.playbackRate = this.livePlaybackRate;
       }
     }

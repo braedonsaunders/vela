@@ -1,12 +1,21 @@
 import type * as V from '../../../wire/v0/types';
-import type { ServerAdapter } from '../index';
-import { VelaError, type Credentials } from '../ether';
-import { createPlexPin, pollPlexPin, plexHeaders, discoverPlexServers, plexAccount } from './auth';
+import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
+import type { LiveTv, PathSwitching, SwitchCommand } from '../capabilities';
+import { VelaError } from '../errors';
+import { plexHeaders } from './auth';
 import { randomId } from '../../protocol/id';
 export * from './auth';
 
 // Plex JSON uses the same metadata envelope for videos, directories and hubs.
 type Node = Record<string, any>;
+interface PlexSession {
+  plan: V.PlaybackPlan;
+  part: Node;
+  metadata: Node;
+  sequence: number;
+  /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
+  mutations: Map<string, V.PlaybackPlan>;
+}
 export interface PlexConfig { origin: string; credentials: Credentials; clientIdentifier: string }
 const ack: V.Ack = { accepted: true };
 const no = (reason: string): V.Feature => ({ available: false, reason });
@@ -24,13 +33,12 @@ function page<T>(items: T[], start = 0, total?: number): V.Page<T> {
   const more = total !== undefined && start + items.length < total;
   return { items, continuation: more ? 'more' : total === undefined ? 'unknown' : 'exhausted', ...(more && items.length ? { nextCursor: String(start + items.length) } : {}) };
 }
-export function createPlexAdapter(config: PlexConfig): PlexAdapter { return new PlexAdapter(config); }
-export class PlexAdapter implements ServerAdapter {
+/** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
+export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
   readonly origin: string;
-  private sessions = new Map<string, { plan: V.PlaybackPlan; part: Node; metadata: Node; sequence: number; mutations: Map<string, V.PlaybackPlan> }>();
+  private sessions = new Map<string, PlexSession>();
   private liveConfig?: { dvr: string; grid: string };
   private delegation?: Promise<string>;
-  private pins = new Map<string, { id: number; code: string; expiresAt: string }>();
   constructor(private config: PlexConfig) {
     const u = new URL(config.origin);
     if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.pathname !== '/' || u.search || u.hash) throw new Error('Plex requires a server origin');
@@ -93,12 +101,12 @@ export class PlexAdapter implements ServerAdapter {
     catch (error) {
       if (!(error instanceof VelaError) || error.status !== 401) throw error;
       const latest = await this.config.credentials.get();
-      if (latest?.accessToken === tokens.accessToken) { this.sessions.clear(); this.pins.clear(); await this.config.credentials.set(null); }
+      if (latest?.accessToken === tokens.accessToken) { this.sessions.clear(); await this.config.credentials.set(null); }
       return null;
     }
     return tokens;
   }
-  async capabilities(): Promise<V.ServerCapabilities> {
+  async describe(): Promise<ServerDescription> {
     const root = await this.request('/identity', {}, 'GET', false);
     let live: V.Feature = no('No accessible Plex DVR');
     if (await this.config.credentials.get()) {
@@ -110,45 +118,12 @@ export class PlexAdapter implements ServerAdapter {
       } catch (error) { if (!(error instanceof VelaError) || ![403, 404].includes(error.status)) throw error; }
     }
     return { protocolVersion: 0, server: { id: root.machineIdentifier || this.origin, name: root.friendlyName || 'Plex Media Server', version: root.version || '' },
-      features: { passwordSignIn: no('Use Plex PIN linking or a server token'), deviceGrant: yes, quickConnect: yes,
-        descriptiveSearch: no('Plex offers catalogue search'), aiSearch: no('Plex does not expose AI search'), proactiveFallback: no('Plex does not expose proactive fallback'),
-        liveTV: live, extras: yes, extraPlayback: yes,
-        trailerPreview: no('Plex trailers are extras without preview grants'), themeMusic: yes,
-        audioFallback: no('Use Plex universal transcoding'), initialTrackSelection: yes, sessionTrackChanges: no('Start a new playback for track changes') },
+      features: { liveTV: live, extras: yes, extraPlayback: yes, themeMusic: yes, initialTrackSelection: yes },
       skins: [{ id: 'cinematic', name: 'Cinematic' }], defaultSkinId: 'cinematic' };
   }
-  async negotiate(r: V.NegotiateRequest): Promise<V.NegotiateResponse> { return { client: r.client, capabilities: await this.capabilities() }; }
-  async signIn(_r: V.SignInRequest): Promise<V.Tokens> { return fail('Use Plex PIN linking then select a resource token'); }
-  async issueWebCode(_r: V.WebCodeIssueRequest): Promise<V.WebCodeIssueResponse> { return fail('Plex does not support Ether web codes'); }
-  async redeemWebCode(_r: V.WebCodeRedeemRequest): Promise<V.Tokens> { return fail('Plex does not support Ether web codes'); }
-  async deviceGrant(_r: V.DeviceGrantRequest): Promise<V.DeviceGrant> {
-    const pin = await createPlexPin(this.config.clientIdentifier);
-    const key = String(pin.id); this.pins.set(key, pin);
-    return { deviceCode: key, userCode: pin.code, verificationUrl: 'https://plex.tv/link', expiresAt: pin.expiresAt, pollIntervalSeconds: 2 };
-  }
-  async pollDevice(r: V.DevicePollRequest): Promise<V.GrantPoll> {
-    const pin = this.pins.get(r.deviceCode);
-    if (!pin) return { status: 'expired' };
-    const result = await pollPlexPin(this.config.clientIdentifier, pin);
-    if (result.authToken) {
-      const servers = await discoverPlexServers(this.config.clientIdentifier, result.authToken);
-      const server = servers.find(s => s.connections.some(c => new URL(c.uri).origin === this.origin));
-      if (!server?.accessToken) fail('Select a discovered Plex server before completing linking');
-      const account = await plexAccount(this.config.clientIdentifier, result.authToken);
-      this.pins.delete(r.deviceCode);
-      return { status: 'approved', tokens: { accessToken: server.accessToken, refreshToken: '', expiresAt: '9999-12-31T23:59:59Z',
-        viewer: { id: account.uuid || String(account.id), name: account.friendlyName || account.title || account.username, policyRevision: 'plex' } } };
-    }
-    return { status: 'pending' };
-  }
-  async quickConnect(r: V.DeviceGrantRequest): Promise<V.QuickConnect> {
-    const grant = await this.deviceGrant(r);
-    return { secret: grant.deviceCode, code: grant.userCode, expiresAt: grant.expiresAt, pollIntervalSeconds: grant.pollIntervalSeconds };
-  }
-  pollQuickConnect(r: V.QuickPollRequest) { return this.pollDevice({ ...r, deviceCode: r.secret }); }
-  async revoke(_r: V.RevokeRequest): Promise<V.Ack> {
+  async revokeSession(_r: V.RevokeRequest): Promise<V.Ack> {
     for (const [id, s] of this.sessions) if (s.plan.state !== 'ended') await this.command(id, { kind: 'stop', ...s.plan, idempotencyKey: `revoke-${id}` });
-    this.sessions.clear(); this.pins.clear(); this.rotateTransientToken(); await this.config.credentials.set(null); return ack;
+    this.sessions.clear(); this.rotateTransientToken(); await this.config.credentials.set(null); return ack;
   }
   private artwork(n: Node): V.ArtworkRef[] {
     return (['thumb', 'art'] as const).flatMap(k => {
@@ -178,12 +153,11 @@ export class PlexAdapter implements ServerAdapter {
     const purpose: V.Row['purpose'] = /continue/i.test(key) ? 'continue' : /onDeck|nextUp/i.test(key) ? 'nextUp' : /recentlyAdded/i.test(key) ? 'recentlyAdded' : 'recommendation';
     return { id: key, name: h.title || '', purpose, receiptToken: '', ...page(this.nodes(h).filter(n => ['movie','show','season','episode','collection','playlist'].includes(n.type)).map(n => this.entry(n)), Number(h.offset || 0), h.totalSize ?? (h.more ? undefined : h.size)) };
   }
-  async bootstrap(): Promise<V.Bootstrap> {
+  async home(): Promise<Home> {
     this.rotateTransientToken();
     const tokens = await this.config.credentials.get(); if (!tokens) fail('Sign in required', 'auth');
-    return { viewer: tokens.viewer, capabilities: await this.capabilities(), defaultSkinId: 'cinematic', rows: (await this.rows({})).items, heroes: [] };
+    return { viewer: tokens.viewer, capabilities: await this.describe(), defaultSkinId: 'cinematic', rows: (await this.rows({})).items, heroes: [] };
   }
-  bootstrapFresh() { return this.bootstrap(); }
   async rows(q: V.RowsQuery): Promise<V.Page<V.Row>> {
     const path = q.placement === 'detail' && q.titleId ? `/library/metadata/${enc(q.titleId)}/related` : '/hubs';
     const c = await this.request(path, { count: q.limit || 20 });
@@ -238,19 +212,12 @@ export class PlexAdapter implements ServerAdapter {
       mediaSummary: { video: streams.filter(s => Number(s.streamType) === 1).map(s => ({ codec: s.codec, width: s.width, height: s.height, bitDepth: s.bitDepth, colorTransfer: s.colorTrc })), audio: streams.filter(s => Number(s.streamType) === 2).map(s => ({ codec: s.codec, channels: s.channels, language: s.languageCode })) } };
   }
   private chapters(n: Node): V.Chapter[] { return (n.Chapter || []).map((c: Node) => ({ id: String(c.id), name: c.tag || `Chapter ${Number(c.index || 0) + 1}`, startSeconds: seconds(c.startTimeOffset), endSeconds: c.endTimeOffset === undefined ? undefined : seconds(c.endTimeOffset) })); }
-  async search(r: V.SearchRequest): Promise<V.SearchResponse> {
-    if (r.mode !== 'fast') fail('Plex descriptive search unavailable');
+  async search(r: CatalogueSearch): Promise<V.SearchResponse> {
     const c = await this.request('/hubs/search', { query: r.query, limit: r.limit || 30 });
     const seen = new Set<string>(); const all = (c.Hub || []).flatMap((h: Node) => this.nodes(h)).filter((n: Node) => ['movie','show','season','episode'].includes(n.type) && !seen.has(String(n.ratingKey)) && !!seen.add(String(n.ratingKey)));
     return { query: r.query, generation: r.generation, ...page(all.map((n: Node) => this.title(n)), 0, all.length) };
   }
-  async trailerPreview(_id: string, _r: V.TrailerPreviewRequest): Promise<V.TrailerPreviewResponse> { return { state: 'unavailable', reason: 'Plex trailers are available as extras' }; }
-  trailerPreviewStatus(id: string) { return this.trailerPreview(id, undefined!); }
-  async startAI(_r: V.AISearchRequest): Promise<V.AISearchJob> { return fail('Plex AI search unavailable'); }
-  async aiJob(_id: string): Promise<V.AISearchJob> { return fail('Plex AI search unavailable'); }
-  async cancelAI(_id: string, _r: V.CancelRequest): Promise<V.AISearchJob> { return fail('Plex AI search unavailable'); }
-  async interactions(_r: V.InteractionsRequest): Promise<V.Ack> { return fail('Plex does not accept ranking receipts'); }
-  async playback(r: V.PlaybackRequest): Promise<V.PlaybackPlan> {
+  async startPlayback(r: V.PlaybackRequest): Promise<V.PlaybackPlan> {
     for (const s of this.sessions.values()) if (s.mutations.has(r.idempotencyKey)) return s.mutations.get(r.idempotencyKey)!;
     if (r.channelId) return this.livePlayback(r);
     const id = r.titleId || r.extraId!; const n = await this.metadata(id);
@@ -300,7 +267,11 @@ export class PlexAdapter implements ServerAdapter {
     this.sessions.set(sessionId, { plan, part, metadata: n, sequence: -1, mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]) });
     return plan;
   }
-  private session(id: string) { const s = this.sessions.get(id); if (!s) fail('Plex playback session not found', 'not-found'); return s; }
+  private session(id: string): PlexSession {
+    const s = this.sessions.get(id);
+    if (!s) fail('Plex playback session not found', 'not-found');
+    return s;
+  }
   private generations(plan: V.PlaybackPlan, request: V.Generations) {
     if (plan.sourceGeneration !== request.sourceGeneration || plan.seekGeneration !== request.seekGeneration)
       throw new VelaError({ class: 'conflict', code: 'stale_generation', message: 'Plex playback generation changed', retry: { allowed: false }, currentGenerations: { sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration } }, 409);
@@ -309,12 +280,12 @@ export class PlexAdapter implements ServerAdapter {
     try { await this.request('/video/:/transcode/universal/stop', { session: id }); }
     catch (error) { if (!(error instanceof VelaError) || error.status !== 404) throw error; }
   }
-  private async timeline(s: ReturnType<PlexAdapter['session']>, state: string) {
+  private async timeline(s: PlexSession, state: string) {
     if (s.plan.channelId) return;
     await this.request('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`, time: Math.round(s.plan.positionSeconds * 1000),
       duration: s.metadata.duration, state, session: s.plan.sessionId, hasMDE: 1 });
   }
-  async observe(id: string, r: V.PlayerObservation): Promise<V.Ack> {
+  async reportObservation(id: string, r: V.PlayerObservation): Promise<V.Ack> {
     const s = this.session(id); this.generations(s.plan, r);
     if (r.sequence <= s.sequence || s.plan.state === 'ended') return ack;
     if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0) fail('Invalid playback position');
@@ -325,36 +296,75 @@ export class PlexAdapter implements ServerAdapter {
     if (r.state === 'ended') await this.stopTranscode(id);
     return ack;
   }
-  async command(id: string, r: V.SessionCommand): Promise<V.PlaybackPlan> {
-    const s = this.session(id); const saved = s.mutations.get(r.idempotencyKey); if (saved) return saved;
+  command(id: string, r: TransportCommand): Promise<V.PlaybackPlan> {
+    return this.mutate(id, r, async s => {
+      switch (r.kind) {
+        case 'seek':
+          if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0) fail('Invalid seek');
+          s.plan.positionSeconds = r.positionSeconds;
+          s.plan.seekGeneration++;
+          await this.timeline(s, 'playing');
+          break;
+        case 'stop':
+          await this.timeline(s, 'stopped');
+          await this.stopTranscode(id);
+          if (s.plan.channelId) await this.request(`/media/subscriptions/${enc(s.metadata.subscriptionId)}`, {}, 'DELETE');
+          s.plan.state = 'ended';
+          break;
+        case 'pause':
+          await this.timeline(s, 'paused');
+          s.plan.state = 'paused';
+          break;
+        case 'resume':
+          await this.timeline(s, 'playing');
+          s.plan.state = 'playing';
+          break;
+      }
+    });
+  }
+
+  /** A plan offers the original file and the universal transcode; the session moves between them. */
+  switchPath(id: string, r: SwitchCommand): Promise<V.PlaybackPlan> {
+    return this.mutate(id, r, s => {
+      if (!s.plan.paths.some(p => p.id === r.pathId)) fail('Unknown Plex path');
+      if (!Number.isFinite(r.atSeconds) || r.atSeconds < 0) fail('Invalid switch position');
+      s.plan.selectedPathId = r.pathId;
+      s.plan.positionSeconds = r.atSeconds;
+      s.plan.sourceGeneration++;
+    });
+  }
+
+  /** Apply one session mutation once per idempotency key, at the generations it was issued for. */
+  private async mutate(
+    id: string,
+    r: V.SessionCommand,
+    apply: (s: PlexSession) => Promise<void> | void,
+  ): Promise<V.PlaybackPlan> {
+    const s = this.session(id);
+    const saved = s.mutations.get(r.idempotencyKey);
+    if (saved) return saved;
     this.generations(s.plan, r);
     if (s.plan.state === 'ended') fail('Plex playback session ended', 'conflict');
-    switch (r.kind) {
-      case 'tracks': return fail('Plex track changes require a new playback');
-      case 'prepare-fallback': return fail('Plex proactive fallback unavailable');
-      case 'seek':
-        if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0) fail('Invalid seek');
-        s.plan.positionSeconds = r.positionSeconds; s.plan.seekGeneration++; await this.timeline(s, 'playing'); break;
-      case 'switch':
-        if (!s.plan.paths.some(p => p.id === r.pathId)) fail('Unknown Plex path');
-        if (!Number.isFinite(r.atSeconds) || r.atSeconds < 0) fail('Invalid switch position');
-        s.plan.selectedPathId = r.pathId; s.plan.positionSeconds = r.atSeconds; s.plan.sourceGeneration++; break;
-      case 'stop':
-        await this.timeline(s, 'stopped'); await this.stopTranscode(id);
-        if (s.plan.channelId) await this.request(`/media/subscriptions/${enc(s.metadata.subscriptionId)}`, {}, 'DELETE');
-        s.plan.state = 'ended'; break;
-      case 'pause': await this.timeline(s, 'paused'); s.plan.state = 'paused'; break;
-      case 'resume': await this.timeline(s, 'playing'); s.plan.state = 'playing'; break;
-    }
-    s.plan.revision++; const result = structuredClone(s.plan); s.mutations.set(r.idempotencyKey, result); return result;
+    await apply(s);
+    s.plan.revision++;
+    const result = structuredClone(s.plan);
+    s.mutations.set(r.idempotencyKey, result);
+    return result;
   }
-  async snapshot(id: string): Promise<V.SessionSnapshot> {
-    const s = this.session(id); return { cursor: String(s.plan.revision), revision: s.plan.revision, plan: structuredClone(s.plan), publishedRanges: [], lastObservationSequence: s.sequence < 0 ? undefined : s.sequence };
+
+  async sessionSnapshot(id: string): Promise<V.SessionSnapshot> {
+    const s = this.session(id);
+    return {
+      cursor: String(s.plan.revision),
+      revision: s.plan.revision,
+      plan: structuredClone(s.plan),
+      publishedRanges: [],
+      lastObservationSequence: s.sequence < 0 ? undefined : s.sequence,
+    };
   }
-  async createAudioFallback(_id: string, _r: V.AudioFallbackRequest, _signal?: AbortSignal): Promise<V.AudioFallbackResponse> { return fail('Use Plex universal transcoding'); }
-  async cancelAudioFallback(_id: string, _audioId: string, _r: V.Mutation, _signal?: AbortSignal): Promise<V.Ack> { return fail('Plex separate audio fallback unavailable'); }
+
   private async requireLive() {
-    if (!this.liveConfig) await this.capabilities();
+    if (!this.liveConfig) await this.describe();
     if (!this.liveConfig) fail('No accessible Plex DVR');
     return this.liveConfig;
   }

@@ -1,0 +1,1115 @@
+import type { Node, Style } from '../../../wire/v0/skin';
+import { card } from './cards';
+import {
+  bone,
+  display,
+  enter,
+  eyebrow,
+  failure,
+  focusRing,
+  ghost,
+  is,
+  ready,
+  sectionHeading,
+  side,
+  sideSmall,
+  small,
+} from './look';
+
+export const band: Node = {
+  type: 'box',
+  when: [{ test: 'env.load', is: 'eq', value: 'ready' }],
+  style: {
+    position: 'relative',
+    display: 'flex',
+    'flex-direction': 'column',
+    'justify-content': 'flex-end',
+    'min-height': 'min(80vh, 780px)',
+    'overflow-x': 'hidden',
+    'overflow-y': 'hidden',
+  },
+  small: { 'min-height': '600px' },
+  children: [
+    {
+      type: 'box',
+      motion: 'velaExpose',
+      style: {
+        position: 'absolute',
+        inset: '0px',
+        'overflow-x': 'hidden',
+        'overflow-y': 'hidden',
+        'mask-image': 'linear-gradient(180deg, black 0%, black 78%, transparent 100%)',
+      },
+      children: [
+        {
+          type: 'box',
+          when: [{ test: 'detail.backdrop' }],
+          motion: 'velaDrift',
+          style: { position: 'absolute', inset: '0px', 'transform-origin': '58% 40%' },
+          children: [
+            {
+              type: 'image',
+              src: '{detail.backdrop}',
+              alt: '',
+              fade: true,
+              style: {
+                position: 'absolute',
+                inset: '0px',
+                width: '100%',
+                height: '100%',
+                'object-fit': 'cover',
+                transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)',
+              },
+            },
+          ],
+        },
+        {
+          type: 'box',
+          when: [{ test: 'detail.accent' }],
+          style: {
+            position: 'absolute',
+            left: '-12%',
+            bottom: '0%',
+            width: '70%',
+            height: '80%',
+            'background-color': '{detail.accent}',
+            opacity: '0.18',
+            'mask-image': 'radial-gradient(closest-side, black 0%, transparent 100%)',
+          },
+        },
+        {
+          type: 'box',
+          when: [{ test: 'detail.accent', not: true }],
+          style: {
+            position: 'absolute',
+            left: '-12%',
+            bottom: '0%',
+            width: '70%',
+            height: '80%',
+            'background-color': '$ui.accent',
+            opacity: '0.18',
+            'mask-image': 'radial-gradient(closest-side, black 0%, transparent 100%)',
+          },
+        },
+        {
+          type: 'box',
+          style: {
+            position: 'absolute',
+            inset: '0px',
+            'background-image': [
+              'linear-gradient(90deg, #090b0ef0 0%, #090b0e70 38%, #090b0e00 72%)',
+              'linear-gradient(0deg, $ui.page 0%, #090b0ed9 20%, #090b0e00 60%)',
+              'linear-gradient(180deg, #07090cb3 0%, #090b0e00 22%)',
+            ].join(', '),
+          },
+        },
+        {
+          type: 'image',
+          src: 'assets/grain.svg',
+          alt: '',
+          style: {
+            position: 'absolute',
+            inset: '0px',
+            width: '100%',
+            height: '100%',
+            'object-fit': 'fill',
+            opacity: '0.05',
+          },
+        },
+      ],
+    },
+    {
+      type: 'box',
+      style: {
+        position: 'relative',
+        display: 'flex',
+        'flex-direction': 'column',
+        gap: '18px',
+        'padding-top': '120px',
+        'padding-bottom': '12px',
+        ...side,
+        'max-width': '58rem',
+      },
+      small: { gap: '14px', 'padding-top': '96px', 'padding-bottom': '8px', ...sideSmall },
+      children: [
+        {
+          type: 'box',
+          motion: enter(140),
+          style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' },
+          children: [
+            {
+              type: 'box',
+              when: [{ test: 'detail.accent' }],
+              style: {
+                width: '24px',
+                height: '2px',
+                'border-radius': '1px',
+                'background-color': '{detail.accent}',
+              },
+            },
+            {
+              type: 'box',
+              when: [{ test: 'detail.accent', not: true }],
+              style: {
+                width: '24px',
+                height: '2px',
+                'border-radius': '1px',
+                'background-color': '$ui.accent',
+              },
+            },
+            {
+              type: 'text',
+              text: '{detail.kindLabel}',
+              style: { ...eyebrow, 'font-size': '10px', color: '$ui.accent' },
+            },
+          ],
+        },
+        {
+          type: 'image',
+          when: [{ test: 'detail.logo' }],
+          src: '{detail.logo}',
+          alt: '{detail.name}',
+          role: 'heading',
+          level: 1,
+          motion: enter(200),
+          style: {
+            height: '150px',
+            width: 'auto',
+            'max-width': 'min(560px, 80%)',
+            'object-fit': 'contain',
+            'align-self': 'flex-start',
+          },
+          small: { height: '92px', 'max-width': '80%' },
+        },
+        {
+          type: 'text',
+          when: [{ test: 'detail.logo', not: true }],
+          text: '{detail.name}',
+          role: 'heading',
+          level: 1,
+          motion: enter(200),
+          style: { ...display, 'font-size': '84px', 'text-shadow': '0px 4px 40px $ui.shadow' },
+          small: { 'font-size': '46px' },
+        },
+        {
+          type: 'text',
+          text: '{detail.factsLine}',
+          motion: enter(260),
+          style: { 'font-size': '14px', color: '$ui.inkSecondary', 'font-variant-numeric': 'tabular-nums' },
+        },
+        {
+          type: 'box',
+          when: [{ test: 'detail.hasMediaFacts' }],
+          motion: enter(300),
+          style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'flex-wrap': 'wrap' },
+          children: [
+            {
+              type: 'repeat',
+              over: 'detail.mediaFacts',
+              item: {
+                type: 'text',
+                text: '{fact.text}',
+                style: {
+                  'font-size': '11px',
+                  'font-weight': '650',
+                  'letter-spacing': '0.06em',
+                  color: '$ui.ink',
+                  padding: '5px 9px',
+                  'border-radius': '6px',
+                  border: '1px solid $ui.glassEdgeStrong',
+                  'background-color': '$ui.control',
+                  'backdrop-filter': 'blur(12px)',
+                },
+              },
+            },
+          ],
+        },
+        {
+          type: 'text',
+          when: [{ test: 'detail.summary' }],
+          text: '{detail.summary}',
+          motion: enter(340),
+          style: {
+            color: '$ui.ink',
+            opacity: '0.88',
+            'font-size': '17px',
+            'line-height': '1.6',
+            'max-width': '42rem',
+          },
+          small: { 'font-size': '15px' },
+        },
+        {
+          type: 'box',
+          motion: enter(400),
+          style: {
+            display: 'flex',
+            'flex-direction': 'row',
+            gap: '12px',
+            'align-items': 'center',
+            'flex-wrap': 'wrap',
+            'margin-top': '10px',
+          },
+          small: { 'margin-top': '6px' },
+          children: [
+            {
+              type: 'box',
+              when: [{ test: 'detail.canPlay' }],
+              press: { action: 'play', arg: '{detail.id}' },
+              label: '{detail.playLabel}',
+              testId: 'detail-play',
+              style: {
+                position: 'relative',
+                display: 'flex',
+                'flex-direction': 'row',
+                'align-items': 'center',
+                height: '56px',
+                'box-sizing': 'border-box',
+                'padding-left': '30px',
+                'padding-right': '34px',
+                'border-radius': '$ui.radiusControl',
+                'background-color': '$ui.ink',
+                color: '$ui.inkInverse',
+                'font-weight': '650',
+                transition: 'background-color 180ms linear',
+              },
+              small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px' },
+              hover: { 'background-color': '#ffffff' },
+              focus: { 'box-shadow': focusRing },
+              children: [
+                {
+                  type: 'box',
+                  style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' },
+                  children: [
+                    { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' } },
+                    { type: 'text', text: '{detail.playLabel}', style: { 'font-size': '16px' } },
+                  ],
+                },
+              ],
+            },
+            {
+              type: 'box',
+              when: [{ test: 'detail.trailerReady' }],
+              press: { action: 'playExtra', arg: '{detail.trailerId}' },
+              label: '{t:ui.watchTrailer}',
+              testId: 'detail-trailer',
+              style: {
+                ...ghost,
+                position: 'relative',
+                display: 'flex',
+                'flex-direction': 'row',
+                'align-items': 'center',
+                height: '56px',
+                'box-sizing': 'content-box',
+                'padding-left': '22px',
+                'padding-right': '26px',
+              },
+              small: { height: '50px' },
+              hover: { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
+              focus: { 'box-shadow': focusRing },
+              children: [
+                {
+                  type: 'box',
+                  style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' },
+                  children: [
+                    { type: 'icon', symbol: 'play', style: { width: '16px', height: '16px' } },
+                    { type: 'text', text: '{t:ui.watchTrailer}', style: { 'font-size': '15px' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: 'box',
+          when: [{ test: 'detail.canPlay' }, { test: 'detail.hasResume' }],
+          motion: enter(440),
+          style: {
+            width: '260px',
+            height: '3px',
+            'border-radius': '2px',
+            'background-color': '$ui.trackStrong',
+            'overflow-x': 'hidden',
+            'overflow-y': 'hidden',
+          },
+          small: { width: '60%' },
+          children: [
+            {
+              type: 'box',
+              style: { height: '3px', width: '{detail.resumePct}%', 'background-color': '$ui.accent' },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+// One episode: a still that lifts and shows a play mark on hover or focus, then its text.
+export const episodeRow: Node = {
+  type: 'box',
+  group: true,
+  motion: 'velaEpisode',
+  stagger: { step: 40, cap: 8 },
+  style: {
+    display: 'flex',
+    'flex-direction': 'row',
+    gap: '24px',
+    'align-items': 'center',
+    padding: '18px 0px',
+    'border-style': 'none none solid none',
+    'border-bottom-width': '1px',
+    'border-bottom-color': '#ffffff0f',
+  },
+  small: { gap: '14px', 'align-items': 'flex-start' },
+  children: [
+    {
+      type: 'box',
+      press: { action: 'select', arg: '{card.kindId}' },
+      label: '{card.label}',
+      testId: 'episode-{card.id}',
+      style: {
+        position: 'relative',
+        width: '220px',
+        'aspect-ratio': '16 / 9',
+        'border-radius': '10px',
+        'overflow-x': 'hidden',
+        'overflow-y': 'hidden',
+        'background-color': '$ui.raised',
+        'flex-shrink': '0',
+        scale: '1',
+        'box-shadow': '0px 0px 0px 1px #ffffff0f',
+        transition:
+          'scale 360ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 360ms cubic-bezier(0.16, 1, 0.3, 1)',
+      },
+      small: { width: '128px' },
+      groupHover: { scale: '1.03', 'box-shadow': '0px 20px 40px -14px #00000088, 0px 0px 0px 1px #ffffff2e' },
+      focus: { 'box-shadow': '0px 0px 0px 3px $ui.ink' },
+      children: [
+        {
+          type: 'image',
+          when: [{ test: 'card.backdrop' }],
+          src: '{card.backdrop}',
+          alt: '',
+          fade: true,
+          style: {
+            position: 'absolute',
+            inset: '0px',
+            width: '100%',
+            height: '100%',
+            'object-fit': 'cover',
+            transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)',
+          },
+        },
+        {
+          type: 'box',
+          when: [{ test: 'card.backdrop', not: true }],
+          style: {
+            position: 'absolute',
+            inset: '0px',
+            display: 'flex',
+            'align-items': 'center',
+            'justify-content': 'center',
+            'background-image': 'linear-gradient(160deg, #2a2622 0%, #121418 100%)',
+          },
+          children: [
+            {
+              type: 'text',
+              text: '{card.episodeNumberLabel}',
+              style: { ...display, 'font-size': '34px', color: '$ui.inkSecondary' },
+              small: { 'font-size': '26px' },
+            },
+          ],
+        },
+        {
+          type: 'box',
+          style: {
+            position: 'absolute',
+            inset: '0px',
+            display: 'flex',
+            'align-items': 'center',
+            'justify-content': 'center',
+            'background-color': '#090b0e30',
+            opacity: '0',
+            transition: 'opacity 360ms cubic-bezier(0.16, 1, 0.3, 1)',
+          },
+          groupHover: { opacity: '1' },
+          children: [
+            {
+              type: 'box',
+              style: {
+                width: '44px',
+                height: '44px',
+                'border-radius': '22px',
+                display: 'flex',
+                'align-items': 'center',
+                'justify-content': 'center',
+                'background-color': '$ui.glass',
+                'backdrop-filter': 'blur(10px)',
+                border: '1px solid $ui.glassEdgeStrong',
+              },
+              children: [
+                {
+                  type: 'icon',
+                  symbol: 'play-fill',
+                  style: { width: '16px', height: '16px', color: '$ui.ink' },
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: 'box',
+          when: [{ test: 'card.hasProgress' }],
+          style: {
+            position: 'absolute',
+            left: '8px',
+            right: '8px',
+            bottom: '8px',
+            height: '3px',
+            'border-radius': '2px',
+            'background-color': '$ui.trackStrong',
+            'overflow-x': 'hidden',
+            'overflow-y': 'hidden',
+          },
+          children: [
+            {
+              type: 'box',
+              style: { height: '3px', width: '{card.progressPct}%', 'background-color': '$ui.accent' },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'box',
+      style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-width': '0px', gap: '6px' },
+      children: [
+        {
+          type: 'text',
+          text: '{episode.numberTitle}',
+          role: 'heading',
+          level: 3,
+          style: { 'font-size': '18px', 'font-weight': '600', 'line-clamp': '2' },
+          small: { 'font-size': '15px' },
+        },
+        {
+          type: 'text',
+          text: '{card.facts}',
+          style: { color: '$ui.inkQuiet', 'font-size': '12px', 'font-variant-numeric': 'tabular-nums' },
+        },
+        {
+          type: 'text',
+          when: [{ test: 'card.summary' }, { test: 'env.small', not: true }],
+          text: '{card.summary}',
+          style: {
+            color: '$ui.inkSecondary',
+            'font-size': '14px',
+            'line-clamp': '2',
+            'line-height': '1.55',
+            'max-width': '46rem',
+          },
+        },
+      ],
+    },
+    {
+      type: 'box',
+      when: [{ test: 'env.small', not: true }],
+      press: { action: 'play', arg: '{card.id}' },
+      label: '{episode.playLabel}',
+      style: {
+        position: 'relative',
+        width: '44px',
+        height: '44px',
+        'box-sizing': 'border-box',
+        padding: '13px',
+        'flex-shrink': '0',
+        'border-radius': '$ui.radiusControl',
+        border: '1px solid $ui.glassEdge',
+        'background-color': '$ui.control',
+        'backdrop-filter': 'blur(20px) saturate(1.3)',
+      },
+      hover: { 'background-color': '$ui.controlHover' },
+      focus: { 'box-shadow': focusRing },
+      children: [{ type: 'icon', symbol: 'play-fill', style: { width: '16px', height: '16px' } }],
+    },
+  ],
+};
+
+// The next episode to watch, as a glass card above the list.
+export const upNext: Node = {
+  type: 'repeat',
+  over: 'detail.upNext',
+  item: {
+    type: 'box',
+    style: {
+      display: 'flex',
+      'flex-direction': 'row',
+      'align-items': 'center',
+      gap: '24px',
+      padding: '20px',
+      'border-radius': '20px',
+      'background-color': '$ui.glass',
+      border: '1px solid $ui.glassEdge',
+      'box-shadow': 'inset 0px 1px 0px #ffffff2e, 0px 24px 60px -20px #00000088',
+    },
+    small: { 'flex-direction': 'column', 'align-items': 'stretch', gap: '16px', padding: '16px' },
+    children: [
+      {
+        type: 'image',
+        when: [{ test: 'card.backdrop' }],
+        src: '{card.backdrop}',
+        alt: '',
+        style: {
+          width: '220px',
+          'aspect-ratio': '16 / 9',
+          'object-fit': 'cover',
+          'border-radius': '12px',
+          'flex-shrink': '0',
+        },
+        small: { width: '100%' },
+      },
+      {
+        type: 'box',
+        style: { display: 'flex', 'flex-direction': 'column', gap: '8px', flex: '1', 'min-width': '0px' },
+        children: [
+          {
+            type: 'text',
+            text: '{episode.upNextLabel}',
+            style: { ...eyebrow, 'font-size': '10px', color: '$ui.accent' },
+          },
+          {
+            type: 'text',
+            text: '{episode.numberTitle}',
+            role: 'heading',
+            level: 3,
+            style: { ...display, 'font-size': '30px' },
+            small: { 'font-size': '24px' },
+          },
+          {
+            type: 'text',
+            when: [{ test: 'card.facts' }],
+            text: '{card.facts}',
+            style: { 'font-size': '13px', color: '$ui.inkSecondary' },
+          },
+        ],
+      },
+      {
+        type: 'box',
+        press: { action: 'play', arg: '{card.id}' },
+        label: '{episode.playLabel}',
+        style: {
+          position: 'relative',
+          display: 'flex',
+          'flex-direction': 'row',
+          'align-items': 'center',
+          'justify-content': 'center',
+          'align-self': 'center',
+          height: '50px',
+          'box-sizing': 'border-box',
+          'padding-left': '22px',
+          'padding-right': '26px',
+          'flex-shrink': '0',
+          'border-radius': '$ui.radiusControl',
+          'background-color': '$ui.ink',
+          color: '$ui.inkInverse',
+          'font-weight': '650',
+          transition: 'background-color 180ms linear',
+        },
+        small: { 'align-self': 'stretch' },
+        hover: { 'background-color': '#ffffff' },
+        focus: { 'box-shadow': focusRing },
+        children: [
+          {
+            type: 'box',
+            style: {
+              display: 'flex',
+              'flex-direction': 'row',
+              gap: '10px',
+              'align-items': 'center',
+              'justify-content': 'center',
+            },
+            children: [
+              { type: 'icon', symbol: 'play-fill', style: { width: '16px', height: '16px' } },
+              { type: 'text', text: '{episode.playLabel}', style: { 'font-size': '15px' } },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export const seasonTab = (on: boolean): Node => ({
+  type: 'box',
+  when: [{ test: 'season.on', not: !on }],
+  press: { action: 'select', arg: '{season.pick}' },
+  label: '{card.name}',
+  style: {
+    position: 'relative',
+    display: 'flex',
+    'flex-direction': 'row',
+    'align-items': 'center',
+    height: '40px',
+    padding: '0px 18px',
+    'box-sizing': 'content-box',
+    border: '1px solid $ui.glassEdge',
+    'border-radius': '$ui.radiusControl',
+    'font-weight': '600',
+    'flex-shrink': '0',
+    'background-color': on ? '$ui.ink' : '$ui.control',
+    color: on ? '$ui.inkInverse' : '$ui.ink',
+    transition: 'background-color 180ms linear, color 180ms linear',
+  },
+  hover: { 'border-color': '$ui.glassEdgeStrong' },
+  focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
+  children: [{ type: 'text', text: '{card.name}', style: { 'font-size': '14px' } }],
+});
+
+export const episodes: Node = {
+  type: 'box',
+  when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'detail.hasEpisodes' }],
+  motion: enter(480),
+  style: { display: 'flex', 'flex-direction': 'column', gap: '24px', ...side },
+  small: { gap: '18px', ...sideSmall },
+  children: [
+    {
+      type: 'box',
+      style: {
+        display: 'flex',
+        'flex-direction': 'row',
+        'align-items': 'flex-end',
+        'justify-content': 'space-between',
+        'flex-wrap': 'wrap',
+        gap: '16px',
+      },
+      children: [
+        {
+          type: 'text',
+          text: '{t:ui.episodes}',
+          role: 'heading',
+          level: 2,
+          style: { ...display, 'font-size': '38px' },
+          small: { 'font-size': '30px' },
+        },
+      ],
+    },
+    // The season tabs: a sticky glass bar that scrolls sideways.
+    {
+      type: 'box',
+      when: [{ test: 'detail.hasSeasons' }],
+      role: 'group',
+      label: '{t:ui.season}',
+      testId: 'season-picker',
+      style: {
+        position: 'sticky',
+        top: '0px',
+        'z-index': '4',
+        display: 'flex',
+        'flex-direction': 'row',
+        gap: '8px',
+        'overflow-x': 'auto',
+        'overflow-y': 'hidden',
+        'scrollbar-width': 'none',
+        'margin-left': '-12px',
+        'margin-right': '-12px',
+        'padding-left': '12px',
+        'padding-right': '12px',
+        'padding-top': '10px',
+        'padding-bottom': '10px',
+        'border-radius': '16px',
+        'background-color': '#090b0ed1',
+        'backdrop-filter': 'blur(20px) saturate(1.3)',
+      },
+      small: {
+        'margin-left': '-20px',
+        'margin-right': '-20px',
+        'padding-left': '20px',
+        'padding-right': '20px',
+        'border-radius': '0px',
+      },
+      children: [
+        {
+          type: 'repeat',
+          over: 'detail.seasons',
+          item: {
+            type: 'box',
+            style: { display: 'flex', 'flex-shrink': '0' },
+            children: [seasonTab(true), seasonTab(false)],
+          },
+        },
+      ],
+    },
+    upNext,
+    // The episodes sit flush (each row draws its own padding and rule).
+    {
+      type: 'box',
+      style: { display: 'flex', 'flex-direction': 'column' },
+      children: [{ type: 'repeat', over: 'detail.episodes', item: episodeRow }],
+    },
+  ],
+};
+
+// An extra (trailer, featurette): a glass tile that plays, or says it is unavailable.
+export const extraTile = (ready: boolean): Node =>
+  ({
+    type: 'box',
+    ...(ready ? { active: { scale: '0.97' } } : {}),
+    when: [{ test: 'extra.ready', not: !ready }],
+    ...(ready ? { press: { action: 'playExtra', arg: '{extra.id}' } } : {}),
+    label: '{extra.name}',
+    style: {
+      ...ghost,
+      position: 'relative',
+      'border-radius': '16px',
+      width: '280px',
+      height: '110px',
+      padding: '18px',
+      'box-sizing': 'content-box',
+      'flex-shrink': '0',
+      ...(ready ? {} : { opacity: '0.42' }),
+    },
+    small: { width: '220px', height: '96px' },
+    ...(ready
+      ? {
+          hover: { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
+          focus: { 'box-shadow': focusRing },
+        }
+      : {}),
+    children: [
+      {
+        type: 'box',
+        style: {
+          display: 'flex',
+          'flex-direction': 'row',
+          gap: '14px',
+          'align-items': 'center',
+          height: '100%',
+        },
+        children: [
+          {
+            type: 'box',
+            style: {
+              width: '40px',
+              height: '40px',
+              'border-radius': '20px',
+              display: 'flex',
+              'align-items': 'center',
+              'justify-content': 'center',
+              'background-color': ready ? '$ui.ink' : '$ui.control',
+              'flex-shrink': '0',
+            },
+            children: [
+              {
+                type: 'icon',
+                symbol: ready ? 'play-fill' : 'lock',
+                style: { width: '14px', height: '14px', color: ready ? '$ui.inkInverse' : '$ui.inkQuiet' },
+              },
+            ],
+          },
+          {
+            type: 'box',
+            style: {
+              display: 'flex',
+              'flex-direction': 'column',
+              gap: '4px',
+              flex: '1',
+              'min-width': '0px',
+              'text-align': 'left',
+            },
+            children: [
+              {
+                type: 'text',
+                text: '{extra.name}',
+                style: { 'font-size': '15px', 'font-weight': '600', 'line-clamp': '2' },
+              },
+              ...(ready
+                ? []
+                : [
+                    {
+                      type: 'text',
+                      text: '{t:ui.notAvailableYet}',
+                      style: { 'font-size': '12px', color: '$ui.inkQuiet' },
+                    } as Node,
+                  ]),
+            ],
+          },
+        ],
+      },
+    ],
+  }) as Node;
+export const extras: Node = {
+  type: 'box',
+  when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'detail.hasExtras' }],
+  motion: enter(520),
+  style: { display: 'flex', 'flex-direction': 'column', gap: '16px' },
+  children: [
+    {
+      ...sectionHeading('extras'),
+      style: { ...display, 'font-size': '34px', ...side },
+      small: { 'font-size': '28px', ...sideSmall },
+    } as Node,
+    {
+      type: 'box',
+      style: {
+        display: 'flex',
+        'flex-direction': 'row',
+        gap: '14px',
+        'overflow-x': 'auto',
+        'overflow-y': 'hidden',
+        'scrollbar-width': 'none',
+        ...side,
+        'padding-top': '4px',
+        'padding-bottom': '8px',
+      },
+      small: { ...sideSmall },
+      children: [
+        {
+          type: 'repeat',
+          over: 'detail.extras',
+          item: {
+            type: 'box',
+            style: { display: 'flex', 'flex-shrink': '0' },
+            children: [extraTile(true), extraTile(false)],
+          },
+        },
+      ],
+    },
+  ],
+};
+
+// The cast: round portraits (or initials) with names and roles.
+export const cast: Node = {
+  type: 'box',
+  when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'detail.hasCast' }],
+  motion: enter(560),
+  style: { display: 'flex', 'flex-direction': 'column', gap: '16px' },
+  children: [
+    {
+      type: 'box',
+      style: {
+        display: 'flex',
+        'flex-direction': 'row',
+        'align-items': 'center',
+        'justify-content': 'space-between',
+        ...side,
+      },
+      small: { ...sideSmall },
+      children: [sectionHeading('featuring')],
+    },
+    {
+      type: 'box',
+      style: {
+        display: 'flex',
+        'flex-direction': 'row',
+        gap: '20px',
+        'overflow-x': 'auto',
+        'overflow-y': 'hidden',
+        'scrollbar-width': 'none',
+        'mask-image': 'linear-gradient(90deg, black 0%, black 94%, transparent 100%)',
+        ...side,
+        'padding-top': '4px',
+        'padding-bottom': '8px',
+      },
+      small: { gap: '14px', ...sideSmall },
+      children: [
+        {
+          type: 'repeat',
+          over: 'detail.cast',
+          item: {
+            type: 'box',
+            style: {
+              display: 'flex',
+              'flex-direction': 'column',
+              width: '112px',
+              'flex-shrink': '0',
+              gap: '8px',
+              'align-items': 'center',
+              'text-align': 'center',
+            },
+            small: { width: '84px' },
+            children: [
+              {
+                type: 'box',
+                style: {
+                  position: 'relative',
+                  display: 'flex',
+                  'align-items': 'center',
+                  'justify-content': 'center',
+                  width: '100px',
+                  height: '100px',
+                  'border-radius': '$ui.radiusControl',
+                  'overflow-x': 'hidden',
+                  'overflow-y': 'hidden',
+                  'background-image': 'linear-gradient(135deg, #2a2622 0%, #121418 100%)',
+                  'box-shadow': '0px 0px 0px 1px #ffffff2e, 0px 12px 28px -14px #00000088',
+                },
+                small: { width: '76px', height: '76px' },
+                children: [
+                  {
+                    type: 'image',
+                    when: [{ test: 'person.portrait' }],
+                    src: '{person.portrait}',
+                    alt: '',
+                    fade: true,
+                    style: {
+                      position: 'absolute',
+                      inset: '0px',
+                      width: '100%',
+                      height: '100%',
+                      'object-fit': 'cover',
+                      transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)',
+                    },
+                  },
+                  {
+                    type: 'text',
+                    when: [{ test: 'person.portrait', not: true }],
+                    text: '{person.initials}',
+                    style: { ...display, 'font-size': '36px', color: '$ui.inkSecondary' },
+                    small: { 'font-size': '28px' },
+                  },
+                ],
+              },
+              {
+                type: 'text',
+                text: '{person.name}',
+                style: { 'font-size': '13px', 'font-weight': '600', 'line-clamp': '2', color: '$ui.ink' },
+              },
+              {
+                type: 'text',
+                when: [{ test: 'person.role' }],
+                text: '{person.role}',
+                style: { 'font-size': '12px', color: '$ui.inkQuiet', 'line-clamp': '2' },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ],
+};
+
+export const crew: Node = {
+  type: 'box',
+  when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'detail.crewLine' }],
+  motion: enter(580),
+  style: { display: 'flex', 'flex-direction': 'column', gap: '12px', ...side },
+  small: { ...sideSmall },
+  children: [
+    sectionHeading('behindTheStory'),
+    {
+      type: 'text',
+      text: '{detail.crewLine}',
+      style: { 'font-size': '15px', color: '$ui.inkSecondary', 'line-height': '1.7', 'max-width': '48rem' },
+    },
+  ],
+};
+
+export const related: Node = {
+  type: 'repeat',
+  over: 'detail.related',
+  when: [{ test: 'env.load', is: 'eq', value: 'ready' }],
+  item: { type: 'use', template: 'velaRelatedRow', motion: enter(600) },
+};
+
+export const detailSections: Node[] = [band, episodes, extras, cast, crew, related];
+
+export const titleLoading: Node = {
+  type: 'box',
+  when: [is('env.load', 'loading')],
+  role: 'status',
+  label: '{t:ui.openingTitle}',
+  motion: 'velaStatusOpen',
+  style: {
+    display: 'flex',
+    'flex-direction': 'column',
+    gap: '18px',
+    ...side,
+    'padding-top': '300px',
+    'padding-bottom': '48px',
+    'background-image': 'radial-gradient(ellipse 90% 60% at 30% 20%, $ui.skeleton 0%, #090b0e00 70%)',
+  } as Style,
+  small: { ...sideSmall, 'padding-top': '260px' } as Style,
+  children: [
+    bone('90px', '10px', 4),
+    bone('min(620px, 60%)', '72px', 10, { width: '85%', height: '44px' }),
+    bone('260px', '14px', 4),
+    bone('min(560px, 55%)', '52px', 8, { width: '100%' }),
+    bone('170px', '56px', 28),
+  ],
+};
+// The page frame; the scrim, blur and dissolve behind it are the route column's (the foundation's).
+export const title: Node = {
+  type: 'box',
+  style: {
+    position: 'absolute',
+    inset: '0px',
+    display: 'flex',
+    'flex-direction': 'column',
+    padding: '4vh 4vw',
+    'box-sizing': 'border-box',
+  },
+  small: { padding: '0px' },
+  children: [
+    {
+      type: 'box',
+      motion: 'velaOpen',
+      style: {
+        position: 'relative',
+        display: 'flex',
+        'flex-direction': 'column',
+        flex: '1',
+        'min-height': '0px',
+        'overflow-x': 'hidden',
+        'overflow-y': 'hidden',
+        'border-radius': '$ui.radiusPanel',
+        'background-color': '$ui.page',
+        'box-shadow': '0px 50px 160px #000000, 0px 0px 0px 1px $ui.glassEdge',
+      },
+      small: { 'border-radius': '0px' },
+      children: [
+        {
+          type: 'box',
+          press: { action: 'back' },
+          label: '{t:ui.close}',
+          testId: 'detail-close',
+          style: {
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            'z-index': '10',
+            width: '44px',
+            height: '44px',
+            'box-sizing': 'border-box',
+            padding: '13px',
+            'border-radius': '22px',
+            border: '1px solid #ffffff24',
+            'background-color': '#1b2028dd',
+            'backdrop-filter': 'blur(20px) saturate(1.3)',
+          },
+          children: [{ type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } }],
+        },
+        {
+          type: 'box',
+          id: '{env.route}-scroll-{env.entry}',
+          role: 'region',
+          style: {
+            flex: '1',
+            'min-height': '0px',
+            'overflow-y': 'auto',
+            'overflow-x': 'hidden',
+            display: 'flex',
+            'flex-direction': 'column',
+            gap: '52px',
+            'padding-bottom': '72px',
+          },
+          small: { gap: '36px' },
+          children: [
+            titleLoading,
+            failure('{t:ui.thisTitleCouldnTBeOpenedItMayNoLongerBeAvailable}'),
+            ...detailSections,
+          ],
+        },
+      ],
+    },
+  ],
+};
