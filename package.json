@@ -2,7 +2,7 @@
   "name": "vela-workspace",
   "private": true,
   "workspaces": [
-    "apps/*",
+    "apps/vela",
     "packages/*",
     "modules/*"
   ],

@@ -1,0 +1,44 @@
+{
+  "name": "vela-desktop",
+  "productName": "Vela",
+  "version": "0.2.7",
+  "description": "Vela for macOS and Linux: a cinematic client for Ether, Jellyfin, Emby and Plex.",
+  "homepage": "https://github.com/braedonsaunders/vela",
+  "author": "Braedon Saunders",
+  "license": "GPL-3.0-only",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.3.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "app.ether.vela.desktop",
+    "productName": "Vela",
+    "copyright": "Braedon Saunders. GPL-3.0.",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "package.json", "build/icon.png"],
+    "extraResources": [{ "from": "${env.VELA_UI}", "to": "ui" }],
+    "artifactName": "Vela-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }, { "target": "zip", "arch": ["arm64", "x64"] }],
+      "darkModeSupport": true,
+      "hardenedRuntime": false,
+      "identity": null
+    },
+    "dmg": { "title": "Vela ${version}" },
+    "linux": {
+      "category": "AudioVideo;Video;Player",
+      "target": [{ "target": "AppImage", "arch": ["x64"] }, { "target": "deb", "arch": ["x64"] }],
+      "maintainer": "Braedon Saunders",
+      "synopsis": "A cinematic client for Ether, Jellyfin, Emby and Plex",
+      "executableName": "vela"
+    }
+  }
+}
