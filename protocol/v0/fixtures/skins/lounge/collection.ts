@@ -131,10 +131,19 @@ export const collection: Node = {
               over: 'collection.items',
               item: { type: 'use', template: 'gridPoster', motion: 'cardIn', stagger: { step: 30, cap: 12 } },
             },
+          ],
+        },
+        // After the grid, across its width: the next page's sentinel, its loading line, the empty state.
+        {
+          type: 'box',
+          when: [{ test: 'env.load', is: 'eq', value: 'ready' }],
+          style: { display: 'flex', 'flex-direction': 'column', gap: '12px', 'padding-top': '12px', ...gutter },
+          small: { ...gutterSmall },
+          children: [
             {
               type: 'box',
               when: [{ test: 'collection.more' }],
-              style: { position: 'relative', 'grid-column': '1 / -1', height: '2px' },
+              style: { position: 'relative', height: '2px' },
               children: [{ type: 'widget', widget: 'sentinel', params: { on: 'collection' } }],
             },
             {
@@ -143,14 +152,14 @@ export const collection: Node = {
               text: '{s:loadingMore}',
               role: 'status',
               motion: 'pulse',
-              style: { 'grid-column': '1 / -1', 'font-size': 'clamp(15px, 1.1vw, 21px)', color: '$ink-quiet' },
+              style: { 'font-size': 'clamp(15px, 1.1vw, 21px)', color: '$ink-quiet' },
             },
             {
               type: 'text',
               when: [{ test: 'collection.itemCount', is: 'eq', value: '0' }, { test: 'collection.complete' }],
               text: '{s:collectionEmpty}',
               role: 'status',
-              style: { 'grid-column': '1 / -1', 'font-size': 'clamp(20px, 1.6vw, 32px)', 'font-weight': '700' },
+              style: { 'font-size': 'clamp(20px, 1.6vw, 32px)', 'font-weight': '700' },
             },
           ],
         },
