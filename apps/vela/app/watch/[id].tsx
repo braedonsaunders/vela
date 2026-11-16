@@ -25,7 +25,11 @@ function heading(detail: DetailModel | undefined): string {
   const title = detail?.title[0];
   if (!title) return msg('ui.nowPlaying');
   if (title.kind === 'episode' && title.seasonNumber > 0 && title.episodeNumber > 0) {
-    return msg('ui.sSeasonEEpisodeTitle', { season: title.seasonNumberLabel, episode: title.episodeNumberLabel, title: title.name });
+    return msg('ui.sSeasonEEpisodeTitle', {
+      season: title.seasonNumberLabel,
+      episode: title.episodeNumberLabel,
+      title: title.name,
+    });
   }
   return title.name;
 }

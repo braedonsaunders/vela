@@ -5,7 +5,12 @@
 import { createContext, useContext } from 'react';
 import { msg } from '@vela/core';
 import type { PlaybackPlan, PlayerObservation, SessionCommand } from '@vela/player-api';
-import type { ClientCapabilities, PlaybackPreparing, PlaybackRequest, SessionSnapshot } from '../../../../../protocol/v0/types';
+import type {
+  ClientCapabilities,
+  PlaybackPreparing,
+  PlaybackRequest,
+  SessionSnapshot,
+} from '../../../../../protocol/v0/types';
 import type { PlaybackController, StartOutcome } from './session';
 
 /** The server side, as core's adapters offer it (`command` is core's sendCommand bound to the adapter). */
@@ -21,7 +26,11 @@ const key = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice
 /** A server refusal carries the v0 error (core's VelaError.detail); anything else is said plainly. */
 function refusal(error: unknown): StartOutcome {
   const detail = (error as { detail?: { class?: string; message?: string } } | null)?.detail;
-  return { kind: 'refused', capacity: detail?.class === 'capacity', message: detail?.message ?? msg('ui.playbackCouldnTBeStarted') };
+  return {
+    kind: 'refused',
+    capacity: detail?.class === 'capacity',
+    message: detail?.message ?? msg('ui.playbackCouldnTBeStarted'),
+  };
 }
 
 /** `client` is what this device's player plays, as negotiated with the server. */

@@ -35,13 +35,35 @@ export function Status({ look, failed, waiting, waitingLabel, onRetry, onClose }
   );
 }
 
-function FailureCard({ look, failed, onRetry, onClose }: { look: PlayerLook; failed: Failed; onRetry(): void; onClose(): void }) {
+function FailureCard({
+  look,
+  failed,
+  onRetry,
+  onClose,
+}: {
+  look: PlayerLook;
+  failed: Failed;
+  onRetry(): void;
+  onClose(): void;
+}) {
   return (
-    <View accessibilityRole="alert" testID="player-status"
-      style={{ alignItems: 'center', gap: look.size(14), marginHorizontal: 16, maxWidth: look.size(440),
-        paddingVertical: look.size(look.small ? 26 : 34), paddingHorizontal: look.size(look.small ? 22 : 40),
-        borderRadius: Math.min(look.radiusPanel, look.size(24)), borderWidth: 1, borderColor: look.glassEdge,
-        overflow: 'hidden', boxShadow: `0px 30px 90px ${look.shadow}` }}>
+    <View
+      accessibilityRole="alert"
+      testID="player-status"
+      style={{
+        alignItems: 'center',
+        gap: look.size(14),
+        marginHorizontal: 16,
+        maxWidth: look.size(440),
+        paddingVertical: look.size(look.small ? 26 : 34),
+        paddingHorizontal: look.size(look.small ? 22 : 40),
+        borderRadius: Math.min(look.radiusPanel, look.size(24)),
+        borderWidth: 1,
+        borderColor: look.glassEdge,
+        overflow: 'hidden',
+        boxShadow: `0px 30px 90px ${look.shadow}`,
+      }}
+    >
       <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: look.glass }]} />
       <PlayerIcon name="alert" size={look.size(26)} color={look.accent} />
@@ -51,7 +73,15 @@ function FailureCard({ look, failed, onRetry, onClose }: { look: PlayerLook; fai
           {failed.message}
         </Text>
       ) : null}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: look.size(10), marginTop: look.size(6) }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          gap: look.size(10),
+          marginTop: look.size(6),
+        }}
+      >
         <Pill look={look} label={msg('ui.tryAgain')} primary preferred onPress={onRetry} testID="player-retry" />
         <Pill look={look} label={msg('ui.closePlayer')} onPress={onClose} testID="player-failure-close" />
       </View>
@@ -73,15 +103,32 @@ function Pill({ look, label, primary, preferred, onPress, testID }: PillProps) {
   const [focus, setFocus] = useState(false);
   const filled = primary || (look.tv && focus);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} hasTVPreferredFocus={preferred} testID={testID}
-      onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)}
-      onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-      style={{ height: look.size(44), paddingHorizontal: look.size(24), justifyContent: 'center',
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hasTVPreferredFocus={preferred}
+      testID={testID}
+      onPress={onPress}
+      onHoverIn={() => setHover(true)}
+      onHoverOut={() => setHover(false)}
+      onFocus={() => setFocus(true)}
+      onBlur={() => setFocus(false)}
+      style={{
+        height: look.size(44),
+        paddingHorizontal: look.size(24),
+        justifyContent: 'center',
         borderRadius: look.radiusControl >= look.size(22) ? look.size(22) : look.radiusControl,
         backgroundColor: filled ? look.ink : hover ? look.controlHover : look.control,
-        borderWidth: filled ? 0 : 1, borderColor: look.glassEdgeStrong, opacity: hover && filled ? 0.9 : 1,
-        outlineColor: look.accent, outlineStyle: 'solid', outlineWidth: focus && !look.tv ? 2 : 0, outlineOffset: 2,
-        transform: [{ scale: look.tv && focus && !look.still ? 1.06 : 1 }] }}>
+        borderWidth: filled ? 0 : 1,
+        borderColor: look.glassEdgeStrong,
+        opacity: hover && filled ? 0.9 : 1,
+        outlineColor: look.accent,
+        outlineStyle: 'solid',
+        outlineWidth: focus && !look.tv ? 2 : 0,
+        outlineOffset: 2,
+        transform: [{ scale: look.tv && focus && !look.still ? 1.06 : 1 }],
+      }}
+    >
       <Text style={look.text(14, 600, filled ? look.inkInverse : look.ink)}>{label}</Text>
     </Pressable>
   );

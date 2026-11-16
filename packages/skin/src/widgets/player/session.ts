@@ -3,7 +3,15 @@
 // commands and refreshes the engine asks for with newer plans, and stop the session on the way
 // out. The controller owns the server and the credentials; this owns the order of things.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Command, Failure, PlaybackPlan, PlayerObservation, SessionCommand, Snapshot, VelaPlayerProps } from '@vela/player-api';
+import type {
+  Command,
+  Failure,
+  PlaybackPlan,
+  PlayerObservation,
+  SessionCommand,
+  Snapshot,
+  VelaPlayerProps,
+} from '@vela/player-api';
 import { msg } from '@vela/core';
 import type { CommandInput, PlayerChromeState, StartFailure } from './context';
 
@@ -76,14 +84,17 @@ export function usePlaybackSession(controller: PlaybackController, titleId: stri
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const ask = () => {
-      controller.start(titleId).then(outcome => {
-        if (!live) return;
-        if (outcome.kind === 'plan') adopt(outcome.plan);
-        else if (outcome.kind === 'preparing') timer = setTimeout(ask, Math.max(1, outcome.retryAfterSeconds) * 1000);
-        else setStartFailure({ capacity: outcome.capacity, message: outcome.message });
-      }, error => {
-        if (live) setStartFailure({ capacity: false, message: words(error) });
-      });
+      controller.start(titleId).then(
+        outcome => {
+          if (!live) return;
+          if (outcome.kind === 'plan') adopt(outcome.plan);
+          else if (outcome.kind === 'preparing') timer = setTimeout(ask, Math.max(1, outcome.retryAfterSeconds) * 1000);
+          else setStartFailure({ capacity: outcome.capacity, message: outcome.message });
+        },
+        error => {
+          if (live) setStartFailure({ capacity: false, message: words(error) });
+        },
+      );
     };
     setPlan(null);
     setSnapshot(null);
@@ -135,12 +146,14 @@ export function usePlaybackSession(controller: PlaybackController, titleId: stri
       if (!event.ok && event.failure) setActionError(event.failure.message);
     },
     onObservation: event => {
-      if (held.current?.sessionId === event.sessionId) controller.observe(event.sessionId, event.observation).catch(() => undefined);
+      if (held.current?.sessionId === event.sessionId)
+        controller.observe(event.sessionId, event.observation).catch(() => undefined);
     },
     onSessionCommand: event => {
       const current = held.current;
       if (!current || current.sessionId !== event.sessionId) return;
-      controller.command(current, { ...event.command, idempotencyKey: event.command.idempotencyKey || key() })
+      controller
+        .command(current, { ...event.command, idempotencyKey: event.command.idempotencyKey || key() })
         .then(adopt, error => setActionError(words(error)));
     },
     onSessionRefresh: event => {
