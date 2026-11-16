@@ -3,7 +3,7 @@
 // takes the node's inherited rows; the quiet lines and the check take the document's `ui` inks.
 import { useState } from 'react';
 import { View } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { eyebrow } from '../../../../../client/src/skin/vela-base/look';
 import { useInheritedText, type WidgetProps } from '../../host';
 import { serverDetail } from './connect/server-row';

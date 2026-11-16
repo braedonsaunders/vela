@@ -2,7 +2,7 @@
 // account's servers to choose from, the recommended one marked. Only the chosen server's own
 // token is kept (the session store's concern); this view only starts, chooses and cancels.
 import { Linking, Platform, View } from 'react-native';
-import { msg } from '../../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { APressable, Alert, CodeTiles, Label, NO_RING, overlaid, Pill, useInteraction, Waiting, Words } from '../../common/controls';
 import { useLook } from '../../common/look';
 import type { PlexChoice, PlexLink } from './model';

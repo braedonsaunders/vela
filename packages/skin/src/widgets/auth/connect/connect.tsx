@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { msg } from '../../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { Alert, Heading, Pill } from '../../common/controls';
 import { useLook } from '../../common/look';
 import { AddressStep, foundName } from './address';

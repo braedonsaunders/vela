@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { msg } from '../../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { display, eyebrow } from '../../../../../../client/src/skin/vela-base/look';
 import { Alert, Field, Heading, Label, Pill, Waiting, Words } from '../../common/controls';
 import { useLook } from '../../common/look';

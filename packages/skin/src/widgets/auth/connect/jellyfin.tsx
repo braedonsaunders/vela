@@ -2,7 +2,7 @@
 // Connect code approved in the server's own dashboard (one tile per character).
 import { useState } from 'react';
 import { View } from 'react-native';
-import { msg } from '../../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { Alert, CodeTiles, Field, Pill, Waiting } from '../../common/controls';
 import type { QuickCode } from './model';
 

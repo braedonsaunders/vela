@@ -1,7 +1,7 @@
 // One of your servers on Connect: its name, kind and state; choosing it switches to it, and a
 // server other than the current one can be removed.
 import { View } from 'react-native';
-import { msg } from '../../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { APressable, Glyph, NO_RING, overlaid, useInteraction, Words } from '../../common/controls';
 import { useLook } from '../../common/look';
 import type { ServerOption } from './model';
