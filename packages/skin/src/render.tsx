@@ -18,7 +18,6 @@ import { EscapeScope, focusElement, focusTarget, noteOpener, type Focusable } fr
 import { SYMBOLS } from './icons';
 import { WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
-import { drawing } from './diagnostics';
 import { animation } from './motion';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
@@ -204,7 +203,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const translated = translatedBox(own, viewport, text.fontSize);
   const fx = translated.fx;
   const style = shrinkFor(translated.style, own, parentDirection) as typeof translated.style;
-  const motion = drawing('motion') ? animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger) : undefined;
+  const motion = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger);
   const rowId = ctx.row?.id ?? '';
 
   const report = useCallback((kind: 'hover' | 'focus', on: boolean) => {
@@ -257,7 +256,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   // so the mask is as large as the box's content. It renders the box offscreen at full size, which
   // a TV cannot afford across a home of masked rows (Basement was killed at 1.6 GB): on TV other
   // masks are left out and the box draws with hard edges.
-  const masked = !filled && !Platform.isTV && drawing('mask') && !!(fx.mask || fx.radialMask);
+  const masked = !filled && !Platform.isTV && !!(fx.mask || fx.radialMask);
   const [geometry, inner] = masked ? partition(drawn, GEOMETRY) : [{}, drawn];
   const boxStyleFinal = masked ? { ...inner, flexGrow: 1 } : drawn;
   const a11y = a11yProps(node, ctx, env);
@@ -436,7 +435,7 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const text = inheritFrom(parentText, inherited, viewport);
   const parentDirection = useContext(Direction);
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
-  const motion = drawing('motion') ? animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger) : undefined;
+  const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger);
   return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion } as Record<string, unknown>, fx };
 }
 
@@ -473,12 +472,12 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
   // The box carries the node's style and motion; the image fills it.
   return (
     <AView style={style as ViewStyle} pointerEvents="none" accessible={!!alt} accessibilityLabel={alt || undefined} accessibilityRole={alt ? 'image' : undefined}>
-      {source && drawing('images') ? (
+      {source ? (
         <Image
           source={source}
           style={StyleSheet.absoluteFill}
           contentFit={fx.contentFit ?? 'fill'}
-          blurRadius={drawing('image-blur') ? fx.imageBlur : undefined}
+          blurRadius={fx.imageBlur}
           transition={node.fade ? 420 : 0}
         />
       ) : null}
