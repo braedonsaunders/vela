@@ -312,10 +312,54 @@ and PGS subtitle switching (rendered by mpv into the picture), snapshots and obs
   Output channels follow the session (`audio-channels=auto-safe` when the output takes more than two).
 - **Ending a session.** mpv raises `eof-reached` for a moment while it switches tracks on a network stream.
   Ether ends a session on an `ended` observation and its media URL then answers 404, so the view reports
-  `ended` only at the file's end. The contract has no session commands: seeks are local (observations carry
-  the position) and the host stops the server session itself.
-- **Redirects** (open question above): not exercised; Ether's broker URLs need no headers.
+  `ended` only at the file's end.
+- **Redirects**: answered below ("Media credentials and redirects").
 - **Client build.** The lab Ether admits client builds below 0.2.0; the app is 0.2.0, so the spike reported 0.1.43.
+
+#### Session commands (agreed with the migration lead, 2026-11-16)
+
+- **Seek.** On an original file (direct play) the view seeks locally and emits nothing; observations carry the
+  position. On a server path (Ether's HLS) it emits `onSessionCommand` `{kind: 'seek'}` and moves only when the
+  plan with the next `seekGeneration` arrives (the web engine's server-controlled behaviour).
+- **Tracks.** An audio or subtitle track the playing file carries switches locally and is reported client-only
+  (`audioClientOnly`/`subtitleClientOnly`, so observations leave it out). Any other track change emits
+  `{kind: 'tracks'}` and is applied from the answering plan. `quality`/`switchPath` emit `{kind: 'switch'}`.
+- **Stop.** The view never emits it. The playback controller (`playbackController` in packages/skin) sends
+  `{kind: 'stop'}` through core when it closes the player; unmounting the view only releases mpv.
+- **Refresh.** `onSessionRefresh` once per source when a media request is refused with 401, 403, 404 or 410
+  (an expired or revoked grant, read from FFmpeg's log), or when a command reply is stale.
+
+#### Media credentials and redirects (proven 2026-11-16)
+
+Stock FFmpeg, and so stock mpv, sends `http-header-fields` to wherever a redirect points: `ffprobe -headers
+'Authorization: …'` against a local origin A that answers 302 to origin B delivered the credential to B.
+The Apple view therefore never lets FFmpeg follow a redirect with credentials attached
+(`ios/MediaRedirects.swift`):
+
+1. A URL whose media access gives it headers is resolved first, hop by hop, with redirects refused
+   (`Range: bytes=0-0`). A hop inside `origin + pathPrefix` keeps the headers; a hop outside drops them for good.
+2. mpv loads the final URL with those headers and FFmpeg's `max_redirects=0` (`stream-lavf-o`), so a redirect on
+   a later request (a seek, a reconnect) fails instead of being followed.
+
+On Basement against the same local pair: a redirect from A to B sent the probe to A with the credential and
+every request to B without it; a redirect within A's `/media/` kept it. A URL without headers (Ether's broker
+URLs) is loaded as is, redirects and all.
+
+#### Releasing a build with libmpv (LGPL-2.1-or-later)
+
+MPVKit's LGPL product is linked as **static** libraries (libmpv, FFmpeg, libass, libplacebo, gnutls and the rest
+of `ios/mpvkit-1.0.0.txt`). A distributed app that statically links LGPL code must let its users relink it
+against a modified version of those libraries. Before any build leaves this team (TestFlight, the App Store,
+an ad hoc install for someone else), the release must provide one of:
+
+- the app's object files (or an Xcode archive's intermediate objects) and the link command, plus the exact
+  corresponding source of every LGPL library used (MPVKit 1.0.0's sources at the pinned hashes, with any
+  patches), and the licence texts; or
+- a build where the LGPL libraries are dynamic frameworks the user can replace (MPVKit publishes static
+  xcframeworks, so this means building them as frameworks ourselves).
+
+The App Store's own terms complicate the first option; record the choice in the release checklist before the
+first external build. The GPL product (`MPVKit-GPL`) is never linked.
 
 ### Android implementation (conversion)
 
