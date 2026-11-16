@@ -29,7 +29,9 @@ name=$(basename "$root")
 scratch=$(cd "$HOME/.scratch" && pwd -P)/vela-build/$name
 derived=$scratch/apple-tv-derived
 log=$scratch/apple-tv-xcodebuild.log
-mkdir -p "$scratch"
+mkdir -p "$scratch/tmp"
+# Metro keeps its cache under TMPDIR: one per worktree, so a bundle never resolves another worktree's files.
+export TMPDIR="$scratch/tmp/"
 
 if [ "$prebuild" = 1 ] || [ ! -d "$root/apps/vela/ios" ]; then
   (cd "$root/apps/vela" && EXPO_TV=1 bun x expo prebuild -p ios --clean)

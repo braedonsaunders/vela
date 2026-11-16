@@ -2266,3 +2266,18 @@ Open: the libraries input is still a prepared tree. Decoder packages and subtitl
 assets are pinned, but the Dolby Vision parser, audio output stage and range-extension
 vectors (built by the upstream WASM toolchain) are accepted by hash and listed under
 `prebuilt` in the manifest until that build runs from source here.
+
+### Expo web app: first lab drive (2026-11-16)
+
+Expo web export (player payload `245e0c03…`) served at `/vela` with the API and media
+proxied same-origin to the lab Ether, real watch route (`/watch/<id>`), headed Chrome.
+1917 (2019): Ether selected the **1080p AVC BluRay remux** (TrueHD Atmos 7.1, PGS) as
+an original file, not the title's 2160p HEVC Dolby Vision 7 release; the client cannot
+choose a version, so this is **not** the 4K HDR proof. On that file, the core reached
+`playing` from ranged original reads; Forward 10 s sought locally and reported the seek
+to the server (200); English PGS drew captions (up to 67,466 opaque overlay pixels,
+seen on screen); the audio switch from TrueHD 7.1 to English AC-3 5.1 applied locally.
+Close sent Stop (200) and left no media elements; the app's and the probe's tokens were
+revoked (200). The 4K HDR10/TrueHD/PGS row still needs a title Ether serves as 2160p
+HDR to this client. Finding for the app: the spike route `(spike)/player` mounted three
+times during sign-in and opened three playback sessions; the watch route opened one.
