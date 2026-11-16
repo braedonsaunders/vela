@@ -9,7 +9,7 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, TVFocusGuideView, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -507,11 +507,16 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const inner = node.inner ? translatedBox(split(filled(node.inner, ctx, host.env, false)).own, host.viewport, text.fontSize).style : undefined;
   if (fx.hidden) return null;
   const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
+  const box = <View style={inner as ViewStyle}>{content}</View>;
+  // The search field is centred and narrower than the page; the TV focus engine only moves to
+  // what lies in line with the focused item, so a guide across the slot's full width hands
+  // focus to the field from anywhere above or below it.
+  const reachable = Platform.isTV && node.slot === 'searchField'
+    ? <TVFocusGuideView autoFocus style={styles.searchGuide}>{box}</TVFocusGuideView>
+    : box;
   return (
     <Inherited.Provider value={text}>
-      <AView style={style as ViewStyle}>
-        <View style={inner as ViewStyle}>{content}</View>
-      </AView>
+      <AView style={style as ViewStyle}>{reachable}</AView>
     </Inherited.Provider>
   );
 }
@@ -547,3 +552,7 @@ export function page(rowId: string, direction: 1 | -1, inset = 0, peek = 0): voi
   pager.view.scrollTo({ x: Math.max(0, pager.x + direction * step), animated: true });
 }
 
+
+const styles = StyleSheet.create({
+  searchGuide: { alignSelf: 'stretch', alignItems: 'center' },
+});
