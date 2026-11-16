@@ -357,12 +357,15 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
  * under a bar whose items sit at its edges) lands on the item last focused there, else the first.
  * So is each band of a route (a direct child of the route's box with something focusable in it:
  * home's hero copy, its search field, its rows), so up and down move band by band whatever the
- * horizontal offsets. An escape scope (a menu, a drawer) is one too, and while open it keeps
- * focus inside: moving off its edges stays on its items rather than reaching the page behind. */
+ * horizontal offsets. Bands are tvOS's alone: its focus engine only moves to what lies in line,
+ * while Android's focus search takes the nearest item in the direction anyway, and there a band
+ * around the sign-in card kept the first D-pad press from reaching its fields. An escape scope
+ * (a menu, a drawer) is one too, and while open it keeps focus inside: moving off its edges stays
+ * on its items rather than reaching the page behind. */
 function tvGuide(node: Extract<RNode, { kind: 'box' }>, flags: string[], band: boolean) {
   if (!Platform.isTV) return undefined;
   const scope = !!node.escape?.length;
-  const region = node.role === 'navigation' || (band && focusableWithin(node));
+  const region = node.role === 'navigation' || (band && Platform.OS === 'ios' && focusableWithin(node));
   if (!scope && !region) return undefined;
   const trap = scope && scopeOpen(node.escape!, flags);
   return { autoFocus: true, trapFocusUp: trap, trapFocusDown: trap, trapFocusLeft: trap, trapFocusRight: trap };
