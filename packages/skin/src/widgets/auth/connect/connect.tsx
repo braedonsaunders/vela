@@ -2,6 +2,7 @@
 // it is typed, the server it found, then that kind's own sign-in. Plex links with a code at
 // plex.tv/link; Jellyfin and Emby take a password or Quick Connect; an Ether server (in a standalone
 // app) is selected and signs in on the app's own sign-in page. Your servers are listed to switch.
+// A Plex account needs no address: Sign in with Plex links it and offers the account's servers.
 // A signed-out Plex server's sign-in is this page too, and so is a standalone app's first start.
 import { useState } from 'react';
 import Animated from 'react-native-reanimated';
@@ -31,11 +32,13 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
   const [added, setAdded] = useState<{ id: string; kind: string; name: string } | null>(null);
   const [errors, setErrors] = useState({ add: '', server: '', plex: '', jellyfin: '' });
   const [plexAsked, setPlexAsked] = useState(false);
+  // Signing in with a Plex account rather than a typed address (Plex servers are found through it).
+  const [plexAccount, setPlexAccount] = useState(false);
   const fail = (key: keyof typeof errors, error: string) => setErrors(e => ({ ...e, [key]: error }));
 
   const target = serverId || added?.id || '';
   const record = servers.list.find(s => s.id === target);
-  const kind = record?.kind ?? added?.kind ?? '';
+  const kind = record?.kind ?? added?.kind ?? (plexAccount ? 'plex' : '');
   const name = record?.name ?? added?.name ?? '';
 
   const add = async (found: ServerProbe) => {
@@ -66,6 +69,14 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
       setPlexAsked(false);
     }
   };
+  const signInWithPlex = () => {
+    setPlexAccount(true);
+    void startPlex();
+  };
+  const cancelPlex = () => {
+    actions.plexCancel();
+    setPlexAccount(false);
+  };
   const choosePlex = async (id: string) => {
     fail('plex', '');
     const outcome = await run(actions.plexChoose(id));
@@ -80,7 +91,7 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
 
   return (
     <Animated.View style={[{ gap: 26 }, look.motion('velaEnter60')]}>
-      {target === '' ? (
+      {target === '' && !plexAccount ? (
         <AddressStep
           servers={servers.list}
           busy={busy}
@@ -88,6 +99,7 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
           onAdd={add}
           onSelect={switchTo}
           onRemove={remove}
+          onPlex={signInWithPlex}
           error={errors.add}
         />
       ) : (
@@ -104,7 +116,7 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
               error={errors.plex}
               onStart={startPlex}
               onChoose={choosePlex}
-              onCancel={() => actions.plexCancel()}
+              onCancel={cancelPlex}
             />
           ) : (
             <JellyfinStep
@@ -118,6 +130,9 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
           )}
         </>
       )}
+      {plexAccount && target === '' && servers.plex?.state !== 'waiting' && !plexAsked ? (
+        <Pill label={msg('connect.otherServer')} height={46} align="flex-start" onPress={cancelPlex} />
+      ) : null}
       {errors.server ? <Alert>{errors.server}</Alert> : null}
       {onClose ? <Pill label={msg('ui.cancel')} height={46} align="flex-start" onPress={onClose} /> : null}
     </Animated.View>

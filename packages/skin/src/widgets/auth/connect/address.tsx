@@ -24,6 +24,7 @@ export function AddressStep({
   onAdd,
   onSelect,
   onRemove,
+  onPlex,
   error,
 }: {
   servers: ServerOption[];
@@ -32,6 +33,8 @@ export function AddressStep({
   onAdd(found: ServerProbe): void;
   onSelect(id: string): void;
   onRemove(id: string): void;
+  /** Sign in with a Plex account instead: its servers are found through plex.tv, no address needed. */
+  onPlex?(): void;
   error: string;
 }) {
   const look = useLook();
@@ -106,6 +109,9 @@ export function AddressStep({
       ) : null}
       {checked.answer && FAILED.has(checked.answer.state) ? <Alert>{checked.answer.message}</Alert> : null}
       {error ? <Alert>{error}</Alert> : null}
+      {onPlex && !found ? (
+        <Pill label={msg('connect.plex.signIn')} height={46} onPress={onPlex} disabled={busy} testID="connect-plex" />
+      ) : null}
       {servers.length > 0 ? (
         <View style={{ gap: 8 }}>
           <Label>{msg('connect.yours')}</Label>

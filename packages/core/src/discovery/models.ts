@@ -158,7 +158,8 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
     heroActions: heroes.map(heroAction),
     heroPreviewIds: heroes.filter(hero => hero.previewOnFocus === true).map(hero => hero.title.id),
     previews,
-    rows: data.rows.map(row => feedRow(row, images, artWidth)),
+    // A row with nothing in it (no shows to continue, say) is a heading over an empty shelf: left out.
+    rows: data.rows.filter(row => row.items.length > 0).map(row => feedRow(row, images, artWidth)),
     nextCursor: data.nextCursor ?? '',
     liveAvailable: features.liveTV.available,
     aiAvailable: features.aiSearch.available,

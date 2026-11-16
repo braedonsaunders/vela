@@ -6,6 +6,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, Vi
 import { PlayerIcon } from './icons';
 import type { PlayerLook } from './look';
 import { Spinner } from './spinner';
+import { useFocusClaim } from '../common/focus-claim';
 
 /** Keeps focus inside on TV; a plain view elsewhere (react-native-web has no focus guide). */
 function FocusTrap({ children }: { children: ReactNode }) {
@@ -86,6 +87,7 @@ interface Choice {
 
 /** One choice: a check on the active item (a spinner while the engine switches), its name and one muted detail. */
 export function ChoiceRow({ look, name, detail, selected, pending, enabled, onChoose, testID }: Choice) {
+  const claim = useFocusClaim(selected);
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const lit = look.tv && focus;
@@ -96,7 +98,7 @@ export function ChoiceRow({ look, name, detail, selected, pending, enabled, onCh
       accessibilityState={{ checked: selected, disabled: !enabled }}
       accessibilityLabel={detail ? `${name}, ${detail}` : name}
       disabled={!enabled}
-      hasTVPreferredFocus={selected}
+      hasTVPreferredFocus={claim}
       testID={testID}
       onPress={onChoose}
       onHoverIn={() => setHover(true)}

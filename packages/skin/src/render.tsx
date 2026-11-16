@@ -662,7 +662,7 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
     );
   }
   return (
-    <AText style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style)]} {...lines} {...a11yProps(node, ctx, env)}>
+    <AText style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style), tightLine(drawn.style, style, text.fontSize)]} {...lines} {...a11yProps(node, ctx, env)}>
       {value}
     </AText>
   );
@@ -682,6 +682,21 @@ function centredBox(own: Css, inherited: Css, style: Record<string, unknown>): T
     return { ...centred, lineHeight: style.height - top - bottom };
   }
   return centred;
+}
+
+/**
+ * CSS lets a line box shorter than its glyphs (a ranked shelf's numeral, line-height 0.74) spill
+ * them evenly above and below. Natively the glyphs sit in the short line and lose their tops, and
+ * the text rides high. Such a text gets a line its glyphs fit, and gives the difference back as
+ * equal negative margins, so it takes the room CSS gives it and draws where CSS draws it.
+ */
+function tightLine(drawn: TextStyle, box: Record<string, unknown>, fontSize: number): TextStyle {
+  const line = drawn.lineHeight;
+  if (web || !line || line >= fontSize * 0.9) return {};
+  const room = fontSize * 1.2;
+  const give = (room - line) / 2;
+  const margin = (side: 'Top' | 'Bottom') => Number(box[`margin${side}`] ?? box.marginVertical ?? box.margin ?? 0) || 0;
+  return { lineHeight: room, marginTop: margin('Top') - give, marginBottom: margin('Bottom') - give };
 }
 
 function pick(rows: Css, keys: string[]): Css {

@@ -8,6 +8,7 @@ import type { Focusable } from '../../escape';
 import { isFocusVisible } from '../../focus-visible';
 import { PlayerIcon, type PlayerIconName } from './icons';
 import type { PlayerLook } from './look';
+import { useFocusClaim } from '../common/focus-claim';
 
 interface Props {
   look: PlayerLook;
@@ -44,6 +45,7 @@ export function ChromeButton({
   onFocusChange,
   buttonRef,
 }: Props) {
+  const claim = useFocusClaim(preferred);
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const box = look.size(size ?? (primary ? 52 : 44));
@@ -79,7 +81,7 @@ export function ChromeButton({
       accessibilityState={{ disabled, selected }}
       disabled={disabled}
       focusable={!disabled}
-      hasTVPreferredFocus={preferred}
+      hasTVPreferredFocus={claim}
       testID={testID}
       onPress={onPress}
       onHoverIn={() => setHover(true)}

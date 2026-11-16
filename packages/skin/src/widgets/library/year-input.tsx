@@ -3,7 +3,8 @@
 // half typed waits. The renderer draws the node's box around it; the field fills that box in the
 // inherited ink and font. `params`: placeholder, label, placeholderColor.
 import { useEffect, useState } from 'react';
-import { Platform, TextInput, type TextStyle } from 'react-native';
+import { Platform, type TextStyle } from 'react-native';
+import { TextField } from '../common/text-field';
 import { colour } from '../../css';
 import { useHost, useInheritedText, useWidgetInteraction, type WidgetProps } from '../../host';
 
@@ -37,7 +38,7 @@ export function YearInput({ params }: WidgetProps) {
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as TextStyle) : {}),
   };
   return (
-    <TextInput
+    <TextField
       value={text}
       onChangeText={edit}
       onFocus={() => interaction.report('focus', true)}

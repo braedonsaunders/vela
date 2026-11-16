@@ -9,7 +9,7 @@
 #   --device     a paired Apple TV; when omitted and exactly one is connected, that one is used
 #   --team       your Apple developer team ID (device builds; see Xcode > Settings > Accounts)
 #
-# Defaults may live in .apple-tv.env at the repository root (gitignored), for example:
+# Defaults may live in .apple-tv.env at the repository root (gitignored; the environment wins), for example:
 #   VELA_APPLE_TV=<device udid or name>
 #   VELA_APPLE_TEAM=<team id>
 #   VELA_BUILD_DIR=<directory for DerivedData and logs>   (default: .build/apple-tv)
@@ -17,7 +17,16 @@
 # A lab build can pin its Ether server with EXPO_PUBLIC_VELA_SERVER; release builds run standalone.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
-[ -f "$root/.apple-tv.env" ] && . "$root/.apple-tv.env"
+if [ -f "$root/.apple-tv.env" ]; then
+  # A value already in the environment wins over the file's.
+  for name in VELA_APPLE_TV VELA_APPLE_TEAM VELA_BUILD_DIR VELA_NATIVE_LOCK; do
+    eval "[ -n \"\${$name:-}\" ] && saved_$name=\$$name" || true
+  done
+  . "$root/.apple-tv.env"
+  for name in VELA_APPLE_TV VELA_APPLE_TEAM VELA_BUILD_DIR VELA_NATIVE_LOCK; do
+    eval "[ -n \"\${saved_$name+set}\" ] && $name=\$saved_$name" || true
+  done
+fi
 device=${VELA_APPLE_TV:-}
 team=${VELA_APPLE_TEAM:-}
 prebuild=0

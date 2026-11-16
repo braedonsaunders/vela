@@ -6,6 +6,7 @@ import { msg } from '@vela/core';
 import { BlurView } from 'expo-blur';
 import { useContext, useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View, type TextStyle, type ViewStyle } from 'react-native';
+import { TextField } from '../common/text-field';
 import Svg, { Path } from 'react-native-svg';
 import { useQueryText } from './query-text';
 import { resolveUi } from '../../resolve/ui';
@@ -108,7 +109,7 @@ export function SearchField({ ctx }: WidgetProps) {
       <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />
       <Frame ref={frame as never} style={styles.entry} {...tvProps}>
         <Glyph symbol="search" size={20} color={focused ? ui.ink : ui.inkSecondary} />
-        <TextInput
+        <TextField
           ref={input}
           value={query.text}
           onChangeText={query.change}
@@ -127,7 +128,11 @@ export function SearchField({ ctx }: WidgetProps) {
       </Frame>
       {query.text !== '' ? (
         <Pressable
-          onPress={() => query.change('')}
+          onPress={() => {
+            query.change('');
+            // On TV the button leaves with the text: focus goes back to the field, not nowhere.
+            if (Platform.isTV) requestAnimationFrame(() => frame.current?.requestTVFocus?.());
+          }}
           accessibilityRole="button"
           accessibilityLabel={msg('ui.clearSearch')}
           onHoverIn={() => setClearHover(true)}

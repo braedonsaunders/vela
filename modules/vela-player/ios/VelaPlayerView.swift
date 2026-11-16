@@ -227,10 +227,10 @@ final class VelaPlayerView: ExpoView {
         if !ambient {
             PlaybackAudioSession.activate()
         }
+        displayFacts = path.isOriginalFile ? DisplayMatching.facts(path.originalVideo) : nil
         let client: MPVClient
         do {
-            client = try MPVClient(layer: metalLayer, options: [
-                "target-colorspace-hint": "yes",
+            client = try MPVClient(layer: metalLayer, options: Self.colourOptions(displayFacts).merging([
                 "pause": "yes",
                 "mute": ambient ? "yes" : "no",
                 // AVSampleBufferAudioRenderer. While mpv played through a raw AudioUnit, tvOS's MediaRemote never made
@@ -238,7 +238,7 @@ final class VelaPlayerView: ExpoView {
                 // A muted ambient view keeps the AudioUnit so it never claims Now Playing.
                 "ao": ambient ? "audiounit" : "avfoundation",
                 "audio-channels": PlaybackAudioSession.outputChannels > 2 ? "auto-safe" : "stereo",
-            ])
+            ]) { $1 })
         } catch {
             state.failure = "\(error)"
             state.failureKind = "decoder"
@@ -272,7 +272,6 @@ final class VelaPlayerView: ExpoView {
             // Source stream indexes are FFmpeg's; mpv selects by its own ids, mapped once loaded (applyTracks).
             options.append(subtitle == nil || subtitle?.isExternal == true ? "sid=no" : "sid=auto")
         }
-        displayFacts = path.isOriginalFile ? DisplayMatching.facts(path.originalVideo) : nil
         // The display switches before the first frame; mpv loads meanwhile, paused.
         if !ambient {
             DisplayMatching.prefer(displayFacts, in: window)
@@ -285,6 +284,20 @@ final class VelaPlayerView: ExpoView {
             }
             self.load(media, options: options, on: client)
         }
+    }
+
+    /// How mpv hands its picture to the display. HDR asks for the display's HDR mode through the
+    /// swapchain's colour space (`target-colorspace-hint`). On tvOS, SDR does not: the hint tags the
+    /// layer ITU-R 709, which Core Animation converts on the way to the TV, lifting the shadows and
+    /// midtones into a washed-out picture. Untagged, mpv's BT.1886 output reaches the TV as the
+    /// film's own values, as the system player's video does.
+    private static func colourOptions(_ facts: VideoFacts?) -> [String: String] {
+        #if os(tvOS)
+        if facts?.dynamicRange == "sdr" {
+            return ["target-colorspace-hint": "no", "target-trc": "bt.1886", "target-prim": "bt.709"]
+        }
+        #endif
+        return ["target-colorspace-hint": "yes"]
     }
 
     /// Loads the resolved URL with its headers; with headers attached, FFmpeg follows no redirect.
@@ -389,7 +402,8 @@ final class VelaPlayerView: ExpoView {
         let video = "\(field(input, "w"))x\(field(input, "h")) \(field(input, "gamma"))/\(field(input, "primaries"))"
         let target = "\(field(output, "gamma"))/\(field(output, "primaries")) peak \(field(output, "sig-peak"))"
         let display = DisplayMatching.describe(window)
-        print("[vela-player] video \(video) range \(state.dynamicRange ?? "?") -> output \(target); display \(display)")
+        let layer = metalLayer.colorspace.flatMap { $0.name as String? } ?? "untagged"
+        print("[vela-player] video \(video) range \(state.dynamicRange ?? "?") -> output \(target), layer \(layer); display \(display)")
     }
 
     /// Unpauses once the display has finished switching modes (it blanks meanwhile).

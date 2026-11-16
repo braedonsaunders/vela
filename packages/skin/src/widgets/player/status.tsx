@@ -8,6 +8,7 @@ import { msg } from '@vela/core';
 import { PlayerIcon } from './icons';
 import type { PlayerLook } from './look';
 import { Spinner } from './spinner';
+import { useFocusClaim } from '../common/focus-claim';
 
 export interface Failed {
   message: string;
@@ -99,6 +100,7 @@ interface PillProps {
 }
 
 function Pill({ look, label, primary, preferred, onPress, testID }: PillProps) {
+  const claim = useFocusClaim(preferred);
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const filled = primary || (look.tv && focus);
@@ -106,7 +108,7 @@ function Pill({ look, label, primary, preferred, onPress, testID }: PillProps) {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      hasTVPreferredFocus={preferred}
+      hasTVPreferredFocus={claim}
       testID={testID}
       onPress={onPress}
       onHoverIn={() => setHover(true)}

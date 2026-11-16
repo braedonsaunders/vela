@@ -2,7 +2,8 @@
 // The renderer draws the node's box (height, padding, border, ground) around it; the input fills
 // that box and takes the inherited text rows. Native username Next focuses the password;
 // password Go and web Enter submit. `params`: field, placeholder, label, placeholderColor.
-import { Platform, TextInput as NativeInput, type TextStyle } from 'react-native';
+import { Platform, type TextStyle } from 'react-native';
+import { TextField } from '../common/text-field';
 import { withClientStrings } from '../../resolve/client-strings';
 import { colour } from '../../css';
 import { useInheritedText, useWidgetInteraction, type WidgetProps } from '../../host';
@@ -33,7 +34,7 @@ export function TextInput({ params }: WidgetProps) {
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as TextStyle) : {}),
   };
   return (
-    <NativeInput
+    <TextField
       ref={field === 'password' ? form.registerPasswordInput : undefined}
       value={form.values[field]}
       onChangeText={value => form.edit(field, value)}

@@ -7,6 +7,7 @@ import { useInheritedText, type WidgetProps } from '../../host';
 import { APressable, Glyph, NO_RING, overlaid, useInteraction, Words } from './controls';
 import { useLook } from './look';
 import { useSelectModel, type Choice } from './select-model';
+import { useFocusClaim } from './focus-claim';
 
 export function Select(props: WidgetProps) {
   const model = useSelectModel(props);
@@ -99,6 +100,7 @@ function Choices({
 }
 
 function ChoiceRow({ choice, on, onChoose }: { choice: Choice; on: boolean; onChoose(value: string): void }) {
+  const claim = useFocusClaim(on);
   const look = useLook();
   const { state, handlers } = useInteraction();
   const rows = overlaid(
@@ -119,7 +121,7 @@ function ChoiceRow({ choice, on, onChoose }: { choice: Choice; on: boolean; onCh
       onPress={() => onChoose(choice.value)}
       accessibilityRole="menuitem"
       accessibilityState={{ checked: on }}
-      hasTVPreferredFocus={on}
+      hasTVPreferredFocus={claim}
       style={[look.box(rows), NO_RING]}
       {...handlers}
     >

@@ -143,7 +143,8 @@ export class Home {
         .map(row => {
           const items = row.items.filter(item => item.kind !== 'title' || !featured.has(item.title.id));
           return feedRow({ ...row, items }, images, this.artWidth());
-        });
+        })
+        .filter(row => row.items.length > 0);
       this.box.update('home', home => {
         if (!home.value || home.value.nextCursor !== cursor) return home;
         const value = { ...home.value, rows: [...home.value.rows, ...rows], nextCursor: data.nextCursor ?? '' };

@@ -4,7 +4,8 @@
 // the tvOS focus engine and a D-pad.
 import { BlurView } from 'expo-blur';
 import { useState, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { TextField } from './text-field';
 import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { display, eyebrow, focusRing, pill } from '../../resolve/vela-base/look';
@@ -297,7 +298,7 @@ export function Field({ label, value, onChangeText, onSubmit, kind = 'username',
     <View style={{ gap: 8 }}>
       <Label>{label}</Label>
       <Animated.View style={box} onPointerEnter={handlers.onHoverIn} onPointerLeave={handlers.onHoverOut}>
-        <TextInput
+        <TextField
           value={value}
           onChangeText={onChangeText}
           onSubmitEditing={onSubmit}

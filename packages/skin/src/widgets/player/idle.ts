@@ -12,6 +12,8 @@ export interface Idle {
   visible: boolean;
   /** Show the chrome and restart the idle clock. */
   wake(): void;
+  /** Restart the idle clock while the chrome stands; a hidden chrome stays hidden. */
+  stir(): void;
   hide(): void;
 }
 
@@ -27,6 +29,11 @@ export function useIdle(hold: boolean): Idle {
     setTouched(Date.now());
   }, []);
   const hide = useCallback(() => setVisible(false), []);
+  // Moving focus along the chrome keeps it up. Not once it is hiding: hiding moves focus itself,
+  // and taking that for the viewer would bring the chrome straight back, again and again.
+  const stir = useCallback(() => {
+    if (shown.current) wake();
+  }, [wake]);
 
   useEffect(() => {
     clearTimeout(timer.current);
@@ -58,12 +65,13 @@ export function useIdle(hold: boolean): Idle {
     };
   }, [wake]);
 
-  // TV: any remote press or swipe. A focus change counts while the chrome stands (the viewer is
-  // moving along it: the TV focus engine takes those presses itself), not once it is hidden
-  // (hiding moves focus to the stage, which would otherwise wake it again at once).
+  // TV: any remote press or swipe the app sees. Presses that move focus along the chrome are taken
+  // by the focus engine and never arrive here (nor, on the new architecture, do focus changes):
+  // the chrome wakes on its bars' focus for those. A focus event that does arrive counts only while
+  // the chrome stands (hiding moves focus to the stage, which would otherwise wake it at once).
   useRemote(event => {
     if (fromViewer(event) || shown.current) wake();
   });
 
-  return { visible, wake, hide };
+  return { visible, wake, stir, hide };
 }

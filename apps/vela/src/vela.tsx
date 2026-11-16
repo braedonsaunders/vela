@@ -4,7 +4,7 @@
 // server sends the viewer to /sign-in.
 import { router, usePathname } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useWindowDimensions } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createVela, type Vela as Store, type VelaState } from '@vela/core';
 import { VelaProvider as StoreProvider, useVelaState } from '@vela/core/react';
@@ -20,6 +20,7 @@ import {
 } from '@vela/skin';
 import { ServersProvider } from '@vela/skin/src/widgets/auth';
 import { LiveProvider, useLiveView } from '@vela/skin/src/widgets/guide';
+import { holdBack } from '@vela/skin/src/menu-key';
 import { useDispatcher } from './actions';
 import { config } from './data/config';
 import { platform } from './data/platform';
@@ -187,6 +188,16 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     return typeof source === 'string' ? { uri: source } : source;
   }, [origin]);
   const setQuery = useCallback((query: string) => store.search.setQuery(query), [store]);
+  // On TV, Back (Menu) with a search open clears the search, as it closes a menu, rather than
+  // leaving the app; anything opened over the results (a menu, the player) holds Back after it.
+  const searching = state.search.query !== '';
+  useEffect(() => {
+    if (!Platform.isTV || !searching) return;
+    return holdBack(() => {
+      store.search.setQuery('');
+      return true;
+    });
+  }, [searching, store]);
 
   const host = useCallback((route: RouteName, entry: string): SkinHost | null => {
     if (!resolved.doc || !fontsReady) return null;

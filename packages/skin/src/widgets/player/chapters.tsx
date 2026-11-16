@@ -6,6 +6,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { msg } from '@vela/core';
 import type { PlayerLook } from './look';
 import { timecode, type ChapterMark, type PlayerView } from './present';
+import { useFocusClaim } from '../common/focus-claim';
 
 interface Props {
   look: PlayerLook;
@@ -75,6 +76,7 @@ interface Card {
 }
 
 function ChapterCard({ look, chapter, width, playing, played, disabled, onPress }: Card) {
+  const claim = useFocusClaim(playing);
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const lit = look.tv && focus;
@@ -84,7 +86,7 @@ function ChapterCard({ look, chapter, width, playing, played, disabled, onPress 
       accessibilityLabel={`${timecode(chapter.seconds)}, ${chapter.name}`}
       accessibilityState={{ selected: playing, disabled }}
       disabled={disabled}
-      hasTVPreferredFocus={playing}
+      hasTVPreferredFocus={claim}
       onPress={onPress}
       onHoverIn={() => setHover(true)}
       onHoverOut={() => setHover(false)}

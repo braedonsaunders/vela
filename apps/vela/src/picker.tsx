@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import type { SkinDocument } from '../../../packages/protocol/skin';
 import { msg } from '@vela/core';
+import { useFocusClaim } from '@vela/skin/src/widgets/common/focus-claim';
 
 interface Props {
   documents: SkinDocument[];
@@ -116,13 +117,14 @@ interface ChoiceProps {
 
 /** A focusable choice: keyboard, pointer and the TV focus engine show the same focus look. */
 function Choice({ label, selected, preferred, onPress, style, focusedStyle, children }: ChoiceProps) {
+  const claim = useFocusClaim(preferred);
   const [focused, setFocused] = useState(false);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected }}
-      hasTVPreferredFocus={preferred}
+      hasTVPreferredFocus={claim}
       onPress={onPress}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}

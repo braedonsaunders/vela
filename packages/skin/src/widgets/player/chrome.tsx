@@ -128,11 +128,13 @@ function Chrome({ state }: { state: PlayerChromeState }) {
         hasTVPreferredFocus={Platform.isTV && !idle.visible}
       />
       {/* Each bar holds its own edge: on a short screen they overlap at the middle rather than
-          push the controls off the bottom. */}
-      <View style={styles.top} pointerEvents="box-none">
+          push the controls off the bottom. On TV, moving focus along a bar keeps the chrome up:
+          the focus engine takes those presses, so they never reach the remote's event stream,
+          but a control's focus bubbles to its bar (and counts only while the chrome stands). */}
+      <View style={styles.top} pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
         <TopBar look={look} title={state.title} visible={idle.visible || !!failed} onClose={state.close} />
       </View>
-      <View style={styles.bottom} pointerEvents="box-none">
+      <View style={styles.bottom} pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
         <BottomBar
           look={look}
           state={state}
