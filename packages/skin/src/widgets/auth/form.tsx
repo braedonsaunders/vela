@@ -1,8 +1,9 @@
 // The sign-in form's fields. The signed-out screen owns the typed username and password and
-// provides them here; the document's `textInput` widgets edit them, and Enter in either signs in.
+// provides them here; the document's `textInput` widgets edit them.
 // They never enter the binding environment, so a document can test `signin.ready` but cannot
 // read what was typed.
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { TextInput } from 'react-native';
 
 export type AuthField = 'username' | 'password';
 
@@ -11,6 +12,8 @@ export interface AuthForm {
   edit(field: AuthField, value: string): void;
   /** Enter in a field: sign in when the form is ready. */
   submit(): void;
+  registerPasswordInput(input: TextInput | null): void;
+  focusPassword(): void;
 }
 
 const FormContext = createContext<AuthForm | null>(null);
@@ -28,7 +31,17 @@ export function useAuthFields() {
   return { values, edit, clearPassword, ready };
 }
 
-export function AuthFormProvider({ values, edit, submit, children }: AuthForm & { children: ReactNode }) {
-  const form = useMemo<AuthForm>(() => ({ values, edit, submit }), [values, edit, submit]);
+export function AuthFormProvider({ values, edit, submit, children }: Pick<AuthForm, 'values' | 'edit' | 'submit'> & {
+  children: ReactNode;
+}) {
+  const passwordInput = useRef<TextInput | null>(null);
+  const registerPasswordInput = useCallback((input: TextInput | null) => {
+    passwordInput.current = input;
+  }, []);
+  const focusPassword = useCallback(() => passwordInput.current?.focus(), []);
+  const form = useMemo<AuthForm>(
+    () => ({ values, edit, submit, registerPasswordInput, focusPassword }),
+    [values, edit, submit, registerPasswordInput, focusPassword],
+  );
   return <FormContext.Provider value={form}>{children}</FormContext.Provider>;
 }

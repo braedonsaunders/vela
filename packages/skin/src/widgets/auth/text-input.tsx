@@ -1,7 +1,7 @@
 // Widget `textInput` (routes.auth): the bare username or password field on the sign-in form.
 // The renderer draws the node's box (height, padding, border, ground) around it; the input fills
-// that box and takes the inherited text rows. Enter in either field signs in when the form is
-// ready. `params`: field (`username` | `password`), placeholder, label, placeholderColor.
+// that box and takes the inherited text rows. Native username Next focuses the password;
+// password Go and web Enter submit. `params`: field, placeholder, label, placeholderColor.
 import { Platform, TextInput as NativeInput, type TextStyle } from 'react-native';
 import { withClientStrings } from '../../resolve/client-strings';
 import { colour } from '../../css';
@@ -34,9 +34,10 @@ export function TextInput({ params }: WidgetProps) {
   };
   return (
     <NativeInput
+      ref={field === 'password' ? form.registerPasswordInput : undefined}
       value={form.values[field]}
       onChangeText={value => form.edit(field, value)}
-      onSubmitEditing={form.submit}
+      onSubmitEditing={Platform.OS !== 'web' && field === 'username' ? form.focusPassword : form.submit}
       onFocus={() => interaction.report('focus', true)}
       onBlur={() => interaction.report('focus', false)}
       onPointerEnter={() => interaction.report('hover', true)}
