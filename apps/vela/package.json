@@ -7,7 +7,7 @@
     "web": "expo start --web",
     "ios": "expo run:ios",
     "tvos": "EXPO_TV=1 expo run:ios",
-    "export:web": "expo export --platform web"
+    "export:web": "VELA_WEB_BASE=/vela expo export --platform web"
   },
   "dependencies": {
     "@react-native-masked-view/masked-view": "0.3.2",
@@ -40,6 +40,10 @@
     "typescript": "~5.9.3"
   },
   "expo": {
-    "install": { "exclude": ["react-native"] }
+    "install": {
+      "exclude": [
+        "react-native"
+      ]
+    }
   }
 }
