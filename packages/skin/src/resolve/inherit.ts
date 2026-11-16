@@ -26,12 +26,18 @@ function homeOf(doc: SkinDocument): Node | undefined {
   return doc.slots?.home ?? doc.routes?.home;
 }
 
-/** A direct in-flow navigation before the route already reserves the header's space. */
-function hasFlowHeader(shell: Node | undefined): boolean {
-  if (shell?.type !== 'box') return false;
-  const children = shell.children ?? [];
-  const slot = children.findIndex(node => node.type === 'slot' && node.slot === 'children');
-  return slot > 0 && children.slice(0, slot).some(node => node.type === 'box' && node.role === 'navigation' && node.style?.position !== 'absolute');
+/** Whether a shell reserves space for navigation before its route content. */
+export function hasFlowHeader(shell: Node | undefined): boolean {
+  let navigation = false;
+  const walk = (node: Node, inFlow: boolean): boolean => {
+    if (node.type === 'slot' && node.slot === 'children') return true;
+    if (node.type !== 'box') return false;
+    const flow = inFlow && node.style?.position !== 'absolute';
+    if (flow && node.role === 'navigation') navigation = true;
+    for (const child of node.children ?? []) if (walk(child, flow)) return true;
+    return false;
+  };
+  return !!shell && walk(shell, true) && navigation;
 }
 
 /** The document over the base: what the document defines wins, the base fills the rest. */

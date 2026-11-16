@@ -1,3 +1,4 @@
+import { hasFlowHeader } from '../../resolve/inherit';
 // The channel guide as an app (widget `guide`, and the Live TV route): a half-height header with
 // the selected programme beside the live preview tile, a toolbar of days, time and filters, the
 // owner's named Guides, then the EPG grid scrolling inside its panel. Phones open on the On now
@@ -57,7 +58,7 @@ interface PageProps {
 }
 
 function GuidePage({ look, model, view, controller, focus }: PageProps) {
-  const { viewport, env } = useHost();
+  const { viewport, env, doc } = useHost();
   const small = viewport.width < 640;
   const still = env.still;
   const side = gutter(small, viewport.width);
@@ -126,7 +127,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     flex: 1,
     minHeight: 0,
     backgroundColor: look.page,
-    paddingTop: pageTop(expanded, showGrid, small),
+    paddingTop: hasFlowHeader(doc.document.slots?.shell) ? 0 : pageTop(expanded, showGrid, small),
     backgroundImage: `radial-gradient(ellipse 70% 60% at 82% 0%, ${look.aura}, transparent 70%)`,
   } as ViewStyle;
   const highlighted =
