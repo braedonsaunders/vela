@@ -66,6 +66,36 @@ The routine compile check becomes `bun x tsc --noEmit -p apps/vela` (it covers t
 packages through project references), plus `bun x expo export --platform web` when the
 web bundle changed. Native builds are checked by building them, nothing more.
 
+## Web and PWA stay first-class
+
+The web app is not a side effect of the native apps. The Expo web export
+(react-native-web) **is** the web artifact. It hosts the WebCodecs/WebGPU player, and Ether
+serves it at `/vela` through the existing signed distribution and installer: archive,
+signed manifest, verification, atomic install, two rollbacks and the shell service worker
+(`docs/distribution.md`). Only what produces the static tree changes. The installer
+contract does not.
+
+- **Build:** `expo export --platform web` with `web.output: "single"` (one SPA
+  `index.html`) and `experiments.baseUrl: "/vela"`, so every URL the export writes is
+  under `/vela`. Routes are expo-router routes. The server-side route list
+  (`routes.json`: `/vela/title/:id`, `/vela/watch/:id`, `/vela/collection/:id`, …) is
+  generated from `apps/vela`'s route table, so Ether's index fallback and its asset 404s
+  keep working.
+- **Release tree** (archive root, owned by the packager `thr_tgszknwfsb`):
+
+  ```
+  index.html                      Expo's single page entry
+  _expo/static/js/web/*.js, css   content-hashed bundles (immutable while the release is retrievable)
+  assets/…                        Metro's content-hashed images and fonts
+  player/…                        the web player's decoder packages, worklets and WASM, loaded by URL
+  skins/<id>/<version>/…          bundled skin documents and assets, as today
+  manifest.webmanifest, icons, pwa.js, sw.js, routes.json    the packager's PWA shell and route list
+  ```
+
+- The release manifest keeps `skinRenderer {schema, version, digest}`. The digest is now
+  that of the React renderer's vocabulary and style matrix.
+- The engine selector, `engines.json` and per-engine roots are gone. There is one app.
+
 ## What moves, what is rewritten, what is deleted
 
 ### Moves as is (by `git mv` at conversion, not during the spike)
