@@ -274,7 +274,7 @@ function ChannelCopy({
       <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
         {!small ? <WatchPill look={look} label={msg('live.watch')} onPress={() => onWatch(channel.id)} /> : null}
         <Line look={look} size={13} color={look.inkSecondary}>
-          {channel.listed ? msg('live.nothingNow') : msg('live.noListings')}
+          {!channel.listingsLoaded ? '' : channel.listed ? msg('live.nothingNow') : msg('live.noListings')}
         </Line>
       </View>
     </>

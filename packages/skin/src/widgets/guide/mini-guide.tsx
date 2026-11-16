@@ -70,7 +70,7 @@ function Neighbour({ look, channel: c }: { look: GuideLook; channel: GuideChanne
         {c.name}
       </Line>
       <Line look={look} size={12} color={look.inkQuiet} style={{ maxWidth: '50%' }}>
-        {c.now || msg('live.noListings')}
+        {c.now || (c.listingsLoaded ? msg('live.noListings') : '')}
       </Line>
     </View>
   );
@@ -87,7 +87,7 @@ function DialledCard({
   playing: boolean;
   onPress(): void;
 }) {
-  const now = c.now || (c.listed ? msg('live.nothingNow') : msg('live.noListings'));
+  const now = c.now || (!c.listingsLoaded ? '' : c.listed ? msg('live.nothingNow') : msg('live.noListings'));
   return (
     <Press
       label={msg('ui.watchChannel', { channel: c.name })}

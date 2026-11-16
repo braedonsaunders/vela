@@ -40,7 +40,7 @@ export type ChannelFilter = 'all' | 'favourites' | 'listed' | `group:${string}`;
 export function keeps(channel: GuideChannel, filter: ChannelFilter, tab: string): boolean {
   if (tab && !channel.guideIds.includes(tab)) return false;
   if (filter === 'favourites') return channel.favorite;
-  if (filter === 'listed') return channel.listed;
+  if (filter === 'listed') return !channel.listingsLoaded || channel.listed;
   if (filter.startsWith('group:')) return channel.group === filter.slice(6);
   return true;
 }

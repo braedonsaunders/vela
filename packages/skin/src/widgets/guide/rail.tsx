@@ -99,7 +99,7 @@ function RailText({ look, channel }: { look: GuideLook; channel: GuideChannel })
         </>
       ) : (
         <Line look={look} size={11} color={look.inkQuiet}>
-          {channel.listed ? channel.group : msg('live.noListings')}
+          {!channel.listingsLoaded || channel.listed ? channel.group : msg('live.noListings')}
         </Line>
       )}
     </View>

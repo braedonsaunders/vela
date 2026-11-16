@@ -21,7 +21,7 @@ export interface GuideProgramme {
   episode: string; rating: string; genre: string; tone: number; art: string;
 }
 export interface GuideChannel {
-  id: string; number: string; name: string; favorite: boolean; logo: string; group: string; listed: boolean;
+  id: string; number: string; name: string; favorite: boolean; logo: string; group: string; listed: boolean; listingsLoaded: boolean;
   /** The owner-defined Guides this channel belongs to, by id; empty when none or unknown. */
   guideIds: string[];
   now: string; next: string; nowId: string; nowProgress: number; nowRemaining: string; nextLabel: string;
@@ -187,10 +187,13 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
     const tomorrow = midnight(now, 1), dayAfterTomorrow = midnight(now, 2);
     const nowMinute = now >= start && now < end ? (now - start) / MINUTE : -1;
     const groups: string[] = [];
+    const groupSet = new Set<string>();
+    const guideSet = new Set<string>();
+    const loadedIds = channelIds ? new Set(channelIds.length ? channelIds : [...window.channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 30).map(c => c.id)) : null;
     const guides: { id: string; name: string }[] = [];
-    for (const channel of window.channels) for (const g of channel.guides ?? []) if (!guides.some(known => known.id === g.id)) guides.push({ id: g.id, name: g.name });
+    for (const channel of window.channels) for (const g of channel.guides ?? []) if (!guideSet.has(g.id)) { guideSet.add(g.id); guides.push({ id: g.id, name: g.name }); }
     const channels: GuideChannel[] = [...window.channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).map(channel => {
-      if (channel.group && !groups.includes(channel.group)) groups.push(channel.group);
+      if (channel.group && !groupSet.has(channel.group)) { groupSet.add(channel.group); groups.push(channel.group); }
       const entries = grouped.get(channel.id) ?? [];
       const live = (currentByChannel.get(channel.id) ?? []);
       const airing = live.find(p => Date.parse(p.start) <= now && now < Date.parse(p.end));
@@ -199,7 +202,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       return {
         id: channel.id, number: channel.number, name: channel.name, favorite: channel.favorite, group: channel.group ?? '',
         guideIds: [...new Set((channel.guides ?? []).map(g => g.id))],
-        logo: picture(channel.artwork, ['logo', 'channel'], 160, 90, images), listed: entries.length > 0,
+        logo: picture(channel.artwork, ['logo', 'channel'], 160, 90, images), listed: entries.length > 0, listingsLoaded: !loadedIds || loadedIds.has(channel.id),
         now: airing?.name ?? '', next: next?.name ?? '', nowId: airing?.id ?? '',
         nowProgress: airing ? Math.round((now - airingStart) / (airingEnd - airingStart) * 1000) / 10 : 0,
         nowRemaining: airing ? left(airingEnd - now) : '',

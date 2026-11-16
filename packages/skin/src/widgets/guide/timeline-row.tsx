@@ -31,7 +31,7 @@ export function TimelineRow(props: RowProps) {
   const near = channel.programmes.filter(p => p.at + p.span > window.from && p.at < window.to);
   return (
     <View style={{ width, height: row, borderBottomWidth: 1, borderBottomColor: look.hairline }}>
-      {!channel.listed ? <NoListings {...props} /> : null}
+      {channel.listingsLoaded && !channel.listed ? <NoListings {...props} /> : null}
       {near.map(p => (
         <ProgrammeCell
           key={p.id}

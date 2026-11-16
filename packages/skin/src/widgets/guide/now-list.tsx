@@ -46,7 +46,7 @@ function NowRow({
   channel: GuideChannel;
   onWatch(channelId: string): void;
 }) {
-  const now = c.now || (c.listed ? msg('live.nothingNow') : msg('live.noListings'));
+  const now = c.now || (!c.listingsLoaded ? '' : c.listed ? msg('live.nothingNow') : msg('live.noListings'));
   return (
     <Press
       label={msg('ui.watchChannel', { channel: c.name })}
