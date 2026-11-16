@@ -190,6 +190,14 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const { dispatch, loadMore } = useDispatcher({ store, view, live, openPicker });
+  useEffect(() => {
+    if (Platform.OS !== 'web' || state.auth.phase !== 'signed-in') return;
+    const find = () => {
+      dispatch({ route: pathname === '/' ? 'home' : 'other', entry: '' }, 'search', '');
+    };
+    window.addEventListener('vela:find', find);
+    return () => window.removeEventListener('vela:find', find);
+  }, [dispatch, pathname, state.auth.phase]);
   const viewport: Viewport = useMemo(() => ({ width, height, insets }), [width, height, insets]);
   const image = useCallback<SkinHost['image']>(path => {
     const source = assetSource(path, origin);

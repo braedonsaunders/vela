@@ -29,8 +29,8 @@ export function screenArtWidth(): number {
 
 /** A desktop app (Windows, macOS, Linux) hosting this bundle from its own origin, as its shell
  * declares before the page runs. It is standalone: no server is implied by the page's origin. */
-interface DesktopShell { version: number; platform: 'windows' | 'macos' | 'linux' }
-const DESKTOP_NAMES: Record<DesktopShell['platform'], string> = { windows: 'Windows', macos: 'Mac', linux: 'Linux' };
+interface DesktopShell { version: number; platform: 'windows' | 'mac' | 'linux' }
+const DESKTOP_NAMES: Record<DesktopShell['platform'], string> = { windows: 'Windows', mac: 'Mac', linux: 'Linux' };
 export function desktopShell(): DesktopShell | undefined {
   const shell = (globalThis as { __VELA_DESKTOP__?: DesktopShell }).__VELA_DESKTOP__;
   return shell?.version === 1 && shell.platform in DESKTOP_NAMES ? shell : undefined;
@@ -43,7 +43,7 @@ export function platform(): VelaPlatform {
     etherOrigin: development || (desktop ? undefined : location.origin),
     secrets,
     device: desktop
-      ? { name: `Vela for ${DESKTOP_NAMES[desktop.platform]}`, platform: desktop.platform }
+      ? { name: `Vela for ${DESKTOP_NAMES[desktop.platform]}`, platform: desktop.platform === 'mac' ? 'macos' : desktop.platform }
       : { name: 'Vela browser', platform: 'web' },
     appVersion: config.appVersion,
     media: VelaPlayer.capabilities(),

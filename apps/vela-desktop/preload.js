@@ -1,6 +1,35 @@
 // Tells the bundled page it is the standalone desktop app (no server implied by its origin).
 'use strict';
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
-const platform = process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux';
+const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'windows' : 'linux';
 contextBridge.exposeInMainWorld('__VELA_DESKTOP__', { version: 1, platform });
+
+// Keep the native drag region in the page's bar while leaving controls interactive.
+if (platform === 'mac') {
+  window.addEventListener('DOMContentLoaded', () => {
+    const style = document.createElement('style');
+    style.textContent = `
+      [data-vela-mac-topbar] { -webkit-app-region: drag; }
+      body:not(.vela-fullscreen) [data-vela-mac-topbar] { padding-left: 80px !important; }
+      [data-vela-mac-topbar] button, [data-vela-mac-topbar] input,
+      [data-vela-mac-topbar] select, [data-vela-mac-topbar] a { -webkit-app-region: no-drag; }
+      body:not(.vela-fullscreen)::before { content: ''; position: fixed; top: 0; left: 0;
+        width: 80px; height: 32px; z-index: 2147483647; -webkit-app-region: drag; }
+    `;
+    document.head.appendChild(style);
+    let scheduled = false;
+    const update = () => {
+      scheduled = false;
+      const bars = [...document.querySelectorAll('[role="navigation"]')];
+      const top = bars.find(el => { const r = el.getBoundingClientRect(); return r.top < 32 && r.bottom > 0 && r.width > 0; });
+      for (const bar of bars) bar.toggleAttribute('data-vela-mac-topbar', bar === top);
+    };
+    const schedule = () => { if (!scheduled) { scheduled = true; requestAnimationFrame(update); } };
+    new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', schedule);
+    schedule();
+  });
+  ipcRenderer.on('vela:fullscreen', (_event, full) => document.body?.classList.toggle('vela-fullscreen', full));
+}
+ipcRenderer.on('vela:find', () => window.dispatchEvent(new Event('vela:find')));

@@ -219,7 +219,7 @@ function a11yProps(node: RNode, c: Ctx, e: Env) {
   };
   return {
     accessibilityRole: role,
-    role: web && node.role === 'status' ? ('status' as const) : undefined,
+    role: web && node.role === 'status' ? ('status' as const) : web && node.role === 'navigation' ? ('navigation' as const) : undefined,
     accessibilityLiveRegion: node.role === 'status' && (web || Platform.OS === 'android')
       ? ('polite' as const) : undefined,
     accessibilityLabel: label || undefined,

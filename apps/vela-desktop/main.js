@@ -109,6 +109,7 @@ function createWindow() {
     title: 'Vela',
     backgroundColor: '#090b0e',
     darkTheme: true,
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 14 } } : {}),
     autoHideMenuBar: true,
     icon: process.platform === 'linux' ? path.join(__dirname, 'build', 'icon.png') : undefined,
     webPreferences: {
@@ -137,8 +138,16 @@ function createWindow() {
     event.preventDefault();
     openExternal(url);
   });
+  for (const event of ['enter-full-screen', 'leave-full-screen']) {
+    window.on(event, () => window.webContents.send('vela:fullscreen', window.isFullScreen()));
+  }
   // Fullscreen comes from the page (the player's button or F) or the menu (F11, Ctrl+Cmd+F).
   window.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape' && window.isFullScreen()) {
+      event.preventDefault();
+      void window.webContents.executeJavaScript('document.fullscreenElement ? document.exitFullscreen().then(() => true) : false')
+        .then(exited => { if (!exited && !window.isDestroyed()) window.setFullScreen(false); }).catch(() => window.setFullScreen(false));
+    }
     if (input.type === 'keyDown' && input.key === 'F11' && process.platform !== 'darwin') {
       event.preventDefault();
       window.setFullScreen(!window.isFullScreen());
@@ -151,22 +160,32 @@ function createWindow() {
 function menu() {
   const mac = process.platform === 'darwin';
   return Menu.buildFromTemplate([
-    ...(mac ? [{ role: 'appMenu' }] : []),
+    ...(mac ? [{ label: 'Vela', submenu: [
+      { role: 'about' },
+      { label: 'Check for Updates…', click: () => void checkForUpdates(true) },
+      { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
+      { type: 'separator' }, { role: 'quit' },
+    ] }] : []),
     { role: 'editMenu' },
     {
       label: 'View',
       submenu: [
+        { label: 'Find', accelerator: 'CommandOrControl+F', click: (_item, window) => window?.webContents.send('vela:find') },
+        ...(app.isPackaged ? [] : [{ role: 'reload' }]),
         { role: 'togglefullscreen' },
         { type: 'separator' },
         { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
       ],
     },
-    { role: 'windowMenu' },
+    ...(mac ? [{ label: 'Window', submenu: [
+      { role: 'close' }, { role: 'minimize' }, { role: 'zoom' },
+      { type: 'separator' }, { role: 'front' },
+    ] }] : [{ role: 'windowMenu' }]),
     {
       role: 'help',
       submenu: [
         { label: 'Vela on GitHub', click: () => openExternal('https://github.com/braedonsaunders/vela') },
-        { label: 'Check for Updates…', click: () => void checkForUpdates(true) },
+        ...(!mac ? [{ label: 'Check for Updates…', click: () => void checkForUpdates(true) }] : []),
       ],
     },
   ]);
