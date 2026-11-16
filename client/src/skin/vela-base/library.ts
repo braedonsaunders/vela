@@ -322,9 +322,17 @@ export const libraryLoading: Node = {
   ],
 };
 export const noItems: Condition = { test: 'library.itemCount', is: 'eq', value: '0' };
+// The route paints its own page: a document whose shell leaves the ground to its home (Kids)
+// still reads its ink on its paper here.
 export const library: Node = {
   type: 'box',
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'column' },
+  style: {
+    position: 'relative',
+    display: 'flex',
+    'flex-direction': 'column',
+    'min-height': '100vh',
+    'background-color': '$ui.page',
+  },
   children: [
     libraryLoading,
     failure('{t:library.couldNotOpen}'),

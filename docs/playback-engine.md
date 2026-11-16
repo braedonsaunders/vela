@@ -2266,3 +2266,37 @@ Open: the libraries input is still a prepared tree. Decoder packages and subtitl
 assets are pinned, but the Dolby Vision parser, audio output stage and range-extension
 vectors (built by the upstream WASM toolchain) are accepted by hash and listed under
 `prebuilt` in the manifest until that build runs from source here.
+
+### Expo web app: first lab drive (2026-11-16)
+
+Expo web export (player payload `245e0c03…`) served at `/vela` with the API and media
+proxied same-origin to the lab Ether, real watch route (`/watch/<id>`), headed Chrome.
+1917 (2019): Ether selected the **1080p AVC BluRay remux** (TrueHD Atmos 7.1, PGS) as
+an original file, not the title's 2160p HEVC Dolby Vision 7 release; the client cannot
+choose a version, so this is **not** the 4K HDR proof. On that file, the core reached
+`playing` from ranged original reads; Forward 10 s sought locally and reported the seek
+to the server (200); English PGS drew captions (up to 67,466 opaque overlay pixels,
+seen on screen); the audio switch from TrueHD 7.1 to English AC-3 5.1 applied locally.
+Close sent Stop (200) and left no media elements; the app's and the probe's tokens were
+revoked (200). The 4K HDR10/TrueHD/PGS row still needs a title Ether serves as 2160p
+HDR to this client. Finding for the app: the spike route `(spike)/player` mounted three
+times during sign-in and opened three playback sessions; the watch route opened one.
+
+**4K HDR proof (same day, after Ether pinned 1917 to the 2160p release).** Ether served
+`1917.2019.UHD.BluRay.2160p.TrueHD.Atmos.7.1.DV.HEVC.REMUX-FraMeSToR` to the web client
+as an original direct file. The core played it as HEVC HDR10 (the Dolby Vision 7 base
+layer) at 4K with **0 dropped of 9,096 frames**. Forward and back 10 s sought through the
+server (seek commands 200, local resume). English SDH PGS drew on screen (44,249 overlay
+pixels at the capture). The TrueHD Atmos 7.1 to English AC-3 5.1 switch applied while
+playing. Close sent Stop (200), the token was revoked (200) and Ether was asked to
+unpin. Connection measured 16–25 Mbps against the release's 48 Mbps average, with
+about 0.3 s of buffer and no stall during the ~7 minutes driven.
+
+Follow-ups, checked on the mock. The "dropped" back seeks were the test driver's: its
+element clicks landed while the chrome was hidden, and a press on a hidden chrome only
+wakes it. With pointer input, forward then back 400 ms apart sent both seeks
+(seekGeneration 3 and 4, both 200). The mock's refused audio switch is the mock's
+policy: its transcode path is muxed, it answers `tracks` with 403 "Changing active
+tracks needs a new source", and the chrome shows that message. Ether switches. The
+repeated /playback came from the app's providers remounting every route on sign-in,
+fixed in apps/vela (one /playback per watch now).

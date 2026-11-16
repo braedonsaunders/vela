@@ -16,6 +16,7 @@ export function useServerSwitch(): ServerSwitch | null {
   return useContext(ServersContext);
 }
 
-export function ServersProvider({ value, children }: { value: ServerSwitch; children: ReactNode }) {
+/** Wraps the app always (null while signed out), so the tree never remounts on sign-in. */
+export function ServersProvider({ value, children }: { value: ServerSwitch | null; children: ReactNode }) {
   return <ServersContext.Provider value={value}>{children}</ServersContext.Provider>;
 }

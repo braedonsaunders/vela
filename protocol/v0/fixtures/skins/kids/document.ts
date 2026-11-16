@@ -387,10 +387,11 @@ const calm = { keyframes: 'dissolve', duration: 220 };
 const kids: SkinDocument = {
   schema: 1, renderer: 15, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
   preview: art('preview.jpg'), swatches: ['#FFF8EE', '#1B2550', '#FFC93C', '#3FA9F5', '#FF6B57'],
-  // Kids' cream, navy ink and sunshine accent, for the routes it inherits (search, library, collection, sign-in).
+  // Kids' cream, navy ink and a deep sky accent (readable as text on cream; the sun stays a fill),
+  // for the routes it inherits (search, library, collection, sign-in).
   ui: {
     page: '#fff8ee', raised: '#ffffff', ink: '#1b2550', inkSecondary: '#4a5580', inkQuiet: '#6e78a0',
-    inkInverse: '#ffffff', inkHover: '#2b3a78', accent: '#ffc93c', onAccent: '#1b2550', control: '#fff3df',
+    inkInverse: '#ffffff', inkHover: '#2b3a78', accent: '#1f7fc4', onAccent: '#ffffff', control: '#fff3df',
     controlHover: '#ffe59a', glass: '#ffffffd9', glassEdge: '#1b25501f', glassEdgeStrong: '#1b255038',
     popover: '#fffffff7', scrim: '#1b255080', track: '#1b25501f', trackStrong: '#1b255038',
     focusHalo: '#3fa9f540', shadow: '#1b255029', skeleton: '#fff3df', skeletonLight: '#ffffff',

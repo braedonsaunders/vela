@@ -8,8 +8,8 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { Platform, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -99,12 +99,17 @@ function rowsFor(node: RNode, c: Ctx, e: Env, ui: Interaction, group: GroupState
   const state: Layer | undefined = node.states.find(s => holds(s.when, c, e))?.layer;
   const look = (kind: 'hover' | 'focus' | 'groupHover' | 'groupFocus') => state?.[kind] ?? node.base[kind];
   const rows: Css = filled((state ?? node.base).style, c, e, false);
+  // `outline: auto` in a plain style is the platform's focus ring (CSS's :focus-visible outline):
+  // it draws only while the node is focused. Written inside a focus look, it applies as written.
+  const ring = rows.outline === 'auto';
+  if (ring) delete rows.outline;
   const overlay = (css: CssT | undefined) => Object.assign(rows, filled(css, c, e, e.still));
   if (group?.hover) overlay(look('groupHover'));
   if (group?.focus) overlay(look('groupFocus'));
   if (ui.hover) overlay(look('hover'));
   // On TV, focus is the only pointer: a node with a hover look and no focus look shows its hover look.
   if (ui.focus) overlay(look('focus') ?? (Platform.isTV ? look('hover') : undefined));
+  if (ui.focus && ring && rows.outline === undefined) rows.outline = 'auto';
   if (ui.active) overlay(node.active);
   if (disabled) overlay(node.disabledStyle);
   return rows;
@@ -186,7 +191,6 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const parentGroup = useContext(Group);
   const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
   const [groupUi, setGroupUi] = useState({ hover: false, focus: false });
-  const [gridWidth, setGridWidth] = useState(0);
   const scrollRef = useRef<Scroller>(null);
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
@@ -221,16 +225,13 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const children = node.children.map((child, i) => <SkinNode key={i} node={child} ctx={ctx} />);
   if (after) children.push(<SkinNode key="after" node={after} ctx={ctx} />);
   let content: ReactNode = children;
-  if (fx.grid && gridWidth > 0) {
-    const gap = fx.grid.gap;
-    const count = fx.grid.count ?? Math.max(1, Math.floor((gridWidth + gap) / ((fx.grid.min ?? 160) + gap)));
-    const cell = (gridWidth - gap * (count - 1)) / count;
+  if (fx.grid) {
     // A grid's cells are its drawn items: a repeat contributes one cell per item, as CSS grid
     // places each element a repeat draws.
     const items = node.children.flatMap((child, i) => child.kind === 'repeat'
       ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(c)}`} node={child.item} ctx={c} />)
       : holds(child.when, ctx, env) ? [<SkinNode key={i} node={child} ctx={ctx} />] : []);
-    content = items.map(item => <View key={item.key} style={{ width: cell }}>{item}</View>);
+    content = <GridTrack grid={fx.grid} rowGap={style.rowGap} items={items} />;
   }
   const layers = (
     <>
@@ -238,7 +239,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}
     </>
   );
-  const drawn: Record<string, unknown> = { ...style, ...(fx.grid ? { flexDirection: 'row', flexWrap: 'wrap' } : {}), ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion };
+  const drawn: Record<string, unknown> = { ...style, ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion };
   // A native mask wraps the box: the mask takes the box's geometry and the box fills it in flow,
   // so the mask is as large as the box's content.
   const masked = !!(fx.mask || fx.radialMask);
@@ -247,7 +248,6 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const a11y = a11yProps(node, ctx, env);
   const hoverProps = web && (node.base.hover || node.group || node.states.some(s => s.layer.hover))
     ? { onMouseEnter: () => set('hover', true), onMouseLeave: () => set('hover', false) } : {};
-  const onLayout = fx.grid ? (e: LayoutChangeEvent) => setGridWidth(e.nativeEvent.layout.width - (Number(style.paddingLeft) || 0) - (Number(style.paddingRight) || 0)) : undefined;
 
   let element: ReactNode;
   if (route || fx.scrollX || fx.scrollY) {
@@ -261,10 +261,10 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
       host.setPager(rowId, { atStart: contentOffset.x <= 1, atEnd: contentOffset.x + layoutMeasurement.width >= contentSize.width - 1 });
     } : undefined;
     element = (
-      <AScroll ref={scrollRef as never} horizontal={horizontal} style={route ? [{ flex: 1 }, outerStyle as ViewStyle] : (outerStyle as ViewStyle)}
+      <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
         contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
-        onLayout={onLayout} {...a11y}>
+        {...a11y}>
         {content}
       </AScroll>
     );
@@ -282,7 +282,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
         testID={a11y.testID} />
     ) : null;
     element = (
-      <AView style={boxStyleFinal as ViewStyle} onLayout={onLayout} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)}>
+      <AView style={boxStyleFinal as ViewStyle} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)}>
         {layers}
         {content}
         {button}
@@ -300,11 +300,35 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   );
 }
 
+/** A route's scroll fills the route. A box that scrolls is sized as CSS sizes it: React Native's
+ * ScrollView grows by default, which would stretch a 232 px sidebar across its row. */
+const ROUTE_SCROLL: ViewStyle = { flex: 1 };
+const BOX_SCROLL: ViewStyle = { flexGrow: 0 };
+
+/** A grid's cells, in a track that fills the box's content width. The track measures that width
+ * itself (a box's padding may be a percentage of its parent's width), and the columns divide it:
+ * auto-fill takes as many columns as fit at the minimum, then stretches them to fill the row. */
+function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>; rowGap: unknown; items: ReactElement[] }) {
+  const [width, setWidth] = useState(0);
+  const gap = grid.gap;
+  const count = grid.count ?? Math.max(1, Math.floor((width + gap) / ((grid.min ?? 160) + gap)));
+  // Rounded down to the hundredth so a row's cells and gaps never sum past the track and wrap.
+  const cell = Math.floor(((width - gap * (count - 1)) / count) * 100) / 100;
+  const track = { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', rowGap, columnGap: gap } as ViewStyle;
+  return (
+    <View style={track} onLayout={e => setWidth(e.nativeEvent.layout.width)}>
+      {width > 0 ? items.map(item => <View key={item.key} style={{ width: cell }}>{item}</View>) : null}
+    </View>
+  );
+}
+
 /** The press button inside a box never draws the platform ring: the box is the clipping element,
- * so the ring is the box's own, drawn from its focus look (`outline: auto` keeps the platform ring
- * on the box). A press box without any focus look keeps the button's ring. */
+ * so the ring is the box's own, drawn from its focus look (`outline: auto`, written in the style or
+ * the focus look, draws the platform ring on the box while focused). A press box without any focus
+ * look keeps the button's ring. */
 function ownFocusLook(node: RNode): boolean {
-  return web && [node.base.focus, ...node.states.map(s => s.layer.focus)].some(Boolean);
+  const layers = [node.base, ...node.states.map(s => s.layer)];
+  return web && layers.some(layer => layer.focus || layer.style.outline === 'auto');
 }
 const NO_RING = { outlineWidth: 0 } as ViewStyle;
 

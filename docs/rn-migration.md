@@ -312,16 +312,121 @@ and PGS subtitle switching (rendered by mpv into the picture), snapshots and obs
   Output channels follow the session (`audio-channels=auto-safe` when the output takes more than two).
 - **Ending a session.** mpv raises `eof-reached` for a moment while it switches tracks on a network stream.
   Ether ends a session on an `ended` observation and its media URL then answers 404, so the view reports
-  `ended` only at the file's end. The contract has no session commands: seeks are local (observations carry
-  the position) and the host stops the server session itself.
-- **Redirects** (open question above): not exercised; Ether's broker URLs need no headers.
+  `ended` only at the file's end.
+- **Redirects**: answered below ("Media credentials and redirects").
 - **Client build.** The lab Ether admits client builds below 0.2.0; the app is 0.2.0, so the spike reported 0.1.43.
+
+#### Session commands (agreed with the migration lead, 2026-11-16)
+
+- **Seek.** On an original file (direct play) the view seeks locally and emits nothing; observations carry the
+  position. On a server path (Ether's HLS) it emits `onSessionCommand` `{kind: 'seek'}` and moves only when the
+  plan with the next `seekGeneration` arrives (the web engine's server-controlled behaviour).
+- **Tracks.** An audio or subtitle track the playing file carries switches locally and is reported client-only
+  (`audioClientOnly`/`subtitleClientOnly`, so observations leave it out). Any other track change emits
+  `{kind: 'tracks'}` and is applied from the answering plan. `quality`/`switchPath` emit `{kind: 'switch'}`.
+- **Stop.** The view never emits it. The playback controller (`playbackController` in packages/skin) sends
+  `{kind: 'stop'}` through core when it closes the player; unmounting the view only releases mpv.
+- **Refresh.** `onSessionRefresh` once per source when a media request is refused with 401, 403, 404 or 410
+  (an expired or revoked grant, read from FFmpeg's log), or when a command reply is stale.
+
+#### Media credentials and redirects (proven 2026-11-16)
+
+Stock FFmpeg, and so stock mpv, sends `http-header-fields` to wherever a redirect points: `ffprobe -headers
+'Authorization: …'` against a local origin A that answers 302 to origin B delivered the credential to B.
+The Apple view therefore never lets FFmpeg follow a redirect with credentials attached
+(`ios/MediaRedirects.swift`):
+
+1. A URL whose media access gives it headers is resolved first, hop by hop, with redirects refused
+   (`Range: bytes=0-0`). A hop inside `origin + pathPrefix` keeps the headers; a hop outside drops them for good.
+2. mpv loads the final URL with those headers and FFmpeg's `max_redirects=0` (`stream-lavf-o`), so a redirect on
+   a later request (a seek, a reconnect) fails instead of being followed.
+
+On Basement against the same local pair: a redirect from A to B sent the probe to A with the credential and
+every request to B without it; a redirect within A's `/media/` kept it. A URL without headers (Ether's broker
+URLs) is loaded as is, redirects and all.
+
+#### Previews
+
+`preview` plays in its own mpv instance (`ios/PreviewPlayback.swift`): no audio track, no subtitles, no
+audio session, no display matching, a 16 MiB cache, `loop-file` when asked. It plays while `active` is not
+false, the view is in a window and the grant is unexpired; mpv is destroyed at once when any of those ends,
+when `preview` is unset and on unmount. Snapshots carry only `state` (loading, playing, ended, failed);
+commands are play and pause. Verified on Basement against the mock server's preview grant (the lab had no
+ready trailer for 1917 or Inception: `trailer_unavailable`).
+
+#### Releasing a build with libmpv (LGPL-2.1-or-later)
+
+MPVKit's LGPL product is linked as **static** libraries (libmpv, FFmpeg, libass, libplacebo, gnutls and the rest
+of `ios/mpvkit-1.0.0.txt`). A distributed app that statically links LGPL code must let its users relink it
+against a modified version of those libraries. Before any build leaves this team (TestFlight, the App Store,
+an ad hoc install for someone else), the release must provide one of:
+
+- the app's object files (or an Xcode archive's intermediate objects) and the link command, plus the exact
+  corresponding source of every LGPL library used (MPVKit 1.0.0's sources at the pinned hashes, with any
+  patches), and the licence texts; or
+- a build where the LGPL libraries are dynamic frameworks the user can replace (MPVKit publishes static
+  xcframeworks, so this means building them as frameworks ourselves).
+
+The App Store's own terms complicate the first option; record the choice in the release checklist before the
+first external build. The GPL product (`MPVKit-GPL`) is never linked.
 
 ### Android implementation (conversion)
 
 Kotlin, the same contract, libmpv from mpv-android's build on a `SurfaceView`,
 `hwdec=mediacodec`. Android TV uses the same module; display mode matching through
 `Surface.setFrameRate` and `Display.Mode`.
+
+#### State and handoff (2026-11-16, thread `thr_xazq34wx52`)
+
+Moved off the shared Mac: the emulator cannot run there beside the Apple work (swap full, the guest
+swapped out, ANRs on input). It continues on a Linux machine with KVM.
+
+- **libmpv is LGPL.** The Maven AAR `dev.jdtech.mpv:libmpv` is GPLv3 (FFmpeg `--enable-gpl`, mpv's GPL
+  default), so it is not used. `modules/vela-player/android/libmpv/build.sh` builds libmpv from
+  libmpv-android's scripts at the revision in `libmpv/pin.sh` (mpv 0.42.0, FFmpeg 9.0.2, libplacebo,
+  libass, dav1d, mbedTLS, libcurl) with `-Dgpl=false` and FFmpeg `--enable-version3` only, on React
+  Native's NDK (27.1, one libc++). It refuses a result whose `config.h` is not LGPLv3 / `HAVE_GPL 0`.
+  Output: `~/.scratch/vela-build/libmpv/<revision>-lgpl/{include,jniLibs/<abi>}`, which the module's
+  Gradle build links (or `-PvelaLibmpvDir=`). Distribution must ship the LGPL notices and offer the
+  sources of this build (shared libraries, so relinking is by replacing them).
+- **The module** (`modules/vela-player/android`): its own JNI (`src/main/cpp`, one mpv handle per view,
+  events on a thread of their own) and Kotlin classes mirroring the Apple ones: `PlayerController`
+  (plans, commands, track selection by source stream index, seek generations), `PreviewPlayback`
+  (`preview`/`active`: muted, small caches, destroyed when inactive, off screen, expired or under Data
+  Saver), `PlayerReport` (the same snapshot and observation shapes as `ios/PlayerReport.swift`),
+  `PlayerCapabilities` (hardware decoders from `MediaCodecList`), `DisplayMatching`
+  (`Surface.setFrameRate`, `preferredDisplayModeId`; SDR output only), `MediaAccess`, `TrustStore`
+  (the device's CAs as one PEM file: mbedTLS cannot read Android's store). It compiles and is packaged;
+  it has **not played a file yet**.
+- **Redirects with credentials** (open question above): mpv 0.42 carries http(s) over libcurl, not
+  FFmpeg. While media access headers apply to a URL the view sets `curl-max-redirects=0` (and FFmpeg's
+  `max_redirects=0`), so a credentialed request never follows any redirect. Ether's broker URLs carry no
+  headers and keep redirects. Not yet exercised against a redirecting server.
+- **Milestone 1 (renderer on Android TV), partly verified** on the emulator (Android 14 TV image): the
+  sign-in document draws with its fonts and gradients, and D-pad focus moves into its fields with the
+  document's focus look. Not yet driven: signing in, home, title, rows and cards by D-pad.
+- **Milestone 2 (lab HEVC MKV with media auth)**: not started on a device. A suitable lab title is
+  Se7en (HEVC Main10 HDR10, 1920x800, 7.9 GB original, `EXPO_PUBLIC_VELA_TITLE=Se7en`); the lab's other
+  originals are 4K.
+- **Blocker in the app shell:** `apps/vela/src/vela.tsx` sends every signed-out route but `/sign-in` and
+  `/connect` to sign-in, which includes the spike route `/player` (it signs in by itself), so
+  `vela://player` cannot open on any native platform until it is let through.
+
+Steps on a new machine (Linux x86_64 with KVM, or a Mac):
+
+1. JDK 17 (`openjdk-17-jdk`, or Homebrew `openjdk@17`). Android command-line tools unpacked to
+   `$ANDROID_HOME/cmdline-tools/latest` (default `~/.scratch/android-sdk`), then
+   `sdkmanager platform-tools emulator "platforms;android-37.0" "build-tools;37.0.0"
+   "ndk;27.1.12297006" "cmake;3.22.1"` and a TV image (`system-images;android-34;android-tv;x86_64` on
+   Linux, `arm64-v8a` on Apple silicon); `avdmanager create avd -n vela-tv -d tv_1080p -k <image>`.
+2. `source tools/android-env.sh` (per-worktree Gradle home, the host's ABI, build output on scratch).
+3. libmpv: on Linux install autoconf, automake, libtool, pkg-config, meson, ninja, nasm, gperf, python3
+   (venv); on a Mac Homebrew's automake, autoconf, gnu-sed, meson, ninja, wget. Then
+   `modules/vela-player/android/libmpv/build.sh x86_64` (or `arm64`); about 30 minutes, clean each time.
+4. `bun install`, the mock server (`bun mock-server/main.ts`, `adb reverse tcp:7777 tcp:7777`), then
+   `tools/android-tv.sh --prebuild --open vela://` (Release, JS embedded; `--debug` for Metro with
+   `--clear`). For the lab spike, `apps/vela/.env.local` as in `app/(spike)/player.tsx` (never committed)
+   and `--open vela://player`.
 
 ### Web implementation
 
