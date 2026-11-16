@@ -42,7 +42,8 @@ const TV_HEIGHT = 1080;
 
 export function usePlayerLook(): PlayerLook {
   const { doc, env, viewport } = useHost();
-  const tv = Platform.isTV || env.tv;
+  // A wide desktop window still uses pointer-sized controls, not remote/TV styling.
+  const tv = Platform.isTV;
   const small = !tv && viewport.width < 640;
   return useMemo(() => {
     const ui = resolveUi(doc.document.ui);

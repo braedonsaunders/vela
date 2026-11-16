@@ -297,6 +297,7 @@ function Controls({
         <ChromeButton
           look={look}
           icon={view.subtitleId ? 'captionsOn' : 'captions'}
+          compact
           label={names.subtitles}
           selected={opened === 'subtitles'}
           testID="player-cc-button"
@@ -305,6 +306,7 @@ function Controls({
         <ChromeButton
           look={look}
           icon="audio"
+          compact
           label={names.audio}
           selected={opened === 'audio'}
           testID="player-audio-button"
@@ -313,6 +315,7 @@ function Controls({
         <ChromeButton
           look={look}
           icon="quality"
+          compact
           label={names.quality}
           selected={opened === 'quality'}
           testID="player-quality-button"
@@ -323,6 +326,7 @@ function Controls({
             <ChromeButton
               look={look}
               icon="speed"
+              compact
               label={names.speed}
               selected={opened === 'speed'}
               testID="player-speed-button"
@@ -331,6 +335,7 @@ function Controls({
             <ChromeButton
               look={look}
               icon="chapters"
+              compact
               label={msg('ui.chapters')}
               selected={opened === 'chapters'}
               disabled={!view.chapters.length}
@@ -343,6 +348,7 @@ function Controls({
           <ChromeButton
             look={look}
             icon="pip"
+            compact
             label={msg('ui.pictureInPicture')}
             onPress={() => send({ type: 'pip' })}
           />
@@ -351,6 +357,7 @@ function Controls({
           <ChromeButton
             look={look}
             icon="fullscreen"
+            compact
             label={msg('ui.fullscreen')}
             onPress={() => send({ type: 'fullscreen' })}
           />

@@ -3,7 +3,7 @@
 // with the ink and wears the ring too, so it reads from across the room and stands apart from
 // the play toggle, which is always filled.
 import { useState, type Ref } from 'react';
-import { Pressable, type ViewStyle } from 'react-native';
+import { Pressable, View, type ViewStyle } from 'react-native';
 import type { Focusable } from '../../escape';
 import { PlayerIcon, type PlayerIconName } from './icons';
 import type { PlayerLook } from './look';
@@ -18,6 +18,8 @@ interface Props {
   disabled?: boolean;
   /** A menu button whose menu is open, or a toggle that is on. */
   selected?: boolean;
+  /** A smaller visible highlight inside the unchanged pointer/touch target. */
+  compact?: boolean;
   size?: number;
   preferred?: boolean;
   testID?: string;
@@ -34,6 +36,7 @@ export function ChromeButton({
   primary,
   disabled,
   selected,
+  compact,
   size,
   preferred,
   testID,
@@ -43,21 +46,29 @@ export function ChromeButton({
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const box = look.size(size ?? (primary ? 52 : 44));
+  const face = compact && !look.tv ? look.size(32) : box;
   const filled = primary || (look.tv && focus);
   const wash = selected || hover ? look.controlHover : 'transparent';
   const style: ViewStyle = {
     width: box,
     height: box,
-    borderRadius: look.radiusControl >= box / 2 ? box / 2 : look.radiusControl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: disabled ? 0.35 : 1,
+    outlineStyle: 'none',
+    transform: [{ scale: look.tv && focus && !look.still ? 1.1 : 1 }],
+  };
+  const faceStyle: ViewStyle = {
+    width: face,
+    height: face,
+    borderRadius: Math.min(look.radiusControl, face / 2),
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: filled ? look.ink : wash,
-    opacity: disabled ? 0.35 : 1,
     outlineColor: look.accent,
     outlineStyle: 'solid',
     outlineWidth: focus ? (look.tv ? look.size(3) : 2) : 0,
     outlineOffset: look.tv ? look.size(3) : 0,
-    transform: [{ scale: look.tv && focus && !look.still ? 1.1 : 1 }],
   };
   return (
     <Pressable
@@ -82,7 +93,9 @@ export function ChromeButton({
       }}
       style={style}
     >
-      <PlayerIcon name={icon} size={look.size(22)} color={filled ? look.inkInverse : look.ink} />
+      <View pointerEvents="none" style={faceStyle}>
+        <PlayerIcon name={icon} size={look.size(22)} color={filled ? look.inkInverse : look.ink} />
+      </View>
     </Pressable>
   );
 }
