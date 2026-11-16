@@ -36,6 +36,10 @@ if [ "$prebuild" = 1 ] || [ ! -d "$root/apps/vela/ios" ]; then
 fi
 
 cd "$root/apps/vela/ios"
+# A native module's new or removed files join the Pods project only through pod install.
+if [ -n "$(find "$root/modules" -path '*/ios/*' -newer Pods/Manifest.lock -print -quit 2>/dev/null)" ]; then
+  pod install >/dev/null
+fi
 if ! xcodebuild -workspace Vela.xcworkspace -scheme Vela -configuration Release \
   -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath "$derived" \
   -allowProvisioningUpdates DEVELOPMENT_TEAM=9YL3YCJTNT CODE_SIGN_STYLE=Automatic \

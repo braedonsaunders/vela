@@ -21,7 +21,7 @@ export interface PlaybackSession {
 function startFailure(playback: PlaybackState): StartFailure | null {
   if (playback.phase !== 'failed' || playback.retryAfterSeconds > 0) return null;
   return {
-    capacity: /capacity/.test(playback.errorCode),
+    capacity: playback.errorClass === 'capacity',
     message: playback.error || msg('ui.playbackCouldnTBeStarted'),
   };
 }
@@ -94,9 +94,9 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
     onSessionCommand: event => {
       if (event.sessionId === sessionId) void vela.playback.command(event.sessionId, event.command);
     },
-    // A grant the server no longer honours: a fresh session from where playback stood.
+    // An expired grant or a stale reply: core re-reads the session's authoritative plan.
     onSessionRefresh: event => {
-      if (event.sessionId === sessionId) begin(position.current);
+      if (event.sessionId === sessionId) void vela.playback.refresh(event.sessionId);
     },
   };
 

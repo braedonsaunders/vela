@@ -10,6 +10,8 @@ final class MPVClient {
         case fileLoaded
         case endFile(reason: Int32, error: Int32)
         case seekDone
+        /// The server refused a media request (401, 403, 404, 410): an expired or revoked grant.
+        case refused(status: Int)
         case shutdown
     }
 
@@ -199,6 +201,9 @@ final class MPVClient {
                     let prefix = message.prefix.map { String(cString: $0) } ?? ""
                     let text = message.text.map { String(cString: $0) } ?? ""
                     print("[mpv] \(prefix): \(text)", terminator: "")
+                    if let status = MPVClient.refusedStatus(text) {
+                        post(.refused(status: status))
+                    }
                 }
             case MPV_EVENT_SHUTDOWN:
                 post(.shutdown)
@@ -207,6 +212,15 @@ final class MPVClient {
                 break
             }
         }
+    }
+
+    /// FFmpeg's "HTTP error 404 Not Found" for a refused grant.
+    private static func refusedStatus(_ text: String) -> Int? {
+        guard let range = text.range(of: "HTTP error ") else {
+            return nil
+        }
+        let status = Int(text[range.upperBound...].prefix(3)) ?? 0
+        return [401, 403, 404, 410].contains(status) ? status : nil
     }
 
     private func deliver(_ property: mpv_event_property) {
