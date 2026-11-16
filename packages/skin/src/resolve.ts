@@ -170,6 +170,13 @@ function variant(node: Node & { below?: Record<string, Style>; above?: Record<st
   return Object.assign({}, base, ...applied.map(m => m.style));
 }
 
+/** A node's states, at most 16 (docs/skin-schema.md): more is refused, never silently cut. */
+function statesOf(node: Node): NonNullable<Node['states']> {
+  const states = node.states ?? [];
+  if (states.length > 16) throw new Error(`A node has at most 16 states (${states.length})`);
+  return states;
+}
+
 function convert(node: Node, depth: number, r: Context): RNode {
   if (++r.count > MAX_NODES) throw new Error(`A skin document draws at most ${MAX_NODES} nodes`);
   if (depth > MAX_DEPTH) throw new Error(`A skin document nests at most ${MAX_DEPTH} deep`);
@@ -195,7 +202,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
   const common: Common = {
     when: tests(node.when),
     base: layer(style, node),
-    states: (node.states ?? []).slice(0, 8).map(s => ({ when: tests(s.when), layer: layer({ ...style, ...s.style }, s) })),
+    states: statesOf(node).map(s => ({ when: tests(s.when), layer: layer({ ...style, ...s.style }, s) })),
     active: node.active && css(node.active, r),
     disabled: node.disabled && tests(node.disabled),
     disabledStyle: node.disabledStyle && css(node.disabledStyle, r),

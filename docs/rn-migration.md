@@ -181,7 +181,8 @@ focus engine (tvOS) and D-pad focus (Android TV); a node with `hover` but no `fo
 uses its hover overlay as its TV focus look. The overlays of the active `states` entry replace the node's own (hover, focus, groupHover,
 groupFocus); a state without one keeps the node's. A focus look written only inside states is
 still the node's TV and keyboard focus look, and it replaces the platform focus ring unless it
-says `outline: auto`. `group`/`groupHover` is a context flag set
+says `outline: auto`. The focus look and any ring are drawn on the press box itself, the
+clipping element, never on the transparent button inside it. A node keeps up to 16 states; more are refused. `group`/`groupHover` is a context flag set
 by the nearest group's hover or focus. Rows use `TVFocusGuideView` so focus moves
 between rows the way the server ordered them.
 
@@ -295,6 +296,27 @@ the auth screens (the spike signs in from configuration).
 390 px), the iOS Simulator and the Basement Apple TV, side by side with screenshots of the
 Exact build of the same documents, with focus moving through hero, rows and cards on tvOS
 by remote. Known differences go in this document, row by row.
+
+### Spike (a) findings so far (web, 2026-11-16)
+
+Drawn from live mock data at 1440 px: the Vela base home (shell, hero, rows, Top 10
+numerals, pill buttons), the Vela base title page, and Mochi's home (sticker cards,
+fonts, SVG assets, hero, search field). Differences from the Exact build, and what the
+renderer still lacks:
+
+- **Search results** draw nothing: the base draws them with compiled code, and no document
+  has `routes.search` yet. The search vocabulary reads empty until one does.
+- **The framed title over home** (`detail.wide`/`small`, scrim and blur over the page
+  underneath) is drawn as a route of its own, without home underneath.
+- **Widgets** other than `searchInput` (install, observe, sentinel, select, previews, live
+  tile) draw nothing yet.
+- **Mixed-percentage lengths** (`calc(100% + 6px)`, `min(560px, 80%)`) are exact on the web
+  (CSS evaluates them). Natively `calc(P% ± …)` keeps the percentage and `min`/`max` keep the
+  argument that wins at the viewport's size.
+- **SVG assets** are bundled as data URIs (`apps/vela/svg-transformer.js`): Metro rejects
+  SVGs sized `100%` as image assets.
+- **A text drawn as a centring flex box** (a badge, an initial in a circle) centres its line
+  with `textAlign` and a line height equal to the box's height.
 
 ## After the spikes
 
