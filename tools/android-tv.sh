@@ -45,7 +45,7 @@ log="$scratch/android-gradle.log"
 
 if [ "$prebuild" = 1 ] || [ ! -d apps/vela/android ]; then
   tv=1
-  [ "$phone" = 1 ] && tv=""
+  [ "$phone" = 1 ] && tv=0
   (cd apps/vela && EXPO_TV=$tv bun x expo prebuild -p android --clean --no-install)
 fi
 
