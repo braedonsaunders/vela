@@ -79,8 +79,8 @@ specified in [AGENTS.md](../AGENTS.md); do not commit generated native projects.
 ## Release handoff
 
 Release owner confirmed `bun tools/release/build.ts --player-assets=<payload-directory>
---committed` for the replacement implementation, where the directory contains
-`PLAYER-ASSETS-MANIFEST.json`. Version is captured `apps/vela/package.json`; one
+--committed` for the replacement implementation, where the directory is `<out>/player/<digest>` and
+`<out>/PLAYER-ASSETS-MANIFEST.json` records provenance. Version is captured `apps/vela/package.json`; one
 archive/manifest records `skinRenderer` and `playerAssetsDigest`. Catalog generation
 moves to `tools/skin-documents.ts`. The parent built and test-key signed the 0.2.0
 candidate from `a9d195c`; see [distribution.md](distribution.md) for its evidence and
