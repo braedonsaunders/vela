@@ -1,6 +1,0 @@
-// The layout engine this build was compiled for: empty in a development or all-skins
-// build (every engine dispatched in place), an engine id in a single-engine release
-// build, where tools/engine.ts rewrites it. Which engine a skin id runs on is the
-// generated registry's resolveSkin (foundation/skins.generated.contract).
-fn buildEngine(): string = ""
-
