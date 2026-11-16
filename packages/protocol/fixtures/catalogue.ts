@@ -74,13 +74,16 @@ const fixtureGuides = [
   { id: 'guide-comedy', name: 'Comedy' }, { id: 'guide-music', name: 'Music' }, { id: 'guide-lifestyle', name: 'Lifestyle' },
 ];
 const houseGuide = { id: 'guide-house-picks', name: 'House picks' };
-export const channels: Channel[] = Array.from({ length: 170 }, (_, i) => ({ id: `channel-${i + 1}`, number: String(i < 150 ? 101 + i : 1980 + i - 150),
+// VELA_MOCK_CHANNELS sizes the lineup (default 170) for guide scale runs, e.g. 12000.
+const channelCount = Math.max(1, Math.floor(Number(process.env.VELA_MOCK_CHANNELS) || 170));
+export const channels: Channel[] = Array.from({ length: channelCount }, (_, i) => ({ id: `channel-${i + 1}`, number: String(i < 150 ? 101 + i : 1980 + i - 150),
   name: i < channelNames.length ? channelNames[i]! : `${['North', 'Coastal', 'Studio', 'Vista', 'Metro'][i % 5]} ${programmeGenres[i % programmeGenres.length]} ${Math.floor(i / 45) + 1}`,
   kind: 'tv', group: programmeGenres[i % programmeGenres.length], guides: [fixtureGuides[i % fixtureGuides.length]!, ...(i < 6 ? [houseGuide] : [])], artwork: i % 5 === 4 ? [] : [artwork(`channel-${i + 1}`, 'channel')], favorite: i < 6 }));
 export function guide(from: number, until: number, ids: string[]): Programme[] {
   const minute = 60000, durations = [15, 25, 30, 45, 60, 90, 120], cycle = 385;
+  const wanted = new Set(ids);
   return channels.flatMap((c, i) => {
-    if (i % 4 === 3 || ids.length && !ids.includes(c.id)) return [];
+    if (i % 4 === 3 || wanted.size && !wanted.has(c.id)) return [];
     const result: Programme[] = [], phase = (i * 13) % cycle;
     for (let n = Math.floor((from / minute - phase) / cycle); (n * cycle + phase) * minute < until; n++) {
       let at = (n * cycle + phase) * minute;

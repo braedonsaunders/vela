@@ -45,7 +45,8 @@ export function RailCell({ look, channel, small, width, row, selected, onWatch }
           size={12}
           color={look.inkQuiet}
           tabular
-          style={{ width: 34, textAlign: 'right', flexShrink: 0 }}
+          // Five digits (a 10,000-channel lineup) or a sub-channel like 100.12 fit before ellipsis.
+          style={{ width: 42, textAlign: 'right', flexShrink: 0 }}
         >
           {channel.number}
         </Line>
