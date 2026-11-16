@@ -4,12 +4,14 @@
 // draws its own field places the bare `searchInput` widget instead.
 import { msg } from '@vela/core';
 import { BlurView } from 'expo-blur';
-import { useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useQueryText } from './query-text';
 import { resolveUi } from '../../../../../client/src/skin/ui';
-import { focusTarget } from '../../escape';
+import { focusTarget, type Focusable } from '../../escape';
+import { useRouteFocusContext } from '../../route-focus';
+import { RevealContext } from '../../tv-reveal';
 import { measure, useHost, type WidgetProps } from '../../host';
 import { SYMBOLS } from '../../icons';
 import { textStyle } from '../../translate';
@@ -50,9 +52,19 @@ export function SearchField({ ctx }: WidgetProps) {
       ? `0px 26px 70px #00000040, 0px 0px 0px 3px ${ui.focusHalo}, inset 0px 1px 0px ${ui.glassEdge}`
       : `0px 18px 50px #00000040, inset 0px 1px 0px ${ui.glassEdge}`,
   };
+  // On TV, the field taking focus settles the route's first focus (results drawn as the viewer
+  // types never take it from the field), and on Android TV it is kept below the shell's bar.
+  const routeFocus = useRouteFocusContext();
+  const reveal = useContext(RevealContext);
+  const frame = useRef<Focusable | null>(null);
+  const onTvFocus = () => {
+    routeFocus?.focused();
+    if (reveal && frame.current) reveal(frame.current);
+  };
   const focus = (on: boolean) => {
     setFocused(on);
     host.setFlag('search-focused', on);
+    if (on) onTvFocus();
   };
 
   // The search actions (`search`, `focusSearch`) focus the field by its id: the text input itself,
@@ -69,7 +81,10 @@ export function SearchField({ ctx }: WidgetProps) {
   const tvProps = Platform.isTV
     ? {
         onPress: () => input.current?.focus(),
-        onFocus: () => setTvFocused(true),
+        onFocus: () => {
+          setTvFocused(true);
+          onTvFocus();
+        },
         onBlur: () => setTvFocused(false),
         accessibilityRole: 'search' as const,
         accessibilityLabel: msg('ui.searchYourLibrary'),
@@ -82,7 +97,7 @@ export function SearchField({ ctx }: WidgetProps) {
   return (
     <View style={[styles.field, field, ring]}>
       <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />
-      <Frame style={styles.entry} {...tvProps}>
+      <Frame ref={frame as never} style={styles.entry} {...tvProps}>
         <Glyph symbol="search" size={20} color={focused ? ui.ink : ui.inkSecondary} />
         <TextInput
           ref={input}
