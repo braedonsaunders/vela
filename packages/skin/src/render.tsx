@@ -735,14 +735,14 @@ function centredBox(own: Css, inherited: Css, style: Record<string, unknown>): T
 }
 
 /**
- * CSS lets a line box shorter than its glyphs (a ranked shelf's numeral, line-height 0.74) spill
- * them evenly above and below. Natively the glyphs sit in the short line and lose their tops, and
+ * CSS lets a line box shorter than its glyphs (a ranked shelf's numeral at 0.74, a display title
+ * at 0.98) spill them evenly above and below. Natively the glyphs sit in the short line and lose their tops, and
  * the text rides high. Such a text gets a line its glyphs fit, and gives the difference back as
  * equal negative margins, so it takes the room CSS gives it and draws where CSS draws it.
  */
 function tightLine(drawn: TextStyle, box: Record<string, unknown>, fontSize: number): TextStyle {
   const line = drawn.lineHeight;
-  if (web || !line || line >= fontSize * 0.9) return {};
+  if (web || !line || line >= fontSize * 1.1) return {};
   const room = fontSize * 1.2;
   const give = (room - line) / 2;
   const margin = (side: 'Top' | 'Bottom') => Number(box[`margin${side}`] ?? box.marginVertical ?? box.margin ?? 0) || 0;

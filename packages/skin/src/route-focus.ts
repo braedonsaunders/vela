@@ -46,6 +46,9 @@ export function useRouteFocusContext(): RouteFocus | null {
 const OPENING_MS = 5000;
 /** How long a drawn route waits for a play press before settling for its first content press. */
 const PRIMARY_WAIT_MS = 500;
+/** The press that opened a route reaches the remote listener just after the route mounts (its
+ * key-up follows the press); presses this soon after opening are that one, not the viewer's next. */
+const OPENING_PRESS_MS = 400;
 /** When a route's opening motion has settled (velaOpen, the longest, runs 640 ms). */
 const SETTLED_MS = 700;
 /** Presses that open a route's content, its first focus when it has no play press. */
@@ -66,6 +69,11 @@ function onFirstScreen(target: Focusable, answer: (visible: boolean) => void): v
   measurable.measureInWindow((_x, y, _width, height) => {
     answer(height > 0 && y < Dimensions.get('window').height);
   });
+}
+
+/** Whether the viewer has pressed or swiped since a route opened (not the press that opened it). */
+function pressedSince(opened: number): boolean {
+  return lastViewerPress > opened + OPENING_PRESS_MS;
 }
 
 function move(target: Focusable): void {
@@ -92,7 +100,7 @@ function firstFocus(): RouteFocus {
     // (the card's close button). Asked again once the motion has settled, unless the viewer has
     // pressed something meanwhile.
     setTimeout(() => {
-      if (lastViewerPress <= opened) move(target);
+      if (!pressedSince(opened)) move(target);
     }, SETTLED_MS);
   };
   // Measured once laid out; a control off the first screen is passed over.
@@ -112,7 +120,7 @@ function firstFocus(): RouteFocus {
       fallback = setTimeout(() => tryFocus(target), PRIMARY_WAIT_MS);
     },
     focused() {
-      if (lastViewerPress > opened) settle();
+      if (pressedSince(opened)) settle();
     },
   };
 }

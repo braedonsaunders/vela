@@ -68,8 +68,9 @@ export const band: Node = {
     'flex-direction': 'column',
     'justify-content': 'flex-end',
     // The frame starts below the shell's bar (title, below), so the band leaves that much of the
-    // screen: on a 540px TV the actions stay above the fold.
-    'min-height': 'min(calc(80vh - 70px), 780px)',
+    // screen: on a 540px TV the actions stay above the fold, and the title block stands well up
+    // the card rather than at its foot.
+    'min-height': 'min(calc(72vh - 70px), 720px)',
     'overflow-x': 'hidden',
     'overflow-y': 'hidden',
   },
@@ -169,7 +170,7 @@ export const band: Node = {
         position: 'relative',
         display: 'flex',
         'flex-direction': 'column',
-        gap: '18px',
+        gap: '24px',
         'padding-top': 'min(120px, 8vh)',
         'padding-bottom': '12px',
         ...side,
