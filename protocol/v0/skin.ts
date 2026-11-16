@@ -126,7 +126,7 @@ export interface MotionPreset {
 export interface SkinFont { family: string; /** weight: a number, or a range "300 700" for a variable face. */ files: { url: string; weight: number | string; style: 'normal' | 'italic' }[]; sizeAdjust?: number }
 
 /** The keys of a document's `ui` block (client/src/skin/ui-defaults.ts holds Cinematic's values). */
-export type UiName = 'page' | 'raised' | 'ink' | 'inkSecondary' | 'inkQuiet' | 'inkInverse' | 'accent' | 'onAccent'
+export type UiName = 'page' | 'raised' | 'ink' | 'inkSecondary' | 'inkQuiet' | 'inkInverse' | 'inkHover' | 'accent' | 'onAccent'
   | 'control' | 'controlHover' | 'glass' | 'glassEdge' | 'glassEdgeStrong' | 'popover' | 'scrim' | 'track' | 'trackStrong'
   | 'focusHalo' | 'shadow' | 'skeleton' | 'skeletonLight' | 'alert' | 'live' | 'font' | 'fontDisplay'
   | 'radiusControl' | 'radiusCard' | 'radiusPanel';

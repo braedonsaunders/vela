@@ -5,7 +5,8 @@
 import type { Action, Condition, Node, SkinDocument, Style } from '../../../protocol/v0/skin';
 import { velaBase } from '../../../client/src/skin/base';
 import { withBase } from '../../../client/src/skin/inherit';
-import { resolveUi, uiValue } from '../../../client/src/skin/ui';
+import { resolveUi, withUi } from '../../../client/src/skin/ui';
+import { mixColours } from '../../../client/src/skin/colour-mix';
 import { withClientStrings } from '../../../client/src/skin/client-strings';
 import { documentKeyframes, type Motion } from './keyframes';
 import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
@@ -150,13 +151,12 @@ function css(style: Style | undefined, r: Context): CssT {
   const out: CssT = {};
   for (const [row, raw] of Object.entries(style ?? {})) {
     if (raw === undefined) continue;
-    const text = String(raw)
-      .replace(/\$ui\.([A-Za-z]+)/g, (_, name: string) => uiValue(r.ui, name))
+    const text = mixColours(withUi(String(raw), r.ui)
       .replace(/\$([A-Za-z0-9_-]+)/g, (_, name: string) => {
         const v = r.doc.tokens?.[name];
         if (v === undefined) throw new Error(`Unknown token $${name}`);
         return v;
-      });
+      }));
     if (UNSAFE.test(text.replace(/\{[a-zA-Z.:-]+\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
     out[row] = compile(text, r, row === 'background-image')!;
   }

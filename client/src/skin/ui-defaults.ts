@@ -8,6 +8,8 @@ export const uiDefaults = {
   inkSecondary: '#b6b8bb',
   inkQuiet: '#858d98',
   inkInverse: '#111419',
+  // An ink-filled control (a primary button) under the pointer; a document that sets ink alone gets its ink.
+  inkHover: '#ffffff',
   accent: '#dcb998',
   onAccent: '#111419',
   control: '#ffffff16',
