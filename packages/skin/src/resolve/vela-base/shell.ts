@@ -156,19 +156,6 @@ export const shell: Node = {
   },
   children: [
     {
-      type: 'slot',
-      slot: 'children',
-      style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px' },
-      inner: {
-        display: 'flex',
-        'flex-direction': 'column',
-        'flex-grow': '1',
-        'min-height': '0px',
-        height: '100%',
-        width: '100%',
-      } as Style,
-    },
-    {
       type: 'box',
       role: 'navigation',
       when: [{ test: 'env.viewer' }],
@@ -322,6 +309,19 @@ export const shell: Node = {
         },
         chipRow,
       ],
+    },
+    {
+      type: 'slot',
+      slot: 'children',
+      style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px' },
+      inner: {
+        display: 'flex',
+        'flex-direction': 'column',
+        'flex-grow': '1',
+        'min-height': '0px',
+        height: '100%',
+        width: '100%',
+      } as Style,
     },
     // Escape closes the menu and returns to its trigger, as compiled's menuKey does.
     {
