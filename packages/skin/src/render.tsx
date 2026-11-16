@@ -9,12 +9,12 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, TVFocusGuideView, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TVFocusGuideView, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
-import { EscapeScope, focusElement, focusTarget, noteOpener, scopeOpen, type Focusable } from './escape';
+import { EscapeScope, focusElement, focusTarget, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
@@ -29,6 +29,8 @@ const Inherited = InheritedContext;
 const Group = GroupContext;
 /** The direction of the parent's flex layout (native shrinking follows it; see shrinkFor). */
 const Direction = createContext<'row' | 'column'>('column');
+/** A direct child of a route: on TV one focus band (see tvGuide). */
+const Band = createContext(false);
 /** Scroll views of row pagers, by row id, so pageNext/pagePrev can move them. */
 interface Scroller { scrollTo(options: { x: number; animated: boolean }): void }
 const pagers = new Map<string, { view: Scroller; x: number; width: number }>();
@@ -198,6 +200,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const scrollRef = useRef<Scroller>(null);
   const buttonRef = useRef<Focusable | null>(null);
   const guideRef = useRef<Focusable | null>(null);
+  const band = useContext(Band);
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
   const rows = rowsFor(node, ctx, env, ui, parentGroup, disabled);
@@ -228,6 +231,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
 
   if (fx.hidden) return null;
 
+  const tvRing = Platform.isTV && ui.focus && !!node.press && !tvFocusLook(node) ? ringOf(host.doc) : undefined;
   const children = node.children.map((child, i) => <SkinNode key={i} node={child} ctx={ctx} />);
   if (after) children.push(<SkinNode key="after" node={after} ctx={ctx} />);
   let content: ReactNode = children;
@@ -245,7 +249,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}
     </>
   );
-  const drawn: Record<string, unknown> = { ...style, ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion };
+  const drawn: Record<string, unknown> = { ...style, ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...tvRing, ...motion };
   // A masked box that only paints a colour draws the masked colour as a gradient fill.
   const filled = !!fx.maskedFill && node.children.length === 0;
   if (filled) {
@@ -291,12 +295,18 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     const registerButton = focusTarget(a11y.nativeID);
     const bindButton = (target: Focusable | null) => {
       buttonRef.current = target;
-      return registerButton(target);
+      const unregister = registerButton(target);
+      const untrack = trackButton(target);
+      return () => {
+        unregister?.();
+        untrack?.();
+      };
     };
     const onPress = press && (() => {
       const arg = fill(press.arg, ctx, env);
       const focus = press.focus ? fill(press.focus, ctx, env) : '';
       noteOpener(press.action, arg, buttonRef.current);
+      notePress(buttonRef.current);
       host.dispatch(press.action, arg);
       // press.focus: the element the action draws (a drawer's first row) takes focus once drawn.
       if (focus) requestAnimationFrame(() => focusElement(focus));
@@ -310,7 +320,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
         accessibilityRole={a11y.accessibilityRole ?? 'button'} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={a11y.accessibilityState}
         testID={a11y.testID} />
     ) : null;
-    const guide = tvGuide(node, env.flags);
+    const guide = tvGuide(node, env.flags, band);
     const Frame = (guide ? AGuide : AView) as typeof AView;
     element = (
       <Frame ref={guide ? (guideRef as never) : undefined} style={boxStyleFinal as ViewStyle} {...(guide as object)}
@@ -334,7 +344,9 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   return (
     <Inherited.Provider value={text}>
       <Group.Provider value={groupValue}>
-        <Direction.Provider value={direction}>{element}</Direction.Provider>
+        <Direction.Provider value={direction}>
+          <Band.Provider value={!!route}>{element}</Band.Provider>
+        </Direction.Provider>
       </Group.Provider>
     </Inherited.Provider>
   );
@@ -343,14 +355,59 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
 /** On TV, the boxes the focus engine must treat as one region. A navigation bar or rail is one
  * destination: focus moving onto it from anywhere in line with the bar (a centred search field
  * under a bar whose items sit at its edges) lands on the item last focused there, else the first.
- * An escape scope (a menu, a drawer) is one too, and while open it keeps focus inside: moving
- * off its edges stays on its items rather than reaching the page behind it. */
-function tvGuide(node: Extract<RNode, { kind: 'box' }>, flags: string[]) {
+ * So is each band of a route (a direct child of the route's box with something focusable in it:
+ * home's hero copy, its search field, its rows), so up and down move band by band whatever the
+ * horizontal offsets. An escape scope (a menu, a drawer) is one too, and while open it keeps
+ * focus inside: moving off its edges stays on its items rather than reaching the page behind. */
+function tvGuide(node: Extract<RNode, { kind: 'box' }>, flags: string[], band: boolean) {
   if (!Platform.isTV) return undefined;
   const scope = !!node.escape?.length;
-  if (!scope && node.role !== 'navigation') return undefined;
+  const region = node.role === 'navigation' || (band && focusableWithin(node));
+  if (!scope && !region) return undefined;
   const trap = scope && scopeOpen(node.escape!, flags);
   return { autoFocus: true, trapFocusUp: trap, trapFocusDown: trap, trapFocusLeft: trap, trapFocusRight: trap };
+}
+
+/** Whether a subtree draws anything that takes focus. An empty guide must not exist: on Android
+ * it would still be a destination, and focus moved onto it would go nowhere. */
+const focusables = new WeakMap<RNode, boolean>();
+function focusableWithin(node: RNode): boolean {
+  const known = focusables.get(node);
+  if (known !== undefined) return known;
+  let found: boolean;
+  switch (node.kind) {
+    case 'box': found = !!node.press || node.children.some(focusableWithin); break;
+    case 'repeat': found = focusableWithin(node.item); break;
+    case 'slot': found = node.slot === 'searchField'; break;
+    case 'widget': found = true; break;
+    default: found = false;
+  }
+  focusables.set(node, found);
+  return found;
+}
+
+/** Whether the document gives a press box a look for TV focus: its focus look, else its hover look,
+ * or a group whose members show its focus. */
+function tvFocusLook(node: RNode): boolean {
+  if (node.group) return true;
+  return [node.base, ...node.states.map(s => s.layer)].some(layer => layer.focus || layer.hover || layer.style.outline === 'auto');
+}
+
+/** The document's ui block, resolved once per document. */
+const uis = new WeakMap<ResolvedDocument, ReturnType<typeof resolveUi>>();
+function uiOf(doc: ResolvedDocument) {
+  let ui = uis.get(doc);
+  if (!ui) {
+    ui = resolveUi(doc.document.ui);
+    uis.set(doc, ui);
+  }
+  return ui;
+}
+
+/** A TV focus ring in the document's accent, for a press box the document gave no focus look:
+ * on TV focus is the only pointer, so a focused control must always show it. */
+function ringOf(doc: ResolvedDocument) {
+  return { outlineColor: uiOf(doc).accent, outlineStyle: 'solid', outlineWidth: 3, outlineOffset: 3 };
 }
 
 /** A horizontal row on TV is one focus destination: moving up or down onto it from any card in
@@ -372,8 +429,8 @@ function RowGuide({ children }: { children: ReactElement<{ style: unknown }> }) 
 function Backdrop({ blur, glass }: { blur: number; glass: boolean }) {
   const { doc } = useHost();
   const android = Platform.OS === 'android';
-  const page = useMemo(() => (android && !glass ? resolveUi(doc.document.ui).page : undefined), [android, glass, doc]);
   if (android && glass) return null;
+  const page = android ? uiOf(doc).page : undefined;
   if (page) return <View style={[StyleSheet.absoluteFill, { backgroundColor: page, opacity: ANDROID_VEIL }]} />;
   return <BlurView intensity={Math.min(100, Math.round(blur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} />;
 }
@@ -489,21 +546,43 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
 function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: Ctx }) {
   const { env, viewport } = useHost();
   const { own, text, style, fx } = useLeafStyle(node, ctx);
-  const drawn = cached(`t${viewport.width}x${viewport.height}|${text.fontSize}|${JSON.stringify(text.rows)}|${own['text-overflow'] ?? ''}|${own['line-clamp'] ?? ''}`,
+  const textKey = `t${viewport.width}x${viewport.height}|${text.fontSize}|${JSON.stringify(text.rows)}`;
+  const drawn = cached(`${textKey}|${own['text-overflow'] ?? ''}|${own['line-clamp'] ?? ''}`,
     () => textStyle({ ...text.rows, ...pick(own, ['text-overflow', 'line-clamp']) }, measure(viewport, text.fontSize)));
   if (fx.hidden) return null;
   const value = fill(node.text, ctx, env);
-  // A text drawn as a centring flex box (a badge, an initial in a circle) centres its line.
-  const centred: { textAlign?: TextStyle["textAlign"]; lineHeight?: number } = {};
-  if (own['justify-content'] === 'center' && !text.rows['text-align']) centred.textAlign = 'center';
-  if (own['align-items'] === 'center' && typeof style.height === 'number' && !text.rows['line-height']) {
-    centred.lineHeight = style.height - (Number(style.borderTopWidth ?? style.borderWidth) || 0) - (Number(style.borderBottomWidth ?? style.borderWidth) || 0);
+  const lines = { numberOfLines: drawn.numberOfLines, ellipsizeMode: drawn.ellipsize ? ('tail' as const) : undefined };
+
+  // Natively a text view does not paint a gradient or a shadow (Android's never does): a text that
+  // paints its box (an initial in a gradient disc) draws as that box with the text centred inside.
+  if (!web && (style.backgroundImage || style.boxShadow)) {
+    return (
+      <AView style={style as ViewStyle} {...a11yProps(node, ctx, env)}>
+        <Text style={[drawn.style, centredLine(own, text.rows)]} {...lines}>{value}</Text>
+      </AView>
+    );
   }
   return (
-    <AText style={[drawn.style, style as TextStyle, centred]} numberOfLines={drawn.numberOfLines} ellipsizeMode={drawn.ellipsize ? 'tail' : undefined} {...a11yProps(node, ctx, env)}>
+    <AText style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style)]} {...lines} {...a11yProps(node, ctx, env)}>
       {value}
     </AText>
   );
+}
+
+/** A text drawn as a centring flex box (a badge, an initial in a circle) centres its line. */
+function centredLine(own: Css, inherited: Css): TextStyle {
+  return own['justify-content'] === 'center' && !inherited['text-align'] ? { textAlign: 'center' } : {};
+}
+
+/** As centredLine, and the line's height is the box's, so the text sits in the middle. */
+function centredBox(own: Css, inherited: Css, style: Record<string, unknown>): TextStyle {
+  const centred: TextStyle = { ...centredLine(own, inherited) };
+  if (own['align-items'] === 'center' && typeof style.height === 'number' && !inherited['line-height']) {
+    const top = Number(style.borderTopWidth ?? style.borderWidth) || 0;
+    const bottom = Number(style.borderBottomWidth ?? style.borderWidth) || 0;
+    return { ...centred, lineHeight: style.height - top - bottom };
+  }
+  return centred;
 }
 
 function pick(rows: Css, keys: string[]): Css {

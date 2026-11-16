@@ -6,6 +6,7 @@ import { advertise } from '../adapter/advertise';
 import { VelaError } from '../adapter/errors';
 import { artworkURL } from '../discovery/artwork';
 import { entry, feedRow, homeModel } from '../discovery/models';
+import { homeCard, homeWatched, recorded, type Watched } from '../discovery/progress';
 import type { Destination, HomeModel, Row } from '../models';
 import type { Session } from './session';
 import { failed, idle, loading, ready, type Load, type Loadable, type StateBox } from './state';
@@ -28,6 +29,8 @@ export interface HomeState extends Loadable<HomeModel> {
 export const initialHome: HomeState = { ...idle<HomeModel>(), retry: null, rowsLoading: [], moreRows: 'idle' };
 
 const PAGE_ITEMS = 20;
+/** Reads of home after watching, before the server's answer stands as it is. */
+const RECONCILE_ATTEMPTS = 3;
 const LIBRARY_PAGES = 100;
 
 export class Home {
@@ -82,6 +85,38 @@ export class Home {
       if (retry.allowed && attempt < retry.limit) {
         this.timer = setTimeout(() => void this.load(attempt + 1), retry.delaySeconds * 1000);
       }
+    }
+  }
+
+  /** Where the viewer left a title, applied at once to Continue Watching and the hero. */
+  watched(watched: Watched): void {
+    this.box.update('home', home => (home.value ? { ...home, value: homeWatched(home.value, watched) } : home));
+  }
+
+  /**
+   * Read home again in place after watching: Continue Watching and the hero's resume change.
+   * Nothing shows loading. An answer that does not yet record where the viewer left the title
+   * keeps home as drawn and is asked again (after 2, 4 and 8 seconds); then the server's stands.
+   */
+  async reconcile(watched: Watched, attempt = 0): Promise<void> {
+    if (this.box.get().home.load !== 'ready') return;
+    const epoch = this.session.epoch;
+    try {
+      const connection = await this.session.ready();
+      const api = connection.adapter;
+      const home = await api.home();
+      const bootstrap: V.Bootstrap = { ...home, capabilities: advertise(api, home.capabilities) };
+      const images = await connection.images();
+      if (epoch !== this.session.epoch) return;
+      const model = homeModel(bootstrap, images, this.artWidth());
+      if (!recorded(homeCard(model, watched.titleId), watched) && attempt < RECONCILE_ATTEMPTS) {
+        setTimeout(() => void this.reconcile(watched, attempt + 1), 2000 * 2 ** attempt);
+        return;
+      }
+      this.session.features = bootstrap.capabilities.features;
+      this.box.update('home', home => ({ ...home, ...ready(model), rowsLoading: [], moreRows: 'idle' }));
+    } catch {
+      // The home already drawn stays; the next read brings it up to date.
     }
   }
 

@@ -5,6 +5,7 @@ import type * as V from '../wire';
 import { capabilitiesOf } from '../adapter/advertise';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { detailModel, entry, feedRow } from '../discovery/models';
+import { detailCard, detailWatched, recorded, type Watched } from '../discovery/progress';
 import type { Card, CollectionModel, DetailModel, LibraryModel, Row } from '../models';
 import type { Connection } from '../adapter/connection';
 import { msg } from '../i18n';
@@ -30,6 +31,8 @@ export function libraryKey(id: string, query: LibraryQuery): string {
 }
 
 const PAGE = 100;
+/** Reads of a title page after watching, before the server's answer stands as it is. */
+const RECONCILE_ATTEMPTS = 3;
 
 export class Catalogue {
   /** What each collection has read so far, and where the server said to continue. */
@@ -53,18 +56,64 @@ export class Catalogue {
   async title(id: string, refresh = false): Promise<void> {
     const known = this.box.get().titles[id];
     if (known && known.load !== 'failed' && !refresh) return;
-    await this.read('titles', id, async connection => {
-      const [detail, capabilities] = await Promise.all([connection.adapter.detail(id), capabilitiesOf(connection.adapter)]);
-      const images = await connection.images();
-      const features = capabilities.features;
-      return detailModel(
-        detail,
-        images,
-        this.artWidth(),
-        features.extraPlayback?.available === true,
-        features.themeMusic?.available === true,
-      );
+    await this.read('titles', id, connection => this.detail(connection, id));
+  }
+
+  private async detail(connection: Connection, id: string): Promise<DetailModel> {
+    const [detail, capabilities] = await Promise.all([connection.adapter.detail(id), capabilitiesOf(connection.adapter)]);
+    const images = await connection.images();
+    const features = capabilities.features;
+    return detailModel(
+      detail,
+      images,
+      this.artWidth(),
+      features.extraPlayback?.available === true,
+      features.themeMusic?.available === true,
+    );
+  }
+
+  /** Where the viewer left a title, applied at once to every title page drawn that shows it. */
+  watched(watched: Watched): void {
+    this.box.update('titles', titles => {
+      let changed = false;
+      const next: typeof titles = {};
+      for (const [id, known] of Object.entries(titles)) {
+        const value = known.value;
+        const shows = !!value && (id === watched.titleId || value.episodes.some(card => card.id === watched.titleId));
+        next[id] = shows ? { ...known, value: detailWatched(value!, watched) } : known;
+        changed ||= shows;
+      }
+      return changed ? next : titles;
     });
+  }
+
+  /**
+   * Read every title page that shows the watched title again, in place. An answer that does not
+   * yet record where the viewer left it keeps the page as drawn and is asked again (after 2, 4
+   * and 8 seconds); after that the server's answer stands.
+   */
+  reconcile(watched: Watched, attempt = 0): void {
+    for (const [id, known] of Object.entries(this.box.get().titles)) {
+      const value = known.value;
+      if (!value || !detailCard(value, watched.titleId)) continue;
+      void this.reconcileTitle(id, watched, attempt);
+    }
+  }
+
+  private async reconcileTitle(id: string, watched: Watched, attempt: number): Promise<void> {
+    const epoch = this.session.epoch;
+    try {
+      const connection = await this.session.ready();
+      const model = await this.detail(connection, id);
+      if (epoch !== this.session.epoch) return;
+      if (!recorded(detailCard(model, watched.titleId), watched) && attempt < RECONCILE_ATTEMPTS) {
+        setTimeout(() => void this.reconcileTitle(id, watched, attempt + 1), 2000 * 2 ** attempt);
+        return;
+      }
+      this.box.update('titles', titles => ({ ...titles, [id]: ready(model) }));
+    } catch {
+      // The page keeps what it shows; the next read brings it up to date.
+    }
   }
 
   /** The rows the server relates to a title. */

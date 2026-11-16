@@ -28,6 +28,9 @@ interface Scope {
 const scopes = new Set<Scope>();
 const targets = new Map<string, Focusable>();
 const openers = new Map<string, Focusable>();
+/** Press buttons that are drawn now, and the one pressed last (the opener of the route on top). */
+const mounted = new Set<Focusable>();
+let lastPressed: Focusable | null = null;
 const Level = createContext(0);
 let registered = 0;
 let unlisten: (() => void) | undefined;
@@ -55,6 +58,41 @@ export function focusTarget(id: string | undefined) {
       if (targets.get(id) === target) targets.delete(id);
     };
   };
+}
+
+/** A ref callback's registration of a drawn press button; the returned cleanup forgets it. */
+export function trackButton(target: Focusable | null) {
+  if (!target) return undefined;
+  mounted.add(target);
+  return () => {
+    mounted.delete(target);
+    if (lastPressed === target) lastPressed = null;
+  };
+}
+
+/** Remember the button pressed last: a route it opens returns focus to it when it closes. */
+export function notePress(button: Focusable | null): void {
+  lastPressed = button;
+}
+
+/** On TV, a route that comes back to the top (Back from a title over home) puts focus back on the
+ * button that left it, which is still drawn underneath; without this nothing on it shows focus. */
+export function useReturnFocus(focused: boolean): void {
+  const opener = useRef<Focusable | null>(null);
+  useEffect(() => {
+    if (!Platform.isTV) return;
+    if (!focused) {
+      opener.current = lastPressed;
+      return;
+    }
+    const target = opener.current;
+    opener.current = null;
+    if (!target) return;
+    const frame = requestAnimationFrame(() => {
+      if (mounted.has(target)) focusOn(target);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focused]);
 }
 
 /** Remember which button opened a flag, so Escape can return focus to it. */

@@ -32,6 +32,9 @@ export function SearchField({ ctx }: WidgetProps) {
   const ui = useMemo(() => resolveUi(host.doc.document.ui), [host.doc.document]);
   const [focused, setFocused] = useState(false);
   const [clearHover, setClearHover] = useState(false);
+  // On TV the focused clear button fills with the ink, as the player's controls do.
+  const [clearFocus, setClearFocus] = useState(false);
+  const clearLit = Platform.isTV && clearFocus;
   const text = useMemo(
     () => textStyle({ 'font-family': ui.font, 'font-size': '17px', color: ui.ink }, measure(host.viewport, 17)).style,
     [ui, host.viewport],
@@ -105,18 +108,18 @@ export function SearchField({ ctx }: WidgetProps) {
           accessibilityLabel={msg('ui.clearSearch')}
           onHoverIn={() => setClearHover(true)}
           onHoverOut={() => setClearHover(false)}
-          onFocus={() => setClearHover(true)}
-          onBlur={() => setClearHover(false)}
+          onFocus={() => setClearFocus(true)}
+          onBlur={() => setClearFocus(false)}
           style={[
             styles.clear,
             {
               // Concentric with the field: its corner less the clear button's inset.
               borderRadius: Math.max(0, radius - (FIELD_HEIGHT - CLEAR_SIZE) / 2),
-              backgroundColor: clearHover ? ui.controlHover : ui.control,
+              backgroundColor: clearLit ? ui.ink : clearHover || clearFocus ? ui.controlHover : ui.control,
             },
           ]}
         >
-          <Glyph symbol="close" size={16} color={ui.ink} />
+          <Glyph symbol="close" size={16} color={clearLit ? ui.inkInverse : ui.ink} />
         </Pressable>
       ) : null}
     </View>

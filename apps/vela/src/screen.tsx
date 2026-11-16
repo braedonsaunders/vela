@@ -1,8 +1,9 @@
 // One route drawn by the active document: the shell's tree around the route's tree. A document
 // that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
 // library, a collection) adds it to the host with `page`.
+import { useIsFocused } from 'expo-router';
 import { Text, View } from 'react-native';
-import { SkinRoot, SkinRoute, type RouteName, type SkinHost } from '@vela/skin';
+import { SkinRoot, SkinRoute, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import { useVela } from './vela';
 
 interface Props {
@@ -15,6 +16,8 @@ export function DocumentScreen({ route, entry, page }: Props) {
   const vela = useVela();
   const app = vela.host(route, entry);
   const host = app && page ? page(app) : app;
+  // On TV, focus returns to the card or button that opened the route above when it closes.
+  useReturnFocus(useIsFocused());
   if (vela.docError) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>

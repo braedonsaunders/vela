@@ -8,6 +8,7 @@ import { sendCommand } from '../adapter/commands';
 import { hasEventStream } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
 import { liveStatus, type LiveObservation } from '../live/player';
+import type { Watched } from '../discovery/progress';
 import { followSession, forgetSession } from '../protocol/events';
 import { randomId } from '../protocol/id';
 import type { Session } from './session';
@@ -75,9 +76,22 @@ export class Playback {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private media: { identity: string; handle: string } | undefined;
 
+  /** The last progress report in flight, so a stop is followed by a read of what it recorded. */
+  private reporting: Promise<unknown> = Promise.resolve();
+
+  /** The last position the player reported for the current session. */
+  private lastPosition: { sessionId: string; seconds: number; ended: boolean } | undefined;
+
+  /**
+   * `watched` is told where the viewer left a title as soon as its session stops or ends (the
+   * last reported position), and `reconcile` once the last report has landed at the server. A
+   * session nothing was reported for changed no resume position.
+   */
   constructor(
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
+    private readonly watched: (watched: Watched) => void,
+    private readonly reconcile: (watched: Watched) => void,
   ) {
     session.onReset(() => {
       this.end();
@@ -162,7 +176,9 @@ export class Playback {
     const present = (plan: V.PlaybackPlan) => connection.plan(plan);
     const show = (plan: V.PlaybackPlan) => {
       if (this.run !== run || plan.sessionId !== sessionId) return;
+      const ended = plan.state === 'ended' && this.box.get().playback.phase !== 'ended';
       this.patch({ plan, phase: plan.state === 'ended' ? 'ended' : 'playing' });
+      if (ended) this.afterWatching(plan, this.box.get().playback.target);
     };
     const adapter = connection.adapter;
     const loop = async () => {
@@ -258,7 +274,11 @@ export class Playback {
   /** The player's progress report. */
   async observe(sessionId: string, observation: V.PlayerObservation): Promise<V.Ack> {
     const connection = await this.session.ready();
-    return connection.adapter.reportObservation(sessionId, observation);
+    const ended = observation.state === 'ended';
+    this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
+    const sent = connection.adapter.reportObservation(sessionId, observation);
+    this.reporting = sent.catch(() => undefined);
+    return sent;
   }
 
   /** A player snapshot: live status (reconnecting, delivery, drift) when the engine observes it. */
@@ -270,7 +290,7 @@ export class Playback {
 
   /** Stop playing: the server releases the session at the plan's generations. */
   async stop(): Promise<void> {
-    const plan = this.box.get().playback.plan;
+    const { plan, target, phase } = this.box.get().playback;
     this.end();
     this.box.update('playback', () => initialPlayback);
     if (!plan || plan.state === 'ended') return;
@@ -285,6 +305,22 @@ export class Playback {
     } catch {
       // Ended, expired or already stopped: the server holds nothing for it.
     }
+    if (phase !== 'ended') this.afterWatching(plan, target);
+  }
+
+  /**
+   * Where the viewer left the title shows at once on the pages that draw it; once the last
+   * progress report has landed, they read the server's own answer.
+   */
+  private afterWatching(plan: V.PlaybackPlan, target: PlaybackTarget | null): void {
+    const titleId = plan.titleId ?? (target?.kind === 'title' ? target.id : '');
+    if (!titleId || plan.purpose === 'preview') return;
+    const last = this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
+    const finished = plan.state === 'ended' || last?.ended === true;
+    if (!last && !finished) return;
+    const watched: Watched = { titleId, positionSeconds: last?.seconds ?? 0, finished };
+    this.watched(watched);
+    void this.reporting.then(() => this.reconcile(watched));
   }
 
   private end(): void {
