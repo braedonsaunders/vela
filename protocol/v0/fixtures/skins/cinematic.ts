@@ -12,7 +12,5 @@ export const cinematicDoc: SkinDocument = {
   tagline: 'The official skin, drawn from a skin document.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg',
   swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
-  // Every slot and route comes from the Vela base.
-  slots: {},
   traits: { barMask: true },
 };
