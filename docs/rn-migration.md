@@ -186,6 +186,18 @@ clipping element, never on the transparent button inside it. A node keeps up to 
 by the nearest group's hover or focus. Rows use `TVFocusGuideView` so focus moves
 between rows the way the server ordered them.
 
+**TV focus regions.** On TV a box with role `navigation`, and a box with `escape` flags, is a
+focus guide (autoFocus): moving onto it lands on its last focused item, else its first, even from
+items that do not line up with it. While an escape scope is open it traps focus on all four sides
+and takes focus when it opens. Each horizontal row is a guide too, and so is home's search field
+slot. Back (Android) and Menu (Apple TV) close an open scope.
+
+**Remote events.** A press counts on key-up, never key-down: a tvOS tap reports `eventKeyAction` 1
+(key-up, when the tap ends), and Android TV sends key-up only, unless it is a long press or
+`enableKeyDownEvents` is set. The TV event stream also carries `focus`/`blur`; anything that wakes on
+"any remote event" must ignore them. The player chrome's TV scale is 1.4 × min(1, height / 1080), so
+Android TV at 540 dp uses the same share of the screen as tvOS at 1080 pt.
+
 **Motion.** Presets map to Reanimated 4 CSS animations (`animationName` keyframes,
 duration, delay, easing, iterations, direction, fill), and `transition` to Reanimated CSS
 transitions. Under reduced motion (`AccessibilityInfo` and Reanimated's `ReducedMotion`)
