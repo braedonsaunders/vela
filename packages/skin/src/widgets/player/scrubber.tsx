@@ -91,7 +91,11 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: 
   const frameImage = active && thumbnail ? thumbnail(target) : null;
   const bubbleWidth = look.size(frameImage ? 160 : 72);
   return (
-    <View ref={box} onLayout={(e: LayoutChangeEvent) => { frame.current.width = e.nativeEvent.layout.width; }}
+    <View
+      ref={box}
+      onLayout={(e: LayoutChangeEvent) => {
+        frame.current.width = e.nativeEvent.layout.width;
+      }}
       style={{ height, justifyContent: 'center' }}
       onStartShouldSetResponderCapture={() => !disabled && duration > 0}
       onMoveShouldSetResponderCapture={() => !disabled && duration > 0}
@@ -99,41 +103,130 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: 
       onResponderGrant={grant}
       onResponderMove={event => setTarget(fromEvent(event))}
       onResponderRelease={event => commit(fromEvent(event))}
-      onResponderTerminate={() => { setTarget(null); onActive(false); }}>
-      <Pressable accessibilityRole="adjustable" accessibilityLabel={msg('ui.playbackPosition')}
+      onResponderTerminate={() => {
+        setTarget(null);
+        onActive(false);
+      }}
+    >
+      <Pressable
+        accessibilityRole="adjustable"
+        accessibilityLabel={msg('ui.playbackPosition')}
         accessibilityValue={{ min: 0, max: Math.round(duration), now: Math.round(shown), text: timecode(shown) }}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-        onAccessibilityAction={e => commit(shown + (e.nativeEvent.actionName === 'increment' ? STEP_SECONDS : -STEP_SECONDS))}
-        disabled={disabled || duration <= 0} focusable={look.tv && !disabled && duration > 0} testID="player-scrub"
-        onFocus={() => setFocused(true)} onBlur={() => { setFocused(false); if (target !== null) commit(target); }}
-        onPress={() => { if (target !== null) { clearTimeout(settle.current); commit(target); } }}
-        style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center' }}>
+        onAccessibilityAction={e =>
+          commit(shown + (e.nativeEvent.actionName === 'increment' ? STEP_SECONDS : -STEP_SECONDS))
+        }
+        disabled={disabled || duration <= 0}
+        focusable={look.tv && !disabled && duration > 0}
+        testID="player-scrub"
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          if (target !== null) commit(target);
+        }}
+        onPress={() => {
+          if (target !== null) {
+            clearTimeout(settle.current);
+            commit(target);
+          }
+        }}
+        style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center' }}
+      >
         <View style={{ height: bar, borderRadius: bar / 2, backgroundColor: look.track, overflow: 'hidden' }}>
           {view.buffered.map((range, i) => (
-            <View key={i} style={{ position: 'absolute', top: 0, bottom: 0, left: `${range.start * 100}%`,
-              width: `${Math.max(0, range.end - range.start) * 100}%`, backgroundColor: look.trackStrong }} />
+            <View
+              key={i}
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: `${range.start * 100}%`,
+                width: `${Math.max(0, range.end - range.start) * 100}%`,
+                backgroundColor: look.trackStrong,
+              }}
+            />
           ))}
-          <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${fraction * 100}%`,
-            backgroundColor: focused && look.tv ? look.accent : look.ink }} />
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: `${fraction * 100}%`,
+              backgroundColor: focused && look.tv ? look.accent : look.ink,
+            }}
+          />
         </View>
-        {view.chapters.filter(c => c.at > 0).map(chapter => (
-          <View key={chapter.id} pointerEvents="none" style={{ position: 'absolute', left: `${chapter.at * 100}%`,
-            width: 2, height: bar, backgroundColor: look.page, opacity: 0.7 }} />
-        ))}
-        <View pointerEvents="none" style={{ position: 'absolute', left: `${fraction * 100}%`, marginLeft: -thumb / 2,
-          width: thumb, height: thumb, borderRadius: thumb / 2, backgroundColor: look.ink,
-          transform: [{ scale: active || focused || look.still ? 1 : 0.85 }],
-          boxShadow: active || focused ? `0px 0px 0px ${look.size(6)}px ${look.focusHalo}` : `0px 2px 10px ${look.shadow}` }} />
+        {view.chapters
+          .filter(c => c.at > 0)
+          .map(chapter => (
+            <View
+              key={chapter.id}
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: `${chapter.at * 100}%`,
+                width: 2,
+                height: bar,
+                backgroundColor: look.page,
+                opacity: 0.7,
+              }}
+            />
+          ))}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: `${fraction * 100}%`,
+            marginLeft: -thumb / 2,
+            width: thumb,
+            height: thumb,
+            borderRadius: thumb / 2,
+            backgroundColor: look.ink,
+            transform: [{ scale: active || focused || look.still ? 1 : 0.85 }],
+            boxShadow:
+              active || focused ? `0px 0px 0px ${look.size(6)}px ${look.focusHalo}` : `0px 2px 10px ${look.shadow}`,
+          }}
+        />
       </Pressable>
       {active ? (
-        <View pointerEvents="none" style={{ position: 'absolute', bottom: height + look.size(8), left: `${fraction * 100}%`,
-          width: bubbleWidth, marginLeft: -bubbleWidth / 2, alignItems: 'center', gap: look.size(6) }}>
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            bottom: height + look.size(8),
+            left: `${fraction * 100}%`,
+            width: bubbleWidth,
+            marginLeft: -bubbleWidth / 2,
+            alignItems: 'center',
+            gap: look.size(6),
+          }}
+        >
           {frameImage ? (
-            <Image source={frameImage} contentFit="cover"
-              style={{ width: bubbleWidth, aspectRatio: 16 / 9, borderRadius: look.size(8), backgroundColor: look.raised }} />
+            <Image
+              source={frameImage}
+              contentFit="cover"
+              style={{
+                width: bubbleWidth,
+                aspectRatio: 16 / 9,
+                borderRadius: look.size(8),
+                backgroundColor: look.raised,
+              }}
+            />
           ) : null}
-          <Text style={[look.text(13, 600), { paddingHorizontal: look.size(8), paddingVertical: look.size(3),
-            borderRadius: look.size(6), backgroundColor: look.popover, fontVariant: ['tabular-nums'], overflow: 'hidden' }]}>
+          <Text
+            style={[
+              look.text(13, 600),
+              {
+                paddingHorizontal: look.size(8),
+                paddingVertical: look.size(3),
+                borderRadius: look.size(6),
+                backgroundColor: look.popover,
+                fontVariant: ['tabular-nums'],
+                overflow: 'hidden',
+              },
+            ]}
+          >
             {timecode(target)}
           </Text>
         </View>

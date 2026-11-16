@@ -22,7 +22,19 @@ interface Props {
   onFocusChange?(focused: boolean): void;
 }
 
-export function ChromeButton({ look, icon, label, onPress, primary, disabled, selected, size, preferred, testID, onFocusChange }: Props) {
+export function ChromeButton({
+  look,
+  icon,
+  label,
+  onPress,
+  primary,
+  disabled,
+  selected,
+  size,
+  preferred,
+  testID,
+  onFocusChange,
+}: Props) {
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const box = look.size(size ?? (primary ? 52 : 44));
@@ -43,12 +55,27 @@ export function ChromeButton({ look, icon, label, onPress, primary, disabled, se
     transform: [{ scale: look.tv && focus && !look.still ? 1.1 : 1 }],
   };
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled, selected }}
-      disabled={disabled} focusable={!disabled} hasTVPreferredFocus={preferred} testID={testID} onPress={onPress}
-      onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)}
-      onFocus={() => { setFocus(true); onFocusChange?.(true); }}
-      onBlur={() => { setFocus(false); onFocusChange?.(false); }}
-      style={style}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled, selected }}
+      disabled={disabled}
+      focusable={!disabled}
+      hasTVPreferredFocus={preferred}
+      testID={testID}
+      onPress={onPress}
+      onHoverIn={() => setHover(true)}
+      onHoverOut={() => setHover(false)}
+      onFocus={() => {
+        setFocus(true);
+        onFocusChange?.(true);
+      }}
+      onBlur={() => {
+        setFocus(false);
+        onFocusChange?.(false);
+      }}
+      style={style}
+    >
       <PlayerIcon name={icon} size={look.size(22)} color={filled ? look.inkInverse : look.ink} />
     </Pressable>
   );

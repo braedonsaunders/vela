@@ -3,6 +3,7 @@
 // draws nothing.
 import type { ComponentType } from 'react';
 import type { WidgetProps } from '../host';
+import { GuideWidget, LiveTileWidget } from './guide';
 import { PlayerChrome } from './player/chrome';
 import { SearchInput } from './search-input';
 import { ServerSwitcher } from './auth/server-switcher';
@@ -20,4 +21,6 @@ export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   cardPreview: CardPreview,
   heroPreview: HeroPreview,
   playerChrome: PlayerChrome,
+  guide: GuideWidget,
+  liveTile: LiveTileWidget,
 };
