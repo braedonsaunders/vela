@@ -2281,3 +2281,15 @@ Close sent Stop (200) and left no media elements; the app's and the probe's toke
 revoked (200). The 4K HDR10/TrueHD/PGS row still needs a title Ether serves as 2160p
 HDR to this client. Finding for the app: the spike route `(spike)/player` mounted three
 times during sign-in and opened three playback sessions; the watch route opened one.
+
+**4K HDR proof (same day, after Ether pinned 1917 to the 2160p release).** Ether served
+`1917.2019.UHD.BluRay.2160p.TrueHD.Atmos.7.1.DV.HEVC.REMUX-FraMeSToR` to the web client
+as an original direct file. The core played it as HEVC HDR10 (the Dolby Vision 7 base
+layer) at 4K with **0 dropped of 9,096 frames**. Forward and back 10 s sought through the
+server (seek commands 200, local resume). English SDH PGS drew on screen (44,249 overlay
+pixels at the capture). The TrueHD Atmos 7.1 to English AC-3 5.1 switch applied while
+playing. Close sent Stop (200), the token was revoked (200) and Ether was asked to
+unpin. Connection measured 16–25 Mbps against the release's 48 Mbps average, with
+about 0.3 s of buffer and no stall during the ~7 minutes driven. Open: a seek issued
+while the previous server seek was still in flight was dropped (no command sent); the
+watch route's remount during sign-in re-posted /playback twice (404 after the first 200).
