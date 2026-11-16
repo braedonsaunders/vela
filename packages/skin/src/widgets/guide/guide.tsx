@@ -2,7 +2,7 @@
 // the selected programme beside the live preview tile, a toolbar of days, time and filters, the
 // owner's named Guides, then the EPG grid scrolling inside its panel. Phones open on the On now
 // list and switch to the grid. Its look comes from the document's `ui` block.
-import { useMemo, useCallback, useRef, useState } from 'react';
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { View, type ViewStyle } from 'react-native';
 import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@vela/core';
 import { useHost, type WidgetProps } from '../../host';
@@ -90,6 +90,10 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     else controller.preview(channel.id);
   };
   const watch = (channelId: string) => controller.watch(channelId);
+  useEffect(() => {
+    controller.setRetainedChannels([selected.channel, handOff?.channelId ?? "", view.tunedId]);
+    return () => controller.setRetainedChannels([]);
+  }, [controller, selected.channel, handOff?.channelId, view.tunedId]);
   const onVisible = useCallback((ids: string[]) => controller.setGuideChannels(ids), [controller]);
   const pickDay = (day: number) => {
     setSelected({ channel: '', programme: '' });

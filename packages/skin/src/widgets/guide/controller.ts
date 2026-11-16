@@ -56,6 +56,8 @@ export class LiveController {
   private loadGeneration = 0;
   private guideIds: string[] = [];
   private guideIdsKey = "";
+  private retainedIds: string[] = [];
+  private viewportTimer: ReturnType<typeof setTimeout> | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private visible = true;
   private quiet = false;
@@ -71,13 +73,13 @@ export class LiveController {
       HOME_ZAP_WAIT,
       () => this.channels(),
       id => this.preview(id),
-      () => this.emit(),
+      () => { this.scheduleFetch(); this.emit(); },
     );
     this.watchZap = new Zap(
       WATCH_ZAP_WAIT,
       () => this.channels(),
       id => this.watchNow(id, true),
-      () => this.emit(),
+      () => { this.scheduleFetch(); this.emit(); },
     );
     this.current = this.compose();
   }
@@ -137,7 +139,20 @@ export class LiveController {
     if (key === this.guideIdsKey) return;
     this.guideIds = next;
     this.guideIdsKey = key;
-    this.fetch();
+    this.scheduleFetch();
+  }
+
+  setRetainedChannels(ids: string[]): void {
+    const next = [...new Set(ids.filter(Boolean))].sort();
+    if (next.join("|") === this.retainedIds.join("|")) return;
+    this.retainedIds = next;
+    this.scheduleFetch();
+  }
+
+  private scheduleFetch(): void {
+    ++this.loadGeneration;
+    clearTimeout(this.viewportTimer);
+    this.viewportTimer = setTimeout(() => { this.viewportTimer = undefined; this.fetch(); }, 100);
   }
 
   retry(): void {
@@ -151,6 +166,7 @@ export class LiveController {
   /** Put a channel on the monitor; a live home remembers it as the viewer's current channel. */
   preview(channelId: string): void {
     this.tile.retune(channelId);
+    this.scheduleFetch();
     if (this.surfaces.has('home')) this.remember(channelId);
   }
 
@@ -202,6 +218,7 @@ export class LiveController {
 
   dispose(): void {
     clearTimeout(this.timer);
+    clearTimeout(this.viewportTimer);
     this.homeZap.cancel();
     this.watchZap.cancel();
     this.tile.dispose();
@@ -255,12 +272,21 @@ export class LiveController {
     if (!this.now) return;
     const generation = ++this.loadGeneration;
     const day = this.day;
-    loadGuide(this.options.source, day, this.now, this.options.scope, this.options.images, undefined, this.guideIds).then(
+    const channels = this.guide?.channels ?? [];
+    const retained = [this.tile.target, this.options.memory.get(this.rememberKey) ?? '', this.homeZap.target, this.watchZap.target, ...this.retainedIds];
+    for (const id of [this.homeZap.target, this.watchZap.target]) {
+      const at = channels.findIndex(c => c.id === id);
+      if (at >= 0) retained.push(channels[(at + channels.length - 1) % channels.length]!.id, channels[(at + 1) % channels.length]!.id);
+    }
+    const base = this.surfaces.has('guide') && this.guideIds.length ? this.guideIds : channels.slice(0, 48).map(c => c.id);
+    const ids = [...new Set([...base, ...retained].filter(Boolean))].sort();
+    loadGuide(this.options.source, day, this.now, this.options.scope, this.options.images, undefined, ids).then(
       model => {
         if (generation !== this.loadGeneration) return;
         this.guide = model;
         this.load = 'ready';
         this.updateTile();
+        if (!base.length && model.channels.length) this.scheduleFetch();
         this.emit();
       },
       error => {

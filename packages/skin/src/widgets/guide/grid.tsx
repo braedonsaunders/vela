@@ -52,7 +52,8 @@ export function GuideGrid(props: GridProps) {
   const scrollX = useSharedValue(0);
   const scrollY = useSharedValue(0);
   const [column, setColumn] = useState(-1);
-  const [rowBase, setRowBase] = useState(0);
+  const focusRow = landing.channelId ? rows.findIndex(c => c.id === landing.channelId) : -1;
+  const [rowBase, setRowBase] = useState(() => Math.max(0, focusRow - 1));
   const timeline = useRef<Animated.ScrollView>(null);
   const list = useRef<FlatList<GuideChannel>>(null);
   const landed = useRef(false);
@@ -126,8 +127,6 @@ export function GuideGrid(props: GridProps) {
 
   const leftMinute = Math.max(0, column) * 30;
   const window = { from: leftMinute - MARGIN, to: leftMinute + visibleMinutes + MARGIN };
-  const focusRow = landing.channelId ? rows.findIndex(c => c.id === landing.channelId) : -1;
-
   /** Web keyboard: move focus through the grid, bringing the target into view first. */
   const onKey = (channel: GuideChannel, p: GuideProgramme, key: string, prevent: () => void) => {
     if (key === 'Enter' && p.airing) {
@@ -183,7 +182,7 @@ export function GuideGrid(props: GridProps) {
   const lastRow = Math.min(rows.length, rowBase + Math.ceil(body.height / row) + 8);
   const listHeight = Math.max(0, body.height - RULER);
   useEffect(() => {
-    const start = focusRow > 0 && rowBase === 0 ? Math.max(0, focusRow - 6) : firstRow;
+    const start = firstRow;
     props.onVisible(rows.slice(start, start + Math.ceil(body.height / row) + 14).map(c => c.id));
   }, [rows, firstRow, rowBase, focusRow, body.height, row, props.onVisible]);
 
