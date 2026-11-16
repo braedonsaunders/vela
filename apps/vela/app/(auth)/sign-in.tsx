@@ -23,6 +23,7 @@ export default function SignIn() {
       actions={session.auth}
       servers={servers}
       serverActions={session.servers}
+      art={app.authArt}
     />
   );
 }
