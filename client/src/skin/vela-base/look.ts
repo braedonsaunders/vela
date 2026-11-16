@@ -5,7 +5,7 @@ export const gutterSmall = { 'padding-left': '18px', 'padding-right': '18px' } a
 export const sans = '$ui.font';
 export const enter = (delay: number) => `velaEnter${delay}`;
 export const enterPresets = Object.fromEntries(
-  [0, 60, 80, 120, 140, 200, 220, 260, 280, 300, 340, 380, 400, 420, 440, 480, 500, 520, 560, 580, 600].map(
+  [0, 60, 80, 120, 140, 160, 200, 220, 260, 280, 300, 340, 380, 400, 420, 440, 480, 500, 520, 560, 580, 600].map(
     d => [
       enter(d),
       {

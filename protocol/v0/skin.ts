@@ -54,7 +54,9 @@ export type Action =
   /** A collection page: load its next titles. */
   | 'collectionMore'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
-  | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide';
+  | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide'
+  /** Search (`routes.search`): open a live hit by its `hit.ref`; ask the descriptive lane again. */
+  | 'openHit' | 'retryDescriptive';
 
 interface NodeBase extends Breakpoints {
   /** Overrides by viewport: `small` under 640 px, `wide` from 1200 px. */

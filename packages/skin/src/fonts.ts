@@ -75,7 +75,8 @@ function nearest(list: Face[], weight: number, italic: boolean): Face | undefine
 /** The font rows a Text takes for a stack, weight and style. */
 export function fontFace(stack: string, weightRaw: string, italic: boolean): TextStyle {
   const weight = weightOf(weightRaw.trim());
-  const fontWeight = String(weight) as TextStyle['fontWeight'];
+  // The web takes any weight; native text takes the nine named steps.
+  const fontWeight = String(web ? weight : Math.min(900, Math.max(100, Math.round(weight / 100) * 100))) as TextStyle['fontWeight'];
   const families = splitTop(withTokens(stack), 'comma').map(unquote).filter(Boolean);
   if (web) return families.length ? { fontFamily: families.map(f => (/\s/.test(f) ? JSON.stringify(f) : f)).join(', '), fontWeight } : { fontWeight };
   for (const family of families) {

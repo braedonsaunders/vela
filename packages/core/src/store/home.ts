@@ -1,0 +1,220 @@
+// Home: the server's heroes and rows, more rows as the viewer scrolls, more items as a row pages,
+// and the libraries the shell lists as destinations. A failed home is retried on the server's
+// terms (its retry policy and Retry-After), at most twice, then left for the viewer to retry.
+import type * as V from '../wire';
+import { advertise } from '../adapter/advertise';
+import { VelaError } from '../adapter/errors';
+import { artworkURL } from '../discovery/artwork';
+import { entry, feedRow, homeModel } from '../discovery/models';
+import type { Destination, HomeModel, Row } from '../models';
+import type { Session } from './session';
+import { failed, idle, loading, ready, type Load, type Loadable, type StateBox } from './state';
+import type { VelaState } from './index';
+
+export interface HomeRetry {
+  allowed: boolean;
+  delaySeconds: number;
+  attempt: number;
+}
+
+export interface HomeState extends Loadable<HomeModel> {
+  retry: HomeRetry | null;
+  /** Rows whose next items are being read. */
+  rowsLoading: string[];
+  /** The next page of rows: being read, failed, or none left. */
+  moreRows: Load | 'end';
+}
+
+export const initialHome: HomeState = { ...idle<HomeModel>(), retry: null, rowsLoading: [], moreRows: 'idle' };
+
+const PAGE_ITEMS = 20;
+const LIBRARY_PAGES = 100;
+
+export class Home {
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private reading: Promise<void> | undefined;
+
+  constructor(
+    private readonly box: StateBox<VelaState>,
+    private readonly session: Session,
+    private readonly artWidth: () => number,
+  ) {
+    session.onReset(() => {
+      if (this.timer) clearTimeout(this.timer);
+      this.reading = undefined;
+      this.box.update('home', () => initialHome);
+      this.box.update('libraries', () => idle());
+    });
+  }
+
+  /** Read home unless it is already read or being read. */
+  ensure(): Promise<void> {
+    if (this.box.get().home.load === 'idle') return this.load();
+    return this.reading ?? Promise.resolve();
+  }
+
+  /** Read home again: the viewer asked, or a retry is due. */
+  load(attempt = 0): Promise<void> {
+    if (this.timer) clearTimeout(this.timer);
+    const reading = this.read(attempt);
+    this.reading = reading;
+    return reading;
+  }
+
+  private async read(attempt: number): Promise<void> {
+    const epoch = this.session.epoch;
+    this.box.update('home', home => ({ ...home, ...loading(home), retry: null }));
+    try {
+      const connection = await this.session.ready();
+      const api = connection.adapter;
+      await this.session.negotiate(api);
+      const home = await api.home();
+      const bootstrap: V.Bootstrap = { ...home, capabilities: advertise(api, home.capabilities) };
+      this.session.check(epoch, 'home');
+      this.session.features = bootstrap.capabilities.features;
+      const images = await connection.images();
+      const model = homeModel(bootstrap, images, this.artWidth());
+      this.box.update('home', home => ({ ...home, ...ready(model), rowsLoading: [], moreRows: 'idle' }));
+    } catch (error) {
+      if (epoch !== this.session.epoch) return;
+      const retry = retryPolicy(error, attempt);
+      this.box.update('home', home => ({ ...home, ...failed(error, home), retry }));
+      if (retry.allowed && attempt < retry.limit) {
+        this.timer = setTimeout(() => void this.load(attempt + 1), retry.delaySeconds * 1000);
+      }
+    }
+  }
+
+  /** The next page of rows, without the heroes' titles and without rows already shown. */
+  async moreRows(): Promise<void> {
+    const state = this.box.get().home;
+    const model = state.value;
+    if (!model || !model.nextCursor || state.moreRows === 'loading' || state.moreRows === 'end') return;
+    const epoch = this.session.epoch;
+    const cursor = model.nextCursor;
+    this.box.update('home', home => ({ ...home, moreRows: 'loading' }));
+    try {
+      const connection = await this.session.ready();
+      const data = await connection.adapter.rows({ cursor, placement: 'home' });
+      if (data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) {
+        throw new Error('Invalid home row continuation');
+      }
+      const images = await connection.images();
+      this.session.check(epoch, 'home rows');
+      const featured = new Set(model.hero.map(card => card.id));
+      const known = new Set(model.rows.map(row => row.id));
+      const rows = data.items
+        .filter(row => !known.has(row.id) && !!known.add(row.id))
+        .map(row => {
+          const items = row.items.filter(item => item.kind !== 'title' || !featured.has(item.title.id));
+          return feedRow({ ...row, items }, images, this.artWidth());
+        });
+      this.box.update('home', home => {
+        if (!home.value || home.value.nextCursor !== cursor) return home;
+        const value = { ...home.value, rows: [...home.value.rows, ...rows], nextCursor: data.nextCursor ?? '' };
+        return { ...home, value, moreRows: data.continuation === 'more' ? 'idle' : 'end' };
+      });
+    } catch {
+      if (epoch === this.session.epoch) this.box.update('home', home => ({ ...home, moreRows: 'failed' }));
+    }
+  }
+
+  /** The next items of one row, appended in the server's order. */
+  async rowItems(rowId: string): Promise<void> {
+    const state = this.box.get().home;
+    const row = state.value?.rows.find(r => r.id === rowId);
+    if (!state.value || !row || !row.nextCursor || row.continuation !== 'more' || state.rowsLoading.includes(rowId)) return;
+    const epoch = this.session.epoch;
+    const cursor = row.nextCursor;
+    const featured = new Set(state.value.hero.map(card => card.id));
+    this.setRowLoading(rowId, true);
+    try {
+      const connection = await this.session.ready();
+      const data = await connection.adapter.row(rowId, cursor, PAGE_ITEMS);
+      if (data.id !== rowId) throw new Error('Wrong row returned');
+      if (data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) {
+        throw new Error('Invalid home item continuation');
+      }
+      const images = await connection.images();
+      this.session.check(epoch, 'home row');
+      this.box.update('home', home => {
+        const current = home.value?.rows.find(r => r.id === rowId);
+        if (!home.value || !current || current.nextCursor !== cursor) return home;
+        const seen = new Set(current.items.map(item => item.id));
+        const items = data.items
+          .filter(item => item.kind !== 'title' || !featured.has(item.title.id))
+          .map(item => entry(item, images, this.artWidth()))
+          .filter(item => !seen.has(item.id) && !!seen.add(item.id));
+        const next: Row = {
+          ...current,
+          items: [...current.items, ...items],
+          nextCursor: data.nextCursor ?? '',
+          continuation: data.continuation,
+        };
+        const rows = home.value.rows.map(r => (r.id === rowId ? next : r));
+        return { ...home, value: { ...home.value, rows } };
+      });
+    } catch {
+      // The row keeps its cursor; the viewer can page again.
+    } finally {
+      if (epoch === this.session.epoch) this.setRowLoading(rowId, false);
+    }
+  }
+
+  private setRowLoading(rowId: string, on: boolean): void {
+    this.box.update('home', home => {
+      const rowsLoading = home.rowsLoading.filter(id => id !== rowId);
+      if (on) rowsLoading.push(rowId);
+      return { ...home, rowsLoading };
+    });
+  }
+
+  /** Every library, as shell destinations; a list the server cannot finish is a failure, not a partial list. */
+  async libraries(): Promise<void> {
+    const epoch = this.session.epoch;
+    this.box.update('libraries', libraries => loading(libraries));
+    try {
+      const connection = await this.session.ready();
+      const images = await connection.images();
+      const items: Destination[] = [];
+      const seen = new Set<string>();
+      let cursor: string | undefined;
+      for (let n = 0; n < LIBRARY_PAGES; n++) {
+        const page = await connection.adapter.libraries({ cursor, limit: 100 });
+        for (const { id, name, kind, artwork } of page.items) {
+          const image = artwork.find(a => a.kind === 'backdrop');
+          items.push({ id, name, kind, backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
+        }
+        if (page.continuation === 'exhausted') {
+          this.session.check(epoch, 'libraries');
+          this.box.update('libraries', () => ready(items));
+          return;
+        }
+        if (page.continuation !== 'more' || !page.nextCursor || seen.has(page.nextCursor)) {
+          throw new Error('Library list is incomplete');
+        }
+        cursor = page.nextCursor;
+        seen.add(cursor);
+      }
+      throw new Error('Library list exceeds page limit');
+    } catch (error) {
+      if (epoch === this.session.epoch) this.box.update('libraries', libraries => failed(error, libraries));
+    }
+  }
+
+  ensureLibraries(): void {
+    if (this.box.get().libraries.load === 'idle') void this.libraries();
+  }
+}
+
+/** When to read home again: the server's retry policy and Retry-After, backing off, at most a minute. */
+function retryPolicy(error: unknown, attempt: number): HomeRetry & { limit: number } {
+  const retry = error instanceof VelaError ? error.detail.retry : undefined;
+  const header = error instanceof VelaError ? Number(error.retryAfter) : 0;
+  const hint = Number.isFinite(retry?.afterSeconds) ? Math.max(0, retry!.afterSeconds!) : 0;
+  const delaySeconds = Math.max(1, 2 ** Math.min(attempt, 5), hint, Number.isFinite(header) ? header : 0);
+  const maxAttempts = Number.isFinite(retry?.maxAttempts) ? Math.floor(retry!.maxAttempts!) : 3;
+  const limit = Math.max(0, Math.min(2, maxAttempts - 1));
+  return { allowed: retry?.allowed === true && delaySeconds <= 60, delaySeconds, attempt, limit };
+}
+
