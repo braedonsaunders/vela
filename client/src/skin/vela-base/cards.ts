@@ -83,6 +83,9 @@ export const cardPreview: Node = {
   ],
 };
 
+// A scrim over the art behind the progress bar: dark in every document, unlike a fade to the page.
+const progressFoot = 'linear-gradient(0deg, $ui.scrim 0%, color-mix(in srgb, $ui.scrim 0%, transparent) 100%)';
+
 export const card: Node = {
   type: 'box',
   group: true,
@@ -215,7 +218,7 @@ export const card: Node = {
             right: '0px',
             bottom: '0px',
             height: '36px',
-            'background-image': `linear-gradient(0deg, ${veil(85)} 0%, ${veil(0)} 100%)`,
+            'background-image': progressFoot,
           },
         },
         {
