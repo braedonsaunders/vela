@@ -132,8 +132,10 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
         s[camel(row)] = v === 'auto' ? 'auto' : len(v);
         break;
       case 'overflow': if (v === 'hidden' || v === 'clip') s.overflow = 'hidden'; else if (v === 'auto' || v === 'scroll') fx.scrollY = true; break;
-      case 'overflow-x': if (v === 'auto' || v === 'scroll') fx.scrollX = true; else if (v === 'hidden' || v === 'clip') s.overflow = 'hidden'; break;
-      case 'overflow-y': if (v === 'auto' || v === 'scroll') fx.scrollY = true; else if (v === 'hidden' || v === 'clip') s.overflow = 'hidden'; break;
+      // RN Web's ScrollView supplies overflow on the scrolling axis. Clipping the
+      // other axis must not override it with the two-axis overflow shorthand.
+      case 'overflow-x': if (v === 'auto' || v === 'scroll') fx.scrollX = true; else if (v === 'hidden' || v === 'clip') s[web ? 'overflowX' : 'overflow'] = 'hidden'; break;
+      case 'overflow-y': if (v === 'auto' || v === 'scroll') fx.scrollY = true; else if (v === 'hidden' || v === 'clip') s[web ? 'overflowY' : 'overflow'] = 'hidden'; break;
       case 'background-color': s.backgroundColor = colour(v); break;
       case 'background-image': background(v, m, s, fx); break;
       case 'opacity': s.opacity = clampUnit(Number(v)); break;

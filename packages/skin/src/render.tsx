@@ -22,6 +22,7 @@ import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
+import { useHeroSwipe } from './hero-swipe';
 import { resolveUi } from './resolve/ui';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
@@ -74,19 +75,19 @@ export function SkinRoute({ host, node, after }: { host: SkinHost; node: RNode; 
   );
 }
 
-function SkinNode({ node, ctx, route, after }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode }) {
+function SkinNode({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
   const { env } = useHost();
   if (node.kind === 'repeat') {
     return (
       <>
         {collection(node.over, ctx, env, node.limit).map(c =>
-          holds(node.when, c, env) ? <SkinNode key={itemKey(c)} node={node.item} ctx={c} /> : null)}
+          holds(node.when, c, env) ? <SkinNode key={itemKey(c)} node={node.item} ctx={c} hero={node.over === 'home.hero'} /> : null)}
       </>
     );
   }
   if (!holds(node.when, ctx, env)) return null;
   switch (node.kind) {
-    case 'box': return <Box node={node} ctx={ctx} route={route} after={after} />;
+    case 'box': return <Box node={node} ctx={ctx} route={route} after={after} hero={hero} />;
     case 'text': return <TextNode node={node} ctx={ctx} />;
     case 'image': return <ImageNode node={node} ctx={ctx} />;
     case 'icon': return <Icon node={node} ctx={ctx} />;
@@ -204,9 +205,10 @@ function partition(style: Record<string, unknown>, keys: Set<string>): [Record<s
   return [inside, outside];
 }
 
-function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode }) {
+function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
   const host = useHost();
   const { env, viewport } = host;
+  const swipe = useHeroSwipe(!!hero, env.home?.hero.length ?? 0, env.heroIndex, host.dispatch);
   const parentText = useContext(Inherited);
   const parentGroup = useContext(Group);
   const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
@@ -279,7 +281,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}
     </>
   );
-  const drawn: Record<string, unknown> = { ...style, ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...tvRing, ...motion };
+  const drawn: Record<string, unknown> = { ...style, ...(swipe ? { touchAction: 'pan-y pinch-zoom' } : {}), ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...tvRing, ...motion };
   // Web sticky headers add a z-index: 10 wrapper, which puts decorative backdrops
   // above their foreground. Native CSS keeps the document's own stacking order.
   if (web && fx.sticky) drawn.position = 'sticky';
@@ -381,7 +383,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     const Frame = (guide ? AGuide : AView) as typeof AView;
     element = (
       <Frame ref={guide ? (guideRef as never) : undefined} style={boxStyleFinal as ViewStyle} {...(guide as object)}
-        {...barLayout} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)} {...stopProps}>
+        {...barLayout} {...swipe} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)} {...stopProps}>
         {layers}
         {content}
         {button}

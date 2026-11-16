@@ -75,6 +75,7 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
       case 'close':
         if (action === 'close' && arg) return view.setFlag(arg, false);
         if (router.canGoBack()) router.back();
+        else router.replace('/');
         return;
       case 'toggle':
         return view.toggleFlag(arg);
