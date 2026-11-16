@@ -1064,8 +1064,11 @@ export const title: Node = {
         position: 'relative',
         display: 'flex',
         'flex-direction': 'column',
-        flex: '1',
-        'min-height': '0px',
+        // A fixed frame, exactly the screen less its margins: the route itself never scrolls,
+        // only the region inside the frame does. Otherwise a TV's focus engine scrolls the whole
+        // page to the focused action and carries the frame and its close button under the bar.
+        height: 'calc(100vh - max(4vh, 92px) - 4vh)',
+        'flex-shrink': '0',
         'overflow-x': 'hidden',
         'overflow-y': 'hidden',
         'border-radius': '$ui.radiusPanel',
@@ -1074,7 +1077,7 @@ export const title: Node = {
         margin: '4vh 4vw',
         'margin-top': 'max(4vh, 92px)',
       },
-      small: { 'border-radius': '0px', margin: '0px', 'margin-top': '0px' },
+      small: { 'border-radius': '0px', margin: '0px', 'margin-top': '0px', height: '100dvh' },
       children: [
         {
           type: 'box',
@@ -1106,8 +1109,9 @@ export const title: Node = {
           style: {
             flex: '1',
             'min-height': '0px',
+            // Scrolls vertically only. An overflow-x: hidden here becomes overflow: hidden on
+            // native and on the web, which stops the region scrolling at all.
             'overflow-y': 'auto',
-            'overflow-x': 'hidden',
             display: 'flex',
             'flex-direction': 'column',
             gap: '52px',
