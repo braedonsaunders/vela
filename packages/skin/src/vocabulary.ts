@@ -2,9 +2,12 @@
 // over the binding context (the repeated item a node sits in) and the environment (the app's
 // view state). The semantics are those of the Contract renderer's table (tools/renderer.ts),
 // key for key. A template calls only the accessors it names.
-import { msg } from '../../../client/foundation/i18n';
-import type { detailModel, entry, homeModel } from '../../../client/src/discovery/models';
-import { AREAS } from './areas';
+import { msg } from '@vela/core';
+import type { detailModel, entry, homeModel } from '@vela/core';
+import type { Hit, SearchView } from './widgets/search/model';
+import type { AuthView } from './widgets/auth/model';
+import { AUTH_VOCABULARY, quickChars } from './widgets/auth/vocabulary';
+import { SEARCH_VOCABULARY, searchCollection } from './widgets/search/vocabulary';
 
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
 export type Card = ReturnType<typeof entry>;
@@ -17,8 +20,7 @@ export type Person = DetailModel['castPeople'][number];
 
 export interface Destination { id: string; name: string; kind: string; backdrop: string }
 
-/** The view state documents read. Areas (areas.ts) add their models by augmenting this
- * interface; a key whose area has no model yet reads nothing. */
+/** The view state documents read. A key whose model is absent (an area not drawn yet) reads nothing. */
 export interface Env {
   viewer: string;
   section: string;
@@ -43,10 +45,13 @@ export interface Env {
   rowLoading: string[];
   /** Per row: whether its pager is at its start and end. */
   pagers: Record<string, { atStart: boolean; atEnd: boolean }>;
+  /** The open query's search answer (routes.search); none while no query is open. */
+  search?: SearchView;
+  /** The signed-out page (routes.auth); none while signed in. */
+  auth?: AuthView;
 }
 
-/** The binding context: the item a node is repeated over, and its position. Areas add their
- * item kinds by augmenting this interface. */
+/** The binding context: the item a node is repeated over, and its position. */
 export interface Ctx {
   card?: Card;
   hero?: Card;
@@ -56,6 +61,7 @@ export interface Ctx {
   extra?: Extra;
   person?: Person;
   fact?: string;
+  hit?: Hit;
   index: number;
 }
 
@@ -93,8 +99,8 @@ function detail(read: (d: DetailModel, e: Env) => string, none = ''): Accessor {
 
 const CARD_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rating', 'progressLabel', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
 const DETAIL_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
-const NO_MODEL = ['ch.', 'tile.', 'library.', 'opt.', 'signin.', 'collection.', 'quick.', 'char.', 'env.auth', 'env.library', 'env.collection',
-  'env.clock', 'env.liveReady', 'env.channelCount', 'env.favoriteCount', 'env.hasLiveLibrary', 'env.authBackdrop', 'env.authWordmark', 'search.', 'hit.', 'env.search'];
+const NO_MODEL = ['ch.', 'tile.', 'library.', 'opt.', 'collection.', 'env.library', 'env.collection',
+  'env.clock', 'env.liveReady', 'env.channelCount', 'env.favoriteCount', 'env.hasLiveLibrary'];
 
 export const VOCABULARY: Record<string, Accessor> = {
   ...Object.fromEntries(CARD_FIELDS.flatMap(f => [[`card.${f}`, from('card', x => String(x[f]))], [`hero.${f}`, from('hero', x => String(x[f]))]])),
@@ -237,9 +243,9 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.hasMediaFacts': detail(d => yes(d.mediaFacts.length > 0), 'false'),
   'detail.hasRelated': detail(d => yes(d.related.length > 0), 'false'),
   'detail.selectedSeason': (_, e) => e.season,
+  ...SEARCH_VOCABULARY,
+  ...AUTH_VOCABULARY,
 };
-
-for (const area of AREAS) Object.assign(VOCABULARY, area.vocabulary);
 
 /** A key's accessor, or undefined for a key no document may name. */
 export function accessor(key: string): Accessor | undefined {
@@ -254,6 +260,9 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
     list.slice(0, limit).map((x, i) => ({ ...c, ...make(x, i), index: i }));
   const heroAct = (id: string) => e.home?.heroActions.find(a => a.heroId === id);
   const d = e.detail;
+  const search = searchCollection(over, c, e, limit);
+  if (search) return search;
+  if (over === 'quick.chars') return quickChars(c, e, limit);
   switch (over) {
     case 'home.rows': return at(e.home?.rows ?? [], row => ({ row }));
     case 'row.items': return at(c.row?.items ?? [], card => ({ card }));
@@ -275,10 +284,6 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
     case 'detail.genres': return at(d?.title[0]?.genres ?? [], fact => ({ fact }));
     case 'detail.related': return at(d?.related ?? [], row => ({ row: row as Row }));
     default:
-      for (const area of AREAS) {
-        const items = area.collection?.(over, c, e, limit);
-        if (items) return items;
-      }
       return [];
   }
 }

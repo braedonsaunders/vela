@@ -1,5 +1,4 @@
 export { RENDERER_VERSION, resolveDocument, type ResolvedDocument, type RNode, type RouteName } from './resolve';
-export type { Area } from './areas';
 export { SkinRoot, SkinRoute, page } from './render';
 export { useHost, useInheritedText, useWidgetInteraction, type SkinHost, type WidgetProps } from './host';
 export { fill, holds } from './resolve';

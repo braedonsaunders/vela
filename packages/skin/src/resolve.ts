@@ -71,7 +71,7 @@ export interface ResolvedDocument {
 }
 
 /** Image URLs (Plex puts a short-lived token in them) may be read only by an image source or a background image. */
-const URL_KEYS = /^(card|hero|detail|dest|person|ch|tile)\.(poster|backdrop|logo|portrait|nowArt)$/;
+const URL_KEYS = /^(card|hero|detail|dest|person|ch|tile|hit)\.(poster|backdrop|logo|portrait|nowArt|artwork)$/;
 const UNSAFE = /expression\(|javascript:|@import|[;{}<>\\]/i;
 
 interface Context {
