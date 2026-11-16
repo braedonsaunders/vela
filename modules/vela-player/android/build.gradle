@@ -37,6 +37,8 @@ android {
   externalNativeBuild {
     cmake {
       path 'src/main/cpp/CMakeLists.txt'
+      // CMake's working tree goes with the build output (on the scratch drive), not beside the sources.
+      buildStagingDirectory layout.buildDirectory.dir('cxx').get().asFile
     }
   }
   sourceSets {
