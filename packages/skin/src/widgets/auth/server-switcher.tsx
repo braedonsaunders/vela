@@ -42,10 +42,20 @@ export function ServerSwitcher({ params }: WidgetProps) {
   const title = params.label || msg('connect.servers');
   return (
     <View style={{ gap: 2 }} accessibilityRole="menu" accessibilityLabel={title}>
-      <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.inkQuiet' }} style={{ paddingVertical: 4 }}>{title}</Words>
+      <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.inkQuiet' }} style={{ paddingVertical: 4 }}>
+        {title}
+      </Words>
       {switcher.servers.list.map(server => (
-        <Row key={server.id} label={server.name} detail={serverDetail(server)} ready={server.status === 'ready'}
-          selected={server.selected} disabled={busy && !server.selected} onPress={() => pick(server)} testID={`server-${server.id}`} />
+        <Row
+          key={server.id}
+          label={server.name}
+          detail={serverDetail(server)}
+          ready={server.status === 'ready'}
+          selected={server.selected}
+          disabled={busy && !server.selected}
+          onPress={() => pick(server)}
+          testID={`server-${server.id}`}
+        />
       ))}
       <Row label={params.addLabel || msg('connect.add')} onPress={switcher.openConnect} testID="server-add" />
       {error ? <Alert>{error}</Alert> : null}
@@ -53,7 +63,15 @@ export function ServerSwitcher({ params }: WidgetProps) {
   );
 }
 
-function Row({ label, detail, ready = true, selected = false, disabled = false, onPress, testID }: {
+function Row({
+  label,
+  detail,
+  ready = true,
+  selected = false,
+  disabled = false,
+  onPress,
+  testID,
+}: {
   label: string;
   detail?: string;
   ready?: boolean;
@@ -67,11 +85,24 @@ function Row({ label, detail, ready = true, selected = false, disabled = false, 
   const face = useInheritedText().style.fontFamily;
   const { state, handlers } = useInteraction();
   return (
-    <APressable onPress={onPress} disabled={disabled} accessibilityRole="menuitem" accessibilityState={{ selected, disabled }}
-      testID={testID} style={[look.box(overlaid(ROW, state, LOOKS, disabled)), NO_RING]} {...handlers}>
+    <APressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="menuitem"
+      accessibilityState={{ selected, disabled }}
+      testID={testID}
+      style={[look.box(overlaid(ROW, state, LOOKS, disabled)), NO_RING]}
+      {...handlers}
+    >
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Words rows={{ 'font-size': '14px' }} style={face ? { fontFamily: face } : undefined} lines={1}>{label}</Words>
-        {detail ? <Words rows={{ 'font-size': '11px', color: ready ? '$ui.inkQuiet' : '$ui.accent' }} lines={1}>{detail}</Words> : null}
+        <Words rows={{ 'font-size': '14px' }} style={face ? { fontFamily: face } : undefined} lines={1}>
+          {label}
+        </Words>
+        {detail ? (
+          <Words rows={{ 'font-size': '11px', color: ready ? '$ui.inkQuiet' : '$ui.accent' }} lines={1}>
+            {detail}
+          </Words>
+        ) : null}
       </View>
       {selected ? <Glyph symbol="checkmark" size={14} color={look.ui.accent} /> : null}
     </APressable>

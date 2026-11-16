@@ -8,10 +8,11 @@ import { colour } from '../../css';
 import { useInheritedText, type WidgetProps } from '../../host';
 import { useAuthForm, type AuthField } from './form';
 
-const FIELDS: Record<AuthField, { autoComplete: 'username' | 'current-password'; content: 'username' | 'password' }> = {
-  username: { autoComplete: 'username', content: 'username' },
-  password: { autoComplete: 'current-password', content: 'password' },
-};
+const FIELDS: Record<AuthField, { autoComplete: 'username' | 'current-password'; content: 'username' | 'password' }> =
+  {
+    username: { autoComplete: 'username', content: 'username' },
+    password: { autoComplete: 'current-password', content: 'password' },
+  };
 
 export function TextInput({ params }: WidgetProps) {
   const form = useAuthForm();
@@ -43,7 +44,9 @@ export function TextInput({ params }: WidgetProps) {
       returnKeyType={field === 'password' ? 'go' : 'next'}
       submitBehavior={field === 'password' ? 'blurAndSubmit' : 'submit'}
       placeholder={placeholder}
-      placeholderTextColor={(params.placeholderColor && colour(params.placeholderColor)) || (drawn.style.color as string | undefined)}
+      placeholderTextColor={
+        (params.placeholderColor && colour(params.placeholderColor)) || (drawn.style.color as string | undefined)
+      }
       accessibilityLabel={label}
       testID={`signin-${field}`}
       nativeID={`vela-${field}`}

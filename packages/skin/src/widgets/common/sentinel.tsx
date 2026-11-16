@@ -26,7 +26,7 @@ export function Sentinel({ params, ctx }: WidgetProps) {
   const on = params.on ?? 'row';
   const reach = on === 'row' ? ROW_REACH : PAGE_REACH;
   // A home sentinel asks for home's next rows (moreRow with no row); a row's names its row.
-  const arg = on === 'row' ? ctx.row?.id ?? '' : '';
+  const arg = on === 'row' ? (ctx.row?.id ?? '') : '';
   const ask = () => {
     const action = MORE[on];
     if (!action || (on === 'row' && !arg)) return;
@@ -34,7 +34,16 @@ export function Sentinel({ params, ctx }: WidgetProps) {
   };
   useInView(ref, reach, ask);
   return (
-    <View ref={ref} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-      style={on === 'row' ? { alignSelf: 'stretch', minWidth: 1, flexGrow: 1 } : { alignSelf: 'stretch', minHeight: 1, flexGrow: 1 }} />
+    <View
+      ref={ref}
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={
+        on === 'row'
+          ? { alignSelf: 'stretch', minWidth: 1, flexGrow: 1 }
+          : { alignSelf: 'stretch', minHeight: 1, flexGrow: 1 }
+      }
+    />
   );
 }

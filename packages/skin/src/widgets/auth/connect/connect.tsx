@@ -57,8 +57,11 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
   const startPlex = async () => {
     fail('plex', '');
     setPlexAsked(true);
-    try { await run(actions.plexStart()); }
-    finally { setPlexAsked(false); }
+    try {
+      await run(actions.plexStart());
+    } finally {
+      setPlexAsked(false);
+    }
   };
   const choosePlex = async (id: string) => {
     fail('plex', '');
@@ -75,19 +78,40 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
   return (
     <Animated.View style={[{ gap: 26 }, look.motion('velaEnter60')]}>
       {target === '' ? (
-        <AddressStep servers={servers.list} busy={busy} probe={actions.probe} onAdd={add} onSelect={switchTo}
-          onRemove={remove} error={errors.add} />
+        <AddressStep
+          servers={servers.list}
+          busy={busy}
+          probe={actions.probe}
+          onAdd={add}
+          onSelect={switchTo}
+          onRemove={remove}
+          error={errors.add}
+        />
       ) : (
         <>
           <Heading
             eyebrow={msg(kind === 'plex' ? 'connect.plex.eyebrow' : 'connect.signIn.eyebrow')}
-            title={kind === 'plex' ? msg('connect.plex.title') : name} />
+            title={kind === 'plex' ? msg('connect.plex.title') : name}
+          />
           {kind === 'plex' ? (
-            <PlexStep link={servers.plex} busy={busy} starting={plexAsked && !servers.plex} error={errors.plex}
-              onStart={startPlex} onChoose={choosePlex} onCancel={actions.plexCancel} />
+            <PlexStep
+              link={servers.plex}
+              busy={busy}
+              starting={plexAsked && !servers.plex}
+              error={errors.plex}
+              onStart={startPlex}
+              onChoose={choosePlex}
+              onCancel={actions.plexCancel}
+            />
           ) : (
-            <JellyfinStep quick={quick} busy={busy} error={errors.jellyfin} onSignIn={signIn}
-              onQuick={() => run(actions.jellyfinQuickStart(target))} onCancelQuick={actions.jellyfinQuickCancel} />
+            <JellyfinStep
+              quick={quick}
+              busy={busy}
+              error={errors.jellyfin}
+              onSignIn={signIn}
+              onQuick={() => run(actions.jellyfinQuickStart(target))}
+              onCancelQuick={actions.jellyfinQuickCancel}
+            />
           )}
         </>
       )}

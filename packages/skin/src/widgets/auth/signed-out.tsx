@@ -49,10 +49,14 @@ export interface SignedOutProps {
 
 function stageOf(auth: SessionAuth): AuthStage {
   switch (auth.phase) {
-    case 'offline': return 'offline';
-    case 'redeeming': return 'redeeming';
-    case 'starting': return 'connecting';
-    default: return auth.quick ? 'quick' : 'signin';
+    case 'offline':
+      return 'offline';
+    case 'redeeming':
+      return 'redeeming';
+    case 'starting':
+      return 'connecting';
+    default:
+      return auth.quick ? 'quick' : 'signin';
   }
 }
 
@@ -84,15 +88,21 @@ function DocumentSignIn({ host, route, auth, actions, art }: SignedOutProps) {
   const signIn = useCallback(async () => {
     if (busy || !fields.ready) return;
     setBusy(true);
-    try { await actions.signIn(fields.values.username.trim(), fields.values.password); }
-    finally { setBusy(false); }
+    try {
+      await actions.signIn(fields.values.username.trim(), fields.values.password);
+    } finally {
+      setBusy(false);
+    }
   }, [busy, fields.ready, fields.values, actions]);
 
   const startQuick = async () => {
     if (busy) return;
     setBusy(true);
-    try { await actions.startQuick(); }
-    finally { setBusy(false); }
+    try {
+      await actions.startQuick();
+    } finally {
+      setBusy(false);
+    }
   };
 
   const goSecure = async () => {
@@ -119,11 +129,20 @@ function DocumentSignIn({ host, route, auth, actions, art }: SignedOutProps) {
 
   const dispatch = (action: Action, arg: string) => {
     switch (action) {
-      case 'signIn': signIn(); return;
-      case 'startQuick': startQuick(); return;
-      case 'cancelQuick': actions.cancelQuick(); return;
-      case 'goSecure': goSecure(); return;
-      default: host.dispatch(action, arg);
+      case 'signIn':
+        signIn();
+        return;
+      case 'startQuick':
+        startQuick();
+        return;
+      case 'cancelQuick':
+        actions.cancelQuick();
+        return;
+      case 'goSecure':
+        goSecure();
+        return;
+      default:
+        host.dispatch(action, arg);
     }
   };
   const signedOutHost: SkinHost = { ...host, env: { ...host.env, auth: view }, dispatch };

@@ -5,8 +5,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export function usePending() {
   const [count, setCount] = useState(0);
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
-  const run = useCallback(async <T,>(work: Promise<T>): Promise<T | undefined> => {
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
+  const run = useCallback(async <T>(work: Promise<T>): Promise<T | undefined> => {
     setCount(n => n + 1);
     try {
       const value = await work;
@@ -23,18 +28,31 @@ export function useLatest<Q, A>(ask: (question: Q) => Promise<A>, delayMs: numbe
   const [answer, setAnswer] = useState<A | null>(null);
   const generation = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { generation.current++; if (timer.current) clearTimeout(timer.current); }, []);
-  const askLater = useCallback((question: Q, waiting: A | null) => {
-    const mine = ++generation.current;
-    if (timer.current) clearTimeout(timer.current);
-    setAnswer(waiting);
-    if (waiting === null) return;
-    timer.current = setTimeout(() => {
-      ask(question).then(
-        value => { if (generation.current === mine) setAnswer(value); },
-        () => { if (generation.current === mine) setAnswer(null); },
-      );
-    }, delayMs);
-  }, [ask, delayMs]);
+  useEffect(
+    () => () => {
+      generation.current++;
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  const askLater = useCallback(
+    (question: Q, waiting: A | null) => {
+      const mine = ++generation.current;
+      if (timer.current) clearTimeout(timer.current);
+      setAnswer(waiting);
+      if (waiting === null) return;
+      timer.current = setTimeout(() => {
+        ask(question).then(
+          value => {
+            if (generation.current === mine) setAnswer(value);
+          },
+          () => {
+            if (generation.current === mine) setAnswer(null);
+          },
+        );
+      }, delayMs);
+    },
+    [ask, delayMs],
+  );
   return { answer, ask: askLater };
 }

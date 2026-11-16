@@ -13,18 +13,36 @@ import { useLook } from '../common/look';
 const AURORAS: { motion: string; rows: Css }[] = [
   {
     motion: 'velaAuroraA',
-    rows: { width: '72vmax', height: '72vmax', left: '-22vmax', top: '-30vmax', opacity: '0.5',
-      'background-image': 'radial-gradient(circle, #c0703f 0%, #090b0e00 68%)' },
+    rows: {
+      width: '72vmax',
+      height: '72vmax',
+      left: '-22vmax',
+      top: '-30vmax',
+      opacity: '0.5',
+      'background-image': 'radial-gradient(circle, #c0703f 0%, #090b0e00 68%)',
+    },
   },
   {
     motion: 'velaAuroraB',
-    rows: { width: '80vmax', height: '80vmax', right: '-30vmax', bottom: '-42vmax', opacity: '0.55',
-      'background-image': 'radial-gradient(circle, #1f5a6b 0%, #090b0e00 66%)' },
+    rows: {
+      width: '80vmax',
+      height: '80vmax',
+      right: '-30vmax',
+      bottom: '-42vmax',
+      opacity: '0.55',
+      'background-image': 'radial-gradient(circle, #1f5a6b 0%, #090b0e00 66%)',
+    },
   },
   {
     motion: 'velaAuroraC',
-    rows: { width: '54vmax', height: '54vmax', left: '34%', top: '18%', opacity: '0.35',
-      'background-image': 'radial-gradient(circle, #5b2a4a 0%, #090b0e00 70%)' },
+    rows: {
+      width: '54vmax',
+      height: '54vmax',
+      left: '34%',
+      top: '18%',
+      opacity: '0.35',
+      'background-image': 'radial-gradient(circle, #5b2a4a 0%, #090b0e00 70%)',
+    },
   },
 ];
 
@@ -47,28 +65,49 @@ export function Stage({ children }: { children: ReactNode }) {
   const card = look.layer(CARD);
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.page }]}>
-      <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} pointerEvents="none"
-        accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View
+        style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
         {AURORAS.map(aurora => (
-          <Animated.View key={aurora.motion}
-            style={[look.box({ position: 'absolute', 'border-radius': '9999px', ...aurora.rows }), look.motion(aurora.motion)]} />
+          <Animated.View
+            key={aurora.motion}
+            style={[
+              look.box({ position: 'absolute', 'border-radius': '9999px', ...aurora.rows }),
+              look.motion(aurora.motion),
+            ]}
+          />
         ))}
-        <View style={[StyleSheet.absoluteFill, look.box({
-          'background-image': 'radial-gradient(ellipse 110% 85% at 50% 42%, #090b0e00 35%, #000000b3 100%)',
-        })]} />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            look.box({
+              'background-image': 'radial-gradient(ellipse 110% 85% at 50% 42%, #090b0e00 35%, #000000b3 100%)',
+            }),
+          ]}
+        />
       </View>
-      <ScrollView contentContainerStyle={look.box({
-        'flex-grow': '1',
-        'align-items': 'center',
-        'justify-content': 'center',
-        gap: '32px',
-        padding: 'max(28px, 7vh) 16px',
-      })} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={look.box({
+          'flex-grow': '1',
+          'align-items': 'center',
+          'justify-content': 'center',
+          gap: '32px',
+          padding: 'max(28px, 7vh) 16px',
+        })}
+        keyboardShouldPersistTaps="handled"
+      >
         {mark ? <Image source={mark} style={{ width: 60, height: 104 }} accessibilityElementsHidden /> : null}
         <Animated.View style={[card.style, look.motion('velaEnter0')]}>
-          {card.blur && Platform.OS !== 'web'
-            ? <BlurView intensity={Math.min(100, Math.round(card.blur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} />
-            : null}
+          {card.blur && Platform.OS !== 'web' ? (
+            <BlurView
+              intensity={Math.min(100, Math.round(card.blur * 2.5))}
+              tint="dark"
+              style={StyleSheet.absoluteFill}
+            />
+          ) : null}
           {children}
         </Animated.View>
       </ScrollView>

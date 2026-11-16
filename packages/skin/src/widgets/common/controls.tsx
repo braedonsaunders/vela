@@ -41,7 +41,12 @@ export function useInteraction() {
 }
 
 /** Rows with the overlays in force: hover, then focus (on TV, focus also shows the hover look). */
-export function overlaid(rows: Css, state: Interaction, looks: { hover?: Css; focus?: Css; disabled?: Css }, disabled = false): Css {
+export function overlaid(
+  rows: Css,
+  state: Interaction,
+  looks: { hover?: Css; focus?: Css; disabled?: Css },
+  disabled = false,
+): Css {
   const out = { ...rows };
   if (disabled) return Object.assign(out, looks.disabled);
   if (state.hover || (Platform.isTV && state.focus)) Object.assign(out, looks.hover);
@@ -49,7 +54,13 @@ export function overlaid(rows: Css, state: Interaction, looks: { hover?: Css; fo
   return out;
 }
 
-export function Words({ rows, lines, children, style, ...a11y }: {
+export function Words({
+  rows,
+  lines,
+  children,
+  style,
+  ...a11y
+}: {
   rows: Css;
   lines?: number;
   children: ReactNode;
@@ -70,9 +81,21 @@ export function Glyph({ symbol, size, color }: { symbol: string; size: number; c
   if (!glyph) return null;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" pointerEvents="none">
-      {glyph.paths.map((d, i) => glyph.stroke
-        ? <Path key={i} d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-        : <Path key={i} d={d} fill={color} />)}
+      {glyph.paths.map((d, i) =>
+        glyph.stroke ? (
+          <Path
+            key={i}
+            d={d}
+            fill="none"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : (
+          <Path key={i} d={d} fill={color} />
+        ),
+      )}
     </Svg>
   );
 }
@@ -82,7 +105,9 @@ export function Heading({ eyebrow: over, title, lines = 2 }: { eyebrow?: string;
   return (
     <View style={{ gap: 10 }}>
       {over ? <Words rows={{ ...eyebrow, 'font-size': '10px', color: '$ui.accent' }}>{over}</Words> : null}
-      <Words rows={{ ...display, 'font-size': '42px' }} lines={lines} accessibilityRole="header">{title}</Words>
+      <Words rows={{ ...display, 'font-size': '42px' }} lines={lines} accessibilityRole="header">
+        {title}
+      </Words>
     </View>
   );
 }
@@ -93,7 +118,11 @@ export function Label({ children }: { children: string }) {
 
 /** A failure the viewer should read: announced, in the accent ink. */
 export function Alert({ children }: { children: string }) {
-  return <Words rows={{ 'font-size': '14px', 'line-height': '1.5', color: '$ui.accent' }} accessibilityRole="alert">{children}</Words>;
+  return (
+    <Words rows={{ 'font-size': '14px', 'line-height': '1.5', color: '$ui.accent' }} accessibilityRole="alert">
+      {children}
+    </Words>
+  );
 }
 
 /** The base's waiting mark: three breathing dots, still under reduced motion. */
@@ -101,7 +130,11 @@ export function Pulse() {
   const look = useLook();
   const dot = look.box({ width: '7px', height: '7px', 'border-radius': '4px', 'background-color': '$ui.accent' });
   return (
-    <View style={{ flexDirection: 'row', gap: 8 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <View
+      style={{ flexDirection: 'row', gap: 8 }}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       {[0, 180, 360].map(delay => (
         <Animated.View key={delay} style={[dot, look.still ? { opacity: 0.8 } : look.motion(`velaPulse${delay}`)]} />
       ))}
@@ -112,7 +145,11 @@ export function Pulse() {
 /** A waiting line: the pulse beside what is being waited for. */
 export function Waiting({ children }: { children: string }) {
   return (
-    <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }} accessibilityRole="text" accessibilityLiveRegion="polite">
+    <View
+      style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}
+      accessibilityRole="text"
+      accessibilityLiveRegion="polite"
+    >
       <Pulse />
       <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }}>{children}</Words>
     </View>
@@ -140,7 +177,12 @@ export function CodeTiles({ code, testID }: { code: string; testID?: string }) {
     color: '$ui.accent',
   });
   return (
-    <View style={{ flexDirection: 'row', width: '100%', gap: 6, justifyContent: 'center' }} accessible accessibilityLabel={code} testID={testID}>
+    <View
+      style={{ flexDirection: 'row', width: '100%', gap: 6, justifyContent: 'center' }}
+      accessible
+      accessibilityLabel={code}
+      testID={testID}
+    >
       {[...code].map((char, i) => (
         <Animated.View key={i} style={[tile, look.motion('velaCodeIn', i, { step: 45, cap: 12 })]}>
           <Text style={ink}>{char}</Text>
@@ -165,14 +207,31 @@ interface PillProps {
 }
 
 /** The base's pill button: primary in ink, or ghost glass. */
-export function Pill({ label, onPress, primary = false, height = 52, disabled = false, busy = false, testID, stretch = true, children }: PillProps) {
+export function Pill({
+  label,
+  onPress,
+  primary = false,
+  height = 52,
+  disabled = false,
+  busy = false,
+  testID,
+  stretch = true,
+  children,
+}: PillProps) {
   const look = useLook();
   const { state, handlers } = useInteraction();
   const rows = overlaid(
-    { ...pill(primary, height), 'padding-left': '28px', 'padding-right': '28px', ...(stretch ? {} : { 'align-self': 'flex-start' }) },
+    {
+      ...pill(primary, height),
+      'padding-left': '28px',
+      'padding-right': '28px',
+      ...(stretch ? {} : { 'align-self': 'flex-start' }),
+    },
     state,
     {
-      hover: primary ? { 'background-color': '#ffffff' } : { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
+      hover: primary
+        ? { 'background-color': '#ffffff' }
+        : { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
       focus: { 'box-shadow': focusRing },
       disabled: primary ? { 'background-color': '$ui.controlHover', color: '$ui.inkQuiet' } : { opacity: '0.42' },
     },
@@ -181,10 +240,24 @@ export function Pill({ label, onPress, primary = false, height = 52, disabled = 
   const { style, blur } = look.layer(rows);
   const ink = look.text({ color: rows.color, 'font-size': '15px', 'font-weight': rows['font-weight'] });
   return (
-    <APressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label}
-      accessibilityState={{ disabled, busy }} testID={testID} {...handlers}
-      style={[style, { flexDirection: 'row', gap: 10, overflow: 'hidden' }, state.pressed && !disabled ? { opacity: 0.65 } : null, NO_RING]}>
-      {blur && !web ? <BlurView intensity={Math.min(100, Math.round(blur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+    <APressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled, busy }}
+      testID={testID}
+      {...handlers}
+      style={[
+        style,
+        { flexDirection: 'row', gap: 10, overflow: 'hidden' },
+        state.pressed && !disabled ? { opacity: 0.65 } : null,
+        NO_RING,
+      ]}
+    >
+      {blur && !web ? (
+        <BlurView intensity={Math.min(100, Math.round(blur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} />
+      ) : null}
       {busy ? <Pulse /> : null}
       {children}
       <Text style={ink}>{label}</Text>
@@ -224,12 +297,26 @@ export function Field({ label, value, onChangeText, onSubmit, kind = 'username',
     <View style={{ gap: 8 }}>
       <Label>{label}</Label>
       <Animated.View style={box} onPointerEnter={handlers.onHoverIn} onPointerLeave={handlers.onHoverOut}>
-        <TextInput value={value} onChangeText={onChangeText} onSubmitEditing={onSubmit} secureTextEntry={kind === 'password'}
-          autoComplete={traits.autoComplete} textContentType={traits.content} keyboardType={traits.keyboard} returnKeyType={traits.submit}
-          autoCapitalize="none" autoCorrect={false} spellCheck={false} placeholder={placeholder}
-          placeholderTextColor={look.ui.inkQuiet} accessibilityLabel={label} testID={testID}
-          onFocus={handlers.onFocus} onBlur={handlers.onBlur}
-          style={[ink, { flex: 1, alignSelf: 'stretch', minWidth: 0, padding: 0 }, NO_RING as TextStyle]} />
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          onSubmitEditing={onSubmit}
+          secureTextEntry={kind === 'password'}
+          autoComplete={traits.autoComplete}
+          textContentType={traits.content}
+          keyboardType={traits.keyboard}
+          returnKeyType={traits.submit}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          placeholder={placeholder}
+          placeholderTextColor={look.ui.inkQuiet}
+          accessibilityLabel={label}
+          testID={testID}
+          onFocus={handlers.onFocus}
+          onBlur={handlers.onBlur}
+          style={[ink, { flex: 1, alignSelf: 'stretch', minWidth: 0, padding: 0 }, NO_RING as TextStyle]}
+        />
       </Animated.View>
     </View>
   );

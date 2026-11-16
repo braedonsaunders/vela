@@ -34,11 +34,17 @@ function read(key: string, c: Ctx, e: Env): string {
 
 function choicesOf(params: Record<string, string>, c: Ctx, e: Env): Choice[] {
   const fixed = params.choices
-    ? params.choices.split(';').filter(Boolean).map(pair => {
-      const [value, ...label] = pair.split('|');
-      return { value, label: label.join('|') };
-    })
-    : collection(params.options ?? '', c, e, MAX_OPTIONS).map(item => ({ value: read('opt.id', item, e), label: read('opt.label', item, e) }));
+    ? params.choices
+        .split(';')
+        .filter(Boolean)
+        .map(pair => {
+          const [value, ...label] = pair.split('|');
+          return { value, label: label.join('|') };
+        })
+    : collection(params.options ?? '', c, e, MAX_OPTIONS).map(item => ({
+        value: read('opt.id', item, e),
+        label: read('opt.label', item, e),
+      }));
   return params.none !== undefined ? [{ value: '', label: params.none }, ...fixed] : fixed;
 }
 

@@ -28,10 +28,17 @@ export function Select(props: WidgetProps) {
     cursor: 'pointer',
   };
   return (
-    <select value={model.value} onChange={event => model.choose(event.target.value)} aria-label={model.label || undefined}
-      data-testid={props.params.testId} style={style}>
+    <select
+      value={model.value}
+      onChange={event => model.choose(event.target.value)}
+      aria-label={model.label || undefined}
+      data-testid={props.params.testId}
+      style={style}
+    >
       {model.choices.map(choice => (
-        <option key={choice.value} value={choice.value} style={option}>{choice.label}</option>
+        <option key={choice.value} value={choice.value} style={option}>
+          {choice.label}
+        </option>
       ))}
     </select>
   );

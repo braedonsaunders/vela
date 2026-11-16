@@ -19,22 +19,48 @@ export function Select(props: WidgetProps) {
   };
   return (
     <>
-      <Pressable onPress={() => setOpen(true)} accessibilityRole="combobox" accessibilityLabel={model.label || undefined}
-        accessibilityValue={{ text: current?.label }} accessibilityState={{ expanded: open }} testID={props.params.testId}
-        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
-        <Text style={[drawn.style, { flexShrink: 1 }]} numberOfLines={1}>{current?.label ?? ''}</Text>
+      <Pressable
+        onPress={() => setOpen(true)}
+        accessibilityRole="combobox"
+        accessibilityLabel={model.label || undefined}
+        accessibilityValue={{ text: current?.label }}
+        accessibilityState={{ expanded: open }}
+        testID={props.params.testId}
+        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}
+      >
+        <Text style={[drawn.style, { flexShrink: 1 }]} numberOfLines={1}>
+          {current?.label ?? ''}
+        </Text>
         <View style={{ transform: [{ rotate: '90deg' }] }}>
           <Glyph symbol="forward-chevron" size={14} color={(drawn.style.color as string | undefined) ?? '#ffffff'} />
         </View>
       </Pressable>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)} supportedOrientations={['portrait', 'landscape']}>
-        <Choices title={model.label} choices={model.choices} value={model.value} onChoose={choose} onClose={() => setOpen(false)} />
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+        supportedOrientations={['portrait', 'landscape']}
+      >
+        <Choices
+          title={model.label}
+          choices={model.choices}
+          value={model.value}
+          onChoose={choose}
+          onClose={() => setOpen(false)}
+        />
       </Modal>
     </>
   );
 }
 
-function Choices({ title, choices, value, onChoose, onClose }: {
+function Choices({
+  title,
+  choices,
+  value,
+  onChoose,
+  onClose,
+}: {
   title: string;
   choices: Choice[];
   value: string;
@@ -54,11 +80,19 @@ function Choices({ title, choices, value, onChoose, onClose }: {
   });
   return (
     <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', padding: 24 }]}>
-      <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.scrim }]} onPress={onClose}
-        accessibilityRole="button" accessibilityLabel={title} focusable={false} />
+      <Pressable
+        style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.scrim }]}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        focusable={false}
+      />
       <View style={panel} accessibilityRole="menu" accessibilityLabel={title}>
-        <FlatList data={choices} keyExtractor={choice => choice.value}
-          renderItem={({ item }) => <ChoiceRow choice={item} on={item.value === value} onChoose={onChoose} />} />
+        <FlatList
+          data={choices}
+          keyExtractor={choice => choice.value}
+          renderItem={({ item }) => <ChoiceRow choice={item} on={item.value === value} onChoose={onChoose} />}
+        />
       </View>
     </View>
   );
@@ -67,19 +101,31 @@ function Choices({ title, choices, value, onChoose, onClose }: {
 function ChoiceRow({ choice, on, onChoose }: { choice: Choice; on: boolean; onChoose(value: string): void }) {
   const look = useLook();
   const { state, handlers } = useInteraction();
-  const rows = overlaid({
-    'flex-direction': 'row',
-    'align-items': 'center',
-    'justify-content': 'space-between',
-    gap: '12px',
-    'min-height': '48px',
-    padding: '10px 14px',
-    'border-radius': '12px',
-  }, state, { hover: { 'background-color': '$ui.control' }, focus: { 'background-color': '$ui.controlHover' } });
+  const rows = overlaid(
+    {
+      'flex-direction': 'row',
+      'align-items': 'center',
+      'justify-content': 'space-between',
+      gap: '12px',
+      'min-height': '48px',
+      padding: '10px 14px',
+      'border-radius': '12px',
+    },
+    state,
+    { hover: { 'background-color': '$ui.control' }, focus: { 'background-color': '$ui.controlHover' } },
+  );
   return (
-    <APressable onPress={() => onChoose(choice.value)} accessibilityRole="menuitem" accessibilityState={{ checked: on }}
-      hasTVPreferredFocus={on} style={[look.box(rows), NO_RING]} {...handlers}>
-      <Words rows={{ 'font-size': '16px', 'font-weight': on ? '650' : '400' }} lines={1}>{choice.label}</Words>
+    <APressable
+      onPress={() => onChoose(choice.value)}
+      accessibilityRole="menuitem"
+      accessibilityState={{ checked: on }}
+      hasTVPreferredFocus={on}
+      style={[look.box(rows), NO_RING]}
+      {...handlers}
+    >
+      <Words rows={{ 'font-size': '16px', 'font-weight': on ? '650' : '400' }} lines={1}>
+        {choice.label}
+      </Words>
       {on ? <Glyph symbol="checkmark" size={16} color={look.ui.accent} /> : null}
     </APressable>
   );

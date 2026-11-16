@@ -19,15 +19,20 @@ export function useInView(ref: RefObject<HostInstance | null>, reach: Reach, onE
     const node = ref.current;
     if (!node) return;
     const enter = () => latest.current();
-    return Platform.OS === 'web' ? observeWeb(node as unknown as Element, reach, enter) : pollNative(node, reach, enter);
+    return Platform.OS === 'web'
+      ? observeWeb(node as unknown as Element, reach, enter)
+      : pollNative(node, reach, enter);
   }, [ref, reach.below, reach.after]);
 }
 
 function observeWeb(element: Element, reach: Reach, enter: () => void): () => void {
-  const observer = new IntersectionObserver(entries => {
-    if (document.visibilityState !== 'visible') return;
-    if (entries.some(entry => entry.isIntersecting)) enter();
-  }, { rootMargin: `0px ${reach.after}px ${reach.below}px 0px` });
+  const observer = new IntersectionObserver(
+    entries => {
+      if (document.visibilityState !== 'visible') return;
+      if (entries.some(entry => entry.isIntersecting)) enter();
+    },
+    { rootMargin: `0px ${reach.after}px ${reach.below}px 0px` },
+  );
   observer.observe(element);
   return () => observer.disconnect();
 }
@@ -39,7 +44,12 @@ function pollNative(node: HostInstance, reach: Reach, enter: () => void): () => 
     node.measureInWindow((x, y, width, height) => {
       const screen = Dimensions.get('window');
       const visible = width > 0 || height > 0;
-      const now = visible && x < screen.width + reach.after && x + width > 0 && y < screen.height + reach.below && y + height > 0;
+      const now =
+        visible &&
+        x < screen.width + reach.after &&
+        x + width > 0 &&
+        y < screen.height + reach.below &&
+        y + height > 0;
       if (now && !inside) enter();
       inside = now;
     });

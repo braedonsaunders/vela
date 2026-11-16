@@ -31,7 +31,12 @@ export function useLook(): Look {
   return useMemo(() => {
     const ui = resolveUi(doc.document.ui);
     const tokens = (rows: Css): Css =>
-      Object.fromEntries(Object.entries(rows).map(([row, value]) => [row, value.replace(/\$ui\.([A-Za-z]+)/g, (_, name: string) => uiValue(ui, name))]));
+      Object.fromEntries(
+        Object.entries(rows).map(([row, value]) => [
+          row,
+          value.replace(/\$ui\.([A-Za-z]+)/g, (_, name: string) => uiValue(ui, name)),
+        ]),
+      );
     const m = measure(viewport, ROOT_FONT);
     return {
       ui,
@@ -46,7 +51,8 @@ export function useLook(): Look {
         const fontSize = fontSizeOf(filled['font-size'], ROOT_FONT, m);
         return textStyle(filled, measure(viewport, fontSize)).style;
       },
-      motion: (name, index = 0, stagger) => (animation(doc.motion[name], doc.keyframes, env.still, index, stagger) ?? {}) as ViewStyle,
+      motion: (name, index = 0, stagger) =>
+        (animation(doc.motion[name], doc.keyframes, env.still, index, stagger) ?? {}) as ViewStyle,
     };
   }, [doc, viewport, env.still]);
 }

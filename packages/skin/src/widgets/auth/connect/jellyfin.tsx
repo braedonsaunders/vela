@@ -6,7 +6,14 @@ import { msg } from '@vela/core';
 import { Alert, CodeTiles, Field, Pill, Waiting } from '../../common/controls';
 import type { QuickCode } from './model';
 
-export function JellyfinStep({ quick, busy, error, onSignIn, onQuick, onCancelQuick }: {
+export function JellyfinStep({
+  quick,
+  busy,
+  error,
+  onSignIn,
+  onQuick,
+  onCancelQuick,
+}: {
   /** This server's Quick Connect code, when one is up. */
   quick: QuickCode | null;
   busy: boolean;
@@ -23,7 +30,12 @@ export function JellyfinStep({ quick, busy, error, onSignIn, onQuick, onCancelQu
   };
 
   if (quick?.code) {
-    const failed = quick.status === 'expired' ? msg('server.codeExpired') : quick.status === 'denied' ? msg('server.rejected') : '';
+    const failed =
+      quick.status === 'expired'
+        ? msg('server.codeExpired')
+        : quick.status === 'denied'
+          ? msg('server.rejected')
+          : '';
     return (
       <View style={{ gap: 18, alignItems: 'center' }}>
         <CodeTiles code={quick.code} testID="jelly-code" />
@@ -34,9 +46,30 @@ export function JellyfinStep({ quick, busy, error, onSignIn, onQuick, onCancelQu
   }
   return (
     <View style={{ gap: 14 }}>
-      <Field label={msg('ui.username')} value={username} onChangeText={setUsername} onSubmit={submit} kind="username" testID="connect-username" />
-      <Field label={msg('ui.password')} value={password} onChangeText={setPassword} onSubmit={submit} kind="password" testID="connect-password" />
-      <Pill primary label={msg('ui.signIn')} onPress={submit} disabled={!ready} busy={busy} testID="connect-sign-in" />
+      <Field
+        label={msg('ui.username')}
+        value={username}
+        onChangeText={setUsername}
+        onSubmit={submit}
+        kind="username"
+        testID="connect-username"
+      />
+      <Field
+        label={msg('ui.password')}
+        value={password}
+        onChangeText={setPassword}
+        onSubmit={submit}
+        kind="password"
+        testID="connect-password"
+      />
+      <Pill
+        primary
+        label={msg('ui.signIn')}
+        onPress={submit}
+        disabled={!ready}
+        busy={busy}
+        testID="connect-sign-in"
+      />
       {error ? <Alert>{error}</Alert> : null}
       <Pill label={msg('connect.quick.start')} onPress={onQuick} disabled={busy} testID="connect-quick" />
     </View>
