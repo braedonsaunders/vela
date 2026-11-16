@@ -13,6 +13,7 @@ import {
   placeholder,
   pulse,
   ready,
+  sans,
   sectionHeading,
   side,
   sideSmall,
@@ -1097,6 +1098,8 @@ export const title: Node = {
     inset: '0px',
     display: 'flex',
     'flex-direction': 'column',
+    color: '$ui.ink',
+    'font-family': sans,
   },
   children: [
     {
