@@ -8,8 +8,7 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         try
         {
-            string? address = args.FirstOrDefault(arg => arg.StartsWith("--server="))?[9..];
-            Application.Run(new MainWindow(address));
+            Application.Run(new MainWindow());
         }
         catch (Exception error)
         {

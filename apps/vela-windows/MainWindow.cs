@@ -12,9 +12,12 @@ internal sealed class MainWindow : Form
     private readonly Panel video = new() { Dock = DockStyle.Fill, BackColor = Color.Black, Visible = false };
     private readonly Label status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 250 };
-    private readonly string settingsPath;
+    // The bundled UI's own origin. *.localhost is a secure context (WebGPU, WebCodecs) that may still
+    // reach plain-HTTP servers on the LAN; every server the viewer adds is cross-origin to it.
+    internal const string AppOrigin = "http://vela.localhost";
+    private static readonly Uri AppStart = new(AppOrigin + "/vela/");
+    private readonly string dataPath;
     private readonly string windowPath;
-    private Uri? server;
     private Playback? playback;
     private string playerId = "";
     private string? mediaOrigin;
@@ -23,22 +26,19 @@ internal sealed class MainWindow : Form
     private bool fullscreen;
     private Rectangle previousBounds;
     private FormWindowState previousState;
-    private readonly string? requestedAddress;
 
-    internal MainWindow(string? address)
+    internal MainWindow()
     {
-        requestedAddress = address;
         Text = "Vela";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         BackColor = Color.FromArgb(9, 11, 14);
         ForeColor = Color.White;
         MinimumSize = new Size(960, 600);
-        // VELA_DATA_DIR keeps a second copy (a test run) apart from the installed app's server,
-        // window placement and WebView profile.
-        string data = Environment.GetEnvironmentVariable("VELA_DATA_DIR") is { Length: > 0 } custom ? custom
+        // VELA_DATA_DIR keeps a second copy (a test run) apart from the installed app's window
+        // placement and WebView profile (servers, sessions and preferences live in the profile).
+        dataPath = Environment.GetEnvironmentVariable("VELA_DATA_DIR") is { Length: > 0 } custom ? custom
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Vela");
-        settingsPath = Path.Combine(data, "server.txt");
-        windowPath = Path.Combine(Path.GetDirectoryName(settingsPath)!, "window.txt");
+        windowPath = Path.Combine(dataPath, "window.txt");
         PlaceWindow();
         Controls.Add(browser);
         Controls.Add(video);
@@ -61,17 +61,12 @@ internal sealed class MainWindow : Form
     {
         try
         {
-            string address = requestedAddress ?? (File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : "");
-            if (!TryAddress(address, out server))
-            {
-                using var setup = new ServerDialog();
-                if (setup.ShowDialog(this) != DialogResult.OK) { Close(); return; }
-                if (!TryAddress(setup.Address, out server)) throw new InvalidOperationException("Invalid server");
-            }
-            Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
-            File.WriteAllText(settingsPath, server!.ToString());
-            var profile = Path.Combine(Path.GetDirectoryName(settingsPath)!, "WebView2");
-            var environment = await CoreWebView2Environment.CreateAsync(null, profile);
+            Directory.CreateDirectory(dataPath);
+            // The page talks to whichever servers the viewer adds (Ether, Jellyfin, Emby, Plex), none of
+            // which name this origin in CORS. Only the bundled UI ever loads here: navigation away from it
+            // is refused and links open in the system browser.
+            var options = new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = "--disable-web-security" };
+            var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(dataPath, "WebView2"), options);
             await browser.EnsureCoreWebView2Async(environment);
             browser.DefaultBackgroundColor = Color.Transparent;
             browser.CoreWebView2.Settings.AreHostObjectsAllowed = false;
@@ -86,30 +81,37 @@ internal sealed class MainWindow : Form
             browser.CoreWebView2.Settings.IsPasswordAutosaveEnabled = false;
             browser.CoreWebView2.Settings.IsGeneralAutofillEnabled = false;
             browser.CoreWebView2.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
-            browser.CoreWebView2.NewWindowRequested += (_, e) => e.Handled = true;
+            browser.CoreWebView2.NewWindowRequested += (_, e) =>
+            {
+                e.Handled = true;
+                OpenExternal(e.Uri);
+            };
             browser.CoreWebView2.NavigationStarting += (_, e) =>
             {
-                if (!Trusted(e.Uri)) e.Cancel = true;
+                if (Trusted(e.Uri)) return;
+                e.Cancel = true;
+                OpenExternal(e.Uri);
             };
             browser.CoreWebView2.WebMessageReceived += Receive;
-            browser.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
-            browser.CoreWebView2.WebResourceRequested += (_, e) => BundledUi.Serve(environment, server, e);
+            browser.CoreWebView2.AddWebResourceRequestedFilter(AppOrigin + "/*", CoreWebView2WebResourceContext.All);
+            browser.CoreWebView2.WebResourceRequested += (_, e) => BundledUi.Serve(environment, e);
             browser.CoreWebView2.ContainsFullScreenElementChanged += (_, _) =>
                 SetFullscreen(browser.CoreWebView2.ContainsFullScreenElement);
             browser.CoreWebView2.ProcessFailed += (_, _) => ShowError("The app stopped. Close and reopen Vela.");
             browser.CoreWebView2.NavigationCompleted += (_, e) =>
             {
-                if (!e.IsSuccess) ShowError("Could not connect to your Ether server. Check its address and connection.");
+                if (!e.IsSuccess) ShowError("Vela could not load. Reinstall it if this keeps happening.");
                 else status.Visible = false;
             };
-            string origin = JsonSerializer.Serialize(server.GetLeftPart(UriPartial.Authority));
+            // The bundled page learns it is the standalone Windows app (no implied server) with native playback.
             await browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                $"if (window === window.top && location.origin === {origin} && " +
-                "(location.pathname === '/vela' || location.pathname.startsWith('/vela/'))) { " +
-                "Object.defineProperty(window, '__VELA_WINDOWS__', { value: Object.freeze({version:1}) }); }");
+                $"if (window === window.top && location.origin === {JsonSerializer.Serialize(AppOrigin)}) {{ " +
+                "Object.defineProperty(window, '__VELA_WINDOWS__', { value: Object.freeze({version:1}) }); " +
+                "Object.defineProperty(window, '__VELA_DESKTOP__', { value: Object.freeze({version:1, platform:'windows'}) }); }");
             await browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(WindowKeys);
-            browser.Source = server;
+            browser.Source = AppStart;
             timer.Start();
+            _ = Updates.CheckAsync(this);
         }
         catch (Exception error)
         {
@@ -165,19 +167,17 @@ internal sealed class MainWindow : Form
         catch (IOException) { }
     }
 
-    private static bool TryAddress(string address, out Uri? uri)
-    {
-        uri = null;
-        if (!Uri.TryCreate(address.Trim(), UriKind.Absolute, out var parsed)
-            || parsed.Scheme is not ("http" or "https") || parsed.UserInfo.Length != 0
-            || parsed.Query.Length != 0 || parsed.Fragment.Length != 0) return false;
-        uri = new Uri(parsed.GetLeftPart(UriPartial.Authority) + "/vela/");
-        return true;
-    }
-
-    private bool Trusted(string address) => server != null && Uri.TryCreate(address, UriKind.Absolute, out var target)
-        && target.GetLeftPart(UriPartial.Authority) == server.GetLeftPart(UriPartial.Authority)
+    private static bool Trusted(string address) => Uri.TryCreate(address, UriKind.Absolute, out var target)
+        && target.GetLeftPart(UriPartial.Authority) == AppOrigin
         && (target.AbsolutePath == "/vela" || target.AbsolutePath.StartsWith("/vela/", StringComparison.Ordinal));
+
+    /// <summary>A web link the page opens (plex.tv/link, a server's own site) goes to the system browser.</summary>
+    internal static void OpenExternal(string address)
+    {
+        if (!Uri.TryCreate(address, UriKind.Absolute, out var target) || target.Scheme is not ("http" or "https")) return;
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target.AbsoluteUri) { UseShellExecute = true }); }
+        catch (Exception) { }
+    }
 
     private void Receive(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
