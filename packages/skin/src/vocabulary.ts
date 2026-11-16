@@ -7,6 +7,7 @@ import type { detailModel, entry, homeModel } from '@vela/core';
 import type { Hit, SearchView } from './widgets/search/model';
 import type { AuthView } from './widgets/auth/model';
 import { AUTH_VOCABULARY, quickChars } from './widgets/auth/vocabulary';
+import { PREVIEW_VOCABULARY, type PreviewView } from './widgets/common/preview-vocabulary';
 import { SEARCH_VOCABULARY, searchCollection } from './widgets/search/vocabulary';
 
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
@@ -49,6 +50,8 @@ export interface Env {
   search?: SearchView;
   /** The signed-out page (routes.auth); none while signed in. */
   auth?: AuthView;
+  /** The card and hero whose trailer previews play now. */
+  preview?: PreviewView;
 }
 
 /** The binding context: the item a node is repeated over, and its position. */
@@ -245,6 +248,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.selectedSeason': (_, e) => e.season,
   ...SEARCH_VOCABULARY,
   ...AUTH_VOCABULARY,
+  ...PREVIEW_VOCABULARY,
 };
 
 /** A key's accessor, or undefined for a key no document may name. */
