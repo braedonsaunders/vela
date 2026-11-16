@@ -2,8 +2,19 @@
 // its name, tagline, preview and swatches. Choosing one applies it at once and is remembered on
 // this device. It is the app's own chrome, drawn the same under every document.
 import { Image, type ImageSource } from 'expo-image';
-import { useEffect, useState } from 'react';
-import { BackHandler, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  BackHandler,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import type { SkinDocument } from '../../../protocol/v0/skin';
 import { msg } from '@vela/core';
 
@@ -37,41 +48,84 @@ export function AppearancePicker({ documents, current, image, onPick, onClose }:
           </Choice>
         </View>
         <ScrollView contentContainerStyle={styles.grid}>
-          {documents.map((doc, index) => {
-            const preview = doc.preview ? image(doc.preview) : undefined;
-            const selected = index === current;
-            return (
-              <Choice key={doc.id} label={doc.name} selected={selected} preferred={selected} onPress={() => onPick(index)}
-                style={[styles.card, small && styles.cardSmall, selected && styles.cardSelected]} focusedStyle={styles.cardFocused}>
-                <View style={styles.preview}>
-                  {preview ? <Image source={preview} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
-                </View>
-                <View style={styles.meta}>
-                  <Text style={styles.name} numberOfLines={1}>{doc.name}</Text>
-                  {doc.tagline ? <Text style={styles.tagline} numberOfLines={2}>{doc.tagline}</Text> : null}
-                  <View style={styles.swatches}>
-                    {doc.swatches.slice(0, 6).map((colour, i) => <View key={i} style={[styles.swatch, { backgroundColor: colour }]} />)}
-                  </View>
-                </View>
-              </Choice>
-            );
-          })}
+          {documents.map((doc, index) => (
+            <DocumentCard
+              key={doc.id}
+              doc={doc}
+              preview={doc.preview ? image(doc.preview) : undefined}
+              selected={index === current}
+              small={small}
+              onPress={() => onPick(index)}
+            />
+          ))}
         </ScrollView>
       </View>
     </View>
   );
 }
 
+interface DocumentCardProps {
+  doc: SkinDocument;
+  preview: ImageSource | number | undefined;
+  selected: boolean;
+  small: boolean;
+  onPress(): void;
+}
+
+/** One document: its preview, name, tagline and up to six swatches. */
+function DocumentCard({ doc, preview, selected, small, onPress }: DocumentCardProps) {
+  return (
+    <Choice
+      label={doc.name}
+      selected={selected}
+      preferred={selected}
+      onPress={onPress}
+      style={[styles.card, small && styles.cardSmall, selected && styles.cardSelected]}
+      focusedStyle={styles.cardFocused}
+    >
+      <View style={styles.preview}>
+        {preview ? <Image source={preview} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+      </View>
+      <View style={styles.meta}>
+        <Text style={styles.name} numberOfLines={1}>{doc.name}</Text>
+        {doc.tagline ? <Text style={styles.tagline} numberOfLines={2}>{doc.tagline}</Text> : null}
+        <View style={styles.swatches}>
+          {doc.swatches.slice(0, 6).map((colour, i) => (
+            <View key={i} style={[styles.swatch, { backgroundColor: colour }]} />
+          ))}
+        </View>
+      </View>
+    </Choice>
+  );
+}
+
+interface ChoiceProps {
+  label: string;
+  selected?: boolean;
+  /** Takes the TV focus engine's first focus. */
+  preferred?: boolean;
+  onPress(): void;
+  style: StyleProp<ViewStyle>;
+  focusedStyle: ViewStyle;
+  children: ReactNode;
+}
+
 /** A focusable choice: keyboard, pointer and the TV focus engine show the same focus look. */
-function Choice({ label, selected, preferred, onPress, style, focusedStyle, children }: {
-  label: string; selected?: boolean; preferred?: boolean; onPress(): void;
-  style: object | (object | false | undefined)[]; focusedStyle: object; children: React.ReactNode;
-}) {
+function Choice({ label, selected, preferred, onPress, style, focusedStyle, children }: ChoiceProps) {
   const [focused, setFocused] = useState(false);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }} onPress={onPress}
-      onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onHoverIn={() => setFocused(true)} onHoverOut={() => setFocused(false)}
-      hasTVPreferredFocus={preferred} style={[style, focused && focusedStyle]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
+      hasTVPreferredFocus={preferred}
+      onPress={onPress}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onHoverIn={() => setFocused(true)}
+      onHoverOut={() => setFocused(false)}
+      style={[style, focused && focusedStyle]}
+    >
       {children}
     </Pressable>
   );
