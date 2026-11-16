@@ -10,8 +10,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist:mac": "electron-builder --mac --publish never",
-    "dist:linux": "electron-builder --linux --publish never"
+    "dist": "node build.mjs"
   },
   "devDependencies": {
     "electron": "45.3.3",
@@ -21,24 +20,74 @@
     "appId": "app.ether.vela.desktop",
     "productName": "Vela",
     "copyright": "Braedon Saunders. GPL-3.0.",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["main.js", "preload.js", "package.json", "build/icon.png"],
-    "extraResources": [{ "from": "${env.VELA_UI}", "to": "ui" }],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "build/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "ui",
+        "to": "ui"
+      }
+    ],
     "artifactName": "Vela-${version}-${os}-${arch}.${ext}",
     "mac": {
       "category": "public.app-category.entertainment",
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }, { "target": "zip", "arch": ["arm64", "x64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "darkModeSupport": true,
       "hardenedRuntime": false,
       "identity": null
     },
-    "dmg": { "title": "Vela ${version}" },
+    "dmg": {
+      "title": "Vela ${version}"
+    },
     "linux": {
       "category": "AudioVideo;Video;Player",
-      "target": [{ "target": "AppImage", "arch": ["x64"] }, { "target": "deb", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "maintainer": "Braedon Saunders",
       "synopsis": "A cinematic client for Ether, Jellyfin, Emby and Plex",
       "executableName": "vela"
+    },
+    "afterPack": "./after-pack.js",
+    "publish": {
+      "provider": "github",
+      "owner": "braedonsaunders",
+      "repo": "vela",
+      "releaseType": "draft"
     }
   }
 }

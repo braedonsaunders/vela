@@ -230,6 +230,18 @@ Releases are signed inventories. Ether installs them atomically, can roll back, 
 
 ## Getting started
 
+**On the desktop (Windows, macOS, Linux).** Download Vela from [the latest release](https://github.com/braedonsaunders/vela/releases/latest), open it, and type your server's address. Vela works on its own with **Ether, Jellyfin, Emby or Plex**; no Ether required. It updates itself from Vela's releases.
+
+| Platform | Download | Playback |
+| :--- | :--- | :--- |
+| **Windows 10/11** (x64) | `Vela-Setup-<version>-x64.exe`, a per-user installer | Native **libmpv** under the Vela player |
+| **macOS** (Apple silicon and Intel) | `Vela-<version>-mac-<arch>.dmg` | The in-app engine: original files, WebGPU, WASM audio |
+| **Linux** (x64) | `.AppImage` or `.deb` | The in-app engine |
+
+The macOS app is not yet notarized: the first time, Control-click Vela in Applications and choose **Open**.
+
+**In the browser, with Ether.**
+
 1. Run [Ether](https://github.com/braedonsaunders/ether) and create a viewer account.
 2. Open `/vela` on your Ether server in a current Chrome or Edge.
 3. Sign in, then add Jellyfin, Emby or Plex servers from **Profile › Add a server** if you have them.
@@ -241,7 +253,8 @@ Vela includes no media and no provider accounts. Your servers supply the catalog
 | Platform | Status |
 | :--- | :--- |
 | **Web / PWA** | Ships with Ether. Signed releases pass Ether's installer qualification (install, upgrade, rollback, reinstall). |
-| **Windows** | Native mpv playback under the full Vela UI works end to end. Installer and signing are next. |
+| **Windows** | Standalone app with native mpv playback and an installer. Not yet code-signed, so SmartScreen may warn on first run. |
+| **macOS, Linux** | Standalone apps around the in-app engine. macOS builds are ad-hoc signed until notarization. |
 | **Apple TV, iPhone, iPad** | In development on libmpv, tested on a real Apple TV. |
 | **Android, Android TV** | In development on libmpv. |
 

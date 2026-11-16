@@ -144,3 +144,21 @@ packaging success alone does not establish platform readiness.
 
 Production signing and publication are explicit maintainer actions for an exact
 version. Keep private keys and local qualification records outside the repository.
+
+## Desktop apps
+
+The desktop apps carry the web release's own bytes and run standalone: the page is told it is a
+desktop app (`window.__VELA_DESKTOP__`), implies no server, and connects to any Ether, Jellyfin,
+Emby or Plex server the viewer adds. They update from Vela's GitHub releases, not from a server.
+
+- **Windows** (`apps/vela-windows`): WebView2 serves the UI at `http://vela.localhost/vela/` and
+  libmpv plays under it. `build.ps1 -Version <x.y.z> -Ui <release folder>` publishes the host, adds
+  the pinned libmpv and builds `Vela-Setup-<version>-x64.exe` with Inno Setup 6.
+- **macOS and Linux** (`apps/vela-desktop`): Electron serves the UI at `vela-app://app/vela/` and the
+  in-app engine plays. `npm ci && node build.mjs --ui=<release folder> --mac|--linux` makes DMG and
+  zip (ad-hoc signed unless a Developer ID is configured) or AppImage and deb.
+
+`<release folder>` is the extracted `vela-<version>.tar.gz`. Attach the installers to the same
+`v<version>` GitHub release after `publish.ts`, for example
+`gh release upload v<version> Vela-Setup-*.exe Vela-*.dmg Vela-*.zip Vela-*.AppImage Vela-*.deb`.
+The apps look for a `Vela-Setup-*-x64.exe` asset (Windows) and the release page (macOS, Linux).
