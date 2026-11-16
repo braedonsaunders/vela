@@ -25,6 +25,8 @@ export interface QualityOption {
   rate: string;
   needs: string;
   pending: boolean;
+  /** The source file itself, not a conversion of it. */
+  original: boolean;
 }
 
 export interface ChapterMark {
@@ -232,6 +234,7 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined): Qualit
         rate: rate(p.quality?.bitrate),
         needs: '',
         pending: false,
+        original: true,
       };
     });
   const renditions = (current?.qualities ?? []).map(
@@ -242,6 +245,7 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined): Qualit
       rate: rate(q.bitrate),
       needs: needs(q.bitrate),
       pending: q.codecStatus === 'pending',
+      original: false,
     }),
   );
   const switchable = siblings(plan, current)
@@ -256,6 +260,7 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined): Qualit
         rate: rate(p.quality!.bitrate),
         needs: needs(p.quality!.bitrate),
         pending: false,
+        original: false,
       }),
     );
   return [...originals, ...renditions, ...switchable];
@@ -306,7 +311,7 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     duration,
     progress: duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0,
     elapsed: timecode(position),
-    remaining: duration > 0 ? `-${timecode(Math.max(0, duration - position))}` : msg('data.live'),
+    remaining: duration > 0 ? `-${timecode(Math.max(0, duration - position))}` : plan?.live ? msg('data.live') : '',
     buffered:
       duration > 0
         ? (snapshot?.playable ?? []).map(r => ({

@@ -8,6 +8,7 @@ import { PlayerChrome } from './player/chrome';
 import { SearchInput } from './search-input';
 import { ServerSwitcher } from './auth/server-switcher';
 import { TextInput } from './auth/text-input';
+import { CardPreview, HeroPreview } from './common/preview';
 import { Select } from './common/select';
 import { Sentinel } from './common/sentinel';
 
@@ -17,6 +18,8 @@ export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   serverSwitcher: ServerSwitcher,
   select: Select,
   sentinel: Sentinel,
+  cardPreview: CardPreview,
+  heroPreview: HeroPreview,
   playerChrome: PlayerChrome,
   guide: GuideWidget,
   liveTile: LiveTileWidget,

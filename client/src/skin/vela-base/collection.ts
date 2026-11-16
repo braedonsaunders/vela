@@ -59,7 +59,7 @@ export const collection: Node = {
             'padding-top': '112px',
             'padding-bottom': '8px',
             ...gutter,
-            'background-image': 'radial-gradient(ellipse 70% 120% at 15% 0%, #77533525 0%, #090b0e00 70%)',
+            'background-image': 'radial-gradient(ellipse 70% 120% at 15% 0%, #77533525 0%, #77533500 70%)',
           } as Style,
           small: { gap: '10px', 'padding-top': '120px', 'padding-bottom': '4px', ...gutterSmall } as Style,
           children: [

@@ -35,9 +35,12 @@ module.exports.transform = function transform(args) {
   return next.transform({ ...args, src: upstreamSource(filename, args.src) });
 };
 
-/** A change to any adaptation, or to the next transformer's key, invalidates Metro's cache. */
+/** A change to any adaptation, or to the next transformer's key, invalidates Metro's cache. The
+ * adaptations import Vela modules by absolute path, so the checkout's location is part of the key:
+ * Metro's cache is shared by every worktree on the machine. */
 module.exports.getCacheKey = function getCacheKey(options) {
   const hash = createHash('sha256');
+  hash.update(root);
   for (const file of [__filename, ...transformSources.map((name) => path.join(root, name))]) {
     hash.update(readFileSync(file));
   }

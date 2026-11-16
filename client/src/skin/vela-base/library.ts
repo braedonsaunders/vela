@@ -15,6 +15,7 @@ import {
   ready,
   rowSkeleton,
   small,
+  veil,
 } from './look';
 
 // A library page (compiled cinematic's Library): its art faint behind a sticky toolbar of
@@ -28,7 +29,7 @@ export const libChip = (on: Condition[], arg: string, label: string): Node => {
     height: '34px',
     padding: '0px 14px',
     'border-radius': '$ui.radiusControl',
-    'background-color': '#090b0e00',
+    'background-color': veil(0),
     color: '$ui.inkSecondary',
     'font-size': '13px',
     'font-weight': '600',
@@ -183,12 +184,12 @@ export const toolbar: Node = {
     display: 'flex',
     'flex-direction': 'column',
     'padding-top': '84px',
-    'background-color': '#090b0ed1',
+    'background-color': veil(82),
     'backdrop-filter': 'blur(20px) saturate(1.3)',
     'border-width': '0px',
     'border-style': 'solid',
     'border-bottom-width': '1px',
-    'border-bottom-color': '#ffffff0f',
+    'border-bottom-color': '$ui.glassEdge',
   } as Style,
   small: { 'padding-top': '104px' } as Style,
   children: [

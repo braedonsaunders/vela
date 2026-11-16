@@ -16,6 +16,6 @@ export function SearchInput({ params, ctx }: WidgetProps) {
       returnKeyType="search" testID={`search-${ctx.index}`} nativeID="vela-search"
       onFocus={() => { host.setFlag('search-focused', true); interaction.report('focus', true); }}
       onBlur={() => { host.setFlag('search-focused', false); interaction.report('focus', false); }}
-      style={[drawn.style, { flex: 1, minWidth: 0, padding: 0, ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}) } as TextStyle]} />
+      style={[drawn.style, { flexGrow: 1, flexShrink: 1, minWidth: 0, padding: 0, ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}) } as TextStyle]} />
   );
 }

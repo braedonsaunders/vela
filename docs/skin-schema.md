@@ -357,11 +357,16 @@ document's `ui` block. A document draws what it wants to own and inherits the re
   `traits.barMask` belong to whoever draws home, `detail` to whoever draws the title page. `slots` is
   optional: a document that only sets its look (`ui`, `traits`) inherits every surface.
 - **`ui`**: the base's look, as values: `page`, `raised`, `ink`, `inkSecondary`, `inkQuiet`,
-  `inkInverse`, `accent`, `onAccent`, `control`, `controlHover`, `glass`, `glassEdge`,
+  `inkInverse`, `inkHover` (an ink-filled button under the pointer; a document that sets `ink` but
+  not `inkHover` keeps its ink), `accent`, `onAccent`, `control`, `controlHover`, `glass`, `glassEdge`,
   `glassEdgeStrong`, `popover`, `scrim`, `track`, `trackStrong`, `focusHalo`, `shadow`, `skeleton`,
   `skeletonLight`, `alert`, `live` (colours), `font`, `fontDisplay` (font stacks), `radiusControl`,
   `radiusCard`, `radiusPanel` (px numbers). A key left out takes Cinematic's value
   (client/src/skin/ui-defaults.ts). Any style may read one as `$ui.<name>` (a radius reads as px).
+  A colour at an alpha, or between two colours, is CSS `color-mix(in srgb, $ui.page 82%, transparent)`:
+  the resolver folds it to one hex colour once tokens are filled, so web and native draw the same.
+  The base writes every veil and fade this way, so a light document's inherited routes fade to its
+  own paper.
 - **Client strings**: `{t:ui.signIn}` in any template is the app's own string in the viewer's
   locale. A string's placeholders bind to the vocabulary: `{t:secure.body|origin=signin.secureOrigin}`.
   A document's own text stays `{s:key}`.
