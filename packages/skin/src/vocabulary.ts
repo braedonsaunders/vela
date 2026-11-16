@@ -243,6 +243,11 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.seasonCount': detail(d => String(d.seasons.length), '0'),
   'detail.seasonName': detail((d, e) => d.seasons.filter(x => x.id === e.season).map(x => x.name).join('')),
   'detail.seasonPending': detail((d, e) => yes(e.season !== '' && d.episodes.length > 0 && !d.episodes.some(x => x.seasonId === e.season)), 'false'),
+  // A queued section only waits while absent; a partial refresh keeps available content visible.
+  'detail.seasonsPending': detail(d => yes(d.pending.includes('seasons') && d.seasons.length === 0), 'false'),
+  'detail.episodesPending': detail(d => yes(d.pending.includes('episodes') && d.episodes.length === 0), 'false'),
+  'detail.extrasPending': detail(d => yes(d.pending.includes('extras') && d.extras.length === 0), 'false'),
+  'detail.trailerPending': detail(d => yes(d.pending.includes('trailer') && d.trailerId === ''), 'false'),
   'detail.crewLineComma': detail(d => d.crew.join(', ')),
   'detail.crewLine': detail(d => d.crew.join(' · ')),
   'detail.trailerId': detail(d => d.trailerId),

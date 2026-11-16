@@ -11,6 +11,7 @@ import {
   ghost,
   is,
   placeholder,
+  pulse,
   ready,
   sectionHeading,
   side,
@@ -18,6 +19,36 @@ import {
   small,
   veil,
 } from './look';
+
+// Partial title answers leave the page usable. Only sections the server says are queued
+// and the vocabulary confirms are absent get a quiet status, never a playable placeholder.
+const pendingStatus = (binding: string, label: string): Node => ({
+  type: 'box',
+  when: [ready, { test: binding }],
+  role: 'status',
+  label: `${label} · {t:ui.loadingMore}`,
+  style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '12px' },
+  children: [
+    pulse,
+    {
+      type: 'text',
+      text: `${label} · {t:ui.loadingMore}`,
+      style: { 'font-size': '14px', color: '$ui.inkSecondary', 'line-height': '1.55' },
+    },
+  ],
+});
+
+const pendingSection = (binding: string, label: string): Node => ({
+  ...pendingStatus(binding, label),
+  style: {
+    display: 'flex',
+    'flex-direction': 'row',
+    'align-items': 'center',
+    gap: '12px',
+    ...side,
+  },
+  small: { ...sideSmall },
+});
 
 export const band: Node = {
   type: 'box',
@@ -324,6 +355,7 @@ export const band: Node = {
                 },
               ],
             },
+            pendingStatus('detail.trailerPending', '{t:jellytwin.trailer}'),
           ],
         },
         {
@@ -1018,7 +1050,17 @@ export const related: Node = {
   item: { type: 'use', template: 'velaRelatedRow', motion: enter(600) },
 };
 
-export const detailSections: Node[] = [band, episodes, extras, cast, crew, related];
+export const detailSections: Node[] = [
+  band,
+  pendingSection('detail.seasonsPending', '{t:ui.seasons}'),
+  pendingSection('detail.episodesPending', '{t:ui.episodes}'),
+  episodes,
+  pendingSection('detail.extrasPending', '{t:ui.extras}'),
+  extras,
+  cast,
+  crew,
+  related,
+];
 
 export const titleLoading: Node = {
   type: 'box',
