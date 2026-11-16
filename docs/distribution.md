@@ -115,10 +115,12 @@ policy. Build one archive and one finalized app manifest. Proposed app manifest
 `basePath` is `/vela/`; its files cover the final static root and agree exactly
 with the full build inventory. Both manifests stay outside the archive to avoid
 self-hashing. Preserve clean source and pinned workspace/toolchain provenance.
-Use a `playerAssetsDigest` field for the full static-payload digest in the signed
-descriptor, replacing `universalRuntimeKey`; confirm this unreleased schema update
-with Ether before producing the new fixture. Do not silently reuse old runtime-key
-semantics. Ether has been told to
+Ether confirmed the unreleased signed descriptor uses `playerAssetsDigest` for
+the full 64-hex static-payload digest, replacing `universalRuntimeKey` with no
+legacy branch. The installer recomputes it from the installed `player/<digest>/`
+tree and refuses a mismatch; the full build inventory also covers the payload
+manifest's SHA-256. The first real Expo export supplies the signed fixture before
+Ether implements this schema change. Do not reuse old runtime-key semantics. Ether has been told to
 hold the Exact-specific app-schema change and keep the distribution implementation.
 
 Implementation and qualification order:
