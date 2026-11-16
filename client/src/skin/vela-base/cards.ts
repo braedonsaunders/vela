@@ -1,5 +1,5 @@
 import type { BoxNode, Node, Style } from '../../../wire/v0/skin';
-import { display, gutter, gutterSmall, is, placeholder, pulse, small, veil } from './look';
+import { cardRadius, display, gutter, gutterSmall, is, placeholder, pulse, small, veil } from './look';
 
 export const card: Node = {
   type: 'box',
@@ -26,7 +26,7 @@ export const card: Node = {
         width: '100%',
         'aspect-ratio': '2 / 3',
         'background-color': '$ui.raised',
-        'border-radius': '12px',
+        'border-radius': cardRadius(2),
         'overflow-x': 'hidden',
         'overflow-y': 'hidden',
         scale: '1',
@@ -38,7 +38,7 @@ export const card: Node = {
           'box-shadow 360ms cubic-bezier(0.16, 1, 0.3, 1)',
         ].join(', '),
       },
-      small: { 'border-radius': '10px' },
+      small: { 'border-radius': cardRadius(4) },
       groupHover: {
         scale: '1.045',
         translate: '0px -6px',
