@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -7,10 +8,12 @@ namespace Vela.Windows;
 internal sealed class MainWindow : Form
 {
     private readonly WebView2 browser = new() { Dock = DockStyle.Fill };
-    private readonly PlayerPanel player = new() { Dock = DockStyle.Fill, Visible = false };
+    // libmpv draws here, behind the transparent WebView, so the page's player chrome lies over the picture.
+    private readonly Panel video = new() { Dock = DockStyle.Fill, BackColor = Color.Black, Visible = false };
     private readonly Label status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 250 };
     private readonly string settingsPath;
+    private readonly string windowPath;
     private Uri? server;
     private Playback? playback;
     private string playerId = "";
@@ -26,22 +29,21 @@ internal sealed class MainWindow : Form
     {
         requestedAddress = address;
         Text = "Vela";
+        Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         BackColor = Color.FromArgb(9, 11, 14);
         ForeColor = Color.White;
-        Size = new Size(1280, 800);
-        MinimumSize = new Size(1080, 650);
-        StartPosition = FormStartPosition.CenterScreen;
+        MinimumSize = new Size(960, 600);
         settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Vela", "server.txt");
+        windowPath = Path.Combine(Path.GetDirectoryName(settingsPath)!, "window.txt");
+        PlaceWindow();
         Controls.Add(browser);
-        Controls.Add(player);
+        Controls.Add(video);
         Controls.Add(status);
         status.Text = "Starting Vela…";
-        player.BackRequested += ClosePlayback;
-        player.FullscreenRequested += ToggleFullscreen;
-        player.CommandRequested += (kind, value) => playback?.LocalCommand(kind, value);
         timer.Tick += (_, _) => playback?.Tick();
         Shown += async (_, _) => await InitializeAsync();
+        FormClosing += (_, _) => SaveWindow();
         FormClosed += (_, _) =>
         {
             timer.Stop();
@@ -68,11 +70,18 @@ internal sealed class MainWindow : Form
             var profile = Path.Combine(Path.GetDirectoryName(settingsPath)!, "WebView2");
             var environment = await CoreWebView2Environment.CreateAsync(null, profile);
             await browser.EnsureCoreWebView2Async(environment);
-            browser.DefaultBackgroundColor = BackColor;
+            browser.DefaultBackgroundColor = Color.Transparent;
             browser.CoreWebView2.Settings.AreHostObjectsAllowed = false;
             browser.CoreWebView2.Settings.IsStatusBarEnabled = false;
             browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             browser.CoreWebView2.Settings.AreDevToolsEnabled = Environment.GetEnvironmentVariable("VELA_DEVTOOLS") == "1";
+            // An app, not a browser tab: no page zoom, reload or find keys, swipe history or form autofill.
+            browser.CoreWebView2.Settings.IsZoomControlEnabled = false;
+            browser.CoreWebView2.Settings.IsPinchZoomEnabled = false;
+            browser.CoreWebView2.Settings.IsSwipeNavigationEnabled = false;
+            browser.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
+            browser.CoreWebView2.Settings.IsPasswordAutosaveEnabled = false;
+            browser.CoreWebView2.Settings.IsGeneralAutofillEnabled = false;
             browser.CoreWebView2.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
             browser.CoreWebView2.NewWindowRequested += (_, e) => e.Handled = true;
             browser.CoreWebView2.NavigationStarting += (_, e) =>
@@ -82,6 +91,8 @@ internal sealed class MainWindow : Form
             browser.CoreWebView2.WebMessageReceived += Receive;
             browser.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
             browser.CoreWebView2.WebResourceRequested += (_, e) => BundledUi.Serve(environment, server, e);
+            browser.CoreWebView2.ContainsFullScreenElementChanged += (_, _) =>
+                SetFullscreen(browser.CoreWebView2.ContainsFullScreenElement);
             browser.CoreWebView2.ProcessFailed += (_, _) => ShowError("The app stopped. Close and reopen Vela.");
             browser.CoreWebView2.NavigationCompleted += (_, e) =>
             {
@@ -93,6 +104,7 @@ internal sealed class MainWindow : Form
                 $"if (window === window.top && location.origin === {origin} && " +
                 "(location.pathname === '/vela' || location.pathname.startsWith('/vela/'))) { " +
                 "Object.defineProperty(window, '__VELA_WINDOWS__', { value: Object.freeze({version:1}) }); }");
+            await browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(WindowKeys);
             browser.Source = server;
             timer.Start();
         }
@@ -100,6 +112,54 @@ internal sealed class MainWindow : Form
         {
             ShowError($"Could not start Vela ({error.GetType().Name}). Check that WebView2 is installed.");
         }
+    }
+
+    // A dark title bar in Vela's page colour (Windows 10 20H1 and later; caption colours on Windows 11).
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        int on = 1, caption = 0x000E0B09, text = 0x00E9F1F5;
+        DwmSetWindowAttribute(Handle, 20, ref on, sizeof(int));
+        DwmSetWindowAttribute(Handle, 35, ref caption, sizeof(int));
+        DwmSetWindowAttribute(Handle, 36, ref text, sizeof(int));
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
+
+    /// <summary>The last window placement, or one that fits the screen's height at 16:10.</summary>
+    private void PlaceWindow()
+    {
+        StartPosition = FormStartPosition.Manual;
+        var area = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1280, 800);
+        try
+        {
+            var parts = File.ReadAllText(windowPath).Split(',').Select(int.Parse).ToArray();
+            var saved = new Rectangle(parts[0], parts[1], parts[2], parts[3]);
+            if (parts.Length == 5 && Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(saved)))
+            {
+                Bounds = saved;
+                if (parts[4] == 1) WindowState = FormWindowState.Maximized;
+                return;
+            }
+        }
+        catch (Exception) { }
+        int height = Math.Max(MinimumSize.Height, (int)(area.Height * 0.9));
+        int width = Math.Min((int)(area.Width * 0.9), height * 16 / 10);
+        Bounds = new Rectangle(area.X + (area.Width - width) / 2, area.Y + (area.Height - height) / 2, width, height);
+    }
+
+    private void SaveWindow()
+    {
+        var state = fullscreen ? previousState : WindowState;
+        var bounds = fullscreen ? previousBounds : WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(windowPath)!);
+            File.WriteAllText(windowPath, string.Join(',', bounds.X, bounds.Y, bounds.Width, bounds.Height,
+                state == FormWindowState.Maximized ? 1 : 0));
+        }
+        catch (IOException) { }
     }
 
     private static bool TryAddress(string address, out Uri? uri)
@@ -124,6 +184,11 @@ internal sealed class MainWindow : Form
             using var document = JsonDocument.Parse(e.WebMessageAsJson);
             var message = document.RootElement;
             string? kind = TextOf(message, "kind");
+            if (kind == "window-key")
+            {
+                SetFullscreen(TextOf(message, "key") == "F11" && !fullscreen);
+                return;
+            }
             if (kind == "capabilities")
             {
                 Post(new { kind, requestId = TextOf(message, "requestId"), value = Capabilities.Value });
@@ -152,18 +217,13 @@ internal sealed class MainWindow : Form
             {
                 DisposePlayback();
                 playerId = id;
-                player.Visible = true;
-                player.BringToFront();
-                playback = new Playback(player.VideoHandle, Emit);
+                video.Visible = true;
+                browser.BringToFront();
+                playback = new Playback(video.Handle, Emit);
                 playback.SetAccess(mediaOrigin, mediaPrefix, mediaHeaders);
             }
             if (id != playerId || playback == null) return;
-            var props = message.GetProperty("props");
-            if (props.TryGetProperty("metadata", out var metadata))
-                player.SetMetadata(TextOf(metadata, "title") ?? "Now playing");
-            if (props.TryGetProperty("plan", out var plan) && plan.ValueKind == JsonValueKind.Object)
-                player.SetPlan(plan);
-            playback.Update(props);
+            playback.Update(message.GetProperty("props"));
         }
         catch (Exception error)
         {
@@ -175,7 +235,6 @@ internal sealed class MainWindow : Form
     private void Emit(string kind, object value)
     {
         if (IsDisposed) return;
-        if (kind == "snapshot") player.UpdateState(JsonSerializer.SerializeToElement(value));
         Post(new { kind = "event", id = playerId, @event = kind, value });
     }
 
@@ -185,26 +244,37 @@ internal sealed class MainWindow : Form
             browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(value));
     }
 
-    private void ClosePlayback()
-    {
-        playback?.Stop();
-        Emit("close", new { });
-        DisposePlayback();
-    }
-
     private void DisposePlayback()
     {
         playback?.Dispose();
         playback = null;
         playerId = "";
-        player.Visible = false;
-        browser.BringToFront();
-        if (fullscreen) ToggleFullscreen();
+        video.Visible = false;
     }
 
-    private void ToggleFullscreen()
+    // F11 fills the screen anywhere in the app; Escape leaves it before the page sees it. Fullscreen
+    // the page asked for (the player's button or F) is left through the page so it hears the change.
+    private const string WindowKeys = """
+        if (window === window.top && window.chrome && window.chrome.webview) {
+          let full = false;
+          window.chrome.webview.addEventListener('message', e => {
+            if (e.data && e.data.kind === 'window-fullscreen') full = e.data.value === true;
+          });
+          window.addEventListener('keydown', e => {
+            if (e.key !== 'F11' && !(e.key === 'Escape' && (full || document.fullscreenElement))) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (e.repeat) return;
+            if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+            else window.chrome.webview.postMessage({ kind: 'window-key', key: e.key });
+          }, true);
+        }
+        """;
+
+    private void SetFullscreen(bool on)
     {
-        if (!fullscreen)
+        if (on == fullscreen) return;
+        if (on)
         {
             previousBounds = Bounds;
             previousState = WindowState;
@@ -218,7 +288,8 @@ internal sealed class MainWindow : Form
             Bounds = previousBounds;
             WindowState = previousState;
         }
-        fullscreen = !fullscreen;
+        fullscreen = on;
+        Post(new { kind = "window-fullscreen", value = on });
     }
 
     private void ShowError(string message)

@@ -55,7 +55,8 @@ internal sealed class Playback : IDisposable
             if (seek != seekKey) { pendingSeek = Math.Max(0,Num(plan,"positionSeconds")-offset); seek = seekKey; }
             
             var cmd = Get(props,"command"); string raw = cmd.ValueKind == JsonValueKind.Object ? cmd.GetRawText() : "";
-            if (raw != command) { command = raw; if (Str(cmd,"type") is string type)
+            // Fullscreen and picture-in-picture belong to the page and the window, never the session.
+            if (raw != command) { command = raw; if (Str(cmd,"type") is string type && type is not ("fullscreen" or "pip"))
                 {
                     object? value = type switch {
                         "seek" or "seekBy" => Get(cmd,"seconds"),
