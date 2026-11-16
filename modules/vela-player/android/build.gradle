@@ -1,0 +1,47 @@
+// VelaPlayer for Android and Android TV: Kotlin over libmpv (LGPL, built by libmpv/build.sh).
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'app.ether.vela'
+version = '0.1.0'
+
+// libmpv/build.sh's output for the revision in libmpv/pin.sh, or -PvelaLibmpvDir=<dir>.
+def libmpvRevision = file('libmpv/pin.sh').readLines()
+  .find { it.startsWith('LIBMPV_ANDROID_REVISION=') }
+  .split('=')[1].replace('"', '')
+def libmpvDir = file(project.findProperty('velaLibmpvDir')
+  ?: "${System.getProperty('user.home')}/.scratch/vela-build/libmpv/${libmpvRevision}-lgpl")
+if (!new File(libmpvDir, 'include/mpv/client.h').exists()) {
+  throw new GradleException(
+    "libmpv is not built: run `source tools/android-env.sh; modules/vela-player/android/libmpv/build.sh` " +
+      "(expected ${libmpvDir})")
+}
+
+android {
+  namespace 'app.ether.vela.player'
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+    externalNativeBuild {
+      cmake {
+        arguments '-DANDROID_STL=c++_shared', "-DVELA_LIBMPV_DIR=${libmpvDir}"
+      }
+    }
+    ndk {
+      // The ABIs libmpv was built for.
+      abiFilters(*new File(libmpvDir, 'jniLibs').list())
+    }
+  }
+  externalNativeBuild {
+    cmake {
+      path 'src/main/cpp/CMakeLists.txt'
+    }
+  }
+  sourceSets {
+    main {
+      jniLibs.srcDirs += ["${libmpvDir}/jniLibs"]
+    }
+  }
+}

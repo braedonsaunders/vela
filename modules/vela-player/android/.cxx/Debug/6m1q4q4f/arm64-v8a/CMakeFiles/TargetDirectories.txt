@@ -1,0 +1,3 @@
+/Users/braedonsaunders/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_xazq34wx52-1/vela/modules/vela-player/android/.cxx/Debug/6m1q4q4f/arm64-v8a/CMakeFiles/velampv.dir
+/Users/braedonsaunders/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_xazq34wx52-1/vela/modules/vela-player/android/.cxx/Debug/6m1q4q4f/arm64-v8a/CMakeFiles/edit_cache.dir
+/Users/braedonsaunders/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_xazq34wx52-1/vela/modules/vela-player/android/.cxx/Debug/6m1q4q4f/arm64-v8a/CMakeFiles/rebuild_cache.dir

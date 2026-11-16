@@ -1,0 +1,5 @@
+# ninja log v5
+4	86	1794812744543437104	CMakeFiles/velampv.dir/mpv_events.cpp.o	96b762c852540bc7
+2	131	1794812744587576148	CMakeFiles/velampv.dir/mpv_node.cpp.o	c31c41462254cb94
+0	1888	1794812746340625554	CMakeFiles/velampv.dir/mpv_jni.cpp.o	979e4048c5274c34
+1889	1962	1794812746419348961	/Users/braedonsaunders/.scratch/vela-build/thr_xazq34wx52-1/gradle-build/android/Vela/vela-player/intermediates/cxx/Debug/6m1q4q4f/obj/arm64-v8a/libvelampv.so	5d32c4a3a283e3d1

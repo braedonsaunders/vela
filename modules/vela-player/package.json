@@ -2,7 +2,7 @@
   "name": "@vela/player",
   "version": "0.1.0",
   "private": true,
-  "description": "VelaPlayerView: libmpv on Apple (MPVKit, LGPL) behind the player view contract in @vela/player-api",
+  "description": "VelaPlayerView: libmpv on Apple (MPVKit, LGPL) and Android (libmpv/build.sh, LGPL) behind the player view contract in @vela/player-api",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "peerDependencies": {
