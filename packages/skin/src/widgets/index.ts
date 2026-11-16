@@ -3,8 +3,11 @@
 // draws nothing.
 import type { ComponentType } from 'react';
 import type { WidgetProps } from '../host';
+import { GuideWidget, LiveTileWidget } from './guide';
 import { SearchInput } from './search-input';
 
 export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   searchInput: SearchInput,
+  guide: GuideWidget,
+  liveTile: LiveTileWidget,
 };
