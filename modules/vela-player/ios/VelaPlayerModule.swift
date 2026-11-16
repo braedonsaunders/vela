@@ -5,6 +5,11 @@ public final class VelaPlayerModule: Module {
     public func definition() -> ModuleDefinition {
         Name("VelaPlayer")
 
+        // What this device plays (VideoToolbox's hardware decoders, libmpv's audio and subtitles).
+        Function("capabilities") { () -> [String: Any] in
+            PlayerCapabilities.probe()
+        }
+
         // The trusted playback controller's media access; null clears it.
         Function("setMediaAccess") { (access: [String: Any]?) in
             guard let access else {
