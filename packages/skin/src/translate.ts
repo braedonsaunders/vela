@@ -16,6 +16,7 @@ import {
   type Measure,
   type RadialGradient,
 } from './css';
+import { drawing } from './diagnostics';
 import { fontFace } from './fonts';
 import { easing } from './motion';
 
@@ -177,7 +178,7 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
         break;
       }
       case 'outline-style': if (v === 'none') s.outlineWidth = 0; break;
-      case 'box-shadow': s.boxShadow = v === 'none' ? undefined : pxText(withTokens(v), m); break;
+      case 'box-shadow': s.boxShadow = v === 'none' || !drawing('shadow') ? undefined : pxText(withTokens(v), m); break;
       case 'filter': {
         if (v === 'none') break;
         const blur = /blur\(([^)]+)\)/.exec(v);
