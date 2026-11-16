@@ -130,7 +130,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const liveView = useLiveView();
-  const view = useViewState(state.home.value?.hero.length ?? 0, state.search.query);
+  const heroPreviewing = state.previews.heroId !== '' && state.previews.url !== '';
+  const view = useViewState(state.home.value?.hero.length ?? 0, state.search.query, heroPreviewing);
   const pathname = usePathname();
   const [docIndex, setDocIndex] = useState(initialDocument);
   /** Whether the viewer chose the document (`?skin=`, the picker); else the server's default applies. */

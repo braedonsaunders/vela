@@ -385,6 +385,8 @@ export const heroCopy: Node = {
           'max-width': '36rem',
         },
         small: { 'font-size': '14px', 'line-clamp': '2' },
+        // Over a playing trailer the summary takes the full ink, as compiled Cinematic's did.
+        states: [{ when: [{ test: 'hero.previewing' }], style: { color: '$ui.ink' } }],
       },
       {
         type: 'box',
