@@ -20,7 +20,10 @@ export default function SectionsLayout() {
   const section = useRef<Section>({ route: 'home', entry: 'home' });
   section.current = sectionForPath(pathname) ?? section.current;
   const vela = useVela();
-  const host = vela.host(section.current.route, section.current.entry);
+  const routeHost = vela.host(section.current.route, section.current.entry);
+  const host = routeHost && section.current.route === 'library'
+    ? { ...routeHost, env: { ...routeHost.env, section: section.current.entry } }
+    : routeHost;
   const shell = vela.doc?.shell;
   const { width } = useWindowDimensions();
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -62,7 +65,7 @@ export default function SectionsLayout() {
   const content = (
     <View style={{ flex: 1, overflow: 'hidden' }}>
       <Navigator>
-        <SectionScenes offset={offset} outgoingOffset={outgoingOffset} reducedMotion={reducedMotion} />
+        <SectionScenes sectionKey={key} offset={offset} outgoingOffset={outgoingOffset} reducedMotion={reducedMotion} />
       </Navigator>
     </View>
   );
@@ -71,7 +74,8 @@ export default function SectionsLayout() {
 }
 
 /** Retain the previous navigator descriptor briefly so both pages move together. */
-function SectionScenes({ offset, outgoingOffset, reducedMotion }: {
+function SectionScenes({ sectionKey, offset, outgoingOffset, reducedMotion }: {
+  sectionKey: string;
   offset: Animated.Value;
   outgoingOffset: Animated.Value;
   reducedMotion: boolean;
@@ -82,11 +86,11 @@ function SectionScenes({ offset, outgoingOffset, reducedMotion }: {
   const last = useRef<{ key: string; content: ReactNode } | null>(null);
   const outgoing = useRef<{ key: string; content: ReactNode } | null>(null);
   const [, refresh] = useState(0);
-  if (route && last.current?.key !== route.key) {
+  if (route && last.current?.key !== sectionKey) {
     outgoing.current = reducedMotion ? null : last.current;
-    last.current = { key: route.key, content: current };
+    last.current = { key: sectionKey, content: current };
   } else if (route) {
-    last.current = { key: route.key, content: current };
+    last.current = { key: sectionKey, content: current };
   }
   useEffect(() => {
     if (!outgoing.current) return;
@@ -95,24 +99,33 @@ function SectionScenes({ offset, outgoingOffset, reducedMotion }: {
       refresh(value => value + 1);
     }, 260);
     return () => clearTimeout(timer);
-  }, [route?.key, reducedMotion]);
+  }, [sectionKey, reducedMotion]);
+  const scenes = [outgoing.current, last.current].filter(
+    (scene): scene is { key: string; content: ReactNode } => scene !== null,
+  );
   return (
     <View style={{ flex: 1 }}>
-      {outgoing.current && (
-        <Animated.View
-          key={outgoing.current.key}
-          pointerEvents="none"
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
-            transform: [{ translateX: outgoingOffset }] }}
-        >
-          {outgoing.current.content}
-        </Animated.View>
-      )}
-      <Animated.View key={route?.key} style={{ flex: 1, transform: [{ translateX: offset }] }}>
-        {current}
-      </Animated.View>
+      {scenes.map(scene => {
+        const isCurrent = scene.key === sectionKey;
+        return (
+          <Animated.View
+            key={scene.key}
+            pointerEvents={isCurrent ? 'auto' : 'none'}
+            accessibilityElementsHidden={!isCurrent}
+            importantForAccessibility={isCurrent ? 'auto' : 'no-hide-descendants'}
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              transform: [{ translateX: isCurrent ? offset : outgoingOffset }],
+            }}
+          >
+            {scene.content}
+          </Animated.View>
+        );
+      })}
     </View>
   );
 }
