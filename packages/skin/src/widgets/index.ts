@@ -3,6 +3,7 @@
 // draws nothing.
 import type { ComponentType } from 'react';
 import type { WidgetProps } from '../host';
+import { PlayerChrome } from './player/chrome';
 import { SearchInput } from './search-input';
 import { ServerSwitcher } from './auth/server-switcher';
 import { TextInput } from './auth/text-input';
@@ -15,4 +16,5 @@ export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   serverSwitcher: ServerSwitcher,
   select: Select,
   sentinel: Sentinel,
+  playerChrome: PlayerChrome,
 };
