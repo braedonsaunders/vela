@@ -15,7 +15,7 @@ For device/quick-connect pairing, approve the displayed code using an already
 signed-in grant. Poll every three seconds; pairing expires after ten minutes.
 POST `/__admin/web-code` issues a single-use three-minute console handoff code.
 
-API and caching follow [v0](../protocol/v0/README.md). All state is in memory;
+API and caching follow [v0](../packages/protocol/README.md). All state is in memory;
 restarts invalidate credentials, cursors, receipts and sessions. The fixtures are
 fictional titles and synthetic SVG artwork; no copyrighted images are fetched.
 Descriptive search uses text/genre matching. AI and proactive preparation are
