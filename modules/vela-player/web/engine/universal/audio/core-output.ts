@@ -674,7 +674,9 @@ export class CoreAudioOutput implements AudioOutput {
     this.bridge = null;
     this.disposal = (async () => {
       try {
-        await output?.destroy();
+        // A worklet that never answers must not keep its AudioContext open: Chromium allows 50 per
+        // renderer, and a retrying source would otherwise exhaust them and lose all audio.
+        if (output) await bounded(output.destroy(), new AbortController().signal, 'Audio output destroy', 1000).catch(() => {});
       } finally {
         await bounded(this.context.close(), new AbortController().signal, 'AudioContext close', 1000).catch(
           () => {},
