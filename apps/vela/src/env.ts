@@ -28,7 +28,7 @@ export function environment({ state, view, live, route, entry, width, skinCount,
   const title = route === 'title' || route === 'watch' ? state.titles[entry] : undefined;
   return {
     viewer: state.auth.viewer,
-    section: route === 'live' ? 'live' : 'home',
+    section: route === 'library' ? entry : route === 'live' ? 'live' : 'home',
     query: state.search.query,
     small: width < 640,
     tv: width >= 1600 || Platform.isTV,
