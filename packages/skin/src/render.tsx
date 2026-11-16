@@ -260,7 +260,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
       host.setPager(rowId, { atStart: contentOffset.x <= 1, atEnd: contentOffset.x + layoutMeasurement.width >= contentSize.width - 1 });
     } : undefined;
     element = (
-      <AScroll ref={scrollRef as never} horizontal={horizontal} style={route ? [{ flex: 1 }, outerStyle as ViewStyle] : (outerStyle as ViewStyle)}
+      <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
         contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
         onLayout={onLayout} {...a11y}>
@@ -298,6 +298,11 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     </Inherited.Provider>
   );
 }
+
+/** A route's scroll fills the route. A box that scrolls is sized as CSS sizes it: React Native's
+ * ScrollView grows by default, which would stretch a 232 px sidebar across its row. */
+const ROUTE_SCROLL: ViewStyle = { flex: 1 };
+const BOX_SCROLL: ViewStyle = { flexGrow: 0 };
 
 /** The press button inside a box never draws the platform ring: the box is the clipping element,
  * so the ring is the box's own, drawn from its focus look (`outline: auto` keeps the platform ring
