@@ -26,6 +26,9 @@ enum DisplayMatching {
             manager.preferredDisplayCriteria = nil
             return
         }
+        guard #available(tvOS 17.0, *) else {
+            return
+        }
         let rate = Float(facts.frameRate > 0 ? facts.frameRate : 24)
         manager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: rate, formatDescription: format)
     }
@@ -96,7 +99,8 @@ enum DisplayMatching {
             range = "sdr"
         }
         let codec = (video.codec ?? "").lowercased()
-        return VideoFacts(dynamicRange: range, frameRate: video.frameRate ?? 0, width: width, height: height, hevc: codec.contains("hevc") || codec.contains("265"))
+        let hevc = codec.contains("hevc") || codec.contains("265")
+        return VideoFacts(dynamicRange: range, frameRate: video.frameRate ?? 0, width: width, height: height, hevc: hevc)
     }
 
     /// From mpv's `video-params` and `container-fps` once the video is decoded.
