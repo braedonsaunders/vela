@@ -18,12 +18,12 @@ function titles(lane: SearchState['fast']): TitleLane {
 
 /** Not started (`idle`) reads `off` until the lane begins; `unavailable` is off for good. */
 function descriptive(lane: SearchState['descriptive']): DescriptiveLane {
-  const failed = lane.status === 'failed' || (WORKING.includes(lane.status) && !lane.retryAllowed);
+  const failed = lane.status === 'failed' || (WORKING.includes(lane.status) && !lane.canRetry);
   const state: DescriptiveLane['state'] = lane.status === 'idle' || lane.status === 'unavailable' ? 'off'
     : failed ? 'failed'
     : lane.status === 'loading' || WORKING.includes(lane.status) ? 'loading'
     : 'ready';
-  return { state, items: lane.items, canRetry: state === 'failed' && lane.retryAllowed };
+  return { state, items: lane.items, canRetry: state === 'failed' && lane.canRetry };
 }
 
 function discovery(lane: SearchState['ai']): DiscoveryLane {

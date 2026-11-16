@@ -120,7 +120,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     flex: 1,
     minHeight: 0,
     backgroundColor: look.page,
-    paddingTop: expanded ? 96 : 0,
+    paddingTop: pageTop(expanded, showGrid, small),
     backgroundImage: `radial-gradient(ellipse 70% 60% at 82% 0%, ${look.aura}, transparent 70%)`,
   } as ViewStyle;
   const highlighted =
@@ -339,6 +339,13 @@ function pickHero(model: GuideModel, selected: { channel: string; programme: str
   const programme =
     channel.programmes.find(p => p.id === wanted) ?? channel.programmes.find(p => p.id === channel.nowId);
   return { channel, programme };
+}
+
+/** Room for the shell's floating bar where the header does not already leave it (On now, expanded). */
+function pageTop(expanded: boolean, showGrid: boolean, small: boolean): number {
+  if (expanded) return 96;
+  if (showGrid) return 0;
+  return small ? 116 : 112;
 }
 
 function clamp(value: number, min: number, max: number): number {
