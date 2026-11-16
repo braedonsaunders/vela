@@ -11,6 +11,7 @@ import { TextInput } from './auth/text-input';
 import { CardPreview, HeroPreview } from './common/preview';
 import { Select } from './common/select';
 import { Sentinel } from './common/sentinel';
+import { YearInput } from './library/year-input';
 
 export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   searchInput: SearchInput,
@@ -23,4 +24,5 @@ export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   playerChrome: PlayerChrome,
   guide: GuideWidget,
   liveTile: LiveTileWidget,
+  yearInput: YearInput,
 };
