@@ -1,6 +1,6 @@
 // The view state documents read beside the data: open flags (menus, panels), the chosen season,
-// each row pager's ends, the hero on show (rotating every 9 seconds unless motion is reduced or a
-// query is open), and the system's reduced-motion setting.
+// each row pager's ends, the hero on show (rotating every 9 seconds unless motion is reduced, a
+// query is open or the hero's trailer is playing), and the system's reduced-motion setting.
 import { useCallback, useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import type { Env } from '@vela/skin';
@@ -23,7 +23,7 @@ export interface ViewState {
   still: boolean;
 }
 
-export function useViewState(heroCount: number, query: string): ViewState {
+export function useViewState(heroCount: number, query: string, heroPreviewing: boolean): ViewState {
   const [flags, setFlags] = useState<string[]>([]);
   const [season, setSeason] = useState('');
   const [pagers, setPagers] = useState<Env['pagers']>({});
@@ -36,7 +36,8 @@ export function useViewState(heroCount: number, query: string): ViewState {
     return () => subscription.remove();
   }, []);
 
-  const rotating = heroCount > 1 && !still && query === '';
+  // A playing hero trailer holds the hero on show, as compiled Cinematic did; rotation resumes when it stops.
+  const rotating = heroCount > 1 && !still && query === '' && !heroPreviewing;
   useEffect(() => {
     if (!rotating) return;
     const timer = setInterval(() => setHeroIndex(i => (i + 1) % heroCount), HERO_SECONDS * 1000);
