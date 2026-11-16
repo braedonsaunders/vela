@@ -6,7 +6,6 @@ use buildEngine from "./foundation/engine.contract"
 use VelaSplash from "./foundation/splash.contract"
 use DocRoute from "./foundation/skins.generated.contract"
 use RouteProps from "./renderer/shapes.contract"
-use cinematicUi from "./foundation/ui.contract"
 
 routes nav
   home "/"
@@ -36,8 +35,6 @@ component Client
   provide
     activeSkin
     doc = activeDoc
-    // The foundation widgets' look: the active document's ui block (renderer 15); Cinematic's until then.
-    ui = cinematicUi()
     // The home pane's own width (a split title page narrows it): document breakpoints follow it.
     homeWidth = shellViewport.width
     // The doc renderer's state and events (skins/doc/members.contract).
