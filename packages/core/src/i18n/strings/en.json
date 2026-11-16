@@ -443,6 +443,7 @@
   "server.signIn": "Sign in to {name}",
   "server.signInVela": "Sign in to your Vela server",
   "server.signedOut": "Signed out",
+  "server.sessionEnded": "Your session has ended. Sign in again.",
   "server.unreachable": "This server isn't answering right now.",
   "server.rejected": "The server didn't accept those details.",
   "server.codeExpired": "The code expired.",

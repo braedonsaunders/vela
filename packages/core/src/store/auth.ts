@@ -92,7 +92,11 @@ export class Auth {
     } catch (error) {
       const stillSignedIn = !!(await this.session.tokens(connection));
       // A transient failure is not sign-out: the stored session stays and the app says it is offline.
-      await this.refresh(message(error, msg('server.unreachable')), stillSignedIn ? 'offline' : undefined);
+      // A session the server no longer accepts was dropped: the viewer is asked to sign in again
+      // rather than shown the server's own wording ("Refresh invalid").
+      const rejected = !stillSignedIn && error instanceof VelaError && (error.status === 401 || error.detail.class === 'auth');
+      const text = rejected ? msg('server.sessionEnded') : message(error, msg('server.unreachable'));
+      await this.refresh(text, stillSignedIn ? 'offline' : undefined);
     }
   }
 
