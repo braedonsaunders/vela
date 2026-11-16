@@ -1,41 +1,21 @@
-// Spike (b): VelaPlayerView on Apple TV with a real lab plan (docs/rn-migration.md).
+// Spike: VelaPlayerView with a real lab plan on any platform (docs/rn-migration.md, spike b).
 // Signs in from configuration (apps/vela/.env.local, never committed):
 //   EXPO_PUBLIC_VELA_ORIGIN, EXPO_PUBLIC_VELA_USER, EXPO_PUBLIC_VELA_PASSWORD, EXPO_PUBLIC_VELA_TITLE (a search query),
-//   EXPO_PUBLIC_VELA_MUTED=1 to start muted (a drive at night)
+//   EXPO_PUBLIC_VELA_MUTED=1 to start muted (a drive at night),
+//   EXPO_PUBLIC_VELA_ORIGINALS=0 to declare no original playback (the server's HLS, server-applied seeks and tracks)
 // then asks Ether for a plan with this device's capabilities and plays it. Remote: the buttons below.
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { VelaPlayer, VelaPlayerView } from '@vela/player';
-import type { Command, PlaybackPlan, PlayerObservation, Snapshot } from '@vela/player-api';
+import type { Command, PlaybackPlan, PlayerObservation, SessionCommand, Snapshot } from '@vela/player-api';
 
 const origin = process.env.EXPO_PUBLIC_VELA_ORIGIN ?? '';
 const api = `${origin}/vela/v0`;
 // The lab Ether admits client builds below 0.2.0; until it admits the React Native app's, the spike
 // reports the web client's build (EXPO_PUBLIC_VELA_APP_VERSION).
 const appVersion = process.env.EXPO_PUBLIC_VELA_APP_VERSION ?? '0.2.0';
-const device = { id: 'vela-tvos-spike', name: 'Apple TV', platform: 'tvos', appVersion };
-
-/** What libmpv plays on the device: originals of these families, never converted by the server. */
-const client = {
-  device,
-  protocolVersions: [0],
-  containers: ['mp4'],
-  videoCodecs: ['h264', 'hevc'],
-  audioCodecs: ['aac', 'ac3', 'eac3'],
-  subtitleFormats: ['webvtt', 'srt', 'ass', 'ssa', 'pgs', 'tx3g'],
-  hls: true,
-  mse: false,
-  originalPlayback: {
-    version: 1,
-    range: true,
-    webgpu: false,
-    demuxContainers: ['mkv', 'webm', 'mp4', 'mpegts'],
-    videoDecoders: ['h264', 'hevc', 'av1', 'vp9', 'mpeg2video', 'vc1'],
-    audioDecoders: [
-      'aac', 'ac3', 'eac3', 'dts', 'truehd', 'mlp', 'flac', 'alac', 'opus', 'vorbis', 'mp3', 'pcm_s16le', 'pcm_s24le',
-    ],
-  },
-};
+const platform = Platform.isTV && Platform.OS === 'ios' ? 'tvos' : Platform.OS;
+const device = { id: `vela-${platform}-spike`, name: `Vela spike (${platform})`, platform, appVersion };
 
 let token = '';
 
@@ -66,7 +46,11 @@ async function labPlan(): Promise<PlaybackPlan> {
     device,
   });
   token = tokens.accessToken;
-  await call('POST', '/negotiate', { idempotencyKey: key(), client });
+  // What this platform's player plays, as the player itself declares it.
+  const capabilities = await VelaPlayer.capabilities();
+  const client = { device, protocolVersions: [0], ...capabilities };
+  const declared = process.env.EXPO_PUBLIC_VELA_ORIGINALS === '0' ? { ...client, originalPlayback: undefined } : client;
+  await call('POST', '/negotiate', { idempotencyKey: key(), client: declared });
   const query = process.env.EXPO_PUBLIC_VELA_TITLE ?? '1917';
   const found = await call<{ items: { id: string; kind: string }[] }>('POST', '/search', {
     idempotencyKey: key(), query, generation: 1, mode: 'fast', limit: 5,
@@ -75,7 +59,7 @@ async function labPlan(): Promise<PlaybackPlan> {
   if (!title) {
     throw new Error(`Nothing found for ${query}`);
   }
-  return call<PlaybackPlan>('POST', '/playback', { idempotencyKey: key(), titleId: title.id, client });
+  return call<PlaybackPlan>('POST', '/playback', { idempotencyKey: key(), titleId: title.id, client: declared });
 }
 
 /** Ends the session on the server, so its media grant is released. */
@@ -86,6 +70,15 @@ function stopSession(plan: PlaybackPlan) {
     sourceGeneration: plan.sourceGeneration,
     seekGeneration: plan.seekGeneration,
   }).catch(() => {});
+}
+
+/** The server applies a session command and answers with the plan to play. */
+function sessionCommand(event: { sessionId: string; command: SessionCommand }): Promise<PlaybackPlan> {
+  return call<PlaybackPlan>('POST', `/sessions/${event.sessionId}/commands`, event.command);
+}
+
+function freshPlan(event: { sessionId: string }): Promise<PlaybackPlan> {
+  return call<{ plan: PlaybackPlan }>('GET', `/sessions/${event.sessionId}`).then((snapshot) => snapshot.plan);
 }
 
 function postObservation(event: { sessionId: string; observation: PlayerObservation }) {
@@ -161,6 +154,8 @@ export default function PlayerSpike() {
           onSnapshot={setSnapshot}
           onError={(failure) => setProblem(`${failure.kind}: ${failure.message}`)}
           onObservation={postObservation}
+          onSessionCommand={(event) => sessionCommand(event).then(setPlan, (error) => setProblem(String(error)))}
+          onSessionRefresh={(event) => freshPlan(event).then(setPlan, (error) => setProblem(String(error)))}
           style={StyleSheet.absoluteFill}
         />
       ) : null}

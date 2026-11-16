@@ -1,7 +1,15 @@
 // How React reaches Live TV: the app provides one LiveController and the player view that draws
 // the tile's picture; widgets read the controller's view and open their surface while on screen.
 import type { VelaPlayerViewProps } from '@vela/player-api';
-import { createContext, useContext, useEffect, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import type { LiveController, LiveView, Surface } from './controller';
 
@@ -47,7 +55,8 @@ export function LiveProvider({ controller, Player, children }: LiveContextValue 
     return () => sub.remove();
   }, [controller]);
 
-  return <LiveContext.Provider value={{ controller, Player }}>{children}</LiveContext.Provider>;
+  const value = useMemo(() => ({ controller, Player }), [controller, Player]);
+  return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
 
 /** The app's live controller and player, or null where the server has no live TV. */
@@ -79,9 +88,9 @@ export function useLiveView(): LiveView {
 
 /** Keeps a surface open while `active` (the screen holding it is focused). */
 export function useLiveSurface(surface: Surface, active: boolean): void {
-  const live = useContext(LiveContext);
+  const controller = useContext(LiveContext)?.controller;
   useEffect(() => {
-    if (!live || !active) return;
-    return live.controller.open(surface);
-  }, [live, surface, active]);
+    if (!controller || !active) return;
+    return controller.open(surface);
+  }, [controller, surface, active]);
 }

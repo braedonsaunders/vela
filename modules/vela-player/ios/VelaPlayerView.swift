@@ -2,6 +2,9 @@
 //   - `plan`: the server's plan; the selected ready path plays (an original file or the server's HLS).
 //     A newer plan of the same source moves the clock only when its seek generation changed.
 //   - `command`: { id, type, ... } (client/player/model.ts Command); each id is consumed once.
+// On an original file (direct play) seeks and the file's own tracks change here; anything the server must
+// apply (a seek on its HLS, a track the file does not carry, a path switch) is an onSessionCommand, and the
+// view moves when the answering plan arrives. A refused media request asks for a fresh plan (onSessionRefresh).
 // Before an original's first frame, the display is asked for its dynamic range and frame rate.
 import ExpoModulesCore
 import Libmpv
@@ -12,6 +15,8 @@ final class VelaPlayerView: ExpoView {
     let onError = EventDispatcher()
     let onObservation = EventDispatcher()
     let onCommand = EventDispatcher()
+    let onSessionCommand = EventDispatcher()
+    let onSessionRefresh = EventDispatcher()
 
     private let metalLayer = PlayerMetalLayer()
     private var mpv: MPVClient?
@@ -19,7 +24,8 @@ final class VelaPlayerView: ExpoView {
     private lazy var report = PlayerReport(
         snapshot: { [weak self] in self?.onSnapshot($0) },
         observation: { [weak self] in self?.onObservation($0) },
-        error: { [weak self] in self?.onError($0) }
+        error: { [weak self] in self?.onError($0) },
+        sessionCommand: { [weak self] in self?.onSessionCommand($0) }
     )
 
     private var plan: VelaPlan?
@@ -30,6 +36,12 @@ final class VelaPlayerView: ExpoView {
     private var ambient = false
     private var displayFacts: VideoFacts?
     private var loggedOutput = false
+    private var refreshAsked = ""
+
+    /// Direct play: the playing source is an original file, so seeks and its tracks are the view's own.
+    private var playsOriginal: Bool {
+        plan?.selectedPath?.isOriginalFile == true
+    }
 
     required init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
@@ -153,7 +165,6 @@ final class VelaPlayerView: ExpoView {
         for property in PlayerState.observed {
             client.observe(property.name, format: property.format)
         }
-        setHeaders(for: url, on: client)
         let subtitle = plan.subtitleTrack(report.subtitleTrackId)
         var options = ["start=\(plan.positionSeconds)"]
         if path.isOriginalFile {
@@ -165,14 +176,21 @@ final class VelaPlayerView: ExpoView {
         if !ambient {
             DisplayMatching.prefer(displayFacts, in: window)
         }
-        client.command(["loadfile", url.absoluteString, "replace", "-1", options.joined(separator: ",")])
         report.publish(state, seekTarget: nil, force: true)
+        Task { @MainActor [weak self] in
+            let media = await MediaRedirects.resolve(url)
+            guard let self, self.activeSource == source, self.mpv === client else {
+                return
+            }
+            self.load(media, options: options, on: client)
+        }
     }
 
-    /// Headers only for a URL inside the media access's origin and path (none for Ether's broker URLs).
-    private func setHeaders(for url: URL, on client: MPVClient) {
-        let fields = VelaMediaAccessStore.headers(for: url).map { "\($0.key): \($0.value)" }
-        client.setStringList("http-header-fields", fields)
+    /// Loads the resolved URL with its headers; with headers attached, FFmpeg follows no redirect.
+    private func load(_ media: ResolvedMedia, options: [String], on client: MPVClient) {
+        client.setStringList("http-header-fields", media.headers.map { "\($0.key): \($0.value)" })
+        client.set("stream-lavf-o", media.refusesRedirects ? "max_redirects=0" : "")
+        client.command(["loadfile", media.url.absoluteString, "replace", "-1", options.joined(separator: ",")])
     }
 
     private func stop() {
@@ -233,6 +251,8 @@ final class VelaPlayerView: ExpoView {
                 state.failure = "The media could not be played (\(String(cString: mpv_error_string(error))))"
                 state.failureKind = error == MPV_ERROR_LOADING_FAILED.rawValue ? "network" : "source"
             }
+        case .refused(let status):
+            askForFreshPlan("media request refused (\(status))")
         case .seekDone:
             pendingSeek = nil
             if !loggedOutput {
@@ -243,6 +263,16 @@ final class VelaPlayerView: ExpoView {
             break
         }
         report.publish(state, seekTarget: pendingSeek, force: true)
+    }
+
+    /// Asks once per source for a fresh plan: the grant behind the media URL has expired or was revoked.
+    private func askForFreshPlan(_ reason: String) {
+        guard let plan, refreshAsked != activeSource else {
+            return
+        }
+        refreshAsked = activeSource
+        print("[vela-player] session refresh: \(reason)")
+        onSessionRefresh(["sessionId": plan.sessionId])
     }
 
     /// What the video is and what mpv and the display make of it, for the console.
@@ -319,12 +349,19 @@ final class VelaPlayerView: ExpoView {
             guard let seconds = number(command["seconds"]) else {
                 return "seek needs seconds"
             }
-            seek(to: seconds)
+            requestSeek(to: seconds)
         case "seekBy":
             guard let seconds = number(command["seconds"]) else {
                 return "seekBy needs seconds"
             }
-            seek(to: (pendingSeek ?? state.position) + seconds)
+            requestSeek(to: (pendingSeek ?? state.position) + seconds)
+        case "quality", "switchPath":
+            let value = (command["renditionId"] as? String) ?? (command["pathId"] as? String) ?? ""
+            let pathId = value.hasPrefix("path:") ? String(value.dropFirst(5)) : value
+            guard !pathId.isEmpty, pathId != report.pathId else {
+                return pathId.isEmpty ? "Automatic quality is the server's choice on this player" : nil
+            }
+            report.sessionCommand(["kind": "switch", "pathId": pathId, "atSeconds": state.position])
         case "volume":
             guard let value = number(command["value"]) else {
                 return "volume needs a value"
@@ -350,12 +387,26 @@ final class VelaPlayerView: ExpoView {
         return nil
     }
 
+    /// A seek: local on an original file; on the server's HLS, a session command whose plan moves the clock.
+    private func requestSeek(to seconds: Double) {
+        let end = (state.duration ?? .infinity) - 1
+        let target = max(0, min(seconds, end))
+        if playsOriginal {
+            seek(to: target)
+            return
+        }
+        pendingSeek = target
+        report.sessionCommand(["kind": "seek", "positionSeconds": target])
+    }
+
     private func selectAudio(_ id: String?) -> String? {
         guard let id, let track = plan?.audioTrack(id) else {
             return "No such audio track"
         }
-        guard let index = track.streamIndex, let mpvId = state.trackId(type: "audio", streamIndex: index) else {
-            return "This audio track is not in the playing file; the server must switch it"
+        let index = track.streamIndex
+        guard playsOriginal, let index, let mpvId = state.trackId(type: "audio", streamIndex: index) else {
+            report.sessionCommand(["kind": "tracks", "audioTrackId": id])
+            return nil
         }
         report.audioTrackId = id
         report.audioClientOnly = true
@@ -365,6 +416,10 @@ final class VelaPlayerView: ExpoView {
 
     private func selectSubtitle(_ id: String?) -> String? {
         guard let id else {
+            if !playsOriginal {
+                report.sessionCommand(["kind": "tracks", "subtitleTrackId": NSNull()])
+                return nil
+            }
             report.subtitleTrackId = nil
             report.subtitleClientOnly = true
             mpv?.set("sid", "no")
@@ -379,8 +434,10 @@ final class VelaPlayerView: ExpoView {
             mpv?.command(["sub-add", url.absoluteString, "select"])
             return nil
         }
-        guard let index = track.streamIndex, let mpvId = state.trackId(type: "sub", streamIndex: index) else {
-            return "This subtitle track is not in the playing file; the server must switch it"
+        let index = track.streamIndex
+        guard playsOriginal, let index, let mpvId = state.trackId(type: "sub", streamIndex: index) else {
+            report.sessionCommand(["kind": "tracks", "subtitleTrackId": id])
+            return nil
         }
         report.subtitleTrackId = id
         report.subtitleClientOnly = true

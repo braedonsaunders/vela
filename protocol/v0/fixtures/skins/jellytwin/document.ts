@@ -15,13 +15,25 @@ import { strings } from './strings';
 
 export default {
   schema: 1,
-  renderer: 13,
+  renderer: 15,
   id,
   name: 'Jelly Twin',
   version,
   tagline: 'A familiar home-media client: near-black, cyan accents, card rows.',
   preview: asset('preview.jpg'),
   swatches: ['#101010', '#ffffff', '#00a4dc', '#aa5cc3', '#292929'],
+  // Jelly Twin's near-black and cyan, for the routes it inherits (search).
+  ui: {
+    page: '#101010', raised: '#292929', ink: '#ffffffde', inkSecondary: '#ffffff99', inkQuiet: '#ffffff66',
+    inkInverse: '#101010', inkHover: '#ffffff', accent: '#00a4dc', onAccent: '#ffffff', control: '#ffffff14',
+    controlHover: '#ffffff24', glass: '#202020d9', glassEdge: '#ffffff1f', glassEdgeStrong: '#ffffff33',
+    popover: '#202020f7', scrim: '#000000b3', track: '#ffffff40', trackStrong: '#ffffff66',
+    focusHalo: '#00a4dc33', shadow: '#000000a6', skeleton: '#ffffff0d', skeletonLight: '#ffffff14',
+    alert: '#cb272a26', live: '#cb272a',
+    font: '"Noto Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    fontDisplay: '"Noto Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    radiusControl: 4, radiusCard: 4, radiusPanel: 6,
+  },
   tokens: {
     page: '#101010',
     header: '#101010f2',

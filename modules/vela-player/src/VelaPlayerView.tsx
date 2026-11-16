@@ -11,6 +11,7 @@ import type {
   PlaybackPlan,
   PlayerCapabilities,
   PlayerObservation,
+  SessionCommand,
   Snapshot,
   VelaPlayerModule,
   VelaPlayerViewProps,
@@ -24,6 +25,7 @@ interface NativeMediaAccess {
 }
 
 interface NativeModule {
+  capabilities(): PlayerCapabilities;
   setMediaAccess(access: NativeMediaAccess | null): void;
 }
 
@@ -36,6 +38,8 @@ interface NativeViewProps {
   onError?: (event: NativeSyntheticEvent<Failure>) => void;
   onObservation?: (event: NativeSyntheticEvent<{ sessionId: string; observation: PlayerObservation }>) => void;
   onCommand?: (event: NativeSyntheticEvent<{ id: number; ok: boolean; failure?: Failure }>) => void;
+  onSessionCommand?: (event: NativeSyntheticEvent<{ sessionId: string; command: SessionCommand }>) => void;
+  onSessionRefresh?: (event: NativeSyntheticEvent<{ sessionId: string }>) => void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -46,27 +50,9 @@ let accessGeneration = 0;
 
 /** What libmpv plays on Apple devices: originals of these families, never converted by the server.
  * A constant until the native side probes VideoToolbox and the audio route. */
-const appleCapabilities: PlayerCapabilities = {
-  containers: ['mp4'],
-  videoCodecs: ['h264', 'hevc'],
-  audioCodecs: ['aac', 'ac3', 'eac3'],
-  subtitleFormats: ['webvtt', 'srt', 'ass', 'ssa', 'pgs', 'tx3g'],
-  hls: true,
-  mse: false,
-  originalPlayback: {
-    version: 1,
-    range: true,
-    webgpu: false,
-    demuxContainers: ['mkv', 'webm', 'mp4', 'mpegts'],
-    videoDecoders: ['h264', 'hevc', 'av1', 'vp9', 'mpeg2video', 'vc1'],
-    audioDecoders: [
-      'aac', 'ac3', 'eac3', 'dts', 'truehd', 'mlp', 'flac', 'alac', 'opus', 'vorbis', 'mp3', 'pcm_s16le', 'pcm_s24le',
-    ],
-  },
-};
-
 export const VelaPlayer: VelaPlayerModule = {
-  capabilities: async () => appleCapabilities,
+  // The native side probes the device (hardware decoders) rather than declaring a fixed list.
+  capabilities: async () => nativeModule.capabilities(),
   setMediaAccess(access: MediaAccess | null) {
     const generation = ++accessGeneration;
     if (!access) {
@@ -101,6 +87,8 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
     onError: forward(props.onError),
     onObservation: forward(props.onObservation),
     onCommand: forward(props.onCommand),
+    onSessionCommand: forward(props.onSessionCommand),
+    onSessionRefresh: forward(props.onSessionRefresh),
     style: props.style,
   });
 }
