@@ -153,9 +153,8 @@ export const signIn: Node = {
           disabled: [{ test: 'signin.secureBusy' }],
           disabledStyle: { opacity: '0.42' },
           style: {
-            ...pill(false),
+            ...pill(false, 42),
             position: 'relative',
-            height: '42px',
             'padding-left': '18px',
             'padding-right': '18px',
             'align-self': 'flex-start',
@@ -293,9 +292,8 @@ export const signIn: Node = {
       disabled: [{ test: 'signin.busy' }],
       disabledStyle: { opacity: '0.42' },
       style: {
-        ...pill(false),
+        ...pill(false, 52),
         position: 'relative',
-        height: '52px',
         'padding-left': '0px',
         'padding-right': '0px',
         transition:
@@ -446,9 +444,8 @@ export const quickConnect: Node = {
       press: { action: 'cancelQuick' },
       label: '{t:ui.cancel}',
       style: {
-        ...pill(false),
+        ...pill(false, 46),
         position: 'relative',
-        height: '46px',
         'padding-left': '28px',
         'padding-right': '28px',
         transition: 'background-color 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)',

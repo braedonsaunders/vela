@@ -76,9 +76,8 @@ export const glassSelect: Style = {
 };
 export const favOn: Condition = { test: 'library.favoriteFilter' };
 export const favBase: Style = {
-  ...pill(false),
+  ...pill(false, 42),
   position: 'relative',
-  height: '42px',
   'padding-left': '16px',
   'padding-right': '18px',
   'flex-shrink': '0',
@@ -330,49 +329,51 @@ export const library: Node = {
     failure('{t:library.couldNotOpen}'),
     {
       type: 'box',
+      when: [ready, { test: 'library.backdrop' }],
+      style: {
+        position: 'absolute',
+        top: '0px',
+        left: '0px',
+        right: '0px',
+        height: '320px',
+        'overflow-x': 'hidden',
+        'overflow-y': 'hidden',
+        'pointer-events': 'none',
+        'mask-image': 'linear-gradient(180deg, black 0%, transparent 100%)',
+        opacity: '0.22',
+      },
+      small: { height: '260px' },
+      children: [
+        {
+          type: 'image',
+          src: '{library.backdrop}',
+          alt: '',
+          fade: true,
+          style: {
+            position: 'absolute',
+            inset: '0px',
+            width: '100%',
+            height: '100%',
+            'object-fit': 'cover',
+          },
+        },
+      ],
+    },
+    // The toolbar is a direct child of the route root, where native draws sticky.
+    { ...toolbar, when: [ready] },
+    {
+      type: 'box',
       when: [ready],
       style: {
         position: 'relative',
         display: 'flex',
         'flex-direction': 'column',
         gap: '26px',
+        'padding-top': '26px',
         'padding-bottom': '80px',
       },
-      small: { gap: '18px' },
+      small: { gap: '18px', 'padding-top': '18px' },
       children: [
-        {
-          type: 'box',
-          when: [{ test: 'library.backdrop' }],
-          style: {
-            position: 'absolute',
-            top: '0px',
-            left: '0px',
-            right: '0px',
-            height: '320px',
-            'overflow-x': 'hidden',
-            'overflow-y': 'hidden',
-            'pointer-events': 'none',
-            'mask-image': 'linear-gradient(180deg, black 0%, transparent 100%)',
-            opacity: '0.22',
-          },
-          small: { height: '260px' },
-          children: [
-            {
-              type: 'image',
-              src: '{library.backdrop}',
-              alt: '',
-              fade: true,
-              style: {
-                position: 'absolute',
-                inset: '0px',
-                width: '100%',
-                height: '100%',
-                'object-fit': 'cover',
-              },
-            },
-          ],
-        },
-        toolbar,
         {
           type: 'box',
           when: [{ test: 'env.libraryLoading' }, noItems],
@@ -413,9 +414,8 @@ export const library: Node = {
               press: { action: 'libraryMore' },
               label: '{t:library.loadMore}',
               style: {
-                ...pill(false),
+                ...pill(false, 48),
                 position: 'relative',
-                height: '48px',
                 'padding-left': '28px',
                 'padding-right': '28px',
               },

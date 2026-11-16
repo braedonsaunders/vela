@@ -298,12 +298,12 @@ export const band: Node = {
                 display: 'flex',
                 'flex-direction': 'row',
                 'align-items': 'center',
-                height: '56px',
-                'box-sizing': 'content-box',
+                height: '58px',
+                'box-sizing': 'border-box',
                 'padding-left': '22px',
                 'padding-right': '26px',
               },
-              small: { height: '50px' },
+              small: { height: '52px' },
               hover: { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
               focus: { 'box-shadow': focusRing },
               children: [
@@ -649,9 +649,9 @@ export const seasonTab = (on: boolean): Node => ({
     display: 'flex',
     'flex-direction': 'row',
     'align-items': 'center',
-    height: '40px',
+    height: '42px',
     padding: '0px 18px',
-    'box-sizing': 'content-box',
+    'box-sizing': 'border-box',
     border: '1px solid $ui.glassEdge',
     'border-radius': '$ui.radiusControl',
     'font-weight': '600',
@@ -693,7 +693,9 @@ export const episodes: Node = {
         },
       ],
     },
-    // The season tabs: a sticky glass bar that scrolls sideways.
+    // The season tabs: a glass bar that scrolls sideways. Compiled pins it while its episodes
+    // are in view; native pins only a route's direct children, which would keep it over the
+    // rest of the page, so it scrolls with the list.
     {
       type: 'box',
       when: [{ test: 'detail.hasSeasons' }],
@@ -701,9 +703,7 @@ export const episodes: Node = {
       label: '{t:ui.season}',
       testId: 'season-picker',
       style: {
-        position: 'sticky',
-        top: '0px',
-        'z-index': '4',
+        position: 'relative',
         display: 'flex',
         'flex-direction': 'row',
         gap: '8px',
@@ -761,14 +761,14 @@ export const extraTile = (ready: boolean): Node =>
       ...ghost,
       position: 'relative',
       'border-radius': '16px',
-      width: '280px',
-      height: '110px',
+      width: '318px',
+      height: '148px',
       padding: '18px',
-      'box-sizing': 'content-box',
+      'box-sizing': 'border-box',
       'flex-shrink': '0',
       ...(ready ? {} : { opacity: '0.42' }),
     },
-    small: { width: '220px', height: '96px' },
+    small: { width: '258px', height: '134px' },
     ...(ready
       ? {
           hover: { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
