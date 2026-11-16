@@ -2,7 +2,7 @@
 // It follows the timeline's horizontal scroll; the corner above the rail names the day.
 import { View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
-import type { GuideModel } from '../../../../../client/src/live/guide';
+import type { GuideModel } from '@vela/core';
 import { RULER } from './geometry';
 import type { GuideLook } from './look';
 import { Line } from './parts';

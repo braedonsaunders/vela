@@ -4,8 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { msg } from '../../../../../client/foundation/i18n';
-import type { GuideChannel, GuideProgramme } from '../../../../../client/src/live/guide';
+import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
 import type { GuideLook } from './look';
 import { Glyph, Line, LiveBadge, Press, Progress } from './parts';
 

@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import type { LiveController } from './controller';
 import type { GuideLook } from './look';
 import { Glyph, Line, LiveBadge, Press } from './parts';

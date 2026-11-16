@@ -2,12 +2,14 @@
 // delivery states and "Go live" when playback has fallen behind the edge) and the keys that flick
 // channels. Latency is automatic; there is no viewer-facing latency toggle.
 import { View } from 'react-native';
-import { msg, number } from '../../../../../client/foundation/i18n';
-import type { LiveSnapshot } from '../../../../../client/player/model';
+import { msg, number } from '@vela/core';
+import type { Snapshot } from '@vela/player-api';
 import type { LiveController } from './controller';
 import { useLiveSurface } from './live';
 import { useGuideLook, type GuideLook } from './look';
 import { Glyph, Line, LiveBadge, Press } from './parts';
+
+type LiveSnapshot = NonNullable<Snapshot['live']>;
 
 interface ControlsProps {
   /** The player's live snapshot for the watched session (null until it reports one). */

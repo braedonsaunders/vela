@@ -1,6 +1,6 @@
 // The guide's honest states: loading, failed (with Try again), no channels, nothing matching.
 import { ActivityIndicator, View } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import type { GuideLook } from './look';
 import { Line, Press } from './parts';
 

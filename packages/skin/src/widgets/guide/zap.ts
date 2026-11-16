@@ -1,7 +1,7 @@
 // Channel flicking: each step moves a dialled channel through the guide's order, wrapping at the
 // ends, and the channel is tuned only once the viewer pauses. Holding a key never opens a session
 // per channel passed.
-import type { GuideChannel } from '../../../../../client/src/live/guide';
+import type { GuideChannel } from '@vela/core';
 
 export class Zap {
   target = '';

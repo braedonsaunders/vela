@@ -2,8 +2,7 @@
 // without listings, one wide "No listings · Watch live" button that stays in view.
 import { View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
-import { msg } from '../../../../../client/foundation/i18n';
-import type { GuideChannel, GuideProgramme } from '../../../../../client/src/live/guide';
+import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
 import { ProgrammeCell } from './cell';
 import type { GuideLook } from './look';
 import { Line, Press } from './parts';

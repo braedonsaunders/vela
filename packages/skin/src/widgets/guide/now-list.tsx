@@ -1,7 +1,6 @@
 // Phones: every channel with what is on now and next, one tap from watching.
 import { FlatList, View } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
-import type { GuideChannel } from '../../../../../client/src/live/guide';
+import { msg, type GuideChannel } from '@vela/core';
 import type { GuideLook } from './look';
 import { Glyph, Line, LogoTile, Press, Progress } from './parts';
 

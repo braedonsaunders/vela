@@ -1,6 +1,6 @@
 // Guide grid geometry in points. Minutes become points at `minuteWidth` per minute: zoom 0, 1
 // and 2 show about 4.5, 3 and 2 hours across a laptop panel; phones keep one scale.
-import type { GuideChannel, GuideProgramme } from '../../../../../client/src/live/guide';
+import type { GuideChannel, GuideProgramme } from '@vela/core';
 
 export type Zoom = 0 | 1 | 2;
 

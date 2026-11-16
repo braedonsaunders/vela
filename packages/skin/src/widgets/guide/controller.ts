@@ -2,10 +2,8 @@
 // preview tile and channel flicking. Surfaces open it while they are on screen (the guide, a live
 // home, live watch); with none open it holds no clock, loads nothing and keeps no session.
 // React reads it through useSyncExternalStore (hooks.ts); documents read it as env.live.
-import type { Snapshot } from '../../../../../client/player/model';
-import type { Images } from '../../../../../client/src/discovery/artwork';
-import { loadGuide, type GuideChannel, type GuideModel } from '../../../../../client/src/live/guide';
-import { time } from '../../../../../client/foundation/i18n';
+import type { Snapshot } from '@vela/player-api';
+import { loadGuide, time, type Images, type GuideChannel, type GuideModel } from '@vela/core';
 import type { LiveSource } from './source';
 import { Tile, type TileView } from './tile';
 import { Zap } from './zap';

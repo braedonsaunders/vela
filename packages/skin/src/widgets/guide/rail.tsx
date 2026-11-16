@@ -1,8 +1,7 @@
 // A channel's cell in the guide's rail: number, logo on its neutral tile, name, favourite star and
 // how far the programme on now has run. Pressing it watches the channel.
 import { Platform, View } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
-import type { GuideChannel } from '../../../../../client/src/live/guide';
+import { msg, type GuideChannel } from '@vela/core';
 import { railId } from './geometry';
 import type { GuideLook } from './look';
 import { Glyph, Line, LogoTile, Press, Progress } from './parts';

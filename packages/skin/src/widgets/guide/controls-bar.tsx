@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
-import { msg } from '../../../../../client/foundation/i18n';
-import type { GuideModel } from '../../../../../client/src/live/guide';
+import { msg, type GuideModel } from '@vela/core';
 import type { ChannelFilter } from './geometry';
 import type { GuideLook } from './look';
 import { Glyph, Line, Press, type Interaction } from './parts';

@@ -6,8 +6,7 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { FlatList, Platform, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import { msg } from '../../../../../client/foundation/i18n';
-import type { GuideChannel, GuideModel, GuideProgramme } from '../../../../../client/src/live/guide';
+import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@vela/core';
 import { cellId, leftFor, minuteWidth, programmeAt, railId, railWidth, rowHeight, RULER, type Zoom } from './geometry';
 import type { GuideLook } from './look';
 import { RailCell } from './rail';

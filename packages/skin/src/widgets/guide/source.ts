@@ -1,8 +1,7 @@
 // What Live TV needs from the server: the lineup and listings (the adapter's LiveTv capability),
 // and a channel session for the preview tile, which it must also be able to stop. The app builds
 // one from its adapter; nothing under widgets/ issues a request of its own.
-import { VelaError } from '../../../../../client/src/adapter/errors';
-import type { GuideApi } from '../../../../../client/src/live/guide';
+import { VelaError, type GuideApi } from '@vela/core';
 import type * as V from '../../../../../protocol/v0/types';
 
 export interface LiveSource extends GuideApi {

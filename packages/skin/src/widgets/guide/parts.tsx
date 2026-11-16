@@ -5,7 +5,7 @@ import { Image } from 'expo-image';
 import { useState, type ReactNode } from 'react';
 import { Platform, Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { SYMBOLS } from '../../icons';
 import { monogram } from './geometry';
 import type { GuideLook } from './look';

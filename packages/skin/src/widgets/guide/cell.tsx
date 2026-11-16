@@ -2,8 +2,7 @@
 // programme began before the panel's left edge; an airing block fills as it runs.
 import { View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
-import { msg } from '../../../../../client/foundation/i18n';
-import type { GuideChannel, GuideProgramme } from '../../../../../client/src/live/guide';
+import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
 import { cellId } from './geometry';
 import type { GuideLook } from './look';
 import { Line, Press } from './parts';

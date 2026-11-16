@@ -1,7 +1,7 @@
 // The live home vocabulary (docs/skin-schema.md, "Live home"): the channel a node is repeated
 // over (`ch.*`), the monitor (`tile.*`), the minute clock and lineup sizes, and the collections
 // `live.channels` and `live.favorites`. vocabulary.ts spreads these into the document vocabulary.
-import type { GuideChannel } from '../../../../../client/src/live/guide';
+import type { GuideChannel } from '@vela/core';
 import type { LiveView } from './controller';
 
 /** The binding context and environment fields Live TV adds. */

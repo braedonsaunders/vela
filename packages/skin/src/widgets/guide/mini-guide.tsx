@@ -2,8 +2,7 @@
 // dialled between its neighbours, with what is on now and next. Pressing the card tunes it now.
 import { View } from 'react-native';
 import Animated, { FadeInLeft, FadeOutLeft } from 'react-native-reanimated';
-import { msg } from '../../../../../client/foundation/i18n';
-import type { GuideChannel } from '../../../../../client/src/live/guide';
+import { msg, type GuideChannel } from '@vela/core';
 import { useLiveContext, useLiveView } from './live';
 import { useGuideLook, type GuideLook } from './look';
 import { Line, LogoTile, Press, Progress } from './parts';

@@ -4,8 +4,7 @@
 // list and switch to the grid. Its look comes from the document's `ui` block.
 import { useMemo, useRef, useState } from 'react';
 import { View, type ViewStyle } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
-import type { GuideChannel, GuideModel, GuideProgramme } from '../../../../../client/src/live/guide';
+import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@vela/core';
 import { useHost, type WidgetProps } from '../../host';
 import type { LiveController, LiveView } from './controller';
 import { DayChips, FilterMenu, GuideTabs, IconButton, NowChip, Segments } from './controls-bar';

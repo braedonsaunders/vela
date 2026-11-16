@@ -3,7 +3,7 @@
 // order, moves on when one cannot play (three tries, or none for a channel the viewer chose), and
 // holds at most one session. Every session it was granted is stopped at the server, and full
 // watch opens only after the server confirmed that stop, so the viewer never holds two streams.
-import type { Command, Snapshot } from '../../../../../client/player/model';
+import type { Command, Snapshot } from '@vela/player-api';
 import type { PlaybackPlan } from '../../../../../protocol/v0/types';
 import type { LiveSource } from './source';
 
