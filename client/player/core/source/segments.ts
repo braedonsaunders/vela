@@ -1,4 +1,4 @@
-import {DeliveryMeter} from './delivery';
+import {DeliveryMeter,mediaCapWait} from './delivery';
 import {LiveWindow} from './live-window';
 import {BandwidthEstimator} from '../../abr';
 import { CustomPathedSource, CustomSource } from 'mediabunny';
@@ -155,7 +155,7 @@ export class SegmentReader {
         this.diagnostics.push(`hls-object:${request}:bytes=${size}:${objectShape(bytes)}`);
         if(this.diagnostics.length>8)this.diagnostics.shift();
       }
-      if(!playlist)this.delivery.record(at,firstByte,size);
+      if(!playlist)this.delivery.record(at,firstByte,size,{capWaitMs:mediaCapWait(response)});
       if(!playlist)this.bandwidth.sample(size,performance.now()-at,Number(response.headers.get('Age')??0)>0||/hit/i.test(response.headers.get('X-Cache')??''));
       this.metrics.bytes+=size;this.metrics.milliseconds+=performance.now()-at;
       if(playlist&&this.liveWindow&&path===this.root){

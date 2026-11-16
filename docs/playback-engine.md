@@ -1,5 +1,52 @@
 # Playback engine
 
+## Core-only launch plan (owner directive, pending qualification)
+
+Ship one Vela player and one source-complete build. First finish delivery-aware
+admission and the real-app matrix below; then remove the legacy implementation;
+finally repeat the full matrix with only the core installed. Send this plan to
+the orchestrator before deleting. Production remains unchanged during the work.
+
+| Remove | Concrete repository scope |
+| --- | --- |
+| Frozen wrapper runtime | Descriptor/payload `3c579f70de6e1cfe`, its release reuse instructions and wrapper qualification gates. No wrapper bytes enter the new release. |
+| Upstream orchestration | `client/player/universal/runtime.ts` (`upstream-controller`), controller/frame-loop/decode-session integration and wrapper-only audio/control/transport/audit adapters under `universal/`. Check imports before removing each shared helper. |
+| Old player dependency | `vendor/webgpu-player` gitlink, `.gitmodules` entry, upstream revision pin/checks, inherited tsconfig/npm tooling and imports into its `src/` or `tools/`. The core currently uses some of these: removing only the controller would be incomplete. |
+| Two runtime build modes | Replace `tools/player/prepare-upstream.ts` and its `--core` branch with one core asset builder. Remove wrapper build transforms and wrapper audit payload generation. |
+| Frozen-release reuse | Remove `--universal-from-release`, `stageUniversalFromRelease` and `tools/release/universal-from-release.py` with the packager. Release tooling accepts/verifies the freshly built core input and emits its one immutable descriptor. |
+| Migration switches | Remove `upstream-controller` unions, wrapper-compatible optional methods, core-vs-wrapper host checks, migration manifest flags (`core.vodHls/liveHls`) and descriptor overrides used for paired qualification. Hardware capability and installed-decoder checks remain. |
+| Obsolete documentation/proofs | Replace this historical wrapper integration narrative and wrapper build instructions with the current core contract. Remove wrapper-only fixture/proof scripts and stale generated references; retain a concise dated evidence record rather than instructions for reviving the old player. |
+
+Before removing the submodule, give the core direct, explicit dependencies:
+Mediabunny's demux source and licence; separately loaded audio/video decoder
+packages, hashes and corresponding sources; and subtitle assets. Replace the
+upstream presentation/audio-output/worker/asset plumbing the core still imports.
+If a small permissively licensed format or colour primitive is retained, keep
+its minimal reviewed source and attribution with the core. Do not copy the old
+controller or whole player into a renamed directory. Preserve MPL/LGPL source
+and licence obligations, including replaceable decoder modules. Install build
+dependencies directly, without the old submodule's `node_modules`.
+
+The retained fallback chain belongs to the same Vela engine: native WebCodecs
+or installed decoder packages; core HLS demux when Ether remuxes/transcodes an
+unsupported original; bounded, typed server conversion/burn-in when necessary;
+and Vela's native-element/MSE compatibility backend where browser capabilities
+require it. These are delivery/decoder backends, not a second controller. A core
+error must never silently load the deleted wrapper. Keep scoped media-header
+authorization, native fallback token handling, observations, progress/epoch
+semantics, chrome commands, trickplay and cleanup across every backend.
+
+Coordinate release inputs/defaults with `thr_tgszknwfsb` and the unchanged
+foundation/player event and prop contract with `thr_2e6r64an8e`. Qualify the
+current candidate in the actual watch view, then qualify again after excision:
+1917 HLS; verified 4K HDR10 TrueHD; Inception UHD DTS-HD and VC-1 server
+conversion; PGS pixels and Off; live channels/latency/preview stop; audio and
+subtitle changes; quality/Auto; trickplay; off-grid and backward seeks. Record
+the actual release, backend, start/seek/transition timing, decoded/presented and
+dropped frames, audio underrun duration, buffering, fallback/recovery and byte
+refetch. Stop/revoke/unpin each run. Only the clean core-only pass goes to the
+packager for the launch release.
+
 Decision: use Exact's **app web native-view module**, with a `vela-player`
 custom view owning one HTMLVideoElement. Contract owns all chrome. No iframe,
 DOM escape in the data module, or change to pinned Exact is required.

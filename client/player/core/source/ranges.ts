@@ -1,4 +1,4 @@
-import {DeliveryMeter} from './delivery';
+import {DeliveryMeter,mediaCapWait} from './delivery';
 import {BandwidthEstimator} from '../../abr';
 import { abortable, delay } from '../async';
 import type { ByteReader } from '../types';
@@ -33,6 +33,7 @@ export class RangeReader implements ByteReader {
   private cachedBytes = 0;
   private cacheLimit=CACHE;
   private ahead=8*MIB;
+  private mediaRate:number|null=null;
   private back=64*MIB;
   private playhead:number|null=null;
   private readonly metadata=new Set<number>();
@@ -73,6 +74,7 @@ export class RangeReader implements ByteReader {
   }
   configureBuffer(durationSeconds:number|null){
     const rate=this.total!==null&&durationSeconds!==null&&Number.isFinite(durationSeconds)&&durationSeconds>0?this.total/durationSeconds:null;
+    this.mediaRate=rate===null?null:rate*8;
     this.ahead=Math.ceil(rate===null?8*MIB:Math.max(8*MIB,Math.min(64*MIB,rate*5)));
     // Reserve room for one 16-MiB speculative window, metadata and parser leases
     // without evicting the authoritative front window. Total remains <=128 MiB.
@@ -177,6 +179,13 @@ export class RangeReader implements ByteReader {
     anchor:this.forwardSignal?this.forwardAnchor:null,playhead:this.playhead,demand:this.forwardDemand,ahead:this.ahead,back:this.back,cacheBytes:this.cachedBytes,cacheLimit:this.cacheLimit,
     runs:[...this.forwardRuns].map(run=>({next:run.next,end:run.end,demand:run.demand,pages:run.slots.size,request:!!run.request,
       paused:run.next>=this.edge(run)})),demands:this.demands.map(value=>({...value}))};}
+  get mediaBitrateBps(){return this.mediaRate;}
+  get forwardReserveBytes(){
+    if(this.playhead===null||!this.forwardSignal)return 0;
+    let end=this.playhead,index=Math.floor(end/PAGE);
+    while(this.pages.has(index)){end=Math.max(end,index*PAGE+this.pages.get(index)!.length);index++;}
+    return Math.max(0,end-this.playhead);
+  }
   private wakeProgress(){for(const wake of [...this.progressWaiters])wake();}
   private changed(signal:AbortSignal,waiters=this.progressWaiters){
     signal.throwIfAborted();return new Promise<void>((resolve,reject)=>{
@@ -297,7 +306,7 @@ export class RangeReader implements ByteReader {
     if (cached) { this.pages.delete(index); this.pages.set(index,cached); this.metrics.cacheHits++; return Promise.resolve(cached); }
     const pending = this.pending.get(index); if (pending) return pending;
     const scope=this.readEpoch,media=this.isMedia(index*PAGE);
-    const work = this.load(index,scope).then(async bytes => {
+    const work = this.load(index,scope,media).then(async bytes => {
       this.lifetime.signal.throwIfAborted();
       await this.store(index,bytes,scope,this.lifetime.signal,media);
       return bytes;
@@ -305,7 +314,7 @@ export class RangeReader implements ByteReader {
     this.pending.set(index,work); return work;
   }
 
-  private async load(index: number,scope:ReadEpoch): Promise<Uint8Array> {
+  private async load(index: number,scope:ReadEpoch,media:boolean): Promise<Uint8Array> {
     const signal = this.lifetime.signal;
     // Random metadata outside every planned run must also get a network slot.
     if(this.active>=3){const background=[...this.forwardRuns].filter(run=>run.request)
@@ -315,7 +324,7 @@ export class RangeReader implements ByteReader {
     try {
       for (let attempt = 0;; attempt++) {
         signal.throwIfAborted();
-        try { return await this.request(index,AbortSignal.any([signal,AbortSignal.timeout(10000)]),scope); }
+        try { return await this.request(index,AbortSignal.any([signal,AbortSignal.timeout(10000)]),scope,media); }
         catch (error) {
           signal.throwIfAborted();
           if (error instanceof RangeFailure || attempt >= 2) throw error;
@@ -374,7 +383,8 @@ export class RangeReader implements ByteReader {
             if(!slot)throw new RangeFailure('Original forward page lost its owner');
             await this.store(index,page,run.scope,signal,!run.metadata);this.notePage(run.scope,index,total);
             const now=performance.now();this.metrics.bytes+=page.length;this.metrics.milliseconds+=now-lastPublication;
-            this.bandwidth.sample(page.length,now-lastPublication,cacheHit);this.delivery.record(at,firstByte,page.length);lastPublication=now;
+            this.bandwidth.sample(page.length,now-lastPublication,cacheHit);
+            this.delivery.record(at,firstByte,page.length,{intervalStart:lastPublication,kind:run.metadata?'metadata':run.speculative?'speculative':'media',capWaitMs:mediaCapWait(response)});lastPublication=now;
             if(this.pending.get(index)===slot.promise)this.pending.delete(index);run.slots.delete(index);slot.resolve(page);
             run.next+=page.length;filled=0;page=new Uint8Array(Math.min(PAGE,run.end-run.next));
           }
@@ -409,7 +419,7 @@ export class RangeReader implements ByteReader {
     }catch(error){await response.body?.cancel().catch(()=>{});if(error instanceof RangeFailure&&!signal.aborted)this.lifetime.abort(error);throw error;}
   }
 
-  private async request(index: number, signal: AbortSignal,scope:ReadEpoch): Promise<Uint8Array> {
+  private async request(index: number, signal: AbortSignal,scope:ReadEpoch,media:boolean): Promise<Uint8Array> {
     const start = index * PAGE;
     const end = Math.min(start+PAGE-1,this.total === null ? Number.MAX_SAFE_INTEGER : this.total-1);
     if (end < start) throw new RangeFailure('Original page exceeds source length');
@@ -428,7 +438,7 @@ export class RangeReader implements ByteReader {
       if (written !== expected) throw new TypeError('Original range body was truncated');
       this.notePage(scope,index,total);
       this.bandwidth.sample(written,performance.now()-at,Number(response.headers.get('Age')??0)>0||/hit/i.test(response.headers.get('X-Cache')??''));
-      this.delivery.record(at,firstByte,written);
+      this.delivery.record(at,firstByte,written,{kind:media?'media':'metadata',capWaitMs:mediaCapWait(response)});
       this.metrics.bytes += written; this.metrics.milliseconds += performance.now()-at;
       return bytes;
     } catch (error) { if (!response.body?.locked) await response.body?.cancel().catch(() => {}); throw error; }

@@ -213,6 +213,7 @@ export class PlaybackCore {
       ]),startup);
       if(!this.current(run))return;
       playbackMark('decode:ready');
+      run.deliveryMark=(source.kind==='file'?source.reader:source.segments).delivery.mark();
       source.audio.setVolume(this.volume,this.muted);source.audio.setRate(this.rate);
       void this.videoPackets(run,video,positionUs,signal);
       if(audio)void this.audioPackets(run,audio,positionUs,signal);else run.audioEnded=true;
@@ -250,12 +251,16 @@ export class PlaybackCore {
     const delivery=(source.kind==='file'?source.reader:source.segments).delivery;
     const reserve=new StartBuffer(),began=performance.now();
     const minimum=this.audio?0.08:0;
-    let buffered=0,ended=false;
+    let buffered=0,ended=false,queueRisk=0;
     for(;;){
       signal.throwIfAborted();if(!this.current(run))return;
       let bitrate=0;
       for(const kind of ['video','audio'] as const)if(run.packetDurationUs[kind]>0)bitrate+=run.packetBytes[kind]*8000000/run.packetDurationUs[kind];
-      reserve.observe(delivery.since(run.deliveryMark),bitrate||null);
+      const admission=delivery.since(run.deliveryMark);
+      if(admission.capWaitMs!==null)queueRisk=Math.max(queueRisk,admission.capWaitMs);
+      const mediaBitrate=source.kind==='file'?Math.max(source.reader.mediaBitrateBps??0,bitrate):bitrate;
+      reserve.observe(admission,mediaBitrate||null,
+        source.kind==='file'?source.reader.forwardReserveBytes:0,queueRisk>0?queueRisk:admission.capWaitMs);
       buffered=Math.max(0,((this.audio?run.audioBufferedUntilUs:run.readAheadEndUs)-positionUs)/1e6);
       ended=this.audio?run.audioEnded&&run.audioTailReported:run.videoEnded;
       if(!this.playing||buffered>=Math.max(minimum,reserve.targetSeconds)||ended)break;
