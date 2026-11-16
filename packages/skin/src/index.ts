@@ -6,3 +6,5 @@ export { loadFonts, type DocumentFont } from './fonts';
 export type { Viewport } from './css';
 export type { Accessor, Card, Ctx, Destination, DetailModel, Env, HomeModel } from './vocabulary';
 export * from './widgets/player';
+export { searchView } from './widgets/search/view';
+export type { Hit, SearchView } from './widgets/search/model';
