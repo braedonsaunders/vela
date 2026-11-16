@@ -1,0 +1,126 @@
+import { afterEach, describe, expect, test } from 'bun:test';
+import { EtherAdapter } from '../src/adapter/ether';
+import { VelaError } from '../src/adapter/errors';
+import { FakeCredentials, restoreFetch, routeFetch, tokens } from './helpers';
+
+afterEach(restoreFetch);
+
+const ORIGIN = 'https://ether.example';
+const ether = (credentials = new FakeCredentials(), onRejected?: () => void) => new EtherAdapter(ORIGIN, credentials, 'web-1', onRejected);
+const searchAnswer = { query: 'heat', generation: 1, items: [], continuation: 'exhausted' };
+
+describe('EtherAdapter', () => {
+  test('search posts the fast and descriptive modes under /vela/v0 with bearer and device', async () => {
+    const seen = routeFetch({ 'POST /vela/v0/search': searchAnswer });
+    const adapter = ether();
+    await adapter.search({ query: 'heat', generation: 1, idempotencyKey: 'k1' });
+    await adapter.searchByDescription({ query: 'heat', generation: 1, idempotencyKey: 'k2' });
+    expect(seen.map(s => s.body)).toEqual([
+      { query: 'heat', generation: 1, idempotencyKey: 'k1', mode: 'fast' },
+      { query: 'heat', generation: 1, idempotencyKey: 'k2', mode: 'descriptive' },
+    ]);
+    expect(seen[0]!.headers.get('authorization')).toBe('Bearer token-1');
+    expect(seen[0]!.headers.get('x-vela-device-id')).toBe('device-test');
+    expect(seen[0]!.headers.get('content-type')).toBe('application/json');
+  });
+
+  test('queries drop undefined values, encode path segments and join channel ids', async () => {
+    const seen = routeFetch({
+      'GET /vela/v0/live/guide': { items: [], continuation: 'exhausted', from: 'a', until: 'b' },
+      'GET /vela/v0/titles/a%2Fb': { title: {} },
+    });
+    const adapter = ether();
+    await adapter.guide({ from: '2026-03-10T00:00:00Z', until: '2026-03-11T00:00:00Z', channelIds: ['c1', 'c 2'] });
+    expect(seen[0]!.url.search).toBe('?from=2026-03-10T00%3A00%3A00Z&until=2026-03-11T00%3A00%3A00Z&channelIds=c1%2Cc%202');
+    await adapter.detail('a/b');
+    expect(seen[1]!.url.pathname).toBe('/vela/v0/titles/a%2Fb');
+  });
+
+  test('cacheable answers are revalidated with their ETag and reused on 304', async () => {
+    let calls = 0;
+    const seen = routeFetch({ 'GET /vela/v0/live/channels': () => {
+      calls++;
+      return calls === 1
+        ? new Response(JSON.stringify({ items: [{ id: 'c1' }], continuation: 'exhausted' }), { headers: { ETag: '"v1"', 'Content-Type': 'application/json' } })
+        : new Response(null, { status: 304 });
+    } });
+    const adapter = ether();
+    const first = await adapter.channels();
+    const second = await adapter.channels();
+    expect(seen[0]!.headers.has('if-none-match')).toBe(false);
+    expect(seen[1]!.headers.get('if-none-match')).toBe('"v1"');
+    expect(second).toEqual(first);
+    // A new client declaration changes what the server answers: the cache is dropped.
+    adapter.setCapabilityContext('web-2');
+    routeFetch({ 'GET /vela/v0/live/channels': (r: { headers: Headers }) => { expect(r.headers.has('if-none-match')).toBe(false); return { items: [], continuation: 'exhausted' }; } });
+    expect((await adapter.channels()).items).toEqual([]);
+  });
+
+  test('a no-store answer is never kept', async () => {
+    const seen = routeFetch({ 'GET /vela/v0/titles/t1': () => new Response(JSON.stringify({ partial: true }), { headers: { ETag: 'W/"p"', 'Cache-Control': 'private, no-store' } }) });
+    const adapter = ether();
+    await adapter.detail('t1');
+    await adapter.detail('t1');
+    expect(seen[1]!.headers.has('if-none-match')).toBe(false);
+  });
+
+  test('a 401 rotates the tokens once and resends', async () => {
+    const credentials = new FakeCredentials(tokens('old'));
+    const rotated = tokens('new');
+    const seen = routeFetch({
+      'GET /vela/v0/libraries': (r: { headers: Headers }) => r.headers.get('authorization') === 'Bearer new'
+        ? { items: [], continuation: 'exhausted' }
+        : new Response('', { status: 401 }),
+      'POST /vela/v0/auth/refresh': rotated,
+    });
+    await ether(credentials).libraries({});
+    expect(seen.map(s => `${s.method} ${s.url.pathname}`)).toEqual(['GET /vela/v0/libraries', 'POST /vela/v0/auth/refresh', 'GET /vela/v0/libraries']);
+    expect(seen[1]!.body).toEqual({ refreshToken: 'old', device: credentials.device, idempotencyKey: 'refresh-key' });
+    expect(seen[1]!.headers.has('authorization')).toBe(false);
+    expect(credentials.current).toEqual(rotated);
+  });
+
+  test('a refused refresh ends the session', async () => {
+    const credentials = new FakeCredentials();
+    let rejected = 0;
+    routeFetch({
+      'GET /vela/v0/libraries': new Response('', { status: 401 }),
+      'POST /vela/v0/auth/refresh': Response.json({ error: { class: 'auth', code: 'invalid_refresh', message: 'Refresh invalid', retry: { allowed: false } } }, { status: 401 }),
+    });
+    const error = await ether(credentials, () => rejected++).libraries({}).catch(e => e);
+    expect(error).toBeInstanceOf(VelaError);
+    expect(error.detail.code).toBe('invalid_refresh');
+    expect(credentials.current).toBeNull();
+    expect(rejected).toBe(1);
+  });
+
+  test('protocol errors keep their detail and Retry-After', async () => {
+    routeFetch({ 'POST /vela/v0/playback': Response.json(
+      { error: { class: 'capacity', code: 'capacity_exhausted', message: 'Busy', retry: { allowed: true, afterSeconds: 3 } } },
+      { status: 503, headers: { 'Retry-After': '3' } },
+    ) });
+    const error = await ether().startPlayback({ titleId: 't', idempotencyKey: 'k' } as never).catch(e => e);
+    expect(error).toMatchObject({ status: 503, retryAfter: '3', message: 'Busy', detail: { class: 'capacity', code: 'capacity_exhausted' } });
+  });
+
+  test('a body that is not a protocol error becomes a transient failure', async () => {
+    routeFetch({ 'GET /vela/v0/live/channels': new Response('<html>bad gateway</html>', { status: 502 }) });
+    const error = await ether().channels().catch(e => e);
+    expect(error).toMatchObject({ status: 502, detail: { class: 'transient', code: 'http_error', message: 'Server returned 502' } });
+  });
+
+  test('a home whose cursor expired is read again without revalidation', async () => {
+    let calls = 0;
+    const seen = routeFetch({ 'GET /vela/v0/bootstrap': () => ++calls === 1
+      ? Response.json({ error: { class: 'conflict', code: 'cursor_expired', message: 'Refresh', retry: { allowed: false } } }, { status: 409 })
+      : { rows: [] } });
+    expect(await ether().home()).toEqual({ rows: [] } as never);
+    expect(seen).toHaveLength(2);
+  });
+
+  test('signed-out requests that need a session fail before fetching', async () => {
+    const seen = routeFetch({});
+    await expect(ether(new FakeCredentials(null)).libraries({})).rejects.toThrow('Sign in required');
+    expect(seen).toHaveLength(0);
+  });
+});

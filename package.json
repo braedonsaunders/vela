@@ -5,5 +5,10 @@
     "apps/*",
     "packages/*",
     "modules/*"
-  ]
+  ],
+  "scripts": {
+    "test": "bun test ./packages ./modules ./mock-server",
+    "typecheck": "bun tools/typecheck.ts",
+    "check:skins": "for document in packages/protocol/fixtures/skins/cinematic.ts packages/protocol/fixtures/skins/*/document.ts; do bun tools/skin.ts check \"$document\" || exit 1; done"
+  }
 }
