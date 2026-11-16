@@ -287,14 +287,17 @@ final class VelaPlayerView: ExpoView {
     }
 
     /// How mpv hands its picture to the display. HDR asks for the display's HDR mode through the
-    /// swapchain's colour space (`target-colorspace-hint`). On tvOS, SDR does not: the hint tags the
-    /// layer ITU-R 709, which Core Animation converts on the way to the TV, lifting the shadows and
-    /// midtones into a washed-out picture. Untagged, mpv's BT.1886 output reaches the TV as the
-    /// film's own values, as the system player's video does.
+    /// swapchain's colour space (`target-colorspace-hint`). On tvOS, SDR does not: tvOS composites
+    /// in sRGB and converts to the TV's BT.1886 signal on the way out (so a UI made for monitors
+    /// looks the same on a TV), and any layer whose curve is not sRGB is converted again on top:
+    /// the hint's ITU-R 709 layer, or BT.1886 values in an sRGB layer, lift the shadows and
+    /// midtones into a flat, washed-out picture beside the system player. mpv encodes sRGB into an
+    /// sRGB layer instead, which the output conversion undoes exactly: the TV gets the film's own
+    /// BT.1886 values, as it does from the system player.
     private static func colourOptions(_ facts: VideoFacts?) -> [String: String] {
         #if os(tvOS)
         if facts?.dynamicRange == "sdr" {
-            return ["target-colorspace-hint": "no", "target-trc": "bt.1886", "target-prim": "bt.709"]
+            return ["target-colorspace-hint": "no", "target-trc": "srgb", "target-prim": "bt.709"]
         }
         #endif
         return ["target-colorspace-hint": "yes"]
