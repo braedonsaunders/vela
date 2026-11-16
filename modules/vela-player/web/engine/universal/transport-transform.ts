@@ -4,6 +4,25 @@ export function transformUpstreamTransport(path:string,source:string,audit=false
   const module=JSON.stringify(new URL('./transport.ts',import.meta.url).pathname);
   const authModule=JSON.stringify(new URL('../media-auth.ts',import.meta.url).pathname);
   const auditModule=JSON.stringify(new URL('./buffer-audit.ts',import.meta.url).pathname);
+  if(normalized.endsWith('/pipeline/DecodeWorkerProtocol.ts')){
+    // The desktop shell serves immutable engine assets from its secure origin.
+    // Restrict the extra scheme to that origin and its asset path.
+    const anchor = "return (parsedURL.protocol === 'http:' || parsedURL.protocol === 'https:')";
+    if(source.split(anchor).length!==2)throw new Error('Pinned codec asset URL validation changed');
+    return source.replace(anchor, "return (parsedURL.protocol === 'http:' || parsedURL.protocol === 'https:' || (parsedURL.protocol === 'vela-app:' && parsedURL.host === 'app' && parsedURL.pathname.startsWith('/vela/')))");
+  }
+  if(normalized.endsWith('/pipeline/CustomPlaybackController.ts')){
+    // An audio-clocked native decoder can stop as soon as the page hides;
+    // hidden-page timers may be throttled before a delayed drain can run.
+    const delay = 'export const CUSTOM_PLAYBACK_BACKGROUND_VIDEO_SUSPENSION_DELAY_MICROSECONDS = millisecondsToMicroseconds(10_000);';
+    const hidden = '            this.pageHiddenAtMicroseconds = this.readMonotonicTime();\n            return false;';
+    const drain = 'const presentationFrame = this.videoDecodeSession.takeFrame(this.getCurrentPresentationTargetTime());';
+    const take = 'this.videoDecodeSession.takeFrame(addMicroseconds(targetTimeMicroseconds, lookaheadMicroseconds))';
+    if([hidden,drain,delay,take].some(value=>source.split(value).length!==2))throw new Error('Pinned background video handling changed');
+    return source.replace(delay, 'export const CUSTOM_PLAYBACK_BACKGROUND_VIDEO_SUSPENSION_DELAY_MICROSECONDS = millisecondsToMicroseconds(0);').replace(hidden, `            this.pageHiddenAtMicroseconds = this.readMonotonicTime();\n            if (this.state === 'playing' && this.canSuspendBackgroundVideo() && this.videoDecodeSession.suspendVideo?.()) {\n                this.videoSuspended = true;\n                this.pendingVideoResyncKeyframe = null;\n            }\n            return false;`)
+      .replace(drain, 'const presentationFrame = this.videoDecodeSession.takeFrame(this.getCurrentPresentationTargetTime(), false);')
+      .replace(take, 'this.videoDecodeSession.takeFrame(addMicroseconds(targetTimeMicroseconds, lookaheadMicroseconds), !this.videoCatchUpActive)');
+  }
   if(normalized.endsWith('/pipeline/CustomDecode.worker.ts')){
     if(audit){
       const settle='await urlSourceRetention.settle(run.urlSource, prepared.durationMicroseconds);';
@@ -37,6 +56,11 @@ export function transformUpstreamTransport(path:string,source:string,audit=false
     const receive="            case 'source-progress':\n                this.telemetry.preparationSourceByteCount = messageValue.byteCount;";
     const report='            ...this.telemetry,\n            earliestQueuedFrameMediaTimeMicroseconds:';
     if(source.split(receive).length!==2||source.split(report).length!==2)throw new Error('Pinned decoder network telemetry hook changed');
+    const take='public takeFrame(targetTimeMicroseconds: Microseconds): DecodedPresentationFrame | null {';
+    const count='        this.telemetry.droppedFrameCount += consumedFrames.length;';
+    if([take,count].some(value=>source.split(value).length!==2))throw new Error('Pinned frame drop accounting changed');
+    source=source.replace(take,'public takeFrame(targetTimeMicroseconds: Microseconds, countDrops = true): DecodedPresentationFrame | null {')
+      .replace(count,'        if (countDrops) this.telemetry.droppedFrameCount += consumedFrames.length;');
     return `import {recordDecoderTransfer,decoderNetwork,type TransferSample} from ${module};\n`+
       (audit?`import {recordDecoderBuffer,decoderBuffer,type SourceBufferAudit} from ${auditModule};\n`:'')+source.replace(receive,
       "            case 'source-progress':\n                "+(audit?"{const buffer=(messageValue as typeof messageValue & {velaBuffer?:SourceBufferAudit}).velaBuffer;if(buffer){recordDecoderBuffer(this,messageValue.generation,buffer);break;}}\n                ":'')+

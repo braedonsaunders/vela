@@ -74,7 +74,11 @@ export class UniversalRuntime {
   private disposing?: Promise<void>;
   private initializing?: AbortSignal;
   private generation = 1;
-  private readonly visibility = () => this.loop?.synchronizePageVisibility(!document.hidden);
+  private readonly visibility = () => {
+    const visible = !document.hidden;
+    this.loop?.synchronizePageVisibility(visible);
+    if (!visible) this.loop?.cancel();
+  };
   constructor(private options: RuntimeOptions) {
     configureEngineAssets({ baseURL: options.assets.baseURL, cacheKey: options.assets.assetKey });
     this.presenter = new TimedPresenter((_generation, reason) => this.failed(`WebGPU presentation: ${reason}`), () => this.loop?.schedule(false), () => this.failed('WebGPU device lost'));
@@ -215,7 +219,7 @@ export class UniversalRuntime {
           createAudioElement:()=>{const audio=document.createElement('audio');this.nativeAudio=audio;return audio;}})),
         audioOutputFactory: audio ? createBrowserCustomAudioOutputFactory(prewarm, getWebGPUAudioOutputManager()) : undefined,
         gpuVideoDecodeSessionFactory: createGPUVideoDecodeSessionFactory(this.presenter, { slicing: true }),
-        eventHandler: event => { if (this.current()) { this.options.onEvent(event); this.loop?.schedule(this.controller?.playbackState === 'playing'); } },
+        eventHandler: event => { if (this.current()) { this.options.onEvent(event); if (!document.hidden) this.loop?.schedule(this.controller?.playbackState === 'playing'); } },
         fallbackHook: request => {
           const state = this.controller?.getTelemetry();
           const decode = state?.videoDecode;
@@ -237,7 +241,8 @@ export class UniversalRuntime {
       const result = await abortable(starting,signal);
       signal.throwIfAborted();
       if (result.status !== 'started') throw new Error(`Original playback did not start: ${result.status}`);
-      this.loop.schedule(true);
+      if (document.hidden) controller.drainBackgroundVideo();
+      else this.loop.schedule(true);
     } catch (error) { await this.dispose(); throw error; }
     finally { signal.removeEventListener('abort',this.abort); this.initializing = undefined; await prewarm?.close(); }
   }
