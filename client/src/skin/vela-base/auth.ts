@@ -1,5 +1,5 @@
 import type { Condition, Node, Style } from '../../../wire/v0/skin';
-import { display, enter, eyebrow, focusRing, is, pill, pulse } from './look';
+import { display, enter, eyebrow, focusRing, is, pill, pulse, veil } from './look';
 
 // The signed-out page (compiled cinematic's AuthStage with its notices, SignIn and
 // QuickConnect): drifting light behind a centred glass card that resizes with its content.
@@ -71,7 +71,7 @@ export const field: Style = {
   padding: '0px 18px',
   'border-radius': '14px',
   border: '1px solid $ui.glassEdge',
-  'background-color': '#ffffff12',
+  'background-color': '$ui.control',
   color: '$ui.ink',
   'font-size': '16px',
   outline: 'none',
@@ -128,8 +128,8 @@ export const signIn: Node = {
         gap: '12px',
         padding: '16px',
         'border-radius': '16px',
-        'background-color': '#dcb99812',
-        border: '1px solid #dcb99840',
+        'background-color': 'color-mix(in srgb, $ui.accent 7%, transparent)',
+        border: '1px solid color-mix(in srgb, $ui.accent 25%, transparent)',
       },
       children: [
         {
@@ -194,7 +194,7 @@ export const signIn: Node = {
         padding: '12px 14px',
         'border-radius': '14px',
         'background-color': '$ui.alert',
-        border: '1px solid #c0703f4d',
+        border: '1px solid color-mix(in srgb, $ui.live 30%, transparent)',
       },
       children: [
         {
@@ -233,7 +233,7 @@ export const signIn: Node = {
             transition:
               'background-color 180ms linear, opacity 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)',
           } as Style,
-          hover: { 'background-color': '#ffffff' },
+          hover: { 'background-color': '$ui.inkHover' },
           focus: { 'box-shadow': focusRing },
           children: [
             {
@@ -396,9 +396,9 @@ export const quickConnect: Node = {
               'align-items': 'center',
               'justify-content': 'center',
               'border-radius': '12px',
-              'background-color': '#0c0e12e6',
+              'background-color': '$ui.popover',
               border: '1px solid $ui.glassEdge',
-              'box-shadow': 'inset 0px 1px 0px #ffffff2e',
+              'box-shadow': 'inset 0px 1px 0px $ui.glassEdgeStrong',
               'font-family': 'ui-monospace, "SF Mono", Menlo, monospace',
               'font-size': '24px',
               'font-weight': '600',
@@ -493,7 +493,7 @@ export const auth: Node = {
           left: '-22vmax',
           top: '-30vmax',
           opacity: '0.5',
-          'background-image': 'radial-gradient(circle, #c0703f 0%, #090b0e00 68%)',
+          'background-image': 'radial-gradient(circle, #c0703f 0%, #c0703f00 68%)',
         }),
         aurora('velaAuroraB', {
           width: '80vmax',
@@ -501,7 +501,7 @@ export const auth: Node = {
           right: '-30vmax',
           bottom: '-42vmax',
           opacity: '0.55',
-          'background-image': 'radial-gradient(circle, #1f5a6b 0%, #090b0e00 66%)',
+          'background-image': 'radial-gradient(circle, #1f5a6b 0%, #1f5a6b00 66%)',
         }),
         aurora('velaAuroraC', {
           width: '54vmax',
@@ -509,14 +509,14 @@ export const auth: Node = {
           left: '34%',
           top: '18%',
           opacity: '0.35',
-          'background-image': 'radial-gradient(circle, #5b2a4a 0%, #090b0e00 70%)',
+          'background-image': 'radial-gradient(circle, #5b2a4a 0%, #5b2a4a00 70%)',
         }),
         {
           type: 'box',
           style: {
             position: 'absolute',
             inset: '0px',
-            'background-image': 'radial-gradient(ellipse 110% 85% at 50% 42%, #090b0e00 35%, #000000b3 100%)',
+            'background-image': `radial-gradient(ellipse 110% 85% at 50% 42%, ${veil(0)} 35%, ${veil(70)} 100%)`,
           },
         },
         {
@@ -576,7 +576,7 @@ export const auth: Node = {
             'background-color': '$ui.glass',
             'backdrop-filter': 'blur(28px) saturate(1.4)',
             border: '1px solid $ui.glassEdge',
-            'box-shadow': '0px 40px 120px #00000088, inset 0px 1px 0px #ffffff2e',
+            'box-shadow': '0px 40px 120px $ui.shadow, inset 0px 1px 0px $ui.glassEdgeStrong',
           },
           children: [...authNotice, signIn, quickConnect],
         },

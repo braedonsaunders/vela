@@ -20,7 +20,7 @@ const rise = {
 
 export default {
   schema: 1,
-  renderer: 13,
+  renderer: 15,
   id,
   name: 'Marquee',
   version,
@@ -28,6 +28,18 @@ export default {
   tagline: 'Your media server at home: charcoal hubs, a sidebar and amber accents.',
   preview: asset('preview.jpg'),
   swatches: ['#1f2023', '#eeeeee', '#e9a31b', '#121315', '#2c2e32'],
+  // Marquee's charcoal, chrome and amber, for the routes it inherits (search).
+  ui: {
+    page: '#1f2023', raised: '#2c2e32', ink: '#eeeeee', inkSecondary: '#a7a9ad', inkQuiet: '#74777c',
+    inkInverse: '#1a1a1a', inkHover: '#ffffff', accent: '#e9a31b', onAccent: '#1a1a1a', control: '#ffffff1a',
+    controlHover: '#ffffff2b', glass: '#121315d9', glassEdge: '#ffffff12', glassEdgeStrong: '#ffffff29',
+    popover: '#2a2c30', scrim: '#000000b8', track: '#ffffff33', trackStrong: '#ffffff52',
+    focusHalo: '#e9a31b2e', shadow: '#00000099', skeleton: '#ffffff0d', skeletonLight: '#ffffff14',
+    alert: '#e9a31b1f', live: '#e8513f',
+    font: '"Open Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif',
+    fontDisplay: '"Open Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif',
+    radiusControl: 4, radiusCard: 6, radiusPanel: 8,
+  },
   tokens: {
     page: '#1f2023',
     chrome: '#121315',

@@ -362,10 +362,23 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 const broadcastDoc: SkinDocument = {
-  schema: 1, renderer: 4, id: 'broadcast', name: 'Broadcast', version: '1.0.0', tagline: 'Live TV first: on now, your channels and the guide, with films below.',
+  schema: 1, renderer: 15, id: 'broadcast', name: 'Broadcast', version: '1.0.0', tagline: 'Live TV first: on now, your channels and the guide, with films below.',
   preview: `${ASSETS}/preview.jpg`, swatches: ['#07090d', '#f2f4f7', '#ff3d2e', '#ffc23d', '#141b24'],
   live: { home: true },
   fonts: { display: { family: 'Barlow Condensed', files: [500, 600, 700].map(weight => ({ url: `${ASSETS}/barlow-condensed-${weight}.ttf`, weight, style: 'normal' as const })) } },
+  // Broadcast's night ground, signal red and cue yellow, for the routes it inherits (search, title, library, collection, sign-in).
+  ui: {
+    page: '#07090d', raised: '#121821', ink: '#f2f4f7', inkSecondary: '#b4bdca', inkQuiet: '#7d8898',
+    inkInverse: '#0b0e13', inkHover: '#ffffff', accent: '#ffc23d', onAccent: '#0b0e13',
+    control: 'rgba(255, 255, 255, 0.06)', controlHover: 'rgba(255, 255, 255, 0.12)', glass: '#121821d9',
+    glassEdge: 'rgba(255, 255, 255, 0.14)', glassEdgeStrong: 'rgba(255, 255, 255, 0.24)',
+    popover: '#121821f7', scrim: '#000000bf', track: 'rgba(255, 255, 255, 0.14)',
+    trackStrong: 'rgba(255, 255, 255, 0.28)', focusHalo: '#ffc23d33', shadow: '#00000099',
+    skeleton: 'rgba(255, 255, 255, 0.06)', skeletonLight: 'rgba(255, 255, 255, 0.1)', alert: '#ff3d2e1f',
+    live: '#ff3d2e', font: 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif',
+    fontDisplay: '"Barlow Condensed", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", sans-serif',
+    radiusControl: 3, radiusCard: 4, radiusPanel: 4,
+  },
   tokens: {
     ground: '#07090d', panel: '#121821', 'panel-hi': '#1b2330', plate: 'rgba(255, 255, 255, 0.06)', line: 'rgba(255, 255, 255, 0.07)', line2: 'rgba(255, 255, 255, 0.14)',
     ink: '#f2f4f7', ink2: '#b4bdca', ink3: '#7d8898', paper: '#f4f5f7', 'paper-ink': '#0b0e13', 'paper-ink2': '#4a5361',

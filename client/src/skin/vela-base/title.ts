@@ -9,11 +9,13 @@ import {
   focusRing,
   ghost,
   is,
+  placeholder,
   ready,
   sectionHeading,
   side,
   sideSmall,
   small,
+  veil,
 } from './look';
 
 export const band: Node = {
@@ -97,9 +99,9 @@ export const band: Node = {
             position: 'absolute',
             inset: '0px',
             'background-image': [
-              'linear-gradient(90deg, #090b0ef0 0%, #090b0e70 38%, #090b0e00 72%)',
-              'linear-gradient(0deg, $ui.page 0%, #090b0ed9 20%, #090b0e00 60%)',
-              'linear-gradient(180deg, #07090cb3 0%, #090b0e00 22%)',
+              `linear-gradient(90deg, ${veil(94)} 0%, ${veil(44)} 38%, ${veil(0)} 72%)`,
+              `linear-gradient(0deg, $ui.page 0%, ${veil(85)} 20%, ${veil(0)} 60%)`,
+              `linear-gradient(180deg, ${veil(70)} 0%, ${veil(0)} 22%)`,
             ].join(', '),
           },
         },
@@ -273,7 +275,7 @@ export const band: Node = {
                 transition: 'background-color 180ms linear',
               },
               small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px' },
-              hover: { 'background-color': '#ffffff' },
+              hover: { 'background-color': '$ui.inkHover' },
               focus: { 'box-shadow': focusRing },
               children: [
                 {
@@ -358,7 +360,7 @@ export const episodeRow: Node = {
     padding: '18px 0px',
     'border-style': 'none none solid none',
     'border-bottom-width': '1px',
-    'border-bottom-color': '#ffffff0f',
+    'border-bottom-color': '$ui.glassEdge',
   },
   small: { gap: '14px', 'align-items': 'flex-start' },
   children: [
@@ -377,12 +379,12 @@ export const episodeRow: Node = {
         'background-color': '$ui.raised',
         'flex-shrink': '0',
         scale: '1',
-        'box-shadow': '0px 0px 0px 1px #ffffff0f',
+        'box-shadow': '0px 0px 0px 1px $ui.glassEdge',
         transition:
           'scale 360ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 360ms cubic-bezier(0.16, 1, 0.3, 1)',
       },
       small: { width: '128px' },
-      groupHover: { scale: '1.03', 'box-shadow': '0px 20px 40px -14px #00000088, 0px 0px 0px 1px #ffffff2e' },
+      groupHover: { scale: '1.03', 'box-shadow': '0px 20px 40px -14px $ui.shadow, 0px 0px 0px 1px $ui.glassEdgeStrong' },
       focus: { 'box-shadow': '0px 0px 0px 3px $ui.ink' },
       children: [
         {
@@ -409,7 +411,7 @@ export const episodeRow: Node = {
             display: 'flex',
             'align-items': 'center',
             'justify-content': 'center',
-            'background-image': 'linear-gradient(160deg, #2a2622 0%, #121418 100%)',
+            'background-image': placeholder(160),
           },
           children: [
             {
@@ -428,7 +430,7 @@ export const episodeRow: Node = {
             display: 'flex',
             'align-items': 'center',
             'justify-content': 'center',
-            'background-color': '#090b0e30',
+            'background-color': veil(19),
             opacity: '0',
             transition: 'opacity 360ms cubic-bezier(0.16, 1, 0.3, 1)',
           },
@@ -550,7 +552,7 @@ export const upNext: Node = {
       'border-radius': '20px',
       'background-color': '$ui.glass',
       border: '1px solid $ui.glassEdge',
-      'box-shadow': 'inset 0px 1px 0px #ffffff2e, 0px 24px 60px -20px #00000088',
+      'box-shadow': 'inset 0px 1px 0px $ui.glassEdgeStrong, 0px 24px 60px -20px $ui.shadow',
     },
     small: { 'flex-direction': 'column', 'align-items': 'stretch', gap: '16px', padding: '16px' },
     children: [
@@ -616,7 +618,7 @@ export const upNext: Node = {
           transition: 'background-color 180ms linear',
         },
         small: { 'align-self': 'stretch' },
-        hover: { 'background-color': '#ffffff' },
+        hover: { 'background-color': '$ui.inkHover' },
         focus: { 'box-shadow': focusRing },
         children: [
           {
@@ -717,7 +719,7 @@ export const episodes: Node = {
         'padding-top': '10px',
         'padding-bottom': '10px',
         'border-radius': '16px',
-        'background-color': '#090b0ed1',
+        'background-color': veil(82),
         'backdrop-filter': 'blur(20px) saturate(1.3)',
       },
       small: {
@@ -940,8 +942,8 @@ export const cast: Node = {
                   'border-radius': '$ui.radiusControl',
                   'overflow-x': 'hidden',
                   'overflow-y': 'hidden',
-                  'background-image': 'linear-gradient(135deg, #2a2622 0%, #121418 100%)',
-                  'box-shadow': '0px 0px 0px 1px #ffffff2e, 0px 12px 28px -14px #00000088',
+                  'background-image': placeholder(135),
+                  'box-shadow': '0px 0px 0px 1px $ui.glassEdgeStrong, 0px 12px 28px -14px $ui.shadow',
                 },
                 small: { width: '76px', height: '76px' },
                 children: [
@@ -1026,7 +1028,7 @@ export const titleLoading: Node = {
     ...side,
     'padding-top': '300px',
     'padding-bottom': '48px',
-    'background-image': 'radial-gradient(ellipse 90% 60% at 30% 20%, $ui.skeleton 0%, #090b0e00 70%)',
+    'background-image': `radial-gradient(ellipse 90% 60% at 30% 20%, $ui.skeleton 0%, ${veil(0)} 70%)`,
   } as Style,
   small: { ...sideSmall, 'padding-top': '260px' } as Style,
   children: [
@@ -1063,7 +1065,7 @@ export const title: Node = {
         'overflow-y': 'hidden',
         'border-radius': '$ui.radiusPanel',
         'background-color': '$ui.page',
-        'box-shadow': '0px 50px 160px #000000, 0px 0px 0px 1px $ui.glassEdge',
+        'box-shadow': '0px 50px 160px $ui.shadow, 0px 0px 0px 1px $ui.glassEdge',
       },
       small: { 'border-radius': '0px' },
       children: [
@@ -1082,8 +1084,8 @@ export const title: Node = {
             'box-sizing': 'border-box',
             padding: '13px',
             'border-radius': '22px',
-            border: '1px solid #ffffff24',
-            'background-color': '#1b2028dd',
+            border: '1px solid $ui.glassEdge',
+            'background-color': '$ui.glass',
             'backdrop-filter': 'blur(20px) saturate(1.3)',
           },
           children: [{ type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } }],
