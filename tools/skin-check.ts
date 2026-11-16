@@ -7,11 +7,11 @@
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { resolveDocument } from '../packages/skin/src/resolve';
+import { resolveDocument } from '../packages/skin/src/resolve/index';
 import { BUDGETS } from '../packages/skin/src/resolve/budget';
 import { perfReport } from './skin-budget';
 import { SYMBOLS } from '../packages/skin/src/icons';
-import type { ResolvedDocument, RNode } from '../packages/skin/src/resolve';
+import type { ResolvedDocument, RNode } from '../packages/skin/src/resolve/index';
 import { portabilityReport, type PortabilityFinding } from '../packages/skin/src/resolve/portability';
 import type { SkinDocument } from '../packages/protocol/skin';
 
