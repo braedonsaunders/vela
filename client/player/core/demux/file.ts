@@ -7,7 +7,7 @@ import {
   type InputTrack,
   type Source,
 } from 'mediabunny';
-import { readWaveFormatAudioTrack } from '../../../../vendor/webgpu-player/src/demux/WaveFormatAudioConfiguration';
+import { readWaveFormatAudioTrack } from 'webgpu-player/src/demux/WaveFormatAudioConfiguration';
 import { velaContainerCodec, velaTrackPrivate } from '../../universal/audio/ffmpeg/track-configuration';
 import { canonicalAudioCodec } from '../../universal/audio/packages';
 import { abortable, delay } from '../async';

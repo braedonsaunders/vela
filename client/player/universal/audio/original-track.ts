@@ -1,11 +1,11 @@
 import { Input, UrlSource, ALL_FORMATS } from 'mediabunny';
-import { requireValidByteRangeResponse } from '../../../../vendor/webgpu-player/src/demux/HTTPRangeResponse';
-import { requireSuccessfulMediaHTTPResponse } from '../../../../vendor/webgpu-player/src/demux/MediaFetchPolicy';
-import { readWaveFormatAudioTrack } from '../../../../vendor/webgpu-player/src/demux/WaveFormatAudioConfiguration';
-import type { CustomDecodeAudioMetadataLayout } from '../../../../vendor/webgpu-player/src/pipeline/DecodeWorkerProtocol';
+import { requireValidByteRangeResponse } from 'webgpu-player/src/demux/HTTPRangeResponse';
+import { requireSuccessfulMediaHTTPResponse } from 'webgpu-player/src/demux/MediaFetchPolicy';
+import { readWaveFormatAudioTrack } from 'webgpu-player/src/demux/WaveFormatAudioConfiguration';
+import type { CustomDecodeAudioMetadataLayout } from 'webgpu-player/src/pipeline/DecodeWorkerProtocol';
 import { canonicalAudioCodec } from './packages';
-import { isSupportedCustomAudioInputLayout } from '../../../../vendor/webgpu-player/src/audio/CustomAudioOutputPolicy';
-import { getQualifiedCustomWaveChannelLayout } from '../../../../vendor/webgpu-player/src/audio/processing/CustomWaveChannelLayout';
+import { isSupportedCustomAudioInputLayout } from 'webgpu-player/src/audio/CustomAudioOutputPolicy';
+import { getQualifiedCustomWaveChannelLayout } from 'webgpu-player/src/audio/processing/CustomWaveChannelLayout';
 import { velaContainerCodec } from './ffmpeg/track-configuration';
 import { createAudioPackages, prepareAudioOptions, type VelaAudioOptions } from './upstream';
 

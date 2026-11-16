@@ -5,20 +5,20 @@ import type {
   AudioClockAnchor,
   AudioBufferState,
 } from '../../core/types';
-import AudioWorkletController from '../../../../vendor/webgpu-player/src/audio/output/AudioWorkletController';
-import CustomDecodeAudioBridge from '../../../../vendor/webgpu-player/src/audio/output/CustomDecodeAudioBridge';
+import AudioWorkletController from 'webgpu-player/src/audio/output/AudioWorkletController';
+import CustomDecodeAudioBridge from 'webgpu-player/src/audio/output/CustomDecodeAudioBridge';
 import AudioDecodeWorkerClient, {
   AudioDecodeWorkerPacketBatchBuilder,
   type AudioDecodeWorkerAttempt,
-} from '../../../../vendor/webgpu-player/src/pipeline/AudioDecodeWorkerClient';
+} from 'webgpu-player/src/pipeline/AudioDecodeWorkerClient';
 import type {
   AudioDecodeWorkerInputBatch,
   AudioDecodeWorkerPCMSample,
-} from '../../../../vendor/webgpu-player/src/pipeline/AudioDecodeWorkerProtocol';
-import type { AudioWorkletTelemetry } from '../../../../vendor/webgpu-player/src/audio/output/AudioWorkletProtocol';
-import { configureCustomAudioDestination } from '../../../../vendor/webgpu-player/src/audio/NativeMultichannelAudioOutput';
-import { requireMicroseconds } from '../../../../vendor/webgpu-player/src/TimeMath';
-import { getQualifiedCustomWaveChannelLayout } from '../../../../vendor/webgpu-player/src/audio/processing/CustomWaveChannelLayout';
+} from 'webgpu-player/src/pipeline/AudioDecodeWorkerProtocol';
+import type { AudioWorkletTelemetry } from 'webgpu-player/src/audio/output/AudioWorkletProtocol';
+import { configureCustomAudioDestination } from 'webgpu-player/src/audio/NativeMultichannelAudioOutput';
+import { requireMicroseconds } from 'webgpu-player/src/TimeMath';
+import { getQualifiedCustomWaveChannelLayout } from 'webgpu-player/src/audio/processing/CustomWaveChannelLayout';
 import { createAudioPackages } from './upstream';
 import { canonicalAudioCodec } from './packages';
 import { outputLayout, downmixPolicy } from './policy';

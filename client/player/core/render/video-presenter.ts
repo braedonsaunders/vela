@@ -1,21 +1,21 @@
 import { playbackMark } from '../../timing';
-import GPUVideoDecodeSession from '../../../../vendor/webgpu-player/src/decode/video/gpu/GPUVideoDecodeSession';
-import { getExternalHDRAuthorizationRouteKey } from '../../../../vendor/webgpu-player/src/validation/ExternalHDRPresentationAuthorization';
+import GPUVideoDecodeSession from 'webgpu-player/src/decode/video/gpu/GPUVideoDecodeSession';
+import { getExternalHDRAuthorizationRouteKey } from 'webgpu-player/src/validation/ExternalHDRPresentationAuthorization';
 import type { VideoPackages } from '../../universal/video/packages';
-import Presenter from '../../../../vendor/webgpu-player/src/presentation/WebGPUPresenter';
+import Presenter from 'webgpu-player/src/presentation/WebGPUPresenter';
 import {
   createSDRColorMetadata,
   createPQColorMetadata,
   createHLGColorMetadata,
   type ColorPrimaries,
   type YUVMatrix,
-} from '../../../../vendor/webgpu-player/src/color/ColorMetadata';
+} from 'webgpu-player/src/color/ColorMetadata';
 import {
   createDefaultRenderSettings,
   createHDRToSDRRenderSettings,
-} from '../../../../vendor/webgpu-player/src/presentation/RenderSettings';
-import { createGPUVideoDecodeSessionFactory } from '../../../../vendor/webgpu-player/src/presentation/PresentationSetup';
-import { secondsToMicroseconds } from '../../../../vendor/webgpu-player/src/MediaTime';
+} from 'webgpu-player/src/presentation/RenderSettings';
+import { createGPUVideoDecodeSessionFactory } from 'webgpu-player/src/presentation/PresentationSetup';
+import { secondsToMicroseconds } from 'webgpu-player/src/MediaTime';
 import { abortable } from '../async';
 import type { CoreVideoFrame, VideoPresentation, VideoRoute } from '../decode/video';
 import type { CorePresenter } from '../runtime';

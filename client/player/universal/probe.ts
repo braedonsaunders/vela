@@ -1,6 +1,6 @@
 import { Input, UrlSource, ALL_FORMATS } from 'mediabunny';
-import { requireValidByteRangeResponse } from '../../../vendor/webgpu-player/src/demux/HTTPRangeResponse';
-import { requireSuccessfulMediaHTTPResponse } from '../../../vendor/webgpu-player/src/demux/MediaFetchPolicy';
+import { requireValidByteRangeResponse } from 'webgpu-player/src/demux/HTTPRangeResponse';
+import { requireSuccessfulMediaHTTPResponse } from 'webgpu-player/src/demux/MediaFetchPolicy';
 import { metadataDifference } from './diagnostics';
 import type { OriginalMedia } from './source';
 /** Bounded header/index inspection of the ORIGINAL; never a whole-file fallback.
