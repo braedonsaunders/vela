@@ -174,6 +174,9 @@ function a11yProps(node: RNode, c: Ctx, e: Env) {
   };
   return {
     accessibilityRole: role,
+    role: web && node.role === 'status' ? ('status' as const) : undefined,
+    accessibilityLiveRegion: node.role === 'status' && (web || Platform.OS === 'android')
+      ? ('polite' as const) : undefined,
     accessibilityLabel: label || undefined,
     accessibilityState: state,
     accessibilityElementsHidden: node.hidden || undefined,
