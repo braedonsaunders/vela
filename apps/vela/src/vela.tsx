@@ -95,7 +95,7 @@ export function VelaProvider({ children }: { children: ReactNode }) {
       if (!client.signedIn) setViewer((await client.signIn(USER, PASSWORD)).viewer.name);
       await client.negotiate();
       const [bootstrap, libraryPage] = await Promise.all([client.bootstrap(), client.libraries()]);
-      setHome(homeModel(bootstrap, images, Date.now(), artWidth));
+      setHome(homeModel(bootstrap, images, artWidth));
       setLibraries(libraryPage.items.map(({ id, name, kind, artwork }) => {
         const backdrop = artwork.find(a => a.kind === 'backdrop');
         return { id, name, kind, backdrop: backdrop ? artworkURL(backdrop, 960, 540, images) ?? '' : '' };

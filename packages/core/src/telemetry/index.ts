@@ -36,8 +36,9 @@ export class InteractionQueue {
       if (!batch.wireKey) {
         const bytes = new TextEncoder().encode(JSON.stringify(batch.interactions));
         let suffix: string;
-        if (crypto.subtle) {
-          const digest = await crypto.subtle.digest('SHA-256', bytes);
+        const subtle = globalThis.crypto?.subtle;
+        if (subtle) {
+          const digest = await subtle.digest('SHA-256', bytes);
           suffix = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
         } else {
           // The sequence may restart in deterministic agent drives. Fold in the
