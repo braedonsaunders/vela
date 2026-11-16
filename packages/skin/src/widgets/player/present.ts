@@ -3,7 +3,7 @@
 // facts for the info card. Pure: no React, no clock. A value the engine has not reported stays
 // empty rather than estimated. (The compiled chrome read the same projection from
 // client/player/presentation.ts.)
-import { msg, number } from '@vela/core';
+import { msg, number, second } from '@vela/core';
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../client/player/video-info';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 
@@ -189,10 +189,7 @@ function stats(snapshot: Snapshot | null): PlayerStats {
     required: rate(required),
     headroom: throughput && required ? throughput / required : 0,
     history: peak ? samples.map(v => v / peak) : [],
-    buffer:
-      ahead == null
-        ? ''
-        : number(ahead, { style: 'unit', unit: 'second', unitDisplay: 'short', maximumFractionDigits: 1 }),
+    buffer: ahead == null ? '' : second(ahead, 1),
     resolution: resolutionOf(video),
     video: [codecName(video?.codec), rangeName(video?.dynamicRange ?? undefined)].filter(Boolean).join(' · '),
     delivery: snapshot?.strategy

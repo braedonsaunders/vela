@@ -1,36 +1,13 @@
-// One watch session on the client: start it through the route's playback controller, number
-// the chrome's commands for the view, take the view's snapshots and failures, answer the session
-// commands and refreshes the engine asks for with newer plans, and stop the session on the way
-// out. The controller owns the server and the credentials; this owns the order of things.
+// One watch session on the client, over core's playback slice: start it when the route opens and
+// stop it when the route leaves, number the chrome's commands for the view, take the view's
+// snapshots and failures, and hand the engine's session commands and observations to core, which
+// talks to the server and follows the session. Core owns the server; this owns the order of things.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type {
-  Command,
-  Failure,
-  PlaybackPlan,
-  PlayerObservation,
-  SessionCommand,
-  Snapshot,
-  VelaPlayerProps,
-} from '@vela/player-api';
-import { msg } from '@vela/core';
+import { msg, type PlaybackState, type PlaybackTarget } from '@vela/core';
+import { useVela, useVelaState } from '@vela/core/react';
+import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { CommandInput, PlayerChromeState, StartFailure } from './context';
-
-export type StartOutcome =
-  | { kind: 'plan'; plan: PlaybackPlan }
-  /** The server is preparing the media; ask again after this long. */
-  | { kind: 'preparing'; retryAfterSeconds: number }
-  | { kind: 'refused'; capacity: boolean; message: string };
-
-/** The trusted side of playback: the server adapter and the media credentials behind it. */
-export interface PlaybackController {
-  start(titleId: string): Promise<StartOutcome>;
-  /** Apply a session command; answers the plan that results. */
-  command(plan: PlaybackPlan, command: SessionCommand): Promise<PlaybackPlan>;
-  /** Read the session's current authoritative plan. */
-  refresh(sessionId: string): Promise<PlaybackPlan>;
-  /** Report what the player observed (position, state, ranges); at most one a second. */
-  observe(sessionId: string, observation: PlayerObservation): Promise<void>;
-}
+import { belongs } from './present';
 
 export interface PlaybackSession {
   chrome: Omit<PlayerChromeState, 'title' | 'close'>;
@@ -40,129 +17,99 @@ export interface PlaybackSession {
   stop(): void;
 }
 
-const key = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-
-/** A newer plan of the same session replaces the one held; anything else is ignored. */
-function newer(held: PlaybackPlan | null, next: PlaybackPlan): boolean {
-  return !held || held.sessionId !== next.sessionId || next.revision > held.revision;
-}
-
-function stopCommand(plan: PlaybackPlan): SessionCommand {
+/** A start the server refused, unless core is already asking again on the server's terms. */
+function startFailure(playback: PlaybackState): StartFailure | null {
+  if (playback.phase !== 'failed' || playback.retryAfterSeconds > 0) return null;
   return {
-    kind: 'stop',
-    sourceGeneration: plan.sourceGeneration,
-    seekGeneration: plan.seekGeneration,
-    idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
+    capacity: /capacity/.test(playback.errorCode),
+    message: playback.error || msg('ui.playbackCouldnTBeStarted'),
   };
 }
 
-function words(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : msg('ui.playbackCouldnTBeStarted');
-}
-
-export function usePlaybackSession(controller: PlaybackController, titleId: string): PlaybackSession {
-  const [attempt, setAttempt] = useState(0);
-  const [plan, setPlan] = useState<PlaybackPlan | null>(null);
+export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
+  const vela = useVela();
+  const playback = useVelaState(state => state.playback);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [startFailure, setStartFailure] = useState<StartFailure | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [actionError, setActionError] = useState('');
+  const [refused, setRefused] = useState('');
   const [command, setCommand] = useState<Command | undefined>();
   const nextId = useRef(0);
-  const held = useRef<PlaybackPlan | null>(null);
-  held.current = plan;
-  /** The session last stopped, so leaving after a retry stops it once. */
-  const stopped = useRef('');
+  const position = useRef(0);
+  const { kind, id } = target;
 
-  const adopt = useCallback((next: PlaybackPlan) => {
-    setPlan(current => (newer(current, next) ? next : current));
-  }, []);
+  const begin = useCallback(
+    (positionSeconds?: number) => {
+      setSnapshot(null);
+      setFailure(null);
+      setRefused('');
+      const from = kind === 'title' && positionSeconds !== undefined ? { positionSeconds } : {};
+      void vela.playback.start({ kind, id, ...from } as PlaybackTarget);
+    },
+    [vela, kind, id],
+  );
 
-  // Start (and, while the server prepares the media, ask again when it says to).
   useEffect(() => {
-    if (!titleId) return;
-    let live = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const ask = () => {
-      controller.start(titleId).then(
-        outcome => {
-          if (!live) return;
-          if (outcome.kind === 'plan') adopt(outcome.plan);
-          else if (outcome.kind === 'preparing') timer = setTimeout(ask, Math.max(1, outcome.retryAfterSeconds) * 1000);
-          else setStartFailure({ capacity: outcome.capacity, message: outcome.message });
-        },
-        error => {
-          if (live) setStartFailure({ capacity: false, message: words(error) });
-        },
-      );
-    };
-    setPlan(null);
-    setSnapshot(null);
-    setStartFailure(null);
-    setFailure(null);
-    setActionError('');
-    ask();
-    return () => {
-      live = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, [controller, titleId, attempt, adopt]);
+    if (!id) return;
+    begin();
+    return () => void vela.playback.stop();
+  }, [vela, id, begin]);
 
-  const stop = useCallback(() => {
-    const current = held.current;
-    if (!current || current.state === 'ended' || stopped.current === current.sessionId) return;
-    stopped.current = current.sessionId;
-    controller.command(current, stopCommand(current)).catch(() => undefined);
-  }, [controller]);
-
-  // Leaving the route (or starting over) ends the session it held.
-  useEffect(() => () => stop(), [stop, attempt]);
+  const stop = useCallback(() => void vela.playback.stop(), [vela]);
 
   const send = useCallback((input: CommandInput) => {
     nextId.current += 1;
-    setActionError('');
+    setRefused('');
     setCommand({ ...input, id: nextId.current } as Command);
   }, []);
 
+  // An engine failure it can recover from is retried in place; anything else starts over where it stopped.
   const retry = useCallback(() => {
-    if (failure?.recoverable && held.current) {
+    if (failure?.recoverable && playback.plan) {
       setFailure(null);
       send({ type: 'retry' });
       return;
     }
-    stop();
-    setAttempt(n => n + 1);
-  }, [failure, send, stop]);
+    begin(position.current > 0 ? position.current : undefined);
+  }, [failure, playback.plan, send, begin]);
 
+  const plan = playback.plan;
+  const sessionId = plan?.sessionId ?? '';
   const view: VelaPlayerProps = {
     plan: plan ?? undefined,
     command,
     onSnapshot: next => {
       setSnapshot(next);
+      if (belongs(next, plan)) position.current = next.position;
       if (next.failure === null) setFailure(null);
+      vela.playback.snapshot(next);
     },
     onError: setFailure,
     onCommand: event => {
-      if (!event.ok && event.failure) setActionError(event.failure.message);
+      if (!event.ok && event.failure) setRefused(event.failure.message);
     },
     onObservation: event => {
-      if (held.current?.sessionId === event.sessionId)
-        controller.observe(event.sessionId, event.observation).catch(() => undefined);
+      if (event.sessionId === sessionId)
+        vela.playback.observe(event.sessionId, event.observation).catch(() => undefined);
     },
     onSessionCommand: event => {
-      const current = held.current;
-      if (!current || current.sessionId !== event.sessionId) return;
-      controller
-        .command(current, { ...event.command, idempotencyKey: event.command.idempotencyKey || key() })
-        .then(adopt, error => setActionError(words(error)));
+      if (event.sessionId === sessionId) void vela.playback.command(event.sessionId, event.command);
     },
+    // A grant the server no longer honours: a fresh session from where playback stood.
     onSessionRefresh: event => {
-      controller.refresh(event.sessionId).then(adopt, error => setActionError(words(error)));
+      if (event.sessionId === sessionId) begin(position.current);
     },
   };
 
   return {
-    chrome: { plan, snapshot, startFailure, failure, actionError, send, retry },
+    chrome: {
+      plan,
+      snapshot,
+      startFailure: startFailure(playback),
+      failure,
+      actionError: refused || (playback.phase === 'playing' ? playback.error : ''),
+      send,
+      retry,
+    },
     view,
     stop,
   };
