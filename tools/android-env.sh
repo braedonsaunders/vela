@@ -4,18 +4,18 @@
 # drive, never in ~/Library: ~/Library/Android belongs to another project. Gradle's home and every
 # project's build directory are per worktree, under ~/.scratch/vela-build/<worktree>/.
 
-root="$(git rev-parse --show-toplevel)"
-worktree="$(basename "$root")"
-if [ "$worktree" = "vela" ]; then
-  worktree="$(basename "$(dirname "$root")")"
+vela_android_root="$(git rev-parse --show-toplevel)"
+vela_android_worktree="$(basename "$vela_android_root")"
+if [ "$vela_android_worktree" = "vela" ]; then
+  vela_android_worktree="$(basename "$(dirname "$vela_android_root")")"
 fi
-build="$HOME/.scratch/vela-build/$worktree"
+vela_android_build="$HOME/.scratch/vela-build/$vela_android_worktree"
 
 export JAVA_HOME="/opt/homebrew/opt/openjdk@17"
 export ANDROID_HOME="$HOME/.scratch/android-sdk"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export ANDROID_AVD_HOME="$HOME/.scratch/android-avd"
-export GRADLE_USER_HOME="$build/gradle-home"
+export GRADLE_USER_HOME="$vela_android_build/gradle-home"
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 
 # Small daemons on the shared 24 GB machine, one ABI, and build output on the scratch drive.
@@ -35,9 +35,9 @@ cat > "$GRADLE_USER_HOME/init.d/build-dirs.gradle" <<EOF
 // Expo's inline-module generator refuses output outside one.
 allprojects {
   if (path != ":" && !projectDir.path.contains("/node_modules/")) {
-    layout.buildDirectory = new File("$build/gradle-build/android/" + rootProject.name + path.replace(":", "/"))
+    layout.buildDirectory = new File("$vela_android_build/gradle-build/android/" + rootProject.name + path.replace(":", "/"))
   }
 }
 EOF
 
-unset root worktree build
+unset vela_android_root vela_android_worktree vela_android_build
