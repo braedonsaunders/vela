@@ -6,6 +6,8 @@ export const sans = '$ui.font';
 // The document's page at an alpha: veils and fades over art, so a light document fades to its paper.
 export const veil = (pct: number) => `color-mix(in srgb, $ui.page ${pct}%, transparent)`;
 // A card or still with no picture: the raised surface, lifted toward the ink at its top corner.
+// A card's corner: the document's card radius, or that much tighter (Cinematic's posters are 12px of 14).
+export const cardRadius = (tighter: number) => `max(0px, $ui.radiusCard - ${tighter}px)`;
 export const placeholder = (angle: number) =>
   `linear-gradient(${angle}deg, color-mix(in srgb, $ui.raised 86%, $ui.ink) 0%, $ui.raised 100%)`;
 export const enter = (delay: number) => `velaEnter${delay}`;
@@ -144,7 +146,7 @@ export const rowSkeleton: Node = {
                 {
                   width: 'clamp(150px, 12.4vw, 232px)',
                   height: 'clamp(225px, 18.6vw, 348px)',
-                  'border-radius': '12px',
+                  'border-radius': cardRadius(2),
                 },
                 { width: '132px', height: '198px' },
               ),

@@ -1,5 +1,5 @@
-import type { GPUVideoDecodeSessionFactory } from '../../../../vendor/webgpu-player/src/decode/video/gpu/GPUVideoDecodeFeed';
-import type { GPUDecoderOutputFormat } from '../../../../vendor/webgpu-player/src/decode/video/gpu/GPUDecodeFormats';
+import type { GPUVideoDecodeSessionFactory } from 'webgpu-player/src/decode/video/gpu/GPUVideoDecodeFeed';
+import type { GPUDecoderOutputFormat } from 'webgpu-player/src/decode/video/gpu/GPUDecodeFormats';
 import { VideoPackages } from '../../universal/video/packages';
 import { abortable } from '../async';
 import type { EncodedPacket, VideoTrack } from '../types';

@@ -1,5 +1,5 @@
 import { videoInfo } from '../video-info';
-import { configureEngineAssets } from '../../../vendor/webgpu-player/src/EngineAssets';
+import { configureEngineAssets } from 'webgpu-player/src/EngineAssets';
 import { createCoreAudioOutput } from '../universal/audio/core-output';
 import type { OriginalBackend, OriginalRuntimeOptions, UniversalReadout } from '../universal/loader';
 import type { OriginalMedia } from '../universal/source';

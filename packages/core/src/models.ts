@@ -168,6 +168,8 @@ export interface LibraryModel {
   canFavorite: boolean;
   items: Card[];
   more: boolean;
+  /** How many pages the items fill (the next read asks for one more). */
+  pages: number;
 }
 
 export interface CollectionModel {

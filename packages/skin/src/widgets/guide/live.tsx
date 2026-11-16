@@ -28,19 +28,29 @@ function saveData(): boolean {
   return connection?.saveData === true;
 }
 
-/** Wraps the app while a server with live TV is signed in. It follows foreground and reduced motion. */
-export function LiveProvider({ controller, Player, children }: LiveContextValue & { children: ReactNode }) {
+interface ProviderProps {
+  /** The signed-in server's controller; null while signed out or where the server has no live TV. */
+  controller: LiveController | null;
+  Player?: ComponentType<VelaPlayerViewProps>;
+  children: ReactNode;
+}
+
+/** Wraps the app (always, so the tree never remounts when a controller arrives). It follows the
+ * foreground, reduced motion and Save-Data for the controller it is given. */
+export function LiveProvider({ controller, Player, children }: ProviderProps) {
   useEffect(() => {
-    controller.setCanPreview(Player !== undefined);
+    controller?.setCanPreview(Player !== undefined);
   }, [controller, Player]);
 
   useEffect(() => {
+    if (!controller) return;
     controller.setVisible(AppState.currentState !== 'background');
     const sub = AppState.addEventListener('change', state => controller.setVisible(state !== 'background'));
     return () => sub.remove();
   }, [controller]);
 
   useEffect(() => {
+    if (!controller) return;
     let still = false;
     const apply = () => controller.setQuiet(still || saveData());
     AccessibilityInfo.isReduceMotionEnabled().then(on => {
@@ -55,7 +65,7 @@ export function LiveProvider({ controller, Player, children }: LiveContextValue 
     return () => sub.remove();
   }, [controller]);
 
-  const value = useMemo(() => ({ controller, Player }), [controller, Player]);
+  const value = useMemo(() => (controller ? { controller, Player } : null), [controller, Player]);
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
 

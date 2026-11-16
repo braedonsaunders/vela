@@ -15,8 +15,6 @@ const retired = () => new DOMException('Media authorization retired', 'AbortErro
 export class ControllerMediaAccess implements BrowserMediaAccess {
   private provider: ControllerAccess | null = null;
   private value?: MediaAuthorization;
-  /** The current provider's headers were read; `value` is undefined when it has none to attach. */
-  private resolved = false;
   private lifetime = new AbortController();
   private pending?: Promise<boolean>;
   private disposed = false;
@@ -32,7 +30,6 @@ export class ControllerMediaAccess implements BrowserMediaAccess {
       this.lifetime = new AbortController();
       this.provider = provider;
       this.value = undefined;
-      this.resolved = false;
       this.pending = undefined;
     }
     if (this.pending) return this.pending;
@@ -49,32 +46,27 @@ export class ControllerMediaAccess implements BrowserMediaAccess {
         throw new Error('Media authorization unavailable');
       }
       this.assertCurrent(provider, lifetime);
-      // An access without headers (Ether's broker paths) attaches nothing: the view fetches as without one.
-      const next = Object.keys(headers).length
-        ? parseMediaAuthorization(
-            JSON.stringify({
-              handle: this.value?.handle ?? crypto.randomUUID(),
-              origin: provider.origin,
-              pathPrefix: provider.pathPrefix,
-              headers,
-            }),
-          )
-        : undefined;
+      const next = parseMediaAuthorization(
+        JSON.stringify({
+          handle: this.value?.handle ?? crypto.randomUUID(),
+          origin: provider.origin,
+          pathPrefix: provider.pathPrefix,
+          headers,
+        }),
+      );
       const changed = replaced || JSON.stringify(next) !== JSON.stringify(this.value);
       if (changed && this.value) {
         this.lifetime.abort();
         this.lifetime = new AbortController();
-        if (next) next.handle = crypto.randomUUID();
+        next!.handle = crypto.randomUUID();
       }
       this.value = next;
-      this.resolved = true;
       return changed;
     })().catch((error) => {
       if (this.provider === provider && this.lifetime === lifetime) {
         this.lifetime.abort();
         this.lifetime = new AbortController();
         this.value = undefined;
-        this.resolved = false;
       }
       throw error;
     });
@@ -92,7 +84,7 @@ export class ControllerMediaAccess implements BrowserMediaAccess {
   }
 
   authorization() {
-    if (this.disposed || this.access() !== this.provider || (this.provider && !this.resolved)) throw retired();
+    if (this.disposed || this.access() !== this.provider || (this.provider && !this.value)) throw retired();
     return this.value ? { ...this.value, headers: { ...this.value.headers } } : undefined;
   }
 
@@ -122,7 +114,7 @@ export class ControllerMediaAccess implements BrowserMediaAccess {
     this.assertCurrent(provider, lifetime);
     signal.throwIfAborted();
     const target = permittedMediaURL(input, this.authorization());
-    if (!provider || !this.value) return target.href;
+    if (!provider) return target.href;
     if (!provider.nativeURL) throw new Error('Native media authorization unavailable');
     let attached: URL;
     try {

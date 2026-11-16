@@ -2,6 +2,7 @@ import type { Node, Style } from '../../../wire/v0/skin';
 import { card } from './cards';
 import {
   bone,
+  cardRadius,
   display,
   enter,
   eyebrow,
@@ -373,7 +374,7 @@ export const episodeRow: Node = {
         position: 'relative',
         width: '220px',
         'aspect-ratio': '16 / 9',
-        'border-radius': '10px',
+        'border-radius': cardRadius(4),
         'overflow-x': 'hidden',
         'overflow-y': 'hidden',
         'background-color': '$ui.raised',
@@ -565,7 +566,7 @@ export const upNext: Node = {
           width: '220px',
           'aspect-ratio': '16 / 9',
           'object-fit': 'cover',
-          'border-radius': '12px',
+          'border-radius': cardRadius(2),
           'flex-shrink': '0',
         },
         small: { width: '100%' },
