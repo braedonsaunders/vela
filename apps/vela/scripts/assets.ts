@@ -9,7 +9,7 @@ import { join, relative } from 'node:path';
 const root = join(import.meta.dir, '../../..');
 const out = join(root, 'apps/vela/src/assets.generated.ts');
 const entries: [string, string][] = [];
-const media = /\.(svg|png|jpe?g|webp|ttf|otf)$/i;
+const media = /\.(svg|png|jpe?g|webp|ttf|otf|woff2?)$/i;
 
 async function walk(dir: string): Promise<string[]> {
   const found: string[] = [];
