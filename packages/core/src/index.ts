@@ -24,3 +24,6 @@ export type { AppearanceModel, DocEntryModel } from './appearance';
 export type { GuideChannel, GuideModel, GuideProgramme } from './live/guide';
 export type { SecretStore } from './session';
 export type { ServerKind } from './session/servers';
+export type { Credentials, MediaAccess, ServerAdapter } from './adapter';
+export { sendCommand } from './adapter/commands';
+export { VelaError } from './adapter/errors';

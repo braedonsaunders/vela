@@ -6,6 +6,7 @@ import type { AppearanceModel } from '../appearance';
 import type { GuideModel } from '../live/guide';
 import type { CollectionModel, Destination, DetailModel, LibraryModel, Row } from '../models';
 import { setLocale, type LocaleContext } from '../i18n';
+import type { ClientCapabilities } from '../wire';
 import { Appearance } from './appearance';
 import { Auth, initialAuth, type AuthState } from './auth';
 import { Catalogue } from './catalogue';
@@ -53,6 +54,8 @@ export interface Vela {
   setLocale(context: LocaleContext): void;
   /** The player's capabilities changed (a new engine, an output change): servers are told again. */
   setMedia(media: MediaCapabilities): void;
+  /** What this client declares it can play (as negotiated with servers). */
+  client(): ClientCapabilities;
   /** The width artwork is sized for; reads after this use it. */
   setArtWidth(width: number): void;
   auth: Auth;
@@ -108,6 +111,7 @@ export function createVela(options: VelaOptions): Vela {
       session.setMedia(media);
       previews.setClient(session.client);
     },
+    client: () => session.client,
     setArtWidth(next) {
       artWidth = bucket(next);
     },
