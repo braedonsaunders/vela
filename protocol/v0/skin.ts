@@ -149,8 +149,8 @@ export interface SkinDocument {
   /** The document's own keyframes (`keyframes: "doc:<name>"` in a preset): opacity, translate (px/%), scale, rotate (deg). */
   keyframes?: Record<string, Record<string, { opacity?: number; translate?: string; scale?: number; rotate?: number }>>;
   templates?: Record<string, Node>;
-  /** One tree per foundation slot; a slot left out uses cinematic's compiled one. */
-  slots: Partial<Record<'shell' | 'home' | 'row' | 'card' | 'status', Node>>;
+  /** One tree per foundation slot; a slot left out is the Vela base's (renderer 15). */
+  slots?: Partial<Record<'shell' | 'home' | 'row' | 'card' | 'status', Node>>;
   /** A tree per route the document draws whole (the route view); a route left out is the Vela base's.
    *  `search` is drawn in home's view, after home's nodes, while a query is open. */
   routes?: Partial<Record<'home' | 'search' | 'title' | 'collection' | 'library' | 'live' | 'watch' | 'auth', Node>>;

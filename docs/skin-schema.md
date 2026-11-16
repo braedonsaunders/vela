@@ -349,8 +349,9 @@ document's `ui` block. A document draws what it wants to own and inherits the re
 - **Inheritance**: a slot or route the document defines replaces the base's (home counts whether it
   is `slots.home` or `routes.home`). Templates, motion, keyframes, fonts, tokens and strings merge by
   name, the document's winning; the base's names start with `vela` (`velaCard`, `velaRow`), so a
-  document that defines `velaCard` restyles the base's lanes on purpose. Home's `status` belongs to
-  whoever draws home, `detail` to whoever draws the title page.
+  document that defines `velaCard` restyles the base's lanes on purpose. Home's `status` and
+  `traits.barMask` belong to whoever draws home, `detail` to whoever draws the title page. `slots` is
+  optional: a document that only sets its look (`ui`, `traits`) inherits every surface.
 - **`ui`**: the base's look, as values: `page`, `raised`, `ink`, `inkSecondary`, `inkQuiet`,
   `inkInverse`, `accent`, `onAccent`, `control`, `controlHover`, `glass`, `glassEdge`,
   `glassEdgeStrong`, `popover`, `scrim`, `track`, `trackStrong`, `focusHalo`, `shadow`, `skeleton`,
