@@ -36,7 +36,7 @@ const Band = createContext(false);
 /** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
 const ReadingStop = createContext(false);
 /** Scroll views of row pagers, by row id, so pageNext/pagePrev can move them. */
-interface Scroller { scrollTo(options: { x: number; animated: boolean }): void }
+interface Scroller { scrollTo(options: { x?: number; y?: number; animated: boolean }): void }
 const pagers = new Map<string, { view: Scroller; x: number; width: number }>();
 /** The masked-view package's class types predate React 19's JSX types. */
 const Masked = MaskedView as unknown as ComponentType<{ style?: ViewStyle; maskElement: ReactNode; children: ReactNode }>;
@@ -233,6 +233,13 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     setUi(u => (u[kind] === on ? u : { ...u, [kind]: on }));
     if (kind !== 'active') groupValue?.report(kind, on);
   };
+
+  // Opening search folds the route (home's hero) and pins the field at its top: the route starts
+  // from its top again, as compiled Cinematic brought search up, whatever it was scrolled to.
+  const searching = !!route && env.query !== '';
+  useEffect(() => {
+    if (searching) scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [searching]);
 
   useEffect(() => {
     if (!node.pager || !fx.scrollX || !rowId) return;
