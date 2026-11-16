@@ -1,8 +1,9 @@
 // A control's menu: a compact glass panel over the control bar with the menu's name above a
 // radio list. On TV focus starts on the active choice and stays inside until the menu closes.
+import { FocusPressable as Pressable } from '../../focus';
 import { BlurView } from 'expo-blur';
 import { useState, type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View } from 'react-native';
 import { PlayerIcon } from './icons';
 import type { PlayerLook } from './look';
 import { Spinner } from './spinner';

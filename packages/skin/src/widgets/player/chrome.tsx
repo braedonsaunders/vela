@@ -3,8 +3,9 @@
 // middle shows the spinner or an honest failure, the bottom bar holds the timeline and the
 // controls with their menus, and the info card sits at the top right. It hides itself while
 // playback runs untouched and comes back on any pointer, key or remote input.
+import { FocusPressable as Pressable } from '../../focus';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { msg } from '@vela/core';
 import type { Focusable } from '../../escape';
 import { useHost } from '../../host';

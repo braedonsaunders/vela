@@ -2,10 +2,11 @@
 // compiled Cinematic's SearchField drew it, on the document's ui look: a glass pill with the
 // search glyph, the query (env.query) and a clear button while there is one. A document that
 // draws its own field places the bare `searchInput` widget instead.
+import { FocusPressable as Pressable } from '../../focus';
 import { msg } from '@vela/core';
 import { BlurView } from 'expo-blur';
 import { useContext, useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
-import { Platform, Pressable, StyleSheet, TextInput, View, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, TextInput, View, type TextStyle, type ViewStyle } from 'react-native';
 import { TextField } from '../common/text-field';
 import Svg, { Path } from 'react-native-svg';
 import { useQueryText } from './query-text';

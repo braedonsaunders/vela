@@ -2,9 +2,10 @@
 // fields, the waiting pulse, a code drawn one tile per character, headings and alerts. Each
 // tracks its own hover, focus and pressed states, so the same look works by pointer, keyboard,
 // the tvOS focus engine and a D-pad.
+import { FocusPressable as Pressable } from '../../focus';
 import { BlurView } from 'expo-blur';
 import { useState, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { TextField } from './text-field';
 import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';

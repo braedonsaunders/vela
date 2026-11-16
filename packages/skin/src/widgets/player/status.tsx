@@ -1,9 +1,10 @@
 // The middle of the screen: nothing while playback runs, the spinner while the engine waits,
 // and a failure card when playback cannot go on: what happened in the server's or engine's
 // words (all streams in use, a refusal, a decoder failure), with Try again and Close.
+import { FocusPressable as Pressable } from '../../focus';
 import { BlurView } from 'expo-blur';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { msg } from '@vela/core';
 import { PlayerIcon } from './icons';
 import type { PlayerLook } from './look';

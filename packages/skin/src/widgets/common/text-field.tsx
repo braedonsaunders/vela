@@ -2,15 +2,28 @@
 // that was edited in the full-screen keyboard keeps its value in state but draws its placeholder
 // once the keyboard closes (and would reopen the keyboard empty). A newly made field draws its
 // value, so on tvOS the field is made again whenever editing ends, and takes the focus back unless
-// editing moved it on (Next on a username focuses the password). Elsewhere this is TextInput itself.
+// editing moved it on (Next on a username focuses the password). Every platform also receives the shared focus treatment.
 import { forwardRef, useCallback, useEffect, useRef, useState, type ComponentRef, type Ref } from 'react';
-import { Platform, TextInput, type TextInputProps } from 'react-native';
+import { Platform, StyleSheet, TextInput, type TextInputProps, type TextStyle } from 'react-native';
+
+import { useFocusStyles } from '../../focus';
+import { focusStyle } from '../../focus-style';
+import { isFocusVisible } from '../../focus-visible';
 
 type Input = ComponentRef<typeof TextInput>;
 
 const REMAKE = Platform.OS === 'ios' && Platform.isTV;
 
-export const TextField: typeof TextInput = REMAKE ? (forwardRef(RemadeField) as unknown as typeof TextInput) : TextInput;
+const NativeField = REMAKE ? forwardRef(RemadeField) : TextInput;
+export const TextField = forwardRef<Input, TextInputProps>(function FocusField(props, ref) {
+  useFocusStyles();
+  const [focused, setFocused] = useState(false);
+  return <NativeField {...props} ref={ref}
+    onFocus={event => { setFocused(isFocusVisible(event.currentTarget)); props.onFocus?.(event); }}
+    onBlur={event => { setFocused(false); props.onBlur?.(event); }}
+    style={[props.style, focused && Platform.OS !== 'web' ? focusStyle(StyleSheet.flatten(props.style)?.transform) as TextStyle : null]}
+  />;
+}) as unknown as typeof TextInput;
 
 function RemadeField(props: TextInputProps, forwarded: Ref<Input>) {
   const [made, setMade] = useState({ generation: 0, focus: false });

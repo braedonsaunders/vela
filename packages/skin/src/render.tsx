@@ -17,6 +17,8 @@ import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
 import { EscapeScope, focusElement, focusTarget, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
+import { useFocusStyles } from './focus';
+import { focusStyle } from './focus-style';
 import { isFocusVisible } from './focus-visible';
 import { RouteFocusContext, useRouteFocus, useRouteFocusContext } from './route-focus';
 import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
@@ -56,6 +58,7 @@ const AGuide = Platform.isTV ? Animated.createAnimatedComponent(TVFocusGuideView
 
 
 export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
+  useFocusStyles();
   useEffect(() => {
     if (host.doc.unsupported.length) console.warn(`${host.doc.name}: rows outside the React Native style matrix: ${host.doc.unsupported.join(', ')}`);
   }, [host.doc]);
@@ -69,6 +72,7 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
 /** A route tree: its root's children scroll in the route's own vertical ScrollView. `after` is a
  * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is open). */
 export function SkinRoute({ host, node, after }: { host: SkinHost; node: RNode; after?: RNode }) {
+  useFocusStyles();
   const focus = useRouteFocus();
   const loading = useRef<SkinHost | null>(null);
   const gridWaiting = useRef(false);
@@ -299,7 +303,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
 
   if (fx.hidden) return null;
 
-  const tvRing = Platform.isTV && ui.focus && (!!node.press || stop) && !tvFocusLook(node) ? ringOf(host.doc) : undefined;
+  const focusRing = ui.focus && (!!node.press || stop) ? focusStyle(style.transform, env.still) : undefined;
   const vertical = !!route || (!!fx.scrollY && !fx.scrollX);
   const stops = Platform.isTV && vertical ? readingStops(node) : undefined;
   const children = node.children.map((child, i) => stops?.has(i)
@@ -321,7 +325,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}
     </>
   );
-  const drawn: Record<string, unknown> = { ...style, ...(swipe ? { touchAction: 'pan-y pinch-zoom' } : {}), ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...tvRing, ...motion };
+  const drawn: Record<string, unknown> = { ...style, ...(swipe ? { touchAction: 'pan-y pinch-zoom' } : {}), ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion, ...focusRing };
   // Web sticky headers add a z-index: 10 wrapper, which puts decorative backdrops
   // above their foreground. Native CSS keeps the document's own stacking order.
   if (web && fx.sticky) drawn.position = 'sticky';
@@ -392,7 +396,8 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       if (focus) requestAnimationFrame(() => focusElement(focus));
     });
     const button = press ? (
-      <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, ownFocusLook(node) ? NO_RING : null]} disabled={disabled}
+      <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} disabled={disabled}
+        {...(web ? { dataSet: { velaFocus: 'frame' } } : {})}
         onPress={onPress}
         onFocus={event => {
           set('focus', isFocusVisible(event.currentTarget));
@@ -526,13 +531,6 @@ function sectionText(node: RNode, ctx: Ctx, env: Env): string {
 }
 const SECTION_TEXT_MAX = 600;
 
-/** Whether the document gives a press box a look for TV focus: its focus look, else its hover look,
- * or a group whose members show its focus. */
-function tvFocusLook(node: RNode): boolean {
-  if (node.group) return true;
-  return [node.base, ...node.states.map(s => s.layer)].some(layer => layer.focus || layer.hover || layer.style.outline === 'auto');
-}
-
 /** The document's ui block, resolved once per document. */
 const uis = new WeakMap<ResolvedDocument, ReturnType<typeof resolveUi>>();
 function uiOf(doc: ResolvedDocument) {
@@ -542,12 +540,6 @@ function uiOf(doc: ResolvedDocument) {
     uis.set(doc, ui);
   }
   return ui;
-}
-
-/** A TV focus ring in the document's accent, for a press box the document gave no focus look:
- * on TV focus is the only pointer, so a focused control must always show it. */
-function ringOf(doc: ResolvedDocument) {
-  return { outlineColor: uiOf(doc).accent, outlineStyle: 'solid', outlineWidth: 3, outlineOffset: 3 };
 }
 
 /** A horizontal row on TV is one focus destination: moving up or down onto it from any card in
@@ -606,15 +598,8 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
   );
 }
 
-/** The press button inside a box never draws the platform ring: the box is the clipping element,
- * so the ring is the box's own, drawn from its focus look (`outline: auto`, written in the style or
- * the focus look, draws the platform ring on the box while focused). A press box without any focus
- * look keeps the button's ring. */
-function ownFocusLook(node: RNode): boolean {
-  const layers = [node.base, ...node.states.map(s => s.layer)];
-  return web && layers.some(layer => layer.focus || layer.style.outline === 'auto');
-}
-const NO_RING = { outlineWidth: 0 } as ViewStyle;
+// The guaranteed ring is drawn inside the frame; web focus-visible overrides the button too.
+const NO_RING = (web ? { outlineStyle: 'none', outlineWidth: 0 } : { outlineWidth: 0 }) as ViewStyle;
 
 interface MaskProps {
   linear?: Effects['mask'];

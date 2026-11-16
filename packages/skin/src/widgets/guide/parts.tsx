@@ -1,9 +1,10 @@
 // Small pieces every Live TV surface draws with: a symbol, a line of text in the guide's type, a
 // pressable that knows its hover and focus, the live badge, a progress bar and a channel logo
 // fitted on its neutral tile.
+import { FocusPressable as Pressable } from '../../focus';
 import { Image } from 'expo-image';
 import { useState, type ReactNode } from 'react';
-import { Platform, Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { msg } from '@vela/core';
 import { SYMBOLS } from '../../icons';

@@ -5,9 +5,10 @@
 // timeline is a focusable slider: the arrows step ten seconds (the chrome's shortcuts), Page Up and
 // Page Down a minute, Home and End go to the start and the end. A bubble over the thumb shows the
 // target time and, once a session offers trickplay, its frame.
+import { FocusPressable as Pressable } from '../../focus';
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { Platform, Pressable, Text, View, type GestureResponderEvent } from 'react-native';
+import { Platform, Text, View, type GestureResponderEvent } from 'react-native';
 import { msg } from '@vela/core';
 import type { PlayerChromeState } from './context';
 import type { PlayerLook } from './look';

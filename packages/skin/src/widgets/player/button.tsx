@@ -2,8 +2,9 @@
 // show the document's accent ring on the button itself, and on TV the focused control fills
 // with the ink and wears the ring too, so it reads from across the room and stands apart from
 // the play toggle, which is always filled.
+import { FocusPressable as Pressable } from '../../focus';
 import { useState, type Ref } from 'react';
-import { Pressable, View, type ViewStyle } from 'react-native';
+import { View, type ViewStyle } from 'react-native';
 import type { Focusable } from '../../escape';
 import { isFocusVisible } from '../../focus-visible';
 import { PlayerIcon, type PlayerIconName } from './icons';

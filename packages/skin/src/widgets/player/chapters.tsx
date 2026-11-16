@@ -1,8 +1,9 @@
 // Chapters as a strip over the timeline: one card per chapter with its start time and name,
 // the one playing marked and filling as it plays. Choosing a card seeks to its start. The
 // strip opens on the chapter playing (on TV, with focus on it).
+import { FocusPressable as Pressable } from '../../focus';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { msg } from '@vela/core';
 import type { PlayerLook } from './look';
 import { timecode, type ChapterMark, type PlayerView } from './present';

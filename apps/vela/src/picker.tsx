@@ -1,12 +1,12 @@
 // The appearance picker (the documents' `openPicker` action): every built-in skin document by
 // its name, tagline, preview and swatches. Choosing one applies it at once and is remembered on
 // this device. It is the app's own chrome, drawn the same under every document.
+import { FocusPressable as Pressable } from '@vela/skin/src/focus';
 import { Image, type ImageSource } from 'expo-image';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   BackHandler,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
