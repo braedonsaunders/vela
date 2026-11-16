@@ -2861,9 +2861,16 @@ class PlaybackEngine {
           signal: job.signal,
           retry,
           mediaRequests: this.mediaAccess,
-          onFailure: (reason) => {
-            if (current())
-              this.recover(new PlaybackFault(reason, "decoder"), this.originalGeneration);
+          onFailure: (reason, _position, transport) => {
+            if (current()) {
+              const generation = this.originalGeneration;
+              if (transport?.httpStatus === 410 && this.awaitingReplacement(generation)) {
+                this.status = "loading";
+                this.publish();
+                return;
+              }
+              this.recover(new PlaybackFault(reason, "decoder"), generation);
+            }
           },
           onEvent: (event) => {
             if (!current() || !this.original)
@@ -2871,7 +2878,8 @@ class PlaybackEngine {
             if (event.type === "waiting")
               this.status = "buffering";
             else if (event.type === "playing" || event.type === "statechange") {
-              this.status = this.original.readout.state;
+              const state = this.original.readout.state;
+              this.status = state === "failed" && this.awaitingReplacement(this.originalGeneration) ? "loading" : state;
               if (this.status === "playing") {
                 this.failure = null;
                 if (this.pendingSeek?.authorized)
@@ -3064,6 +3072,12 @@ class PlaybackEngine {
       seekGeneration: this.controller.seek,
       idempotencyKey: randomId()
     } });
+  }
+  awaitingReplacement(token) {
+    if (!this.session?.serverControlled || !this.controller.current(token))
+      return false;
+    const pending = this.pendingSwitch;
+    return !!(pending && pending.sessionId === token.sessionId && pending.source === token.source && pending.seek === token.seek || this.pendingSeek && !this.pendingSeek.authorized || this.pendingTracks);
   }
   fail(failure) {
     const position = this.position();

@@ -801,3 +801,59 @@ playback thread storage, independent of scratch. The scalar policy proof also
 kept 1.8 seconds for absent/empty/malformed/negative/nonfinite hints, low
 goodput and insufficient forward bytes. The real-app header-enabled matrix
 remains necessary before any launch/default claim.
+
+## Pre-excision 1917 matrix and HLS root fixes
+
+With signed 0.1.43 and candidate `678c0e0109cf1334`, Ether independently pinned
+release `01faec3ef47348ebf74bdab902d0b7347d430727`. Its actual probe was HEVC
+Main10 3840x2160, 7139.488 seconds, 74,481,494,233 bytes, with English TrueHD
+eight-channel/48 kHz, alternate AC3 and 26 PGS tracks. The core rendered the
+HDR10 base layer of the DV7 source; no EL/FEL or Atmos-object claim is made.
+Detail prewarm filled opening bytes, so these are warm real-app correctness
+results, not another cold pair.
+
+Direct playback, PGS (39,772 nontransparent caption pixels), Off, and local
+TrueHD -> AC3 5.1 -> TrueHD switching worked without source replacement,
+underruns or completed-page refetch. One retry recorded one dropped frame at
+the off-grid seek; the earlier bounded sample had none. The UI scrubber rounds
+to 0.1 seconds: actual tested targets were 61.4 and paused 220.3, not the
+unrounded driver arguments. Every app run stopped and closed its browser; the
+first direct-title cleanup lacked the Profile route, so Ether revoked only its
+exact device. Later cleanups navigated Home and revoked through UI (200).
+Ether independently unpinned and read zero sessions/encoders.
+
+The final 720p quality transition failed the matrix: 468 decoded, 288 presented,
+178 drops and video lag above three seconds after a 30-second sample. Ether
+confirmed software 4K HEVC decode before VideoToolbox encode, running 0.948x
+(22.8 fps) with segments 3–9 each awaited 3.3–4.1 seconds. Its hardware-decode
+repair is pending; this is not a valid client throughput comparison. Returning
+to Original also exposed a real host race: the server retired old HLS before
+the switch reply reached Contract, and a correct 410 triggered decoder recovery.
+No full matrix/default/excision pass is claimed.
+
+A generated local fixture exposed another concrete HLS issue: the shared serial
+packet-operation queue held a future video GET while audio needed cached earlier
+segments. Holding segment 2 caused the prior core's eight-second progress stall.
+HLS packet reads now run concurrently over the same epoch and bounded segment
+objects; metadata remains serialized/search-bounded, and file search budgets
+are unchanged. With that segment still blocked, the corrected core primed cached
+audio and reached playing with no recovery. Releasing the segment continued
+playback. This does not make a below-realtime producer faster.
+
+Segment HTTP status now survives demux Error causes and reaches the host as a
+scalar. Only 410 while a matching current generation awaits a server
+switch/seek/track replacement is treated as expected retirement. Authorization
+rejection/timeouts still fail, and unsolicited 410 still recovers. The local
+delayed-reply switch reproduced two recoveries with the prior host (including
+native fallback), versus zero with the fix; the replacement remained on core.
+Separate unsolicited-410 and rejected-switch cases reached recovery/failure as
+expected. The first attempted race fixture instead hit the serial startup stall
+and is not counted as a 410 comparison.
+
+Scoped player TypeScript and host/runtime assembly passed; corrected runtime
+is `1db03fbb7c9919f6`. Private scalar records are `retirement-{before-expected,
+after-concurrent,after-expected,after-unsolicited,after-reject}.json` in playback
+thread storage. These are generated local state/cancellation proofs under WATCH
+memory pressure, not performance benchmarks. All dedicated contexts/profiles
+closed and the fixture server stopped. The header-enabled, repaired-producer
+real-app matrix is still the next gate before dependency extraction/excision.
