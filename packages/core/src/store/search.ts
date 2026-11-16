@@ -7,6 +7,7 @@ import type * as V from '../wire';
 import { hasAiSearch, hasDescriptiveSearch, type AiSearch } from '../adapter/capabilities';
 import { card } from '../discovery/models';
 import { liveSearch } from '../live/search';
+import { randomId } from '../protocol/id';
 import type { Card } from '../models';
 import type { Session } from './session';
 import { message, type Load, type StateBox } from './state';
@@ -53,7 +54,13 @@ export class Search {
   private pause: ReturnType<typeof setTimeout> | undefined;
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private aiPoll: ReturnType<typeof setTimeout> | undefined;
-  private job: { generation: number; query: string; id?: string; status?: string } | undefined;
+  private job: { scope: string; generation: number; query: string; id?: string; status?: string } | undefined;
+  /**
+   * Makes each generation's idempotency keys unique to this run and session. Generations restart
+   * at 1 after a launch or sign-in, and a key the server has already seen with another query is
+   * refused as reused ("heat" collided with an earlier launch's "inception" at generation 2).
+   */
+  private scope = randomId();
 
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -63,6 +70,7 @@ export class Search {
     session.onReset(() => {
       this.stopTimers();
       this.job = undefined;
+      this.scope = randomId();
       this.box.update('search', () => initialSearch);
     });
   }
@@ -115,7 +123,7 @@ export class Search {
   private async fast(query: string, generation: number): Promise<void> {
     try {
       const connection = await this.session.ready();
-      const result = await connection.adapter.search({ query, generation, idempotencyKey: `search-${this.session.epoch}-${generation}` });
+      const result = await connection.adapter.search({ query, generation, idempotencyKey: `search-${this.scope}-${generation}` });
       const images = await connection.images();
       if (!this.current(generation) || result.generation !== generation) return;
       const live = liveSearch(result.live, images, Date.now());
@@ -183,14 +191,14 @@ export class Search {
         this.patch('ai', { status: 'unavailable' });
         return;
       }
-      const current: NonNullable<Search['job']> = { generation, query };
+      const current: NonNullable<Search['job']> = { scope: this.scope, generation, query };
       this.job = current;
       this.patch('ai', { status: 'loading' });
-      const job = await api.startAiSearch({ query, generation, idempotencyKey: `ai-${this.session.epoch}-${generation}` });
+      const job = await api.startAiSearch({ query, generation, idempotencyKey: `ai-${this.scope}-${generation}` });
       current.id = job.id;
       current.status = job.status;
       if (this.job !== current) {
-        await api.cancelAiSearch(job.id, { generation, idempotencyKey: `cancel-${this.session.epoch}-${generation}` });
+        await api.cancelAiSearch(job.id, { generation, idempotencyKey: `cancel-${current.scope}-${generation}` });
         return;
       }
       await this.showJob(job, current, api);
@@ -226,7 +234,7 @@ export class Search {
     if (!previous?.id || !ACTIVE_JOB.includes(previous.status ?? '')) return;
     try {
       const api = (await this.session.ready()).adapter;
-      const idempotencyKey = `cancel-${this.session.epoch}-${previous.generation}`;
+      const idempotencyKey = `cancel-${previous.scope}-${previous.generation}`;
       if (hasAiSearch(api)) await api.cancelAiSearch(previous.id, { generation: previous.generation, idempotencyKey });
     } catch {
       // The job ends on its own; nothing waits on the cancellation.
