@@ -9,6 +9,8 @@ import type { ByteReader } from '../core/types';
 import type { SubtitleSession, SubtitleSessionOptions } from './subtitles/session';
 import type { Track } from '../model';
 import type { MediaRequestPolicy } from '../media-auth';
+import type { BrowserRuntimeServices } from '../host/services';
+import { canAttemptOriginal } from '../original-support';
 export interface UniversalReadout {
   state: 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'failed';
   video?: VideoInfo | null;
@@ -99,14 +101,20 @@ function assetLocation(): { base: URL; assetKey?: string } {
     throw new Error('Original runtime assets must use the same-origin immutable base');
   return { base, assetKey };
 }
-export function canAttemptOriginal() {
-  return (
-    isSecureContext &&
-    !!(navigator as Navigator & { gpu?: unknown }).gpu &&
-    typeof VideoFrame === 'function' &&
-    typeof Worker === 'function'
-  );
-}
+export { canAttemptOriginal };
+
+/** The Exact host's runtime services: the payload's runtime.js, loaded by URL. The Expo web app
+ * bundles the core instead (host/bundled-runtime.ts); this goes with the Exact app. */
+export const loadedRuntimeServices: BrowserRuntimeServices = {
+  get hls() {
+    return hasCoreHls();
+  },
+  get live() {
+    return hasCoreLive();
+  },
+  create: loadOriginalRuntime,
+  createSubtitles: loadSubtitleSession,
+};
 export async function loadOriginalRuntime(
   options: Omit<OriginalRuntimeOptions, 'assets'>,
 ): Promise<OriginalBackend> {
