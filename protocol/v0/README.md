@@ -66,6 +66,12 @@ cues) or a direct file. There is no parallel Vela media API. A plan advertises o
 currently authorized paths, never provider credentials. Media grants expire and
 must be revalidated against the owning device/session and current policy.
 
+Media range responses may include `X-Ether-Media-Cap-Wait-Ms`, a nonnegative
+integer number of milliseconds that the range waited for an upstream connection
+slot. `0` means no connection-slot wait. An absent header means the wait is
+unknown; clients must preserve that conservative unknown state rather than treat
+absence as zero.
+
 Subtitle `Track.delivery` optionally describes an external `webvtt` or
 `webvtt-window` URL, an `embedded` source track, or `burn-in` delivery. Omission
 makes no delivery claim. `Track.streamIndex` remains the full source stream index;
