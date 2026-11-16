@@ -78,7 +78,10 @@ export class EtherTransport {
     const etag = response.headers.get('etag');
     // A refresh may change policy: do not store under the old identity.
     const sameIdentity = !tokens || key === this.cacheKey(tokens, path);
-    if (etag && cacheable && sameIdentity) this.cache.set(key, { etag, body: value });
+    // A partial answer (a title still being filled) says no-store: it is never kept or revalidated.
+    const storable = !/(^|,)\s*no-store\s*(,|$)/i.test(response.headers.get('cache-control') ?? '');
+    if (etag && cacheable && sameIdentity && storable) this.cache.set(key, { etag, body: value });
+    else if (cacheable && !storable) this.cache.delete(key);
     return value;
   }
 

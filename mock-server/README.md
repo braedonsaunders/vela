@@ -9,6 +9,8 @@ Sign in: POST `/vela/v0/auth/sign-in`, JSON
 `{"idempotencyKey":"login-1","username":"demo","password":"vela","device":{"id":"vela-dev","name":"Browser","platform":"web","appVersion":"0.1"}}`.
 Use returned bearer plus `X-Vela-Device-Id: vela-dev` on authenticated API calls.
 Optional `VELA_MOCK_TOKEN=dev-token` seeds that fixed bearer/device for development.
+Optional `VELA_MOCK_COLD=1` makes each title's first detail read partial (`pending: ["extras"]`,
+`refreshAfterMs: 2000`, `Cache-Control: private, no-store`), as Ether answers a title it is still filling.
 For device/quick-connect pairing, approve the displayed code using an already
 signed-in grant. Poll every three seconds; pairing expires after ten minutes.
 POST `/__admin/web-code` issues a single-use three-minute console handoff code.

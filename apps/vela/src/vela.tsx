@@ -41,8 +41,9 @@ export interface Vela {
   host(route: RouteName, entry: string): SkinHost | null;
   doc: ResolvedDocument | null;
   docError: string | null;
-  /** Read a title's details (a title or watch route opened). */
-  openTitle(id: string): void;
+  /** A title's page is on screen (a title or watch route): its details are read and kept current
+   * while partial. Call the returned function when it leaves. */
+  openTitle(id: string): () => void;
   /** The server pack's stage art for the signed-out page, as document image paths ('' for none). */
   authArt: { backdrop: string; wordmark: string };
 }
@@ -211,7 +212,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     };
   }, [resolved.doc, fontsReady, state, view, live, liveView, width, viewport, dispatch, image, setQuery, loadMore]);
 
-  const openTitle = useCallback((id: string) => void store.catalogue.title(id), [store]);
+  const openTitle = useCallback((id: string) => store.catalogue.view(id), [store]);
   const art = useMemo(
     () => authArt(state.appearance.value, state.home.value?.defaultSkinId ?? '', picked ? raw.id : ''),
     [state.appearance.value, state.home.value?.defaultSkinId, picked, raw.id],

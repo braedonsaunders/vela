@@ -9,6 +9,7 @@ import { detailCard, detailWatched, recorded, type Watched } from '../discovery/
 import type { Card, CollectionModel, DetailModel, LibraryModel, Row } from '../models';
 import type { Connection } from '../adapter/connection';
 import { msg } from '../i18n';
+import { PendingTitles } from './pending';
 import type { Session } from './session';
 import { failed, loading, ready, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
@@ -37,6 +38,8 @@ const RECONCILE_ATTEMPTS = 3;
 export class Catalogue {
   /** What each collection has read so far, and where the server said to continue. */
   private readonly collectionReads = new Map<string, { items: V.RowEntry[]; cursor?: string; continuation: string }>();
+  /** Titles on screen whose answer was partial, read again until complete. */
+  private readonly pending = new PendingTitles(id => void this.refreshTitle(id));
 
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -45,6 +48,7 @@ export class Catalogue {
   ) {
     session.onReset(() => {
       this.collectionReads.clear();
+      this.pending.clear();
       this.box.update('titles', () => ({}));
       this.box.update('related', () => ({}));
       this.box.update('library', () => ({}));
@@ -56,20 +60,47 @@ export class Catalogue {
   async title(id: string, refresh = false): Promise<void> {
     const known = this.box.get().titles[id];
     if (known && known.load !== 'failed' && !refresh) return;
-    await this.read('titles', id, connection => this.detail(connection, id));
+    await this.read('titles', id, async connection => (await this.detail(connection, id)).model);
   }
 
-  private async detail(connection: Connection, id: string): Promise<DetailModel> {
-    const [detail, capabilities] = await Promise.all([connection.adapter.detail(id), capabilitiesOf(connection.adapter)]);
+  /**
+   * A title page is on screen: its details are read, and a partial answer (parts the server is
+   * still making) is read again in place until complete. Call the returned function when it leaves.
+   */
+  view(id: string): () => void {
+    const release = this.pending.view(id);
+    const known = this.box.get().titles[id];
+    if (known?.load === 'ready') void this.refreshTitle(id);
+    else void this.title(id);
+    return release;
+  }
+
+  /** Read a title again in place: no loading state, and a failure keeps the page as drawn. */
+  private async refreshTitle(id: string): Promise<void> {
+    const epoch = this.session.epoch;
+    try {
+      const connection = await this.session.ready();
+      const { model } = await this.detail(connection, id);
+      if (epoch === this.session.epoch) this.box.update('titles', titles => ({ ...titles, [id]: ready(model) }));
+    } catch {
+      // The page keeps what it shows; a later read brings it up to date.
+    }
+  }
+
+  /** One read of a title's details; a partial answer is followed while the title is on screen. */
+  private async detail(connection: Connection, id: string): Promise<{ model: DetailModel; answer: V.TitleDetail }> {
+    const [answer, capabilities] = await Promise.all([connection.adapter.detail(id), capabilitiesOf(connection.adapter)]);
     const images = await connection.images();
     const features = capabilities.features;
-    return detailModel(
-      detail,
+    const model = detailModel(
+      answer,
       images,
       this.artWidth(),
       features.extraPlayback?.available === true,
       features.themeMusic?.available === true,
     );
+    this.pending.answered(id, answer);
+    return { model, answer };
   }
 
   /** Where the viewer left a title, applied at once to every title page drawn that shows it. */
@@ -104,7 +135,7 @@ export class Catalogue {
     const epoch = this.session.epoch;
     try {
       const connection = await this.session.ready();
-      const model = await this.detail(connection, id);
+      const { model } = await this.detail(connection, id);
       if (epoch !== this.session.epoch) return;
       if (!recorded(detailCard(model, watched.titleId), watched) && attempt < RECONCILE_ATTEMPTS) {
         setTimeout(() => void this.reconcileTitle(id, watched, attempt + 1), 2000 * 2 ** attempt);
