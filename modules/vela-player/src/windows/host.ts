@@ -1,5 +1,6 @@
 import type { VelaPlayerProps, WebPlayerHost } from '@vela/player-api';
 import { listen, send } from './bridge';
+import { windowsSnapshot } from './snapshot';
 
 let sequence = 0;
 function serializable(props: VelaPlayerProps) {
@@ -11,7 +12,7 @@ export function createWindowsPlayerHost(_node: HTMLElement, initial: VelaPlayerP
   const unsubscribe = listen(message => {
     if (message.kind !== 'event' || message.id !== id) return;
     switch (message.event) {
-      case 'snapshot': props.onSnapshot?.(message.value as Parameters<NonNullable<VelaPlayerProps['onSnapshot']>>[0]); break;
+      case 'snapshot': props.onSnapshot?.(windowsSnapshot(message.value, props)); break;
       case 'error': props.onError?.(message.value as Parameters<NonNullable<VelaPlayerProps['onError']>>[0]); break;
       case 'command': props.onCommand?.(message.value as Parameters<NonNullable<VelaPlayerProps['onCommand']>>[0]); break;
       case 'observation': props.onObservation?.(message.value as Parameters<NonNullable<VelaPlayerProps['onObservation']>>[0]); break;
