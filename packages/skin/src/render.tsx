@@ -340,8 +340,14 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
     () => textStyle({ ...text.rows, ...pick(own, ['text-overflow', 'line-clamp']) }, measure(viewport, text.fontSize)));
   if (fx.hidden) return null;
   const value = fill(node.text, ctx, env);
+  // A text drawn as a centring flex box (a badge, an initial in a circle) centres its line.
+  const centred: { textAlign?: TextStyle["textAlign"]; lineHeight?: number } = {};
+  if (own['justify-content'] === 'center' && !text.rows['text-align']) centred.textAlign = 'center';
+  if (own['align-items'] === 'center' && typeof style.height === 'number' && !text.rows['line-height']) {
+    centred.lineHeight = style.height - (Number(style.borderTopWidth ?? style.borderWidth) || 0) - (Number(style.borderBottomWidth ?? style.borderWidth) || 0);
+  }
   return (
-    <AText style={[drawn.style, style as TextStyle]} numberOfLines={drawn.numberOfLines} ellipsizeMode={drawn.ellipsize ? 'tail' : undefined} {...a11yProps(node, ctx, env)}>
+    <AText style={[drawn.style, style as TextStyle, centred]} numberOfLines={drawn.numberOfLines} ellipsizeMode={drawn.ellipsize ? 'tail' : undefined} {...a11yProps(node, ctx, env)}>
       {value}
     </AText>
   );

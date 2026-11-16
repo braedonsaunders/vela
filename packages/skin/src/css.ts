@@ -2,6 +2,7 @@
 // takes. Lengths in px, rem, em, ch, vw/vh (and the dynamic viewport units), percentages, and
 // calc()/min()/max()/clamp() over them are evaluated here, against the viewport and the font
 // size in force. Theme token names become their colours.
+import { Platform } from 'react-native';
 import { THEME } from './theme.generated';
 
 export interface Viewport {
@@ -141,8 +142,29 @@ export function length(raw: string, m: Measure): Length | undefined {
   const text = raw.trim();
   const percent = /^(-?\d*\.?\d+)%$/.exec(text);
   if (percent) return `${Number(percent[1])}%`;
+  // A percentage mixed with other units: the browser computes it on the web; natively it is approximated.
+  if (text.includes('%')) return Platform.OS === 'web' ? (text as Length) : mixedPercent(text, m);
   const value = evaluate(text, m);
   return value === undefined || !Number.isFinite(value) ? undefined : Math.round(value * 100) / 100;
+}
+
+/** A native approximation of an expression that mixes a percentage with other units, which
+ * React Native cannot express: `calc(P% ± …)` keeps the percentage; `min()`/`max()` keep the
+ * argument that wins at the viewport's size, in its own unit; anything else is evaluated with
+ * the percentage taken of the viewport. */
+function mixedPercent(text: string, m: Measure): Length | undefined {
+  const calc = /^calc\(\s*(-?\d*\.?\d+)%\s*[-+]/.exec(text);
+  if (calc) return `${Number(calc[1])}%`;
+  const call = /^(min|max)\((.*)\)$/.exec(text);
+  if (call) {
+    const options = splitTop(call[2], 'comma').map(arg => ({ arg, value: evaluate(arg, m) }));
+    if (options.some(o => o.value === undefined)) return undefined;
+    const pickMin = call[1] === 'min';
+    const best = options.reduce((a, b) => ((pickMin ? b.value! < a.value! : b.value! > a.value!) ? b : a));
+    return length(best.arg, m);
+  }
+  const value = evaluate(text, m);
+  return value === undefined ? undefined : Math.round(value * 100) / 100;
 }
 
 /** A length in points; a percentage resolves against the given base. */

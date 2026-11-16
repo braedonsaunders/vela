@@ -228,7 +228,14 @@ function convert(node: Node, depth: number, r: Context): RNode {
     case 'icon': return { ...common, kind: 'icon', symbol: node.symbol, paths: node.paths, viewBox: node.viewBox, fillRule: node.fillRule };
     case 'repeat': return { ...common, kind: 'repeat', over: node.over, limit: node.limit ?? 1000, item: convert(node.item, depth + 1, r) };
     case 'slot': return { ...common, kind: 'slot', slot: node.slot, inner: node.inner && css(node.inner, r) };
-    case 'widget': return { ...common, kind: 'widget', widget: node.widget, params: node.params ?? {} };
+    case 'widget': {
+      // Parameters are text: client and document strings are filled now; a bound parameter stays as written.
+      const params = Object.fromEntries(Object.entries(node.params ?? {}).map(([k, v]) => {
+        const t = compile(v, r);
+        return [k, typeof t === 'string' ? t : v];
+      }));
+      return { ...common, kind: 'widget', widget: node.widget, params };
+    }
   }
 }
 

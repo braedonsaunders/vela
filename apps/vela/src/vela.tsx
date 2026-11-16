@@ -41,6 +41,12 @@ export function useVela(): Vela {
   return vela;
 }
 
+/** The document to start with: `?skin=<id>` on the web, EXPO_PUBLIC_VELA_SKIN in a native build. */
+function initialDocument(): number {
+  const wanted = Platform.OS === 'web' && typeof location !== 'undefined' ? new URLSearchParams(location.search).get('skin') : process.env.EXPO_PUBLIC_VELA_SKIN;
+  return Math.max(0, DOCUMENTS.findIndex(doc => doc.id === wanted));
+}
+
 function source(path: string): string | number | undefined {
   if (!path) return undefined;
   if (ASSETS[path] !== undefined) return ASSETS[path];
@@ -58,7 +64,7 @@ export function VelaProvider({ children }: { children: ReactNode }) {
   const [viewer, setViewer] = useState('');
   const [libraries, setLibraries] = useState<Destination[]>([]);
   const [details, setDetails] = useState<Record<string, { load: Load; model?: DetailModel }>>({});
-  const [docIndex, setDocIndex] = useState(0);
+  const [docIndex, setDocIndex] = useState(initialDocument);
   const [query, setQuery] = useState('');
   const [flags, setFlags] = useState<string[]>([]);
   const [heroIndex, setHeroIndex] = useState(0);
@@ -75,7 +81,16 @@ export function VelaProvider({ children }: { children: ReactNode }) {
     return () => sub.remove();
   }, []);
 
-  const start = useCallback(async () => {
+  /** The signed-in, negotiated session every request waits for (a deep link may arrive first). */
+  const session = useRef<Promise<void> | null>(null);
+  const requested = useRef(new Set<string>());
+
+  const start = useCallback(() => {
+    const run = connect();
+    session.current = run.catch(() => undefined);
+    return run;
+  }, []);
+  async function connect() {
     setLoad('loading');
     try {
       if (!client.signedIn) setViewer((await client.signIn(USER, PASSWORD)).viewer.name);
@@ -91,18 +106,21 @@ export function VelaProvider({ children }: { children: ReactNode }) {
       console.warn('Vela could not reach its server', error);
       setLoad('failed');
     }
-  }, [client, images, artWidth]);
+  }
 
-  useEffect(() => { start(); }, [start]);
+  // Child effects run first: a title opened by a deep link may already have started the session.
+  useEffect(() => { if (!session.current) start(); }, [start]);
 
   const openTitle = useCallback((id: string) => {
-    if (details[id]?.load === 'ready') return;
+    if (requested.current.has(id)) return;
+    requested.current.add(id);
     setDetails(d => ({ ...d, [id]: { load: 'loading' } }));
-    client.detail(id).then(
+    if (!session.current) start();
+    session.current!.then(() => client.detail(id)).then(
       data => setDetails(d => ({ ...d, [id]: { load: 'ready', model: detailModel(data, images, artWidth) } })),
-      () => setDetails(d => ({ ...d, [id]: { load: 'failed' } })),
+      () => { requested.current.delete(id); setDetails(d => ({ ...d, [id]: { load: 'failed' } })); },
     );
-  }, [client, details, images, artWidth]);
+  }, [client, images, artWidth, start]);
 
   const raw = DOCUMENTS[docIndex % DOCUMENTS.length];
   const resolved = useMemo(() => {
