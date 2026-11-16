@@ -29,6 +29,7 @@ final class VelaPlayerView: ExpoView {
     private var wantsPlay = true
     private var ambient = false
     private var displayFacts: VideoFacts?
+    private var loggedOutput = false
 
     required init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
@@ -204,8 +205,15 @@ final class VelaPlayerView: ExpoView {
         }
         if name == "video-params", displayFacts == nil, !ambient {
             // A path without verified facts (the server's HLS) matches once the video is decoded.
-            displayFacts = DisplayMatching.facts(videoParams: state.videoParams, frameRate: state.frameRate, codec: state.videoCodec)
+            displayFacts = DisplayMatching.facts(
+                videoParams: state.videoParams,
+                frameRate: state.frameRate,
+                codec: state.videoCodec
+            )
             DisplayMatching.prefer(displayFacts, in: window)
+        }
+        if name == "video-params", !state.videoParams.isEmpty {
+            logOutput()
         }
         if name == "time-pos", let target = pendingSeek, abs(state.position - target) < 2, !state.seeking {
             pendingSeek = nil
@@ -227,10 +235,25 @@ final class VelaPlayerView: ExpoView {
             }
         case .seekDone:
             pendingSeek = nil
+            if !loggedOutput {
+                loggedOutput = true
+                logOutput()
+            }
         case .shutdown:
             break
         }
         report.publish(state, seekTarget: pendingSeek, force: true)
+    }
+
+    /// What the video is and what mpv and the display make of it, for the console.
+    private func logOutput() {
+        let input = state.videoParams
+        let output = mpv?.value("video-target-params") as? [String: Any] ?? [:]
+        let field = { (params: [String: Any], key: String) in params[key].map { "\($0)" } ?? "?" }
+        let video = "\(field(input, "w"))x\(field(input, "h")) \(field(input, "gamma"))/\(field(input, "primaries"))"
+        let target = "\(field(output, "gamma"))/\(field(output, "primaries")) peak \(field(output, "sig-peak"))"
+        let display = DisplayMatching.describe(window)
+        print("[vela-player] video \(video) range \(state.dynamicRange ?? "?") -> output \(target); display \(display)")
     }
 
     /// Unpauses once the display has finished switching modes (it blanks meanwhile).
@@ -249,13 +272,15 @@ final class VelaPlayerView: ExpoView {
         guard let plan, let path = plan.selectedPath, path.isOriginalFile, !state.tracks.isEmpty else {
             return
         }
-        if let index = plan.audioTrack(report.audioTrackId)?.streamIndex, let id = state.trackId(type: "audio", streamIndex: index) {
+        let audioIndex = plan.audioTrack(report.audioTrackId)?.streamIndex
+        if let audioIndex, let id = state.trackId(type: "audio", streamIndex: audioIndex) {
             if state.audioId != id {
                 mpv?.set("aid", String(id))
             }
         }
         let subtitle = plan.subtitleTrack(report.subtitleTrackId)
-        if let subtitle, !subtitle.isExternal, let index = subtitle.streamIndex, let id = state.trackId(type: "sub", streamIndex: index) {
+        let subtitleIndex = subtitle?.isExternal == false ? subtitle?.streamIndex : nil
+        if let subtitleIndex, let id = state.trackId(type: "sub", streamIndex: subtitleIndex) {
             if state.subtitleId != id {
                 mpv?.set("sid", String(id))
             }

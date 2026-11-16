@@ -55,6 +55,8 @@ final class MPVClient {
             try check(mpv_set_option_string(created, name, value), name)
         }
         try check(mpv_initialize(created), "initialize")
+        // mpv's own warnings and errors reach the app's console (devicectl ... launch --console).
+        mpv_request_log_messages(created, "warn")
         let context = Unmanaged.passUnretained(self).toOpaque()
         mpv_set_wakeup_callback(created, { context in
             guard let context else {
@@ -125,6 +127,19 @@ final class MPVClient {
         mpv_set_property(handle, name, MPV_FORMAT_DOUBLE, &value)
     }
 
+    /// A property's current value, read once (diagnostics; playback state is observed instead).
+    func value(_ name: String) -> Any? {
+        guard let handle else {
+            return nil
+        }
+        var node = mpv_node()
+        guard mpv_get_property(handle, name, MPV_FORMAT_NODE, &node) >= 0 else {
+            return nil
+        }
+        defer { mpv_free_node_contents(&node) }
+        return MPVNode.node(node)
+    }
+
     /// A string-list property (`http-header-fields`), set as a node so values may hold commas.
     func setStringList(_ name: String, _ values: [String]) {
         guard let handle else {
@@ -179,6 +194,12 @@ final class MPVClient {
                 }
             case MPV_EVENT_PLAYBACK_RESTART:
                 post(.seekDone)
+            case MPV_EVENT_LOG_MESSAGE:
+                if let message = event.data?.assumingMemoryBound(to: mpv_event_log_message.self).pointee {
+                    let prefix = message.prefix.map { String(cString: $0) } ?? ""
+                    let text = message.text.map { String(cString: $0) } ?? ""
+                    print("[mpv] \(prefix): \(text)", terminator: "")
+                }
             case MPV_EVENT_SHUTDOWN:
                 post(.shutdown)
                 return

@@ -1,6 +1,7 @@
 // Spike (b): VelaPlayerView on Apple TV with a real lab plan (docs/rn-migration.md).
 // Signs in from configuration (apps/vela/.env.local, never committed):
-//   EXPO_PUBLIC_VELA_ORIGIN, EXPO_PUBLIC_VELA_USER, EXPO_PUBLIC_VELA_PASSWORD, EXPO_PUBLIC_VELA_TITLE (a search query)
+//   EXPO_PUBLIC_VELA_ORIGIN, EXPO_PUBLIC_VELA_USER, EXPO_PUBLIC_VELA_PASSWORD, EXPO_PUBLIC_VELA_TITLE (a search query),
+//   EXPO_PUBLIC_VELA_MUTED=1 to start muted (a drive at night)
 // then asks Ether for a plan with this device's capabilities and plays it. Remote: the buttons below.
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -9,7 +10,10 @@ import type { Command, PlaybackPlan, PlayerObservation, Snapshot } from '@vela/p
 
 const origin = process.env.EXPO_PUBLIC_VELA_ORIGIN ?? '';
 const api = `${origin}/vela/v0`;
-const device = { id: 'vela-tvos-spike', name: 'Apple TV', platform: 'tvos', appVersion: '0.2.0' };
+// The lab Ether admits client builds below 0.2.0; until it admits the React Native app's, the spike
+// reports the web client's build (EXPO_PUBLIC_VELA_APP_VERSION).
+const appVersion = process.env.EXPO_PUBLIC_VELA_APP_VERSION ?? '0.2.0';
+const device = { id: 'vela-tvos-spike', name: 'Apple TV', platform: 'tvos', appVersion };
 
 /** What libmpv plays on the device: originals of these families, never converted by the server. */
 const client = {
@@ -27,7 +31,9 @@ const client = {
     webgpu: false,
     demuxContainers: ['mkv', 'webm', 'mp4', 'mpegts'],
     videoDecoders: ['h264', 'hevc', 'av1', 'vp9', 'mpeg2video', 'vc1'],
-    audioDecoders: ['aac', 'ac3', 'eac3', 'dts', 'truehd', 'mlp', 'flac', 'alac', 'opus', 'vorbis', 'mp3', 'pcm_s16le', 'pcm_s24le'],
+    audioDecoders: [
+      'aac', 'ac3', 'eac3', 'dts', 'truehd', 'mlp', 'flac', 'alac', 'opus', 'vorbis', 'mp3', 'pcm_s16le', 'pcm_s24le',
+    ],
   },
 };
 
@@ -72,6 +78,16 @@ async function labPlan(): Promise<PlaybackPlan> {
   return call<PlaybackPlan>('POST', '/playback', { idempotencyKey: key(), titleId: title.id, client });
 }
 
+/** Ends the session on the server, so its media grant is released. */
+function stopSession(plan: PlaybackPlan) {
+  void call('POST', `/sessions/${plan.sessionId}/commands`, {
+    idempotencyKey: key(),
+    kind: 'stop',
+    sourceGeneration: plan.sourceGeneration,
+    seekGeneration: plan.seekGeneration,
+  }).catch(() => {});
+}
+
 function postObservation(event: { sessionId: string; observation: PlayerObservation }) {
   void call('POST', `/sessions/${event.sessionId}/observations`, event.observation).catch(() => {});
 }
@@ -104,6 +120,20 @@ export default function PlayerSpike() {
     setCommand({ ...next, id: commandId.current } as Command);
   };
 
+  useEffect(() => {
+    return () => {
+      if (plan) {
+        stopSession(plan);
+      }
+    };
+  }, [plan]);
+
+  useEffect(() => {
+    if (plan && process.env.EXPO_PUBLIC_VELA_MUTED === '1') {
+      send({ type: 'mute', muted: true });
+    }
+  }, [plan]);
+
   const nextTrack = (kind: 'audio' | 'subtitle') => {
     const tracks = kind === 'audio' ? plan?.audioTracks ?? [] : plan?.subtitleTracks ?? [];
     const current = kind === 'audio' ? snapshot?.audioTrackId : snapshot?.subtitleTrackId;
@@ -120,6 +150,8 @@ export default function PlayerSpike() {
   const audio = plan?.audioTracks.find((track) => track.id === snapshot?.audioTrackId);
   const subtitle = plan?.subtitleTracks.find((track) => track.id === snapshot?.subtitleTrackId);
   const video = snapshot?.video;
+  const playing = snapshot?.state === 'playing';
+  const muted = snapshot?.muted ?? false;
   return (
     <View style={styles.stage}>
       {plan ? (
@@ -143,12 +175,13 @@ export default function PlayerSpike() {
           {`  buffer: ${snapshot?.bufferAheadSeconds?.toFixed(0) ?? '-'} s  dropped: ${snapshot?.droppedFrames ?? '-'}`}
         </Text>
         <View style={styles.buttons}>
-          <Control label="Play/Pause" onPress={() => send({ type: snapshot?.state === 'playing' ? 'pause' : 'play' })} />
+          <Control label="Play/Pause" onPress={() => send({ type: playing ? 'pause' : 'play' })} />
           <Control label="-10 s" onPress={() => send({ type: 'seekBy', seconds: -10 })} />
           <Control label="+60 s" onPress={() => send({ type: 'seekBy', seconds: 60 })} />
           <Control label="+10 min" onPress={() => send({ type: 'seekBy', seconds: 600 })} />
           <Control label="Audio" onPress={() => nextTrack('audio')} />
           <Control label="Subtitles" onPress={() => nextTrack('subtitle')} />
+          <Control label={muted ? 'Unmute' : 'Mute'} onPress={() => send({ type: 'mute', muted: !muted })} />
         </View>
       </View>
     </View>

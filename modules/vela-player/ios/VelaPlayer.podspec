@@ -26,7 +26,8 @@ Pod::Spec.new do |s|
 
   s.vendored_frameworks = 'Frameworks/*.xcframework'
   # What MPVKit's Package.swift links for its LGPL product.
-  s.frameworks = 'AVFoundation', 'CoreAudio', 'AudioToolbox', 'CoreVideo', 'CoreFoundation',
+  # AVKit carries UIWindow.avDisplayManager (display matching); auto-linking does not reach it from this static pod.
+  s.frameworks = 'AVKit', 'AVFoundation', 'CoreAudio', 'AudioToolbox', 'CoreVideo', 'CoreFoundation',
                  'CoreMedia', 'Metal', 'VideoToolbox', 'QuartzCore'
   s.libraries = 'bz2', 'iconv', 'expat', 'resolv', 'xml2', 'z', 'c++'
 end

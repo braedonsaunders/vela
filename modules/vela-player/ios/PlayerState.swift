@@ -36,13 +36,22 @@ struct PlayerState {
         if !loaded {
             return .loading
         }
-        if endReached {
+        if endReached && atEnd {
             return .ended
         }
         if pausedForCache || seeking {
             return .buffering
         }
         return paused ? .paused : .playing
+    }
+
+    /// The position is at the file's end. mpv also raises `eof-reached` for a moment while it
+    /// switches tracks on a network stream; reporting that as `ended` makes Ether end the session.
+    var atEnd: Bool {
+        guard let duration else {
+            return false
+        }
+        return position >= duration - 1.5
     }
 
     /// Applies one observed property's new value.

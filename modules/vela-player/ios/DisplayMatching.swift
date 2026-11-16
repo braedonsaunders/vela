@@ -37,36 +37,43 @@ enum DisplayMatching {
     static func switching(in window: UIWindow?) -> Bool {
         window?.avDisplayManager.isDisplayModeSwitchInProgress ?? false
     }
+
+    /// The display manager's state, for the console.
+    static func describe(_ window: UIWindow?) -> String {
+        guard let manager = window?.avDisplayManager else {
+            return "no window"
+        }
+        let criteria = manager.preferredDisplayCriteria.map { "\($0)" } ?? "none"
+        let modes = AVPlayer.availableHDRModes
+        let named: [(AVPlayer.HDRMode, String)] = [(.hdr10, "hdr10"), (.hlg, "hlg"), (.dolbyVision, "dv")]
+        let hdr = named.filter { modes.contains($0.0) }.map(\.1)
+        let matching = manager.isDisplayCriteriaMatchingEnabled ? "on" : "off"
+        return "matching \(matching), criteria \(criteria), switching \(manager.isDisplayModeSwitchInProgress), "
+            + "HDR eligible \(AVPlayer.eligibleForHDRPlayback) \(hdr)"
+    }
     #else
     static func prefer(_ facts: VideoFacts?, in window: UIWindow?) {}
     static func switching(in window: UIWindow?) -> Bool { false }
+    static func describe(_ window: UIWindow?) -> String { "no display matching" }
     #endif
 
     /// A format description that carries only what display matching reads: codec and colour.
     private static func formatDescription(_ facts: VideoFacts) -> CMVideoFormatDescription? {
-        var extensions: [CFString: Any] = [:]
         let codec: CMVideoCodecType
+        let extensions: [CFString: Any]
         switch facts.dynamicRange {
         case "hdr10":
             codec = kCMVideoCodecType_HEVC
-            extensions[kCMFormatDescriptionExtension_ColorPrimaries] = kCMFormatDescriptionColorPrimaries_ITU_R_2020
-            extensions[kCMFormatDescriptionExtension_TransferFunction] = kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ
-            extensions[kCMFormatDescriptionExtension_YCbCrMatrix] = kCMFormatDescriptionYCbCrMatrix_ITU_R_2020
+            extensions = colour(bt2020: true, transfer: kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ)
         case "hlg":
             codec = kCMVideoCodecType_HEVC
-            extensions[kCMFormatDescriptionExtension_ColorPrimaries] = kCMFormatDescriptionColorPrimaries_ITU_R_2020
-            extensions[kCMFormatDescriptionExtension_TransferFunction] = kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG
-            extensions[kCMFormatDescriptionExtension_YCbCrMatrix] = kCMFormatDescriptionYCbCrMatrix_ITU_R_2020
+            extensions = colour(bt2020: true, transfer: kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG)
         case "dv":
             codec = kCMVideoCodecType_DolbyVisionHEVC
-            extensions[kCMFormatDescriptionExtension_ColorPrimaries] = kCMFormatDescriptionColorPrimaries_ITU_R_2020
-            extensions[kCMFormatDescriptionExtension_TransferFunction] = kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ
-            extensions[kCMFormatDescriptionExtension_YCbCrMatrix] = kCMFormatDescriptionYCbCrMatrix_ITU_R_2020
+            extensions = colour(bt2020: true, transfer: kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ)
         default:
             codec = facts.hevc ? kCMVideoCodecType_HEVC : kCMVideoCodecType_H264
-            extensions[kCMFormatDescriptionExtension_ColorPrimaries] = kCMFormatDescriptionColorPrimaries_ITU_R_709_2
-            extensions[kCMFormatDescriptionExtension_TransferFunction] = kCMFormatDescriptionTransferFunction_ITU_R_709_2
-            extensions[kCMFormatDescriptionExtension_YCbCrMatrix] = kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2
+            extensions = colour(bt2020: false, transfer: kCMFormatDescriptionTransferFunction_ITU_R_709_2)
         }
         var format: CMVideoFormatDescription?
         let status = CMVideoFormatDescriptionCreate(
@@ -78,6 +85,16 @@ enum DisplayMatching {
             formatDescriptionOut: &format
         )
         return status == noErr ? format : nil
+    }
+
+    private static func colour(bt2020: Bool, transfer: CFString) -> [CFString: Any] {
+        [
+            kCMFormatDescriptionExtension_ColorPrimaries:
+                bt2020 ? kCMFormatDescriptionColorPrimaries_ITU_R_2020 : kCMFormatDescriptionColorPrimaries_ITU_R_709_2,
+            kCMFormatDescriptionExtension_TransferFunction: transfer,
+            kCMFormatDescriptionExtension_YCbCrMatrix:
+                bt2020 ? kCMFormatDescriptionYCbCrMatrix_ITU_R_2020 : kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2,
+        ]
     }
 
     // MARK: Facts
@@ -100,7 +117,8 @@ enum DisplayMatching {
         }
         let codec = (video.codec ?? "").lowercased()
         let hevc = codec.contains("hevc") || codec.contains("265")
-        return VideoFacts(dynamicRange: range, frameRate: video.frameRate ?? 0, width: width, height: height, hevc: hevc)
+        let rate = video.frameRate ?? 0
+        return VideoFacts(dynamicRange: range, frameRate: rate, width: width, height: height, hevc: hevc)
     }
 
     /// From mpv's `video-params` and `container-fps` once the video is decoded.
@@ -111,7 +129,8 @@ enum DisplayMatching {
         let gamma = videoParams["gamma"] as? String ?? ""
         let range = gamma == "pq" ? "hdr10" : gamma == "hlg" ? "hlg" : "sdr"
         let hevc = (codec ?? "").lowercased().contains("hevc")
-        return VideoFacts(dynamicRange: range, frameRate: frameRate ?? 0, width: Int(width), height: Int(height), hevc: hevc)
+        let rate = frameRate ?? 0
+        return VideoFacts(dynamicRange: range, frameRate: rate, width: Int(width), height: Int(height), hevc: hevc)
     }
 }
 
