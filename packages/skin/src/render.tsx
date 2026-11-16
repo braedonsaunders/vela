@@ -241,7 +241,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   }
   const layers = (
     <>
-      {fx.backdropBlur ? <Backdrop blur={fx.backdropBlur} /> : null}
+      {fx.backdropBlur ? <Backdrop blur={fx.backdropBlur} glass={style.backgroundColor !== undefined} /> : null}
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}
     </>
   );
@@ -366,11 +366,14 @@ function RowGuide({ children }: { children: ReactElement<{ style: unknown }> }) 
   );
 }
 
-/** A backdrop blur. Android draws no blur without a blur target, so there the box is veiled in
- * the document's page colour instead, enough to keep what scrolls beneath it from showing through. */
-function Backdrop({ blur }: { blur: number }) {
+/** A backdrop blur. Android draws no blur without a blur target, so there a box without a colour
+ * of its own (a bar's scrim) is veiled in the document's page colour instead, enough to keep what
+ * scrolls beneath it from showing through; a glass box (a pill, a badge) keeps just its colour. */
+function Backdrop({ blur, glass }: { blur: number; glass: boolean }) {
   const { doc } = useHost();
-  const page = useMemo(() => (Platform.OS === 'android' ? resolveUi(doc.document.ui).page : undefined), [doc]);
+  const android = Platform.OS === 'android';
+  const page = useMemo(() => (android && !glass ? resolveUi(doc.document.ui).page : undefined), [android, glass, doc]);
+  if (android && glass) return null;
   if (page) return <View style={[StyleSheet.absoluteFill, { backgroundColor: page, opacity: ANDROID_VEIL }]} />;
   return <BlurView intensity={Math.min(100, Math.round(blur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} />;
 }
