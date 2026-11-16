@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Vela",
+    "slug": "vela",
+    "scheme": "vela",
+    "version": "0.2.0",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#090b0e",
+    "ios": {
+      "bundleIdentifier": "app.ether.vela",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "app.ether.vela"
+    },
+    "web": {
+      "output": "single",
+      "bundler": "metro",
+      "name": "Vela",
+      "backgroundColor": "#090b0e"
+    },
+    "experiments": {
+      "baseUrl": "/vela"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      ["@react-native-tvos/config-tv", {}]
+    ]
+  }
+}

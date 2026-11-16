@@ -340,7 +340,62 @@ the page colour (draw your own back: press `back`). `collection.name`, `collecti
 Also: a fully transparent ground (`transparent`, `#rrggbb00`, `rgba(…, 0)`) counts as no ground,
 so a pressed control dims its content as a compiled button does.
 
-## Next (renderer 14, names final)
+## Renderer 15: the Vela base
+
+Every skin is a document (build plan, decision 7), and every document draws on top of the **Vela
+base** (client/src/skin/base.ts): built-in slots and routes for every surface, styled from the
+document's `ui` block. A document draws what it wants to own and inherits the rest.
+
+- **Inheritance**: a slot or route the document defines replaces the base's (home counts whether it
+  is `slots.home` or `routes.home`). Templates, motion, keyframes, fonts, tokens and strings merge by
+  name, the document's winning; the base's names start with `vela` (`velaCard`, `velaRow`), so a
+  document that defines `velaCard` restyles the base's lanes on purpose. Home's `status` and
+  `traits.barMask` belong to whoever draws home, `detail` to whoever draws the title page. `slots` is
+  optional: a document that only sets its look (`ui`, `traits`) inherits every surface.
+- **`ui`**: the base's look, as values: `page`, `raised`, `ink`, `inkSecondary`, `inkQuiet`,
+  `inkInverse`, `accent`, `onAccent`, `control`, `controlHover`, `glass`, `glassEdge`,
+  `glassEdgeStrong`, `popover`, `scrim`, `track`, `trackStrong`, `focusHalo`, `shadow`, `skeleton`,
+  `skeletonLight`, `alert`, `live` (colours), `font`, `fontDisplay` (font stacks), `radiusControl`,
+  `radiusCard`, `radiusPanel` (px numbers). A key left out takes Cinematic's value
+  (client/src/skin/ui-defaults.ts). Any style may read one as `$ui.<name>` (a radius reads as px).
+- **Client strings**: `{t:ui.signIn}` in any template is the app's own string in the viewer's
+  locale. A string's placeholders bind to the vocabulary: `{t:secure.body|origin=signin.secureOrigin}`.
+  A document's own text stays `{s:key}`.
+- `env.skinName`: the document's name.
+
+These are resolver features: whatever renderer draws the resolved document gets them. The version
+number 14 went to the Exact renderer's arrow-key focus, which is held on a branch; main skips it.
+
+### Search (`routes.search`)
+
+Search is drawn in home's view, after home's nodes, while a query is open: the search field (home's
+holder) stays put and focused as the answers arrive below it. Home's own nodes step aside with
+`env.searching`. The Vela base draws search for a document that does not.
+
+| Vocabulary | Meaning |
+| --- | --- |
+| `env.search` | The title lane: `loading`, `failed`, `ready` (empty with no query). |
+| `search.titleCount`, `search.descriptiveCount`, `search.aiCount` | How many titles each lane shows (the title lane none while it loads or failed). |
+| `search.describing` | The query reads as a description (several words, descriptive search on): an empty answer is about the mood, not the name. |
+| `search.descriptiveState`, `search.canRetry` | The descriptive lane: `off`, `loading`, `failed` (it keeps what it found), `ready`; whether `retryDescriptive` may run. |
+| `search.aiState` | Discovery: `off`, `running` (its partial answer shows), `failed`, `complete`. |
+| `search.onNowCount`, `search.comingUpCount` | Live hits: channels and programmes airing, and programmes coming up. |
+| `hit.*` | A live hit: `id`, `kind` (`channel`, `programme`), `ref` (for `openHit`), `name`, `channelName`, `channelNumber`, `logo`, `artwork`, `episode`, `live`, `progressPct`, `detail` (localized: channel and until when), `chip` (when it starts), `navigable`. |
+| collections | `search.titles`, `search.descriptive`, `search.ai` (cards, `card.*`), `search.onNow`, `search.comingUp` (`hit.*`). |
+| actions | `select {card.kindId}`, `openHit {hit.ref}` (a channel's page, or a programme: watch it if airing), `retryDescriptive`. |
+
+### The style matrix
+
+Skins draw on React Native as well as the web (docs/rn-migration.md, "Style matrix"). `bun tools/skin.ts
+check <document>` refuses the rows native cannot draw (`-webkit-text-stroke`, `position: fixed` or
+`static`, `position: sticky` anywhere but on a direct child of a route's root or of a vertical scroll box,
+`box-sizing: content-box`, `display: block`, `inline` or `contents`, several text shadows,
+`mask-image: url()`, grid placement) and notes the approximated ones (`backdrop-filter`, gradient
+`mask-image`, grid columns, `filter`, `corner-shape`, scroll snapping, and allowed `sticky`, which native
+pins at the top of its scroll view, ignoring a non-zero `top`). The web still draws a refused
+row, with a console warning naming it.
+
+## Next (renderer 16, names final)
 
 - Per-document `traits`: `page`, `ink`, `splashOnPaper`. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 

@@ -1,0 +1,7 @@
+# Continuous native generation: ios/ and android/ come from `expo prebuild`.
+ios/
+android/
+.expo/
+dist/
+expo-env.d.ts
+.env*.local

@@ -10,6 +10,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { skinDoc } from '../client/src/skin/index';
 import { BUDGETS, perfReport } from '../client/src/skin/budget';
+import { portabilityReport, type PortabilityFinding } from '../client/src/skin/portability';
 import type { SkinDocument } from '../protocol/v0/skin';
 
 const WIDTHS = [1440, 390, 1920];
@@ -20,7 +21,25 @@ async function load(path: string): Promise<SkinDocument> {
   return (mod.default ?? Object.values(mod).find(v => v && typeof v === 'object' && 'schema' in (v as object))) as SkinDocument;
 }
 
-/** Prints the report; returns false when the document fails (unresolvable or over a limit). */
+/** The style matrix (docs/rn-migration.md): rows refused on native fail, approximated rows are noted. */
+function printPortability(findings: PortabilityFinding[]): boolean {
+  const counts = new Map<string, { finding: PortabilityFinding; count: number }>();
+  for (const finding of findings) {
+    const key = `${finding.level} ${finding.row} ${finding.message}`;
+    const seen = counts.get(key);
+    if (seen) seen.count++;
+    else counts.set(key, { finding, count: 1 });
+  }
+  console.log('  style matrix (React Native)');
+  if (counts.size === 0) console.log('    every row draws the same on every platform');
+  for (const { finding, count } of counts.values()) {
+    const label = finding.level === 'error' ? 'FAIL' : 'warn';
+    console.log(`    ${label} ${finding.row} (${count}x, first at ${finding.at}): ${finding.message}`);
+  }
+  return !findings.some(f => f.level === 'error');
+}
+
+/** Prints the report; returns false when the document fails (unresolvable, over a limit, or unportable). */
 export async function checkDocument(path: string): Promise<boolean> {
   const doc = await load(path);
   let ok = true, shown = '';
@@ -37,6 +56,7 @@ export async function checkDocument(path: string): Promise<boolean> {
     for (const p of report.pages) console.log(`    ${p.route.padEnd(11)} ${String(p.nodes).padStart(5)}  ${String(p.perItem).padStart(8)}  ${String(p.imagesPerItem).padStart(11)}  ${String(p.endlessPerItem).padStart(12)}  ${String(p.blursPerItem).padStart(10)}`);
     for (const f of report.findings) { console.log(`    ${f.level === 'error' ? 'FAIL' : 'warn'} ${f.route}: ${f.message}`); if (f.level === 'error') ok = false; }
   }
+  if (!printPortability(portabilityReport(doc))) ok = false;
   console.log(`  budgets (warn/limit): ${Object.entries(BUDGETS).map(([k, b]) => `${k} ${b.warn}/${b.fail}`).join(', ')}`);
   console.log(ok ? 'pass' : 'FAIL');
   return ok;

@@ -1,0 +1,314 @@
+# React Native migration
+
+Status: accepted direction (owner decision, 2026-11-16). This document is the plan for
+moving Vela from Exact to React Native + Expo, the spec for the two spikes that prove it,
+and the style matrix skin documents must stay inside. Architecture owner: thread
+`thr_b57w7znkf9`. Orchestration: `thr_ucqnvk37fq`.
+
+## Why
+
+Exact renders natively, but Vela's player is a DOM web module (MSE, WebCodecs, WebGPU),
+so the framework's native hosts never reach the feature that matters most. Contract has
+no recursion, which is why the skin renderer is a generated, depth-unrolled interpreter
+with per-level copies and widget depth limits. React Native + Expo gives first-class
+iOS, Android, tvOS and Android TV from one app (react-native-tvos), web through
+react-native-web, and macOS/Windows through Microsoft's forks. The playback engine on
+native becomes libmpv, which already plays everything Vela's browser core was built to
+reach (MKV, HEVC Main10, Dolby Vision, PGS/ASS, TrueHD/DTS) with hardware decode.
+
+## Targets and pins
+
+| Target | Host | When |
+|---|---|---|
+| Web / PWA | react-native-web, same app | Spike (a), then conversion |
+| iOS, iPadOS | Expo prebuild | Spike (a) |
+| tvOS | Expo prebuild with `EXPO_TV=1` (react-native-tvos) | Spikes (a) and (b) |
+| Android, Android TV | Expo prebuild (`EXPO_TV=1` for TV) | Conversion |
+| macOS | First "Designed for iPad" on Apple silicon; later a react-native-macos host | After conversion |
+| Windows | react-native-windows host | After conversion |
+| Linux | The web/PWA build | No separate host |
+
+Pinned at spike start (checked against the registry 2026-11-16): Expo SDK 58
+(`expo@58.0.25`), React 19.3.0, `react-native` aliased to `react-native-tvos@0.88.1-0`
+(upstream RN 0.88.1), react-native-web 0.21.4, Reanimated 4.7.1 + worklets 0.13.0,
+expo-image, expo-blur, expo-linear-gradient, expo-secure-store,
+@react-native-masked-view/masked-view at the versions Expo 58 bundles. Moving a pin is
+a deliberate commit, as `EXACT_REVISION` was.
+
+react-native-macos (0.83) and react-native-windows (0.85) trail upstream and cannot share
+one `react-native` dependency with the tvOS fork. They get their own host apps later.
+That is the reason for the package rule below: packages depend on `react` and
+`react-native` only as peers and use no API newer than the oldest host needs.
+
+## Layout
+
+```
+apps/vela/              Expo app: routes (expo-router), screens that draw document routes,
+                        platform storage, the player view wiring. Web, iOS, tvOS, Android, Android TV.
+packages/protocol/      Wire types (today protocol/v0/types.ts, skin.ts) and fixtures.
+packages/core/          Server adapters (Ether, Jellyfin, Plex), session and server registry,
+                        discovery models, search generations, live/guide, telemetry, i18n catalogs.
+                        No React, no DOM, no React Native.
+packages/skin/          Document resolver (validation, inheritance from the Vela base, tokens,
+                        variants, motion), the style translator, the React renderer, widgets.
+packages/player-api/    The player view contract (types only) shared by every implementation.
+modules/vela-player/    Expo module: Apple (Swift + MPVKit), Android (Kotlin + libmpv),
+                        web (the existing WebCodecs/WebGPU core).
+mock-server/            Unchanged.
+```
+
+Bun workspaces at the root. Metro needs a hoisted `node_modules`: set
+`[install] linker = "hoisted"` in `bunfig.toml`. Generated native projects (`ios/`,
+`android/`, CNG output) are not committed. DerivedData, Gradle caches and prebuild
+output live under `~/.scratch/vela-build/<worktree>/`.
+
+The routine compile check becomes `bun x tsc --noEmit -p apps/vela` (it covers the
+packages through project references), plus `bun x expo export --platform web` when the
+web bundle changed. Native builds are checked by building them, nothing more.
+
+## Web and PWA stay first-class
+
+The web app is not a side effect of the native apps. The Expo web export
+(react-native-web) **is** the web artifact. It hosts the WebCodecs/WebGPU player, and Ether
+serves it at `/vela` through the existing signed distribution and installer: archive,
+signed manifest, verification, atomic install, two rollbacks and the shell service worker
+(`docs/distribution.md`). Only what produces the static tree changes. The installer
+contract does not.
+
+- **Build:** `expo export --platform web` with `web.output: "single"` (one SPA
+  `index.html`) and `experiments.baseUrl: "/vela"`, so every URL the export writes is
+  under `/vela`. Routes are expo-router routes. The server-side route list
+  (`routes.json`: `/vela/title/:id`, `/vela/watch/:id`, `/vela/collection/:id`, …) is
+  generated from `apps/vela`'s route table, so Ether's index fallback and its asset 404s
+  keep working.
+- **Release tree** (archive root, owned by the packager `thr_tgszknwfsb`):
+
+  ```
+  index.html                      Expo's single page entry
+  _expo/static/js/web/*.js, css   content-hashed bundles (immutable while the release is retrievable)
+  assets/…                        Metro's content-hashed images and fonts
+  player/…                        the web player's decoder packages, worklets and WASM, loaded by URL
+  skins/<id>/<version>/…          bundled skin documents and assets, as today
+  manifest.webmanifest, icons, pwa.js, sw.js, routes.json    the packager's PWA shell and route list
+  ```
+
+- The release manifest keeps `skinRenderer {schema, version, digest}`. The digest is now
+  that of the React renderer's vocabulary and style matrix.
+- The engine selector, `engines.json` and per-engine roots are gone. There is one app.
+
+## What moves, what is rewritten, what is deleted
+
+### Moves as is (by `git mv` at conversion, not during the spike)
+
+- `protocol/v0/` → `packages/protocol/` (types, skin types, fixtures, skin documents).
+- `client/src/adapter/**`, `discovery/`, `live/`, `search/`, `telemetry/`, `protocol/`,
+  `session/servers.ts`, `appearance/` → `packages/core/`.
+- `client/src/skin/` resolver pieces (`base.ts`, `vela-base/`, `inherit.ts`, `ui*.ts`,
+  `client-strings.ts`, the validation half of `index.ts`) → `packages/skin/resolve/`.
+- `client/foundation/i18n.ts`, `catalogs.ts`, `client/strings/` → `packages/core/i18n/`.
+- `client/player/**` (the web core) → `modules/vela-player/web/`.
+- `mock-server/`, `tools/skin*.ts` (validator and packager), `tools/locales.ts`.
+
+### Adapted
+
+- **Types generated from Contract.** Several files import `app.contract.d.ts` (the
+  `Sources`/`Answer`/`Store` types and the model shapes). Those shapes become hand-written
+  TypeScript in `packages/core/models.ts`, kept field-for-field so the adapters do not change.
+- **`client/src/sources.ts`** (the Exact answer dispatcher, 942 lines) is replaced by a
+  small store: `packages/core/store.ts` holds state and actions; React reads it through
+  `useSyncExternalStore` hooks. The logic inside each source (session, negotiation, origin
+  binding, server selection) moves into the store's actions, not into components.
+- **Storage.** Exact's `secret.keep` becomes a `SecretStore` interface in core:
+  expo-secure-store on native (Keychain on iOS and tvOS, Keystore on Android), and the
+  current web behaviour on web. Non-secret preferences use a plain key-value store.
+- **Fonts.** Document fonts load at run time with expo-font (`loadAsync` with a URL).
+
+### Rewritten
+
+- **The skin renderer** (`packages/skin/render/`): an ordinary recursive React renderer,
+  below. It replaces `client/renderer/*.contract`, `tools/renderer.ts`, the level
+  conversion in `client/src/skin/index.ts` and `vocabulary.ts`'s positional table.
+- **Widgets**: search field, scrubber and track/quality menus, guide time grid, sign-in
+  fields and quick-connect code, hero/card trailer previews, install/update, visibility
+  sentinels, appearance picker. Each is a React component registered by name.
+- **Foundation screens**: the route shell, navigation stack and restoration (scroll,
+  focus, query), detail presentation (fullscreen/modal/stack), player chrome host, guide.
+- **The native player** (spike b).
+
+### Deleted after conversion
+
+`client/` as an Exact app (`app.contract`, `foundation/*.contract`, `skins/`, `renderer/`,
+`app.tamber`, `exact.mjs`, `modules/web/index.js`), `vendor/exact`, `EXACT_REVISION`,
+`tools/check.ts`, `tools/engine.ts`, `tools/renderer.ts`, `tools/tvos.ts`, the Exact
+sections of `AGENTS.md`, and the docs that describe compiled skins or Contract workarounds.
+
+## The skin renderer
+
+Documents stay schema 1 and are not changed for React Native. The renderer implements a
+declared `RENDERER_VERSION` (15 at spike start, the version the Vela base needs); a
+document that asks for a newer renderer is refused on version and falls back to the
+built-in document, never half-drawn.
+
+**Resolve once, render many.** `resolve(doc, base, viewport, locale)` validates the
+document, applies inheritance from the Vela base, inlines templates, applies `small`/`wide`
+variants for the viewport, substitutes tokens, expands motion presets, compiles templates
+and conditions to small closures, and translates every style row once (next section). It
+returns a plain tree. It re-runs only when the document, viewport class or locale changes.
+
+**Render.** `<SkinNode node ctx />` is recursive. There is no depth table: the resolver
+keeps sanity limits (4,000 nodes, 32 levels) as refusals, not as layout rules, and widgets
+may sit at any depth.
+
+**Bindings.** The vocabulary becomes a typed map from key to accessor,
+`'card.name': (ctx, env) => ctx.card?.name ?? ''`. A compiled template calls only the
+accessors it names, so a node costs what it binds, not the whole vocabulary.
+`ctx` carries `card`, `hero`, `row`, `heroAct`, `dest`, `extra`, `person`, `fact`, `ch`,
+`opt` and `index`; `env` is the store's view state. Unknown keys are refused at resolve
+time, as today.
+
+**Inheritance.** React Native views do not pass text style to children. The resolver
+computes each node's inherited text rows (colour, font, size, weight, line height,
+letter spacing, transform, alignment) down the tree and the renderer applies them only at
+`text` nodes. `inherit` placeholders disappear.
+
+**Repeat.** `repeat` over `home.rows` is a vertical `FlatList`, over `row.items` a
+horizontal one, so long homes virtualize. Other repeats map over their items.
+
+**Interaction.** A `press` box is a `Pressable`. `hover` overlays apply on pointer
+platforms (web, iPad, Mac). On TV, `focus` drives the same overlays through the native
+focus engine (tvOS) and D-pad focus (Android TV); a node with `hover` but no `focus`
+uses its hover overlay as its TV focus look. `group`/`groupHover` is a context flag set
+by the nearest group's hover or focus. Rows use `TVFocusGuideView` so focus moves
+between rows the way the server ordered them.
+
+**Motion.** Presets map to Reanimated 4 CSS animations (`animationName` keyframes,
+duration, delay, easing, iterations, direction, fill), and `transition` to Reanimated CSS
+transitions. Under reduced motion (`AccessibilityInfo` and Reanimated's `ReducedMotion`)
+the document's reduced alternative runs, or nothing.
+
+**Visibility.** The `observe` widget reports a receipt only when the element is actually
+on screen: `onViewableItemsChanged` inside virtualized lists, layout-in-viewport checks
+elsewhere, never on prefetch, and never while the app is backgrounded.
+
+## Style matrix (React Native 0.88, new architecture)
+
+This is the boundary for skin documents from now on. **Supported** and **Mapped** rows
+draw the same on every platform. **Approximated** rows draw close to their meaning, and
+the validator notes the approximation. **Web only** rows draw on web and are ignored
+silently on native. **Unsupported** rows are refused by the validator. Do not add new uses
+of Approximated or Unsupported rows.
+
+| Class | Rows | On native |
+|---|---|---|
+| Supported | `display` (`flex`, `none`), `position` (`relative`, `absolute`), `top`/`right`/`bottom`/`left`/`inset`, `z-index`, `width`/`height`/`min-*`/`max-*`, `aspect-ratio`, `flex`, `flex-grow`/`-shrink`/`-basis`, `flex-direction`, `flex-wrap`, `align-items`/`-self`, `justify-content`, `gap`/`row-gap`/`column-gap`, `order` (resolver reorders), `margin*`, `padding*`, `overflow` (`hidden`, `visible`), `color`, `background-color`, `opacity`, `border*` (width, colour, radius, style, per side), `outline`, `box-shadow` (incl. inset, several), `font-family`, `font-size`, `font-weight`, `font-style`, `line-height`, `letter-spacing`, `text-transform`, `text-align`, `font-variant-numeric`, `translate`/`scale`/`rotate`/`perspective`, `transform-origin`, `pointer-events`, `transition`, `animation` | As written |
+| Mapped | `background-image: linear-gradient(...)` / `radial-gradient(...)` → `experimental_backgroundImage`; `background-image: url(...)` → an absolutely filled expo-image under the content; `line-clamp` → `numberOfLines`; `text-overflow: ellipsis` → `ellipsizeMode`; `white-space: nowrap` → one line; `text-shadow` → `textShadow*` (the first shadow); `object-fit` → expo-image `contentFit`; `overflow-x/-y: auto/scroll` → a `ScrollView` on that axis; units `rem`, `em`, `vw`, `vh`, `clamp()`, `min()`, `max()` and simple `calc()` → resolved to numbers per viewport | Same result |
+| Approximated | `backdrop-filter: blur(n)` → expo-blur `BlurView` (other functions dropped); `mask-image: linear-gradient(...)` → MaskedView + gradient (`url()` masks unsupported); `display: grid` with `grid-template-columns` of equal or fixed tracks → wrapped flex rows with computed widths (`grid-row`, `grid-column` spans, named areas unsupported); `filter` → `filter` where the platform supports the function, else dropped; `corner-shape: squircle` → `borderCurve: 'continuous'` on Apple, round elsewhere; `scroll-snap-type`/`-align` → `snapToInterval` when items have a fixed width, else none; `position: sticky` only on a **direct child of a vertical scroll box**: the route root (the renderer wraps every route root's children in the route's vertical ScrollView) or a box the document itself scrolls (`overflow-y: auto`/`scroll`) → that ScrollView's `stickyHeaderIndices`, pinned at its top (a non-zero `top` is ignored); anywhere else it is refused | Close, noted by the validator |
+| Web only | `cursor`, `scrollbar-width`, `scroll-behavior`, `scroll-padding-*`, `color-scheme`, `box-sizing: border-box` (React Native is always border-box) | Ignored |
+| Unsupported | `-webkit-text-stroke`, `position: fixed`/`static`, `position: sticky` outside a scroll box's direct children, `box-sizing: content-box`, `display: block`/`inline`/`contents`, multiple text shadows, `mask-image: url()`, grid placement (`grid-row`, `grid-column`, `grid-template-rows`, areas) | Refused |
+
+Decided 2026-11-16 (finding in 177d4ce): document owners rewrite `box-sizing: content-box`, `display: block`/`contents`, multiple text shadows and `grid-column`; constrained sticky (above) stays.
+
+## Player view contract (`packages/player-api`)
+
+One contract, three implementations (Apple, Android, web). It is the browser contract in
+`client/player/model.ts`, with typed props instead of JSON strings.
+
+```ts
+<VelaPlayerView
+  session={PlaybackSession}          // or plan={PlaybackPlan}; a newer revision/generation replaces it
+  command={Command}                  // { id, type, ... }; each id is consumed once, older ids ignored
+  onSnapshot={(s: Snapshot) => …}    // at most 4 per second, and on every state change
+  onError={(f: Failure) => …}        // network | source | decoder | unsupported | action
+  onObservation={(o: { sessionId, observation: PlayerObservation }) => …}  // at most 1 per second
+  style={…} />
+```
+
+Commands: `play`, `pause`, `seek {seconds}`, `volume {value}`, `audio {trackId}`,
+`subtitle {trackId|null}`, `quality {renditionId|null}`, `lowDelay {enabled}`, `pip`,
+`fullscreen`. Snapshot fields are those of `model.ts` (`Snapshot`); a value the
+implementation cannot observe is `null`, never estimated.
+
+**Media credentials** never travel through props, snapshots, errors or logs. The trusted
+host (the app's playback controller, not skin code) calls
+`VelaPlayer.setMediaAccess({ origin, pathPrefix, headers })` before loading. The
+native side attaches the headers only to requests inside `origin + pathPrefix`, and
+refuses redirects that leave it. Implementations must show this holds for redirects
+before shipping.
+
+Player chrome stays in JavaScript (skin-styled widgets over the view). The view draws
+video and bitmap subtitles; text subtitles may be drawn by the engine (`sub-ass`) for
+exact ASS styling.
+
+### Apple implementation (spike b: tvOS on the Basement Apple TV)
+
+- Expo module `modules/vela-player/ios`, Swift. `VelaPlayerView` is an `ExpoView` hosting
+  a `CAMetalLayer`.
+- libmpv from **MPVKit 1.0.0, the LGPL `MPVKit` product** (not `MPVKit-GPL`). Link it with
+  React Native's `spm_dependency` in the module podspec, or vendor the release
+  xcframeworks if that fails on tvOS. Record which one in this document.
+- mpv options to start from: `vo=gpu-next`, `gpu-api=vulkan` (MoltenVK), `wid` = the
+  layer, `hwdec=videotoolbox` (fall back to `videotoolbox-copy`), `keep-open=yes`,
+  `cache=yes` with a bounded `demuxer-max-bytes`, `audio-channels` matching the output.
+- Map mpv state to the snapshot: `time-pos`, `duration`, `pause`, `paused-for-cache`,
+  `demuxer-cache-time` (buffer ahead), `cache-speed` (throughput), `frame-drop-count`,
+  `track-list` (tracks, ids, codecs, languages, forced, default), `aid`/`sid`/`vid`.
+  Observe properties with `mpv_observe_property`, never by polling.
+- tvOS display matching: set `AVDisplayManager.preferredDisplayCriteria` from the video's
+  frame rate and dynamic range before the first frame, and clear it on stop.
+- Lifecycle: `destroy` terminates the mpv handle, releases the layer and clears criteria.
+
+**Spike (b) passes when** a lab MKV with HEVC Main10, PGS subtitles and a TrueHD or
+E-AC-3 track plays on Basement through the view, from a real lab `PlaybackPlan`:
+first frame, steady playback with A/V sync, seek, audio and subtitle switching, pause and
+resume, a clean stop, and correct snapshots. Record what HDR/Dolby Vision output it
+actually achieves (tone-mapped SDR is acceptable for the spike; say which).
+
+### Android implementation (conversion)
+
+Kotlin, the same contract, libmpv from mpv-android's build on a `SurfaceView`,
+`hwdec=mediacodec`. Android TV uses the same module; display mode matching through
+`Surface.setFrameRate` and `Display.Mode`.
+
+### Web implementation
+
+The web keeps the Vela-owned WebCodecs/WebGPU core (`client/player/core`) behind the same
+contract, as `VelaPlayerView.web.tsx`, which mounts the engine into a DOM node through
+react-native-web. Native `<video>`/MSE remains its last resort. The old player paths the
+playback lead is excising stay excised.
+
+## Spike (a): the React skin renderer
+
+Owner: `thr_b57w7znkf9`. Location: `apps/vela`, `packages/skin`. It moves no existing file:
+it imports `client/src`, `protocol/v0` and the Vela base by path alias.
+
+Scope: the home route and the title route of two documents, the Vela base as Cinematic
+and Mochi, drawn with live data from an Ether adapter. Hero, rows, cards, title detail,
+the search field widget filtering titles, the appearance switch between the two
+documents, and focus navigation on tvOS. Not in scope: player, live, guide, library,
+the auth screens (the spike signs in from configuration).
+
+**Spike (a) passes when** both documents draw home and title on web (1440 px and
+390 px), the iOS Simulator and the Basement Apple TV, side by side with screenshots of the
+Exact build of the same documents, with focus moving through hero, rows and cards on tvOS
+by remote. Known differences go in this document, row by row.
+
+## After the spikes
+
+1. Move files into `packages/` with `git mv` once the adapter redesign has landed.
+2. Renderer to the full vocabulary and every route; all widgets.
+3. Player module integrated on iOS and tvOS; player chrome as widgets.
+4. Android and Android TV (player module in Kotlin).
+5. Web parity with the existing web core.
+6. Release and distribution: signed skin documents unchanged; app builds through
+   `xcodebuild`/Gradle locally (or EAS, owner's call).
+7. Delete the Exact client (list above).
+8. macOS host, Windows host.
+
+## Open questions
+
+- Whether mpv's HTTP stack can be held to "no headers after a cross-origin redirect", or
+  the host must resolve redirects before loading. Spike (b) answers this.
+- HDR/Dolby Vision output path on tvOS through MoltenVK (EDR, HDR10 passthrough). Spike
+  (b) records what it gets; full HDR may need a Metal presenter later.
+- Audio passthrough (TrueHD/DTS-HD bitstream) on tvOS is not available to third-party apps
+  in general; decoded multichannel PCM is the expected path.

@@ -12,7 +12,7 @@
 import type { SkinDocModel } from './index';
 
 /** Collections that draw many items at once (a row, a grid, a list): what a node inside one costs is multiplied. */
-const MANY = new Set(['row.items', 'library.items', 'collection.items', 'detail.episodes', 'detail.related', 'detail.cast', 'live.channels', 'live.favorites']);
+const MANY = new Set(['row.items', 'library.items', 'collection.items', 'detail.episodes', 'detail.related', 'detail.cast', 'live.channels', 'live.favorites', 'search.titles', 'search.descriptive', 'search.ai', 'search.onNow', 'search.comingUp']);
 
 export const BUDGETS = {
   // Nodes in one page's tree (its repeats counted once).

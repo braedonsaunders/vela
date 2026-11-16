@@ -984,8 +984,8 @@ export const title: Node = {
               style: {
                 ...fill,
                 'background-image':
-                  'linear-gradient(180deg, $page-veil 0%, $page-veil 45%, $page 100%), '
-                    + 'linear-gradient(90deg, $page-veil 0%, $page-clear 100%)',
+                  'linear-gradient(180deg, $page-veil 0%, $page-veil 45%, $page 100%), ' +
+                  'linear-gradient(90deg, $page-veil 0%, $page-clear 100%)',
               },
             },
           ],

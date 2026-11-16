@@ -38,8 +38,7 @@ are scoped by server ID; changing servers invalidates the previous viewer's cach
 answers, negotiation, event cursors and preview state.
 
 Adapters translate their server's real behavior into the v0 types consumed by
-`ServerAdapter`. They expose only supported features in capabilities and return an
-honest unavailable error for unsupported operations. Authentication is per adapter:
+`ServerAdapter` (see "Core contract and capabilities" below). Authentication is per adapter:
 its session validation returns a current viewer or a signed-out state; a transient
 validation error is not sign-out. Native non-expiring tokens need no invented refresh.
 Credentials and the stable client identifier remain in Exact secret storage, never
@@ -94,6 +93,37 @@ snapshot fallback. A server without an event stream uses bounded, cancellable sn
 polling while the session is active; it must not invent cursors or event semantics.
 Appearance and distributed skins are optional server features; absence uses the local
 built-in appearance rather than an invented remote endpoint.
+
+### Core contract and capabilities
+
+`ServerAdapter` (`client/src/adapter/index.ts`) is only what every media server has:
+session validation and revocation, the server's description, home, rows, libraries,
+library browse, collections, detail, catalogue search, a playback plan, the player's
+observations, transport commands (seek, pause, resume, stop) and the session snapshot.
+Its operations are named by meaning (`home`, `startPlayback`, `reportObservation`), not
+by Ether's endpoints, and they speak the v0 data shapes, which remain the common language.
+
+Everything else is a small optional capability (`adapter/capabilities.ts`): password,
+web-code, device-grant and Quick Connect sign-in, client declaration, descriptive and AI
+search, trailer previews, ranking interactions, audio fallback, track changes, path
+switching, proactive fallback, live TV, event streams and appearance. An adapter
+implements a capability only when its server really offers it; nothing is stubbed to
+throw. Callers find a capability by presence with its type guard (`hasLiveTv(adapter)`)
+and narrow without casts; a player command goes through `adapter/commands.ts`, which
+refuses a kind the server does not offer with an honest `unsupported` error.
+
+Advertised capabilities are derived, never declared twice (`adapter/advertise.ts`). An
+adapter's `describe()` states its server's features; a feature that is an operation is
+advertised available only when the adapter implements its capability **and** the server
+states it available. The foundation's feature gating reads those advertised
+capabilities, so it cannot offer what the adapter cannot do. Today Ether implements every
+capability; Jellyfin implements password and Quick Connect sign-in, client declaration and
+live TV; Plex implements path switching and live TV (it signs in through plex.tv linking,
+`adapter/plex/link.ts`, outside the per-server adapter).
+
+**Rule: a new feature that only some servers have, including every new Ether-only
+feature, becomes a capability, never a core obligation.** A core method is added only when
+every supported server can implement it for real.
 
 ### Implementation
 
