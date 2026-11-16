@@ -1,6 +1,6 @@
 // Whether a view is on screen, within a margin past the screen's edge: an IntersectionObserver
-// on the web; on native, the view's window position checked while the app is in front. Reports
-// each time the view comes into range, never while the app is in the background.
+// on the web; on native, the view's window position checked while the app is in front. A view
+// counts as coming into range only while the app is in the foreground; leaving is always reported.
 import { useEffect, useRef, type RefObject } from 'react';
 import { AppState, Dimensions, Platform, type HostInstance } from 'react-native';
 
@@ -12,24 +12,41 @@ export interface Reach {
 
 const NATIVE_CHECK_MS = 400;
 
-export function useInView(ref: RefObject<HostInstance | null>, reach: Reach, onEnter: () => void): void {
-  const latest = useRef(onEnter);
-  latest.current = onEnter;
+/** Reports each change of the view's visibility: true when it comes into range, false when it leaves. */
+export function useVisibility(
+  ref: RefObject<HostInstance | null>,
+  reach: Reach,
+  onChange: (visible: boolean) => void,
+): void {
+  const latest = useRef(onChange);
+  latest.current = onChange;
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    const enter = () => latest.current();
+    const change = (visible: boolean) => latest.current(visible);
     return Platform.OS === 'web'
-      ? observeWeb(node as unknown as Element, reach, enter)
-      : pollNative(node, reach, enter);
+      ? observeWeb(node as unknown as Element, reach, change)
+      : pollNative(node, reach, change);
   }, [ref, reach.below, reach.after]);
 }
 
-function observeWeb(element: Element, reach: Reach, enter: () => void): () => void {
+/** Calls `onEnter` each time the view comes into range. */
+export function useInView(ref: RefObject<HostInstance | null>, reach: Reach, onEnter: () => void): void {
+  const latest = useRef(onEnter);
+  latest.current = onEnter;
+  useVisibility(ref, reach, visible => {
+    if (visible) latest.current();
+  });
+}
+
+function observeWeb(element: Element, reach: Reach, change: (visible: boolean) => void): () => void {
+  let inside = false;
   const observer = new IntersectionObserver(
     entries => {
-      if (document.visibilityState !== 'visible') return;
-      if (entries.some(entry => entry.isIntersecting)) enter();
+      const now = entries.some(entry => entry.isIntersecting);
+      if (now && document.visibilityState !== 'visible') return;
+      if (now !== inside) change(now);
+      inside = now;
     },
     { rootMargin: `0px ${reach.after}px ${reach.below}px 0px` },
   );
@@ -37,7 +54,7 @@ function observeWeb(element: Element, reach: Reach, enter: () => void): () => vo
   return () => observer.disconnect();
 }
 
-function pollNative(node: HostInstance, reach: Reach, enter: () => void): () => void {
+function pollNative(node: HostInstance, reach: Reach, change: (visible: boolean) => void): () => void {
   let inside = false;
   const check = () => {
     if (AppState.currentState !== 'active') return;
@@ -50,7 +67,7 @@ function pollNative(node: HostInstance, reach: Reach, enter: () => void): () => 
         x + width > 0 &&
         y < screen.height + reach.below &&
         y + height > 0;
-      if (now && !inside) enter();
+      if (now !== inside) change(now);
       inside = now;
     });
   };

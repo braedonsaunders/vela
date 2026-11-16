@@ -11,9 +11,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
+import { EscapeScope, focusElement, focusTarget, noteOpener, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
@@ -192,6 +193,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
   const [groupUi, setGroupUi] = useState({ hover: false, focus: false });
   const scrollRef = useRef<Scroller>(null);
+  const buttonRef = useRef<Focusable | null>(null);
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
   const rows = rowsFor(node, ctx, env, ui, parentGroup, disabled);
@@ -235,15 +237,28 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   }
   const layers = (
     <>
-      {fx.backdropBlur ? <BlurView intensity={Math.min(100, Math.round(fx.backdropBlur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+      {/* On a TV a live backdrop blur re-blurs everything moving behind it each frame; the
+          document's glass colour stays and the blur is left out. */}
+      {fx.backdropBlur && !Platform.isTV ? (
+        <BlurView intensity={Math.min(100, Math.round(fx.backdropBlur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} />
+      ) : null}
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}
     </>
   );
   const drawn: Record<string, unknown> = { ...style, ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion };
+  // A masked box that only paints a colour draws the masked colour as a gradient fill.
+  const filled = !!fx.maskedFill && node.children.length === 0;
+  if (filled) {
+    delete drawn.backgroundColor;
+    drawn.backgroundImage = fx.maskedFill;
+  }
   // A native mask wraps the box: the mask takes the box's geometry and the box fills it in flow,
-  // so the mask is as large as the box's content.
-  const [geometry, inner] = fx.mask ? partition(drawn, GEOMETRY) : [{}, drawn];
-  const boxStyleFinal = fx.mask ? { ...inner, flexGrow: 1 } : drawn;
+  // so the mask is as large as the box's content. It renders the box offscreen at full size, which
+  // a TV cannot afford across a home of masked rows (Basement was killed at 1.6 GB): on TV other
+  // masks are left out and the box draws with hard edges.
+  const masked = !filled && !Platform.isTV && !!(fx.mask || fx.radialMask);
+  const [geometry, inner] = masked ? partition(drawn, GEOMETRY) : [{}, drawn];
+  const boxStyleFinal = masked ? { ...inner, flexGrow: 1 } : drawn;
   const a11y = a11yProps(node, ctx, env);
   const hoverProps = web && (node.base.hover || node.group || node.states.some(s => s.layer.hover))
     ? { onMouseEnter: () => set('hover', true), onMouseLeave: () => set('hover', false) } : {};
@@ -270,10 +285,24 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   } else {
     // A press box is the schema's full-size transparent button over its content: the button takes
     // focus (keyboard, tvOS focus engine, D-pad) and carries the label; the box keeps its motion.
+    // The button registers under the box's id, so Escape's returnFocus can land on it.
     const press = node.press;
+    const registerButton = focusTarget(a11y.nativeID);
+    const bindButton = (target: Focusable | null) => {
+      buttonRef.current = target;
+      return registerButton(target);
+    };
+    const onPress = press && (() => {
+      const arg = fill(press.arg, ctx, env);
+      const focus = press.focus ? fill(press.focus, ctx, env) : '';
+      noteOpener(press.action, arg, buttonRef.current);
+      host.dispatch(press.action, arg);
+      // press.focus: the element the action draws (a drawer's first row) takes focus once drawn.
+      if (focus) requestAnimationFrame(() => focusElement(focus));
+    });
     const button = press ? (
-      <Pressable style={[StyleSheet.absoluteFill, ownFocusLook(node) ? NO_RING : null]} disabled={disabled}
-        onPress={() => host.dispatch(press.action, fill(press.arg, ctx, env))}
+      <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, ownFocusLook(node) ? NO_RING : null]} disabled={disabled}
+        onPress={onPress}
         onFocus={() => set('focus', true)} onBlur={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
@@ -288,7 +317,11 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
       </AView>
     );
   }
-  if (fx.mask) element = <Mask mask={fx.mask} style={geometry}>{element}</Mask>;
+  if (masked) element = <Mask linear={fx.mask} radial={fx.radialMask} style={geometry}>{element}</Mask>;
+  if (node.escape?.length) {
+    const returnFocus = node.returnFocus ? fill(node.returnFocus, ctx, env) : undefined;
+    element = <EscapeScope flags={node.escape} returnFocus={returnFocus || undefined}>{element}</EscapeScope>;
+  }
   const direction = fx.grid || (fx.scrollX && !fx.scrollY) || String(style.flexDirection ?? 'column').startsWith('row') ? 'row' : 'column';
   return (
     <Inherited.Provider value={text}>
@@ -331,14 +364,55 @@ function ownFocusLook(node: RNode): boolean {
 }
 const NO_RING = { outlineWidth: 0 } as ViewStyle;
 
+interface MaskProps {
+  linear?: Effects['mask'];
+  radial?: Effects['radialMask'];
+  style: Record<string, unknown>;
+  children: ReactNode;
+}
+
 /** A native gradient mask with the box's geometry, around the box. */
-function Mask({ mask, style, children }: { mask: NonNullable<Effects['mask']>; style: Record<string, unknown>; children: ReactNode }) {
+function Mask({ linear, radial, style, children }: MaskProps) {
   return (
-    <Masked style={style as ViewStyle} maskElement={
-      <LinearGradient colors={mask.colors as [string, string, ...string[]]} locations={mask.locations as [number, number, ...number[]]} start={mask.start} end={mask.end} style={StyleSheet.absoluteFill} />
-    }>
+    <Masked style={style as ViewStyle} maskElement={linear ? <LinearMask mask={linear} /> : <RadialMask mask={radial!} />}>
       {children}
     </Masked>
+  );
+}
+
+function LinearMask({ mask }: { mask: NonNullable<Effects['mask']> }) {
+  return (
+    <LinearGradient
+      colors={mask.colors as [string, string, ...string[]]}
+      locations={mask.locations as [number, number, ...number[]]}
+      start={mask.start}
+      end={mask.end}
+      style={StyleSheet.absoluteFill}
+    />
+  );
+}
+
+/** An elliptical radial mask, drawn with an SVG gradient stretched over the box. */
+function RadialMask({ mask }: { mask: NonNullable<Effects['radialMask']> }) {
+  return (
+    <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
+      <Defs>
+        <RadialGradient
+          id="mask"
+          cx={mask.centre.x * 100}
+          cy={mask.centre.y * 100}
+          rx={mask.radius.x * 100}
+          ry={mask.radius.y * 100}
+          gradientUnits="userSpaceOnUse"
+        >
+          {mask.colors.map((colour, i) => (
+            <Stop key={i} offset={mask.locations[i]} stopColor={colour === 'transparent' ? '#000' : colour}
+              stopOpacity={colour === 'transparent' ? 0 : 1} />
+          ))}
+        </RadialGradient>
+      </Defs>
+      <Rect x={0} y={0} width={100} height={100} fill="url(#mask)" />
+    </Svg>
   );
 }
 
@@ -398,7 +472,15 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
   // The box carries the node's style and motion; the image fills it.
   return (
     <AView style={style as ViewStyle} pointerEvents="none" accessible={!!alt} accessibilityLabel={alt || undefined} accessibilityRole={alt ? 'image' : undefined}>
-      {source ? <Image source={source} style={StyleSheet.absoluteFill} contentFit={fx.contentFit ?? 'fill'} blurRadius={fx.imageBlur} transition={node.fade ? 420 : 0} /> : null}
+      {source ? (
+        <Image
+          source={source}
+          style={StyleSheet.absoluteFill}
+          contentFit={fx.contentFit ?? 'fill'}
+          blurRadius={fx.imageBlur}
+          transition={node.fade ? 420 : 0}
+        />
+      ) : null}
     </AView>
   );
 }

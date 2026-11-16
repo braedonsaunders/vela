@@ -1,6 +1,6 @@
 // Collection pages: a back bar with the collection's name over its titles.
 import type { Node } from '../../../skin';
-import { sans, bar, fill, px, is, set, glyph, round, oneLine } from './look';
+import { sans, fill, is, set, glyph, round, oneLine } from './look';
 import { glassBar } from './shell';
 import { spinner } from './cards';
 import { empty, ready, loading, failure } from './home';
@@ -32,13 +32,12 @@ export const collectionRoute: Node = {
         'overflow-y': 'auto',
       },
       children: [
-        // Opening: the amber ring and what is happening, below the bar's height.
+        // Opening: the amber ring and what is happening.
         {
           type: 'box',
           when: [loading],
           motion: 'statusIn',
-          style: { display: 'flex', 'flex-direction': 'column', 'padding-top': px(bar.normal) },
-          small: { 'padding-top': px(bar.small) },
+          style: { display: 'flex', 'flex-direction': 'column' },
           children: [
             {
               type: 'box',

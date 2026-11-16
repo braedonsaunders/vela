@@ -3,7 +3,19 @@
 // draws with extra components (blur, mask, background image, scrolling, grid). Text rows are
 // translated where text is drawn, with the inherited rows of every ancestor merged in.
 import { Platform, type TextStyle, type ViewStyle } from 'react-native';
-import { colour, length, linearGradient, points, pxText, splitTop, withTokens, type LinearGradient, type Measure } from './css';
+import {
+  colour,
+  length,
+  linearGradient,
+  points,
+  pxText,
+  radialGradient,
+  splitTop,
+  withTokens,
+  type LinearGradient,
+  type Measure,
+  type RadialGradient,
+} from './css';
 import { fontFace } from './fonts';
 import { easing } from './motion';
 
@@ -25,8 +37,11 @@ export interface Effects {
   grid?: { count?: number; min?: number; gap: number };
   /** Native backdrop blur radius in points (web uses CSS backdrop-filter directly). */
   backdropBlur?: number;
-  /** Native gradient mask (web uses CSS mask-image directly). */
+  /** A masked box that only paints a colour: the mask and colour as one gradient fill (no mask needed). */
+  maskedFill?: string;
+  /** Native gradient masks (web uses CSS mask-image directly). */
   mask?: LinearGradient;
+  radialMask?: RadialGradient;
   /** A url() background image, drawn as a filled image under the content. */
   backgroundUrl?: string;
   /** Image rows: fit and a blur filter, which expo-image draws itself. */
@@ -169,8 +184,14 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
         if (v === 'none') break;
         const blur = /blur\(([^)]+)\)/.exec(v);
         if (blur) fx.imageBlur = points(blur[1], { ...m, axis: 'x' });
-        const rest = web ? v : v.replace(/blur\([^)]*\)/g, '').trim();
-        if (rest) s.filter = pxText(rest, m);
+        if (web) {
+          s.filter = pxText(v, m);
+          break;
+        }
+        // Natively only brightness and opacity are cheap: other functions render the whole box
+        // offscreen, which on a full-screen stage costs hundreds of megabytes on a TV.
+        const cheap = splitTop(v, 'space').filter(f => /^(brightness|opacity)\(/.test(f));
+        if (cheap.length) s.filter = cheap.join(' ');
         break;
       }
       case 'backdrop-filter': {
@@ -183,8 +204,11 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
       case 'mask-image': {
         if (v === 'none') break;
         if (web) { s.maskImage = withTokens(v); s.WebkitMaskImage = withTokens(v); break; }
-        const mask = linearGradient(v);
-        if (mask) fx.mask = mask; else refuse('mask-image');
+        const linear = linearGradient(v);
+        const radial = linear ? undefined : radialGradient(v);
+        if (linear) fx.mask = linear;
+        else if (radial) fx.radialMask = radial;
+        else refuse('mask-image');
         break;
       }
       case 'object-fit': fx.contentFit = v as Effects['contentFit']; break;
@@ -215,6 +239,14 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
     }
   }
   if (transform.length) s.transform = transform;
+  // A gradient mask over a plain colour is that colour as a gradient: drawn as a fill, it costs
+  // nothing, where a mask renders the box offscreen.
+  if ((fx.mask || fx.radialMask) && typeof s.backgroundColor === 'string' && !s.backgroundImage && !fx.backgroundUrl) {
+    fx.maskedFill = withTokens(css['mask-image']).replace(/\b(black|#000000|#000)\b/g, s.backgroundColor);
+  }
+  // A sticky node is pinned at its scroll view's top (the style matrix ignores a non-zero `top`):
+  // its offsets are not a relative shift, which would draw it below its own place in flow.
+  if (fx.sticky) { delete s.top; delete s.bottom; }
   if (fx.grid && s.columnGap !== undefined) fx.grid.gap = typeof s.columnGap === 'number' ? s.columnGap : 0;
   for (const key of Object.keys(s)) if (s[key] === undefined) delete s[key];
   return { style: s as ViewStyle & Transitions, fx };

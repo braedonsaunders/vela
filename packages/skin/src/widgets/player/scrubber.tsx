@@ -1,11 +1,13 @@
 // The timeline: buffered ranges, the played fill, chapter marks and a thumb. Dragging (pointer
 // or touch) moves the thumb at once and seeks on release; the thumb stays where it was let go
 // until the engine's position catches up, so it never jumps back. On TV the focused timeline
-// takes left and right as ten-second steps and seeks when the presses stop. A bubble over the
-// thumb shows the target time and, once a session offers trickplay, its frame.
+// takes left and right as ten-second steps and seeks when the presses stop. On the web the
+// timeline is a focusable slider: the arrows step ten seconds (the chrome's shortcuts), Page Up and
+// Page Down a minute, Home and End go to the start and the end. A bubble over the thumb shows the
+// target time and, once a session offers trickplay, its frame.
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { Pressable, Text, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
+import { Platform, Pressable, Text, View, type GestureResponderEvent } from 'react-native';
 import { msg } from '@vela/core';
 import type { PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
@@ -13,6 +15,7 @@ import { timecode, type PlayerView } from './present';
 import { pressed, useRemote } from './remote';
 
 const STEP_SECONDS = 10;
+const PAGE_SECONDS = 60;
 /** TV: the presses stop for this long, then the timeline seeks. */
 const SETTLE_MS = 650;
 /** A released target is held until the engine reports a position this close, or this long passes. */
@@ -56,19 +59,48 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: 
     onSeek(clamped);
   };
 
+  /** Where the timeline sits in the window, kept current so a quick click needs no measuring. */
+  const measure = () => {
+    box.current?.measureInWindow((left, _top, width) => {
+      frame.current = { left, width };
+    });
+  };
+
   const fromEvent = (event: GestureResponderEvent) => {
     const { left, width } = frame.current;
     return Math.max(0, Math.min(1, (event.nativeEvent.pageX - left) / Math.max(1, width))) * duration;
   };
 
   const grant = (event: GestureResponderEvent) => {
-    const pageX = event.nativeEvent.pageX;
     onActive(true);
-    box.current?.measureInWindow((left, _top, width) => {
-      frame.current = { left, width };
-      setTarget(Math.max(0, Math.min(1, (pageX - left) / Math.max(1, width))) * duration);
-    });
+    setTarget(fromEvent(event));
+    measure();
   };
+
+  /** Web keys on the focused timeline; the arrows are the chrome's own shortcuts. */
+  const keys =
+    Platform.OS === 'web'
+      ? {
+          onKeyDown: (event: { nativeEvent: object; preventDefault(): void }) => {
+            if (disabled || duration <= 0) return;
+            const key = (event.nativeEvent as { key?: string }).key;
+            const from = held?.seconds ?? view.position;
+            const to =
+              key === 'Home'
+                ? 0
+                : key === 'End'
+                  ? duration
+                  : key === 'PageUp'
+                    ? from + PAGE_SECONDS
+                    : key === 'PageDown'
+                      ? from - PAGE_SECONDS
+                      : null;
+            if (to === null) return;
+            event.preventDefault();
+            commit(to);
+          },
+        }
+      : {};
 
   useRemote(event => {
     if (!focused || disabled) return;
@@ -93,9 +125,7 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: 
   return (
     <View
       ref={box}
-      onLayout={(e: LayoutChangeEvent) => {
-        frame.current.width = e.nativeEvent.layout.width;
-      }}
+      onLayout={measure}
       style={{ height, justifyContent: 'center' }}
       onStartShouldSetResponderCapture={() => !disabled && duration > 0}
       onMoveShouldSetResponderCapture={() => !disabled && duration > 0}
@@ -112,12 +142,16 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: 
         accessibilityRole="adjustable"
         accessibilityLabel={msg('ui.playbackPosition')}
         accessibilityValue={{ min: 0, max: Math.round(duration), now: Math.round(shown), text: timecode(shown) }}
+        aria-valuemin={0}
+        aria-valuemax={Math.round(duration)}
+        aria-valuenow={Math.round(shown)}
+        aria-valuetext={timecode(shown)}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={e =>
           commit(shown + (e.nativeEvent.actionName === 'increment' ? STEP_SECONDS : -STEP_SECONDS))
         }
         disabled={disabled || duration <= 0}
-        focusable={look.tv && !disabled && duration > 0}
+        focusable={(look.tv || Platform.OS === 'web') && !disabled && duration > 0}
         testID="player-scrub"
         onFocus={() => setFocused(true)}
         onBlur={() => {
@@ -131,6 +165,7 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: 
           }
         }}
         style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center' }}
+        {...keys}
       >
         <View style={{ height: bar, borderRadius: bar / 2, backgroundColor: look.track, overflow: 'hidden' }}>
           {view.buffered.map((range, i) => (

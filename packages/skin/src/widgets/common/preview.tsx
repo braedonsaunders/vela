@@ -7,9 +7,12 @@
 // documents draw their overlay around the widget with `card.previewing` / `hero.previewing`. A
 // `cardPreview` must stay mounted while its card is idle (it is what reports the intent): show
 // its overlay through a state on `card.previewing` (opacity, scale), not a `when` on it.
-import { createContext, useContext, useEffect, type ComponentType, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+// A `heroPreview` reports whether its hero is on screen: a hero trailer is asked for only while
+// one is, so a hero scrolled away (or a document that draws no `heroPreview`) plays nothing.
+import { createContext, useContext, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
+import { StyleSheet, View, type HostInstance } from 'react-native';
 import { GroupContext, useHost, type WidgetProps } from '../../host';
+import { useVisibility, type Reach } from './in-view';
 
 export interface PreviewSource {
   /** The URL of the card preview playing now (`env.preview.cardId`), or ''. */
@@ -18,6 +21,8 @@ export interface PreviewSource {
   heroUrl: string;
   /** Hover or focus came to (on) or left a previewable card. */
   intent(cardId: string, rowId: string, on: boolean): void;
+  /** A hero's art came on screen (true) or left it, was hidden or unmounted (false). */
+  heroVisible(heroId: string, visible: boolean): void;
   /** Plays a preview URL, muted, filling its box. */
   Surface: ComponentType<{ url: string }>;
 }
@@ -59,6 +64,22 @@ export function HeroPreview({ ctx }: WidgetProps) {
   const { env } = useHost();
   const source = useContext(PreviewContext);
   const heroId = ctx.hero?.id ?? '';
+  const box = useRef<HostInstance>(null);
+  const report = source?.heroVisible;
+  useVisibility(box, ON_SCREEN, visible => {
+    if (heroId) report?.(heroId, visible);
+  });
+  useEffect(() => {
+    if (!heroId || !report) return;
+    return () => report(heroId, false);
+  }, [report, heroId]);
   const playing = source && heroId !== '' && env.preview?.heroId === heroId ? source.heroUrl : '';
-  return source && playing ? <Playing Surface={source.Surface} url={playing} /> : null;
+  return (
+    <View ref={box} style={StyleSheet.absoluteFill} pointerEvents="none">
+      {source && playing ? <Playing Surface={source.Surface} url={playing} /> : null}
+    </View>
+  );
 }
+
+/** The hero counts as visible only while some of it is on the screen itself. */
+const ON_SCREEN: Reach = { below: 0, after: 0 };

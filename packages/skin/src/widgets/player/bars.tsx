@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { Platform, Text, TVFocusGuideView, View, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { msg } from '@vela/core';
+import { easing } from '../../motion';
 import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
 import { LiveDial, LivePanel, type LiveWatch } from './live';
@@ -32,7 +33,8 @@ function shownStyle(look: PlayerLook, visible: boolean, from: number): ViewStyle
     transform: [{ translateY: visible || look.still ? 0 : from }],
     transitionProperty: ['opacity', 'transform'],
     transitionDuration: look.still ? 160 : 420,
-    transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+    // Native Reanimated takes a bezier only as cubicBezier(): easing() converts the CSS text.
+    transitionTimingFunction: easing('cubic-bezier(0.16, 1, 0.3, 1)'),
   } as ViewStyle;
 }
 

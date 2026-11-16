@@ -414,7 +414,9 @@ row, with a console warning naming it.
 - Per-document `traits`: `page`, `ink`, `splashOnPaper`. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 
 **Widgets**: `heroPreview`, `cardPreview` (with the card's intent on hover/focus in preview
-rows); an `active` (pressed) overlay and `replayOnPress`.
+rows); an `active` (pressed) overlay and `replayOnPress`. A `heroPreview` also tells the app
+whether its hero is on screen: a hero trailer is asked for only while it is, so a hero scrolled
+away, or a document that draws no `heroPreview`, plays none.
 
 **Routes next** (each with its vocabulary): search (lanes, status), status, collection,
 library (toolbar menus, sort/filter), auth (sign-in fields, quick connect), player chrome

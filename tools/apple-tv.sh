@@ -33,8 +33,18 @@ mkdir -p "$scratch/tmp"
 # Metro keeps its cache under TMPDIR: one per worktree, so a bundle never resolves another worktree's files.
 export TMPDIR="$scratch/tmp/"
 
+# One heavy native tool at a time on this Mac (simulator, xcodebuild, Gradle, emulator): the shared native lock.
+native_lock="$HOME/.bb/thread-storage/vela-orch/native.lock"
+locked() {
+  if [ -d "$(dirname "$native_lock")" ]; then
+    perl -MFcntl=:flock -e 'open(my $f,">>",shift);flock($f,LOCK_EX);my $p=fork();if(!$p){exec @ARGV}waitpid($p,0);exit($?>>8)' "$native_lock" "$@"
+  else
+    "$@"
+  fi
+}
+
 if [ "$prebuild" = 1 ] || [ ! -d "$root/apps/vela/ios" ]; then
-  (cd "$root/apps/vela" && EXPO_TV=1 bun x expo prebuild -p ios --clean)
+  (cd "$root/apps/vela" && EXPO_TV=1 locked bun x expo prebuild -p ios --clean)
 fi
 
 cd "$root/apps/vela/ios"
@@ -42,7 +52,7 @@ cd "$root/apps/vela/ios"
 if [ -n "$(find "$root/modules" -path '*/ios/*' -newer Pods/Manifest.lock -print -quit 2>/dev/null)" ]; then
   pod install >/dev/null
 fi
-if ! xcodebuild -workspace Vela.xcworkspace -scheme Vela -configuration Release \
+if ! locked xcodebuild -workspace Vela.xcworkspace -scheme Vela -configuration Release \
   -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath "$derived" \
   -allowProvisioningUpdates DEVELOPMENT_TEAM=9YL3YCJTNT CODE_SIGN_STYLE=Automatic \
   build >"$log" 2>&1; then

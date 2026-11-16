@@ -202,16 +202,8 @@ export interface LinearGradient {
   end: { x: number; y: number };
 }
 
-export function linearGradient(raw: string): LinearGradient | undefined {
-  const match = /^linear-gradient\((.*)\)$/i.exec(withTokens(raw.trim()));
-  if (!match) return undefined;
-  const parts = splitTop(match[1], 'comma');
-  let angle = 180;
-  if (parts.length && /^(-?\d*\.?\d+deg|to\s)/.test(parts[0])) {
-    const first = parts.shift()!;
-    const sides: Record<string, number> = { 'to top': 0, 'to right': 90, 'to bottom': 180, 'to left': 270 };
-    angle = first.endsWith('deg') ? parseFloat(first) : sides[first] ?? 180;
-  }
+/** A gradient's colour stops, with missing positions spread evenly. */
+function colourStops(parts: string[]): { colors: string[]; locations: number[] } | undefined {
   const colors: string[] = [];
   const stops: (number | undefined)[] = [];
   for (const part of parts) {
@@ -223,9 +215,49 @@ export function linearGradient(raw: string): LinearGradient | undefined {
     stops.push(pct === undefined ? undefined : parseFloat(pct) / 100);
   }
   if (colors.length < 2) return undefined;
-  const locations = stops.map((s, i) => s ?? i / (stops.length - 1));
+  return { colors, locations: stops.map((s, i) => s ?? i / (stops.length - 1)) };
+}
+
+export function linearGradient(raw: string): LinearGradient | undefined {
+  const match = /^linear-gradient\((.*)\)$/i.exec(withTokens(raw.trim()));
+  if (!match) return undefined;
+  const parts = splitTop(match[1], 'comma');
+  let angle = 180;
+  if (parts.length && /^(-?\d*\.?\d+deg|to\s)/.test(parts[0])) {
+    const first = parts.shift()!;
+    const sides: Record<string, number> = { 'to top': 0, 'to right': 90, 'to bottom': 180, 'to left': 270 };
+    angle = first.endsWith('deg') ? parseFloat(first) : sides[first] ?? 180;
+  }
+  const stops = colourStops(parts);
+  if (!stops) return undefined;
+  const { colors, locations } = stops;
   const radians = (angle * Math.PI) / 180;
   const dx = Math.sin(radians) / 2;
   const dy = -Math.cos(radians) / 2;
   return { colors, locations, start: { x: 0.5 - dx, y: 0.5 - dy }, end: { x: 0.5 + dx, y: 0.5 + dy } };
+}
+
+/** An elliptical radial gradient over the box: its centre and radii as fractions of the box. */
+export interface RadialGradient {
+  colors: string[];
+  locations: number[];
+  centre: { x: number; y: number };
+  radius: { x: number; y: number };
+}
+
+/** A radial-gradient as an ellipse over the box. `closest-side` reaches the nearer edges from the
+ * centre; any other size is taken as the farthest corner. */
+export function radialGradient(raw: string): RadialGradient | undefined {
+  const match = /^radial-gradient\((.*)\)$/i.exec(withTokens(raw.trim()));
+  if (!match) return undefined;
+  const parts = splitTop(match[1], 'comma');
+  let shape = '';
+  if (parts.length && /(closest|farthest|ellipse|circle|\bat\b)/.test(parts[0])) shape = parts.shift()!;
+  const stops = colourStops(parts);
+  if (!stops) return undefined;
+  const at = /\bat\s+(-?\d*\.?\d+)%\s+(-?\d*\.?\d+)%/.exec(shape);
+  const centre = { x: at ? Number(at[1]) / 100 : 0.5, y: at ? Number(at[2]) / 100 : 0.5 };
+  const closest = shape.includes('closest-side');
+  const reach = (c: number) => (closest ? Math.min(c, 1 - c) : Math.max(c, 1 - c) * Math.SQRT2);
+  return { ...stops, centre, radius: { x: reach(centre.x), y: reach(centre.y) } };
 }

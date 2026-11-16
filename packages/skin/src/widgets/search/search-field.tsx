@@ -4,10 +4,11 @@
 // draws its own field places the bare `searchInput` widget instead.
 import { msg } from '@vela/core';
 import { BlurView } from 'expo-blur';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { resolveUi } from '../../../../../client/src/skin/ui';
+import { focusTarget } from '../../escape';
 import { measure, useHost, type WidgetProps } from '../../host';
 import { SYMBOLS } from '../../icons';
 import { textStyle } from '../../translate';
@@ -49,11 +50,34 @@ export function SearchField({ ctx }: WidgetProps) {
     host.setFlag('search-focused', on);
   };
 
+  // The search actions (`search`, `focusSearch`) focus the field by its id: the text input itself,
+  // which on a TV opens the system keyboard.
+  const input = useRef<ElementRef<typeof TextInput>>(null);
+  useEffect(() => focusTarget('vela-search')({ focus: () => input.current?.focus() }), []);
+
+  // On a TV the field is a focus destination of its own (the focus engine skips a bare text input
+  // here): the remote moves onto it, and selecting it opens the keyboard.
+  const [tvFocused, setTvFocused] = useState(false);
+  const Frame = Platform.isTV ? Pressable : View;
+  const tvProps = Platform.isTV
+    ? {
+        onPress: () => input.current?.focus(),
+        onFocus: () => setTvFocused(true),
+        onBlur: () => setTvFocused(false),
+        accessibilityRole: 'search' as const,
+        accessibilityLabel: msg('ui.searchYourLibrary'),
+      }
+    : {};
+  const ring = tvFocused && !focused
+    ? { borderColor: ui.glassEdgeStrong, boxShadow: `0px 0px 0px 3px ${ui.focusHalo}` }
+    : null;
+
   return (
-    <View style={[styles.field, field]}>
-      <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />
+    <Frame style={[styles.field, field, ring]} {...tvProps}>
+      {Platform.isTV ? null : <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />}
       <Glyph symbol="search" size={20} color={focused ? ui.ink : ui.inkSecondary} />
       <TextInput
+        ref={input}
         value={host.env.query}
         onChangeText={host.setQuery}
         placeholder={msg('ui.aTitleAFeelingAWorldToGetLostIn')}
@@ -87,7 +111,7 @@ export function SearchField({ ctx }: WidgetProps) {
           <Glyph symbol="close" size={16} color={ui.ink} />
         </Pressable>
       ) : null}
-    </View>
+    </Frame>
   );
 }
 

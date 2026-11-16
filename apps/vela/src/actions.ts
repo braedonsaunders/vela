@@ -4,7 +4,7 @@
 import { router } from 'expo-router';
 import { useCallback } from 'react';
 import type { Vela as Store } from '@vela/core';
-import { page, type SkinHost } from '@vela/skin';
+import { focusElement, page, type SkinHost } from '@vela/skin';
 import { liveAction, type LiveController } from '@vela/skin/src/widgets/guide';
 import type { Action } from '../../../protocol/v0/skin';
 import { COLLECTION_KINDS, openCollection, openHit, openLibrary, playExtra } from './browse/open';
@@ -27,14 +27,15 @@ interface Context {
   store: Store;
   view: ViewState;
   live: LiveController | null;
-  nextDocument(): void;
+  /** Open the appearance picker. */
+  openPicker(): void;
 }
 
 function notYet(action: string, arg: string): void {
   console.info(`Vela: ${action} ${arg} is not carried out yet`);
 }
 
-export function useDispatcher({ store, view, live, nextDocument }: Context): Dispatcher {
+export function useDispatcher({ store, view, live, openPicker }: Context): Dispatcher {
   const loadMore = useCallback<SkinHost['loadMore']>((on, id) => {
     if (on === 'row') void store.home.rowItems(id);
     else if (on === 'home') void store.home.moreRows();
@@ -87,6 +88,8 @@ export function useDispatcher({ store, view, live, nextDocument }: Context): Dis
         return store.search.clear();
       case 'search':
       case 'focusSearch':
+        // The field's own focus sets search-focused; on a TV it opens the keyboard.
+        if (focusElement('vela-search')) return;
         return view.setFlag('search-focused', true);
       case 'retryDescriptive':
         return store.search.retryDescriptive();
@@ -109,7 +112,7 @@ export function useDispatcher({ store, view, live, nextDocument }: Context): Dis
       case 'openHit':
         return openHit(store, arg);
       case 'openPicker':
-        return nextDocument();
+        return openPicker();
       case 'signOut':
         void store.auth.signOut();
         return;
@@ -118,7 +121,7 @@ export function useDispatcher({ store, view, live, nextDocument }: Context): Dis
       default:
         notYet(action, arg);
     }
-  }, [store, view, live, select, retry, loadMore, nextDocument]);
+  }, [store, view, live, select, retry, loadMore, openPicker]);
 
   return { dispatch, loadMore };
 }

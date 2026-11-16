@@ -207,7 +207,7 @@ of Approximated or Unsupported rows.
 |---|---|---|
 | Supported | `display` (`flex`, `none`), `position` (`relative`, `absolute`), `top`/`right`/`bottom`/`left`/`inset`, `z-index`, `width`/`height`/`min-*`/`max-*`, `aspect-ratio`, `flex`, `flex-grow`/`-shrink`/`-basis`, `flex-direction`, `flex-wrap`, `align-items`/`-self`, `justify-content`, `gap`/`row-gap`/`column-gap`, `order` (resolver reorders), `margin*`, `padding*`, `overflow` (`hidden`, `visible`), `color`, `background-color`, `opacity`, `border*` (width, colour, radius, style, per side), `outline`, `box-shadow` (incl. inset, several), `font-family`, `font-size`, `font-weight`, `font-style`, `line-height`, `letter-spacing`, `text-transform`, `text-align`, `font-variant-numeric`, `translate`/`scale`/`rotate`/`perspective`, `transform-origin`, `pointer-events`, `transition`, `animation` | As written |
 | Mapped | `background-image: linear-gradient(...)` / `radial-gradient(...)` → `experimental_backgroundImage`; `background-image: url(...)` → an absolutely filled expo-image under the content; `line-clamp` → `numberOfLines`; `text-overflow: ellipsis` → `ellipsizeMode`; `white-space: nowrap` → one line; `text-shadow` → `textShadow*` (the first shadow); `object-fit` → expo-image `contentFit`; `overflow-x/-y: auto/scroll` → a `ScrollView` on that axis; units `rem`, `em`, `vw`, `vh`, `clamp()`, `min()`, `max()` and simple `calc()` → resolved to numbers per viewport; `color-mix(in srgb, <colour> p%, <colour or transparent>)` → folded to one hex colour at resolve, after `$ui.*` and document tokens are filled (`currentColor` stays unfolded: it draws on the web and is dropped natively) | Same result |
-| Approximated | `backdrop-filter: blur(n)` → expo-blur `BlurView` (other functions dropped); `mask-image: linear-gradient(...)` → MaskedView + gradient (`url()` masks unsupported); `display: grid` with `grid-template-columns` of equal or fixed tracks → wrapped flex rows with computed widths (`grid-row`, `grid-column` spans, named areas unsupported); `filter` → `filter` where the platform supports the function, else dropped; `corner-shape: squircle` → `borderCurve: 'continuous'` on Apple, round elsewhere; `scroll-snap-type`/`-align` → `snapToInterval` when items have a fixed width, else none; `position: sticky` only on a **direct child of a vertical scroll box**: the route root (the renderer wraps every route root's children in the route's vertical ScrollView) or a box the document itself scrolls (`overflow-y: auto`/`scroll`) → that ScrollView's `stickyHeaderIndices`, pinned at its top (a non-zero `top` is ignored); anywhere else it is refused | Close, noted by the validator |
+| Approximated | `backdrop-filter: blur(n)` → expo-blur `BlurView` (other functions dropped; on TV no blur is drawn, only the box's own glass colour, since a live blur over moving art costs too much); `mask-image: linear-gradient(...)` / `radial-gradient(...)` → over a box that only paints a colour, one gradient fill of that colour (exact, and free); otherwise a MaskedView + gradient (a radial mask is an ellipse over the box), except on TV, where such masks are left out and the box draws with hard edges, because a mask renders its box offscreen (a home of masked rows was killed at 1.6 GB on an Apple TV); `url()` masks unsupported; `display: grid` with `grid-template-columns` of equal or fixed tracks → wrapped flex rows with computed widths (`grid-row`, `grid-column` spans, named areas unsupported); `filter` → natively only `brightness()` and `opacity()`, plus `blur()` on an image (expo-image's own blur); other functions are dropped, because they render the whole box offscreen; `corner-shape: squircle` → `borderCurve: 'continuous'` on Apple, round elsewhere; `scroll-snap-type`/`-align` → `snapToInterval` when items have a fixed width, else none; `position: sticky` only on a **direct child of a vertical scroll box**: the route root (the renderer wraps every route root's children in the route's vertical ScrollView) or a box the document itself scrolls (`overflow-y: auto`/`scroll`) → that ScrollView's `stickyHeaderIndices`, pinned at its top (a non-zero `top` is ignored); anywhere else it is refused | Close, noted by the validator |
 | Web only | `cursor`, `scrollbar-width`, `scroll-behavior`, `scroll-padding-*`, `color-scheme`, `box-sizing: border-box` (React Native is always border-box) | Ignored |
 | Unsupported | `-webkit-text-stroke`, `position: fixed`/`static`, `position: sticky` outside a scroll box's direct children, `box-sizing: content-box`, `display: block`/`inline`/`contents`, multiple text shadows, `mask-image: url()`, grid placement (`grid-row`, `grid-column`, `grid-template-rows`, areas) | Refused |
 
@@ -474,8 +474,25 @@ the renderer, each a rule now:
   the viewport's size.
 - **A text drawn as a centring flex box** (a badge, an initial in a circle) centres its line.
 
+- **Native filters** keep only `brightness()` and `opacity()` (plus an image's own blur); other
+  functions render the box offscreen, which a full-screen stage cannot afford on a TV.
+- **Radial masks** draw natively as an SVG ellipse gradient over the box.
+- **Variable fonts** draw at their default weight natively: a face is registered once per file, and
+  native text cannot select a weight inside a variable font.
+
 Still differs from the Exact build: the framed title page draws as its own route, without home
-underneath.
+underneath. The tvOS text field is the platform's (a grey button that opens the TV keyboard).
+
+Lab builds: the lab admits client builds 0.1.0 up to, not including, 0.2.0 (`compatibleClientBuilds`).
+apps/vela reports 0.2.0 unless `EXPO_PUBLIC_VELA_APP_VERSION` says otherwise, so lab builds set it
+until Ether's range admits 0.2.x.
+
+Basement (Apple TV 4K), resolved: Cinematic's home was killed by Jetsam (up to 2 GB resident). A
+bisect by build switches pinned it on gradient masks, which render their box offscreen at full size
+across a home of masked rows. From e30c765 on, Cinematic's home stays up against the lab, with masks
+left out on TV and row-card backdrops capped at 1280 px.
+
+Open: the iOS (phone) Simulator pass, held behind the one-native-tool rule on this Mac.
 
 ## After the spikes
 
