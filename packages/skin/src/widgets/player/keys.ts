@@ -41,7 +41,8 @@ export function useShortcuts(shortcuts: Shortcuts): void {
       const arrows = event.key.startsWith('Arrow');
       if (arrows && s.menuOpen) return;
       // A focused button takes Space and Enter as its own press.
-      const onControl = (event.target as { tagName?: string } | null)?.tagName === 'BUTTON' ||
+      const onControl =
+        (event.target as { tagName?: string } | null)?.tagName === 'BUTTON' ||
         (event.target as { getAttribute?(name: string): string | null } | null)?.getAttribute?.('role') === 'button';
       const act = (run: () => void) => {
         event.preventDefault();
@@ -51,14 +52,38 @@ export function useShortcuts(shortcuts: Shortcuts): void {
         case ' ':
           if (!onControl) act(s.togglePlay);
           return;
-        case 'k': case 'K': act(s.togglePlay); return;
-        case 'ArrowLeft': case 'j': case 'J': act(() => s.seekBy(-10)); return;
-        case 'ArrowRight': case 'l': case 'L': act(() => s.seekBy(10)); return;
-        case 'ArrowUp': act(() => s.volumeBy(0.05)); return;
-        case 'ArrowDown': act(() => s.volumeBy(-0.05)); return;
-        case 'm': case 'M': act(s.toggleMute); return;
-        case 'i': case 'I': act(s.toggleInfo); return;
-        case 'f': case 'F': act(s.fullscreen); return;
+        case 'k':
+        case 'K':
+          act(s.togglePlay);
+          return;
+        case 'ArrowLeft':
+        case 'j':
+        case 'J':
+          act(() => s.seekBy(-10));
+          return;
+        case 'ArrowRight':
+        case 'l':
+        case 'L':
+          act(() => s.seekBy(10));
+          return;
+        case 'ArrowUp':
+          act(() => s.volumeBy(0.05));
+          return;
+        case 'ArrowDown':
+          act(() => s.volumeBy(-0.05));
+          return;
+        case 'm':
+        case 'M':
+          act(s.toggleMute);
+          return;
+        case 'i':
+        case 'I':
+          act(s.toggleInfo);
+          return;
+        case 'f':
+        case 'F':
+          act(s.fullscreen);
+          return;
       }
     };
     window.addEventListener('keydown', onKey);
