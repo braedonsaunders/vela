@@ -20,14 +20,16 @@ export const enterPresets = Object.fromEntries(
   ),
 );
 
-// Compiled's GhostPill keeps the browser's content-box, so its border sits outside the height.
-export const pill = (primary: boolean): Style =>
+// A pill button at compiled Cinematic's height. Its GhostPill drew that height inside a 1px
+// border (content-box); this box is border-box, so a ghost pill is two pixels taller and draws
+// the same.
+export const pill = (primary: boolean, height = 56): Style =>
   ({
     display: 'flex',
     'align-items': 'center',
     'justify-content': 'center',
-    'box-sizing': primary ? 'border-box' : 'content-box',
-    height: '56px',
+    'box-sizing': 'border-box',
+    height: `${primary ? height : height + 2}px`,
     'border-radius': '$ui.radiusControl',
     'padding-left': primary ? '28px' : '24px',
     'padding-right': primary ? '32px' : '26px',

@@ -4,6 +4,115 @@ Vela is built separately from Ether. Ether installs a pinned static artifact and
 serves it on its own origin under `/vela/`. No separate API hostname is part of
 the production deployment. Build and signing commands never publish. Publishing is a separate owner-approved command, first shipping with Ether 0.3.13; Ether 0.3.12 did not ship Vela.
 
+## Expo web export migration plan
+
+Owner decision (2026-11-16): retain the web/PWA target alongside native apps. The
+web artifact becomes the `apps/vela` Expo export. Keep signed distribution and the
+Ether installer; Ether 0.3.13 itself ships without Vela. The Exact single-app
+cutover commits `75c76af`, `9b200e8` and `fd6a9cc` remain unmerged. Do not use them
+as the starting point for the Expo release implementation. The packaging contract
+below is agreed with the migration lead; emitted paths still need confirmation
+against its first real spike export. Existing packaging sections below describe
+the current installed baseline until this replacement is qualified.
+
+### Captured inputs and export
+
+Capture one clean committed source revision into scratch-backed build output:
+
+- `apps/vela`, including app configuration and its owned route-table script;
+- `packages/*`, root `package.json`, `bun.lock` and `bunfig.toml`;
+- during the spike only, the imported `client/src`, foundation i18n/catalogs,
+  `client/strings` and `protocol/` inputs, until their planned package moves land.
+
+Use root Bun workspaces and the committed hoisted-linker configuration. Install
+from the frozen lockfile, then export from the staged `apps/vela` directory:
+
+```
+bun install --frozen-lockfile
+# cwd: apps/vela
+bun x expo export --platform web --output-dir <staged-export>
+```
+
+Expo and Metro come from that captured workspace/lockfile, never a floating CLI
+or the developer's global installation. Export configuration is
+`web.output: "single"` and `experiments.baseUrl: "/vela"`. Only deliberately public
+`EXPO_PUBLIC_*` configuration is admitted; no viewer credentials, private keys or
+other secrets belong in build values. Web builds need no Exact checkout, Contract
+lowering, skin profile, custom engine loader or native prebuild. Native iOS/Android
+binaries have their own distribution and are not placed in this web archive.
+
+### Preserve the export graph
+
+The archive root is Expo's generated `index.html`, with no HTML replacement loader
+or post-export JavaScript/URL string rewriting. Expected generated URLs are
+`/vela/_expo/static/js/web/entry-<hash>.js` and `/vela/assets/...`; the migration
+lead will confirm the actual tree and hashes from the first export. Configure the
+base at export time; do not invent an Exact-style `/vela/app/V/` asset subtree.
+Keep the export's platform manifests, fonts, images, notices and linked resources.
+
+SPA mode does not emit a route manifest. The app owns
+`apps/vela/scripts/routes.ts`; packaging runs it from the same captured revision
+to produce `routes.json` at the archive root. Ether routes `/vela/v0/` before the
+SPA and returns index.html only for those declared app routes. Missing static
+files remain 404s, not HTML. Confirm deep links and canonical `/vela` behavior
+against the real export before adopting this layout in the installer.
+
+`_expo/static/**` and `assets/**` content-addressed files are immutable while their
+release is retrievable. HTML, routes, PWA/worker and mutable metadata revalidate.
+The installer must keep previously verified hashed assets available to existing
+tabs through an update, without overwriting new files or copying arbitrary old
+HTML. Agree the exact retained paths and filename rules after inspecting Expo's
+output. Exercise an old tab requesting a previously unfetched chunk after update.
+
+### Player assets and skins
+
+Metro owns the web player JavaScript and view through `VelaPlayerView.web.tsx`.
+Do not package a second browser runtime.js or resurrect an Exact native host.
+Decoder WASM packages, worklets, subtitle resources and other non-Metro assets are
+a separate player-build output under `player/<digest>/` within the export; the
+player loads them relative to the configured `/vela` base. Playback owns that
+builder, dependency/source/licence inventory and digest algorithm. Packaging
+verifies and copies its immutable output. Its exact command and manifest contract
+remain open until playback and the migration lead confirm them; the earlier
+Exact CORE-MANIFEST input contract is not assumed to fit this new split.
+
+Built-in skin documents and their static assets remain data, with real ids/names,
+schema/renderer compatibility and the same complete release inventory. Agree their
+export/public-directory ownership with the migration lead so there is one catalog
+producer, not duplicate Metro and packager copies. Theme, artwork, API and media
+requests retain their current same-origin/privacy rules. A PWA worker may cache
+only digest-verified static resources; it must never cache API responses, artwork
+grants or media. Expo web install/update handling must be qualified explicitly.
+
+### Signed installer contract and gates
+
+Keep the existing Ed25519 exact-byte signature, dedicated production/test key
+separation, owner-triggered check/install, compatibility/expiry checks, complete
+tar verification, atomic activation, additive preservation and two-rollbacks
+policy. Build one archive and one finalized app manifest. Proposed app manifest
+`basePath` is `/vela/`; its files cover the final static root and agree exactly
+with the full build inventory. Both manifests stay outside the archive to avoid
+self-hashing. Preserve clean source and pinned workspace/toolchain provenance.
+Settle the player-asset identity field with Ether once its digest contract is
+known; do not silently reuse old runtime-key semantics. Ether has been told to
+hold the Exact-specific app-schema change and keep the distribution implementation.
+
+Implementation and qualification order:
+
+1. Migration lead supplies the first real export tree, route script and exact
+   workspace inputs; playback supplies the non-Metro asset builder contract.
+2. Implement the exporter adapter from clean main, preserving the signing and
+   installer verification modules; retire the Exact build path coherently. Update
+   this document with observed paths and final metadata, not assumptions.
+3. Inspect the export for secret-free, same-origin URLs and complete dependencies;
+   record entry raw/gzip and cold-load results. Drive deep links, login, skin
+   switching, player asset loading, offline/update behavior and missing-asset 404s.
+4. Sign a local test-key file-channel fixture using the real exporter. Ether repeats
+   check/install/rollback/reinstall and verifies the app inventory, old-tab assets
+   and owner-staged additive preservation, with no public upload.
+5. Obtain owner approval for the exact version before production signing and the
+   deliberate public publish command. No public release is authorized by this plan.
+
 ## Local packaging
 
 Run `source tools/env.sh` then `bun tools/release/build.ts` from this repository.

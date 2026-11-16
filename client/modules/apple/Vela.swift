@@ -16,7 +16,9 @@ import UIKit
 final class Vela: ExactModule {
     override class var views: [String: ExactNativeFactory] {
         [
-            "vela-player": ExactNativeFactory(for: Vela.self) { module, props, events in try VelaPlayerView(module, props, events) },
+            "vela-player": ExactNativeFactory(for: Vela.self) { module, props, events in
+                try VelaPlayerView(module, props, events)
+            },
             "vela-context": ExactNativeFactory { props, events in VelaContextView(props, events) },
             "vela-preview": ExactNativeFactory { props, events in VelaPreviewView(props, events) },
             "vela-theme": ExactNativeFactory { _, events in VelaQuietView(events) },
@@ -77,7 +79,9 @@ final class VelaContextView: ExactNativeInstance {
 /// overrides it on a device.
 enum VelaServer {
     static var origin: String {
-        if let saved = UserDefaults.standard.string(forKey: "vela.origin"), let url = URL(string: saved), url.scheme == "https" || url.scheme == "http" {
+        let saved = UserDefaults.standard.string(forKey: "vela.origin") ?? ""
+        let scheme = URL(string: saved)?.scheme
+        if scheme == "https" || scheme == "http" {
             return saved
         }
         return velaBuildOrigin

@@ -24,7 +24,7 @@ const gutter: Style = { 'padding-left': 'max(30px, 3.6vw)', 'padding-right': 'ma
 const gutterSmall: Style = { 'padding-left': '16px', 'padding-right': '16px' };
 
 // The OSD look: phosphor text with a hard black drop so it reads over any picture.
-const osdText = (size: string, colour = '$osd'): Style => ({ 'font-family': osd, 'font-size': size, 'line-height': '1', color: colour, 'text-transform': 'uppercase', 'letter-spacing': '0.04em', 'text-shadow': '2px 2px 0px $shadow, 0px 0px 10px $osd-glow' });
+const osdText = (size: string, colour = '$osd'): Style => ({ 'font-family': osd, 'font-size': size, 'line-height': '1', color: colour, 'text-transform': 'uppercase', 'letter-spacing': '0.04em', 'text-shadow': '2px 2px 0px $shadow' });
 // RGB misregistration, the one glitch content is allowed: only on hover/focus rings and big titles.
 const split = (px: number) => `${-px}px 0px 0px $chroma-red, ${px}px 0px 0px $chroma-cyan`;
 
@@ -211,7 +211,7 @@ const heroCopy: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.
     { type: 'text', text: '{heroAct.reasonLabel}', style: { ...osdText('22px', '$ink'), padding: '3px 8px 1px', 'background-color': '$osd-plate', 'text-shadow': 'none', 'white-space': 'nowrap', 'line-clamp': '1', 'min-width': '0px' }, small: { 'font-size': '18px' } },
   ] },
   { type: 'image', when: [{ test: 'hero.logo' }], src: '{hero.logo}', alt: '{hero.name}', role: 'heading', level: 1, motion: 'osd2', style: { height: '140px', width: 'auto', 'max-width': 'min(520px, 72%)', 'object-fit': 'contain', 'align-self': 'flex-start', filter: 'drop-shadow(-2px 0px 0px $chroma-red) drop-shadow(2px 0px 0px $chroma-cyan)' }, small: { height: '92px', 'max-width': '80%' } },
-  { type: 'text', when: [{ test: 'hero.logo', not: true }], text: '{hero.name}', role: 'heading', level: 1, motion: 'osd2', style: { 'font-family': print, 'font-size': '58px', 'line-height': '1.04', 'letter-spacing': '0.01em', 'text-transform': 'uppercase', 'line-clamp': '3', 'text-shadow': `${split(2)}, 0px 6px 40px $shadow` }, wide: { 'font-size': '66px' }, small: { 'font-size': '32px' } },
+  { type: 'text', when: [{ test: 'hero.logo', not: true }], text: '{hero.name}', role: 'heading', level: 1, motion: 'osd2', style: { 'font-family': print, 'font-size': '58px', 'line-height': '1.04', 'letter-spacing': '0.01em', 'text-transform': 'uppercase', 'line-clamp': '3', 'text-shadow': '2px 0px 0px $chroma-cyan' }, wide: { 'font-size': '66px' }, small: { 'font-size': '32px' } },
   { type: 'text', text: '{hero.factsLine}', motion: 'osd3', style: { ...osdText('24px', '$ink-dim'), 'text-transform': 'none', 'letter-spacing': '0.02em', 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '20px' } },
   { type: 'text', when: [{ test: 'hero.summary' }], text: '{hero.summary}', motion: 'osd3', style: { 'font-size': '16px', color: '$ink-dim', 'line-height': '1.55', 'line-clamp': '3', 'max-width': '36rem', 'text-shadow': '0px 1px 14px $shadow' }, small: { 'font-size': '14px', 'line-clamp': '2' } },
   { type: 'box', motion: 'osd4', style: { display: 'flex', 'flex-direction': 'row', gap: '14px 14px', 'align-items': 'center', 'flex-wrap': 'wrap', 'margin-top': '10px' } as Style, small: { 'margin-top': '4px', gap: '10px 10px' } as Style, children: [heroPlay, heroInfo(false), heroInfo(true)] },
@@ -268,7 +268,7 @@ const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '
 
 // Ranked rows get a big outlined OSD number beside each poster.
 const rankedCard: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end', gap: '2px 2px' }, children: [
-  { type: 'text', text: '{index.label}', style: { 'font-family': osd, 'font-size': '150px', 'line-height': '0.74', color: '$osd', opacity: '0.92', 'text-shadow': '4px 4px 0px $shadow, 0px 0px 18px $osd-glow', 'margin-right': '4px', 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '100px' } },
+  { type: 'text', text: '{index.label}', style: { 'font-family': osd, 'font-size': '150px', 'line-height': '0.74', color: '$osd', opacity: '0.92', 'text-shadow': '4px 4px 0px $shadow', 'margin-right': '4px', 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '100px' } },
   { type: 'use', template: 'card' },
 ] };
 
@@ -380,7 +380,7 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
             { type: 'text', text: '▶ {detail.kindLabel}', style: { ...osdText('22px'), padding: '3px 8px 1px', 'background-color': '$osd-plate', 'text-shadow': 'none', 'white-space': 'nowrap' }, small: { 'font-size': '18px' } },
           ] },
           { type: 'image', when: [{ test: 'detail.logo' }], src: '{detail.logo}', alt: '{detail.name}', role: 'heading', level: 1, motion: 'osd2', style: { height: '130px', width: 'auto', 'max-width': 'min(500px, 90%)', 'object-fit': 'contain', 'align-self': 'flex-start', filter: 'drop-shadow(-2px 0px 0px $chroma-red) drop-shadow(2px 0px 0px $chroma-cyan)' }, small: { height: '84px' } },
-          { type: 'text', when: [{ test: 'detail.logo', not: true }], text: '{detail.name}', role: 'heading', level: 1, motion: 'osd2', style: { 'font-family': print, 'font-size': '52px', 'line-height': '1.06', 'text-transform': 'uppercase', 'line-clamp': '3', 'text-shadow': `${split(2)}, 0px 6px 40px $shadow` }, small: { 'font-size': '30px' } },
+          { type: 'text', when: [{ test: 'detail.logo', not: true }], text: '{detail.name}', role: 'heading', level: 1, motion: 'osd2', style: { 'font-family': print, 'font-size': '52px', 'line-height': '1.06', 'text-transform': 'uppercase', 'line-clamp': '3', 'text-shadow': '2px 0px 0px $chroma-cyan' }, small: { 'font-size': '30px' } },
           { type: 'text', text: '{detail.factsLine}', motion: 'osd3', style: { ...osdText('24px', '$ink-dim'), 'text-transform': 'none', 'letter-spacing': '0.02em' }, small: { 'font-size': '20px' } },
           { type: 'text', when: [{ test: 'detail.summary' }], text: '{detail.summary}', motion: 'osd3', style: { 'font-size': '16px', 'line-height': '1.6', color: '$ink-dim', 'max-width': '40rem', 'text-shadow': '0px 1px 14px $shadow' }, small: { 'font-size': '14.5px' } },
           { type: 'text', when: [{ test: 'detail.crewLine' }], text: '{detail.crewLine}', motion: 'osd3', style: { 'font-family': print, 'font-size': '10.5px', 'letter-spacing': '0.12em', 'text-transform': 'uppercase', 'line-height': '1.7', color: '$ink-quiet' } },

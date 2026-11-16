@@ -214,8 +214,8 @@ const spotlight: Node = {
         style: {
           ...fill,
           'background-image':
-            'linear-gradient(90deg, $scrim 0%, $scrim 30%, $scrim-soft 55%, $scrim-clear 78%), '
-              + 'linear-gradient(0deg, $scrim 0%, $scrim-clear 55%)',
+            'linear-gradient(90deg, $scrim 0%, $scrim 30%, $scrim-soft 55%, $scrim-clear 78%), ' +
+            'linear-gradient(0deg, $scrim 0%, $scrim-clear 55%)',
         },
         small: { display: 'none' },
       },

@@ -349,8 +349,9 @@ document's `ui` block. A document draws what it wants to own and inherits the re
 - **Inheritance**: a slot or route the document defines replaces the base's (home counts whether it
   is `slots.home` or `routes.home`). Templates, motion, keyframes, fonts, tokens and strings merge by
   name, the document's winning; the base's names start with `vela` (`velaCard`, `velaRow`), so a
-  document that defines `velaCard` restyles the base's lanes on purpose. Home's `status` belongs to
-  whoever draws home, `detail` to whoever draws the title page.
+  document that defines `velaCard` restyles the base's lanes on purpose. Home's `status` and
+  `traits.barMask` belong to whoever draws home, `detail` to whoever draws the title page. `slots` is
+  optional: a document that only sets its look (`ui`, `traits`) inherits every surface.
 - **`ui`**: the base's look, as values: `page`, `raised`, `ink`, `inkSecondary`, `inkQuiet`,
   `inkInverse`, `accent`, `onAccent`, `control`, `controlHover`, `glass`, `glassEdge`,
   `glassEdgeStrong`, `popover`, `scrim`, `track`, `trackStrong`, `focusHalo`, `shadow`, `skeleton`,
@@ -386,10 +387,12 @@ holder) stays put and focused as the answers arrive below it. Home's own nodes s
 ### The style matrix
 
 Skins draw on React Native as well as the web (docs/rn-migration.md, "Style matrix"). `bun tools/skin.ts
-check <document>` refuses the rows native cannot draw (`-webkit-text-stroke`, `position: fixed`, `sticky`
-or `static`, `box-sizing: content-box`, `display: block`, `inline` or `contents`, several text shadows,
+check <document>` refuses the rows native cannot draw (`-webkit-text-stroke`, `position: fixed` or
+`static`, `position: sticky` anywhere but on a direct child of a route's root or of a vertical scroll box,
+`box-sizing: content-box`, `display: block`, `inline` or `contents`, several text shadows,
 `mask-image: url()`, grid placement) and notes the approximated ones (`backdrop-filter`, gradient
-`mask-image`, grid columns, `filter`, `corner-shape`, scroll snapping). The web still draws a refused
+`mask-image`, grid columns, `filter`, `corner-shape`, scroll snapping, and allowed `sticky`, which native
+pins at the top of its scroll view, ignoring a non-zero `top`). The web still draws a refused
 row, with a console warning naming it.
 
 ## Next (renderer 16, names final)

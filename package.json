@@ -1,0 +1,5 @@
+{
+  "name": "vela-workspace",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"]
+}

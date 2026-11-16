@@ -10,8 +10,10 @@ enum VelaCapabilities {
     /// Containers VelaMedia demuxes (Ether's family names).
     static let demuxContainers = ["mkv", "webm", "mp4", "mpegts"]
     /// Audio the engine renders: AC-3/E-AC-3 to tvOS compressed, the rest decoded by FFmpeg to PCM.
-    static let audioDecoders = ["aac", "ac3", "eac3", "dts", "truehd", "mlp", "flac", "alac", "opus", "vorbis", "mp3", "mp2",
-                                "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_s16be", "pcm_s24be", "pcm_f32le", "pcm_bluray", "pcm_dvd"]
+    static let audioDecoders = [
+        "aac", "ac3", "eac3", "dts", "truehd", "mlp", "flac", "alac", "opus", "vorbis", "mp3", "mp2",
+        "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_s16be", "pcm_s24be", "pcm_f32le", "pcm_bluray", "pcm_dvd",
+    ]
     /// Subtitles the overlay draws: text (SubRip, WebVTT, tx3g, basic ASS) and bitmaps (PGS).
     static let subtitleFormats = ["webvtt", "ether-vtt-window", "srt", "ass", "ssa", "pgs", "tx3g"]
 
