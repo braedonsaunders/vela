@@ -97,6 +97,7 @@ export function createVela(options: VelaOptions): Vela {
   const auth = new Auth(box, session, options);
   const servers = new Servers(box, session, options);
   const previews = new Previews(session);
+  const playback = new Playback(box, session);
   return {
     getState: box.get,
     subscribe: box.subscribe,
@@ -120,8 +121,8 @@ export function createVela(options: VelaOptions): Vela {
     home: new Home(box, session, width),
     catalogue: new Catalogue(box, session, width),
     search: new Search(box, session, width),
-    playback: new Playback(box, session),
-    live: new Live(box, session),
+    playback,
+    live: new Live(box, session, playback),
     appearance: new Appearance(box, session, options.rendererVersion),
     receipts: new Receipts(session),
     previews,
