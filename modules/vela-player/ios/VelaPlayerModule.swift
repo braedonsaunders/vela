@@ -25,6 +25,12 @@ public final class VelaPlayerModule: Module {
             Prop("ambient") { (view: VelaPlayerView, ambient: Bool?) in
                 view.setAmbient(ambient ?? false)
             }
+            Prop("preview") { (view: VelaPlayerView, preview: [String: Any]?) in
+                view.setPreview(preview)
+            }
+            Prop("active") { (view: VelaPlayerView, active: Bool?) in
+                view.setActive(active)
+            }
             Prop("plan") { (view: VelaPlayerView, plan: [String: Any]?) in
                 view.setPlan(plan)
             }

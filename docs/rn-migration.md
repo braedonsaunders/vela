@@ -345,6 +345,15 @@ On Basement against the same local pair: a redirect from A to B sent the probe t
 every request to B without it; a redirect within A's `/media/` kept it. A URL without headers (Ether's broker
 URLs) is loaded as is, redirects and all.
 
+#### Previews
+
+`preview` plays in its own mpv instance (`ios/PreviewPlayback.swift`): no audio track, no subtitles, no
+audio session, no display matching, a 16 MiB cache, `loop-file` when asked. It plays while `active` is not
+false, the view is in a window and the grant is unexpired; mpv is destroyed at once when any of those ends,
+when `preview` is unset and on unmount. Snapshots carry only `state` (loading, playing, ended, failed);
+commands are play and pause. Verified on Basement against the mock server's preview grant (the lab had no
+ready trailer for 1917 or Inception: `trailer_unavailable`).
+
 #### Releasing a build with libmpv (LGPL-2.1-or-later)
 
 MPVKit's LGPL product is linked as **static** libraries (libmpv, FFmpeg, libass, libplacebo, gnutls and the rest
