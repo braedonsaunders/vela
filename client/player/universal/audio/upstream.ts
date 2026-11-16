@@ -1,9 +1,9 @@
-import { loadDecoderPackage, type AudioDecoderPackage } from '../../../../vendor/webgpu-player/src/decode/packages/DecoderPackage';
-import { createBrowserCustomAudioOutputFactory } from '../../../../vendor/webgpu-player/src/audio/output/BrowserCustomAudioOutput';
-import type { CustomPlaybackPlayOptions, CustomPlaybackAudioSwitch } from '../../../../vendor/webgpu-player/src/pipeline/CustomPlaybackControllerTypes';
+import { loadDecoderPackage, type AudioDecoderPackage } from 'webgpu-player/src/decode/packages/DecoderPackage';
+import { createBrowserCustomAudioOutputFactory } from 'webgpu-player/src/audio/output/BrowserCustomAudioOutput';
+import type { CustomPlaybackPlayOptions, CustomPlaybackAudioSwitch } from 'webgpu-player/src/pipeline/CustomPlaybackControllerTypes';
 import { AudioPackageRegistry, canonicalAudioCodec, packageForCodec } from './packages';
 import { outputLayout, downmixPolicy } from './policy';
-import { CUSTOM_MEDIABUNNY_PCM_AUDIO_CODECS } from '../../../../vendor/webgpu-player/src/audio/CustomAudioCodec';
+import { CUSTOM_MEDIABUNNY_PCM_AUDIO_CODECS } from 'webgpu-player/src/audio/CustomAudioCodec';
 
 export { createBrowserCustomAudioOutputFactory };
 export function createAudioPackages(baseURL: string) {

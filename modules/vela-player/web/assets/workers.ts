@@ -14,8 +14,8 @@ interface BuiltWorkers {
 }
 
 export async function buildWorkers(root: string, libraries: string): Promise<BuiltWorkers> {
-  const upstream = join(root, 'vendor/webgpu-player');
-  const mediabunny = join(upstream, 'vendor/mediabunny/src/index.ts');
+  const upstream = join(root, 'node_modules/webgpu-player');
+  const mediabunny = join(root, 'node_modules/mediabunny/src/index.ts');
   const { getWorkerEntryPoints } = (await import(join(upstream, 'scripts/library-assets.mjs'))) as {
     getWorkerEntryPoints(): [string, string][];
   };
@@ -46,7 +46,7 @@ export async function buildWorkers(root: string, libraries: string): Promise<Bui
     await Bun.write(join(libraries, target), result.outputs[0]);
   }
   const velaSources = [...inputs]
-    .filter((path) => !path.startsWith(upstream))
+    .filter((path) => !path.includes('/node_modules/'))
     .map((path) => relative(root, path))
     .sort();
   return { velaSources };

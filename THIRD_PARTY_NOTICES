@@ -5,7 +5,8 @@ WebGPU Player
 --------------
 Source: https://github.com/alchemyyy/WebGPU-Player
 Pinned commit: a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2
-Location: vendor/webgpu-player (unmodified source submodule)
+Package: webgpu-player (modules/vela-player dependency, unmodified source; Vela's build-time
+adaptations are in modules/vela-player/web/source-transform.ts)
 
 MIT License
 
@@ -31,7 +32,9 @@ SOFTWARE.
 
 Dependency distribution boundary
 --------------------------------
-Mediabunny is MPL-2.0; the engine pins its fork through its own submodule.
+Mediabunny is MPL-2.0. Vela pins its fork (https://github.com/alchemyyy/mediabunny,
+commit e9303e8dbf1e77140328a417ac07306defc42cf6) as the mediabunny package; the player
+payload ships its source as sources/mediabunny.tar.gz.
 Decoder packages are separately licensed: FFmpeg/libdcadec based packages are
 LGPL-2.1-or-later. Their manifests, licence texts and exact corresponding source
 archives must accompany the independently loaded modules when distributed.
