@@ -94,6 +94,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     controller.setRetainedChannels([selected.channel, handOff?.channelId ?? "", view.tunedId]);
     return () => controller.setRetainedChannels([]);
   }, [controller, selected.channel, handOff?.channelId, view.tunedId]);
+  const onRange = useCallback((from: number, to: number) => controller.setGuideRange(from, to), [controller]);
   const onVisible = useCallback((ids: string[]) => controller.setGuideChannels(ids), [controller]);
   const pickDay = (day: number) => {
     setSelected({ channel: '', programme: '' });
@@ -266,6 +267,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
         onSelect={select}
         onPress={press}
         onWatch={watch}
+        onRange={onRange}
         onVisible={onVisible}
         onAll={() => setFilter('all')}
       />
@@ -288,6 +290,7 @@ interface BodyProps {
   onSelect(channel: GuideChannel, programme: GuideProgramme | null): void;
   onPress(channel: GuideChannel, programme: GuideProgramme): void;
   onWatch(channelId: string): void;
+  onRange(from: number, to: number): void;
   onVisible(ids: string[]): void;
   onAll(): void;
 }
@@ -328,6 +331,7 @@ function GuideBody(props: BodyProps) {
         onSelect={props.onSelect}
         onPress={props.onPress}
         onWatch={props.onWatch}
+        onRange={props.onRange}
         onVisible={props.onVisible}
       />
     </View>

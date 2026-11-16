@@ -1,3 +1,4 @@
+import { VelaError } from '../adapter/errors';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { localeContext, minute, msg, number, time, withLocale } from '../i18n';
 import type { ArtworkRef, Channel, GuideQuery, GuideResponse, Page, Programme } from '../wire';
@@ -46,7 +47,7 @@ const DAYS = 7;
 /** Listings are re-read at most this often; the clock re-projects them every minute. */
 const FRESH = 5 * MINUTE;
 
-async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise<T[]> {
+async function readPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise<T[]> {
   const items: T[] = [];
   const cursors = new Set<string>();
   let cursor: string | undefined;
@@ -62,6 +63,14 @@ async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise
   return items;
 }
 
+async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise<T[]> {
+  try { return await readPages(read); }
+  catch (error) {
+    if (error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired') return readPages(read);
+    throw error;
+  }
+}
+
 interface Listings { channels: Channel[]; programmes: Programme[] }
 const cache = new Map<string, { at: number; value: Promise<Listings> }>();
 /** Every page of one window, shared by the minute-by-minute re-projections of that window. */
@@ -72,7 +81,10 @@ function listings(api: GuideApi, scope: string, from: number, until: number, now
   const value = (async () => {
     const channels = await channelMetadata(api, scope, now);
     const requested = ids && ids.length === 0 ? [...channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 30).map(c => c.id) : ids;
-    const programmes = requested?.length === 0 ? [] : await allPages(cursor => api.guide({ from: new Date(from).toISOString(), until: new Date(until).toISOString(), cursor, limit: 100, channelIds: requested }));
+    const programmes: Programme[] = [];
+    const batches = requested ? Array.from({ length: Math.ceil(requested.length / 100) }, (_, i) => requested.slice(i * 100, (i + 1) * 100)) : [undefined];
+    for (const batch of batches) programmes.push(...await allPages(cursor => api.guide({ from: new Date(from).toISOString(), until: new Date(until).toISOString(), cursor, limit: 100, channelIds: batch })));
+
     return { channels, programmes };
   })();
   cache.set(key, { at: now, value });
@@ -145,17 +157,19 @@ function group(programmes: Programme[]) {
  * One local day of listings, every page fetched; incomplete pages are never presented as complete.
  * `day` counts days from today. Airing state and progress are projected at `now`.
  */
-export async function loadGuide(api: GuideApi, day: number, now: number, scope: string, images?: Images, localeJSON?: string, channelIds?: string[]): Promise<GuideModel> {
+export async function loadGuide(api: GuideApi, day: number, now: number, scope: string, images?: Images, localeJSON?: string, channelIds?: string[], range?: { from: number; to: number }): Promise<GuideModel> {
   if (!Number.isInteger(day) || day < 0 || day >= DAYS) throw new Error('Invalid guide day');
   const { start, end } = withLocale(localeJSON, () => {
     const start = midnight(now, day);
     // A DST day can run 25 hours; the protocol's window is at most 24.
     return { start, end: Math.min(midnight(now, day + 1), start + DAY) };
   });
-  const window = await listings(api, scope, start, end, now, channelIds);
+  const from = range ? Math.max(start, start + Math.floor(range.from / 30) * 30 * MINUTE) : start;
+  const until = range ? Math.min(end, start + Math.ceil(range.to / 30) * 30 * MINUTE) : end;
+  const window = await listings(api, scope, from, Math.max(from + MINUTE, until), now, channelIds);
   // Mobile now/next and the channel column stay current even while the grid browses another day.
   const currentStart = Math.floor(now / 1800000) * 1800000;
-  const current = day === 0 ? window : await listings(api, scope, currentStart, currentStart + 2 * HOUR, now, channelIds);
+  const current = !range && day === 0 ? window : await listings(api, scope, currentStart, currentStart + 2 * HOUR, now, channelIds);
   const grouped = group(window.programmes.filter(p => Date.parse(p.start) < end && Date.parse(p.end) > start));
   const currentByChannel = group(current.programmes);
   return withLocale(localeJSON, () => {

@@ -56,6 +56,7 @@ export class LiveController {
   private loadGeneration = 0;
   private guideIds: string[] = [];
   private guideIdsKey = "";
+  private guideRange: { from: number; to: number } | undefined;
   private retainedIds: string[] = [];
   private viewportTimer: ReturnType<typeof setTimeout> | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -139,6 +140,13 @@ export class LiveController {
     if (key === this.guideIdsKey) return;
     this.guideIds = next;
     this.guideIdsKey = key;
+    this.scheduleFetch();
+  }
+
+  setGuideRange(from: number, to: number): void {
+    const next = { from: Math.max(0, Math.floor(from / 30) * 30), to: Math.ceil(to / 30) * 30 };
+    if (this.guideRange?.from === next.from && this.guideRange.to === next.to) return;
+    this.guideRange = next;
     this.scheduleFetch();
   }
 
@@ -280,7 +288,7 @@ export class LiveController {
     }
     const base = this.surfaces.has('guide') && this.guideIds.length ? this.guideIds : channels.slice(0, 48).map(c => c.id);
     const ids = [...new Set([...base, ...retained].filter(Boolean))].sort();
-    loadGuide(this.options.source, day, this.now, this.options.scope, this.options.images, undefined, ids).then(
+    loadGuide(this.options.source, day, this.now, this.options.scope, this.options.images, undefined, ids, this.guideRange ?? { from: 0, to: 240 }).then(
       model => {
         if (generation !== this.loadGeneration) return;
         this.guide = model;
