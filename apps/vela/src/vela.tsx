@@ -24,8 +24,10 @@ import { useDispatcher } from './actions';
 import { config } from './data/config';
 import { platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
+import { authArt } from './auth-art';
 import { environment } from './env';
 import { useLiveController } from './live';
+import { Previews } from './previews';
 import { useViewState } from './view-state';
 
 export interface Vela {
@@ -37,6 +39,8 @@ export interface Vela {
   docError: string | null;
   /** Read a title's details (a title or watch route opened). */
   openTitle(id: string): void;
+  /** The server pack's stage art for the signed-out page, as document image paths ('' for none). */
+  authArt: { backdrop: string; wordmark: string };
 }
 
 const VelaContext = createContext<Vela | null>(null);
@@ -124,7 +128,10 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const insets = useSafeAreaInsets();
   const liveView = useLiveView();
   const view = useViewState(state.home.value?.hero.length ?? 0, state.search.query);
+  const pathname = usePathname();
   const [docIndex, setDocIndex] = useState(initialDocument);
+  /** Whether the viewer chose the document (`?skin=`, the picker); else the server's default applies. */
+  const [picked, setPicked] = useState(() => DOCUMENTS[initialDocument()]?.id !== DOCUMENTS[0]?.id);
   const [fontsReady, setFontsReady] = useState(false);
   const origin = state.servers.list.find(s => s.selected)?.origin ?? '';
 
@@ -143,7 +150,10 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     void Promise.all([loadFonts(APP_FONTS, source), loadFonts(raw.fonts, source)]).finally(() => setFontsReady(true));
   }, [raw, origin]);
 
-  const nextDocument = useCallback(() => setDocIndex(i => i + 1), []);
+  const nextDocument = useCallback(() => {
+    setDocIndex(i => i + 1);
+    setPicked(true);
+  }, []);
   const { dispatch, loadMore } = useDispatcher({ store, view, live, nextDocument });
   const viewport: Viewport = useMemo(() => ({ width, height, insets }), [width, height, insets]);
   const image = useCallback<SkinHost['image']>(path => {
@@ -179,9 +189,19 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   }, [resolved.doc, fontsReady, state, view, live, liveView, width, viewport, dispatch, image, setQuery, loadMore]);
 
   const openTitle = useCallback((id: string) => void store.catalogue.title(id), [store]);
-  const value = useMemo<Vela>(
-    () => ({ store, host, doc: resolved.doc, docError: resolved.error, openTitle }),
-    [store, host, resolved, openTitle],
+  const art = useMemo(
+    () => authArt(state.appearance.value, state.home.value?.defaultSkinId ?? '', picked ? raw.id : ''),
+    [state.appearance.value, state.home.value?.defaultSkinId, picked, raw.id],
   );
-  return <VelaContext.Provider value={value}>{children}</VelaContext.Provider>;
+  const value = useMemo<Vela>(
+    () => ({ store, host, doc: resolved.doc, docError: resolved.error, openTitle, authArt: art }),
+    [store, host, resolved, openTitle, art],
+  );
+  return (
+    <VelaContext.Provider value={value}>
+      <Previews store={store} state={state} onHome={pathname === '/'} heroIndex={view.heroIndex} still={view.still}>
+        {children}
+      </Previews>
+    </VelaContext.Provider>
+  );
 }

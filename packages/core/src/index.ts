@@ -20,7 +20,7 @@ export { libraryKey, type LibraryQuery } from './store/catalogue';
 export type { LiveChannelResult, LiveProgrammeResult, SearchLane, SearchState } from './store/search';
 export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } from './store/playback';
 export type { LiveState, LiveTvAccess } from './store/live';
-export type { Preview } from './store/previews';
+export type { PreviewContext, PreviewState } from './store/previews';
 export type { ReceiptKind } from './store/receipts';
 export type { AppearanceModel, DocEntryModel } from './appearance';
 export type { GuideApi, GuideChannel, GuideModel, GuideProgramme } from './live/guide';
