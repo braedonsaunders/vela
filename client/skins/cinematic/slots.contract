@@ -376,7 +376,7 @@ component Home
               // The one thing to press: the server's predicted action, then More info.
               row gap=12 align-items="center" flex-wrap="wrap" margin-top=(p.small ? 4 : 8) animation=enter(p.still, 500)
                 for act in primaries.filter(a => a.heroId == hero.id).slice(0, 1) key=act.heroId
-                  button press=playHero(act.targetId, act.positionSeconds, act.hasPosition) testId="hero-primary" class=PrimaryPill height=(p.small ? 50 : 56) padding-left=(p.small ? 22 : 28) padding-right=(p.small ? 26 : 32) box-shadow=(p.heroIndex == 0 ? "0px 14px 44px var(--cinematic.focus-halo), 0px 0px 0px 1px var(--cinematic.ring)" : "none") transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
+                  button press=playHero(act.targetId) testId="hero-primary" class=PrimaryPill height=(p.small ? 50 : 56) padding-left=(p.small ? 22 : 28) padding-right=(p.small ? 26 : 32) box-shadow=(p.heroIndex == 0 ? "0px 14px 44px var(--cinematic.focus-halo), 0px 0px 0px 1px var(--cinematic.ring)" : "none") transition=`background-color 180ms linear, scale ${base()}ms ${glide()}`
                     row gap=12 align-items="center"
                       image "symbol:play-fill" width=18 height=18 aria-hidden=true
                       column gap=3 align-items="flex-start"

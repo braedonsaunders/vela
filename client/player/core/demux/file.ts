@@ -7,7 +7,7 @@ import {observeFragmentTiming} from './fragment-time';
 import {observeSubtitleClusters,type MatroskaSubtitleStream} from './subtitle-stream';
 import {hasBufferAudit,sourceBufferAudit,type BufferCacheState} from '../../universal/buffer-audit';
 import {clusterCacheAudit} from './cluster-cache';
-import {installMatroskaStreaming,hasStreamingMatroskaBacking,primeMatroskaIndex,finishMatroskaMetadata} from './matroska-stream';
+import {installMatroskaStreaming,hasStreamingMatroskaBacking,streamingMatroskaOffset,primeMatroskaIndex,finishMatroskaMetadata,warmMatroskaResume} from './matroska-stream';
 import type { AudioTrack, ByteReader, EncodedPacket, MediaTrack, VideoTrack } from '../types';
 
 /** Demux only. No upstream controller, decoder, clock or independent HTTP cache. */
@@ -23,7 +23,9 @@ export class PacketDemux {
   private stopSubtitleClusters?:()=>void;
   private stopStreaming?:()=>void;
   private originalReader?:ByteReader;
+  private originalPosition=0;
   private operationStage='metadata';
+  private readonly packetOffsets=new Map<string,number>();
 
   constructor(makeSource:(signal:()=>AbortSignal,count:(bytes:number)=>void,forward:(offset:number)=>void)=>Source,
     sourceSignal:AbortSignal,private readonly originUs=0,private readonly liveEnded?:()=>boolean,subtitleClusters?:MatroskaSubtitleStream,private readonly auditCache?:()=>BufferCacheState,streaming?:{reader:ByteReader;startSeconds:number}) {
@@ -33,9 +35,10 @@ export class PacketDemux {
     const source=makeSource(()=>this.operationSignal,bytes=>{
       this.operationSignal.throwIfAborted();this.readBytes+=bytes;
       if(this.readBytes>32*1024*1024)throw new Error('Demux operation exceeded its bounded search budget');
-    },offset=>{if(this.operationStage==='video-packet'||this.operationStage==='audio-packet')streaming?.reader.prefetch?.(offset,sourceLifetime);});
+    },offset=>{if(this.operationStage==='video-packet'||this.operationStage==='audio-packet'){
+      this.packetOffsets.set(this.operationStage,offset);streaming?.reader.prefetch?.(offset,sourceLifetime);}});
     this.auditSource=source;
-    if(streaming){this.originalReader=streaming.reader;this.stopStreaming=installMatroskaStreaming(source,streaming.reader,AbortSignal.any([sourceSignal,this.lifetime.signal]),streaming.startSeconds,subtitleClusters);}
+    if(streaming){this.originalReader=streaming.reader;this.originalPosition=streaming.startSeconds;this.stopStreaming=installMatroskaStreaming(source,streaming.reader,AbortSignal.any([sourceSignal,this.lifetime.signal]),streaming.startSeconds,subtitleClusters);}
     observeFragmentTiming(source,report);
     if(subtitleClusters)this.stopSubtitleClusters=observeSubtitleClusters(source,subtitleClusters.receive);
     this.input=new Input({source,formats:ALL_FORMATS,formatOptions:{hls:{offsetTimestampsByDateTime:!!liveEnded}}});
@@ -82,6 +85,8 @@ export class PacketDemux {
         this.input.getFormat(),this.input.getVideoTracks(),this.input.getAudioTracks(),this.liveEnded?Promise.resolve(null):this.input.getDurationFromMetadata(),
       ]);
       this.originalReader?.configureBuffer?.(duration);
+      const warming=this.originalReader&&format.name==='Matroska'?warmMatroskaResume(this.originalReader,this.originalPosition,duration,signal,
+        note=>{if(this.diagnostics.length<16&&!this.diagnostics.includes(note))this.diagnostics.push(note);},this.auditSource):undefined;
       const indexing=primeMatroskaIndex(videos[0]??audios[0]);
       void indexing?.catch(()=>{});
       const tracks: MediaTrack[] = [];
@@ -110,7 +115,7 @@ export class PacketDemux {
           codecPrivate:velaTrackPrivate(track,config),waveFormat:wave?.status === 'read' ? wave.waveFormat.slice() : null};
         tracks.push(actual); this.tracks.set(id,track);
       }
-      await indexing;finishMatroskaMetadata(this.auditSource);
+      const indexed=await indexing;warming?.correct(indexed);finishMatroskaMetadata(this.auditSource);
       return {tracks,durationUs:duration === null ? null : Math.round(duration*1e6)+this.originUs,container:format.name};
     },signal);
   }
@@ -142,6 +147,7 @@ export class PacketDemux {
       if (packet.data.length > 16 * 1024 * 1024) throw new Error('Encoded packet exceeds decode budget');
       if (![packet.timestamp,packet.duration].every(Number.isFinite) || packet.duration < 0) throw new Error('Invalid encoded packet timing');
       yield {trackId,epoch,data:packet.data,timestampUs:Math.round(packet.timestamp*1e6)+this.originUs,durationUs:Math.round(packet.duration*1e6),
+        ...(this.originalReader?{sourceOffset:streamingMatroskaOffset(track,packet)??this.packetOffsets.get(track instanceof InputVideoTrack?'video-packet':'audio-packet')}:{}),
         key:packet.type === 'key',additions:packet.sideData.matroskaBlockAdditions?.map(item => ({addId:item.addId,data:item.data}))};
       const previous = packet;
       packet = await read(() => reader.getNext(previous,{skipLiveWait:!!this.liveEnded}));

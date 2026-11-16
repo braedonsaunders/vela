@@ -19,8 +19,54 @@ interface Segment {timestampFactor:number;codecDelay?:number;clusterSeekStartPos
 interface Track {id:number;codecDelay:number;defaultDuration:number|null;codecId:string|null;codecPrivate?:Uint8Array|null;decodingInstructions:{scope:number;data:{type:string;algorithm?:number|null;settings?:Uint8Array|null}|null}[];
  info:{type:string;codec?:string|null;alphaMode?:boolean;sampleRate?:number;codecDescription?:Uint8Array|null}|null;segment:Segment;cuePoints:{time:number;trackId:number;clusterPosition:number}[];
  demuxer:{segments:unknown[];input:{_rootSource:object};loadDeferredCues(segment:Segment):Promise<void>|null;expandLacedBlocks(blocks:RawBlock[],track:Track):RawBlock[];decodeBlockData(track:Track,data:Uint8Array):Uint8Array}}
-interface Scope {metadata:boolean;prefetch:WeakMap<object,Promise<void>>;reader:ByteReader;signal:AbortSignal;startSeconds:number;videoStart?:{cluster:number;time:number};subtitles?:MatroskaSubtitleStream;tracks:WeakMap<object,StreamingMatroskaTrack>;cues:WeakMap<object,Promise<void>>}
+interface Scope {cueHint?:{cluster:number;time:number};onCueHint?:(value:{cluster:number;time:number})=>void;metadata:boolean;prefetch:WeakMap<object,Promise<void>>;reader:ByteReader;signal:AbortSignal;startSeconds:number;videoStart?:{cluster:number;time:number};subtitles?:MatroskaSubtitleStream;tracks:WeakMap<object,StreamingMatroskaTrack>;cues:WeakMap<object,Promise<void>>}
 const scopes=new WeakMap<object,Scope>();
+/** Network-only speculation. No estimated position is ever passed to demux or
+ * the clock. Cues selects the cluster; its header is checked in the warmed bytes. */
+export function warmMatroskaResume(reader:ByteReader,position:number,duration:number|null,signal:AbortSignal,report:(note:string)=>void,source:object){
+ if(!reader.speculateMedia||!duration||!Number.isFinite(duration)||position<=0||position>=duration)return;
+ const scope=scopes.get(source);
+ let window:ReturnType<NonNullable<ByteReader['speculateMedia']>>|undefined;
+ let actual:{cluster:number;time:number}|undefined,bytes:Uint8Array|undefined,closed=false,size=0;
+ const validate=()=>{
+  if(!window||!actual||!bytes)return;
+  const at=actual.cluster-window.start;if(at<0||at>=bytes.length)return;
+  try{
+   const id=vint(bytes,at,true),length=vint(bytes,at+id.length),data=at+id.length+length.length;
+   if(id.value!==CLUSTER||!length.unknown&&actual.cluster+id.length+length.length+length.value>size)throw Error();
+   let cursor=data,found=false;
+   for(let n=0;n<16&&cursor<Math.min(bytes.length,data+4096);n++){
+    const child=vint(bytes,cursor,true),span=vint(bytes,cursor+child.length),start=cursor+child.length+span.length,end=start+span.value;
+    if(span.unknown||end>bytes.length||end<=cursor)break;
+    if(child.value===TIMESTAMP){if(span.value>8)break;unsigned(bytes.subarray(start,end));found=true;break;}
+    if(![0xbf,0xec,0xa7,0xab].includes(child.value))break;cursor=end;
+   }
+   report(found?'Matroska resume warm boundary validated against Cues':'Matroska resume warm boundary unavailable; authoritative parser retained');
+  }catch{report('Matroska resume warm boundary rejected; authoritative parser retained');}
+ };
+ const start=(offset:number)=>{
+  if(closed||signal.aborted||!size)return;
+  if(window&&offset>=window.start&&offset<window.end)return;
+  window?.cancel();bytes=undefined;
+  const next=window=reader.speculateMedia!(offset,16*1024*1024,signal);
+  void next.bytes.then(value=>{if(window===next){bytes=value;validate();}}).catch(()=>{
+   if(window===next&&!signal.aborted&&!closed)report('Matroska resume warm request retired; authoritative acquisition retained');
+  });
+ };
+ if(scope)scope.onCueHint=value=>{if(!actual)start(value.cluster);};
+ void reader.size(signal).then(value=>{
+  size=value;if(closed||signal.aborted)return;
+  start(scope?.cueHint?.cluster??Math.max(0,Math.min(size-1,Math.floor(size*position/duration)-8*1024*1024)));
+ }).catch(()=>{});
+ return{correct:(value:{cluster:number;time:number}|undefined)=>{
+  if(scope)scope.onCueHint=undefined;
+  if(!value){closed=true;window?.cancel();return;}
+  actual=value;
+  if(!window){closed=true;reader.prefetch?.(value.cluster,signal);return;}
+  if(value.cluster<window.start||value.cluster>=window.end){closed=true;report('Matroska resume warm window missed; Cues corrected it');}
+  window.settle(value.cluster);validate();
+ }};
+}
 export function installMatroskaStreaming(source:object,reader:ByteReader,signal:AbortSignal,startSeconds:number,subtitles?:MatroskaSubtitleStream){
  const scope:Scope={metadata:true,reader,signal,startSeconds,subtitles,tracks:new WeakMap(),cues:new WeakMap(),prefetch:new WeakMap()};scopes.set(source,scope);
  return()=>{if(scopes.get(source)===scope)scopes.delete(source);};
@@ -32,10 +78,48 @@ function loadCues(scope:Scope,track:Track){
 export function preloadMatroskaStreaming(demuxer:Track['demuxer'],segment:Segment){
  const scope=scopes.get(demuxer.input._rootSource);if(!scope||scope.startSeconds<=0||scope.signal.aborted)return;
  if(segment.deferredCuesPosition===null||scope.prefetch.has(segment))return;
- const work=(async()=>{const step=new Step(scope,await scope.reader.size(scope.signal)),element=await step.element(segment.deferredCuesPosition!);
-  if(element.id!==0x1c53bb6b||element.end-element.data>16*1024*1024)return;
-  for(let at=element.data;at<element.end;at+=1024*1024)await step.read(at,Math.min(1024*1024,element.end-at));
+ const work=(async()=>{
+  const size=await scope.reader.size(scope.signal),step=new Step(scope,size);
+  // Stream the contiguous index rather than paying one RTT per metadata page.
+  const warming=scope.reader.speculateMedia?.(segment.deferredCuesPosition!,16*1024*1024,scope.signal,true);
+  try{
+   const element=await step.element(segment.deferredCuesPosition!);
+   if(element.id!==0x1c53bb6b||element.end-element.data>16*1024*1024)return;
+   const prefix=new Uint8Array(element.end-element.data);
+   for(let at=element.data;at<element.end;at+=1024*1024){
+    const bytes=await step.read(at,Math.min(1024*1024,element.end-at));prefix.set(bytes,at-element.data);
+    if(!scope.cueHint){const hint=cuePrefixHint(prefix.subarray(0,at-element.data+bytes.length),segment,scope.startSeconds,size);
+     if(hint){scope.cueHint=hint;scope.onCueHint?.(hint);}}
+   }
+  }finally{warming?.cancel();void warming?.bytes.catch(()=>{});}
  })();scope.prefetch.set(segment,work);void work.catch(()=>{});
+}
+/** Optional network hint from complete CuePoints only. The library still validates
+ * the full index before a packet cursor is admitted. Truncated prefixes do nothing. */
+function cuePrefixHint(bytes:Uint8Array,segment:Segment,seconds:number,size:number){
+ const video=[...segment.idToTrack.values()].find(track=>track.info?.type==='video');if(!video)return;
+ let candidate:{cluster:number;time:number}|undefined,visits=0;
+ const fields=(start:number,end:number)=>{const result:{id:number;data:number;end:number}[]=[];
+  for(let at=start;at<end;){if(++visits>1000000)throw Error();const id=vint(bytes,at,true),length=vint(bytes,at+id.length),data=at+id.length+length.length,stop=data+length.value;
+   if(length.unknown||stop>end||stop<=at)throw Error();result.push({id:id.value,data,end:stop});at=stop;}return result;};
+ try{
+  for(let at=0;at<bytes.length;){
+   const id=vint(bytes,at,true),length=vint(bytes,at+id.length),data=at+id.length+length.length,end=data+length.value;
+   if(length.unknown||end>bytes.length||end<=at)break;at=end;if(id.value!==0xbb)continue;
+   let time:number|undefined,cluster:number|undefined;
+   for(const field of fields(data,end)){
+    if(field.id===0xb3)time=unsigned(bytes.subarray(field.data,field.end));
+    if(field.id===0xb7){let track:number|undefined,position:number|undefined;
+     for(const value of fields(field.data,field.end)){if(value.id===0xf7)track=unsigned(bytes.subarray(value.data,value.end));if(value.id===0xf1)position=unsigned(bytes.subarray(value.data,value.end));}
+     if(track===video.id&&position!==undefined)cluster=segment.dataStartPos+position;
+    }
+   }
+   if(time===undefined||cluster===undefined||!Number.isSafeInteger(cluster)||cluster<segment.dataStartPos||cluster>=size)continue;
+   const titleTime=(time-video.codecDelay)/segment.timestampFactor;
+   if(titleTime>seconds)return candidate;
+   if(!candidate||titleTime>=candidate.time)candidate={cluster,time:titleTime};
+  }
+ }catch{/* An optional hint never weakens authoritative index admission. */}
 }
 export function streamingMatroskaTrack(value:unknown,packetType?:(codec:string,data:Uint8Array)=>string|null,parsers?:AudioFrameParsers):StreamingMatroskaTrack|null{
  const track=value as Track,scope=track?.demuxer&&scopes.get(track.demuxer.input._rootSource);
@@ -215,10 +299,12 @@ export class StreamingMatroskaTrack {
   const step=new Step(this.scope,await this.scope.reader.size(this.scope.signal),false);
   for(const common of [true,false]){
    const start=await this.indexed(target,step,common);
+   let release=()=>{};
+   try{
    let candidate:{element:Element;cursor:Cursor}|undefined;
    const search:BlockSearch={done:false,visit:(element,cursor,timestamp)=>{
-    if(timestamp<=target)candidate={element,cursor};
-    else{candidate??={element,cursor};search.done=true;}
+    if(timestamp<=target||!candidate){release();release=this.scope.reader.retain?.(element.start,element.end-element.start)??(()=>{});candidate={element,cursor};}
+    if(timestamp>target)search.done=true;
    }};
    await this.next(start.cursor,step,undefined,search);
    if(!candidate)return result.set({packet:null,provisional:false});
@@ -231,6 +317,7 @@ export class StreamingMatroskaTrack {
    if(common&&'shared'in start&&start.shared&&packet&&(packet.timestamp>this.scope.startSeconds+packet.duration||packet.type!=='key'))continue;
    this.scope.reader.prefetch?.(candidate.element.start,this.scope.signal);
    return result.set({packet,provisional:false});
+   }finally{release();}
   }
   return result.set({packet:null,provisional:false});
  }
@@ -243,6 +330,9 @@ export class StreamingMatroskaTrack {
 
 function rawTrack(value:unknown){const backing=(value as {_backing?:unknown})?._backing??value;return(backing as {internalTrack?:Track})?.internalTrack;}
 export function hasStreamingMatroskaBacking(value:unknown){return !!streamingMatroskaTrack(rawTrack(value))?.sequential;}
+export function streamingMatroskaOffset(value:unknown,packet:EncodedPacket){
+ return streamingMatroskaTrack(rawTrack(value))?.owns(packet)?packet.sequenceNumber:undefined;
+}
 export function primeMatroskaIndex(backing:unknown){
  const track=rawTrack(backing);
  const scope=track?.demuxer&&scopes.get(track.demuxer.input._rootSource);
@@ -254,6 +344,7 @@ export function primeMatroskaIndex(backing:unknown){
   let low=0,high=cues.length;while(low<high){const mid=(low+high)>>>1;if(cues[mid].time<=ticks)low=mid+1;else high=mid;}
   const cue=low?cues[low-1]:undefined;
   scope.videoStart={cluster:cue?.clusterPosition??track.segment.clusterSeekStartPos,time:cue?(cue.time-track.codecDelay)/track.segment.timestampFactor:0};
+  return scope.videoStart;
  })();void work.catch(()=>{});return work;
 }
 export function finishMatroskaMetadata(source:object){const scope=scopes.get(source);if(scope)scope.metadata=false;}

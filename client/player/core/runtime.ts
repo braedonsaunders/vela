@@ -87,6 +87,7 @@ export class PlaybackCore {
 
   snapshot():CoreState {
     const position=this.clock.time(),run=this.epoch;
+    if(this.source?.kind==='file')this.source.reader.advance(position);
     const videoEnd=this.scheduler.bufferedEnd(position);
     const bufferedEnd=this.audio?Math.min(videoEnd,run?.audioBufferedUntilUs??position):videoEnd;
     const network=this.source?.kind==='file'?this.source.reader.bandwidth:this.source?.segments.bandwidth;
@@ -240,6 +241,7 @@ export class PlaybackCore {
       if(!this.current(run))return;
       run.packetBytes[track.kind]+=packet.data.length;
       run.packetDurationUs[track.kind]+=packet.durationUs;
+      if(this.source?.kind==='file'&&packet.sourceOffset!==undefined){this.source.reader.notePacket(track.kind,packet.timestampUs,packet.sourceOffset);this.source.reader.advance(this.clock.time());}
       yield packet;
     }
   }
