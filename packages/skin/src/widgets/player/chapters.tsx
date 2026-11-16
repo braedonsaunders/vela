@@ -17,7 +17,9 @@ interface Props {
 /** The chapter playing: the last one that starts at or before the position. */
 export function chapterAt(chapters: ChapterMark[], position: number): number {
   let index = 0;
-  chapters.forEach((c, i) => { if (c.seconds <= position) index = i; });
+  chapters.forEach((c, i) => {
+    if (c.seconds <= position) index = i;
+  });
   return index;
 }
 
@@ -33,14 +35,29 @@ export function ChapterStrip({ look, view, disabled, onSeek }: Props) {
   }, []);
 
   return (
-    <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} accessibilityLabel={msg('ui.chapters')}
-      contentContainerStyle={{ gap, paddingVertical: look.size(4) }} testID="player-chapters">
+    <ScrollView
+      ref={scroller}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      accessibilityLabel={msg('ui.chapters')}
+      contentContainerStyle={{ gap, paddingVertical: look.size(4) }}
+      testID="player-chapters"
+    >
       {view.chapters.map((chapter, i) => {
         const end = view.chapters[i + 1]?.seconds ?? view.duration;
-        const played = i === current && end > chapter.seconds ? (view.position - chapter.seconds) / (end - chapter.seconds) : 0;
+        const played =
+          i === current && end > chapter.seconds ? (view.position - chapter.seconds) / (end - chapter.seconds) : 0;
         return (
-          <ChapterCard key={chapter.id} look={look} chapter={chapter} width={width} playing={i === current}
-            played={Math.max(0, Math.min(1, played))} disabled={disabled} onPress={() => onSeek(chapter.seconds)} />
+          <ChapterCard
+            key={chapter.id}
+            look={look}
+            chapter={chapter}
+            width={width}
+            playing={i === current}
+            played={Math.max(0, Math.min(1, played))}
+            disabled={disabled}
+            onPress={() => onSeek(chapter.seconds)}
+          />
         );
       })}
     </ScrollView>
@@ -62,23 +79,54 @@ function ChapterCard({ look, chapter, width, playing, played, disabled, onPress 
   const [focus, setFocus] = useState(false);
   const lit = look.tv && focus;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${timecode(chapter.seconds)}, ${chapter.name}`}
-      accessibilityState={{ selected: playing, disabled }} disabled={disabled} hasTVPreferredFocus={playing}
-      onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)}
-      onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-      style={{ width, gap: look.size(4), padding: look.size(12), borderRadius: look.size(12), overflow: 'hidden',
-        borderWidth: 1, borderColor: playing ? look.glassEdgeStrong : look.glassEdge,
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${timecode(chapter.seconds)}, ${chapter.name}`}
+      accessibilityState={{ selected: playing, disabled }}
+      disabled={disabled}
+      hasTVPreferredFocus={playing}
+      onPress={onPress}
+      onHoverIn={() => setHover(true)}
+      onHoverOut={() => setHover(false)}
+      onFocus={() => setFocus(true)}
+      onBlur={() => setFocus(false)}
+      style={{
+        width,
+        gap: look.size(4),
+        padding: look.size(12),
+        borderRadius: look.size(12),
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: playing ? look.glassEdgeStrong : look.glassEdge,
         backgroundColor: lit ? look.ink : hover || playing ? look.controlHover : look.glass,
-        outlineColor: look.accent, outlineStyle: 'solid', outlineWidth: focus && !look.tv ? 2 : 0,
-        transform: [{ scale: lit && !look.still ? 1.05 : 1 }] }}>
-      <Text style={[look.text(11, 650, lit ? look.inkInverse : playing ? look.accent : look.inkQuiet),
-        { fontVariant: ['tabular-nums'] }]}>
+        outlineColor: look.accent,
+        outlineStyle: 'solid',
+        outlineWidth: focus && !look.tv ? 2 : 0,
+        transform: [{ scale: lit && !look.still ? 1.05 : 1 }],
+      }}
+    >
+      <Text
+        style={[
+          look.text(11, 650, lit ? look.inkInverse : playing ? look.accent : look.inkQuiet),
+          { fontVariant: ['tabular-nums'] },
+        ]}
+      >
         {timecode(chapter.seconds)}
       </Text>
-      <Text numberOfLines={1} style={look.text(14, 550, lit ? look.inkInverse : look.ink)}>{chapter.name}</Text>
+      <Text numberOfLines={1} style={look.text(14, 550, lit ? look.inkInverse : look.ink)}>
+        {chapter.name}
+      </Text>
       {playing ? (
-        <View style={{ position: 'absolute', left: 0, bottom: 0, height: look.size(3), width: `${played * 100}%`,
-          backgroundColor: look.accent }} />
+        <View
+          style={{
+            position: 'absolute',
+            left: 0,
+            bottom: 0,
+            height: look.size(3),
+            width: `${played * 100}%`,
+            backgroundColor: look.accent,
+          }}
+        />
       ) : null}
     </Pressable>
   );

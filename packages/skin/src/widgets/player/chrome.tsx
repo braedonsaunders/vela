@@ -63,7 +63,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   };
   const seekBy = (delta: number) => {
     if (blocked) return;
-    const recent = lastStep.current && Date.now() - lastStep.current.at < STEP_MEMORY_MS ? lastStep.current.seconds : null;
+    const recent =
+      lastStep.current && Date.now() - lastStep.current.at < STEP_MEMORY_MS ? lastStep.current.seconds : null;
     const from = recent ?? view.position;
     const limit = view.duration > 0 ? view.duration : Number.POSITIVE_INFINITY;
     seek(Math.max(0, Math.min(limit, from + delta)));
@@ -82,7 +83,9 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     volumeBy: delta => send({ type: 'volume', value: Math.max(0, Math.min(1, view.volume + delta)) }),
     toggleMute: () => send({ type: 'mute', muted: !view.muted }),
     toggleInfo,
-    fullscreen: () => { if (view.fullscreen) send({ type: 'fullscreen' }); },
+    fullscreen: () => {
+      if (view.fullscreen) send({ type: 'fullscreen' });
+    },
     closeMenu: () => setOpened(null),
   });
 
@@ -95,17 +98,44 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const top = look.small ? 76 : look.size(108);
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="player-chrome">
-      <Pressable accessible={false} onPress={tapStage} style={StyleSheet.absoluteFill}
-        focusable={Platform.isTV && !idle.visible} hasTVPreferredFocus={Platform.isTV && !idle.visible} />
+      <Pressable
+        accessible={false}
+        onPress={tapStage}
+        style={StyleSheet.absoluteFill}
+        focusable={Platform.isTV && !idle.visible}
+        hasTVPreferredFocus={Platform.isTV && !idle.visible}
+      />
       <View style={[StyleSheet.absoluteFill, { justifyContent: 'space-between' }]} pointerEvents="box-none">
         <TopBar look={look} title={state.title} visible={idle.visible || !!failed} onClose={state.close} />
-        <BottomBar look={look} state={state} view={view} visible={idle.visible && !failed} blocked={blocked}
-          opened={opened} info={info} menuHeight={Math.round(viewport.height * 0.55)} send={send} seek={seek}
-          seekBy={seekBy} toggle={toggle} toggleInfo={toggleInfo} onActive={setActive} />
+        <BottomBar
+          look={look}
+          state={state}
+          view={view}
+          visible={idle.visible && !failed}
+          blocked={blocked}
+          opened={opened}
+          info={info}
+          menuHeight={Math.round(viewport.height * 0.55)}
+          send={send}
+          seek={seek}
+          seekBy={seekBy}
+          toggle={toggle}
+          toggleInfo={toggleInfo}
+          onActive={setActive}
+        />
       </View>
-      <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="box-none">
-        <Status look={look} failed={failed} waiting={waiting} waitingLabel={waitingLabel(view)} onRetry={state.retry}
-          onClose={state.close} />
+      <View
+        style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}
+        pointerEvents="box-none"
+      >
+        <Status
+          look={look}
+          failed={failed}
+          waiting={waiting}
+          waitingLabel={waitingLabel(view)}
+          onRetry={state.retry}
+          onClose={state.close}
+        />
       </View>
       {info && !failed ? <InfoCard look={look} view={view} top={top} /> : null}
     </View>
