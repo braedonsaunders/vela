@@ -59,12 +59,18 @@ do not invent an Exact-style `/vela/app/V/` asset subtree. Preserve every chunk,
 platform manifest, font, image, notice and linked resource, including chunks not
 requested during an initial Home visit. Fixed-name `metadata.json` revalidates.
 
-SPA mode does not emit a route manifest. The app owns
-`apps/vela/scripts/routes.ts`; packaging runs it from the same captured revision
-to produce `routes.json` at the archive root. Ether routes `/vela/v0/` before the
-SPA and returns index.html only for those declared app routes. Missing static
-files remain 404s, not HTML. Confirm deep links and canonical `/vela` behavior
-against the real export before adopting this layout in the installer.
+SPA mode does not emit a route manifest. The app-owned exporter landed in
+`99b47e9`: run `bun apps/vela/scripts/routes.ts [base]` from the captured repository
+root; base defaults to `/vela`. Packaging writes its stdout as `routes.json` at
+the archive root. Verified output is `{schema:1, base:"/vela", routes:["/vela",
+"/vela/title/:id"]}`. It derives routes from the expo-router app directory: index
+maps to its directory, `[x]` maps to `:x`, route groups disappear, and `_layout`
+and `+` files are skipped. The table grows as real screens land; do not invent
+watch, collection or library routes before those screens exist.
+
+Ether routes `/vela/v0/` before the SPA and returns index.html only for declared
+app routes. Missing static files remain 404s, not HTML. Confirm deep links and
+canonical `/vela` behavior against the real export before installer qualification.
 
 `_expo/static/**` and `assets/**` content-addressed files are immutable while their
 release is retrievable. HTML, routes, PWA/worker and mutable metadata revalidate.
@@ -137,8 +143,8 @@ hold the Exact-specific app-schema change and keep the distribution implementati
 
 Implementation and qualification order:
 
-1. The first export tree and export-only base setting are verified. Migration
-   lead supplies the app-owned route script and final captured workspace inputs;
+1. The first export tree, export-only base setting and app-owned route exporter
+   are verified. Migration lead confirms the final captured workspace inputs;
    playback supplies the qualified non-Metro asset builder contract.
 2. Implement the exporter adapter from clean main, preserving the signing and
    installer verification modules; retire the Exact build path coherently. Update
