@@ -5,6 +5,10 @@ public final class VelaPlayerModule: Module {
     public func definition() -> ModuleDefinition {
         Name("VelaPlayer")
 
+        OnCreate {
+            TVTextFields.install()
+        }
+
         // What this device plays (VideoToolbox's hardware decoders, libmpv's audio and subtitles).
         Function("capabilities") { () -> [String: Any] in
             PlayerCapabilities.probe()

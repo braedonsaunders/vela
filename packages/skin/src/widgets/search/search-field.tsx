@@ -3,6 +3,7 @@
 // search glyph, the query (env.query) and a clear button while there is one. A document that
 // draws its own field places the bare `searchInput` widget instead.
 import { FocusPressable as Pressable } from '../../focus';
+import { Pressable as PlainPressable } from 'react-native';
 import { msg } from '@vela/core';
 import { BlurView } from 'expo-blur';
 import { useContext, useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
@@ -88,7 +89,9 @@ export function SearchField({ ctx }: WidgetProps) {
     const timer = setTimeout(() => frame.current && reveal(frame.current), SETTLE_MS);
     return () => clearTimeout(timer);
   }, [searching]);
-  const Frame = Platform.isTV ? Pressable : View;
+  // The entry inside the field takes TV focus, but the field draws the ring (below) around its whole
+  // box: the shared focus look on the entry itself would show only as a line cut by the field's edge.
+  const Frame = Platform.isTV ? PlainPressable : View;
   const tvProps = Platform.isTV
     ? {
         onPress: () => input.current?.focus(),
@@ -102,7 +105,7 @@ export function SearchField({ ctx }: WidgetProps) {
       }
     : {};
   const ring = tvFocused && !focused
-    ? { borderColor: ui.glassEdgeStrong, boxShadow: `0px 0px 0px 3px ${ui.focusHalo}` }
+    ? { borderColor: '#ffffff', boxShadow: '0px 0px 0px 2px #ffffff, 0px 0px 0px 6px #101216' }
     : null;
 
   return (
