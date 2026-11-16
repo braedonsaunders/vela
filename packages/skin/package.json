@@ -1,0 +1,17 @@
+{
+  "name": "@vela/skin",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "peerDependencies": {
+    "@react-native-masked-view/masked-view": "*",
+    "expo-blur": "*",
+    "expo-image": "*",
+    "expo-linear-gradient": "*",
+    "react": "*",
+    "react-native": "*",
+    "react-native-reanimated": "*",
+    "react-native-svg": "*"
+  }
+}
