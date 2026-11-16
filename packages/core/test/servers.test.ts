@@ -136,6 +136,52 @@ describe('ServerRegistry', () => {
   });
 });
 
+describe('ServerRegistry, standalone (no implicit Ether)', () => {
+  const standalone = (store = new MemoryStore()) => ({ store, servers: new ServerRegistry(store) });
+
+  test('starts with no server and nothing selected', () => {
+    const { servers } = standalone();
+    expect(servers.standalone).toBe(true);
+    expect(servers.read()).toEqual({ selectedId: '', servers: [] });
+  });
+
+  test('an Ether server is added by address like any other, and the first one is selected', () => {
+    const { servers, store } = standalone();
+    const ether = servers.add('ether', 'Home Ether', 'http://10.0.0.5:32550');
+    expect(ether).toMatchObject({ kind: 'ether', origin: 'http://10.0.0.5:32550', basePath: '/' });
+    expect(ether.id).toMatch(/^[a-f0-9-]{36}$/);
+    expect(servers.read().selectedId).toBe(ether.id);
+    // A fresh registry over the same store reads it back.
+    expect(new ServerRegistry(store).read().servers).toEqual([ether]);
+  });
+
+  test('removing the selected server selects the next, then none', () => {
+    const { servers } = standalone();
+    const ether = servers.add('ether', 'Ether', 'https://ether.example');
+    const jelly = servers.add('jellyfin', 'Jelly', 'https://jelly.example');
+    servers.select(ether.id);
+    servers.remove(ether.id);
+    expect(servers.read().selectedId).toBe(jelly.id);
+    servers.remove(jelly.id);
+    expect(servers.read()).toEqual({ selectedId: '', servers: [] });
+  });
+
+  test('an added Ether server can be relocated; a hosted registry still refuses adding Ether', () => {
+    const { servers } = standalone();
+    const ether = servers.add('ether', 'Ether', 'http://10.0.0.5:32550');
+    expect(servers.relocate(ether.id, 'Ether', 'https://ether.example').origin).toBe('https://ether.example');
+    expect(() => new ServerRegistry(new MemoryStore(), ETHER).add('ether', 'Other', 'https://other.example')).toThrow('Invalid server');
+  });
+
+  test('a hosted registry ignores stored Ether records it did not configure', () => {
+    const store = new MemoryStore();
+    const added = new ServerRegistry(store).add('ether', 'Ether', 'https://other.example');
+    // The same store read by an Ether-hosted page: the added Ether record is not one it can use.
+    expect(() => new ServerRegistry(store, ETHER).read()).toThrow('Invalid server record');
+    expect(added.kind).toBe('ether');
+  });
+});
+
 describe('ServerCredentials', () => {
   test('each server keeps its own session in one shared secret', async () => {
     const store = new MemoryStore();
