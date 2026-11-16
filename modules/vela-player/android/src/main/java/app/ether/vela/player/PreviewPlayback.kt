@@ -148,7 +148,8 @@ internal class PreviewPlayback(
         state.failure = "The preview could not be played (${MpvNative.errorString(event.error)})"
         state.failureKind = if (event.error == MpvEvent.ERROR_LOADING_FAILED) "network" else "source"
       }
-      MpvClient.Event.SeekDone -> Unit
+      // A refused preview grant fails the preview; the host asks for a new grant, the view never retries.
+      MpvClient.Event.SeekDone, is MpvClient.Event.Refused -> Unit
     }
     report.publish(state, null, force = true)
     if (state.phase == PlayerState.Phase.ENDED || state.phase == PlayerState.Phase.FAILED) {

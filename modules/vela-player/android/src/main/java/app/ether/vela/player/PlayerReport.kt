@@ -1,6 +1,6 @@
 // The contract's events in client/player/model.ts shapes: snapshots (at most four a second, and on
-// every state change), observations (at most one a second), errors and command results. The same
-// shapes as the Apple implementation (ios/PlayerReport.swift).
+// every state change), observations (at most one a second), errors, session commands and session
+// refreshes. The same shapes as the Apple implementation (ios/PlayerReport.swift).
 package app.ether.vela.player
 
 import android.os.SystemClock
@@ -8,11 +8,14 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 
 internal class PlayerReport(
   private val emitSnapshot: (Map<String, Any?>) -> Unit,
   private val emitObservation: (Map<String, Any?>) -> Unit,
   private val emitError: (Map<String, Any?>) -> Unit,
+  private val emitSessionCommand: (Map<String, Any?>) -> Unit,
+  private val emitSessionRefresh: (Map<String, Any?>) -> Unit,
 ) {
   var pathId = ""
   var audioTrackId: String? = null
@@ -35,6 +38,24 @@ internal class PlayerReport(
   private var failureReported = ""
   private val isoTime = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
     timeZone = TimeZone.getTimeZone("UTC")
+  }
+
+  /** Asks the playback controller to apply a session command (protocol/v0 SessionCommand) for the
+   * current generations; it answers with a newer plan. */
+  fun sessionCommand(fields: Map<String, Any?>) {
+    val plan = plan ?: return
+    val command = fields + mapOf(
+      "sourceGeneration" to plan.sourceGeneration,
+      "seekGeneration" to plan.seekGeneration,
+      "idempotencyKey" to UUID.randomUUID().toString(),
+    )
+    emitSessionCommand(mapOf("sessionId" to plan.sessionId, "command" to command))
+  }
+
+  /** Asks for a fresh plan: the grant behind the media URL has expired or was revoked. */
+  fun sessionRefresh() {
+    val plan = plan ?: return
+    emitSessionRefresh(mapOf("sessionId" to plan.sessionId))
   }
 
   /** A preview plays: snapshots and errors without a session, and no observations. */

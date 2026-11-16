@@ -32,7 +32,14 @@ done
 cd "$root"
 # shellcheck source=android-env.sh
 source tools/android-env.sh
-export PATH="$root/.tools/bun-darwin-aarch64:$PATH"
+# Bun 1.4.2 for this host, unpacked under .tools/ as the release archive names it.
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) bun_dir=bun-darwin-aarch64 ;;
+  Linux-x86_64) bun_dir=bun-linux-x64 ;;
+  Linux-aarch64) bun_dir=bun-linux-aarch64 ;;
+  *) bun_dir=bun-darwin-x64 ;;
+esac
+export PATH="$root/.tools/$bun_dir:$PATH"
 scratch="$(dirname "$GRADLE_USER_HOME")"
 log="$scratch/android-gradle.log"
 
@@ -49,7 +56,7 @@ bundle=()
 [ "$variant" = Release ] && bundle=(":app:createBundleReleaseJsAndAssets" --rerun)
 if ! ./gradlew ${bundle[@]+"${bundle[@]}"} ":app:assemble$variant" -Pandroid.enableMinifyInReleaseBuilds=false \
   --console=plain >"$log" 2>&1; then
-  grep -E "error:|e: |What went wrong" -A3 "$log" | head -40
+  grep -E "error:|^e: |What went wrong" -A3 "$log" | head -40
   ./gradlew --stop >/dev/null 2>&1 || true
   echo "android-tv: build failed; the log is $log" >&2
   exit 1

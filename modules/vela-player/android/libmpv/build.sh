@@ -52,10 +52,11 @@ mkdir -p sdk
 [ -e sdk/android-sdk-mac ] || ln -s "$ANDROID_HOME" sdk/android-sdk-mac
 [ -e sdk/android-sdk-linux ] || ln -s "$ANDROID_HOME" sdk/android-sdk-linux
 
-# Python modules the dependencies' generators import (Mbed TLS: jinja2, jsonschema).
-if ! "$work/venv/bin/python3" -c 'import jinja2, jsonschema' 2>/dev/null; then
+# Python modules the dependencies' generators import (Mbed TLS: jinja2, jsonschema), and Meson: fontconfig
+# needs 1.11 or later, newer than Linux distributions ship.
+if ! "$work/venv/bin/python3" -c 'import jinja2, jsonschema, mesonbuild' 2>/dev/null; then
   python3 -m venv "$work/venv"
-  PIP_USER=0 "$work/venv/bin/pip" install --quiet --disable-pip-version-check jinja2 jsonschema
+  PIP_USER=0 "$work/venv/bin/pip" install --quiet --disable-pip-version-check jinja2 jsonschema 'meson>=1.11'
 fi
 export PATH="$work/venv/bin:$PATH"
 IN_CI=1 ./include/download-sdk.sh

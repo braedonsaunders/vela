@@ -3,6 +3,9 @@
 //   - `plan`: the selected ready path plays (an original file or the server's HLS). A newer plan of
 //     the same source moves the clock only when its seek generation changed.
 //   - `command`: { id, type, ... } (client/player/model.ts Command); each id is consumed once.
+// On an original file (direct play) seeks and the file's own tracks change here; anything the server
+// must apply (a seek on its HLS, a track the file does not carry, a path switch) is a session command,
+// and the view moves when the answering plan arrives. A refused media request asks for a fresh plan.
 // Before an original's first frame, the display is asked for its frame rate (mpv waits, paused).
 package app.ether.vela.player
 
@@ -42,6 +45,7 @@ internal class PlayerController(
   private var wantsPlay = true
   private var displayFacts: VideoFacts? = null
   private var loggedOutput = false
+  private var refreshAsked = ""
   /** A muted preview: no display matching, no screen-on, no observations. */
   var ambient = false
     set(value) {
@@ -50,6 +54,10 @@ internal class PlayerController(
       // Props arrive in any order: a view that became ambient after it started goes quiet.
       mpv?.set("mute", value || report.muted)
     }
+
+  /** Direct play: the playing source is an original file, so seeks and its tracks are the view's own. */
+  private val playsOriginal: Boolean
+    get() = plan?.selectedPath?.isOriginalFile == true
 
   // Props
 
@@ -243,8 +251,19 @@ internal class PlayerController(
           logOutput()
         }
       }
+      is MpvClient.Event.Refused -> askForFreshPlan("media request refused (${event.status})")
     }
     report.publish(state, pendingSeek, force = true)
+  }
+
+  /** Asks once per source for a fresh plan: the grant behind the media URL has expired or was revoked. */
+  private fun askForFreshPlan(reason: String) {
+    if (plan == null || refreshAsked == activeSource) {
+      return
+    }
+    refreshAsked = activeSource
+    Log.i(MpvClient.LOG_TAG, "session refresh: $reason")
+    report.sessionRefresh()
   }
 
   /** Unpauses once the display has finished switching modes (it blanks meanwhile), at most 6 s. */
@@ -316,8 +335,12 @@ internal class PlayerController(
         wantsPlay = false
         mpv?.set("pause", true)
       }
-      "seek" -> seek(command.number("seconds") ?: return "seek needs seconds")
-      "seekBy" -> seek((pendingSeek ?: state.position) + (command.number("seconds") ?: return "seekBy needs seconds"))
+      "seek" -> requestSeek(command.number("seconds") ?: return "seek needs seconds")
+      "seekBy" -> {
+        val seconds = command.number("seconds") ?: return "seekBy needs seconds"
+        requestSeek((pendingSeek ?: state.position) + seconds)
+      }
+      "quality", "switchPath" -> return switchPath(command.text("renditionId") ?: command.text("pathId"))
       "volume" -> {
         val value = command.number("value") ?: return "volume needs a value"
         report.volume = max(0.0, min(1.0, value))
@@ -335,10 +358,37 @@ internal class PlayerController(
     return null
   }
 
+  /** A seek: local on an original file; on the server's HLS, a session command whose plan moves the clock. */
+  private fun requestSeek(seconds: Double) {
+    val end = (state.duration ?: Double.MAX_VALUE) - 1
+    val target = max(0.0, min(seconds, end))
+    if (playsOriginal) {
+      seek(target)
+      return
+    }
+    pendingSeek = target
+    report.sessionCommand(mapOf("kind" to "seek", "positionSeconds" to target))
+  }
+
+  /** Another of the plan's paths: the server switches it and answers with a plan. */
+  private fun switchPath(value: String?): String? {
+    val pathId = value.orEmpty().removePrefix("path:")
+    if (pathId.isEmpty()) {
+      return "Automatic quality is the server's choice on this player"
+    }
+    if (pathId != report.pathId) {
+      report.sessionCommand(mapOf("kind" to "switch", "pathId" to pathId, "atSeconds" to state.position))
+    }
+    return null
+  }
+
   private fun selectAudio(id: String?): String? {
     val track = plan?.audioTrack(id ?: return "No such audio track") ?: return "No such audio track"
-    val mpvId = track.streamIndex?.let { state.trackId("audio", it) }
-      ?: return "This audio track is not in the playing file; the server must switch it"
+    val mpvId = track.streamIndex?.takeIf { playsOriginal }?.let { state.trackId("audio", it) }
+    if (mpvId == null) {
+      report.sessionCommand(mapOf("kind" to "tracks", "audioTrackId" to id))
+      return null
+    }
     report.audioTrackId = id
     report.audioClientOnly = true
     mpv?.set("aid", mpvId.toString())
@@ -347,6 +397,10 @@ internal class PlayerController(
 
   private fun selectSubtitle(id: String?): String? {
     if (id == null) {
+      if (!playsOriginal) {
+        report.sessionCommand(mapOf("kind" to "tracks", "subtitleTrackId" to null))
+        return null
+      }
       report.subtitleTrackId = null
       report.subtitleClientOnly = true
       mpv?.set("sid", "no")
@@ -360,8 +414,11 @@ internal class PlayerController(
       mpv?.command("sub-add", external.toString(), "select")
       return null
     }
-    val mpvId = track.streamIndex?.let { state.trackId("sub", it) }
-      ?: return "This subtitle track is not in the playing file; the server must switch it"
+    val mpvId = track.streamIndex?.takeIf { playsOriginal }?.let { state.trackId("sub", it) }
+    if (mpvId == null) {
+      report.sessionCommand(mapOf("kind" to "tracks", "subtitleTrackId" to id))
+      return null
+    }
     report.subtitleTrackId = id
     report.subtitleClientOnly = true
     mpv?.set("sid", mpvId.toString())
