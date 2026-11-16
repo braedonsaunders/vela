@@ -13,7 +13,8 @@ export interface Connection {
   readonly record: ServerRecord;
   readonly adapter: ServerAdapter;
   readonly credentials: Credentials;
-  /** A native server's request credentials for the player host; Ether's broker needs none. */
+  /** A native server's request credentials for the player host. Ether's broker needs none, but a
+   * standalone app (whose page is on no server's origin) still scopes the player to its paths. */
   readonly media?: MediaAccess;
   /** Artwork addressing for one read, taken after that read so a rotated credential is current. */
   images(): Promise<Images>;
@@ -23,8 +24,12 @@ export interface Connection {
   setCapabilityContext?(context: string): void;
 }
 
-export function etherConnection(record: ServerRecord, adapter: EtherAdapter, credentials: Credentials): Connection {
-  return { record, adapter, credentials,
+/** `crossOrigin`: the page is not on this server's origin (a standalone app), so the player is
+ * told the broker's scope; its grant paths carry no credentials, so the scope adds no headers. */
+export function etherConnection(record: ServerRecord, adapter: EtherAdapter, credentials: Credentials, crossOrigin = false): Connection {
+  const media: MediaAccess | undefined = crossOrigin
+    ? { origin: record.origin, pathPrefix: '/sessions/', headers: async () => ({}), nativeURL: async url => url } : undefined;
+  return { record, adapter, credentials, ...(media ? { media } : {}),
     images: async () => ({ origin: record.origin }),
     plan: plan => mediaPlan(plan, record.origin),
     setCapabilityContext: context => adapter.setCapabilityContext(context) };

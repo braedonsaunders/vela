@@ -132,7 +132,7 @@ export class Session {
         : new ServerCredentials(this.platform.secrets, this.device, () => this.key(), id);
       const context = this.clientValue ? JSON.stringify(this.clientValue) : '';
       const adapter = new EtherAdapter(record.origin, credentials, context, rejected);
-      made = etherConnection(record, adapter, credentials);
+      made = etherConnection(record, adapter, credentials, this.registry.standalone);
     } else {
       const credentials = new ServerCredentials(this.platform.secrets, this.device, () => this.key(), id);
       made = nativeConnection(record, credentials, rejected);
