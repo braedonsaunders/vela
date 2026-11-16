@@ -244,7 +244,15 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
   // Under reduced motion the overlays drop what moves: scale, translate, rotate, transitions, animations.
   const still = (o: Style | undefined) => o && Object.fromEntries(Object.entries(o).filter(([k]) => !['scale', 'translate', 'rotate', 'transition', 'animation'].includes(k))) as Style;
   const n = node as Node & NodeExtra;
-  level.ha = !!n.active; level.hh = !!node.hover; level.hf = !!node.focus; level.grp = node.group === true; level.hg = !!node.groupHover; level.gf = !!n.groupFocus; level.fade = false;
+  // A look counts when the node or any of its states carries it (a state's focus is the node's focus look then).
+  const looks = [n, ...(n.states ?? [])];
+  level.ha = !!n.active;
+  level.hh = looks.some(x => !!x.hover);
+  level.hf = looks.some(x => !!x.focus);
+  level.grp = node.group === true;
+  level.hg = looks.some(x => !!x.groupHover);
+  level.gf = looks.some(x => !!x.groupFocus);
+  level.fade = false;
   /** A state's style indices: its base, each overlay, and the reduced-motion overlays. */
   const stateRef = (layers: (Style | undefined)[], s: { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; active?: Style }, cond: Condition[]) => {
     const at = (extra?: Style) => intern(style([...layers, extra], r, undefined, weight), r);
@@ -351,10 +359,14 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
     case 'box':
       if (node.press) { if (!ACTIONS.has(node.press.action)) throw new Error(`Unknown action ${node.press.action}`); level.act = node.press.action; level.arg = parts(node.press.arg, r); level.cs = node.controlStates !== false;
         // The platform focus ring stays unless the node says outline: none, or a focus overlay suppresses it (not outline: auto).
-        const rings = [node.style, node.focus, (node as NodeExtra).groupFocus].map(o => (o as Record<string, string> | undefined)?.outline ?? (o as Record<string, string> | undefined)?.['outline-style']);
+        const states = (node as NodeExtra).states ?? [];
+        const focusLooks = [node.focus, (node as NodeExtra).groupFocus, ...states.flatMap(x => [x.focus, x.groupFocus])];
+        const outlineOf = (o: Style | undefined) => (o as Record<string, string> | undefined)?.outline
+          ?? (o as Record<string, string> | undefined)?.['outline-style'];
+        const rings = [node.style, ...focusLooks].map(outlineOf);
         // A group's descendants' group looks are its focus look too (a focused group lights them).
         const groupLook = node.group === true && JSON.stringify(node.children ?? []).search(/"group(Hover|Focus)":/) >= 0;
-        level.rn = rings.includes('none') || (!rings.includes('auto') && (!!node.focus || !!(node as NodeExtra).groupFocus || groupLook)); }
+        level.rn = rings.includes('none') || (!rings.includes('auto') && (focusLooks.some(Boolean) || groupLook)); }
       kids = node.children ?? [];
       // A row's pager: this box is the row's sideways scroller (its style sets overflow-x); pageNext/pagePrev {row.id} move it.
       if (node.pager) {
@@ -424,7 +436,10 @@ function cssStates(level: Level, r: Resolve) {
   for (const ref of refs) {
     for (const still of [false, true]) {
       const k = (f: string) => ref[still ? `${f}2` : f];
-      const base = at(ref.s), hover = level.hh ? at(k('hs')) : undefined, active = level.ha ? at(k('as')) : undefined;
+      const base = at(ref.s);
+      // A hover look counts in this state only when it differs from the state's own style.
+      const hover = level.hh && k('hs') !== ref.s ? at(k('hs')) : undefined;
+      const active = level.ha ? at(k('as')) : undefined;
       // What the renderer may have drawn inline: the state, its focus look, its group's focus looks.
       const inline = [base, ...(level.hf ? [at(k('fs'))] : []), ...(level.gf ? [at(k('gfs'))] : []), ...(level.hg ? [at(k('gs'))] : [])];
       const group = level.hg ? declarations(at(k('gs')), [base]) : [];
