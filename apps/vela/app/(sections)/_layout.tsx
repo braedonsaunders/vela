@@ -63,8 +63,8 @@ export default function SectionsLayout() {
       offset.setValue(direction * width);
       outgoingOffset.setValue(0);
       Animated.parallel([
-        Animated.timing(offset, { toValue: 0, duration: 260, useNativeDriver: Platform.OS !== 'web' }),
-        Animated.timing(outgoingOffset, { toValue: -direction * width, duration: 260, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(offset, { toValue: 0, duration: 260, useNativeDriver: true }),
+        Animated.timing(outgoingOffset, { toValue: -direction * width, duration: 260, useNativeDriver: true }),
       ]).start();
     } else {
       offset.setValue(0);

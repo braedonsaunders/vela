@@ -56,7 +56,7 @@ export function ChromeButton({
     alignItems: 'center',
     justifyContent: 'center',
     opacity: disabled ? 0.35 : 1,
-    outlineStyle: 'none',
+    outlineWidth: 0,
     transform: [{ scale: look.tv && focus && !look.still ? 1.1 : 1 }],
   };
   const faceStyle: ViewStyle = {
