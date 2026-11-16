@@ -649,9 +649,10 @@ members Client
   action play(id: string)
     streamAttempt = 0
     nav = push(nav, path("watch", id))
-  action playHero(id: string, position: number, hasPosition: bool)
+  // A hero's Play or Resume names no position: the server resolves the viewer's watch state.
+  action playHero(id: string)
     streamAttempt = 0
-    nav = push(nav, path("watch", id) + (hasPosition ? `?position=${position}` : ""))
+    nav = push(nav, path("watch", id))
   action playExtra(id: string)
     streamAttempt = 0
     nav = push(nav, path("extra", id))

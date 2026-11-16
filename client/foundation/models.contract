@@ -55,8 +55,6 @@ shape HeroAction
   action: string
   targetId: string
   targetKind: string
-  hasPosition: bool
-  positionSeconds: number
   actionLabel: string
   actionDetail: string
   progress: number

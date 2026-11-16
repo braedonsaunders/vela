@@ -36,14 +36,16 @@ export function homeModel(data: Bootstrap, images?: Images, _now?: number, artWi
     heroActions: heroes.map(hero => {
       const { title, action, reason } = hero;
       const sameTarget = action.titleId === title.id;
-      const position = action.kind === 'resume' && sameTarget ? action.positionSeconds : undefined;
+      // The decoration reads the title's own watch state: the action names no position (the server
+      // resolves where to resume when playback starts, so a cached Home never replays a stale one).
+      const position = action.kind === 'resume' && sameTarget ? title.watch?.positionSeconds : undefined;
       const remaining = position !== undefined && title.durationSeconds !== undefined && title.durationSeconds > position && position >= 0 ? title.durationSeconds - position : undefined;
       const episode = sameTarget && title.kind === 'episode' && title.seasonNumber !== undefined && title.episodeNumber !== undefined;
       const actionLabel = episode && action.kind !== 'details'
         ? msg(`hero.action.${action.kind === 'resume' ? 'resumeEpisode' : 'playEpisode'}`, { season: number(title.seasonNumber!, { useGrouping: false }), episode: number(title.episodeNumber!, { useGrouping: false }) })
         : msg(`hero.action.${action.kind}`);
       return { heroId: title.id, reason, reasonLabel: hero.label || msg(`hero.reason.${reason}`), action: action.kind,
-        targetId: action.titleId, targetKind: sameTarget ? title.kind : reason === 'nextEpisode' ? 'episode' : '', hasPosition: action.positionSeconds !== undefined, positionSeconds: action.positionSeconds ?? 0, actionLabel,
+        targetId: action.titleId, targetKind: sameTarget ? title.kind : reason === 'nextEpisode' ? 'episode' : '', actionLabel,
         actionDetail: remaining !== undefined ? msg('hero.detail.remaining', { time: minute(Math.ceil(remaining / 60)) }) : '',
         progress: position !== undefined && title.durationSeconds && title.durationSeconds > 0 ? Math.min(1, Math.max(0, position / title.durationSeconds)) : 0 };
     }), heroPreviewIds: heroes.filter(hero => hero.previewOnFocus === true).map(hero => hero.title.id), previews,
