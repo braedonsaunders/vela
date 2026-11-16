@@ -3,6 +3,7 @@
 // route the document defines replaces the base's; templates, motion, keyframes, fonts, tokens and
 // strings merge by name, the document's winning.
 import type { Node, SkinDocument } from '../../../protocol/skin';
+import { libraryBelowHeader } from './vela-base/library';
 
 /** A document with the base under it: every table filled, slots always present. */
 export type InheritedDocument = SkinDocument & Required<Pick<SkinDocument, 'slots'>>;
@@ -25,12 +26,21 @@ function homeOf(doc: SkinDocument): Node | undefined {
   return doc.slots?.home ?? doc.routes?.home;
 }
 
+/** A direct in-flow navigation before the route already reserves the header's space. */
+function hasFlowHeader(shell: Node | undefined): boolean {
+  if (shell?.type !== 'box') return false;
+  const children = shell.children ?? [];
+  const slot = children.findIndex(node => node.type === 'slot' && node.slot === 'children');
+  return slot > 0 && children.slice(0, slot).some(node => node.type === 'box' && node.role === 'navigation' && node.style?.position !== 'absolute');
+}
+
 /** The document over the base: what the document defines wins, the base fills the rest. */
 export function withBase(doc: SkinDocument, base: SkinDocument): InheritedDocument {
   const ownHome = homeOf(doc);
   const home = ownHome ?? homeOf(base);
   const routes = { ...base.routes, ...doc.routes };
   delete routes.home;
+  if (!doc.routes?.library && hasFlowHeader(doc.slots?.shell)) routes.library = libraryBelowHeader;
   const slots = { ...base.slots, ...doc.slots };
   delete slots.home;
   // Home's bar mask is its drawer's: a document that draws its own home does not take the base's.

@@ -104,3 +104,17 @@ describe('portability checker', () => {
     expect(errors(doc).sort()).toEqual(['box-sizing', 'display', 'position']);
   });
 });
+
+test('inherited library reserves header space only for overlay navigation', async () => {
+  const { withBase } = await import('../src/resolve/inherit');
+  const { velaBase } = await import('../src/resolve/base');
+  const broadcast = documents.find(([name]) => name === 'broadcast')![1];
+  const lateNight = documents.find(([name]) => name === 'latenight')![1];
+  const topPadding = (doc: SkinDocument) => {
+    const route = withBase(doc, velaBase).routes!.library!;
+    if (route.type !== 'box' || route.children?.[3]?.type !== 'box') throw new Error('missing toolbar');
+    return [route.children[3].style?.['padding-top'], route.children[3].small?.['padding-top']];
+  };
+  expect(topPadding(broadcast)).toEqual(['0px', '0px']);
+  expect(topPadding(lateNight)).toEqual(['84px', '104px']);
+});

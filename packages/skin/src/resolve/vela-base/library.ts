@@ -324,7 +324,7 @@ export const libraryLoading: Node = {
 export const noItems: Condition = { test: 'library.itemCount', is: 'eq', value: '0' };
 // The route paints its own page: a document whose shell leaves the ground to its home (Kids)
 // still reads its ink on its paper here.
-export const library: Node = {
+const makeLibrary = (flowHeader: boolean): Node => ({
   type: 'box',
   style: {
     position: 'relative',
@@ -334,7 +334,7 @@ export const library: Node = {
     'background-color': '$ui.page',
   },
   children: [
-    libraryLoading,
+    flowHeader ? { ...libraryLoading, style: { ...libraryLoading.style, 'padding-top': '24px' }, small: { 'padding-top': '18px' } } : libraryLoading,
     failure('{t:library.couldNotOpen}'),
     {
       type: 'box',
@@ -369,7 +369,7 @@ export const library: Node = {
       ],
     },
     // The toolbar is a direct child of the route root, where native draws sticky.
-    { ...toolbar, when: [ready] },
+    { ...toolbar, when: [ready], ...(flowHeader ? { style: { ...toolbar.style, 'padding-top': '0px' }, small: { ...toolbar.small, 'padding-top': '0px' } } : {}) },
     {
       type: 'box',
       when: [ready],
@@ -437,4 +437,7 @@ export const library: Node = {
       ],
     },
   ],
-};
+});
+
+export const library = makeLibrary(false);
+export const libraryBelowHeader = makeLibrary(true);
