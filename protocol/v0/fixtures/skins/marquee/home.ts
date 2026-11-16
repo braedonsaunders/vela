@@ -1,7 +1,7 @@
 // Home: the search strip, the featured banner, the hubs, and home's loading and failure states.
 import type { Node, Style } from '../../../skin';
-import { sans, bar, fill, px, is, set, unset, glyph, ring, round, primary, secondary } from './look';
-import { glassBar } from './shell';
+import { fill, is, set, unset, glyph, ring, primary, secondary } from './look';
+import { searchBox } from './search';
 import { block, art } from './cards';
 
 const heroCopy: Node = {
@@ -268,95 +268,20 @@ export const empty = (icon: string, title: string, message: string, extra: Parti
     ],
   }) as Node;
 
-// The search field: in a sticky strip at the top of a wide home (the bar's middle, in the
-// bar's colour), under the bar on phones.
-const fieldStyle = (focused: boolean): Style => ({
-  position: 'relative',
-  display: 'flex',
-  'flex-direction': 'row',
-  width: '100%',
-  'max-width': '560px',
-  'align-items': 'center',
-  gap: '10px',
-  height: '38px',
-  'box-sizing': 'border-box',
-  padding: '0px 4px 0px 12px',
-  'border-radius': '6px',
-  'background-color': focused ? '$field-focus' : '$field',
-  'box-shadow': focused ? '0px 0px 0px 1px $line-strong' : 'none',
-  transition: 'background-color 120ms linear, box-shadow 120ms linear',
-});
+// On phones the search field takes its own strip under the bar (the bar shows a search button).
 const searchStrip: Node = {
   type: 'box',
+  when: [set('env.small')],
   style: {
-    position: 'sticky',
-    top: '0px',
-    'z-index': '16',
+    position: 'relative',
     display: 'flex',
     'flex-direction': 'row',
     'flex-shrink': '0',
-    height: px(bar.normal),
-    'box-sizing': 'border-box',
-    padding: '0px 76px 0px 24px',
+    padding: '10px 14px 16px',
     'align-items': 'center',
     'justify-content': 'center',
-    'background-color': '$chrome-glass',
-    'backdrop-filter': 'blur(18px)',
   },
-  small: {
-    position: 'relative',
-    top: 'auto',
-    height: 'auto',
-    'margin-top': px(bar.small),
-    padding: '10px 14px 16px',
-    'background-color': 'transparent',
-    'backdrop-filter': 'none',
-  },
-  children: [
-    {
-      type: 'box',
-      style: fieldStyle(false),
-      states: [{ when: [set('env.searchFocused')], style: fieldStyle(true) }],
-      children: [
-        glyph('search', 18, {
-          style: { color: '$ink-faint' },
-          states: [
-            {
-              when: [set('env.searchFocused')],
-              style: { width: '18px', height: '18px', 'flex-shrink': '0', color: '$ink' },
-            },
-          ],
-        } as Partial<Node>),
-        {
-          type: 'widget',
-          widget: 'searchInput',
-          params: {
-            placeholder: '{s:search}',
-            label: '{s:searchYourLibrary}',
-            placeholderColor: '$ink-faint',
-          },
-          style: {
-            flex: '1',
-            'min-width': '0px',
-            height: '100%',
-            padding: '0px',
-            outline: 'none',
-            color: '$ink',
-            'font-size': '15px',
-            'font-family': sans,
-          },
-        },
-        {
-          type: 'box',
-          when: [set('env.searching')],
-          press: { action: 'clearSearch' },
-          label: '{s:clearSearch}',
-          ...round(30),
-          children: [glyph('close', 16)],
-        },
-      ],
-    } as Node,
-  ],
+  children: [searchBox],
 };
 // Home's next rows load as its end scrolls into view, shaped like what is coming.
 const shelfBlocks: Node = {
@@ -410,13 +335,12 @@ const contentStyle = (searching: boolean): Style => ({
 export const ready = is('env.load', 'ready'),
   loading = is('env.load', 'loading'),
   failed = is('env.load', 'failed');
-// A failed page: what happened, and Try again when the foundation can ask again. It sits below the bar.
+// A failed page: what happened, and Try again when the foundation can ask again.
 export const failure = (message: string): Node => ({
   type: 'box',
   when: [failed],
   motion: 'statusIn',
-  style: { display: 'flex', 'flex-direction': 'column', gap: '4px', 'padding-top': px(bar.normal) },
-  small: { 'padding-top': px(bar.small) },
+  style: { display: 'flex', 'flex-direction': 'column', gap: '4px' },
   children: [
     empty('alert', '{s:somethingWentQuiet}', message),
     {
@@ -435,27 +359,8 @@ export const failure = (message: string): Node => ({
     },
   ],
 });
-// Home while it loads: the bar's strip, then a banner and two hubs in outline.
+// Home while it loads: a banner and two hubs in outline.
 const homeLoading: Node[] = [
-  {
-    type: 'box',
-    when: [loading],
-    motion: 'statusIn',
-    style: {
-      position: 'sticky',
-      top: '0px',
-      'z-index': '16',
-      'flex-shrink': '0',
-      height: px(bar.normal),
-      ...glassBar,
-    },
-    small: {
-      position: 'relative',
-      height: px(bar.small),
-      'background-color': 'transparent',
-      'backdrop-filter': 'none',
-    },
-  },
   {
     type: 'box',
     when: [loading],
@@ -485,7 +390,7 @@ export const home: Node = {
   type: 'box',
   style: { position: 'relative', display: 'flex', 'flex-direction': 'column' },
   children: [
-    { ...searchStrip, when: [ready] },
+    { ...searchStrip, when: [ready, set('env.small')] },
     ...homeLoading,
     {
       type: 'box',

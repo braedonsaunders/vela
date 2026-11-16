@@ -1,6 +1,7 @@
 // Marquee's frame: the sidebar (an icon rail on narrower screens, a drawer on phones),
 // the top bar and the account menu.
 import type { Condition, Node, Style } from '../../../skin';
+import { searchBox } from './search';
 import {
   sans,
   bar,
@@ -196,7 +197,6 @@ const sidebarStyle = (w: number): Style => ({
   width: px(w),
   'flex-shrink': '0',
   'box-sizing': 'border-box',
-  'padding-top': px(bar.normal),
   'background-color': '$chrome',
   'overflow-x': 'hidden',
   'overflow-y': 'auto',
@@ -286,11 +286,9 @@ const topBar: Node = {
   escape: 'menu',
   returnFocus: 'marquee-account',
   style: {
-    position: 'absolute',
-    top: '0px',
-    left: '0px',
-    right: '0px',
+    position: 'relative',
     height: px(bar.normal),
+    'flex-shrink': '0',
     'z-index': '20',
     display: 'flex',
     'flex-direction': 'row',
@@ -298,16 +296,8 @@ const topBar: Node = {
     'box-sizing': 'border-box',
     'padding-right': '14px',
     gap: '12px',
-    'pointer-events': 'none',
     ...glassBar,
   },
-  // Over a wide home the bar is clear: the page draws its middle, around the live search field.
-  states: [
-    {
-      when: [is('env.section', 'home'), notSmall],
-      style: { 'background-color': '$scrim-clear', 'backdrop-filter': 'none' },
-    },
-  ],
   small: { height: px(bar.small), 'padding-right': '6px', gap: '2px' },
   children: [
     barStart,
@@ -333,6 +323,7 @@ const topBar: Node = {
       },
       small: { display: 'none' },
       children: [
+        { ...searchBox, when: [is('env.section', 'home'), notSmall] } as Node,
         {
           type: 'box',
           when: [isnt('env.section', 'home')],
@@ -353,7 +344,6 @@ const topBar: Node = {
             'background-color': '$field',
             color: '$ink-faint',
             cursor: 'text',
-            'pointer-events': 'auto',
           },
           hover: { 'background-color': '$field-focus' },
           focus: { 'box-shadow': ring('$amber') },
@@ -534,12 +524,36 @@ const drawer: Node[] = [
   } as Node,
 ];
 
+// The page beside the sidebar: the route's own box fills it.
+const page: Node = {
+  type: 'slot',
+  slot: 'children',
+  style: {
+    position: 'relative',
+    display: 'flex',
+    'flex-direction': 'column',
+    flex: '1',
+    'min-width': '0px',
+    'min-height': '0px',
+  },
+  inner: {
+    display: 'flex',
+    'flex-direction': 'column',
+    'flex-grow': '1',
+    'min-height': '0px',
+    height: '100%',
+    width: '100%',
+  },
+} as Node;
+
+// The bar sits in flow above the sidebar and the page, so the page's scroll view starts below it
+// and a sticky toolbar pins under the bar on web and native alike.
 export const shell: Node = {
   type: 'box',
   style: {
     position: 'relative',
     display: 'flex',
-    'flex-direction': 'row',
+    'flex-direction': 'column',
     height: '100%',
     'min-height': '0px',
     'background-color': '$page',
@@ -548,28 +562,12 @@ export const shell: Node = {
     'font-family': sans,
   },
   children: [
-    sidebar,
-    {
-      type: 'slot',
-      slot: 'children',
-      style: {
-        position: 'relative',
-        display: 'flex',
-        'flex-direction': 'column',
-        flex: '1',
-        'min-width': '0px',
-        'min-height': '0px',
-      },
-      inner: {
-        display: 'flex',
-        'flex-direction': 'column',
-        'flex-grow': '1',
-        'min-height': '0px',
-        height: '100%',
-        width: '100%',
-      },
-    },
     topBar,
+    {
+      type: 'box',
+      style: { display: 'flex', 'flex-direction': 'row', flex: '1', 'min-height': '0px' },
+      children: [sidebar, page],
+    },
     accountMenu,
     ...drawer,
   ],
