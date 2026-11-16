@@ -2140,3 +2140,44 @@ its virtual clock is a different boundary; cinematic's normal-motion headless
 Home drive also rendered/tapped successfully but never mounted a preview because
 its deferred timer awaited another clock commit. No user-agent or GPU-disable
 workaround was added to playback.
+
+### Browser host and core responsibility split (2026-11-16)
+
+The web core remains independent of Exact and React. `core/runtime.ts` is a public
+facade; source/session lifetime, decode epochs and packet delivery, clock admission,
+live-window handling, transport, and telemetry have separate modules with typed
+state. `engine.ts` is the browser host facade, with browser events, source activation,
+track commands, recovery, startup watchdogs, observations and lifecycle in `host/`.
+`browser-view.ts` owns the DOM surface and the existing props/event adaptation;
+`web-module.ts` temporarily registers it with Exact. Expo will mount the same host
+through a typed React view, and Metro will bundle its JavaScript. Only decoder,
+worker, worklet, subtitle and other static assets need the separate immutable export.
+The old runtime loader is still present until the approved excision; this refactor
+has not selected a new production default.
+
+A generated 640×360 H.264 Matroska fixture with two AAC tracks and embedded PGS
+was driven before and after the structural split in dedicated headed Chrome contexts.
+Both started, paused, sought to 1.5 and 4.5 seconds, painted 3,168 opaque subtitle
+pixels at each target, switched to the second audio track, cleared subtitles, and
+resumed. Both reported zero audio underflows, video drops, recoveries and repeated
+source pages; both requested 1,941,345 physical bytes. The scoped TypeScript compile,
+core asset assembly and browser host build passed. These are local correctness
+proofs, not the pending real-title matrix or a controlled speed comparison: Ballast
+rose from WARNING to CRITICAL during the proof window. Every owned context and the
+fixture server was closed afterwards.
+
+Readability inventory over the same surviving source scope, including new modules:
+
+| Stage | Files | Lines >120 columns | Lines >200 columns |
+| --- | ---: | ---: | ---: |
+| Before formatting | 77 | 1,210 | 247 |
+| Mechanical formatting | 77 | 35 | 7 |
+| Responsibility split | 112 | 32 | 6 |
+
+The browser engine class changed from 61 fields in 843 compressed lines (2,035
+formatted lines) to one context field behind a small public facade. The former
+718-line formatted core class likewise has one context field. The largest remaining
+file is `core/demux/matroska-stream.ts` (934 lines); the largest remaining class is
+`RangeReader` (864 formatted lines, 34 fields). The remaining long lines are mostly
+literal dependency-source transforms and imports that the direct-dependency cutover
+must replace, not compressed playback control flow.
