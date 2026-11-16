@@ -18,8 +18,8 @@ export function NowList({
 }) {
   const latest = useRef({ rows, onVisible });
   latest.current = { rows, onVisible };
-  const changed = useRef(({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
-    const indexes = viewableItems.map(item => item.index).filter((i): i is number => i !== null);
+  const changed = useRef(({ viewableItems }: { viewableItems: { index?: number | null }[] }) => {
+    const indexes = viewableItems.map(item => item.index).filter((i): i is number => typeof i === 'number');
     if (!indexes.length) return;
     const start = Math.max(0, Math.min(...indexes) - 6);
     latest.current.onVisible(latest.current.rows.slice(start, Math.max(...indexes) + 7).map(c => c.id));
