@@ -3,6 +3,7 @@
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
 import { perfReport } from './budget';
+import { resolveFonts } from './fonts';
 import { portabilityReport } from './portability';
 import { SEARCH_ACTIONS, SEARCH_COLLECTIONS, SEARCH_KEYS } from './search-vocabulary';
 import { withClientStrings } from './client-strings';
@@ -41,9 +42,13 @@ const knownKeyframes = (name: string) => name === 'none' || KEYFRAMES.has(name) 
 function keyframesCss(doc: SkinDocument): string {
   const frames = (doc as SkinDocument & { keyframes?: Record<string, Record<string, Record<string, unknown>>> }).keyframes ?? {};
   const length = /^-?\d+(\.\d+)?(px|%)$/;
-  return Object.entries(frames).slice(0, 32).map(([name, steps]) => {
+  const named = Object.entries(frames);
+  if (named.length > 32) throw new Error(`The document has ${named.length} keyframes; the limit is 32`);
+  return named.map(([name, steps]) => {
     if (!/^[a-zA-Z][a-zA-Z0-9-]{0,31}$/.test(name)) throw new Error(`Bad keyframes name ${name}`);
-    const body = Object.entries(steps).slice(0, 16).map(([at, p]) => {
+    const stepList = Object.entries(steps);
+    if (stepList.length > 16) throw new Error(`Keyframes ${name} has ${stepList.length} steps; the limit is 16`);
+    const body = stepList.map(([at, p]) => {
       if (!/^(from|to|\d{1,3}(\.\d+)?%)$/.test(at)) throw new Error(`Bad keyframe step ${at}`);
       const decl: string[] = [];
       if (p.opacity !== undefined) { const o = Number(p.opacity); if (!(o >= 0 && o <= 1)) throw new Error('opacity 0..1'); decl.push(`opacity:${o}`); }
@@ -91,7 +96,11 @@ function parts(template: string | undefined, r?: Resolve, urls = false): Part[] 
   // Client strings ({t:}) and the document's own ({s:}) are resolved now, for the viewer's locale.
   // The document's name ({env.skinName}) is known now too.
   const text = withClientStrings(template ?? '')
-    .replace(/\{s:([a-zA-Z0-9.-]+)\}/g, (_, key) => r?.strings[key] ?? '')
+    .replace(/\{s:([a-zA-Z0-9.-]+)\}/g, (_, key: string) => {
+      const found = r?.strings[key];
+      if (found === undefined) throw new Error(`Unknown document string ${key}`);
+      return found;
+    })
     .replace(/\{env\.skinName\}/g, () => r?.doc.name ?? '');
   let at = 0;
   for (const m of text.matchAll(/\{([a-zA-Z.:-]+)\}/g)) {
@@ -204,6 +213,18 @@ function setsRow(node: unknown, key: string): boolean {
 
 /** A pressed scale is no motion: reduced motion keeps it, as Exact's press scale (only its transition goes). */
 const pressScale = (active: Style | undefined) => (active as Record<string, string> | undefined)?.scale !== undefined ? { scale: (active as Record<string, string>).scale } as Style : {};
+
+/** library.played's fixed choices, "value|label;…" (labels literal or {s:}/{t:} strings), up to 8. */
+function playedChoices(raw: unknown, r: Resolve): string[] {
+  const choices = String(raw ?? '').split(';').filter(Boolean);
+  if (choices.length > 8) throw new Error(`A select has ${choices.length} choices; the limit is 8`);
+  return choices.map(choice => {
+    const [value, ...label] = choice.split('|');
+    const pieces = parts(label.join('|'), r);
+    if (pieces.some(p => p.k >= 0 || p.f !== '')) throw new Error('A select choice\'s label is text, not a binding');
+    return `${value}|${pieces.map(p => p.l).join('')}`;
+  });
+}
 
 function convert(node: Node, depth: number, r: Resolve, weight = 400, root = false): Level | undefined {
   if (++r.count > MAX_NODES) throw new Error('Skin document has too many nodes');
@@ -343,14 +364,20 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
         const over = node.params?.options ?? '';
         if (!['library.genres', 'library.sorts', 'library.kinds', 'library.played'].includes(over)) throw new Error(`select options: library.genres, library.sorts, library.kinds or library.played, not ${over}`);
         // library.played lists the document's own choices: "value|label;…" (labels may be {s:key}).
-        if (over === 'library.played') level.ipaths = String(node.params?.choices ?? '').split(';').filter(Boolean).slice(0, 8).map(c => { const [v, ...l] = c.split('|'); return `${v}|${parts(l.join('|'), r).map(p => p.l).join('')}`; });
+        if (over === 'library.played') level.ipaths = playedChoices(node.params?.choices, r);
         if (!node.params?.action || !ACTIONS.has(node.params.action)) throw new Error(`Unknown select action ${node.params?.action}`);
         // {value} is the select's own placeholder (the chosen id), kept literal for the renderer to fill.
         level.t = 'select'; level.sym = over; level.act = node.params.action; level.arg = parts((node.params.arg ?? '{value}').replaceAll('{value}', '\u0000'), r).map(p => ({ ...p, l: p.l.replaceAll('\u0000', '{value}') }));
         level.parts = parts(node.params.none, r); level.label = parts(node.params.label, r); level.test = parts(node.testId, r);
       }
       // Asks for the next page of home or of its row when it scrolls into view.
-      else if (node.widget === 'sentinel') { if (depth > PAGER_DEPTH) throw new Error(`A sentinel must sit within ${PAGER_DEPTH} levels of its slot`); level.t = 'sentinel'; level.sym = ['home', 'library', 'collection'].includes(node.params?.on ?? '') ? node.params!.on! : 'row'; }
+      else if (node.widget === 'sentinel') {
+        if (depth > PAGER_DEPTH) throw new Error(`A sentinel must sit within ${PAGER_DEPTH} levels of its slot`);
+        const on = node.params?.on ?? 'row';
+        if (!['row', 'home', 'library', 'collection'].includes(on)) throw new Error(`A sentinel loads row, home, library or collection, not ${on}`);
+        level.t = 'sentinel';
+        level.sym = on;
+      }
       else throw new Error(`Unknown widget ${node.widget}`);
       break;
     case 'repeat': {
@@ -376,7 +403,11 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
       if (node.pager) {
         if (depth > PAGER_DEPTH) throw new Error(`A pager must sit within ${PAGER_DEPTH} levels of its slot`);
         if (node.press) throw new Error('A pager box takes no press');
-        const px = (v: unknown, d: number) => Math.max(0, Math.min(400, Math.round(Number(v ?? d)) || 0));
+        const px = (v: unknown, fallback: number) => {
+          const n = v === undefined ? fallback : Number(v);
+          if (!Number.isInteger(n) || n < 0 || n > 400) throw new Error('A pager\'s inset and peek are whole pixels, 0 to 400');
+          return n;
+        };
         level.dom = parts('pager-{row.id}'); level.sym = `${px(node.pager.inset, 0)}|${px(node.pager.peek, 60)}`;
       }
       break;
@@ -502,7 +533,28 @@ function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchFi
   return { present: true, rootBase: rootStates.base, rootSts: rootStates.sts, slotBase: holderStates.base, slotSts: holderStates.sts, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), holds: holderAt >= 0, nodes };
 }
 
-const tri = (v: unknown) => v === true ? 'true' : v === false ? 'false' : '';
+/** A trait the document may set: "true", "false", or "" when it leaves the trait to the engine. */
+function tri(v: unknown, name: string): string {
+  if (v === undefined) return '';
+  if (typeof v !== 'boolean') throw new Error(`traits.${name} is true or false`);
+  return String(v);
+}
+/** The title page's presentation per viewport class, the width it changes at, and the split pane. */
+function detailLayout(doc: SkinDocument): { detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string } {
+  const presentation = (v: unknown, name: string) => {
+    if (v === undefined) return 'fullscreen';
+    if (v !== 'fullscreen' && v !== 'modal' && v !== 'stack') throw new Error(`detail.${name} is fullscreen, modal or stack`);
+    // The navigation's own presentation for a stacked page is its default ("").
+    return v === 'stack' ? '' : v;
+  };
+  // From this viewport width the detail takes its wide presentation and splits home beside it.
+  const from = doc.detail?.from === undefined ? 640 : Number(doc.detail.from);
+  if (!Number.isInteger(from) || from < 0 || from > 4000) throw new Error('detail.from is whole pixels, 0 to 4000');
+  const split = doc.detail?.split === undefined || doc.detail.split === 'none' ? 'none' : /^(\d{2,4})(px)?$/.exec(String(doc.detail.split))?.[1];
+  if (split === undefined) throw new Error('detail.split is a pane width in px (10 to 9999) or none');
+  return { detailWide: presentation(doc.detail?.wide, 'wide'), detailSmall: presentation(doc.detail?.small, 'small'), detailFrom: from, detailSplit: split };
+}
+
 function detailFrame(doc: SkinDocument, r: Resolve): { detailScrim: string; detailBlur: string; detailFlat: boolean } {
   const frame = (doc.detail as { frame?: { scrim?: string; blur?: string; flat?: boolean } } | undefined)?.frame;
   if (frame?.flat) return { detailScrim: 'transparent', detailBlur: 'none', detailFlat: true };
@@ -553,20 +605,14 @@ function resolveDoc(own: SkinDocument, width: number, origin: string, locale: st
   // Home is a route like the others (its holder is the foundation's search field): one renderer call site draws them all.
   const tree = (name: string, root: Node | undefined, holder: 'children' | 'searchField') => { const { present, ...rest } = slot(root, r, holder); return present ? [{ name, ...rest }] : []; };
   const routes = [...tree('home', doc.slots.home ?? doc.routes?.home, 'searchField'), ...Object.entries(doc.routes ?? {}).filter(([name]) => name !== 'home').flatMap(([name, root]) => tree(name, root, 'children'))];
-  // Document fonts: same-origin appearance files, registered by the vela-theme view under their family names.
-  const fonts = Object.values(doc.fonts ?? {}).slice(0, 8).flatMap(f => /^[A-Za-z0-9 ]{1,48}$/.test(f?.family ?? '') ? (f.files ?? []).slice(0, 4).flatMap(file => {
-    const url = file && typeof file.url === 'string' && (file.url.startsWith('/vela/v0/appearance/') || file.url.startsWith('/vela/skins/')) && /\.(woff2|woff|ttf|otf)$/.test(file.url) && !/[?#\\]/.test(file.url) ? `${origin}${file.url}` : '';
-    const w = String(file.weight ?? 400).trim();
-    return url && /^\d{3}( \d{3})?$/.test(w) ? [{ family: f.family, url, weight: w, style: file.style === 'italic' ? 'italic' : 'normal', sizeAdjust: Number(f.sizeAdjust) || 100 }] : [];
-  }) : []);
+  const fonts = resolveFonts(doc, origin);
   return { id: doc.id, fontsJson: fonts.length ? JSON.stringify(fonts) : '', keyframesCss: kfCss, styles: r.styles, shell, routes, liveHome: doc.live?.home === true,
-    detailWide: doc.detail?.wide === 'stack' ? '' : doc.detail?.wide ?? 'fullscreen', detailSmall: doc.detail?.small === 'stack' ? '' : doc.detail?.small ?? 'fullscreen',
-    // From this viewport width the detail takes its wide presentation and splits home beside it (a pane width in px).
-    detailFrom: Math.max(0, Math.min(4000, Math.round(Number(doc.detail?.from ?? 640)) || 0)), detailSplit: /^(\d{2,4})(px)?$/.exec(String(doc.detail?.split ?? ''))?.[1] ?? 'none',
+    ...detailLayout(doc),
     // The framed title's surround, drawn by the route frame: scrim (colour or token), blur, or flat.
     ...detailFrame(doc, r),
     // Foundation traits the document sets ("" leaves the doc engine's).
-    barMask: tri(doc.traits?.barMask), panSections: tri(doc.traits?.panSections), splashOnPaper: tri(doc.traits?.splashOnPaper),
+    barMask: tri(doc.traits?.barMask, 'barMask'), panSections: tri(doc.traits?.panSections, 'panSections'),
+    splashOnPaper: tri(doc.traits?.splashOnPaper, 'splashOnPaper'),
     pageColor: doc.traits?.page ? style([{ color: doc.traits.page } as Style], r)['color'] as string : '',
     inkColor: doc.traits?.ink ? style([{ color: doc.traits.ink } as Style], r)['color'] as string : '', drawsStatus: doc.status === true,
     // Hover and group hover only where a pointer hovers (a touch leaves no hover behind), then press.
