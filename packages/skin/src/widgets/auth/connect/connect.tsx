@@ -3,7 +3,6 @@
 // plex.tv/link; Jellyfin and Emby take a password or Quick Connect. Your servers are listed to
 // switch. A signed-out Plex server's sign-in is this page too, opened on that server.
 import { useState } from 'react';
-import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { msg } from '@vela/core';
 import { Alert, Heading, Pill } from '../../common/controls';
@@ -116,11 +115,7 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
         </>
       )}
       {errors.server ? <Alert>{errors.server}</Alert> : null}
-      {onClose ? (
-        <View style={{ alignItems: 'flex-start' }}>
-          <Pill label={msg('ui.cancel')} height={46} stretch={false} onPress={onClose} />
-        </View>
-      ) : null}
+      {onClose ? <Pill label={msg('ui.cancel')} height={46} align="flex-start" onPress={onClose} /> : null}
     </Animated.View>
   );
 }

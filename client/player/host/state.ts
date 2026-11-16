@@ -131,7 +131,7 @@ export interface HostEventsState {
   deliver: (event: EngineEvent) => void;
 }
 export interface HostContext {
-  readonly runtimes?: BrowserRuntimeServices;
+  readonly runtimes: BrowserRuntimeServices;
   readonly session: HostSessionState;
   readonly media: HostMediaState;
   readonly watchdog: HostWatchdogState;

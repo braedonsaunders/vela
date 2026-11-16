@@ -1,4 +1,5 @@
 import manifest from './assets.json';
+import { importModuleURL } from './module-url';
 export const subtitleAssetKey = manifest.assetKey;
 export interface AssRendererPort extends EventTarget {
   createEvent(event: Record<string, unknown>): void;
@@ -74,7 +75,7 @@ export async function loadAssAssets(baseURL: string, signal: AbortSignal): Promi
     const moduleURL = blob(module, 'application/javascript'),
       workerURL = blob(worker, 'application/javascript'),
       wasmURL = blob(wasm, 'application/wasm');
-    const loaded = (await import(/* @vite-ignore */ moduleURL)) as { default: AssConstructor };
+    const loaded = await importModuleURL<{ default: AssConstructor }>(moduleURL, signal);
     signal.throwIfAborted();
     if (typeof loaded.default !== 'function') throw new Error('Invalid ASS renderer module');
     return {
