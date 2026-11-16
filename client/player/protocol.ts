@@ -2,7 +2,10 @@ import { codecFamily } from './video-info';
 import type { PlaybackPlan, PlaybackPath, PlayerObservation } from '../../protocol/v0/types';
 import type { PlaybackSession, Snapshot } from './model';
 /** Protocol paths contain server-qualified codec strings, never guessed capabilities. */
-export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
+/** The plan's media URLs may be relative to the server; `mediaBase` is that server's origin (the
+ * page's own when it serves both, as Ether does at /vela). */
+export function sessionFromPlan(plan: PlaybackPlan, mediaBase: string = location.href): PlaybackSession {
+  const absolute = (url: string) => new URL(url, mediaBase).href;
   const selected = plan.paths.find((p) => p.id === plan.selectedPathId);
   if (!selected) throw new Error('Plan selected path is absent');
   const edition = selected.edition ?? '';
@@ -40,8 +43,8 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
       language: t.language,
       codec: t.codec,
       streamIndex: t.streamIndex,
-      url: t.delivery?.kind === 'external' ? t.delivery.url : t.url,
-      delivery: t.delivery,
+      url: t.delivery?.kind === 'external' ? absolute(t.delivery.url) : t.url && absolute(t.url),
+      delivery: t.delivery?.kind === 'external' ? { ...t.delivery, url: absolute(t.delivery.url) } : t.delivery,
       forced: t.forced,
       hearingImpaired: t.hearingImpaired,
     })),
@@ -65,7 +68,7 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
         id: p.id,
         strategy: p.kind,
         delivery: p.transport,
-        url: p.url,
+        url: absolute(p.url),
         mime: p.mimeType,
         edition: p.edition ?? '',
         timeline: p.timelineId ?? `unverified:${p.id}`,
@@ -90,10 +93,10 @@ export function sessionFromPlan(plan: PlaybackPlan): PlaybackSession {
         sourceRevision: p.sourceId,
         timelineOriginSeconds: p.timelineOriginSeconds,
         initialRenditionId: p.initialRenditionId,
-        audioRenditions: p.audioRenditions,
+        audioRenditions: p.audioRenditions?.map((rendition) => ({ ...rendition, url: absolute(rendition.url) })),
         renditions: p.qualities.map((q) => ({
           id: q.id,
-          url: q.url,
+          url: absolute(q.url),
           bandwidth: q.bitrate,
           height: q.height,
           width: q.width,

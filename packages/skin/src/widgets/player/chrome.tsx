@@ -11,6 +11,7 @@ import { BottomBar, TopBar, type Opened } from './bars';
 import { usePlayerChrome, type PlayerChromeState } from './context';
 import { useIdle } from './idle';
 import { InfoCard } from './info-card';
+import { useLiveWatchChrome } from './live';
 import { useShortcuts } from './keys';
 import { usePlayerLook } from './look';
 import { present, type PlayerView } from './present';
@@ -54,7 +55,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const failed = failureOf(state, view);
   const blocked = !state.plan || view.ended || !!failed;
   const waiting = !failed && (!state.plan || view.waiting);
-  const idle = useIdle(!view.playing || opened !== null || active || !!failed);
+  const live = useLiveWatchChrome(state.plan, state.snapshot);
+  const idle = useIdle(!view.playing || opened !== null || active || !!failed || live.attention);
   const { send } = state;
 
   const seek = (seconds: number) => {
@@ -87,6 +89,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
       if (view.fullscreen) send({ type: 'fullscreen' });
     },
     closeMenu: () => setOpened(null),
+    liveKey: live.live ? live.key : undefined,
   });
 
   // Touch: a tap on the picture shows a hidden chrome, or hides a standing one (closing a menu first).
@@ -122,6 +125,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           toggle={toggle}
           toggleInfo={toggleInfo}
           onActive={setActive}
+          live={live}
         />
       </View>
       <View

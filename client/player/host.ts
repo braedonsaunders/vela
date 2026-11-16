@@ -78,7 +78,7 @@ export const createWebPlayerHost: CreateWebPlayerHost = (element, initialProps, 
           plan.sourceGeneration < engine.controller.source ||
           plan.seekGeneration < engine.controller.seek);
       if (!stale) {
-        const session = plan ? sessionFromPlan(plan) : next.session!;
+        const session = plan ? sessionFromPlan(plan, options.access()?.origin ?? location.href) : next.session!;
         if (!session.id || !Array.isArray(session.sources)) throw new Error('Invalid playback session');
         if (plan) {
           planSession = plan.sessionId;

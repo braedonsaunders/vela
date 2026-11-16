@@ -1,7 +1,15 @@
 // How React reaches Live TV: the app provides one LiveController and the player view that draws
 // the tile's picture; widgets read the controller's view and open their surface while on screen.
 import type { VelaPlayerViewProps } from '@vela/player-api';
-import { createContext, useContext, useEffect, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import type { LiveController, LiveView, Surface } from './controller';
 
@@ -20,19 +28,29 @@ function saveData(): boolean {
   return connection?.saveData === true;
 }
 
-/** Wraps the app while a server with live TV is signed in. It follows foreground and reduced motion. */
-export function LiveProvider({ controller, Player, children }: LiveContextValue & { children: ReactNode }) {
+interface ProviderProps {
+  /** The signed-in server's controller; null while signed out or where the server has no live TV. */
+  controller: LiveController | null;
+  Player?: ComponentType<VelaPlayerViewProps>;
+  children: ReactNode;
+}
+
+/** Wraps the app (always, so the tree never remounts when a controller arrives). It follows the
+ * foreground, reduced motion and Save-Data for the controller it is given. */
+export function LiveProvider({ controller, Player, children }: ProviderProps) {
   useEffect(() => {
-    controller.setCanPreview(Player !== undefined);
+    controller?.setCanPreview(Player !== undefined);
   }, [controller, Player]);
 
   useEffect(() => {
+    if (!controller) return;
     controller.setVisible(AppState.currentState !== 'background');
     const sub = AppState.addEventListener('change', state => controller.setVisible(state !== 'background'));
     return () => sub.remove();
   }, [controller]);
 
   useEffect(() => {
+    if (!controller) return;
     let still = false;
     const apply = () => controller.setQuiet(still || saveData());
     AccessibilityInfo.isReduceMotionEnabled().then(on => {
@@ -47,7 +65,8 @@ export function LiveProvider({ controller, Player, children }: LiveContextValue 
     return () => sub.remove();
   }, [controller]);
 
-  return <LiveContext.Provider value={{ controller, Player }}>{children}</LiveContext.Provider>;
+  const value = useMemo(() => (controller ? { controller, Player } : null), [controller, Player]);
+  return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
 
 /** The app's live controller and player, or null where the server has no live TV. */
@@ -79,9 +98,9 @@ export function useLiveView(): LiveView {
 
 /** Keeps a surface open while `active` (the screen holding it is focused). */
 export function useLiveSurface(surface: Surface, active: boolean): void {
-  const live = useContext(LiveContext);
+  const controller = useContext(LiveContext)?.controller;
   useEffect(() => {
-    if (!live || !active) return;
-    return live.controller.open(surface);
-  }, [live, surface, active]);
+    if (!controller || !active) return;
+    return controller.open(surface);
+  }, [controller, surface, active]);
 }

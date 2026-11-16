@@ -448,9 +448,24 @@ const fadeStill = { keyframes: 'dissolve', duration: 200 };
 const osdIn = (delay: number) => ({ keyframes: 'dissolve', duration: 240, delay, easing: 'steps(3, jump-end)', fill: 'both' as const, still: fadeStill });
 
 export default {
-  schema: 1, renderer: 4, id, name: 'Late Night', version,
+  schema: 1, renderer: 15, id, name: 'Late Night', version,
   tagline: 'Your library on an old TV set: channel flips, tape labels and a glowing on-screen display.',
   preview: asset('preview.svg'), swatches: ['#07080b', '#f3eee0', '#7dffa1', '#e8452c', '#f4cf3a'],
+  // Late Night's dark set, OSD green and the VCR's blue menus, for the routes it inherits (search, library, collection, sign-in).
+  ui: {
+    page: '#07080b', raised: '#16171b', ink: '#f3eee0', inkSecondary: 'rgba(243, 238, 224, 0.72)',
+    inkQuiet: 'rgba(243, 238, 224, 0.5)', inkInverse: '#15120d', inkHover: '#ffffff', accent: '#7dffa1',
+    onAccent: '#07080b', control: 'rgba(255, 255, 255, 0.06)', controlHover: 'rgba(255, 255, 255, 0.13)',
+    glass: 'rgba(4, 6, 8, 0.82)', glassEdge: 'rgba(243, 238, 224, 0.22)',
+    glassEdgeStrong: 'rgba(243, 238, 224, 0.55)', popover: 'rgba(18, 36, 168, 0.96)',
+    scrim: 'rgba(7, 8, 11, 0.78)', track: 'rgba(243, 238, 224, 0.22)',
+    trackStrong: 'rgba(243, 238, 224, 0.55)', focusHalo: 'rgba(125, 255, 161, 0.35)',
+    shadow: 'rgba(0, 0, 0, 0.75)', skeleton: 'rgba(255, 255, 255, 0.06)',
+    skeletonLight: 'rgba(255, 255, 255, 0.13)', alert: 'rgba(232, 69, 44, 0.16)', live: '#ff4b3e',
+    font: 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif',
+    fontDisplay: '"Late Night Print", "Michroma", "Eurostile", "Microgramma", system-ui, sans-serif',
+    radiusControl: 3, radiusCard: 4, radiusPanel: 4,
+  },
   tokens: {
     page: '#07080b', raised: '#16171b', bezel: '#0d0d0f', 'bezel-lip': 'rgba(255, 255, 255, 0.06)',
     ink: '#f3eee0', 'ink-bright': '#ffffff', 'ink-dim': 'rgba(243, 238, 224, 0.72)', 'ink-quiet': 'rgba(243, 238, 224, 0.5)', 'ink-on-label': '#15120d',

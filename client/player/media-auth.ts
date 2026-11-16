@@ -59,9 +59,9 @@ export function parseMediaAuthorization(json: string): MediaAuthorization | unde
       typeof value.headers !== 'object'
     )
       throw 0;
+    // No headers is a scope without credentials (Ether's broker paths on another origin).
     const entries = Object.entries(value.headers);
     if (
-      entries.length < 1 ||
       entries.length > 8 ||
       entries.some(
         ([key, text]) =>

@@ -1,7 +1,8 @@
 // Shortcuts. On a keyboard: Space or K plays and pauses, J/L and the side arrows step ten
 // seconds, the vertical arrows set the volume, M mutes, I shows the info card, F goes
 // fullscreen, Escape closes a menu. On a TV remote: play/pause always toggles, and while the
-// chrome is hidden the side presses step ten seconds.
+// chrome is hidden the side presses step ten seconds. In live watch, up and down (and the
+// channel keys) dial channels instead.
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { pressed, useRemote } from './remote';
@@ -18,6 +19,8 @@ export interface Shortcuts {
   toggleInfo(): void;
   fullscreen(): void;
   closeMenu(): void;
+  /** Live watch takes its own keys first (up and down dial channels); answers whether it took one. */
+  liveKey?(key: string): boolean;
 }
 
 function typing(target: EventTarget | null): boolean {
@@ -34,10 +37,15 @@ export function useShortcuts(shortcuts: Shortcuts): void {
     const onKey = (event: KeyboardEvent) => {
       const s = latest.current;
       if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
-      if (event.key === 'Escape') {
-        if (s.menuOpen) s.closeMenu();
+      if (event.key === 'Escape' && s.menuOpen) {
+        s.closeMenu();
         return;
       }
+      if (!s.menuOpen && s.liveKey?.(event.key)) {
+        event.preventDefault();
+        return;
+      }
+      if (event.key === 'Escape') return;
       const arrows = event.key.startsWith('Arrow');
       if (arrows && s.menuOpen) return;
       // A focused button takes Space and Enter as its own press.
@@ -95,6 +103,8 @@ export function useShortcuts(shortcuts: Shortcuts): void {
     if (!pressed(event)) return;
     if (event.eventType === 'playPause') s.togglePlay();
     else if (event.eventType === 'menu' && s.menuOpen) s.closeMenu();
+    else if (!s.visible && event.eventType === 'up') s.liveKey?.('ArrowUp');
+    else if (!s.visible && event.eventType === 'down') s.liveKey?.('ArrowDown');
     else if (!s.visible && event.eventType === 'left') s.seekBy(-10);
     else if (!s.visible && event.eventType === 'right') s.seekBy(10);
   });
