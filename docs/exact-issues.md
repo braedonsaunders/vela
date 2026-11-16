@@ -1,8 +1,8 @@
 # Exact issues found by Vela
 
 One entry per Exact-side problem Vela hit, with a minimal repro, what it cost us, how Vela works
-around it, and a proposed fix in Exact's terms. Nothing here goes upstream (no issue, no PR)
-until the owner approves it and the fix is tested end to end. Each entry is also recorded with
+around it, and a proposed fix in Exact's terms. Nothing here goes upstream until the owner approves it and the fix is tested end to end;
+Exact takes issues with diffs, not pull requests (its CONTRIBUTING.md). Each entry is also recorded with
 `bun exact.mjs feedback note`.
 
 Exact is pinned at `vendor/exact` (`EXACT_REVISION`). The repros are the measured cases cut down;
@@ -61,7 +61,7 @@ Results:
 - On Vela's current doc engine, where the walk is already ~7 ms after the anchor cut, scroll script falls
   1.71/1.64 s → 1.55/1.50 s and scroll goes 80/83 → 84/88 fps.
 - On a page as the doc engine was before (50 ms per walk), this pass is most of the commit cost.
-- The PR text is in `~/.scratch/vela-build/exact-pr-modes.md` and waits for the owner's go.
+- Filed as https://github.com/expo/exact/issues/720 with the diff and a browser-path test (`modes-commits.test.mjs`); Exact takes no pull requests.
 
 **Proposed fix (as first written).**
 - Track which elements gained or lost a token class or `data-x-b` from the commit's own
@@ -186,8 +186,7 @@ effect and whether its last write was empty. A probe is skipped when three thing
   without staling effects. This version tracks those writes.
 
 All related web-js tests pass. On top of the modes fix, Vela's scroll script falls 1.55/1.50 s → 1.34/1.22 s,
-scroll goes 84/88 → 90/94 fps, and the longest task 123/119 → 92/91 ms. The PR text is in
-`~/.scratch/vela-build/exact-pr-presence.md`. Vela meanwhile binds motion only on route levels 1-6 and in the
+scroll goes 84/88 → 90/94 fps, and the longest task 123/119 → 92/91 ms. Filed as https://github.com/expo/exact/issues/721 with the diff. Vela meanwhile binds motion only on route levels 1-6 and in the
 shell (MOTION_DEPTH).
 
 **Proposed fix.**
