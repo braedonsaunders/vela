@@ -3,10 +3,10 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import type { SkinHost } from '@vela/skin';
-import { useLibraryPage } from '../../src/browse/library-page';
-import { queryOf, type LibraryParams } from '../../src/browse/library-query';
-import { libraryHost } from '../../src/browse/page-host';
-import { DocumentScreen } from '../../src/screen';
+import { useLibraryPage } from '../../../src/browse/library-page';
+import { queryOf, type LibraryParams } from '../../../src/browse/library-query';
+import { libraryHost } from '../../../src/browse/page-host';
+import { DocumentScreen } from '../../../src/screen';
 
 export default function Library() {
   const params = useLocalSearchParams<LibraryParams & { id: string }>();
@@ -18,5 +18,5 @@ export default function Library() {
   );
   const library = useLibraryPage(id, query);
   const page = (host: SkinHost) => libraryHost(host, id, query, library);
-  return <DocumentScreen route="library" entry={id} page={page} />;
+  return <DocumentScreen route="library" entry={id} page={page} sharedShell />;
 }

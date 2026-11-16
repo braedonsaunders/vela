@@ -1,7 +1,7 @@
 import { useIsFocused } from 'expo-router';
 import { useLiveSurface } from '@vela/skin';
-import { DocumentScreen } from '../src/screen';
-import { useVela } from '../src/vela';
+import { DocumentScreen } from '../../src/screen';
+import { useVela } from '../../src/vela';
 
 export default function Home() {
   const vela = useVela();
@@ -10,5 +10,5 @@ export default function Home() {
   // visible route without a query.
   const query = vela.host('home', 'home')?.env.query ?? '';
   useLiveSurface('home', focused && !!vela.doc?.document.live?.home && query === '');
-  return <DocumentScreen route="home" entry="home" />;
+  return <DocumentScreen route="home" entry="home" sharedShell />;
 }

@@ -6,9 +6,8 @@ import { useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import { guideFocus } from '@vela/core';
-import { SkinRoot } from '@vela/skin';
 import { Guide, useLiveContext, useLiveSurface, useLiveView, type GuideFocus } from '@vela/skin/src/widgets/guide';
-import { useVela } from '../src/vela';
+import { useVela } from '../../src/vela';
 
 export default function Live() {
   const { ch = '', prog = '', at = '' } = useLocalSearchParams<{ ch?: string; prog?: string; at?: string }>();
@@ -18,8 +17,7 @@ export default function Live() {
   const focus = useHandOff(ch, prog, at);
   if (!host) return <View style={{ flex: 1 }} />;
   const content = <Guide focus={focus} />;
-  const shell = vela.doc?.shell;
-  return shell ? <SkinRoot host={{ ...host, children: content }} node={shell} /> : content;
+  return content;
 }
 
 /** A hand-off's channel and minute, once its day is the one the guide shows. */

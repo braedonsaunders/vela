@@ -10,9 +10,10 @@ interface Props {
   route: RouteName;
   entry: string;
   page?: (host: SkinHost) => SkinHost;
+  sharedShell?: boolean;
 }
 
-export function DocumentScreen({ route, entry, page }: Props) {
+export function DocumentScreen({ route, entry, page, sharedShell = false }: Props) {
   const vela = useVela();
   const app = vela.host(route, entry);
   const host = app && page ? page(app) : app;
@@ -30,6 +31,6 @@ export function DocumentScreen({ route, entry, page }: Props) {
   // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md, "Search").
   const search = route === 'home' && host.env.query !== '' ? vela.doc?.routes.search : undefined;
   const content = <SkinRoute host={host} node={tree} after={search} />;
-  const shell = route === 'title' ? undefined : vela.doc?.shell;
+  const shell = route === 'title' || sharedShell ? undefined : vela.doc?.shell;
   return shell ? <SkinRoot host={{ ...host, children: content }} node={shell} /> : content;
 }
