@@ -1,7 +1,7 @@
 import type { Interaction } from '../../wire/v0/types';
-import type { ServerAdapter } from '../adapter';
+import type { Interactions } from '../adapter/capabilities';
 import { randomId } from '../protocol/id';
-import { VelaError } from '../adapter/ether';
+import { VelaError } from '../adapter/errors';
 
 /** Only enqueue events supplied by the UI. A failed batch remains queued for retry. */
 export class InteractionQueue {
@@ -11,7 +11,7 @@ export class InteractionQueue {
   private attempts = 0;
   private retryAt = 0;
   private stopped = false;
-  constructor(private adapter: ServerAdapter, private limit = 256) {}
+  constructor(private adapter: Interactions, private limit = 256) {}
   get size(): number { return this.pending.length + (this.batch?.interactions.length ?? 0); }
   get disabled(): boolean { return this.stopped; }
   add(interaction: Interaction): boolean {
@@ -48,7 +48,7 @@ export class InteractionQueue {
         }
         batch.wireKey = `${batch.idempotencyKey}-${suffix}`;
       }
-      await this.adapter.interactions({ idempotencyKey: batch.wireKey, interactions: batch.interactions });
+      await this.adapter.sendInteractions({ idempotencyKey: batch.wireKey, interactions: batch.interactions });
       if (this.batch === batch) this.batch = undefined;
       this.attempts = 0; this.retryAt = 0;
       return true;

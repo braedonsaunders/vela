@@ -1,7 +1,8 @@
 import type * as V from '../../wire/v0/types';
 import type { ClientCapabilities, PreviewGrant } from '../../wire/v0/types';
 import type { ServerAdapter } from '../adapter';
-import { VelaError } from '../adapter/ether';
+import type { TrailerPreviews } from '../adapter/capabilities';
+import { VelaError } from '../adapter/errors';
 
 type Preview = { cardId: string; url: string; expiresAt: number; retryAfterSeconds: number; generation: number };
 const empty = (generation: number, retryAfterSeconds = 0): Preview => ({ cardId: '', url: '', expiresAt: 0, retryAfterSeconds, generation });
@@ -17,7 +18,12 @@ export class PreviewCoordinator {
   /** Titles the server called unavailable this session: final, never asked again. */
   private unavailable = new Map<string, V.TrailerPreviewResponse>();
   private tail: Promise<void> = Promise.resolve();
-  constructor(private api: ServerAdapter, private origin: string, private client: ClientCapabilities, private key: () => string) {}
+  constructor(
+    private api: ServerAdapter & TrailerPreviews,
+    private origin: string,
+    private client: ClientCapabilities,
+    private key: () => string,
+  ) {}
   setClient(client: ClientCapabilities): void { this.client = client; }
   private async stop(grant: PreviewGrant): Promise<void> {
     await this.api.command(grant.sessionId, { kind: 'stop', idempotencyKey: this.key(), sourceGeneration: grant.sourceGeneration, seekGeneration: grant.seekGeneration });
@@ -43,7 +49,7 @@ export class PreviewCoordinator {
   }
   private async read(id: string, generation: number): Promise<V.TrailerPreviewResponse> {
     if (this.statusRead && this.requested?.id === id && this.requested.generation === generation) {
-      try { return await this.api.trailerPreviewStatus(id); }
+      try { return await this.api.trailerPreviewState(id); }
       catch (error) {
         if (!(error instanceof VelaError) || (error.status !== 404 && error.status !== 405)) throw error;
         // 405, or 404 for an intent this client just requested (the server keeps one for minutes):
@@ -51,7 +57,7 @@ export class PreviewCoordinator {
         this.statusRead = false;
       }
     }
-    const result = await this.api.trailerPreview(id, { idempotencyKey: this.key(), client: this.client });
+    const result = await this.api.requestTrailerPreview(id, { idempotencyKey: this.key(), client: this.client });
     this.requested = { id, generation };
     return result;
   }
