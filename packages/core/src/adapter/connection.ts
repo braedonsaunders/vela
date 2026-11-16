@@ -1,4 +1,4 @@
-import type * as V from '../../wire/v0/types';
+import type * as V from '../wire';
 import type { Credentials, MediaAccess, ServerAdapter } from './index';
 import type { EtherAdapter } from './ether';
 import { JellyfinAdapter } from './jellyfin';

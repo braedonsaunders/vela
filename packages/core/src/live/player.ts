@@ -1,13 +1,23 @@
-import { number } from '../../foundation/i18n';
-import type { EngineEvent } from '../../player/model';
-import type { PlaybackPlan, SessionCommand } from '../../wire/v0/types';
+import { number } from '../i18n';
+import type { PlaybackPlan, SessionCommand } from '../wire';
+
+/** The part of a player snapshot (`@vela/player-api`) live status reads. */
+export interface LiveObservation {
+  sessionId: string | null;
+  live: {
+    reconnecting: boolean;
+    delivery: string;
+    driftSeconds: number | null;
+    canCatchUp: boolean;
+  } | null;
+}
 
 /** Only expose observations the engine can substantiate. */
-export function liveStatus(event: EngineEvent) {
-  if (event.type !== 'snapshot' || !event.snapshot.live) return null;
-  const live = event.snapshot.live;
+export function liveStatus(snapshot: LiveObservation) {
+  if (!snapshot.live) return null;
+  const live = snapshot.live;
   return {
-    sessionId: event.snapshot.sessionId ?? '',
+    sessionId: snapshot.sessionId ?? '',
     reconnecting: live.reconnecting,
     delivery: live.delivery,
     drift: live.driftSeconds === null ? -1 : Math.round(live.driftSeconds),

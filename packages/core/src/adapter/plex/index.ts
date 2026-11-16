@@ -1,4 +1,4 @@
-import type * as V from '../../../wire/v0/types';
+import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
 import type { LiveTv, PathSwitching, SwitchCommand } from '../capabilities';
 import { VelaError } from '../errors';

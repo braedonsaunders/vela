@@ -1,5 +1,6 @@
-import type { Tokens } from '../../../wire/v0/types';
+import type { Tokens } from '../../wire';
 import { createPlexPin, pollPlexPin, discoverPlexServers, plexAccount, plexHeaders, type PlexResource } from './auth';
+import { timeoutSignal } from '../../protocol/timeout';
 
 /** A discovered server as the viewer chooses it: names and connection kinds only. */
 export type PlexConnectionKind = 'relay' | 'secure-direct' | 'secure' | 'local' | 'remote';
@@ -72,7 +73,7 @@ export class PlexLink {
       const origin = new URL(connection.uri).origin;
       try {
         const response = await fetch(`${origin}/identity`, { headers: { ...plexHeaders(this.clientIdentifier), 'X-Plex-Token': resource.accessToken },
-          redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(6000) });
+          redirect: 'error', credentials: 'omit', signal: timeoutSignal(6000) });
         if (!response.ok) continue;
         const body = await response.json() as { MediaContainer?: { machineIdentifier?: string } };
         if (body.MediaContainer?.machineIdentifier !== resource.clientIdentifier) continue;

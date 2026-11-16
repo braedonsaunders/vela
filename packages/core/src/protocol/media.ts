@@ -1,4 +1,4 @@
-import type { PlaybackPlan } from '../../wire/v0/types';
+import type { PlaybackPlan } from '../wire';
 
 /** Resolve broker-issued media references without changing their grant tokens. */
 export function mediaPlan(plan: PlaybackPlan, origin: string): PlaybackPlan {

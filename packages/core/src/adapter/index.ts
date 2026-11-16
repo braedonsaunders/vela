@@ -1,4 +1,4 @@
-import type * as V from '../../wire/v0/types';
+import type * as V from '../wire';
 
 /**
  * The core contract: what every media server offers, in the v0 shapes. Anything only some

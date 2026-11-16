@@ -2,8 +2,8 @@
 // over the binding context (the repeated item a node sits in) and the environment (the app's
 // view state). The semantics are those of the Contract renderer's table (tools/renderer.ts),
 // key for key. A template calls only the accessors it names.
-import { msg } from '../../../client/foundation/i18n';
-import type { detailModel, entry, homeModel } from '../../../client/src/discovery/models';
+import { msg } from '@vela/core';
+import type { detailModel, entry, homeModel } from '@vela/core';
 
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
 export type Card = ReturnType<typeof entry>;

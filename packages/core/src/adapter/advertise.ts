@@ -1,4 +1,4 @@
-import type * as V from '../../wire/v0/types';
+import type * as V from '../wire';
 import type { ServerAdapter, ServerDescription } from './index';
 import {
   hasAiSearch,

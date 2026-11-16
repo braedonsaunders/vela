@@ -480,5 +480,10 @@
   "connect.plex.failed": "Plex couldn't link this time.",
   "connect.signIn.eyebrow": "Sign in",
   "connect.quick.start": "Use Quick Connect",
-  "connect.quick.waiting": "Approve this code in your server's Quick Connect…"
+  "connect.quick.waiting": "Approve this code in your server's Quick Connect…",
+  "unit.minute.one": "{count} min",
+  "unit.minute.other": "{count} min",
+  "unit.second.one": "{count} sec",
+  "unit.second.other": "{count} sec",
+  "unit.percent": "{value}%"
 }

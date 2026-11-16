@@ -1,4 +1,4 @@
-import type { ArtworkRef } from '../../wire/v0/types';
+import type { ArtworkRef } from '../wire';
 
 /** How the selected server addresses artwork. Ether resolves relative grants on its origin;
  * a native server sizes its own image URLs for each slot (`sized`), which may carry an

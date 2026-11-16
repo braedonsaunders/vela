@@ -1,9 +1,8 @@
 // The server's appearance as the foundation sees it: the default skin, the owner's
 // force flag and each installed runtime skin pack, validated here so nothing a pack
 // carries reaches the page except colours, lengths and same-origin asset URLs.
-import type { StreamEvent } from '../../app.contract.d.ts';
-import type { Appearance, PackFont, ServerEvent, SkinDocumentRef, SkinPack } from '../../wire/v0/types';
-import { RENDERER_VERSION } from '../skin/vocabulary';
+import type { Appearance, PackFont, ServerEvent, SkinDocumentRef, SkinPack } from '../wire';
+import type { EventHandler } from '../protocol/sse';
 
 /** Compiled engines a pack may style. A pack for any other engine is not offered. */
 const ENGINES = ['cinematic'];
@@ -67,13 +66,20 @@ function pack(p: SkinPack, origin: string): PackEntryModel | undefined {
     wordmark: asset(p.images?.wordmark, origin, image), swatches, packJson: JSON.stringify(canonical) };
 }
 
-/** The release's own skin documents (/vela/skins/catalog.json): none in a development build. */
+/** The release's own skin documents (/vela/skins/catalog.json): none in a development build.
+ * A document needing a newer renderer than this client draws is not offered. */
 let builtIn: Promise<SkinDocumentRef[]> | undefined;
 let builtInList: SkinDocumentRef[] = [];
-export function builtInDocuments(origin: string): Promise<SkinDocumentRef[]> {
-  builtIn ??= fetch(`${origin}/vela/skins/catalog.json`).then(r => r.ok ? r.json() : { documents: [] }).then((c: { documents?: (SkinDocumentRef & { renderer?: number })[] }) =>
-    // A document needing a newer renderer than this client is not offered.
-    (Array.isArray(c?.documents) ? c.documents : []).filter(d => typeof d?.renderer === 'number' && d.renderer <= RENDERER_VERSION).slice(0, 32)).catch(() => []).then(list => (builtInList = list));
+export function builtInDocuments(origin: string, rendererVersion: number): Promise<SkinDocumentRef[]> {
+  type Listed = SkinDocumentRef & { renderer?: number };
+  builtIn ??= fetch(`${origin}/vela/skins/catalog.json`)
+    .then(response => (response.ok ? response.json() : { documents: [] }))
+    .then((catalog: { documents?: Listed[] }) => {
+      const listed = Array.isArray(catalog?.documents) ? catalog.documents : [];
+      return listed.filter(d => typeof d?.renderer === 'number' && d.renderer <= rendererVersion).slice(0, 32);
+    })
+    .catch(() => [])
+    .then(list => (builtInList = list));
   return builtIn;
 }
 
@@ -90,16 +96,21 @@ export function appearanceModel(a: Appearance, origin: string, builtInDocs: Skin
   return { revision: a.revision, defaultSkinId: text(a.defaultSkinId, 64), defaultEngineId: text(a.defaultEngineId, 64), force: a.force === true, packs, docs };
 }
 
-/** Each `appearance` event's model; an older revision keeps the newest seen. */
-export function appearanceStream(origin: string, open: (mapper: (event: StreamEvent) => AppearanceModel) => Promise<AppearanceModel>, floor: number): Promise<AppearanceModel> {
-  let newest: AppearanceModel | undefined;
+/** One connection to the viewer's events: each `appearance` event's model goes to `onAppearance`;
+ * an older revision than the newest seen (or `floor`) is ignored. */
+export function followAppearance(
+  origin: string,
+  open: (onEvent: EventHandler) => Promise<void>,
+  floor: number,
+  onAppearance: (model: AppearanceModel) => void,
+): Promise<void> {
+  let newest = floor;
   return open(event => {
-    if (event.type === 'error') throw new Error(event.message || 'Server events disconnected');
-    if (typeof event.data !== 'string') throw new Error('Invalid server event');
     const value = JSON.parse(event.data) as ServerEvent;
-    if (value.type !== 'appearance') { if (newest) return newest; throw new Error('Waiting for appearance'); }
+    if (value.type !== 'appearance') return;
     const next = appearanceModel(value.appearance, origin, builtInList);
-    if (next.revision >= Math.max(floor, newest?.revision ?? 0)) newest = next;
-    return newest ?? next;
+    if (next.revision < newest) return;
+    newest = next.revision;
+    onAppearance(next);
   });
 }

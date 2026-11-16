@@ -1,34 +1,59 @@
-import type { StreamEvent } from '../../app.contract.d.ts';
-import type { PlaybackPlan, SessionEvent, SessionSnapshot } from '../../wire/v0/types';
+import type { PlaybackPlan, SessionEvent, SessionSnapshot } from '../wire';
 import type { ServerAdapter } from '../adapter';
 import type { EventStream } from '../adapter/capabilities';
 
+/** The last cursor seen per session, so a reconnection resumes where the previous one stopped. */
 const cursors = new Map<string, string>();
 
-/** The host owns the stream lifetime. Each connection starts from a fresh snapshot.
- * `present` validates a plan for the server it came from before the player receives it. */
-export async function sessionEvents(
+/**
+ * One connection to a playback session's events. It starts from a fresh authoritative snapshot,
+ * then follows the stream from the last cursor seen (or the snapshot's). Every plan goes to
+ * `onPlan` after `present` validates it for the server it came from. Resolves when the server
+ * closes the stream; an unknown or malformed event rejects, so a retry starts with a new snapshot.
+ */
+export async function followSession(
   api: ServerAdapter & EventStream,
   present: (plan: PlaybackPlan) => PlaybackPlan,
   sessionId: string,
-): Promise<{ planJson: string; sessionId: string; preparing: boolean; errorCode: string; errorMessage: string; retryAllowed: boolean; retryAfterSeconds: number; retryLimit: number }> {
+  onPlan: (plan: PlaybackPlan) => void,
+  signal?: AbortSignal,
+): Promise<void> {
   let snapshot: SessionSnapshot = await api.sessionSnapshot(sessionId);
   let revision = snapshot.revision;
-  return api.streamSession(sessionId, cursors.get(sessionId) ?? snapshot.cursor, async (event: StreamEvent) => {
-      if (event.type === 'error') throw new Error(event.message || 'Session stream disconnected');
-      if (typeof event.data !== 'string') throw new Error('Invalid session event');
-      const value = JSON.parse(event.data) as SessionEvent;
-      if (value.sessionId !== sessionId || !value.cursor || typeof value.revision !== 'number') throw new Error('Invalid session event');
-      if (value.revision < revision) return { planJson: JSON.stringify(present(snapshot.plan)), sessionId, preparing: false, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: 0, retryLimit: 0 };
-      switch (value.type) {
-        case 'snapshot': snapshot = value.snapshot; break;
-        case 'plan': snapshot = { ...snapshot, plan: value.plan, cursor: value.cursor, revision: value.revision }; break;
-        case 'ended': snapshot = { ...snapshot, plan: { ...snapshot.plan, state: 'ended', revision: value.revision }, cursor: value.cursor, revision: value.revision }; break;
-        case 'error': throw new Error(value.error.message);
-        default: snapshot = await api.sessionSnapshot(sessionId); break;
+  signal?.throwIfAborted();
+  onPlan(present(snapshot.plan));
+  const cursor = cursors.get(sessionId) ?? snapshot.cursor;
+  await api.streamSession(sessionId, cursor, async event => {
+    const value = JSON.parse(event.data) as SessionEvent;
+    if (value.sessionId !== sessionId || !value.cursor || typeof value.revision !== 'number') {
+      throw new Error('Invalid session event');
+    }
+    if (value.revision < revision) return;
+    switch (value.type) {
+      case 'snapshot':
+        snapshot = value.snapshot;
+        break;
+      case 'plan':
+        snapshot = { ...snapshot, plan: value.plan, cursor: value.cursor, revision: value.revision };
+        break;
+      case 'ended': {
+        const plan = { ...snapshot.plan, state: 'ended' as const, revision: value.revision };
+        snapshot = { ...snapshot, plan, cursor: value.cursor, revision: value.revision };
+        break;
       }
-      revision = snapshot.revision;
-      cursors.set(sessionId, snapshot.cursor);
-      return { planJson: JSON.stringify(present(snapshot.plan)), sessionId, preparing: false, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: 0, retryLimit: 0 };
-    });
+      case 'error':
+        throw new Error(value.error.message);
+      default:
+        snapshot = await api.sessionSnapshot(sessionId);
+        break;
+    }
+    revision = snapshot.revision;
+    cursors.set(sessionId, snapshot.cursor);
+    onPlan(present(snapshot.plan));
+  }, signal);
+}
+
+/** A session that has ended needs no resumption cursor. */
+export function forgetSession(sessionId: string): void {
+  cursors.delete(sessionId);
 }

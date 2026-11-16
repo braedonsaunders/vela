@@ -1,4 +1,4 @@
-/** plex.tv account credentials never enter a PMS request. Store returned secrets in Exact secret storage. */
+/** plex.tv account credentials never enter a PMS request. Store returned secrets in the SecretStore. */
 export interface PlexPin { id: number; code: string; expiresAt: string; authToken?: string }
 export interface PlexResource { name: string; clientIdentifier: string; accessToken: string; owned: boolean;
   connections: { uri: string; local: boolean; relay: boolean; protocol: string }[] }

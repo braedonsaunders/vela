@@ -1,11 +1,10 @@
-import type * as V from '../../../wire/v0/types';
-import type { StreamEvent } from '../../../app.contract.d.ts';
+import type * as V from '../../wire';
 import type { Credentials } from '../index';
 import { VelaError } from '../errors';
+import { readEvents, type EventHandler } from '../../protocol/sse';
 
 type Method = 'GET' | 'POST' | 'DELETE';
 type Token = V.Tokens | null;
-type StreamInit<T> = RequestInit & { exactStream: (event: StreamEvent) => T };
 
 export interface RequestOptions {
   /** Send the session's bearer token (default true). */
@@ -41,11 +40,14 @@ export class EtherTransport {
     }
   }
 
-  /** An event stream under `/vela/v0`, read through Exact's streaming fetch. */
-  async stream<T>(path: string, headers: Record<string, string>, mapper: (event: StreamEvent) => T): Promise<T> {
+  /** One connection to an event stream under `/vela/v0`, read to its end. */
+  async stream(path: string, headers: Record<string, string>, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
     const tokens = await this.credentials.get();
     if (!tokens) throw new Error('Sign in required');
-    return this.fetchBound(`/vela/v0${path}`, { headers, exactStream: mapper }, tokens);
+    const init = { headers: { Accept: 'text/event-stream', ...headers }, signal };
+    const response = await this.fetchBound(`/vela/v0${path}`, init, tokens);
+    if (!response.ok) throw await this.failure(response, signal);
+    await readEvents(response, onEvent, signal);
   }
 
   async request<T>(method: Method, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
@@ -164,9 +166,7 @@ export class EtherTransport {
     return url.href;
   }
 
-  private fetchBound<T>(path: string, init: StreamInit<T>, token: Token): Promise<T>;
-  private fetchBound(path: string, init: RequestInit, token: Token): Promise<Response>;
-  private fetchBound(path: string, init: RequestInit, token: Token): Promise<any> {
+  private fetchBound(path: string, init: RequestInit, token: Token): Promise<Response> {
     const headers: Record<string, string> = { ...init.headers as Record<string, string> };
     if (token) {
       headers.Authorization = `Bearer ${token.accessToken}`;

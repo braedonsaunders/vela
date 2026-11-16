@@ -1,6 +1,6 @@
-import type * as V from '../../wire/v0/types';
-import type { SkinDocument } from '../../wire/v0/skin';
-import type { StreamEvent } from '../../app.contract.d.ts';
+import type * as V from '../wire';
+import type { SkinDocument } from '../wire';
+import type { EventHandler } from '../protocol/sse';
 import type { ServerAdapter } from './index';
 
 /*
@@ -92,10 +92,11 @@ export interface LiveTv {
   guide(query: V.GuideQuery): Promise<V.GuideResponse>;
 }
 
-/** Server-pushed events: a playback session's changes, and the viewer's (appearance first). */
+/** Server-pushed events: a playback session's changes, and the viewer's (appearance first).
+ * Each call is one connection; it resolves when the server closes it and rejects on failure. */
 export interface EventStream {
-  streamSession<T>(sessionId: string, cursor: string, mapper: (event: StreamEvent) => T): Promise<T>;
-  streamViewerEvents<T>(mapper: (event: StreamEvent) => T): Promise<T>;
+  streamSession(sessionId: string, cursor: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
+  streamViewerEvents(onEvent: EventHandler, signal?: AbortSignal): Promise<void>;
 }
 
 /** The server's chosen look and the skin documents it distributes. */

@@ -1,6 +1,6 @@
-import type { ArtworkRef, Bootstrap, Row, RowEntry, Title, TitleDetail } from '../../wire/v0/types';
+import type { ArtworkRef, Bootstrap, Row, RowEntry, Title, TitleDetail } from '../wire';
 import { artworkURL, type Images } from './artwork';
-import { number, minute, clock, msg, plural } from '../../foundation/i18n';
+import { number, minute, clock, msg, percent, plural } from '../i18n';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number, images?: Images): string {
   const ref = artwork.find(item => item.kind === kind);
@@ -10,7 +10,7 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
   const posterWidth = Math.min(600, Math.ceil(artWidth / 6));
   const logoWidth = Math.min(800, Math.ceil(artWidth / 3));
   return { id: title.id, kind: title.kind, name: title.name, summary: title.summary, year: title.year ?? 0, rating: title.rating ?? '', durationSeconds: title.durationSeconds ?? 0, progressSeconds: title.watch?.positionSeconds ?? 0, played: title.watch?.played ?? false, seasonId: title.seasonId ?? '', seasonNumber: title.seasonNumber ?? 0, episodeNumber: title.episodeNumber ?? 0, genres: title.genres,
-    durationLabel: title.durationSeconds ? minute(Math.round(title.durationSeconds / 60)) : '', yearLabel: title.year ? number(title.year, { useGrouping: false }) : '', progressLabel: title.durationSeconds ? number(Math.min(1, Math.max(0, (title.watch?.positionSeconds ?? 0) / title.durationSeconds)), { style: 'percent', maximumFractionDigits: 0 }) : '', seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '', episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
+    durationLabel: title.durationSeconds ? minute(Math.round(title.durationSeconds / 60)) : '', yearLabel: title.year ? number(title.year, { useGrouping: false }) : '', progressLabel: title.durationSeconds ? percent(Math.min(1, Math.max(0, (title.watch?.positionSeconds ?? 0) / title.durationSeconds))) : '', seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '', episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
     facts: [title.year ? number(title.year, { useGrouping: false }) : '', title.rating ?? '', title.durationSeconds ? minute(Math.round(title.durationSeconds / 60)) : ''].filter(Boolean).join(' · '),
     poster: art(title.artwork, 'poster', posterWidth, Math.ceil(posterWidth * 1.5), images), backdrop: art(title.artwork, 'backdrop', artWidth, Math.ceil(artWidth * 9 / 16), images),
     logo: art(title.artwork, 'logo', logoWidth, Math.ceil(logoWidth / 2), images), accent: title.artwork.find(a => a.color)?.color ?? '', receipt };
@@ -88,7 +88,7 @@ export function detailModel(data: TitleDetail, images?: Images, artWidth = 2560,
     source: r.source === 'tomatoes' && r.kind === 'critic' ? 'rt-critics' : r.source === 'popcorn' && r.kind === 'audience' ? 'rt-audience' : r.source,
     label: labels[r.source] ? msg(labels[r.source]!) : r.source,
     value: r.source === 'tomatoes' || r.source === 'popcorn'
-      ? number(r.value / r.scale, { style: 'percent', maximumFractionDigits: 0 })
+      ? percent(r.value / r.scale)
       : r.source === 'imdb' || r.source === 'tmdb' || r.source === 'letterboxd'
         ? number(r.value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
         : number(r.value, { maximumFractionDigits: r.source === 'metacritic' ? 0 : 20 }),

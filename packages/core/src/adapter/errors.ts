@@ -1,4 +1,4 @@
-import type * as V from '../../wire/v0/types';
+import type * as V from '../wire';
 
 /** A server's refusal in the v0 error shape, whichever protocol the server speaks. */
 export class VelaError extends Error {

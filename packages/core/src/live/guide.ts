@@ -1,6 +1,6 @@
 import { artworkURL, type Images } from '../discovery/artwork';
-import { localeContext, minute, msg, number, time, withLocale } from '../../foundation/i18n';
-import type { ArtworkRef, Channel, GuideQuery, GuideResponse, Page, Programme } from '../../wire/v0/types';
+import { localeContext, minute, msg, number, time, withLocale } from '../i18n';
+import type { ArtworkRef, Channel, GuideQuery, GuideResponse, Page, Programme } from '../wire';
 
 /** A single bounded guide window. Times remain the server's original timestamps. */
 export interface GuideApi {

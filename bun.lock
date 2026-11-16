@@ -10,6 +10,7 @@
       "version": "0.2.0",
       "dependencies": {
         "@react-native-masked-view/masked-view": "0.3.2",
+        "@vela/core": "workspace:*",
         "@vela/skin": "workspace:*",
         "expo": "~58.0.25",
         "expo-asset": "~58.0.21",
@@ -38,9 +39,23 @@
         "typescript": "~5.9.3",
       },
     },
+    "packages/core": {
+      "name": "@vela/core",
+      "version": "0.1.0",
+    },
+    "packages/player-api": {
+      "name": "@vela/player-api",
+      "version": "0.1.0",
+      "peerDependencies": {
+        "react-native": "*",
+      },
+    },
     "packages/skin": {
       "name": "@vela/skin",
       "version": "0.1.0",
+      "dependencies": {
+        "@vela/core": "workspace:*",
+      },
       "peerDependencies": {
         "@react-native-masked-view/masked-view": "*",
         "expo-blur": "*",
@@ -397,6 +412,10 @@
     "@types/yargs-parser": ["@types/yargs-parser@21.0.3", "", {}, "sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ=="],
 
     "@ungap/structured-clone": ["@ungap/structured-clone@1.4.0", "", {}, "sha512-1mEZtMKPM09vDmQt5y7YvmN2+DFTP7Tg0EWXdic8/C6VRnpb33e4ghisCIE3WZjsE2N8mf+QV1Zqh7ZFYLWInQ=="],
+
+    "@vela/core": ["@vela/core@workspace:packages/core"],
+
+    "@vela/player-api": ["@vela/player-api@workspace:packages/player-api"],
 
     "@vela/skin": ["@vela/skin@workspace:packages/skin"],
 

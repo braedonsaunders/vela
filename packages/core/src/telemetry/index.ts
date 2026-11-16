@@ -1,4 +1,4 @@
-import type { Interaction } from '../../wire/v0/types';
+import type { Interaction } from '../wire';
 import type { Interactions } from '../adapter/capabilities';
 import { randomId } from '../protocol/id';
 import { VelaError } from '../adapter/errors';

@@ -1,6 +1,6 @@
-import type * as V from '../../../wire/v0/types';
-import type { SkinDocument } from '../../../wire/v0/skin';
-import type { StreamEvent } from '../../../app.contract.d.ts';
+import type * as V from '../../wire';
+import type { SkinDocument } from '../../wire';
+import type { EventHandler } from '../../protocol/sse';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
 import type {
   AiSearch,
@@ -115,8 +115,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
 
   /** The viewer-level server event stream; its first event is the current appearance. */
-  streamViewerEvents<T>(mapper: (event: StreamEvent) => T): Promise<T> {
-    return this.http.stream('/events', {}, mapper);
+  streamViewerEvents(onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+    return this.http.stream('/events', {}, onEvent, signal);
   }
 
   // Catalogue
@@ -222,8 +222,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.SessionSnapshot>('GET', `/sessions/${segment(sessionId)}`);
   }
 
-  streamSession<T>(sessionId: string, cursor: string, mapper: (event: StreamEvent) => T): Promise<T> {
-    return this.http.stream(`/sessions/${segment(sessionId)}/events`, { 'Last-Event-ID': cursor }, mapper);
+  streamSession(sessionId: string, cursor: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+    const path = `/sessions/${segment(sessionId)}/events`;
+    return this.http.stream(path, { 'Last-Event-ID': cursor }, onEvent, signal);
   }
 
   createAudioFallback(sessionId: string, request: V.AudioFallbackRequest, signal?: AbortSignal) {

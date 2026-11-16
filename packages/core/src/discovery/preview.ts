@@ -1,5 +1,5 @@
-import type * as V from '../../wire/v0/types';
-import type { ClientCapabilities, PreviewGrant } from '../../wire/v0/types';
+import type * as V from '../wire';
+import type { ClientCapabilities, PreviewGrant } from '../wire';
 import type { ServerAdapter } from '../adapter';
 import type { TrailerPreviews } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';

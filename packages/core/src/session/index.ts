@@ -1,7 +1,8 @@
-import type { Device, Tokens } from '../../wire/v0/types';
+import type { Device, Tokens } from '../wire';
 import type { Credentials } from '../adapter';
 
-/** Exact's secret store is synchronous; secret.keep vela.session is required. */
+/** Secrets (sessions, server tokens, the device ID): the Keychain or Keystore natively, the page's
+ * storage on the web. Synchronous, so a credential read never waits on a bridge round trip. */
 export interface SecretStore { get(key: string): string | null | undefined; set(key: string, value: string): void }
 export class SessionCredentials implements Credentials {
   constructor(private store: SecretStore, readonly device: Device, readonly refreshKey: () => string) {}

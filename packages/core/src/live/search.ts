@@ -1,6 +1,6 @@
-import type { ArtworkRef, LiveSearchResults, Programme } from '../../wire/v0/types';
+import type { ArtworkRef, LiveSearchResults, Programme } from '../wire';
 import { artworkURL, type Images } from '../discovery/artwork';
-import { localeContext, msg, number, time } from '../../foundation/i18n';
+import { localeContext, msg, number, time } from '../i18n';
 
 function image(refs: ArtworkRef[], kinds: ArtworkRef['kind'][], images: Images, width: number, height: number): string {
   const ref = kinds.map(kind => refs.find(item => item.kind === kind)).find(Boolean);

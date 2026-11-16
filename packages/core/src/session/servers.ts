@@ -75,20 +75,20 @@ export class ServerRegistry {
 
 /** Per-server credentials share one declared secret; the original Ether key remains intact. */
 export class ServerCredentials {
-  constructor(private readonly store: SecretStore, readonly device: import('../../wire/v0/types').Device,
+  constructor(private readonly store: SecretStore, readonly device: import('../wire').Device,
     readonly refreshKey: () => string, private readonly id: string) {}
-  private all(): Record<string, import('../../wire/v0/types').Tokens> {
+  private all(): Record<string, import('../wire').Tokens> {
     const raw = this.store.get('vela.server-sessions');
     if (!raw) return {};
     const value = JSON.parse(raw);
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid server sessions');
     return value;
   }
-  async get(): Promise<import('../../wire/v0/types').Tokens | null> {
+  async get(): Promise<import('../wire').Tokens | null> {
     const value = this.all()[this.id];
     return value ?? null;
   }
-  async set(tokens: import('../../wire/v0/types').Tokens | null): Promise<void> {
+  async set(tokens: import('../wire').Tokens | null): Promise<void> {
     const sessions = this.all();
     if (JSON.stringify(sessions[this.id] ?? null) === JSON.stringify(tokens)) return;
     if (tokens) sessions[this.id] = tokens;

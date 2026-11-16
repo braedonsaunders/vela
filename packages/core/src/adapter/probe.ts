@@ -1,5 +1,6 @@
 import { serverAddress, type ServerKind } from '../session/servers';
 import { plexHeaders } from './plex/auth';
+import { timeoutSignal } from '../protocol/timeout';
 
 /** What an address answers before any credential is sent. */
 export interface Probe {
@@ -17,7 +18,7 @@ const PROBE_MS = 6000;
 /** Public, credential-free reads with redirects refused, so an address is identified only by what it serves itself. */
 async function read(url: string, headers: Record<string, string>): Promise<Record<string, unknown> | undefined> {
   try {
-    const response = await fetch(url, { headers, redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(PROBE_MS) });
+    const response = await fetch(url, { headers, redirect: 'error', credentials: 'omit', signal: timeoutSignal(PROBE_MS) });
     if (!response.ok) return undefined;
     const value = await response.json();
     return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
@@ -61,7 +62,7 @@ export async function probeServer(input: string, clientIdentifier: string, pageS
     const server = (vela?.server ?? undefined) as Record<string, unknown> | undefined;
     if (server && vela?.protocolVersion === 0) return { state: 'unsupported', kind: 'ether', name: text(server.name), version: text(server.version, 40), url: address.origin };
     // Any readable answer (even an error page) means the address is reachable but not a media server.
-    if (await fetch(base, { method: 'HEAD', redirect: 'manual', credentials: 'omit', signal: AbortSignal.timeout(PROBE_MS) }).then(() => true, () => false)) return { state: 'unsupported', kind: '', name: '', version: '', url: base };
+    if (await fetch(base, { method: 'HEAD', redirect: 'manual', credentials: 'omit', signal: timeoutSignal(PROBE_MS) }).then(() => true, () => false)) return { state: 'unsupported', kind: '', name: '', version: '', url: base };
   }
   if (blocked) return { state: 'insecure', kind: '', name: '', version: '', url: blocked };
   return { state: parsed ? 'unreachable' : 'invalid', kind: '', name: '', version: '', url: '' };

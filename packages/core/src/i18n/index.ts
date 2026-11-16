@@ -29,7 +29,20 @@ export function number(value: number, options?: Intl.NumberFormatOptions): strin
 export function plural(value: number): string {
   return typeof Intl.PluralRules === 'function' ? new Intl.PluralRules(current.resolvedLocale).select(value) : value === 1 ? 'one' : 'other';
 }
-export function minute(value: number): string { return number(value, { style: 'unit', unit: 'minute', unitDisplay: 'short' }); }
+
+// Durations and percentages are catalog strings around a plain number, never Intl's `unit` or
+// `percent` styles: Hermes on Apple formats those through the platform's measurement formatter
+// in base units (90 minutes drew as "5,400s").
+export function minute(value: number): string {
+  return msg(`unit.minute.${plural(value)}`, { count: number(value) });
+}
+export function second(value: number, maximumFractionDigits = 0): string {
+  return msg(`unit.second.${plural(value)}`, { count: number(value, { maximumFractionDigits }) });
+}
+/** A fraction (0.42) as a whole percentage ("42%"). */
+export function percent(fraction: number): string {
+  return msg('unit.percent', { value: number(Math.round(fraction * 100)) });
+}
 export function time(value: number): string { return new Intl.DateTimeFormat(current.formatLocale, { timeZone: current.timeZone, hour: 'numeric', minute: '2-digit' }).format(value); }
 export function clock(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
