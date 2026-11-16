@@ -3,6 +3,11 @@
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
 import { perfReport } from './budget';
+import { withClientStrings } from './client-strings';
+import { withBase } from './inherit';
+import { resolveUi, uiValue } from './ui';
+import type { UiTokens } from './ui-defaults';
+import { velaBase } from './base';
 import { BOUND_ROWS, DEPTH, FIELD_DEPTH, MOTION_DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
 
 const KEY = new Map(VOCAB.map((key, i) => [key, i]));
@@ -61,7 +66,7 @@ type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; holds: boolean; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
 export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string; pageColor: string; inkColor: string; splashOnPaper: string; drawsStatus: boolean; css: string; escapes: { flags: string; to: string }[] }
-interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number>;
+interface Resolve { doc: SkinDocument; ui: UiTokens; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number>;
   /** Hover/group-hover rules and press rules (the document's css), the next state id, and the Escape closures. */
   group: Map<string, string[]>; hover: Map<string, string[]>; press: Map<string, string[]>; ids: number; escapes: { flags: string; to: string }[];
   /** Converting the shell's tree (its levels all bind motion; a route's only to MOTION_DEPTH). */
@@ -80,8 +85,11 @@ function intern(s: Record<string, string | number>, r: Resolve): number {
 const URL_KEYS = /^(card|hero|detail|dest|person|ch|tile)\.(poster|backdrop|logo|portrait|nowArt)$/;
 function parts(template: string | undefined, r?: Resolve, urls = false): Part[] {
   const out: Part[] = [];
-  // Document strings are resolved now, for the viewer's locale.
-  const text = (template ?? '').replace(/\{s:([a-zA-Z0-9.-]+)\}/g, (_, key) => r?.strings[key] ?? '');
+  // Client strings ({t:}) and the document's own ({s:}) are resolved now, for the viewer's locale.
+  // The document's name ({env.skinName}) is known now too.
+  const text = withClientStrings(template ?? '')
+    .replace(/\{s:([a-zA-Z0-9.-]+)\}/g, (_, key) => r?.strings[key] ?? '')
+    .replace(/\{env\.skinName\}/g, () => r?.doc.name ?? '');
   let at = 0;
   for (const m of text.matchAll(/\{([a-zA-Z.:-]+)\}/g)) {
     if (!urls && URL_KEYS.test(m[1])) throw new Error(`${m[1]} is an image URL: only an image src or background-image may bind it`);
@@ -107,7 +115,8 @@ function sides(raw: string): [string, string, string, string] {
 }
 function value(raw: string, r: Resolve): string {
   // A token reference is the whole name: `$paperInk` is refused, not read as `$paper` + "Ink".
-  const text = cssVar(raw.replace(/\$([A-Za-z0-9_-]+)/g, (_, name) => {
+  const withUi = raw.replace(/\$ui\.([A-Za-z]+)/g, (_, name: string) => uiValue(r.ui, name));
+  const text = cssVar(withUi.replace(/\$([A-Za-z0-9_-]+)/g, (_, name) => {
     const v = r.doc.tokens?.[name];
     if (v === undefined) throw new Error(`Unknown token $${name}`);
     return v;
@@ -488,14 +497,21 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
   return model;
 }
 
-function resolveDoc(doc: SkinDocument, width: number, origin: string, locale: string): SkinDocModel {
-  if (!doc || doc.schema !== 1 || typeof doc.id !== 'string' || !/^[a-z][a-z0-9-]{0,31}$/.test(doc.id)) throw new Error('Not a schema 1 skin document');
-  if (JSON.stringify(doc).length > 512 * 1024) throw new Error('Skin document over 512 KiB');
-  if (!Number.isInteger(doc.renderer) || doc.renderer < 1 || doc.renderer > RENDERER_VERSION) throw new Error(`Skin document needs renderer ${doc.renderer}; this client has ${RENDERER_VERSION}`);
+function resolveDoc(own: SkinDocument, width: number, origin: string, locale: string): SkinDocModel {
+  if (!own || own.schema !== 1 || typeof own.id !== 'string' || !/^[a-z][a-z0-9-]{0,31}$/.test(own.id)) {
+    throw new Error('Not a schema 1 skin document');
+  }
+  if (JSON.stringify(own).length > 512 * 1024) throw new Error('Skin document over 512 KiB');
+  if (!Number.isInteger(own.renderer) || own.renderer < 1 || own.renderer > RENDERER_VERSION) {
+    throw new Error(`Skin document needs renderer ${own.renderer}; this client has ${RENDERER_VERSION}`);
+  }
+  // The document over the Vela base: the routes it leaves out are the base's, in its ui look.
+  const ui = resolveUi(own.ui);
+  const doc = withBase(own, velaBase);
   docId = doc.id; docKeyframes = new Set();
   const kfCss = keyframesCss(doc);
   const strings = { ...doc.strings?.en, ...doc.strings?.[locale.split('-')[0]], ...doc.strings?.[locale] };
-  const r: Resolve = { doc, count: 0, assets: origin, strings, styles: [], index: new Map(), group: new Map(), hover: new Map(), press: new Map(), ids: 0, escapes: [], shell: false };
+  const r: Resolve = { doc, ui, count: 0, assets: origin, strings, styles: [], index: new Map(), group: new Map(), hover: new Map(), press: new Map(), ids: 0, escapes: [], shell: false };
   r.shell = true;
   const shell = slot(doc.slots.shell, r, 'children', SHELL_FROM);
   r.shell = false;
