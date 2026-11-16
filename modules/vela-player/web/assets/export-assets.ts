@@ -1,4 +1,4 @@
-// Builds the web player's static payload into <out>/player/<digest>/ with PLAYER-ASSETS-MANIFEST.json
+// Builds the web player's static payload into <out>/player/<digest>/ and provenance at <out>/
 // (docs/distribution.md, "Player assets and skins"). Metro bundles the player's JavaScript; this
 // payload is everything the page loads by URL: decoder workers, WASM packages, subtitle renderer,
 // licences and corresponding sources.
@@ -89,8 +89,8 @@ if (await stat(target).catch(() => null)) {
   // Same digest, same bytes: the existing tree is this payload. Keep it untouched.
   await rm(staging, { recursive: true, force: true });
 } else {
-  await writeFile(join(staging, MANIFEST_NAME), `${JSON.stringify(manifest, null, 2)}\n`);
   await rename(staging, target);
 }
+await writeFile(join(resolve(out), MANIFEST_NAME), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`Player assets: ${files.length} files in ${target}`);
 console.log(digest);

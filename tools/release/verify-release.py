@@ -64,7 +64,7 @@ prefix = 'player/' + digest + '/'
 assets = release['playerAssets']
 if assets['digest'] != digest or assets['baseURL'] != '/vela/' + prefix:
     raise ValueError('Player served base mismatch')
-payload_name = prefix + 'PLAYER-ASSETS-MANIFEST.json'
+payload_name = 'PLAYER-ASSETS-MANIFEST.json'
 required = {'index.html', 'routes.json', 'manifest.webmanifest', 'pwa.js', 'sw.js',
             'offline.html', 'skins/catalog.json', payload_name}
 if not required <= expected.keys():

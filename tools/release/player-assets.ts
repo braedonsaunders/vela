@@ -7,8 +7,9 @@ const manifestName = 'PLAYER-ASSETS-MANIFEST.json';
 
 export async function stagePlayerAssets(input: string, dist: string, revision: string) {
   const root = resolve(input);
-  if (!(await lstat(join(root, manifestName))).isFile()) throw new Error('Player manifest must be a regular file');
-  const bytes = await readFile(join(root, manifestName));
+  const manifestPath = join(root, '..', '..', manifestName);
+  if (!(await lstat(manifestPath)).isFile()) throw new Error('Player manifest must be a regular file');
+  const bytes = await readFile(manifestPath);
   const manifest = JSON.parse(bytes.toString('utf8'));
   if (manifest.schemaVersion !== 1 || !/^[a-f0-9]{64}$/.test(manifest.digest)
     || manifest.sourceRevision !== revision || manifest.sourceDirty !== false
@@ -55,7 +56,7 @@ export async function stagePlayerAssets(input: string, dist: string, revision: s
     await copyFile(join(root, file.path), output);
     if (await hashFile(output) !== file.sha256) throw new Error(`Player input changed: ${file.path}`);
   }
-  await copyFile(join(root, manifestName), join(target, manifestName));
-  if (await hashFile(join(target, manifestName)) !== sha256(bytes)) throw new Error('Player manifest changed');
+  await copyFile(manifestPath, join(dist, manifestName));
+  if (await hashFile(join(dist, manifestName)) !== sha256(bytes)) throw new Error('Player manifest changed');
   return { digest, baseURL: `/vela/player/${digest}/`, payloadManifestSha256: sha256(bytes) };
 }
