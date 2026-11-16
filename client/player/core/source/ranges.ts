@@ -14,6 +14,7 @@ interface ReadEpoch {id:number;seen:Uint8Array|null|undefined;unique:number;repe
 interface PageSlot {promise:Promise<Uint8Array>;resolve(bytes:Uint8Array):void;reject(error:unknown):void}
 interface ForwardRun {
   speculative?:boolean;
+  metadata?:boolean;
   end:number;next:number;demand:number;scope:ReadEpoch;
   abort:AbortController;signal:AbortSignal;slots:Map<number,PageSlot>;
   request?:AbortController;
@@ -86,7 +87,7 @@ export class RangeReader implements ByteReader {
     this.forwardAnchor=Math.min(this.forwardAnchor,offset);
     this.maintainForward(offset,offset,true);
   }
-  speculateMedia(offset:number,length:number,signal:AbortSignal){
+  speculateMedia(offset:number,length:number,signal:AbortSignal,metadata=false){
     signal.throwIfAborted();
     if(this.total===null||!Number.isSafeInteger(offset)||offset<0||offset>=this.total||!Number.isSafeInteger(length)||length<=0||length>MAX_READ||length%PAGE!==0)
       throw new RangeFailure('Invalid speculative source window');
@@ -98,10 +99,10 @@ export class RangeReader implements ByteReader {
       if(this.pages.has(index)||this.pending.has(index)){index++;continue;}
       let limit=end;
       for(const at of [...this.pages.keys(),...this.pending.keys()])if(at>index&&at*PAGE<limit)limit=at*PAGE;
-      runs.push(this.startForward(index*PAGE,limit,lifetime,true));index=Math.ceil(limit/PAGE);
+      runs.push(this.startForward(index*PAGE,limit,lifetime,true,metadata));index=Math.ceil(limit/PAGE);
     }
     const cancel=()=>{for(const run of runs)this.cancelForward(run);abort.abort();};
-    const bytes=this.read(start,end-start,lifetime);void bytes.catch(()=>{});
+    const bytes=this.read(start,end-start,lifetime,true);void bytes.catch(()=>{});
     return{start,end,bytes,cancel,settle:(actualCluster:number)=>{
       if(actualCluster<start||actualCluster>=end)cancel();
       else for(const run of runs)run.speculative=false;
@@ -132,9 +133,9 @@ export class RangeReader implements ByteReader {
       foreground=false;
     }
   }
-  private startForward(start:number,limit:number,signal:AbortSignal,speculative=false){
+  private startForward(start:number,limit:number,signal:AbortSignal,speculative=false,metadata=false){
     const abort=new AbortController();
-    const run:ForwardRun={speculative,end:limit,next:start,demand:this.playhead??start,scope:this.readEpoch,
+    const run:ForwardRun={speculative,metadata,end:limit,next:start,demand:this.playhead??start,scope:this.readEpoch,
       abort,signal:AbortSignal.any([signal,this.lifetime.signal,abort.signal]),slots:new Map()};
     for(let at=start;at<limit;at+=PAGE){
       let resolve!:(bytes:Uint8Array)=>void,reject!:(error:unknown)=>void;
@@ -161,12 +162,11 @@ export class RangeReader implements ByteReader {
     for(const run of this.forwardRuns){
       const cut=index*PAGE;
       if(!run.slots.has(index))continue;
-      if(run.speculative)return;
       if(cut<=run.next+PAGE)return;
-      const abort=new AbortController(),tail:ForwardRun={end:run.end,next:cut,demand:this.playhead??cut,scope:run.scope,
-        abort,signal:AbortSignal.any([this.forwardSignal!,this.lifetime.signal,abort.signal]),slots:new Map()};
+      const abort=new AbortController(),tail:ForwardRun={speculative:run.speculative,metadata:run.metadata,end:run.end,next:cut,demand:this.playhead??cut,scope:run.scope,
+        abort,signal:AbortSignal.any([run.signal,abort.signal]),slots:new Map()};
       for(const [at,slot]of run.slots)if(at>=index){tail.slots.set(at,slot);run.slots.delete(at);}
-      run.end=cut;this.forward=tail;this.forwardRuns.add(tail);
+      run.end=cut;if(!tail.speculative)this.forward=tail;this.forwardRuns.add(tail);
       void this.loadForward(tail).catch(error=>{this.rejectForward(tail,error);if(error instanceof RangeFailure&&!tail.signal.aborted)this.lifetime.abort(error);})
         .finally(()=>{this.forwardRuns.delete(tail);this.wakeProgress();});
       run.request?.abort(new RangePreempt('Foreground range split'));this.wakeProgress();return;
@@ -259,7 +259,7 @@ export class RangeReader implements ByteReader {
     return this.total!;
   }
 
-  async read(offset: number, length: number, signal: AbortSignal): Promise<Uint8Array> {
+  async read(offset: number, length: number, signal: AbortSignal,speculativeRead=false): Promise<Uint8Array> {
     signal.throwIfAborted(); this.lifetime.signal.throwIfAborted();
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 0 ||
         length > MAX_READ || !Number.isSafeInteger(offset + length)) throw new RangeFailure('Invalid or oversized original read');
@@ -270,7 +270,8 @@ export class RangeReader implements ByteReader {
     this.demands.push({offset,length});if(this.demands.length>12)this.demands.shift();
     this.maintainForward(offset,offset+length);
     const firstPage=Math.floor(offset/PAGE);
-    if(length&&!this.pages.has(firstPage))this.prioritize(firstPage);
+    // Warming must not preempt itself; every real parser demand still can.
+    if(length&&!speculativeRead&&!this.pages.has(firstPage))this.prioritize(firstPage);
     const output = new Uint8Array(length);
     // Limit fanout as well as network concurrency. A seek never queues a remux.
     for (let cursor = offset; cursor < offset + length;) {
@@ -371,7 +372,7 @@ export class RangeReader implements ByteReader {
           if(filled===page.length){
             const index=run.next/PAGE,slot=run.slots.get(index);
             if(!slot)throw new RangeFailure('Original forward page lost its owner');
-            await this.store(index,page,run.scope,signal,true);this.notePage(run.scope,index,total);
+            await this.store(index,page,run.scope,signal,!run.metadata);this.notePage(run.scope,index,total);
             const now=performance.now();this.metrics.bytes+=page.length;this.metrics.milliseconds+=now-lastPublication;
             this.bandwidth.sample(page.length,now-lastPublication,cacheHit);this.delivery.record(at,firstByte,page.length);lastPublication=now;
             if(this.pending.get(index)===slot.promise)this.pending.delete(index);run.slots.delete(index);slot.resolve(page);

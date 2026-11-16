@@ -597,3 +597,72 @@ correct target frames, repeated pages and cache capacity for hit and miss cases.
 Matching asset assembly is queued under the shared build lock. This change is
 not yet locally or lab qualified; production remains the frozen wrapper and no
 further lab pair has been started.
+
+## Cues-stream correction and local overlap proof
+
+The exact real-file duration (8888.299 seconds) showed that the average-rate
+1390.5-second estimate is 23.29 MiB before the known video range. A centred
+16-MiB window therefore misses that source. The implementation was extended
+before qualification: deferred Cues now uses a bounded streaming metadata
+request instead of page-sized network round trips. Complete CuePoints in each
+arriving prefix can redirect media warming to the nearest preceding video
+cluster before the remaining index arrives. Only the full library index admits
+the packet cursor. Prefix parse errors or truncation cannot weaken admission.
+The initial estimate and partial-index hint never set the clock or relabel time.
+
+Authoritative foreground reads can split a speculative run; warming cannot
+preempt itself. Shared promises and cached pages survive adoption, and miss
+cancellation retains completed pages inside the existing bounded cache. Cues
+pages are marked metadata. The source, ETag, length, scope and redirect checks
+are shared with normal reads. Scoped TypeScript and matching asset assembly
+passed for runtime `4f43df6016245ce1`.
+
+The generated 608.76-second 4K HEVC Main10/PQ + DTS fixture averages 46.9 Mbps;
+HTTP bodies were capped at 65 Mbps aggregate, with 2-second Cues first-byte
+latency and 400-ms media first-byte latency per request. Separate owned headed
+Chrome contexts disabled service workers. The same fixture and throttle were
+used before and after:
+
+| Metric, resume 48.08 s | Before (b76) | Overlap (4f43) |
+| --- | ---: | ---: |
+| First media request minus first Cues request | 2028.842 ms | 2.323 ms |
+| First presented frame | 3.725 s | 2.737 s |
+| Playable | 5.843 s | 3.695 s |
+| HTTP requests through two playing seconds | 11 | 5 |
+| Validated bytes | 29,478,614 | 37,867,222 |
+| Completed-page repeats / underruns | 0 / 0 | 0 / 0 |
+
+First-media acquisition moved earlier by 2.027 seconds, approximately the Cues
+wait. The extra 8 MiB acquired in the hit case is bounded warming before the
+actual cluster, not a repeated page. The actual frame timestamp was 48.060 s,
+covering target 48.08. Boundary validation against the authoritative Cues
+position was recorded. Raw cache was 37,867,222 bytes against a 96,428,575-byte
+bound; raw-cache maximum remains 128 MiB. These are measured local observations,
+not statistical GPU timing claims.
+
+A separate cold 52.5-second case deliberately missed: the initial window began
+at byte 299,368,448 while Cues corrected acquisition to 281,804,800. It rendered
+52.477 seconds (covering target), reached playable at 7.721 seconds, and had
+zero completed-page repeats or underruns through two playing seconds. No speed
+claim is made for this miss without a matched baseline.
+
+A fourth case extended the same fixture's Cues with legal Void padding to
+3.15 MB, adjusted Segment/Cues sizes and removed the replaced Cue CRC. It served
+a virtual file from the original media plus small patched header/tail buffers;
+no multi-gigabyte media copy was loaded into memory. With the same 52.5-second
+miss, the partial CuePoint correction requested the true cluster at server
+20,029.454 ms, before the streamed Cues response ended at 20,275.537 ms: 246 ms
+of useful overlap despite the inaccurate estimate. Target frame, 128-MiB cache
+bound, zero repeats and zero underruns passed. Cache use was 62,246,615 bytes
+against 96,454,412. This checks correction before the tail completes rather than
+merely issuing an irrelevant early estimate.
+
+Private records/screenshots are `resume-warm-{before,after}-48.08`,
+`resume-warm-after-52.5`, and `resume-padded-after-52.5` under `range-stream/`.
+All four own Chrome contexts/profiles closed; both fixture servers stopped;
+the architect's performance window was released. No lab stream was opened for
+this proof. The matching immutable runtime still needs the requested controlled
+pair in each order. Production remains the wrapper; default evaluation will use
+the parent's updated relative/aggregate criterion, including the wrapper's own
+underrun duration, drops and buffering, with no extra core fallback/recovery or
+refetch failure mode permitted.

@@ -86,7 +86,7 @@ export class PacketDemux {
       ]);
       this.originalReader?.configureBuffer?.(duration);
       const warming=this.originalReader&&format.name==='Matroska'?warmMatroskaResume(this.originalReader,this.originalPosition,duration,signal,
-        note=>{if(this.diagnostics.length<16&&!this.diagnostics.includes(note))this.diagnostics.push(note);}):undefined;
+        note=>{if(this.diagnostics.length<16&&!this.diagnostics.includes(note))this.diagnostics.push(note);},this.auditSource):undefined;
       const indexing=primeMatroskaIndex(videos[0]??audios[0]);
       void indexing?.catch(()=>{});
       const tracks: MediaTrack[] = [];
