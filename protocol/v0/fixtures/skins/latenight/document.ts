@@ -248,8 +248,10 @@ const card: Node = { type: 'box', group: true, press: { action: 'select', arg: '
       groupHover: { translate: '0px -5px', 'box-shadow': `0px 0px 0px 2px $ink, ${split(4)}, 0px 22px 40px -14px $shadow` },
       groupFocus: { translate: '0px -5px', 'box-shadow': `0px 0px 0px 3px $osd, ${split(4)}, 0px 22px 40px -14px $shadow` }, children: [
         { type: 'image', when: [{ test: 'card.poster' }], src: '{card.poster}', alt: '', fade: true, style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover', transition: 'opacity 260ms linear' } },
-        // No poster: a hand-labelled tape.
-        { type: 'box', when: [{ test: 'card.poster', not: true }], style: { position: 'absolute', ...inset('0px'), display: 'flex', 'flex-direction': 'column', 'justify-content': 'center', padding: '12px', 'background-image': 'linear-gradient(180deg, $tape-shell 0%, $tape-shell-deep 100%)' }, children: [
+        // No poster: the landscape art (an episode's still) cropped to the portrait frame.
+        { type: 'image', when: [{ test: 'card.poster', not: true }, { test: 'card.backdrop' }], src: '{card.backdrop}', alt: '', fade: true, style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover', transition: 'opacity 260ms linear' } },
+        // No art at all: a hand-labelled tape.
+        { type: 'box', when: [{ test: 'card.poster', not: true }, { test: 'card.backdrop', not: true }], style: { position: 'absolute', ...inset('0px'), display: 'flex', 'flex-direction': 'column', 'justify-content': 'center', padding: '12px', 'background-image': 'linear-gradient(180deg, $tape-shell 0%, $tape-shell-deep 100%)' }, children: [
           { type: 'text', text: '{card.name}', style: { padding: '22px 10px 12px', 'background-color': '$label', 'border-radius': '2px', 'box-shadow': 'inset 0px 6px 0px $tape-red, inset 0px 10px 0px $tape-orange, inset 0px 14px 0px $tape-yellow', 'font-family': marker, 'font-size': '20px', 'line-height': '1.05', color: '$ink-on-label', 'line-clamp': '4' }, small: { 'font-size': '17px' } },
         ] },
         { type: 'box', when: [{ test: 'card.played' }], style: { position: 'absolute', top: '7px', left: '7px', padding: '2px 6px 0px', 'background-color': '$osd-plate', ...osdText('17px'), 'text-shadow': 'none' }, children: [

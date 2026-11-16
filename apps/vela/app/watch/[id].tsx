@@ -69,10 +69,15 @@ export default function Watch() {
 
   const channel = target.kind === 'channel' ? channels?.find(c => c.id === id) : undefined;
   const title = channel ? `${channel.number} · ${channel.name}` : heading(skin?.env.detail);
+  // Now Playing (the system's controls): the heading the chrome shows, and the title's poster.
+  const poster = target.kind === 'title' ? skin?.env.detail?.title[0]?.poster : undefined;
+  const metadata = { title, ...(poster ? { artworkUrl: poster } : {}) };
   if (!skin) return <View style={styles.stage} />;
   return (
     <WatchSurface host={skin} state={{ ...session.chrome, title, close }}>
-      {session.view.plan ? <VelaPlayerView {...session.view} style={StyleSheet.absoluteFill} /> : null}
+      {session.view.plan ? (
+        <VelaPlayerView {...session.view} metadata={metadata} style={StyleSheet.absoluteFill} />
+      ) : null}
     </WatchSurface>
   );
 }

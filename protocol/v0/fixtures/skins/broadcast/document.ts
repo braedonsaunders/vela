@@ -315,7 +315,9 @@ const titleCard: Node = { type: 'box', group: true, press: { action: 'select', a
       groupHover: { translate: '0px -4px', 'box-shadow': '0px 0px 0px 2px $ink, 0px 18px 40px -16px rgba(0, 0, 0, 0.9)' },
       groupFocus: { translate: '0px -4px', 'box-shadow': '0px 0px 0px 3px $cue, 0px 18px 40px -16px rgba(0, 0, 0, 0.9)' }, children: [
         { type: 'image', when: [{ test: 'card.poster' }], src: '{card.poster}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
-        { type: 'box', when: [{ test: 'card.poster', not: true }], style: { position: 'absolute', inset: '0px', padding: '12px', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'background-image': 'linear-gradient(160deg, #1a2230 0%, #0c1016 100%)' }, children: [
+        // No poster: the landscape art (an episode's still) cropped to the portrait frame.
+        { type: 'image', when: [{ test: 'card.poster', not: true }, { test: 'card.backdrop' }], src: '{card.backdrop}', alt: '', fade: true, style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
+        { type: 'box', when: [{ test: 'card.poster', not: true }, { test: 'card.backdrop', not: true }], style: { position: 'absolute', inset: '0px', padding: '12px', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'background-image': 'linear-gradient(160deg, #1a2230 0%, #0c1016 100%)' }, children: [
           { type: 'text', text: '{card.name}', style: { ...caps('20px', { 'letter-spacing': '0.02em' }), 'line-clamp': '4', 'line-height': '1.02' } },
         ] },
         { type: 'box', when: [{ test: 'card.played' }], style: { position: 'absolute', top: '6px', right: '6px', width: '22px', height: '22px', 'border-radius': '2px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': 'rgba(7, 9, 13, 0.75)' }, children: [

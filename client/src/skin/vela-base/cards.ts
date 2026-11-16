@@ -83,6 +83,16 @@ export const cardPreview: Node = {
   ],
 };
 
+// Portrait art filling the card, centred: a poster, or landscape art cropped to the portrait frame.
+const posterArt: Style = {
+  position: 'absolute',
+  inset: '0px',
+  width: '100%',
+  height: '100%',
+  'object-fit': 'cover',
+  transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)',
+};
+
 // A scrim over the art behind the progress bar: dark in every document, unlike a fade to the page.
 const progressFoot = 'linear-gradient(0deg, $ui.scrim 0%, color-mix(in srgb, $ui.scrim 0%, transparent) 100%)';
 
@@ -135,24 +145,27 @@ export const card: Node = {
         'box-shadow': '0px 0px 0px 3px $ui.ink, 0px 28px 50px -14px $ui.shadow',
       },
       children: [
+        // The portrait art: the poster (an episode's is its series poster), else the landscape
+        // art (an episode's still) cropped to the portrait frame; the named card only without art.
         {
           type: 'image',
           when: [{ test: 'card.poster' }],
           src: '{card.poster}',
           alt: '',
           fade: true,
-          style: {
-            position: 'absolute',
-            inset: '0px',
-            width: '100%',
-            height: '100%',
-            'object-fit': 'cover',
-            transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)',
-          },
+          style: posterArt,
+        },
+        {
+          type: 'image',
+          when: [{ test: 'card.poster', not: true }, { test: 'card.backdrop' }],
+          src: '{card.backdrop}',
+          alt: '',
+          fade: true,
+          style: posterArt,
         },
         {
           type: 'box',
-          when: [{ test: 'card.poster', not: true }],
+          when: [{ test: 'card.poster', not: true }, { test: 'card.backdrop', not: true }],
           style: {
             position: 'absolute',
             inset: '0px',

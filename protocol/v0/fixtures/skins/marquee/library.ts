@@ -15,7 +15,7 @@ import {
   label,
   oneLine,
 } from './look';
-import { block, art, progress, tri, card, spinner } from './cards';
+import { block, progress, tri, card, spinner, posterArt } from './cards';
 import { empty } from './home';
 
 // Browsing a library: a sticky toolbar (name, poster size, grid or list; type, sort,
@@ -336,7 +336,7 @@ const listRow: Node = {
         'background-color': '$raised',
       },
       children: [
-        { ...art('{card.poster}'), when: [set('card.poster')] },
+        ...posterArt,
         { type: 'box', when: [set('card.unwatched')], style: tri(12) },
         progress(3, '{card.progressPct}', [set('card.hasProgress')]),
       ],

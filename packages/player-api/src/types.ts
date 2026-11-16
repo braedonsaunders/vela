@@ -23,6 +23,14 @@ export interface PreviewSource {
   loop?: boolean;
 }
 
+/** A full-screen watch's identity for the system's Now Playing. */
+export interface PlayerMetadata {
+  title: string;
+  subtitle?: string;
+  /** Absolute, or relative to the media access origin. */
+  artworkUrl?: string;
+}
+
 export interface VelaPlayerProps {
   /** The session to play. A newer revision or generation of the same session replaces it. */
   session?: PlaybackSession;
@@ -37,6 +45,9 @@ export interface VelaPlayerProps {
   preview?: PreviewSource;
   /** False stops the preview and releases its decoder without unmounting (a card losing hover or focus). */
   active?: boolean;
+  /** What the system's Now Playing shows (Control Center, the remote's info). Ambient and preview views never
+   * claim the system's media controls; the remote's play, pause and skip take the command paths. */
+  metadata?: PlayerMetadata;
   /** A failure the server reported for this session; the view stops and reports it as its own state. */
   serverError?: Failure | null;
   onSnapshot?: (snapshot: Snapshot) => void;
