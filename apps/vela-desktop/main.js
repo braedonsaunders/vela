@@ -25,6 +25,12 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-unsafe-webgpu');
   app.commandLine.appendSwitch('enable-features', 'Vulkan,VaapiVideoDecoder');
 }
+// A film keeps playing at full rate when the window is behind another app or another full-screen
+// Space: Chromium otherwise treats an occluded window as a background tab and throttles its
+// animation frames, and the player drops every frame it cannot present.
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 if (process.env.VELA_DEBUG_PORT) app.commandLine.appendSwitch('remote-debugging-port', process.env.VELA_DEBUG_PORT);
 if (process.env.VELA_DATA_DIR) app.setPath('userData', path.resolve(process.env.VELA_DATA_DIR));
 
@@ -115,6 +121,7 @@ function createWindow() {
       // it is refused and links open in the system browser.
       webSecurity: false,
       spellcheck: false,
+      backgroundThrottling: false,
       devTools: !app.isPackaged || process.env.VELA_DEVTOOLS === '1',
     },
   });
