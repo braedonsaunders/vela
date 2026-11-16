@@ -219,6 +219,10 @@ final class VelaPlayerView: ExpoView {
                 "target-colorspace-hint": "yes",
                 "pause": "yes",
                 "mute": ambient ? "yes" : "no",
+                // AVSampleBufferAudioRenderer. While mpv played through a raw AudioUnit, tvOS's MediaRemote never made
+                // the app the Now Playing app, so system play, pause and skip never arrived; through AVFoundation it does.
+                // A muted ambient view keeps the AudioUnit so it never claims Now Playing.
+                "ao": ambient ? "audiounit" : "avfoundation",
                 "audio-channels": PlaybackAudioSession.outputChannels > 2 ? "auto-safe" : "stereo",
             ])
         } catch {
