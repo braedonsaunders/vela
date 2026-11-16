@@ -2,10 +2,8 @@
 import type { Condition, Node, Style } from '../../../skin';
 import {
   sans,
-  bar,
   gutter,
   gutterSmall,
-  px,
   is,
   isnt,
   set,
@@ -106,7 +104,7 @@ const libraryToolbar: Node = {
   type: 'box',
   style: {
     position: 'sticky',
-    top: px(bar.normal),
+    top: '0px',
     'z-index': '5',
     display: 'flex',
     'flex-direction': 'column',
@@ -117,7 +115,6 @@ const libraryToolbar: Node = {
     'border-bottom-color': '$line',
     'flex-shrink': '0',
   } as Style,
-  small: { top: px(bar.small) },
   children: [
     {
       type: 'box',
@@ -435,13 +432,11 @@ export const libraryRoute: Node = {
     position: 'relative',
     display: 'flex',
     'flex-direction': 'column',
-    'padding-top': px(bar.normal),
     'padding-bottom': '60px',
     'background-color': '$page',
     color: '$ink',
     'font-family': sans,
   },
-  small: { 'padding-top': px(bar.small) },
   children: [
     libraryToolbar,
     // Waiting for the first titles: the grid in outline.
