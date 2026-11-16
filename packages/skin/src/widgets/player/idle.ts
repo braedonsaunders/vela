@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { fromViewer, useRemote } from './remote';
 
-const IDLE_MS = 3500;
+/** A television is watched from across the room and worked with a remote: it waits longer. */
+const IDLE_MS = Platform.isTV ? 6000 : 3500;
 
 export interface Idle {
   visible: boolean;
@@ -18,6 +19,8 @@ export function useIdle(hold: boolean): Idle {
   const [visible, setVisible] = useState(true);
   const [touched, setTouched] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const shown = useRef(visible);
+  shown.current = visible;
 
   const wake = useCallback(() => {
     setVisible(true);
@@ -55,10 +58,11 @@ export function useIdle(hold: boolean): Idle {
     };
   }, [wake]);
 
-  // TV: any remote press or swipe. Focus changes are not the viewer's: hiding the chrome moves
-  // focus to the stage, which would otherwise wake it again at once.
+  // TV: any remote press or swipe. A focus change counts while the chrome stands (the viewer is
+  // moving along it: the TV focus engine takes those presses itself), not once it is hidden
+  // (hiding moves focus to the stage, which would otherwise wake it again at once).
   useRemote(event => {
-    if (fromViewer(event)) wake();
+    if (fromViewer(event) || shown.current) wake();
   });
 
   return { visible, wake, hide };
