@@ -26,8 +26,14 @@ public sealed class PlayerPanel : UserControl
     public PlayerPanel()
     {
         BackColor = Color.Black;
+        play.AccessibleName = "Play or pause";
+        seek.AccessibleName = "Seek";
+        volume.AccessibleName = "Volume";
+        audio.AccessibleName = "Audio track";
+        subtitles.AccessibleName = "Subtitle track";
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, BackColor = Color.FromArgb(32, 32, 32) };
         var back = new Button { Text = "Back", AutoSize = true };
+        back.AccessibleName = "Back";
         back.Click += (_, _) => BackRequested?.Invoke();
         top.Controls.Add(back);
         top.Controls.Add(title);
@@ -36,6 +42,7 @@ public sealed class PlayerPanel : UserControl
             Dock = DockStyle.Bottom, Height = 46, BackColor = Color.FromArgb(32, 32, 32), WrapContents = false
         };
         var fullscreen = new Button { Text = "Fullscreen", AutoSize = true };
+        fullscreen.AccessibleName = "Fullscreen";
         fullscreen.Click += (_, _) => FullscreenRequested?.Invoke();
         play.Click += (_, _) => TogglePlayback();
         seek.MouseDown += (_, _) => dragging = true;
@@ -54,6 +61,8 @@ public sealed class PlayerPanel : UserControl
         Controls.Add(VideoSurface);
         Controls.Add(bottom);
         Controls.Add(top);
+        SizeChanged += (_, _) => seek.Width = Math.Clamp(ClientSize.Width - 760, 120, 400);
+        seek.Width = Math.Clamp(ClientSize.Width - 760, 120, 400);
         RefreshClock();
     }
 
@@ -75,8 +84,8 @@ public sealed class PlayerPanel : UserControl
         updating = true;
         try
         {
-            if (Number(state, "positionSeconds", out var p)) position = Math.Max(0, p);
-            if (Number(state, "durationSeconds", out var d)) duration = Math.Max(0, d);
+            if (Number(state, "position", out var p)) position = Math.Max(0, p);
+            if (Number(state, "duration", out var d)) duration = Math.Max(0, d);
             if (Number(state, "volume", out var v)) volume.Value = Math.Clamp((int)Math.Round(v * 100), 0, 100);
             if (state.TryGetProperty("state", out var s) && s.ValueKind == JsonValueKind.String)
             {
@@ -124,7 +133,7 @@ public sealed class PlayerPanel : UserControl
             foreach (var track in list.EnumerateArray())
             {
                 if (!track.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String) continue;
-                var label = track.TryGetProperty("label", out var name) && name.ValueKind == JsonValueKind.String
+                var label = track.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String
                     ? name.GetString() : id.GetString();
                 combo.Items.Add(new TrackOption(id.GetString(), label ?? id.GetString() ?? ""));
             }
