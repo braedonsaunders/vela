@@ -7,6 +7,7 @@ import { BlurView } from 'expo-blur';
 import { useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { useQueryText } from './query-text';
 import { resolveUi } from '../../../../../client/src/skin/ui';
 import { focusTarget } from '../../escape';
 import { measure, useHost, type WidgetProps } from '../../host';
@@ -27,6 +28,7 @@ function Glyph({ symbol, size, color }: { symbol: 'search' | 'close'; size: numb
 
 export function SearchField({ ctx }: WidgetProps) {
   const host = useHost();
+  const query = useQueryText();
   const ui = useMemo(() => resolveUi(host.doc.document.ui), [host.doc.document]);
   const [focused, setFocused] = useState(false);
   const [clearHover, setClearHover] = useState(false);
@@ -81,8 +83,8 @@ export function SearchField({ ctx }: WidgetProps) {
         <Glyph symbol="search" size={20} color={focused ? ui.ink : ui.inkSecondary} />
         <TextInput
           ref={input}
-          value={host.env.query}
-          onChangeText={host.setQuery}
+          value={query.text}
+          onChangeText={query.change}
           placeholder={msg('ui.aTitleAFeelingAWorldToGetLostIn')}
           placeholderTextColor={ui.inkQuiet}
           accessibilityLabel={msg('ui.searchYourLibrary')}
@@ -96,9 +98,9 @@ export function SearchField({ ctx }: WidgetProps) {
           style={[text, styles.input] as TextStyle[]}
         />
       </Frame>
-      {host.env.query !== '' ? (
+      {query.text !== '' ? (
         <Pressable
-          onPress={() => host.setQuery('')}
+          onPress={() => query.change('')}
           accessibilityRole="button"
           accessibilityLabel={msg('ui.clearSearch')}
           onHoverIn={() => setClearHover(true)}
