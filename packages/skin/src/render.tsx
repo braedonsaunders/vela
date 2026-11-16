@@ -734,12 +734,15 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
 function Widget({ node, ctx }: { node: Extract<RNode, { kind: 'widget' }>; ctx: Ctx }) {
   const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
   const group = useContext(Group);
+  const routeFocus = useRouteFocusContext();
   const interaction = useMemo(() => ({
     report(kind: 'hover' | 'focus', on: boolean) {
       setUi(u => (u[kind] === on ? u : { ...u, [kind]: on }));
       group?.report(kind, on);
+      // A widget taking focus (a text field) settles the route's first focus.
+      if (kind === 'focus' && on) routeFocus?.focused();
     },
-  }), [group]);
+  }), [group, routeFocus]);
   const { style, text, fx } = useLeafStyle(node, ctx, ui);
   const Part = WIDGETS[node.widget];
   if (fx.hidden || !Part) return null;
