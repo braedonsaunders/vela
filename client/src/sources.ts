@@ -1,7 +1,26 @@
 import type { Answer, Sources } from '../app.contract.d.ts';
-import type { AISearchJob, ClientCapabilities, Device, ServerCapabilities, Tokens, Bootstrap, LibraryBrowseQuery, LibrarySort, SortDirection, TitleKind, RowEntry } from '../wire/v0/types';
+import type {
+  AISearchJob, Appearance, Bootstrap, ClientCapabilities, Device, LibraryBrowseQuery, LibrarySort, RowEntry,
+  ServerCapabilities, SortDirection, TitleDetail, TitleKind, Tokens,
+} from '../wire/v0/types';
 import type { ServerAdapter } from './adapter';
-import { EtherAdapter, VelaError } from './adapter/ether';
+import { EtherAdapter } from './adapter/ether';
+import { VelaError } from './adapter/errors';
+import { advertise, capabilitiesOf } from './adapter/advertise';
+import { sendCommand } from './adapter/commands';
+import {
+  hasAiSearch,
+  hasAppearance,
+  hasClientDeclaration,
+  hasDescriptiveSearch,
+  hasEventStream,
+  hasInteractions,
+  hasLiveTv,
+  hasPasswordSignIn,
+  hasQuickConnectSignIn,
+  hasTrailerPreviews,
+  hasWebCodeSignIn,
+} from './adapter/capabilities';
 import { etherConnection, nativeConnection, type Connection } from './adapter/connection';
 import { probeServer } from './adapter/probe';
 import { PlexLink } from './adapter/plex/link';
@@ -72,7 +91,7 @@ let activeQuick: { handle: string; secret: string; serverId: string } | undefine
 let authVersion = 0;
 const homeReads = new Map<string, Promise<Bootstrap>>();
 const homeFailures = new Map<string, { at: number; attempt: number; allowed: boolean; delaySeconds: number; retryLimit: number }>();
-const detailReads = new Map<string, Promise<[Awaited<ReturnType<ServerAdapter['detail']>>, Awaited<ReturnType<ServerAdapter['capabilities']>>]>>();
+const detailReads = new Map<string, Promise<[TitleDetail, ServerCapabilities]>>();
 const playbackDeclarations = new Map<string, ClientCapabilities>();
 const playbackReads = new Map<string, Promise<{ planJson: string; sessionId: string; preparing: boolean; errorCode: string; errorMessage: string; retryAllowed: boolean; retryAfterSeconds: number; retryLimit: number }>>();
 let previewEpoch = 0;
@@ -103,7 +122,9 @@ let negotiation: { version: number; context: string; pending: Promise<void> } | 
 let features: ServerCapabilities['features'] | undefined;
 let appearanceAvailable = true;
 let lastAppearance: Awaited<ReturnType<Sources['uiAppearance']>> | undefined;
-const localAppearance = { revision: 0, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs: [], documents: [] };
+const localAppearance: Appearance = {
+  revision: 0, defaultSkinId: 'cinematic', defaultEngineId: 'cinematic', force: false, packs: [],
+};
 function missingAppearance(error: unknown): boolean {
   return error instanceof VelaError && (error.status === 404 || error.detail.code === 'feature_unavailable' || error.detail.code === 'unsupported');
 }
@@ -162,7 +183,7 @@ function server(store: Store, capabilities?: MediaCapabilities): Connection {
     const context = JSON.stringify(updated);
     if (context !== JSON.stringify(client)) {
       client = updated;
-      for (const known of connections.values()) known.setCapabilityContext(context);
+      for (const known of connections.values()) known.setCapabilityContext?.(context);
       previews?.setClient(client);
     }
   }
@@ -178,8 +199,10 @@ async function session(store: Store): Promise<Connection> {
   const conn = server(store);
   if (!ready) ready = (async () => {
     if (await signedIn(conn)) return;
-    if (conn.record.kind !== 'ether' || !MOCK || store.get('vela.session') === '') throw new Error(signInMessage(conn));
-    const tokens = await conn.adapter.signIn({ idempotencyKey: key(store), username: 'demo', password: 'vela', device });
+    const adapter = conn.adapter;
+    const demo = conn.record.kind === 'ether' && MOCK && store.get('vela.session') !== '';
+    if (!demo || !hasPasswordSignIn(adapter)) throw new Error(signInMessage(conn));
+    const tokens = await adapter.signInWithPassword({ idempotencyKey: key(store), username: 'demo', password: 'vela', device });
     store.set('vela.session', JSON.stringify(tokens));
   })().catch(e => { ready = undefined; throw e; });
   await ready;
@@ -190,7 +213,9 @@ async function session(store: Store): Promise<Connection> {
   if (server(store) !== conn) throw new Error('Server changed');
   return conn;
 }
+/** Declare the client to a server that tailors plans to it, once per session and declaration. */
 async function ensureNegotiated(api: ServerAdapter, store: Store): Promise<void> {
+  if (!hasClientDeclaration(api)) return;
   for (;;) {
     const version = authVersion, context = JSON.stringify(client);
     if (negotiation && (negotiation.version !== version || negotiation.context !== context)) {
@@ -203,7 +228,7 @@ async function ensureNegotiated(api: ServerAdapter, store: Store): Promise<void>
     if (!negotiation) {
       const declared = client;
       const current = { version, context, pending: Promise.resolve() };
-      current.pending = api.negotiate({ client: declared, idempotencyKey: key(store) }).then(() => {
+      current.pending = api.declareClient({ client: declared, idempotencyKey: key(store) }).then(() => {
         if (authVersion !== version) throw new Error('Session changed during negotiation');
       }).catch(error => { if (negotiation === current) negotiation = undefined; throw error; });
       negotiation = current;
@@ -227,25 +252,30 @@ function advertisedSecureOrigin(origins: string[] | undefined, requested?: strin
   return '';
 }
 let authCapabilities: Promise<ServerCapabilities> | undefined;
-/** Native servers publish no session events; the foundation polls their snapshot this often (its timer is the literal 5000 ms). */
+/** A server without session events has its snapshot polled this often
+ * (the foundation's timer is the literal 5000 ms). */
 const SNAPSHOT_POLL_SECONDS = 5;
 const authReply = (conn: Connection, authenticated: boolean, error: string) => ({ authenticated, ...authOptions, error,
-  serverId: conn.record.id, serverKind: conn.record.kind, revision: authVersion, pollSeconds: conn.ether ? 0 : SNAPSHOT_POLL_SECONDS });
+  serverId: conn.record.id, serverKind: conn.record.kind, revision: authVersion,
+  pollSeconds: hasEventStream(conn.adapter) ? 0 : SNAPSHOT_POLL_SECONDS });
 const authModel = async (store: Store, error = '') => {
   const conn = server(store);
-  if (!authCapabilities) authCapabilities = conn.adapter.capabilities().finally(() => { authCapabilities = undefined; });
+  authCapabilities ??= capabilitiesOf(conn.adapter).finally(() => { authCapabilities = undefined; });
   const capabilities = await authCapabilities;
   if (capabilities.server.name) serverNames.set(conn.record.id, capabilities.server.name);
-  // Plex links through plex.tv in the connect flow, not the generic code screen.
-  authOptions = { passwordAvailable: capabilities.features.passwordSignIn.available, quickAvailable: capabilities.features.quickConnect.available && conn.record.kind !== 'plex',
-    secureOrigin: conn.ether ? advertisedSecureOrigin(capabilities.secureOrigins) : '' };
+  // A secure switch hands the session over with a web code, so only a server with web codes offers one.
+  authOptions = {
+    passwordAvailable: capabilities.features.passwordSignIn.available,
+    quickAvailable: capabilities.features.quickConnect.available,
+    secureOrigin: hasWebCodeSignIn(conn.adapter) ? advertisedSecureOrigin(capabilities.secureOrigins) : '',
+  };
   return authReply(conn, !!await signedIn(conn), error);
 };
 /** Revoke a server's session, then forget it locally; a token the server already rejected needs no revocation. */
 async function endSession(conn: Connection, store: Store): Promise<void> {
   const tokens = await signedIn(conn);
   if (!tokens) return;
-  try { await conn.adapter.revoke({ refreshToken: tokens.refreshToken, idempotencyKey: key(store) }); }
+  try { await conn.adapter.revokeSession({ refreshToken: tokens.refreshToken, idempotencyKey: key(store) }); }
   catch (error) { if (!(error instanceof VelaError) || error.status !== 401) throw error; }
   const latest = await signedIn(conn);
   if (latest?.accessToken === tokens.accessToken) await conn.credentials.set(null);
@@ -281,10 +311,17 @@ function keptSkinDoc(store: { get(key: string): string | null }, path: string): 
 
 const sources: Sources = {
   uiGuideFocus: async ([at, epoch, localeJSON]) => guideFocus(at, epoch, localeJSON),
-  uiLiveIdentity: async ([channelId, epoch, localeJSON], store) => liveIdentity((await session(store)).adapter, channelId, epoch, localeJSON),
+  uiLiveIdentity: async ([channelId, epoch, localeJSON], store) => {
+    const adapter = (await session(store)).adapter;
+    if (!hasLiveTv(adapter)) throw new Error('Live TV is not offered by this server');
+    return liveIdentity(adapter, channelId, epoch, localeJSON);
+  },
   uiGuide: async ([epoch, day, localeJSON], store) => {
     const conn = await session(store);
-    return loadGuide(conn.adapter, day, epoch, `${conn.record.id}|${JSON.stringify(await signedIn(conn))}`, await conn.images(), localeJSON);
+    const adapter = conn.adapter;
+    if (!hasLiveTv(adapter)) throw new Error('Live TV is not offered by this server');
+    const scope = `${conn.record.id}|${JSON.stringify(await signedIn(conn))}`;
+    return loadGuide(adapter, day, epoch, scope, await conn.images(), localeJSON);
   },
   liveEvent: async ([json, localeJSON]) => {
     const event = JSON.parse(json);
@@ -300,6 +337,8 @@ const sources: Sources = {
     // A web-code handoff always signs in to the Ether server this page came from.
     if (code && !store.get('vela.session')) {
       const ether = connection(store, 'ether');
+      const etherAdapter = ether.adapter;
+      if (!hasWebCodeSignIn(etherAdapter)) throw new Error('Sign-in links are not offered by this server');
       let decoded = code;
       try { if (isFragment) decoded = decodeURIComponent(code); } catch { /* Preserve malformed input for the server to reject. */ }
       if (!redemption || redemption.code !== decoded) redemption = { code: decoded, idempotencyKey: key(store), consumed: false };
@@ -307,7 +346,7 @@ const sources: Sources = {
       if (current.consumed) throw new Error('The sign-in link has already been used');
       const version = authVersion;
       if (!current.pending) {
-        current.pending = ether.adapter.redeemWebCode({ code: decoded, device, idempotencyKey: current.idempotencyKey })
+        current.pending = etherAdapter.redeemWebCode({ code: decoded, device, idempotencyKey: current.idempotencyKey })
           .catch(error => { current.pending = undefined; throw error; });
       }
       const tokens = await current.pending;
@@ -316,7 +355,7 @@ const sources: Sources = {
         current.consumed = true;
         if (conn === ether) { resetSessionSnapshots(); ready = undefined; }
       }
-    } else if (MOCK && conn.ether && store.get('vela.session') === null) await session(store);
+    } else if (MOCK && conn.record.kind === 'ether' && store.get('vela.session') === null) await session(store);
     const stored = await signedIn(conn);
     if (stored) {
       const token = `${conn.record.id}:${stored.refreshToken || stored.accessToken}`;
@@ -339,23 +378,34 @@ const sources: Sources = {
   },
   signIn: async ([username, password], store) => {
     const conn = server(store);
+    const adapter = conn.adapter;
     try {
-      const tokens = await conn.adapter.signIn({ username, password, device, idempotencyKey: key(store) });
+      if (!hasPasswordSignIn(adapter)) throw new Error('Password sign-in is not offered by this server');
+      const tokens = await adapter.signInWithPassword({ username, password, device, idempotencyKey: key(store) });
       await conn.credentials.set(tokens); resetSessionSnapshots(); ready = undefined;
       return authModel(store);
-    } catch (error) { return authModel(store, conn.ether ? (error instanceof Error ? error.message : 'Sign in failed') : failure(error, 'Sign in failed')); }
+    } catch (error) {
+      const message = conn.record.kind === 'ether'
+        ? (error instanceof Error ? error.message : 'Sign in failed')
+        : failure(error, 'Sign in failed');
+      return authModel(store, message);
+    }
   },
   startQuick: async ([_epoch, localeJSON], store) => {
     const conn = server(store);
-    const grant = await conn.adapter.quickConnect({ device, idempotencyKey: key(store) });
+    const adapter = conn.adapter;
+    if (!hasQuickConnectSignIn(adapter)) throw new Error('Quick Connect is not offered by this server');
+    const grant = await adapter.startQuickConnect({ device, idempotencyKey: key(store) });
     activeQuick = { handle: randomId(), secret: grant.secret, serverId: conn.record.id };
     return withLocale(localeJSON, () => ({ ...grant, secret: activeQuick!.handle, expiresLabel: time(Date.parse(grant.expiresAt)), status: 'pending' }));
   },
   pollQuick: async ([handle], store) => {
     const conn = server(store);
     const current = activeQuick;
+    const adapter = conn.adapter;
     if (!handle || current?.handle !== handle || current.serverId !== conn.record.id) return authModel(store, 'Connection cancelled');
-    const result = await conn.adapter.pollQuickConnect({ secret: current.secret, device, idempotencyKey: key(store) });
+    if (!hasQuickConnectSignIn(adapter)) return authModel(store, 'Quick Connect is not offered by this server');
+    const result = await adapter.pollQuickConnect({ secret: current.secret, device, idempotencyKey: key(store) });
     if (activeQuick !== current) return authModel(store, 'Connection cancelled');
     if (result.status === 'approved') { await conn.credentials.set(result.tokens); activeQuick = undefined; resetSessionSnapshots(); ready = undefined; }
     return authModel(store, result.status === 'expired' ? 'Code expired' : result.status === 'denied' ? 'Connection denied' : '');
@@ -375,12 +425,11 @@ const sources: Sources = {
   },
   issueSecureSwitch: async ([targetOrigin, at], store) => {
     try {
-      const conn = await session(store);
-      if (!conn.ether) throw new Error('Secure connection unavailable');
-      const api = conn.ether;
+      const api = (await session(store)).adapter;
+      if (!hasWebCodeSignIn(api)) throw new Error('Secure connection unavailable');
       const version = authVersion;
-      const capabilities = await api.capabilities();
-      const origin = advertisedSecureOrigin(capabilities.secureOrigins, targetOrigin);
+      const description = await api.describe();
+      const origin = advertisedSecureOrigin(description.secureOrigins, targetOrigin);
       if (!origin) throw new Error('Secure connection is no longer available');
       const issued = await api.issueWebCode({ targetOrigin: origin, device, idempotencyKey: key(store) });
       if (version !== authVersion || issued.targetOrigin !== origin || !issued.code || !Number.isFinite(Date.parse(issued.expiresAt)) || Date.parse(issued.expiresAt) <= at) throw new Error('Invalid secure connection handoff');
@@ -399,11 +448,8 @@ const sources: Sources = {
     if (!read) {
       read = (async () => {
         try {
-          try { return await api.bootstrap(); }
-          catch (error) {
-            if (!(error instanceof VelaError) || error.status !== 409 || error.detail.code !== 'cursor_expired') throw error;
-            return await api.bootstrapFresh();
-          }
+          const home = await api.home();
+          return { ...home, capabilities: advertise(api, home.capabilities) };
         } catch (error) {
           const retry = error instanceof VelaError ? error.detail.retry : undefined;
           const rawHeader = error instanceof VelaError ? Number(error.retryAfter) : 0;
@@ -435,9 +481,11 @@ const sources: Sources = {
     const version = authVersion;
     const conn = await session(store);
     // Previews are Ether broker grants; a native server advertises none.
-    if (version !== authVersion || generation !== previewEpoch || !conn.ether || !features?.trailerPreview?.available)
+    const adapter = conn.adapter;
+    const current = version === authVersion && generation === previewEpoch;
+    if (!current || !hasTrailerPreviews(adapter) || !features?.trailerPreview?.available)
       return { cardId: '', url: '', expiresAt: 0, retryAfterSeconds: 0, generation };
-    if (!previews) previews = new PreviewCoordinator(conn.adapter, conn.record.origin, client, () => key(store));
+    if (!previews) previews = new PreviewCoordinator(adapter, conn.record.origin, client, () => key(store));
     return previews.request(id, generation, at);
   },
   uiHomeRows: async ([cursor, heroIds, homeAt, localeJSON, artWidth], store) => {
@@ -557,8 +605,13 @@ const sources: Sources = {
   cancelAISearch: async (_args, store) => {
     const previous = ai;
     ai = undefined;
-    if (previous?.job && (previous.job.status === 'queued' || previous.job.status === 'running' || previous.job.status === 'partial'))
-      await (await session(store)).adapter.cancelAI(previous.job.id, { generation: previous.generation, idempotencyKey: `cancel-${previous.epoch}-${previous.generation}` });
+    const status = previous?.job?.status;
+    if (previous?.job && (status === 'queued' || status === 'running' || status === 'partial')) {
+      const adapter = (await session(store)).adapter;
+      const idempotencyKey = `cancel-${previous.epoch}-${previous.generation}`;
+      const cancel = { generation: previous.generation, idempotencyKey };
+      if (hasAiSearch(adapter)) await adapter.cancelAiSearch(previous.job.id, cancel);
+    }
     // A start still in flight detects that it was superseded and cancels itself.
     return { accepted: true };
   },
@@ -575,7 +628,7 @@ const sources: Sources = {
     const cacheKey = JSON.stringify([version, conn.record.id, tokens?.viewer.id, tokens?.viewer.policyRevision, id, entryId]);
     let read = detailReads.get(cacheKey);
     if (!read) {
-      read = Promise.all([api.detail(id), api.capabilities()]);
+      read = Promise.all([api.detail(id), capabilitiesOf(api)]);
       detailReads.set(cacheKey, read);
       if (detailReads.size > 64) detailReads.delete(detailReads.keys().next().value!);
     }
@@ -586,14 +639,14 @@ const sources: Sources = {
   },
   uiSearch: async ([query, generation, epoch, at, localeJSON, artWidth], store) => {
     const conn = await session(store);
-    const result = await conn.adapter.search({ query, generation, mode: 'fast', idempotencyKey: `search-${epoch}-${generation}` });
+    const result = await conn.adapter.search({ query, generation, idempotencyKey: `search-${epoch}-${generation}` });
     const images = await conn.images();
     return withLocale(localeJSON, () => ({ query: result.query, generation: result.generation, items: result.items.map(t => card(t, '', images, artWidth)), descriptive: [], ai: [], aiStatus: 'unavailable', descriptiveStatus: 'ready', descriptiveRetryAllowed: false, descriptiveRetryAfter: 0, ...liveSearch(result.live, images, at) }));
   },
   uiDescriptive: async ([query, generation, epoch, localeJSON, artWidth], store) => {
     const conn = await session(store), api = conn.adapter;
-    if (!features?.descriptiveSearch.available) return lane(query, generation);
-    const result = await api.search({ query, generation, mode: 'descriptive', idempotencyKey: key(store) });
+    if (!features?.descriptiveSearch.available || !hasDescriptiveSearch(api)) return lane(query, generation);
+    const result = await api.searchByDescription({ query, generation, idempotencyKey: key(store) });
     const status = result.descriptive?.state ?? 'ready';
     const retry = result.descriptive?.retry;
     const images = await conn.images();
@@ -601,24 +654,24 @@ const sources: Sources = {
   },
   uiAI: async ([query, generation, epoch, localeJSON, artWidth], store) => {
     const conn = await session(store), api = conn.adapter;
-    if (!features?.aiSearch.available) return lane(query, generation);
+    if (!features?.aiSearch.available || !hasAiSearch(api)) return lane(query, generation);
     if (!ai || ai.epoch !== epoch || ai.generation !== generation || ai.query !== query) {
       const previous = ai;
       const current = { epoch, generation, query } as NonNullable<typeof ai>;
       ai = current;
       const previousJobId = previous?.job && (previous.job.status === 'running' || previous.job.status === 'queued' || previous.job.status === 'partial') ? previous.job.id : undefined;
-      current.starting = api.startAI({ query, generation, ...(previousJobId ? { previousJobId } : {}), idempotencyKey: `ai-${epoch}-${generation}` });
+      current.starting = api.startAiSearch({ query, generation, ...(previousJobId ? { previousJobId } : {}), idempotencyKey: `ai-${epoch}-${generation}` });
       current.job = await current.starting;
       current.starting = undefined;
       if (ai !== current) {
-        await api.cancelAI(current.job.id, { generation, idempotencyKey: `cancel-${epoch}-${generation}` });
+        await api.cancelAiSearch(current.job.id, { generation, idempotencyKey: `cancel-${epoch}-${generation}` });
         return lane(query, generation);
       }
     } else if (ai.starting) {
       await ai.starting;
     } else if (ai.job && (ai.job.status === 'queued' || ai.job.status === 'running' || ai.job.status === 'partial')) {
       const current = ai;
-      const job = await api.aiJob(ai.job.id);
+      const job = await api.aiSearchJob(ai.job.id);
       if (ai === current) current.job = job;
     }
     if (!ai || ai.epoch !== epoch || ai.generation !== generation || !ai.job || ai.job.generation !== generation) return lane(query, generation);
@@ -630,6 +683,8 @@ const sources: Sources = {
   interaction: async ([receipt, kind, at], store) => {
     if (kind !== 'visible' && kind !== 'selected' && kind !== 'played') throw new Error('Invalid interaction');
     const api = (await session(store)).adapter;
+    // A server without ranking receipts has nothing to accept them.
+    if (!hasInteractions(api)) return { accepted: false };
     interactions ??= new InteractionQueue(api);
     if (!interactions.add({ receiptToken: receipt, kind, occurredAt: new Date(at).toISOString() })) return { accepted: false };
     if (kind !== 'visible' || interactions.size >= 16) await interactions.flush(key(store), at);
@@ -654,7 +709,7 @@ const sources: Sources = {
     if (!read) {
       read = (async () => {
         try {
-          const plan = await api.playback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id } : { titleId: id }), client: declared!, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}-${manual}` });
+          const plan = await api.startPlayback({ ...(kind === 'title' && position !== undefined ? { positionSeconds: position } : {}), ...(kind === 'extra' ? { extraId: id } : kind === 'channel' ? { channelId: id } : { titleId: id }), client: declared!, idempotencyKey: `play-${epoch}-${entryId}-${kind}-${id}-${manual}` });
           if (version !== authVersion) throw new Error('Session changed during playback');
           if (plan.state === 'preparing') {
             if (kind !== 'extra' || !Number.isFinite(plan.retryAfterSeconds) || plan.retryAfterSeconds < 1) throw new Error('Invalid playback preparation response');
@@ -696,9 +751,9 @@ const sources: Sources = {
       raw = await response.json();
     } else {
       if (!path.startsWith('/vela/v0/appearance/skins/')) throw new Error('Skin document outside the appearance tree');
-      const ether = server(store).ether;
-      if (!ether) throw new Error('This server publishes no skin documents');
-      raw = await ether.skinDocument(path.slice('/vela/v0'.length));
+      const adapter = server(store).adapter;
+      if (!hasAppearance(adapter)) throw new Error('This server publishes no skin documents');
+      raw = await adapter.skinDocument(path.slice('/vela/v0'.length));
     }
     // The model is built from the same tables tools/renderer.ts generates its shapes from.
     const model = resolve(raw);
@@ -707,25 +762,29 @@ const sources: Sources = {
     return model;
   },
   uiAppearance: async (_args, store) => {
-    // Appearance is an Ether feature; any other server uses the local built-in appearance.
-    const ether = server(store).ether;
-    let appearance;
-    try {
-      if (!ether) throw new VelaError({ class: 'request', code: 'unsupported', message: 'No server appearance', retry: { allowed: false } }, 404);
-      appearance = await ether.appearance(); appearanceAvailable = true;
-    } catch (error) {
-      if (!missingAppearance(error)) throw error;
-      appearanceAvailable = false;
-      appearance = localAppearance;
+    // A server without an appearance of its own uses the local built-in one.
+    const adapter = server(store).adapter;
+    let appearance = localAppearance;
+    appearanceAvailable = false;
+    if (hasAppearance(adapter)) {
+      try {
+        appearance = await adapter.appearance();
+        appearanceAvailable = true;
+      } catch (error) {
+        if (!missingAppearance(error)) throw error;
+      }
     }
     return lastAppearance = appearanceModel(appearance, API, await builtInDocuments(API));
   },
   appearanceEvents: async ([_attempt, floor], store) => {
     if (!appearanceAvailable) return lastAppearance ?? appearanceModel(localAppearance, API, await builtInDocuments(API));
-    const api = (await session(store)).ether;
+    const api = (await session(store)).adapter;
     try {
-      if (!api) throw new VelaError({ class: 'request', code: 'unsupported', message: 'No server appearance', retry: { allowed: false } }, 404);
-      return await appearanceStream(API, mapper => api.streamEvents(mapper), floor);
+      if (!hasAppearance(api) || !hasEventStream(api)) {
+        appearanceAvailable = false;
+        return lastAppearance ?? appearanceModel(localAppearance, API, await builtInDocuments(API));
+      }
+      return await appearanceStream(API, mapper => api.streamViewerEvents(mapper), floor);
     } catch (error) {
       if (!missingAppearance(error)) throw error;
       appearanceAvailable = false;
@@ -734,9 +793,10 @@ const sources: Sources = {
   },
   sessionEvents: async ([id], store) => {
     const conn = await session(store);
-    if (conn.ether) return sessionEvents(conn.ether, conn.record.origin, id);
+    const adapter = conn.adapter;
+    if (hasEventStream(adapter)) return sessionEvents(adapter, plan => conn.plan(plan), id);
     // No event stream: one authoritative snapshot per ask; the foundation polls at auth.pollSeconds.
-    const snapshot = await conn.adapter.snapshot(id);
+    const snapshot = await adapter.sessionSnapshot(id);
     if (snapshot.plan.sessionId !== id) throw new Error('Invalid session snapshot');
     return { planJson: JSON.stringify(conn.plan(snapshot.plan)), sessionId: id, preparing: false, errorCode: '', errorMessage: '', retryAllowed: false, retryAfterSeconds: 0, retryLimit: 0 };
   },
@@ -754,7 +814,7 @@ const sources: Sources = {
       sessionId = event.sessionId;
       const conn = await session(store), api = conn.adapter;
       let plan;
-      try { plan = await api.command(sessionId, event.command); }
+      try { plan = await sendCommand(api, sessionId, event.command); }
       catch (error) {
         // A stop can race an authorized seek or switch. Retry once only when
         // the server supplies authoritative generations, with a new key because
@@ -772,7 +832,7 @@ const sources: Sources = {
     const event = JSON.parse(json);
     if (event.type !== 'observation') return { accepted: true };
     if (typeof event.sessionId !== 'string' || !event.observation) throw new Error('Invalid player observation');
-    await (await session(store)).adapter.observe(event.sessionId, event.observation);
+    await (await session(store)).adapter.reportObservation(event.sessionId, event.observation);
     return { accepted: true };
   },
 
@@ -908,8 +968,10 @@ const sources: Sources = {
   connectJellyfin: async ([id, username, password], store) => {
     try {
       const conn = connection(store, id);
+      const adapter = conn.adapter;
       if (conn.record.kind !== 'jellyfin' && conn.record.kind !== 'emby') throw new Error('Not a Jellyfin or Emby server');
-      const tokens = await conn.adapter.signIn({ username, password, device: deviceFor(store), idempotencyKey: key(store) });
+      if (!hasPasswordSignIn(adapter)) throw new Error('Password sign-in is not offered by this server');
+      const tokens = await adapter.signInWithPassword({ username, password, device: deviceFor(store), idempotencyKey: key(store) });
       await conn.credentials.set(tokens);
       selectServer(store, id);
       return { id, error: '' };
@@ -917,8 +979,10 @@ const sources: Sources = {
   },
   beginJellyfinQuick: async ([id, _at, localeJSON], store) => {
     const conn = connection(store, id);
+    const adapter = conn.adapter;
     if (conn.record.kind !== 'jellyfin' && conn.record.kind !== 'emby') throw new Error('Not a Jellyfin or Emby server');
-    const grant = await conn.adapter.quickConnect({ device: deviceFor(store), idempotencyKey: key(store) });
+    if (!hasQuickConnectSignIn(adapter)) throw new Error('Quick Connect is not offered by this server');
+    const grant = await adapter.startQuickConnect({ device: deviceFor(store), idempotencyKey: key(store) });
     jellyQuick = { handle: randomId(), serverId: id, secret: grant.secret, expiresAt: Date.parse(grant.expiresAt) };
     return withLocale(localeJSON, () => ({ secret: jellyQuick!.handle, code: grant.code, expiresAt: grant.expiresAt, expiresLabel: time(Date.parse(grant.expiresAt)), status: 'pending', pollIntervalSeconds: grant.pollIntervalSeconds }));
   },
@@ -928,7 +992,9 @@ const sources: Sources = {
     if (Number.isFinite(current.expiresAt) && at >= current.expiresAt) { jellyQuick = undefined; return { id: '', error: msg('server.codeExpired') }; }
     try {
       const conn = connection(store, current.serverId);
-      const result = await conn.adapter.pollQuickConnect({ secret: current.secret, device: deviceFor(store), idempotencyKey: key(store) });
+      const adapter = conn.adapter;
+      if (!hasQuickConnectSignIn(adapter)) throw new Error('Quick Connect is not offered by this server');
+      const result = await adapter.pollQuickConnect({ secret: current.secret, device: deviceFor(store), idempotencyKey: key(store) });
       if (jellyQuick !== current) return { id: '', error: 'Connection cancelled' };
       if (result.status === 'pending') return { id: '', error: '' };
       jellyQuick = undefined;

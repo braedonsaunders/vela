@@ -1,6 +1,6 @@
 import type * as V from '../../wire/v0/types';
-import type { MediaAccess, ServerAdapter } from './index';
-import type { EtherAdapter, Credentials } from './ether';
+import type { Credentials, MediaAccess, ServerAdapter } from './index';
+import type { EtherAdapter } from './ether';
 import { JellyfinAdapter } from './jellyfin';
 import { PlexAdapter } from './plex';
 import type { ServerRecord } from '../session/servers';
@@ -13,19 +13,18 @@ export interface Connection {
   readonly record: ServerRecord;
   readonly adapter: ServerAdapter;
   readonly credentials: Credentials;
-  /** Ether alone streams session and appearance events and serves appearance documents. */
-  readonly ether?: EtherAdapter;
   /** A native server's request credentials for the player host; Ether's broker needs none. */
   readonly media?: MediaAccess;
   /** Artwork addressing for one read, taken after that read so a rotated credential is current. */
   images(): Promise<Images>;
   /** The plan as the player receives it, with every media URL validated for this server. */
   plan(plan: V.PlaybackPlan): V.PlaybackPlan;
-  setCapabilityContext(context: string): void;
+  /** A server whose cached answers depend on the declared client drops them when it changes. */
+  setCapabilityContext?(context: string): void;
 }
 
 export function etherConnection(record: ServerRecord, adapter: EtherAdapter, credentials: Credentials): Connection {
-  return { record, adapter, credentials, ether: adapter,
+  return { record, adapter, credentials,
     images: async () => ({ origin: record.origin }),
     plan: plan => mediaPlan(plan, record.origin),
     setCapabilityContext: context => adapter.setCapabilityContext(context) };
@@ -44,15 +43,13 @@ export function nativeConnection(record: ServerRecord, credentials: Credentials,
         try { token = await adapter.transientToken(); } catch { /* Artwork is unavailable. */ }
         return { origin: record.origin, sized: (url, width, height) => token ? plexImage(record.origin, url, width, height, token) : undefined };
       },
-      plan: plan => scopedPlan(plan, media),
-      setCapabilityContext: () => {} };
+      plan: plan => scopedPlan(plan, media) };
   }
-  const adapter = new JellyfinAdapter(base, credentials, '', onSessionRejected);
+  const adapter = new JellyfinAdapter(base, credentials, onSessionRejected);
   const media: MediaAccess = { origin: record.origin, pathPrefix: record.basePath, headers: () => adapter.mediaHeaders(), nativeURL: url => adapter.nativePlaybackURL(url) };
   return { record, adapter, credentials, media,
     images: async () => ({ origin: record.origin, sized: (url, width, height) => jellyfinImage(record, url, width, height) }),
-    plan: plan => scopedPlan(plan, media),
-    setCapabilityContext: () => {} };
+    plan: plan => scopedPlan(plan, media) };
 }
 
 /** PMS scales its own artwork; the transient delegation token lives only in this URL in memory. */
