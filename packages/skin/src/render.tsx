@@ -225,7 +225,12 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     const gap = fx.grid.gap;
     const count = fx.grid.count ?? Math.max(1, Math.floor((gridWidth + gap) / ((fx.grid.min ?? 160) + gap)));
     const cell = (gridWidth - gap * (count - 1)) / count;
-    content = children.map((child, i) => <View key={i} style={{ width: cell }}>{child}</View>);
+    // A grid's cells are its drawn items: a repeat contributes one cell per item, as CSS grid
+    // places each element a repeat draws.
+    const items = node.children.flatMap((child, i) => child.kind === 'repeat'
+      ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(c)}`} node={child.item} ctx={c} />)
+      : holds(child.when, ctx, env) ? [<SkinNode key={i} node={child} ctx={ctx} />] : []);
+    content = items.map(item => <View key={item.key} style={{ width: cell }}>{item}</View>);
   }
   const layers = (
     <>

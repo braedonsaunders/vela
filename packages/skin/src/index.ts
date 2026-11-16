@@ -8,3 +8,4 @@ export type { Accessor, Card, Ctx, Destination, DetailModel, Env, HomeModel } fr
 export * from './widgets/player';
 export { searchView } from './widgets/search/view';
 export type { Hit, SearchView } from './widgets/search/model';
+export { LiveProvider, useLiveContext, useLiveSurface, useLiveView } from './widgets/guide';
