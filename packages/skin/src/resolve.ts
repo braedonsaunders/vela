@@ -7,7 +7,7 @@ import { velaBase } from '../../../client/src/skin/base';
 import { withBase } from '../../../client/src/skin/inherit';
 import { resolveUi, uiValue } from '../../../client/src/skin/ui';
 import { withClientStrings } from '../../../client/src/skin/client-strings';
-import { documentKeyframes, type Motion } from './motion';
+import { documentKeyframes, type Motion } from './keyframes';
 import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
 
 /** The highest document renderer version this renderer draws (docs/skin-schema.md). */

@@ -243,7 +243,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     } : undefined;
     element = (
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={route ? [{ flex: 1 }, outerStyle as ViewStyle] : (outerStyle as ViewStyle)}
-        contentContainerStyle={[contentStyle as ViewStyle, route ? { flexGrow: 1 } : null]} stickyHeaderIndices={sticky?.length ? sticky : undefined}
+        contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
         onLayout={onLayout} {...a11y}>
         {content}
