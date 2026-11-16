@@ -6,7 +6,7 @@
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.1.0';
+const version = '1.2.0';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';

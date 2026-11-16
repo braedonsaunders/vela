@@ -7,7 +7,7 @@ import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
 type Press = NonNullable<BoxNode['press']>;
 
-const ASSETS = '/vela/v0/appearance/skins/broadcast/1.0.0';
+const ASSETS = '/vela/v0/appearance/skins/broadcast/1.0.1';
 const display = '"Barlow Condensed", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", sans-serif';
 const sans = 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif';
 const gutter = { 'padding-left': 'clamp(20px, 2.4vw, 48px)', 'padding-right': 'clamp(20px, 2.4vw, 48px)' } as Style;
@@ -364,7 +364,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 const broadcastDoc: SkinDocument = {
-  schema: 1, renderer: 15, id: 'broadcast', name: 'Broadcast', version: '1.0.0', tagline: 'Live TV first: on now, your channels and the guide, with films below.',
+  schema: 1, renderer: 15, id: 'broadcast', name: 'Broadcast', version: '1.0.1', tagline: 'Live TV first: on now, your channels and the guide, with films below.',
   preview: `${ASSETS}/preview.jpg`, swatches: ['#07090d', '#f2f4f7', '#ff3d2e', '#ffc23d', '#141b24'],
   live: { home: true },
   fonts: { display: { family: 'Barlow Condensed', files: [500, 600, 700].map(weight => ({ url: `${ASSETS}/barlow-condensed-${weight}.ttf`, weight, style: 'normal' as const })) } },

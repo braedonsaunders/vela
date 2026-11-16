@@ -1,7 +1,10 @@
 // Published skin URLs (/vela/skins/<id>/<version>/...) are immutable: Ether keeps them for open tabs
 // and refuses a release that changes their bytes. Any change to a built-in skin's published files
-// therefore needs a new version. This checks the built output against skin-versions.lock.json.
+// therefore needs a new version. This checks the built output against skin-versions.lock.json (this
+// tree's versions) and skin-published.json (every skin file a Vela release, 0.1.x included, has ever
+// published, with its SHA-256; a path published with several contents can never be used again).
 //   Update the lock after a deliberate version bump: VELA_UPDATE_SKIN_LOCK=1 bun test skin-versions
+//   After publishing a release, add its skin files to skin-published.json.
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -10,6 +13,7 @@ import { join, relative } from 'node:path';
 import { writeDocuments } from '../../../tools/skin-documents';
 
 const lockFile = join(import.meta.dir, 'skin-versions.lock.json');
+const publishedFile = join(import.meta.dir, 'skin-published.json');
 
 async function files(dir: string): Promise<string[]> {
   const out: string[] = [];
@@ -22,7 +26,7 @@ async function files(dir: string): Promise<string[]> {
 }
 
 describe('built-in skin versions', () => {
-  test('a skin whose published files changed has a new version', async () => {
+  test('a skin whose files changed has a version never published with other bytes', async () => {
     const out = await mkdtemp(join(tmpdir(), 'vela-skins-'));
     try {
       const refs = await writeDocuments(out);
@@ -37,6 +41,17 @@ describe('built-in skin versions', () => {
         const previous = JSON.parse(await readFile(lockFile, 'utf8').catch(() => '{}')) as Record<string, string>;
         await writeFile(lockFile, JSON.stringify({ ...previous, ...current }, Object.keys({ ...previous, ...current }).sort(), 2) + '\n');
         return;
+      }
+      const published = JSON.parse(await readFile(publishedFile, 'utf8')) as Record<string, string[]>;
+      for (const ref of refs) {
+        const dir = join(out, ref.id, ref.version);
+        for (const file of await files(dir)) {
+          const path = `skins/${ref.id}/${ref.version}/${relative(dir, file)}`;
+          const known = published[path];
+          if (!known) continue;
+          const sha = createHash('sha256').update(await readFile(file)).digest('hex');
+          expect({ path, reusable: known.length === 1, sameBytes: known.includes(sha) }).toEqual({ path, reusable: true, sameBytes: true });
+        }
       }
       const lock = JSON.parse(await readFile(lockFile, 'utf8')) as Record<string, string>;
       for (const [key, hash] of Object.entries(current)) {
