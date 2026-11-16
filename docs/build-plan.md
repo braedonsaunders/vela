@@ -129,3 +129,22 @@ was an explicit exception. The new 0.2.3 fixture is handed to Ether for that fin
 No real lab restart or public publication was performed. Cinematic's reported thin
 top strip remains unreproduced: desktop header/root bounds start at y=0; a screenshot
 is needed to identify the affected pixels. Native delivery limits above remain open.
+
+### Navigation feedback — 2026-11-16
+
+Candidate 0.2.4 (`3f31378`) adds the capability-gated Cinematic Live TV tab and a
+compact desktop guide header: the grid starts at 211 px instead of 288 px at
+1440×900, keeping the prior 8 px outer margins. Home, libraries and Live share a
+persistent shell with directional outgoing/incoming slides; explicit section focus
+keeps the guide active only in front, and reduced motion disables translation.
+Parent app compilation/export and browser navigation checks pass, including library
+switching, Live guide/preview, return Home with the preview released, and title overlay.
+Native navigation has not been driven. 0.2.4 is locally test-key signed; all 246 files
+and the unchanged player aggregate verify. The owner preview serves this candidate
+and Ether has the fixture for isolated acceptance; no public publication or lab restart.
+
+Owner playback on work-computer reports dropped frames. Read-only sampling found
+RTX 3050, 1080p60 display, decoder utilization 28%, and no disable-GPU flags. Ether
+reports copied H.264 1038p SDR with EAC3→AAC stereo and ~178 seconds server readiness
+ahead; this does not establish the browser buffer or frame-drop cause. Player info
+counters are requested; no speculative playback change has been applied.
