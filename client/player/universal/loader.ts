@@ -17,6 +17,8 @@ export interface UniversalReadout {
 export interface OriginalBackend {
   readonly implementation?: 'vela-core' | 'upstream-controller';
   readonly retainsSource?: boolean;
+  /** The Vela core owns progress-based startup and its hard admission ceiling. */
+  readonly startupPending?: boolean;
   readonly live?:{startSeconds:number;edgeSeconds:number;segmentSeconds:number;ended:boolean;retries:number;retrying:boolean;delivery:'upstream-gap'|'segment-delayed'|'waiting-for-publication'|'available'};
   setLiveTarget?(seconds:number,rate:number):void;
   readonly supportsLocalAudioSwitch?:boolean;
@@ -41,7 +43,7 @@ export interface OriginalRuntimeOptions {
   assets: {baseURL: string; assetKey: string; audioDecoderURL: string; videoDecoderURL: string; subtitleBaseURL?:string};
   retry?: DecoderRetry;
   signal: AbortSignal; onEvent: (event: {type: string}) => void;
-  onFailure: (reason: string, position: number) => void;
+  onFailure: (reason: string, position: number, transport?:{httpStatus:number|null}) => void;
 }
 /** Production shares an immutable payload across skin engines. Only an absent
  * descriptor uses diagnostic-relative assets; invalid explicit bases fail closed. */

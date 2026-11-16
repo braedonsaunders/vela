@@ -28,14 +28,14 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 14 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
+// Renderer 15 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
 // until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
 const pending = (fields: Record<string, unknown>) => fields as object;
 const active = (style: Style) => pending({ active: style });
-const candy = { hover: { 'background-color': '$pink-hover' }, focus: { 'box-shadow': ring }, active: press94 };
-const puffy = { hover: { 'background-color': '$lavender-soft' }, focus: { 'box-shadow': ring }, active: press94 };
-const bubble = { hover: { 'background-color': '$pink-wash' }, focus: { 'box-shadow': ring }, active: { scale: '0.9' } };
+const candy = { hover: { 'background-color': '$pink-hover' }, focus: { outline: 'auto', 'box-shadow': ring }, active: press94 };
+const puffy = { hover: { 'background-color': '$lavender-soft' }, focus: { outline: 'auto', 'box-shadow': ring }, active: press94 };
+const bubble = { hover: { 'background-color': '$pink-wash' }, focus: { outline: 'auto', 'box-shadow': ring }, active: { scale: '0.9' } };
 
 const inset0: Style = { position: 'absolute', top: '0px', right: '0px', bottom: '0px', left: '0px' };
 const fill: Style = { ...inset0, width: '100%', height: '100%', 'object-fit': 'cover' };
@@ -151,7 +151,7 @@ const pillOn: Style = { ...pillBase, 'border-color': '$ink', 'background-color':
 const pillCompact: Style = { height: '38px', 'border-color': '$ink', 'box-shadow': '0px 3px 0px $ink' };
 const compactC: Condition = { test: 'env.width', is: 'lt', value: COMPACT };
 const navItem = (label: string, iconName: (on: Condition[]) => Node[], on: Condition[], press: { action: 'home' | 'live' | 'library'; arg?: string }, extra: Extra = {}): Node => ({ type: 'box', press, label, testId: `nav-${label}`, ...extra,
-  style: pillBase, below: { [COMPACT]: pillCompact }, states: [{ when: on, style: pillOn }, { when: [compactC], style: { ...pillBase, 'background-color': '$card' } }], a11y: { current: on }, hover: { 'border-color': '$ink' }, focus: { 'box-shadow': ring }, ...active(press94), children: [
+  style: pillBase, below: { [COMPACT]: pillCompact }, states: [{ when: on, style: pillOn }, { when: [compactC], style: { ...pillBase, 'background-color': '$card' } }], a11y: { current: on }, hover: { 'border-color': '$ink' }, focus: { outline: 'auto', 'box-shadow': ring }, ...active(press94), children: [
     ...iconName(on),
     { type: 'text', text: label, style: { 'font-size': '15px', 'font-weight': '550', 'white-space': 'nowrap' }, states: [{ when: on, style: { 'font-size': '15px', 'font-weight': '650', 'white-space': 'nowrap' } }] },
   ] } as Node);
@@ -236,7 +236,7 @@ const menu: Node = { type: 'box', id: 'viewer-settings', role: 'dialog', label: 
     { type: 'box', style: { height: '0px', 'border-style': 'dashed', 'border-width': '0px', 'border-top-width': '2.5px', 'border-top-color': '$line-strong' } },
     { type: 'box', press: { action: 'openPicker' }, label: '{s:appearance}', testId: 'skin-picker', when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
       style: { ...row, position: 'relative', gap: '12px', 'align-items': 'center', 'box-sizing': 'border-box', width: '100%', padding: '10px 12px', border: '2.5px solid $ink', 'border-radius': '16px', 'background-color': '$page', color: '$ink', cursor: 'pointer' },
-      hover: { 'background-color': '$lavender-soft' }, focus: { 'box-shadow': ring }, ...active({ scale: '0.97' }), children: [
+      hover: { 'background-color': '$lavender-soft' }, focus: { outline: 'auto', 'box-shadow': ring }, ...active({ scale: '0.97' }), children: [
         { type: 'box', style: { ...col, gap: '2px', flex: '1', 'min-width': '0px', 'text-align': 'left' }, children: [
           { type: 'text', text: '{s:appearance}', style: { ...Label, 'font-size': '10px', color: '$ink-soft' } },
           { type: 'text', text: '{s:name}', style: { 'font-size': '16px', 'font-weight': '600', color: '$ink' } },
@@ -414,7 +414,7 @@ const banner: Node = { type: 'box', motion: 'pop0', style: { ...col, position: '
 const dot: Style = { position: 'relative', width: '14px', height: '14px', padding: '0px', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '7px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$card', cursor: 'pointer' };
 const heroDot: Node = { type: 'box', press: { action: 'pickHero', arg: '{index}' }, label: '{s:featuredTitle} {index.label} {s:of} {env.heroCount}: {hero.name}', a11y: { current: [set('index.current')] },
   style: dot, states: [{ when: [set('index.current')], style: { ...dot, width: '44px', 'background-color': '$pink-soft' } }], layoutTransition: '380ms ease-out',
-  hover: { 'background-color': '$lavender-soft' }, focus: { 'box-shadow': '0px 0px 0px 2px $card, 0px 0px 0px 5px $focus' }, children: [
+  hover: { 'background-color': '$lavender-soft' }, focus: { outline: 'auto', 'box-shadow': '0px 0px 0px 2px $card, 0px 0px 0px 5px $focus' }, children: [
     { type: 'box', when: [set('index.current'), set('env.rotating')], motion: 'heroFill', style: { ...inset0, 'background-color': '$pink' } },
     { type: 'box', when: [set('index.current'), not('env.rotating')], style: { ...inset0, 'background-color': '$pink' } },
   ] };
@@ -492,7 +492,7 @@ const pageHeading = (eyebrow: string, name: string, backdrop?: string, back = fa
 const chipBase: Style = { ...row, position: 'relative', 'align-items': 'center', height: '34px', padding: '0px 14px', border: '2px solid $page-clear', 'border-radius': '999px', 'background-color': '$page-clear', color: '$ink', 'font-family': fredoka, 'font-size': '14px', 'font-weight': '550', cursor: 'pointer', 'white-space': 'nowrap', transition: 'background-color 160ms linear' };
 const chipOn: Style = { ...chipBase, 'border-color': '$ink', 'background-color': '$pink', 'font-weight': '650' };
 const chip = (label: string, on: Condition[], arg: string, when: Condition[] = []): Node => ({ type: 'box', when, press: { action: 'libraryFilter' as Action, arg }, label, a11y: { pressed: on },
-  style: chipBase, states: [{ when: on, style: chipOn }], hover: { 'border-color': '$ink' }, focus: { 'box-shadow': '0px 0px 0px 2px $card, 0px 0px 0px 5px $focus' }, children: [
+  style: chipBase, states: [{ when: on, style: chipOn }], hover: { 'border-color': '$ink' }, focus: { outline: 'auto', 'box-shadow': '0px 0px 0px 2px $card, 0px 0px 0px 5px $focus' }, children: [
     { type: 'text', text: label },
   ] });
 const chipGroup = (label: string, when: Condition[], children: Node[]): Node => ({ type: 'box', role: 'group', label, when, style: { ...row, gap: '4px', padding: '4px', 'flex-shrink': '0', 'border-radius': '999px', 'background-color': '$card', border: '2.5px solid $ink' }, children });
@@ -786,7 +786,7 @@ const episodeCard: Node = { type: 'box', group: true, motion: 'hop0', stagger: {
   style: episodeBase, states: [{ when: [stillC], style: { ...episodeBase, transition: liftStill } }], small: { gap: '12px', 'align-items': 'flex-start', padding: '10px' },
   hover: episodeUp, groupFocus: episodeUp, children: [
     ...byAccent('card', a => ({ type: 'box', press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'episode-{card.id}',
-      style: thumbBase(a), states: [{ when: [stillC], style: { ...thumbBase(a), transition: liftStill } }], small: { width: '124px' }, groupHover: { rotate: '-1.5' }, groupFocus: { rotate: '-1.5' }, focus: { 'box-shadow': ring }, children: [
+      style: thumbBase(a), states: [{ when: [stillC], style: { ...thumbBase(a), transition: liftStill } }], small: { width: '124px' }, groupHover: { rotate: '-1.5' }, groupFocus: { rotate: '-1.5' }, focus: { outline: 'auto', 'box-shadow': ring }, children: [
         { type: 'image', when: [set('card.backdrop')], src: '{card.backdrop}', alt: '', fade: true, style: fadeIn },
         { type: 'box', when: [not('card.backdrop')], style: { ...col, ...inset0, 'align-items': 'center', 'justify-content': 'center' }, children: [
           { type: 'text', when: [set('card.episodeNumberLabel')], text: '{card.episodeNumberLabel}', style: { ...Pixel, 'font-size': '30px' }, small: { 'font-size': '24px' } },
@@ -835,7 +835,7 @@ const episodesBody: Node[] = [
     { type: 'box', role: 'group', label: '{s:season}', testId: 'season-picker', style: { ...row, gap: '10px', padding: '4px 16px 8px' }, children: [
       { type: 'repeat', over: 'detail.seasons', item: { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', a11y: { pressed: [set('season.on')] },
         style: seasonPill, states: [{ when: [set('season.on')], style: { ...seasonPill, 'background-color': '$pink', 'box-shadow': '0px 4px 0px $ink' } }],
-        hover: { scale: '1.05' }, focus: { 'box-shadow': ring }, ...active(press94), children: [
+        hover: { scale: '1.05' }, focus: { outline: 'auto', 'box-shadow': ring }, ...active(press94), children: [
           { type: 'text', text: '{card.name}', style: { 'font-size': '15px' } },
         ] } },
     ] },
@@ -886,12 +886,11 @@ const related: Node = { type: 'repeat', over: 'detail.related', when: [ready], i
 
 // The title page opens as a framed page over the route frame's blurred scrim (detail.frame),
 // with an ink-ringed close button.
-// (The compiled trait's frame shadow named `var(--mochi.ink)` in a bound row, which never
-// resolved, so the frame draws without one; matched here.)
+// The frame wears an ink edge and a hard lavender shadow (the compiled detailShadow trait).
 const title: Node = { type: 'box', style: { ...col, position: 'relative', height: '100%' }, children: [
   { type: 'box', style: { ...col, ...inset0, 'box-sizing': 'border-box', padding: '4vh 4vw', color: '$ink' }, small: { padding: '0px' }, children: [
-    { type: 'box', motion: 'pageOpen', style: { ...col, position: 'relative', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': '$page' },
-      small: { 'border-radius': '0px' }, children: [
+    { type: 'box', motion: 'pageOpen', style: { ...col, position: 'relative', flex: '1', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'border-radius': '28px', 'background-color': '$page', 'box-shadow': '0px 0px 0px 3px $ink, 10px 12px 0px 3px $lavender' },
+      small: { 'border-radius': '0px', 'box-shadow': 'none' }, children: [
         { type: 'box', id: 'back', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', ...sz(44), 'box-sizing': 'border-box', padding: '13px', border: '3px solid $ink', 'border-radius': '22px', 'background-color': '$card', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: '$ink' },
           // The glyph keeps its 18px size inside the 12px content box (as the foundation's close does).
           children: [{ type: 'icon', symbol: 'close', style: { ...sz(18) } }] },
@@ -921,8 +920,18 @@ const popIn = (delay: number) => ({ keyframes: 'doc:pop', duration: 520, delay, 
 const float = (seconds: number) => ({ keyframes: 'doc:float', duration: seconds * 1000, easing: 'ease-in-out', iterations: 'infinite' as const, fill: 'none' as const });
 const vanish = (duration: number) => ({ keyframes: 'vanish', duration, easing: 'ease-in', fill: 'both' as const, still: { keyframes: 'vanish', duration: 120 } });
 
+// A holding state replaces the node's overlays too: give each state the node's own hover,
+// focus and group looks unless it names its own (the current nav pill keeps its ring).
+type Overlays = { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; active?: Style };
+function keepOverlays(n: Node): Node {
+  const node = n as Node & Overlays & { states?: (Overlays & { when: Condition[]; style: Style })[]; children?: Node[]; item?: Node };
+  const states = node.states?.map(st => ({ hover: node.hover, focus: node.focus, groupHover: node.groupHover, groupFocus: node.groupFocus, active: node.active, ...st }));
+  return { ...node, ...(states ? { states } : {}), ...(node.children ? { children: node.children.map(keepOverlays) } : {}), ...(node.item ? { item: keepOverlays(node.item) } : {}) } as Node;
+}
+const each = <T extends Record<string, Node>>(o: T): T => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, keepOverlays(v)])) as T;
+
 export default {
-  schema: 1, renderer: 14, id, name: 'Mochi', version,
+  schema: 1, renderer: 15, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true },
@@ -1001,8 +1010,8 @@ export default {
   },
   // Home draws its own loading and failure states.
   status: true,
-  templates: { card, gridCard, shelf: shelf(true), relatedShelf: shelf(false) },
-  slots: { shell, home },
-  routes: { title, library, collection, auth },
+  templates: each({ card, gridCard, shelf: shelf(true), relatedShelf: shelf(false) }),
+  slots: each({ shell, home }),
+  routes: each({ title, library, collection, auth }),
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { scrim: '$scrim' } },
 } as unknown as SkinDocument;

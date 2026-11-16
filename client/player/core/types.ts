@@ -7,6 +7,8 @@ export interface EncodedPacket {
   durationUs: number;
   key: boolean;
   data: Uint8Array;
+  /** Actual original-file byte position, never a generic packet sequence id. */
+  sourceOffset?:number;
   epoch: number;
   /** Preserve container side data, including HDR metadata, through demux. */
   additions?: readonly { addId: number; data: Uint8Array }[];
@@ -50,7 +52,19 @@ export interface AudioClockAnchor {
   bufferedUntilUs: number;
 }
 
+/** Scalar submission/output state; independent of physical-clock admission. */
+export interface AudioBufferState {
+  epoch:number;
+  bufferedUntilUs:number;
+  queuedFrames:number;
+  consumedFrames:number;
+  outputCredits:number;
+  pendingChunks:number;
+  submittedChunks:number;
+}
+
 export interface AudioOutput {
+  bufferState?():AudioBufferState|null;
   configure(track: AudioTrack, epoch: number, signal: AbortSignal): Promise<void>;
   /** Resolves when accepted; implementations apply bounded queue backpressure. */
   decode(packet: EncodedPacket, signal: AbortSignal): Promise<void>;

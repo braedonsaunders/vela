@@ -123,10 +123,27 @@ export interface Fallback { state: 'unsupported' | 'idle' | 'preparing' | 'ready
 export interface LiveAnchor { /** Nonnegative safe integer from the published snapshot. */ mediaSequence: number; windowStartSeconds: number }
 /** HTTP 202 while an explicitly requested extra is being prepared; no session exists yet. */
 export interface PlaybackPreparing { state: 'preparing'; retryAfterSeconds: number }
+/** Session-scoped scrub thumbnail geometry; omission makes no availability claim. */
+export interface TrickplayMetadata {
+  /** One thumbnail's pixel dimensions, not the complete sprite sheet. */
+  width: number; height: number;
+  /** Positive integer milliseconds between title-time slots. */
+  intervalMs: number;
+  /** ceil(probed durationMs / intervalMs), including fallback slots; omit offer if duration unknown. */
+  count: number;
+  /** Sheet grid dimensions (currently 10 by 10). */
+  cols: number; rows: number;
+  /** Highest contiguous real-frame end from title time zero, in milliseconds; islands do not advance it. */
+  coverageUntilMs: number;
+  /** Monotonic within the plan's sourceGeneration; changes when published sheets change. */
+  revision: number;
+}
 export interface PlaybackPlan extends Generations { sessionId: ID; revision: number; titleId?: ID; channelId?: ID; extraId?: ID; purpose?: 'playback' | 'preview';
   state: 'ready' | 'playing' | 'paused' | 'recovering' | 'ended'; positionSeconds: number; durationSeconds?: number;
   paths: PlaybackPath[]; selectedPathId: ID; audioTracks: Track[]; subtitleTracks: Track[];
   selectedAudioTrackId?: ID; selectedSubtitleTrackId: ID | null; chapters: Chapter[]; fallback: Fallback;
+  /** Also carried by SessionSnapshot.plan and full plan events. */
+  trickplay?: TrickplayMetadata;
   qualityLimitations?: { height: number; reason: string }[];
   livePolicy?: { latencyProfile: 'auto' | 'low' | 'stable'; targetLatencySeconds: number };
   live?: { mode: 'adaptive' | 'low-delay'; anchor?: LiveAnchor; windowStartSeconds?: number; liveEdgeSeconds?: number; maxDriftSeconds?: number } }

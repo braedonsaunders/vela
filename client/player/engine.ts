@@ -114,6 +114,7 @@ export class PlaybackEngine {
     if (!this.session || !this.source || !this.wantsPlay || ['failed','ended','recovering'].includes(this.status)) return;
     const now = performance.now();
     if (this.recordPlaybackProgress(now)) return;
+    if(this.original?.implementation==='vela-core'&&this.original.startupPending)return;
     const expired = !this.everPlayed ? now - this.waitSince > this.startupDeadlineMs : now - this.lastAdvance > 30000;
     if (expired) void this.recover(new PlaybackFault(this.everPlayed ? 'Playback stalled for 30 seconds' : `Playback did not start within ${this.startupDeadlineMs / 1000} seconds`, 'network'), this.controller.token());
   }
@@ -446,6 +447,7 @@ export class PlaybackEngine {
       this.originalStartTimer = setTimeout(() => {
         this.originalStartTimer = undefined;
         if (!this.controller.current(token)) return;
+        if(this.original?.implementation==='vela-core'&&this.original.startupPending)return;
         this.recordPlaybackProgress();
         if (!this.everPlayed)
           void this.recover(new PlaybackFault('Original first-frame deadline exceeded (8 seconds)','decoder'),token);
@@ -461,12 +463,20 @@ export class PlaybackEngine {
         const job=this.originalJob=new AbortController();this.originalGeneration=token;
         const current=()=>this.originalJob===job&&!job.signal.aborted&&!!this.originalGeneration&&this.controller.current(this.originalGeneration);
         const original = await loadOriginalRuntime({ surface:{container:parent,video:this.video}, signal:job.signal, retry,mediaRequests:this.mediaAccess,
-          onFailure: reason => { if (current()) void this.recover(new PlaybackFault(reason,'decoder'),this.originalGeneration!); },
+          onFailure: (reason,_position,transport) => { if(current()){
+            const generation=this.originalGeneration!;
+            if(transport?.httpStatus===410&&this.awaitingReplacement(generation)){this.status='loading';this.publish();return;}
+            void this.recover(new PlaybackFault(reason,'decoder'),generation);
+          } },
           onEvent: event => {
             if (!current() || !this.original) return;
             if (event.type === 'waiting') this.status = 'buffering';
             else if (event.type === 'playing' || event.type === 'statechange') {
-              this.status = this.original.readout.state;
+              const state=this.original.readout.state;
+              // A server command can retire its old producer before the reply
+              // reaches Contract. Its typed failure callback decides whether
+              // this is expected retirement or a real recovery.
+              this.status=state==='failed'&&this.awaitingReplacement(this.originalGeneration!)?'loading':state;
               if (this.status === 'playing') { this.failure = null; if (this.pendingSeek?.authorized) this.pendingSeek = undefined; }
             } else if (event.type === 'ended') { this.endPlayback(); return; }
             this.publish();
@@ -555,6 +565,12 @@ export class PlaybackEngine {
     this.pendingSwitch = { startedAt: performance.now(), sessionId: this.session!.id, sourceId: source.id, source: this.controller.source, seek: this.controller.seek, position, recovery };
     this.emit({ type: 'session-command', sessionId: this.session!.id, command: { kind: 'switch', pathId: source.id, atSeconds: boundary,
       sourceGeneration: this.controller.source, seekGeneration: this.controller.seek, idempotencyKey: randomId() } });
+  }
+  private awaitingReplacement(token:Generation):boolean{
+    if(!this.session?.serverControlled||!this.controller.current(token))return false;
+    const pending=this.pendingSwitch;
+    return !!(pending&&pending.sessionId===token.sessionId&&pending.source===token.source&&pending.seek===token.seek||
+      this.pendingSeek&&!this.pendingSeek.authorized||this.pendingTracks);
   }
   private fail(failure: Failure) { const position = this.position(); const duration = this.duration(); const metrics = this.frameMetrics(); this.pendingSeek = undefined; this.failure = failure; this.status = 'failed'; this.controller.cancel(); this.detachMedia(); this.resetMedia(); this.terminalMedia = { position, duration, ...metrics }; this.emit({ type: 'error', failure }); this.lastObservation = -Infinity; this.publish(); }
   private async recover(error: unknown, token: Generation) {

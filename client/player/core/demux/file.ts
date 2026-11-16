@@ -7,7 +7,7 @@ import {observeFragmentTiming} from './fragment-time';
 import {observeSubtitleClusters,type MatroskaSubtitleStream} from './subtitle-stream';
 import {hasBufferAudit,sourceBufferAudit,type BufferCacheState} from '../../universal/buffer-audit';
 import {clusterCacheAudit} from './cluster-cache';
-import {installMatroskaStreaming,hasStreamingMatroskaBacking,primeMatroskaIndex,finishMatroskaMetadata} from './matroska-stream';
+import {installMatroskaStreaming,hasStreamingMatroskaBacking,streamingMatroskaOffset,primeMatroskaIndex,finishMatroskaMetadata,warmMatroskaResume} from './matroska-stream';
 import type { AudioTrack, ByteReader, EncodedPacket, MediaTrack, VideoTrack } from '../types';
 
 /** Demux only. No upstream controller, decoder, clock or independent HTTP cache. */
@@ -22,17 +22,28 @@ export class PacketDemux {
   readonly diagnostics:string[]=[];
   private stopSubtitleClusters?:()=>void;
   private stopStreaming?:()=>void;
+  private originalReader?:ByteReader;
+  private originalPosition=0;
+  private operationStage='metadata';
+  private metadataReady=false;
+  private readonly packetOffsets=new Map<string,number>();
 
-  constructor(makeSource:(signal:()=>AbortSignal,count:(bytes:number)=>void)=>Source,
-    sourceSignal:AbortSignal,private readonly originUs=0,private readonly liveEnded?:()=>boolean,subtitleClusters?:MatroskaSubtitleStream,private readonly auditCache?:()=>BufferCacheState,streaming?:{reader:ByteReader;startSeconds:number}) {
-    this.operationSignal=AbortSignal.any([sourceSignal,this.lifetime.signal]);
+  constructor(makeSource:(signal:()=>AbortSignal,count:(bytes:number)=>void,forward:(offset:number)=>void)=>Source,
+    sourceSignal:AbortSignal,private readonly originUs=0,private readonly liveEnded?:()=>boolean,subtitleClusters?:MatroskaSubtitleStream,private readonly auditCache?:()=>BufferCacheState,streaming?:{reader:ByteReader;startSeconds:number},private readonly concurrentPackets=false) {
+    const sourceLifetime=AbortSignal.any([sourceSignal,this.lifetime.signal]);
+    this.operationSignal=sourceLifetime;
     const report=(note:string)=>{if(this.diagnostics.length<16&&!this.diagnostics.includes(note))this.diagnostics.push(note);};
     const source=makeSource(()=>this.operationSignal,bytes=>{
-      this.operationSignal.throwIfAborted();this.readBytes+=bytes;
-      if(this.readBytes>32*1024*1024)throw new Error('Demux operation exceeded its bounded search budget');
-    });
+      this.operationSignal.throwIfAborted();
+      // HLS packet readers share immutable indexed objects, each independently
+      // bounded by SegmentReader. A global search counter/queue must not make
+      // cached audio wait behind a future video segment's network request.
+      if(!this.concurrentPackets||!this.metadataReady){this.readBytes+=bytes;
+        if(this.readBytes>32*1024*1024)throw new Error('Demux operation exceeded its bounded search budget');}
+    },offset=>{if(this.operationStage==='video-packet'||this.operationStage==='audio-packet'){
+      this.packetOffsets.set(this.operationStage,offset);streaming?.reader.prefetch?.(offset,sourceLifetime);}});
     this.auditSource=source;
-    if(streaming)this.stopStreaming=installMatroskaStreaming(source,streaming.reader,AbortSignal.any([sourceSignal,this.lifetime.signal]),streaming.startSeconds,subtitleClusters);
+    if(streaming){this.originalReader=streaming.reader;this.originalPosition=streaming.startSeconds;this.stopStreaming=installMatroskaStreaming(source,streaming.reader,AbortSignal.any([sourceSignal,this.lifetime.signal]),streaming.startSeconds,subtitleClusters);}
     observeFragmentTiming(source,report);
     if(subtitleClusters)this.stopSubtitleClusters=observeSubtitleClusters(source,subtitleClusters.receive);
     this.input=new Input({source,formats:ALL_FORMATS,formatOptions:{hls:{offsetTimestampsByDateTime:!!liveEnded}}});
@@ -48,15 +59,16 @@ export class PacketDemux {
   /** Serial source operations make each cancellation/read budget unambiguous. */
   private operation<T>(run: () => PromiseLike<T> | T, signal: AbortSignal,stage='metadata',parallel=false): Promise<T> {
     if(parallel){
-      const operation=AbortSignal.any([signal,this.lifetime.signal,AbortSignal.timeout(8000)]);
+      const operation=AbortSignal.any([signal,this.lifetime.signal]);
       return abortable(Promise.resolve().then(()=>{operation.throwIfAborted();return run();}),operation).catch(error=>{
         if(signal.aborted)throw error;
-        throw new Error(`Demux ${stage}: ${error instanceof Error?error.message:'operation failed'}`);
+        throw new Error(`Demux ${stage}: ${error instanceof Error?error.message:'operation failed'}`,{cause:error});
       });
     }
     const work = this.serial.then(async () => {
       signal.throwIfAborted(); this.lifetime.signal.throwIfAborted();
-      this.operationSignal = AbortSignal.any([signal,this.lifetime.signal,AbortSignal.timeout(8000)]);
+      this.operationStage=stage;
+      this.operationSignal = AbortSignal.any([signal,this.lifetime.signal]);
       this.readBytes = 0;
       const abort = () => this.dispose();
       this.operationSignal.addEventListener('abort',abort,{once:true});
@@ -64,7 +76,7 @@ export class PacketDemux {
       catch(error){
         if(signal.aborted)throw error;
         const detail=error instanceof Error?`${error.name}: ${error.message}`:'operation failed';
-        throw new Error(`Demux ${stage} (${this.readBytes} requested bytes): ${detail}`);
+        throw new Error(`Demux ${stage} (${this.readBytes} requested bytes): ${detail}`,{cause:error});
       }
       finally { this.operationSignal.removeEventListener('abort',abort); }
     });
@@ -77,6 +89,9 @@ export class PacketDemux {
       const [format,videos,audios,duration] = await Promise.all([
         this.input.getFormat(),this.input.getVideoTracks(),this.input.getAudioTracks(),this.liveEnded?Promise.resolve(null):this.input.getDurationFromMetadata(),
       ]);
+      this.originalReader?.configureBuffer?.(duration);
+      const warming=this.originalReader&&format.name==='Matroska'?warmMatroskaResume(this.originalReader,this.originalPosition,duration,signal,
+        note=>{if(this.diagnostics.length<16&&!this.diagnostics.includes(note))this.diagnostics.push(note);},this.auditSource):undefined;
       const indexing=primeMatroskaIndex(videos[0]??audios[0]);
       void indexing?.catch(()=>{});
       const tracks: MediaTrack[] = [];
@@ -105,7 +120,8 @@ export class PacketDemux {
           codecPrivate:velaTrackPrivate(track,config),waveFormat:wave?.status === 'read' ? wave.waveFormat.slice() : null};
         tracks.push(actual); this.tracks.set(id,track);
       }
-      await indexing;finishMatroskaMetadata(this.auditSource);
+      const indexed=await indexing;warming?.correct(indexed);finishMatroskaMetadata(this.auditSource);
+      this.metadataReady=true;
       return {tracks,durationUs:duration === null ? null : Math.round(duration*1e6)+this.originUs,container:format.name};
     },signal);
   }
@@ -115,7 +131,9 @@ export class PacketDemux {
     if (!track) throw new Error('Unknown demux track');
     if (!Number.isFinite(positionUs) || positionUs < 0) throw new Error('Invalid demux seek position');
     const reader = new PacketReader(track);
-    const parallel=hasStreamingMatroskaBacking(track);
+    const parallel=this.concurrentPackets||hasStreamingMatroskaBacking(track);
+    if(this.originalReader){const note=`${track instanceof InputVideoTrack?'Video':'Audio'} packet acquisition: ${parallel?'streaming':'library'}`;
+      if(!this.diagnostics.includes(note)&&this.diagnostics.length<16)this.diagnostics.push(note);}
     const read=<T>(run:()=>PromiseLike<T>|T)=>this.operation(run,signal,track instanceof InputVideoTrack?'video-packet':'audio-packet',parallel);
     const querySeconds=Math.max(0,positionUs-this.originUs)/1e6;
     // Container cues/sample tables locate a preceding random-access packet.
@@ -135,6 +153,7 @@ export class PacketDemux {
       if (packet.data.length > 16 * 1024 * 1024) throw new Error('Encoded packet exceeds decode budget');
       if (![packet.timestamp,packet.duration].every(Number.isFinite) || packet.duration < 0) throw new Error('Invalid encoded packet timing');
       yield {trackId,epoch,data:packet.data,timestampUs:Math.round(packet.timestamp*1e6)+this.originUs,durationUs:Math.round(packet.duration*1e6),
+        ...(this.originalReader?{sourceOffset:streamingMatroskaOffset(track,packet)??this.packetOffsets.get(track instanceof InputVideoTrack?'video-packet':'audio-packet')}:{}),
         key:packet.type === 'key',additions:packet.sideData.matroskaBlockAdditions?.map(item => ({addId:item.addId,data:item.data}))};
       const previous = packet;
       packet = await read(() => reader.getNext(previous,{skipLiveWait:!!this.liveEnded}));
@@ -150,8 +169,8 @@ export class PacketDemux {
 /** Original-file transport: the reader and its cache survive demux epochs. */
 export class FileDemux extends PacketDemux {
   constructor(readonly reader:ByteReader,signal:AbortSignal,subtitleClusters?:MatroskaSubtitleStream,auditCache?:()=>BufferCacheState,startSeconds=0){
-    super((current,count)=>new CustomSource({
-      getSize:()=>reader.size(current()),read:(start,end)=>{count(end-start);return reader.read(start,end-start,current());},
+    super((current,count,forward)=>new CustomSource({
+      getSize:()=>reader.size(current()),read:(start,end)=>{count(end-start);forward(start);return reader.read(start,end-start,current());},
       maxCacheSize:0,prefetchProfile:'none',
     }),signal,0,undefined,subtitleClusters,auditCache,{reader,startSeconds});
   }

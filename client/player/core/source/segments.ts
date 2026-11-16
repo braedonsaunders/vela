@@ -1,11 +1,13 @@
-import {DeliveryMeter} from './delivery';
+import {DeliveryMeter,mediaCapWait} from './delivery';
 import {LiveWindow} from './live-window';
 import {BandwidthEstimator} from '../../abr';
 import { CustomPathedSource, CustomSource } from 'mediabunny';
 import { abortable, delay } from '../async';
 
 const MAX_OBJECT=16*1024*1024,MAX_PLAYLIST=1024*1024,CACHE_BYTES=32*1024*1024;
-class SegmentFailure extends Error {}
+class SegmentFailure extends Error {
+  constructor(message:string,readonly httpStatus?:number){super(message);}
+}
 interface ObjectBytes {bytes:Uint8Array;playlist:boolean;at:number}
 
 /** Vela owns acquisition, URL policy, retries and caching; HLS parsing is a library. */
@@ -22,7 +24,7 @@ export class SegmentReader {
   private polling?:ReturnType<typeof setInterval>;
   readonly bandwidth=new BandwidthEstimator();
   readonly delivery=new DeliveryMeter();
-  readonly metrics={requests:0,bytes:0,cacheHits:0,milliseconds:0};
+  readonly metrics={requests:0,bytes:0,receivedBytes:0,cacheHits:0,milliseconds:0};
   readonly diagnostics:string[]=[];
   constructor(url:string,private readonly fetcher:typeof fetch=(...args)=>fetch(...args),private readonly allowed?:(url:URL)=>boolean,private readonly cacheIdentity='local',live=false){
     this.root=this.scoped(url);
@@ -111,19 +113,24 @@ export class SegmentReader {
     try{
       for(let attempt=0;;attempt++){
         signal.throwIfAborted();
-        try{const value=await this.request(path,AbortSignal.any([signal,AbortSignal.timeout(10000)]),playlist);this.retrying=false;return value;}
+        try{const value=await this.request(path,signal,playlist);this.retrying=false;return value;}
         catch(error){signal.throwIfAborted();if(error instanceof SegmentFailure||attempt>=2)throw error;this.networkRetries++;this.retrying=true;await delay(200*2**attempt,signal);}
       }
     }finally{this.active--;this.waiters.values().next().value?.();}
   }
-  private async request(path:string,signal:AbortSignal,playlist:boolean):Promise<ObjectBytes>{
+  private async request(path:string,parent:AbortSignal,playlist:boolean):Promise<ObjectBytes>{
+    const stalled=new AbortController(),signal=AbortSignal.any([parent,stalled.signal]);
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    const arm=()=>{timer=setTimeout(()=>stalled.abort(new TypeError('Segment byte delivery stalled')),10000);};
+    const disarm=()=>{if(timer)clearTimeout(timer);timer=undefined;};
     const at=performance.now(),request=++this.metrics.requests;
-    const response=await this.fetcher(path,{signal,credentials:'same-origin',redirect:'error',cache:'no-store'});
+    let response:Response;
+    try{arm();response=await this.fetcher(path,{signal,credentials:'same-origin',redirect:'error',cache:'no-store'});}finally{disarm();}
     const firstByte=performance.now();
     try{
       if(response.status!==200){
         if(response.status===408||response.status===429||response.status>=500)throw new TypeError(`Segment HTTP ${response.status}`);
-        throw new SegmentFailure(`Segment HTTP ${response.status}`);
+        throw new SegmentFailure(`Segment HTTP ${response.status}`,response.status);
       }
       const type=response.headers.get('Content-Type')??'';
       if(/text\/html|application\/json/i.test(type))throw new SegmentFailure('Media endpoint returned a document instead of media');
@@ -135,7 +142,10 @@ export class SegmentReader {
       const reader=response.body?.getReader();if(!reader)throw new TypeError('Segment response has no body');
       const chunks:Uint8Array[]=[];let size=0,complete=false;
       try{
-        for(;;){const result=await reader.read();if(result.done){complete=true;break;}
+        for(;;){arm();let result:ReadableStreamReadResult<Uint8Array>;
+          try{result=await reader.read();}finally{disarm();}
+          if(result.done){complete=true;break;}
+          this.metrics.receivedBytes+=result.value.length;
           size+=result.value.length;if(size>limit)throw new SegmentFailure('Segment object exceeds its byte bound');chunks.push(result.value);
         }
       }finally{if(!complete)await reader.cancel().catch(()=>{});reader.releaseLock();}
@@ -147,7 +157,7 @@ export class SegmentReader {
         this.diagnostics.push(`hls-object:${request}:bytes=${size}:${objectShape(bytes)}`);
         if(this.diagnostics.length>8)this.diagnostics.shift();
       }
-      if(!playlist)this.delivery.record(at,firstByte,size);
+      if(!playlist)this.delivery.record(at,firstByte,size,{capWaitMs:mediaCapWait(response)});
       if(!playlist)this.bandwidth.sample(size,performance.now()-at,Number(response.headers.get('Age')??0)>0||/hit/i.test(response.headers.get('X-Cache')??''));
       this.metrics.bytes+=size;this.metrics.milliseconds+=performance.now()-at;
       if(playlist&&this.liveWindow&&path===this.root){
@@ -161,6 +171,7 @@ export class SegmentReader {
       }
       return{bytes,playlist,at:performance.now()};
     }catch(error){if(!response.body?.locked)await response.body?.cancel().catch(()=>{});throw error;}
+    finally{disarm();}
   }
   dispose(){if(this.polling)clearInterval(this.polling);this.polling=undefined;this.lifetime.abort();this.cache.clear();this.pending.clear();this.cached=0;for(const wake of [...this.waiters])wake();}
 }

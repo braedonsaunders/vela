@@ -14,7 +14,10 @@ fidelity proof, cinematic as a document: `protocol/v0/fixtures/skins/cinematic.t
 | --- | --- |
 | Shapes are finite and nonrecursive (`contract-grammar.md:3020`); a component cannot use itself (`syntax-inline-depth`) | The renderer is 12 generated levels `L1..L12` over shapes `N1..N12`. A document nests at most 12 boxes deep; the resolver refuses deeper ones. |
 | A component is inlined at every call site | Each level calls the next from exactly one place: one generic container; only leaves (text, image, icon, widgets) branch. A slot draws its tree from one call site. |
-| `:hover`/`:focus` rows are literals or token names (`lower-state-literal`) | Hover, focus and group hover are node overlays the renderer applies from its own hover/focus state, not CSS state rows. |
+| `:hover`/`:focus` rows are literals or token names (`lower-state-literal`) | Hover, press and group hover are CSS the resolver writes (the document's `css`, injected by vela-theme) on the nodes' `data-vs`/`data-vg`/`data-vf`: a pointer over the page runs no script. Focus looks (keyboard focus, a group's focus) are the renderer's own state, since parent-from-child CSS (`:has`) is missing on the TV browsers. |
+| An action receives every prop and inject of its component as hidden arguments, type-checked deeply on each call | Renderer components declare no actions that read their props: events go to the app's own actions (`client/skins/doc/members.contract`) with a few strings, so an event never re-checks a subtree or the page's models. |
+| Every element with `color-scheme` is a colour boundary that Exact's modes pass walks after every commit | `color-scheme` is set only on a tree's root box (the shell's or a route's); the resolver refuses it elsewhere. |
+| Exact probes every element that binds a layout transition or an exit before every commit | A route's nodes may take `layoutTransition` or `exit` only within 6 levels (the resolver refuses deeper ones); the shell's anywhere. A route's deep levels (cards, posters, captions) draw through a box without them. |
 | Computed `border`/`flex` must be longhands (`lower-css-shorthand`, `lower-attr-type`) | Write the shorthands; the resolver splits them. |
 | Number rows (`opacity`, `order`, `flex-grow`, `flex-shrink`, `font-weight`, `line-clamp`, `scale`) take numbers | Write them as strings; the resolver converts and resolves `font-weight` inheritance down the tree. |
 | A bound `position` on a clipping box is `relative`, `absolute` or `sticky` | `fixed` and `static` are not offered; anything else is `relative`. |
@@ -159,7 +162,8 @@ Renderer 3 is the live home above; a document using anything here names `rendere
 - Press: `press: { action, arg?, focus?: "<id>" }`; `disabled: Condition[]` with a
   `disabled` style overlay; `a11y: { expanded?, selected?, current?, pressed?: Condition[],
   haspopup?, controls?, title?: Template, role? }` on the press button.
-- `escape: "<flag>"` on a node: Escape clears the flag and returns focus to `returnFocus`.
+- `escape: "<flag>"` on a node: Escape (anywhere on the page) clears the innermost such node's open
+  flags and returns focus to `returnFocus` (a literal id).
 - Flags named `keep-…` survive navigation actions; shell `reset` clears all others.
   Shell `only <flag>` opens that flag alone (closing the other non-keep flags); pressed again it closes.
 - Home's `nav.destinations` (and `dest.*`, `env.libraryCount`, `env.hasLiveLibrary`) list the libraries
@@ -229,7 +233,9 @@ hasProgress/progressPct/seasonPending/genresLine/crewLineComma`; `row.landscape`
   suppresses it, as before; `outline: auto` in the overlay keeps the ring with it). Only `none` and
   `auto` are accepted: the platform draws the ring itself.
 - **Control states**: a pressable box shows Exact's hover wash under its content (as a compiled
-  button does), unless its style has a background image or it sets `controlStates: false`.
+  button does), unless its style has a background image, it has its own `hover` overlay (an
+  authored hover replaces the wash, as an authored `:hover` does in Exact; the pressed state
+  still applies), or it sets `controlStates: false` (no wash and no pressed look).
 - **searchInput** takes its node's padding (the input is the padded box, so the ring hugs it).
 - **traits**: `{ barMask?: bool, panSections?: bool }`: home fades under a floating bar; home,
   libraries and Live TV pan sideways between sections (unset: the doc engine's).
@@ -292,8 +298,10 @@ Without `routes.library` the foundation's library page shows.
 - `escape` acts only while one of its flags is open and may name several (`"menu drawer"`), so it
   can sit on a whole bar; a pressable box's `id` is its press button's, so `returnFocus` and
   `press.focus` land on the control. Route action `home`.
-- **Pressed**: a pressable box with control states dims its content to .65 while pressed when
-  it has no ground, and shows Exact's pressed wash (`--exact-tertiary-fill`) when it has one.
+- **Pressed**: a pressable box with control states shows Exact's pressed state while held: the
+  whole box at .65 opacity (its ground, ring and content; a hover ground stays), with or without a
+  ground of its own. An `active` overlay replaces it (author over platform), as a bound opacity or a `hover`
+  opacity does.
 - **Focus ring**: no inline outline unless the node suppresses the ring (`outline: none`, or a
   focus/groupFocus overlay without `outline: auto`), so Exact's own focus-visible ring is
   drawn exactly as on a compiled button.

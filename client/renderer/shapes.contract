@@ -94,6 +94,8 @@ shape Style
   cursor: string
   outlineStyle: string
   cornerShape: string
+  // Its position in the document's table (its rule in the document's css), -1 for the renderer's own.
+  id: number
 
 // One piece of a template: literal text, or a vocabulary key.
 shape Part
@@ -108,31 +110,29 @@ shape Cond
   v: string
   not: bool
 
-// A node's styles (indices into the document's table) in one state: base, hover, focus,
-// group hover, group focus, disabled, and the reduced-motion overlays (*2).
+// A node's styles (indices into the document's table) in one state: base, focus, group
+// focus look, group focus, disabled, and the reduced-motion overlays (*2). Hover, press and
+// group hover are the document's css under the state's ids, v (v2 reduced).
 shape StateRef
   cond: Cond[]
   s: number
   pos: number
-  // While pressed (the node's active overlay over its hover).
-  as: number
-  as2: number
+  v: string
+  v2: string
   // The press button's name in this state (empty: the node's label).
   lbl: Part[]
-  hs: number
   fs: number
   gs: number
   gfs: number
   ds: number
-  hs2: number
   fs2: number
   gs2: number
   gfs2: number
 
 // Where a node is drawn: the records repeat nodes stepped into, and the item's index.
 shape Ctx
+  // The nearest group's keyboard focus (its group focus and group look; its hover is CSS).
   hot: bool
-  fhot: bool
   card: Card[]
   row: FeedRow[]
   hero: Card[]
@@ -203,10 +203,6 @@ shape Env
   // A collection page (route "collection"): its model (zero or one) and whether more is loading.
   collection: CollectionModel[]
   collectionMoreLoading: bool
-  // Exact's control hover wash (a background image the document's data carries).
-  wash: string
-  // Exact's pressed wash (tertiary fill).
-  washPressed: string
   // The environment's own vocabulary values (envBinds), bound once per slot.
   ev: string[]
 
@@ -214,7 +210,6 @@ shape N10
   t: string
   base: StateRef
   sts: StateRef[]
-  hh: bool
   hf: bool
   grp: bool
   hg: bool
@@ -229,8 +224,6 @@ shape N10
   atitle: Part[]
   brole: string
   pfocus: Part[]
-  esc: string
-  escTo: Part[]
   lt: string
   ex: string
   exs: string
@@ -244,9 +237,7 @@ shape N10
   arg: Part[]
   sym: string
   act: string
-  cs: bool
   rn: bool
-  ha: bool
   ahid: bool
   achk: Cond[]
   role: string
@@ -277,7 +268,6 @@ shape N9
   t: string
   base: StateRef
   sts: StateRef[]
-  hh: bool
   hf: bool
   grp: bool
   hg: bool
@@ -292,8 +282,6 @@ shape N9
   atitle: Part[]
   brole: string
   pfocus: Part[]
-  esc: string
-  escTo: Part[]
   lt: string
   ex: string
   exs: string
@@ -307,9 +295,7 @@ shape N9
   arg: Part[]
   sym: string
   act: string
-  cs: bool
   rn: bool
-  ha: bool
   ahid: bool
   achk: Cond[]
   role: string
@@ -341,7 +327,6 @@ shape N8
   t: string
   base: StateRef
   sts: StateRef[]
-  hh: bool
   hf: bool
   grp: bool
   hg: bool
@@ -356,8 +341,6 @@ shape N8
   atitle: Part[]
   brole: string
   pfocus: Part[]
-  esc: string
-  escTo: Part[]
   lt: string
   ex: string
   exs: string
@@ -371,9 +354,7 @@ shape N8
   arg: Part[]
   sym: string
   act: string
-  cs: bool
   rn: bool
-  ha: bool
   ahid: bool
   achk: Cond[]
   role: string
@@ -405,7 +386,6 @@ shape N7
   t: string
   base: StateRef
   sts: StateRef[]
-  hh: bool
   hf: bool
   grp: bool
   hg: bool
@@ -420,8 +400,6 @@ shape N7
   atitle: Part[]
   brole: string
   pfocus: Part[]
-  esc: string
-  escTo: Part[]
   lt: string
   ex: string
   exs: string
@@ -435,9 +413,7 @@ shape N7
   arg: Part[]
   sym: string
   act: string
-  cs: bool
   rn: bool
-  ha: bool
   ahid: bool
   achk: Cond[]
   role: string
@@ -469,7 +445,6 @@ shape N6
   t: string
   base: StateRef
   sts: StateRef[]
-  hh: bool
   hf: bool
   grp: bool
   hg: bool
@@ -484,8 +459,6 @@ shape N6
   atitle: Part[]
   brole: string
   pfocus: Part[]
-  esc: string
-  escTo: Part[]
   lt: string
   ex: string
   exs: string
@@ -499,9 +472,7 @@ shape N6
   arg: Part[]
   sym: string
   act: string
-  cs: bool
   rn: bool
-  ha: bool
   ahid: bool
   achk: Cond[]
   role: string
@@ -533,7 +504,6 @@ shape N5
   t: string
   base: StateRef
   sts: StateRef[]
-  hh: bool
   hf: bool
   grp: bool
   hg: bool
@@ -548,8 +518,6 @@ shape N5
   atitle: Part[]
   brole: string
   pfocus: Part[]
-  esc: string
-  escTo: Part[]
   lt: string
   ex: string
   exs: string
@@ -563,9 +531,7 @@ shape N5
   arg: Part[]
   sym: string
   act: string
-  cs: bool
   rn: bool
-  ha: bool
   ahid: bool
   achk: Cond[]
   role: string
@@ -597,7 +563,6 @@ shape N4
   t: string
   base: StateRef
   sts: StateRef[]
-  hh: bool
   hf: bool
   grp: bool
   hg: bool
@@ -612,8 +577,6 @@ shape N4
   atitle: Part[]
   brole: string
   pfocus: Part[]
-  esc: string
-  escTo: Part[]
   lt: string
   ex: string
   exs: string
@@ -627,9 +590,7 @@ shape N4
   arg: Part[]
   sym: string
   act: string
-  cs: bool
   rn: bool
-  ha: bool
   ahid: bool
   achk: Cond[]
   role: string
@@ -661,7 +622,6 @@ shape N3
   t: string
   base: StateRef
   sts: StateRef[]
-  hh: bool
   hf: bool
   grp: bool
   hg: bool
@@ -676,8 +636,6 @@ shape N3
   atitle: Part[]
   brole: string
   pfocus: Part[]
-  esc: string
-  escTo: Part[]
   lt: string
   ex: string
   exs: string
@@ -691,9 +649,7 @@ shape N3
   arg: Part[]
   sym: string
   act: string
-  cs: bool
   rn: bool
-  ha: bool
   ahid: bool
   achk: Cond[]
   role: string
@@ -725,7 +681,6 @@ shape N2
   t: string
   base: StateRef
   sts: StateRef[]
-  hh: bool
   hf: bool
   grp: bool
   hg: bool
@@ -740,8 +695,6 @@ shape N2
   atitle: Part[]
   brole: string
   pfocus: Part[]
-  esc: string
-  escTo: Part[]
   lt: string
   ex: string
   exs: string
@@ -755,9 +708,7 @@ shape N2
   arg: Part[]
   sym: string
   act: string
-  cs: bool
   rn: bool
-  ha: bool
   ahid: bool
   achk: Cond[]
   role: string
@@ -789,7 +740,6 @@ shape N1
   t: string
   base: StateRef
   sts: StateRef[]
-  hh: bool
   hf: bool
   grp: bool
   hg: bool
@@ -804,8 +754,6 @@ shape N1
   atitle: Part[]
   brole: string
   pfocus: Part[]
-  esc: string
-  escTo: Part[]
   lt: string
   ex: string
   exs: string
@@ -819,9 +767,7 @@ shape N1
   arg: Part[]
   sym: string
   act: string
-  cs: bool
   rn: bool
-  ha: bool
   ahid: bool
   achk: Cond[]
   role: string
@@ -848,6 +794,96 @@ shape N1
   dop: Part[]
   dtr: Part[]
   kids: N2[]
+
+// A child as its parent resolves it (kids1): its node, context, bindings, state, disabled and row key.
+shape Kid1
+  n: N1
+  c: Ctx
+  vals: string[]
+  sr: StateRef
+  dis: bool
+  key: string
+
+// A child as its parent resolves it (kids2): its node, context, bindings, state, disabled and row key.
+shape Kid2
+  n: N2
+  c: Ctx
+  vals: string[]
+  sr: StateRef
+  dis: bool
+  key: string
+
+// A child as its parent resolves it (kids3): its node, context, bindings, state, disabled and row key.
+shape Kid3
+  n: N3
+  c: Ctx
+  vals: string[]
+  sr: StateRef
+  dis: bool
+  key: string
+
+// A child as its parent resolves it (kids4): its node, context, bindings, state, disabled and row key.
+shape Kid4
+  n: N4
+  c: Ctx
+  vals: string[]
+  sr: StateRef
+  dis: bool
+  key: string
+
+// A child as its parent resolves it (kids5): its node, context, bindings, state, disabled and row key.
+shape Kid5
+  n: N5
+  c: Ctx
+  vals: string[]
+  sr: StateRef
+  dis: bool
+  key: string
+
+// A child as its parent resolves it (kids6): its node, context, bindings, state, disabled and row key.
+shape Kid6
+  n: N6
+  c: Ctx
+  vals: string[]
+  sr: StateRef
+  dis: bool
+  key: string
+
+// A child as its parent resolves it (kids7): its node, context, bindings, state, disabled and row key.
+shape Kid7
+  n: N7
+  c: Ctx
+  vals: string[]
+  sr: StateRef
+  dis: bool
+  key: string
+
+// A child as its parent resolves it (kids8): its node, context, bindings, state, disabled and row key.
+shape Kid8
+  n: N8
+  c: Ctx
+  vals: string[]
+  sr: StateRef
+  dis: bool
+  key: string
+
+// A child as its parent resolves it (kids9): its node, context, bindings, state, disabled and row key.
+shape Kid9
+  n: N9
+  c: Ctx
+  vals: string[]
+  sr: StateRef
+  dis: bool
+  key: string
+
+// A child as its parent resolves it (kids10): its node, context, bindings, state, disabled and row key.
+shape Kid10
+  n: N10
+  c: Ctx
+  vals: string[]
+  sr: StateRef
+  dis: bool
+  key: string
 
 // The shell's tree: its root container's style, its top-level nodes, and the flex order
 // of the route it wraps among them.
@@ -945,10 +981,18 @@ shape SkinDoc
   splashOnPaper: string
   // The document draws its pages' loading and failure states (env.load); else the foundation's status screen shows.
   drawsStatus: bool
-  wash: string
-  washPressed: string
+  // The document's stylesheet (vela-theme injects it): each style's sheet rows on data-st, and
+  // hover, press and group hover on data-vs, data-vf, data-vg.
+  css: string
+  // The document's Escape closures (escape, returnFocus), innermost first.
+  escapes: Escape[]
 
-fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", columnGap="", rowGap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", scrollBehavior="", scrollPaddingLeft="", colorScheme="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", borderTopWidth="", borderTopColor="", borderBottomWidth="", borderBottomColor="", borderLeftWidth="", borderLeftColor="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", textOverflow="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, rotate=0, perspective="", transition="", animation="", pointerEvents="", cursor="", outlineStyle="", cornerShape="")
-fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, as=0, as2=0, lbl=[], hs=0, fs=0, gs=0, gfs=0, ds=0, hs2=0, fs2=0, gs2=0, gfs2=0)
-fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=true, nodes=[holderNode5()]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none", detailScrim="transparent", detailBlur="none", detailFlat=true, barMask="", panSections="", pageColor="", inkColor="", splashOnPaper="", drawsStatus=false, wash="", washPressed="")
-fn holderNode5(): N5 = N5(t="holder", base=noRef(), sts=[], hh=false, hf=false, grp=false, hg=false, gf=false, fade=false, dis=[], aexp=[], asel=[], acur=[], aprs=[], ahp="", atitle=[], brole="", pfocus=[], esc="", escTo=[], lt="", ex="", exs="", ivb="", ipaths=[], fr="", cond=[], parts=[], src=[], label=[], arg=[], sym="", act="", cs=false, rn=false, ha=false, ahid=false, achk=[], role="", level=0, test=[], dom=[], rep="", lim=0, mk="", md=0, mdl=0, me="", mf="", mit="", mdir="", msk="", msd=0, step=0, cap=0, dw=[], dbg=[], dbi=[], dc=[], dop=[], dtr=[], kids=[])
+// Escape closes these open flags (shell or route scope) and focuses the element with id `to`.
+shape Escape
+  flags: string
+  to: string
+
+fn noStyle(): Style = Style(display="", position="", top="", right="", bottom="", left="", zIndex="", width="", height="", minWidth="", minHeight="", maxWidth="", maxHeight="", aspectRatio="", boxSizing="", flexGrow=0, flexBasis="", flexDirection="", flexWrap="", flexShrink=1, alignItems="", alignSelf="", justifyContent="", gap="", columnGap="", rowGap="", order=0, gridTemplateColumns="", gridTemplateRows="", gridColumn="", gridRow="", paddingTop="", paddingRight="", paddingBottom="", paddingLeft="", marginTop="", marginRight="", marginBottom="", marginLeft="", overflowX="", overflowY="", scrollSnapType="", scrollSnapAlign="", scrollbarWidth="", scrollBehavior="", scrollPaddingLeft="", colorScheme="", color="", backgroundColor="", backgroundImage="", opacity=1, borderWidth="", borderStyle="", borderColor="", borderRadius="", borderTopWidth="", borderTopColor="", borderBottomWidth="", borderBottomColor="", borderLeftWidth="", borderLeftColor="", boxShadow="", filter="", backdropFilter="", maskImage="", fontFamily="", fontSize="", fontWeight=400, fontStyle="", lineHeight="", letterSpacing="", textTransform="", textAlign="", textShadow="", textStroke="", textOverflow="", lineClamp=0, whiteSpace="", fontVariantNumeric="", objectFit="", transformOrigin="", translate="", scale=1, rotate=0, perspective="", transition="", animation="", pointerEvents="", cursor="", outlineStyle="", cornerShape="", id=-1)
+fn noRef(): StateRef = StateRef(cond=[], s=0, pos=0, v="", v2="", lbl=[], fs=0, gs=0, gfs=0, ds=0, fs2=0, gs2=0, gfs2=0)
+fn emptyDoc(): SkinDoc = SkinDoc(id="", fontsJson="", keyframesCss="", styles=[], shell=ShellSlot(present=false, rootBase=noRef(), rootSts=[], slotBase=noRef(), slotSts=[], slotInner=0, slotOrder="0", holds=true, nodes=[holderNode5()]), routes=[], liveHome=false, detailWide="fullscreen", detailSmall="fullscreen", detailFrom=640, detailSplit="none", detailScrim="transparent", detailBlur="none", detailFlat=true, barMask="", panSections="", pageColor="", inkColor="", splashOnPaper="", drawsStatus=false, css="", escapes=[])
+fn holderNode5(): N5 = N5(t="holder", base=noRef(), sts=[], hf=false, grp=false, hg=false, gf=false, fade=false, dis=[], aexp=[], asel=[], acur=[], aprs=[], ahp="", atitle=[], brole="", pfocus=[], lt="", ex="", exs="", ivb="", ipaths=[], fr="", cond=[], parts=[], src=[], label=[], arg=[], sym="", act="", rn=false, ahid=false, achk=[], role="", level=0, test=[], dom=[], rep="", lim=0, mk="", md=0, mdl=0, me="", mf="", mit="", mdir="", msk="", msd=0, step=0, cap=0, dw=[], dbg=[], dbi=[], dc=[], dop=[], dtr=[], kids=[])

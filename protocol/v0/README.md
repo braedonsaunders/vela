@@ -52,6 +52,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /sessions/:id/events | cursor (query), Last-Event-ID (header) | SSE SessionEvent |
 | POST | /sessions/:id/commands | SessionCommand | PlaybackPlan |
 | POST | /sessions/:id/observations | PlayerObservation | Ack |
+| GET | /sessions/:id/trickplay/:width/:sheet.jpg | bearer + device; optional If-None-Match | private JPEG sprite sheet or 304 |
 | GET | /live/channels | cursor, limit (query) | Page<Channel> |
 | GET | /live/guide | GuideQuery (query) | GuideResponse |
 
@@ -65,6 +66,12 @@ variant playlists, CMAF init/segments, subtitle resources (including progressive
 cues) or a direct file. There is no parallel Vela media API. A plan advertises only
 currently authorized paths, never provider credentials. Media grants expire and
 must be revalidated against the owning device/session and current policy.
+
+Media range responses may include `X-Ether-Media-Cap-Wait-Ms`, a nonnegative
+integer number of milliseconds that the range waited for an upstream connection
+slot. `0` means no connection-slot wait. An absent header means the wait is
+unknown; clients must preserve that conservative unknown state rather than treat
+absence as zero.
 
 Subtitle `Track.delivery` optionally describes an external `webvtt` or
 `webvtt-window` URL, an `embedded` source track, or `burn-in` delivery. Omission
@@ -320,6 +327,74 @@ and cursor are session scoped; deduplicate repeats and ignore older revisions.
 Comments are heartbeat keepalives, never state changes. Recheck authorization on
 reconnect and while streaming; revoked credentials close the stream. Ended sessions
 retain a final snapshot for bounded reconnection; `ended` closes the stream.
+
+### Scrub thumbnails (trickplay)
+
+`PlaybackPlan.trickplay?: {width, height, intervalMs, count, cols, rows,
+coverageUntilMs, revision}` advertises only an available offer for the release
+currently streamed by that session. Omit it when unavailable. The session snapshot
+carries the same metadata in `snapshot.plan.trickplay`; there is no independent
+snapshot copy. Existing full `plan` session events publish changes, using normal
+session revision/cursor replay and snapshot rules. Clients may ignore this optional
+metadata; it does not affect playback readiness or authorize another media path.
+
+`width` and `height` are positive integer dimensions of **one thumbnail** in pixels;
+`cols` and `rows` are positive integer sheet dimensions, currently 10 × 10 like
+Jellyfin. `intervalMs` is a positive integer title-time interval. `count` is the
+positive integer `ceil(durationMs / intervalMs)` from the probed duration,
+including fallback slots, not a claim that every frame has been generated. Omit
+the entire offer when the duration is unknown; `count` does not grow with playback.
+`coverageUntilMs` is the nonnegative integer highest **contiguous real-frame end
+from title time zero**, clamped to duration (zero when only a fallback exists).
+Seeks can create real-frame islands beyond this edge; those frames appear in
+sheets but do not advance contiguous coverage across missing/fallback slots.
+`revision` is a nonnegative safe integer,
+monotonic within a source generation; advance it whenever coverage or published
+sheet contents change, including replacement of a fallback with real frames.
+Throttle trickplay-driven full-plan SSE republishing to at most once per ten
+seconds per session, plus one final publish when generation stops. Publish only
+when metadata/content actually changed; do not send unchanged periodic events.
+The sheet ETag uses the current generation revision even while plan publication
+is throttled, so a fallback replacement invalidates it without waiting for SSE.
+On source-generation replacement, discard the old metadata and cached sheets;
+never reuse thumbnails across releases merely because the title id matches.
+
+For title time `tMs >= 0`, the slot is `floor(tMs / intervalMs)`; it must be less
+than `count`. Sheet indices are zero-based: `floor(slot / (cols * rows))`.
+Within a sheet, column is `slot % cols` and row is
+`floor(slot / cols) % rows`. A JPEG is `width * cols` by `height * rows`; ignore
+padding cells after the final slot. The route width must equal the advertised
+provider width (currently 320); do not resize on request or invent other variants.
+
+`GET /vela/v0/sessions/:id/trickplay/:width/:sheet.jpg` returns `image/jpeg`.
+This is an authenticated Vela request with bearer and `X-Vela-Device-Id`, bound to
+the exact owning session, current grant family, device and surface. Validate the
+session's active media grant, selected release and current viewer/media policy on
+every request, **including conditional requests before returning 304**. Do not
+look up the newest session for a title or expose upstream URLs/credentials. Client
+renderers need authenticated fetch; the bare endpoint is not a public image grant.
+An unknown, ended or unavailable session/offer, unadvertised width or unavailable
+sheet returns 404; ordinary authentication/policy failures retain 401/403 rules.
+
+Responses use `Cache-Control: private, no-cache` and a version-keyed ETag that
+includes the session/source generation, trickplay revision, width and sheet index.
+The same URL's bytes can change as frames arrive, so revalidate rather than cache
+it immutably. `X-Ether-Trickplay-Fallback: true` says the sheet contains one or more
+fallback still cells; `false` says its addressable cells are all real generated
+frames. An absent fallback header means unknown, never proof of real frames.
+Fallback stills may stand in until real frames exist; they do not advance real
+coverage. Sheets wholly beyond contiguous coverage may return placeholder-only
+JPEGs with `X-Ether-Trickplay-Fallback: true`. Service workers and shared/static
+caches must bypass these sheets.
+
+Generation is owned by Ether's existing streaming `TrickplayProvider`/`Leaser`,
+only while that exact session streams the release. Metadata and JPEG reads never
+start generation, resolve a release, acquire a new playback stream, or generate
+ahead of playback. Progress is published through session events as the active
+stream makes frames available. Stopping/revoking the session invalidates access
+and releases its generation lease; pre-existing private cached bytes do not grant
+continued access. This contract adds no thumbnail generation during browsing or
+before playback, and no player/scrubber implementation is implied by the spec.
 
 ## Search and errors
 

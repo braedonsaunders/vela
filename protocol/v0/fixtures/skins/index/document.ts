@@ -23,9 +23,9 @@ const wide: Condition = { test: 'env.small', not: true };
 /** A style that changes when the slot is small: the small state replaces the style whole. */
 const responsive = (style: Style, smallStyle: Style) => ({ style, states: [{ when: [small], style: { ...style, ...smallStyle } as Style }] });
 
-// A button with a ground of its own: compiled Exact washes it with 12% of its ink on hover
-// (they draw that wash themselves and opt out of the renderer's control states).
-const inkWash = { hover: { 'background-image': 'linear-gradient(color-mix(in srgb, currentColor 12%, transparent) 0 0)' } as Style, controlStates: false };
+// A button with a ground of its own: compiled Exact washes it with 12% of its ink on hover and
+// dims the whole control while pressed (drawn here, so they opt out of the renderer's states).
+const inkWash = { hover: { 'background-image': 'linear-gradient(color-mix(in srgb, currentColor 12%, transparent) 0 0)' } as Style, active: { opacity: '0.65' }, controlStates: false };
 
 // A plain text button as Exact draws one: unset, a block, 4 px of padding, centred text.
 const plain = (text: string, press: { action: 'home' | 'search' | 'live' | 'signOut' }, when: Condition[]): Node => ({
@@ -92,15 +92,27 @@ const row: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'co
 ] };
 
 // ---------------------------------------------------------------- home
-// A loading or failure moment: the message alone, 32 px in.
-const status = (text: string, when: Condition[]): Node => ({ type: 'text', text, role: 'status', when, style: { padding: '32px' } });
+// A plain Contract button with no ground of its own, as Exact draws it ("bordered"): a hairline
+// in the label colour at 45%, the control radius (8px x Exact's curve reach, 1.52 where corner-shape
+// is supported: a var() radius is not bound) and curve, the label colour at weight 500, centred.
+// Exact's bordered button washes its ground on hover (quaternary) and while pressed (tertiary)
+// and does not dim; it opts out of the renderer's pressed dim.
+const borderedStates = { hover: { 'background-image': 'linear-gradient(var(--exact-quaternary-fill) 0 0)' } as Style, active: { 'background-image': 'linear-gradient(var(--exact-tertiary-fill) 0 0)' } as Style, controlStates: false };
+const bordered: Style = { display: 'grid', 'justify-content': 'center', 'align-items': 'center', padding: '16px', border: '1px solid var(--exact-line)', 'border-radius': '12.16px', 'corner-shape': 'var(--exact-control-curve, var(--exact-curve))',
+  color: 'var(--exact-label)', 'font-weight': '500', 'line-height': '20px', 'text-align': 'center' };
+
+// A loading or failure moment: the message, 32 px in, and after a failure Try again.
+const status = (text: string, when: Condition[], retry = false): Node => ({ type: 'box', when, style: { display: 'flex', 'flex-direction': 'column', gap: '12px', padding: '32px', 'align-items': 'flex-start' }, children: [
+  { type: 'text', text, role: 'status' },
+  ...(retry ? [{ type: 'box', when: [{ test: 'env.canRetry' }], press: { action: 'retry' }, label: '{s:tryAgain}', style: { ...bordered, padding: '8px 16px' }, ...borderedStates, children: [{ type: 'text', text: '{s:tryAgain}' }] } as Node] : []),
+] });
 
 // Compiled, the heading, the search field and the featured title share one column
 // (padding 24px 4%, gap 18px); here they are siblings carrying that padding and gap.
 const home: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'background-color': '$page', color: '$ink' }, children: [
   // Before home is known, Index shows only the message, plainly (as its compiled Status: no retry).
   status('{s:findingEvening}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
-  status('{s:unreachable}', [{ test: 'env.load', is: 'eq', value: 'failed' }]),
+  status('{s:unreachable}', [{ test: 'env.load', is: 'eq', value: 'failed' }], true),
   { type: 'box', when: [ready], style: { display: 'block', padding: '24px 4% 0px' }, children: [
     { type: 'text', text: '{s:viewingIndex}', role: 'heading', level: 1, ...responsive({ 'font-size': '42px', 'font-weight': '700' }, { 'font-size': '28px' }) },
   ] },
@@ -131,27 +143,21 @@ const home: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'c
 ] };
 
 // ---------------------------------------------------------------- library
-// A plain Contract button with no ground of its own, as Exact draws it ("bordered"): a hairline
-// in the label colour at 45%, the control radius (8px x Exact's curve reach, 1.52 where corner-shape
-// is supported: a var() radius is not bound) and curve, the label colour at weight 500, centred.
-const bordered: Style = { display: 'grid', 'justify-content': 'center', 'align-items': 'center', padding: '16px', border: '1px solid var(--exact-line)', 'border-radius': '12.16px', 'corner-shape': 'var(--exact-control-curve, var(--exact-curve))',
-  color: 'var(--exact-label)', 'font-weight': '500', 'line-height': '20px', 'text-align': 'center' };
-
 // A library's titles in the server's order, a way back and a way to load more.
 const library: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: [
   status('{s:findingTitles}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
-  status('{s:libraryFailed}', [{ test: 'env.load', is: 'eq', value: 'failed' }]),
-  { type: 'box', when: [ready], press: { action: 'home' }, label: '{s:back}', style: bordered, children: [{ type: 'text', text: '{s:back}' }] },
+  status('{s:libraryFailed}', [{ test: 'env.load', is: 'eq', value: 'failed' }], true),
+  { type: 'box', when: [ready], press: { action: 'home' }, label: '{s:back}', style: bordered, ...borderedStates, children: [{ type: 'text', text: '{s:back}' }] },
   catalogue('{library.name}', 'library.items', [ready]),
   { type: 'box', when: [ready, { test: 'library.more' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{s:showMore}',
-    style: bordered, children: [{ type: 'text', text: '{s:showMore}' }] },
+    style: bordered, ...borderedStates, children: [{ type: 'text', text: '{s:showMore}' }] },
 ] };
 
 // A collection's titles in server order, under a way back.
 const collection: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: [
   status('{s:openingCollection}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
-  status('{s:collectionFailed}', [{ test: 'env.load', is: 'eq', value: 'failed' }]),
-  { type: 'box', when: [ready], press: { action: 'back' }, label: '{s:back}', style: bordered, children: [{ type: 'text', text: '{s:back}' }] },
+  status('{s:collectionFailed}', [{ test: 'env.load', is: 'eq', value: 'failed' }], true),
+  { type: 'box', when: [ready], press: { action: 'back' }, label: '{s:back}', style: bordered, ...borderedStates, children: [{ type: 'text', text: '{s:back}' }] },
   catalogue('{collection.name}', 'collection.items', [ready]),
 ] };
 
@@ -324,7 +330,7 @@ const title: Node = { type: 'box', style: { width: '100%', height: '100%', displ
       style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', width: '44px', height: '44px', 'box-sizing': 'border-box', padding: '13px', border: '1px solid surface.line', 'border-radius': '22px', 'background-color': 'surface.glass', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: 'ink.primary' }, ...inkWash,
       children: [{ type: 'icon', symbol: 'close', style: { width: '19.2px', height: '19.2px' } }] },
     { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{s:titleDetails}', style: { display: 'block', flex: '1', 'min-height': '0px', 'overflow-x': 'auto', 'overflow-y': 'auto' }, children: [
-      status('{s:failed}', [{ test: 'env.load', is: 'eq', value: 'failed' }]),
+      status('{s:failed}', [{ test: 'env.load', is: 'eq', value: 'failed' }], true),
       status('{s:opening}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
       { ...detail, when: [{ test: 'env.load', is: 'eq', value: 'ready' }] },
     ] },
@@ -348,7 +354,7 @@ export default {
     viewingIndex: 'THE VIEWING INDEX', searchLabel: 'SEARCH', searchPlaceholder: 'Title, person, or description', searchLibrary: 'Search your library', clearSearch: 'Clear search', clear: 'Clear', featured: 'FEATURED', loadingMore: 'Loading more…',
     film: 'Film', series: 'Series', episode: 'Episode', season: 'Season', collection: 'Collection', noYear: '—',
     closeTitle: 'Close title', titleDetails: 'Title details', opening: 'Opening title…', failed: 'This title couldn\'t be opened. It may no longer be available.',
-    back: 'Back', openingCollection: 'Opening collection…', collectionFailed: 'This collection couldn\'t be opened.', showMore: 'Show more', findingTitles: 'Finding titles…', libraryFailed: 'This library couldn\'t be opened. Check your connection and try again.',
+    back: 'Back', tryAgain: 'Try again', openingCollection: 'Opening collection…', collectionFailed: 'This collection couldn\'t be opened.', showMore: 'Show more', findingTitles: 'Finding titles…', libraryFailed: 'This library couldn\'t be opened. Check your connection and try again.',
     welcome: 'Welcome to your evening.', signInTo: 'Sign in to your library.', username: 'Username', password: 'Password', signIn: 'Sign in', signingIn: 'Signing in…', or: 'or',
     withCode: 'Connect with a code', noMethods: 'This server doesn\'t offer a way to sign in from Vela yet. Ask its owner to enable password or code sign-in.',
     unreachableTitle: 'Can\'t reach your server', unreachableBody: 'Your server could not be reached. Reopen Vela when the connection is restored.',

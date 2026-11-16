@@ -2,7 +2,8 @@
 // inlined, viewport variants and document tokens applied, motion presets expanded,
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
 import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
-import { DEPTH, FIELD_DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
+import { perfReport } from './budget';
+import { BOUND_ROWS, DEPTH, FIELD_DEPTH, MOTION_DEPTH, FIXED_TOKENS, PAGER_DEPTH, RENDERER_VERSION, SHELL_FROM, STYLE, VOCAB, WIDGET_DEPTH } from './vocabulary';
 
 const KEY = new Map(VOCAB.map((key, i) => [key, i]));
 /** A vocabulary key's index, a flag, or a refusal: documents name only known keys. */
@@ -59,13 +60,18 @@ interface NodeExtra { states?: { when: Condition[]; style: Style; hover?: Style;
 type Level = Record<string, unknown>;
 export interface DocSlot { present: boolean; rootBase: unknown; rootSts: unknown[]; slotBase: unknown; slotSts: unknown[]; slotInner: number; slotOrder: string; holds: boolean; nodes: Level[] }
 export type RouteTree = Omit<DocSlot, 'present'> & { name: string };
-export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string; pageColor: string; inkColor: string; splashOnPaper: string; drawsStatus: boolean; wash: string; washPressed: string }
-interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number> }
+export interface SkinDocModel { id: string; fontsJson: string; keyframesCss: string; styles: Record<string, string | number>[]; shell: DocSlot; routes: RouteTree[]; liveHome: boolean; detailWide: string; detailSmall: string; detailFrom: number; detailSplit: string; detailScrim: string; detailBlur: string; detailFlat: boolean; barMask: string; panSections: string; pageColor: string; inkColor: string; splashOnPaper: string; drawsStatus: boolean; css: string; escapes: { flags: string; to: string }[] }
+interface Resolve { doc: SkinDocument; count: number; assets: string; strings: Record<string, string>; styles: Record<string, string | number>[]; index: Map<string, number>;
+  /** Hover/group-hover rules and press rules (the document's css), the next state id, and the Escape closures. */
+  group: Map<string, string[]>; hover: Map<string, string[]>; press: Map<string, string[]>; ids: number; escapes: { flags: string; to: string }[];
+  /** Converting the shell's tree (its levels all bind motion; a route's only to MOTION_DEPTH). */
+  shell: boolean }
 /** A style's position in the document's shared table (nodes name styles by index). */
 function intern(s: Record<string, string | number>, r: Resolve): number {
   const key = JSON.stringify(s);
   let at = r.index.get(key);
-  if (at === undefined) { at = r.styles.length; r.styles.push(s); r.index.set(key, at); }
+  // Its id is its rule in the document's css (baseCss), which a renderer box matches by data-st.
+  if (at === undefined) { at = r.styles.length; r.styles.push({ ...s, id: at }); r.index.set(key, at); }
   return at;
 }
 
@@ -178,7 +184,16 @@ function style(layers: (Style | undefined)[], r: Resolve, dyn?: Level, weight = 
 }
 const conds = (when: Condition[] | undefined) => (when ?? []).map(c => ({ ...key(c.test), is: c.is ?? 'set', v: c.value ?? '', not: c.not === true }));
 
-function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | undefined {
+/** Whether a node's own styles (base, variants, states, overlays; not its children) set `key`. */
+function setsRow(node: unknown, key: string): boolean {
+  if (!node || typeof node !== 'object') return false;
+  return Object.entries(node).some(([k, v]) => k === key || (k !== 'children' && k !== 'item' && setsRow(v, key)));
+}
+
+/** A pressed scale is no motion: reduced motion keeps it, as Exact's press scale (only its transition goes). */
+const pressScale = (active: Style | undefined) => (active as Record<string, string> | undefined)?.scale !== undefined ? { scale: (active as Record<string, string>).scale } as Style : {};
+
+function convert(node: Node, depth: number, r: Resolve, weight = 400, root = false): Level | undefined {
   if (++r.count > MAX_NODES) throw new Error('Skin document has too many nodes');
   if (node.type === 'use') {
     const template = r.doc.templates?.[node.template];
@@ -186,6 +201,8 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     // The use node's own style, conditions and motion wrap the template's.
     return convert({ ...template, style: { ...template.style, ...node.style }, when: [...(template.when ?? []), ...(node.when ?? [])], motion: node.motion ?? template.motion, stagger: node.stagger ?? template.stagger } as Node, depth, r, weight);
   }
+  // A colour boundary per node would cost every commit a walk of them all (renderer: RootEl).
+  if (!root && setsRow(node, 'color-scheme')) throw new Error('color-scheme is set only on a tree\'s root box (the shell\'s or a route\'s)');
   if (depth > DEPTH) throw new Error(`Skin document nests deeper than ${DEPTH}`);
   // A box (and a repeat's wrapper) is a flex column unless it says otherwise, as Contract's `column`.
   // Text, images and icons are drawn inside a box of their own (the renderer's one element): a block.
@@ -222,7 +239,7 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
     const plain = style(layers, r, undefined, weight), sIdx = intern(plain, r);
     const overlay = (o?: Style) => o ? at(o) : sIdx, calm = (o?: Style) => o ? at(still(o)) : sIdx;
     // Position is a choice the renderer binds per state (a viewport variant may move a node into flow).
-    return { cond: conds(cond), lbl: [], s: sIdx, as: s.active ? at({ ...s.hover, ...s.active }) : overlay(s.hover), as2: s.active ? at(still({ ...s.hover, ...s.active })) : calm(s.hover), pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
+    return { cond: conds(cond), lbl: [], s: sIdx, as: s.active ? at({ ...s.hover, ...s.active }) : overlay(s.hover), as2: s.active ? at({ ...still({ ...s.hover, ...s.active }), ...pressScale(s.active) }) : calm(s.hover), pos: plain.position === 'absolute' ? 1 : plain.position === 'sticky' ? 2 : 0, hs: overlay(s.hover), fs: overlay(s.focus), gs: overlay(s.groupHover), gfs: overlay(s.groupFocus), ds: overlay(n.disabledStyle),
       hs2: calm(s.hover), fs2: calm(s.focus), gs2: calm(s.groupHover), gfs2: calm(s.groupFocus) };
   };
   const overlays = { hover: node.hover, focus: node.focus, groupHover: node.groupHover, groupFocus: n.groupFocus, active: n.active };
@@ -239,6 +256,9 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
   const a = n.a11y ?? {};
   Object.assign(level, { ahid: a.hidden === true, achk: conds(a.checked), aexp: conds(a.expanded), asel: conds(a.selected), acur: conds(a.current), aprs: conds(a.pressed), ahp: a.haspopup ?? '', atitle: parts(a.title, r), brole: a.role ?? '',
     pfocus: parts(node.type === 'box' ? node.press?.focus : undefined, r), esc: n.escape ?? '', escTo: parts(n.returnFocus, r), lt: n.layoutTransition ?? '', ex: '', exs: '', ivb: '', ipaths: [], fr: 'nonzero' });
+  // Exact probes every element that binds a layout transition or an exit before every commit: a
+  // route's deep levels (cards and their parts) draw through a box without them.
+  if (!r.shell && depth > MOTION_DEPTH && (n.layoutTransition || n.exit)) throw new Error(`layoutTransition and exit are allowed within ${MOTION_DEPTH} levels of a route (this node is at level ${depth}): Exact checks every such element on every update`);
   if (n.exit) {
     const m = r.doc.motion?.[n.exit];
     if (!m) throw new Error(`Unknown motion ${n.exit}`);
@@ -320,7 +340,9 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
       if (node.press) { if (!ACTIONS.has(node.press.action)) throw new Error(`Unknown action ${node.press.action}`); level.act = node.press.action; level.arg = parts(node.press.arg, r); level.cs = node.controlStates !== false;
         // The platform focus ring stays unless the node says outline: none, or a focus overlay suppresses it (not outline: auto).
         const rings = [node.style, node.focus, (node as NodeExtra).groupFocus].map(o => (o as Record<string, string> | undefined)?.outline ?? (o as Record<string, string> | undefined)?.['outline-style']);
-        level.rn = rings.includes('none') || (!rings.includes('auto') && (!!node.focus || !!(node as NodeExtra).groupFocus)); }
+        // A group's descendants' group looks are its focus look too (a focused group lights them).
+        const groupLook = node.group === true && JSON.stringify(node.children ?? []).search(/"group(Hover|Focus)":/) >= 0;
+        level.rn = rings.includes('none') || (!rings.includes('auto') && (!!node.focus || !!(node as NodeExtra).groupFocus || groupLook)); }
       kids = node.children ?? [];
       // A row's pager: this box is the row's sideways scroller (its style sets overflow-x); pageNext/pagePrev {row.id} move it.
       if (node.pager) {
@@ -332,9 +354,90 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400): Level | u
       break;
     case 'slot': throw new Error('A slot node belongs at the top of its slot tree');
   }
+  cssStates(level, r);
+  if (n.escape) r.escapes.push({ flags: n.escape, to: (level.escTo as Part[]).every(p => p.k < 0 && !p.f) ? (level.escTo as Part[]).map(p => p.l).join('') : '' });
+  for (const f of ['hh', 'ha', 'cs', 'esc', 'escTo']) delete level[f];
   if (depth < DEPTH) level.kids = kids.map(k => convert(k, depth + 1, r, own.fontWeight)).filter(Boolean);
   else if (kids.length) throw new Error(`Skin document nests deeper than ${DEPTH}`);
+  // A pager's edge markers are its first and last children (renderer node "edge", sym "s|inset|peek"):
+  // 1 px wide, taken out of the row's spacing by a margin of -1 px less the row's gap.
+  if (node.type === 'box' && node.pager) {
+    // The gap in force is the pager's own --vg (every style rule declares its row gap there).
+    const edge = (which: string) => ({ ...convert({ type: 'box' } as Node, depth + 1, r)!, t: 'edge', sym: `${which}|${level.sym}`, ivb: 'calc(-1px - var(--vg, 0px))' });
+    level.kids = [edge('s'), ...(level.kids as Level[]), edge('e')];
+  }
   return level;
+}
+
+// Hover, press and group hover as CSS (the document's css, which vela-theme injects): a
+// pointer over the page runs no script. Each node state with a look gets an id (v; v2 under
+// reduced motion) that the renderer writes as data-vs; data-vg marks a group, data-vf a focus
+// look the renderer drew (it outranks a group's hover). Every rule is !important over the
+// node's bound (inline) rows and of zero specificity, so their order is their precedence:
+// group hover, then hover, then press, as the renderer's state order had them.
+const WASH = 'linear-gradient(var(--exact-quaternary-fill) 0 0)';
+const CSS_ROWS = STYLE.filter(([field]) => !['lineClamp', 'objectFit', 'outlineStyle', 'colorScheme'].includes(field));
+const cssValue = (field: string, v: string | number) => v === '' ? 'unset' : field === 'rotate' ? `${v}deg` : String(v);
+/** The rows where `to` differs from any of `from`, as `to` has them. */
+function declarations(to: Record<string, string | number>, from: Record<string, string | number>[]): string[] {
+  return CSS_ROWS.filter(([field]) => from.some(f => f[field] !== to[field])).map(([field, row]) => `${row}:${cssValue(field, to[field])}!important`);
+}
+/** Each distinct style's rows a renderer box does not bind (BOUND_ROWS), as one rule its
+ * data-st matches: the root's id twice and two attributes outrank Exact's element classes (which nest
+ * under #exact-root#exact-root), as the box's inline rows did; every such row is first reset to unset (scale and rotate to their identity, position to relative), as an empty bound row was written. */
+const SHEET_ROWS = CSS_ROWS.filter(([field]) => !BOUND_ROWS.includes(field));
+function baseCss(r: Resolve): string {
+  // A box always writes scale and rotate (1, 0deg: an identity transform, not none), as its bound rows did.
+  const reset = `#exact-root#exact-root [data-st][data-st]{${SHEET_ROWS.map(([field, row]) => `${row}:${field === 'scale' ? '1' : field === 'rotate' ? '0deg' : field === 'position' ? 'relative' : 'unset'}`).join(';')}}`;
+  return reset + r.styles.map((st, i) => {
+    // A box is relative unless absolute or sticky (fixed and static are not offered).
+    const rows = SHEET_ROWS.filter(([field]) => st[field] !== '' && !(field === 'position' && st[field] !== 'absolute' && st[field] !== 'sticky') && !(field === 'flexShrink' && st[field] === 1) && !(field === 'scale' && st[field] === 1) && !(field === 'rotate' && st[field] === 0) && !(field === 'order' && st[field] === 0) && !(field === 'flexGrow' && st[field] === 0));
+    // --vg: the row gap a pager's edge markers take back out (renderer node "edge").
+    const decls = [...rows.map(([field, row]) => `${row}:${cssValue(field, st[field])}`), `--vg:${st.columnGap || st.gap || '0px'}`];
+    return `#exact-root#exact-root [data-st="${i}"][data-st]{${decls.join(';')}}`;
+  }).join('');
+}
+/** The state rules, those with one body sharing it: group hover, then hover (only where a pointer
+ * hovers, so a touch leaves no hover behind), then press. */
+function statesCss(r: Resolve): string {
+  const rules = (m: Map<string, string[]>) => [...m].map(([body, sels]) => `:where(${sels.join(',')}){${body}}`).join('');
+  const hover = rules(r.group) + rules(r.hover);
+  return (hover ? `@media (hover:hover){${hover}}` : '') + rules(r.press);
+}
+function cssStates(level: Level, r: Resolve) {
+  const refs = [level.base, ...(level.sts as unknown[])] as Record<string, unknown>[];
+  const at = (i: unknown) => r.styles[i as number];
+  const pressable = level.act !== '' && level.cs === true;
+  const ground = (st: Record<string, string | number>) => st.backgroundImage === '';
+  for (const ref of refs) {
+    for (const still of [false, true]) {
+      const k = (f: string) => ref[still ? `${f}2` : f];
+      const base = at(ref.s), hover = level.hh ? at(k('hs')) : undefined, active = level.ha ? at(k('as')) : undefined;
+      // What the renderer may have drawn inline: the state, its focus look, its group's focus looks.
+      const inline = [base, ...(level.hf ? [at(k('fs'))] : []), ...(level.gf ? [at(k('gfs'))] : []), ...(level.hg ? [at(k('gs'))] : [])];
+      const group = level.hg ? declarations(at(k('gs')), [base]) : [];
+      const over = hover ? declarations(hover, inline) : [];
+      // Exact's control wash under a pressable's content when its state draws no image of its own (no bound image);
+      // an authored hover replaces it (author over platform, per state), while the pressed look below stays.
+      if (pressable && !hover && !(level.dbi as Part[]).length && ground(base)) over.push(`background-image:${WASH}!important`);
+      const held = active ? declarations(active, [...inline, ...(hover ? [hover] : [])]) : [];
+      // Exact's pressed state, as compiled controls show it: the whole control at .65 while held
+      // (ground, ring and content; a hover ground stays), whether or not it has a ground. An authored
+      // \`active\` look replaces it (author over platform, per state), as a bound opacity does.
+      // An authored hover opacity wins over it too (the same property), so a filled control that
+      // fades on hover does not dim further.
+      if (pressable && !active && !(level.dop as Part[]).length && !(hover && hover.opacity !== base.opacity)) held.push('opacity:0.65!important');
+      const id = !group.length && !over.length && !held.length ? '' : `${r.ids++}`;
+      ref[still ? 'v2' : 'v'] = id;
+      if (!id) continue;
+      const vs = `[data-vs="${id}"]`;
+      const add = (rules: Map<string, string[]>, body: string[], selector: string) => { if (body.length) (rules.get(body.join(';')) ?? rules.set(body.join(';'), []).get(body.join(';'))!).push(selector); };
+      add(r.group, group, `:where([data-vg="1"]:hover) ${vs}:not([data-vf="1"]):not(:where([data-vg="1"]:not(:hover)) *)`);
+      add(r.hover, over, `${vs}:hover`);
+      add(r.press, held, `${vs}:active`);
+    }
+    for (const f of ['as', 'as2', 'hs', 'hs2']) delete ref[f];
+  }
 }
 /** Image sources: a vocabulary template, an app asset, or a same-origin pack asset. */
 function asset(src: string, r: Resolve): string {
@@ -344,8 +447,9 @@ function asset(src: string, r: Resolve): string {
 }
 
 /** A slot's root box or holder: its style with states and viewport variants, as any node's (it follows the slot's width). */
-function boxStates(node: { style?: Style; small?: Style; wide?: Style; below?: Record<string, Style>; above?: Record<string, Style>; states?: unknown } | undefined, r: Resolve, extra?: Style): { base: unknown; sts: unknown[] } {
-  const level = convert({ type: 'box', style: { ...node?.style, ...extra }, small: node?.small, wide: node?.wide, below: node?.below, above: node?.above, states: node?.states } as Node, 1, r)!;
+function boxStates(node: { style?: Style; small?: Style; wide?: Style; below?: Record<string, Style>; above?: Record<string, Style>; states?: unknown; escape?: string; returnFocus?: string } | undefined, r: Resolve, extra?: Style, root = false): { base: unknown; sts: unknown[] } {
+  // A root's escape closes its flags too (a shell root may hold the menu's escape).
+  const level = convert({ type: 'box', style: { ...node?.style, ...extra }, small: node?.small, wide: node?.wide, below: node?.below, above: node?.above, states: node?.states, ...(root ? { escape: (node as NodeExtra | undefined)?.escape, returnFocus: (node as NodeExtra | undefined)?.returnFocus } : {}) } as Node, 1, r, 400, root)!;
   return { base: level.base, sts: level.sts as unknown[] };
 }
 function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchField', from = 1): DocSlot {
@@ -362,7 +466,7 @@ function slot(root: Node | undefined, r: Resolve, holder: 'children' | 'searchFi
   const holderAt = at >= 0 ? at : holder === 'children' && from === SHELL_FROM ? kids.length : -1;
   const nodes = [...kids, ...(at < 0 && holderAt >= 0 ? [undefined] : [])].flatMap((k, i) => i === holderAt ? [{ ...convert({ type: 'box' } as Node, from, r)!, t: 'holder' }] : !k || k.type === 'slot' ? [] : [convert(ordered(k, i), from, r)!]);
   // The slot box's own flex order rides in its style (the box takes every row).
-  const rootStates = boxStates(root as Parameters<typeof boxStates>[0], r);
+  const rootStates = boxStates(root as Parameters<typeof boxStates>[0], r, undefined, true);
   const holderStates = boxStates(holderNode, r, { order: String(at < 0 ? kids.length : at) } as Style);
   return { present: true, rootBase: rootStates.base, rootSts: rootStates.sts, slotBase: holderStates.base, slotSts: holderStates.sts, slotInner: intern(style([holderNode?.inner], r), r), slotOrder: String(at < 0 ? kids.length : at), holds: holderAt >= 0, nodes };
 }
@@ -377,14 +481,24 @@ function detailFrame(doc: SkinDocument, r: Resolve): { detailScrim: string; deta
 }
 
 export function skinDoc(doc: SkinDocument, width: number, origin: string, locale = 'en'): SkinDocModel {
+  const model = resolveDoc(doc, width, origin, locale);
+  // Over a performance limit (src/skin/budget.ts), the document is refused, as any invalid one.
+  const over = perfReport(model).findings.filter(f => f.level === 'error');
+  if (over.length) throw new Error(`Skin document over its performance budget: ${over.map(f => `${f.route}: ${f.message}`).join('; ')}`);
+  return model;
+}
+
+function resolveDoc(doc: SkinDocument, width: number, origin: string, locale: string): SkinDocModel {
   if (!doc || doc.schema !== 1 || typeof doc.id !== 'string' || !/^[a-z][a-z0-9-]{0,31}$/.test(doc.id)) throw new Error('Not a schema 1 skin document');
   if (JSON.stringify(doc).length > 512 * 1024) throw new Error('Skin document over 512 KiB');
   if (!Number.isInteger(doc.renderer) || doc.renderer < 1 || doc.renderer > RENDERER_VERSION) throw new Error(`Skin document needs renderer ${doc.renderer}; this client has ${RENDERER_VERSION}`);
   docId = doc.id; docKeyframes = new Set();
   const kfCss = keyframesCss(doc);
   const strings = { ...doc.strings?.en, ...doc.strings?.[locale.split('-')[0]], ...doc.strings?.[locale] };
-  const r: Resolve = { doc, count: 0, assets: origin, strings, styles: [], index: new Map() };
+  const r: Resolve = { doc, count: 0, assets: origin, strings, styles: [], index: new Map(), group: new Map(), hover: new Map(), press: new Map(), ids: 0, escapes: [], shell: false };
+  r.shell = true;
   const shell = slot(doc.slots.shell, r, 'children', SHELL_FROM);
+  r.shell = false;
   // A route tree is a slot without `present` (a route is drawn only when the document has it).
   // Home is a route like the others (its holder is the foundation's search field): one renderer call site draws them all.
   const tree = (name: string, root: Node | undefined, holder: 'children' | 'searchField') => { const { present, ...rest } = slot(root, r, holder); return present ? [{ name, ...rest }] : []; };
@@ -405,7 +519,6 @@ export function skinDoc(doc: SkinDocument, width: number, origin: string, locale
     barMask: tri(doc.traits?.barMask), panSections: tri(doc.traits?.panSections), splashOnPaper: tri(doc.traits?.splashOnPaper),
     pageColor: doc.traits?.page ? style([{ color: doc.traits.page } as Style], r)['color'] as string : '',
     inkColor: doc.traits?.ink ? style([{ color: doc.traits.ink } as Style], r)['color'] as string : '', drawsStatus: doc.status === true,
-    // Exact's control hover wash, carried as data (a literal would be checked as an app token).
-    wash: 'linear-gradient(var(--exact-quaternary-fill) 0 0)',
-    washPressed: 'linear-gradient(var(--exact-tertiary-fill) 0 0)' };
+    // Hover and group hover only where a pointer hovers (a touch leaves no hover behind), then press.
+    css: baseCss(r) + statesCss(r), escapes: [...r.escapes].reverse() };
 }

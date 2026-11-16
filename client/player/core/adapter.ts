@@ -5,6 +5,7 @@ import type { OriginalBackend, OriginalRuntimeOptions, UniversalReadout } from '
 import type { OriginalMedia } from '../universal/source';
 import {acquireCoreVideo,prewarmCoreVideo} from './render/warmup';
 import {abortable} from './async';
+import {mediaHTTPStatus} from './source/errors';
 import { PlaybackCore, type CoreState } from './runtime';
 import type { AudioTrack } from './types';
 import { canonicalAudioCodec } from '../universal/audio/packages';
@@ -16,6 +17,7 @@ export async function warmup(options:Pick<OriginalRuntimeOptions,'assets'|'signa
 export class UniversalRuntime implements OriginalBackend {
   readonly implementation='vela-core' as const;
   readonly retainsSource=true;
+  get startupPending(){return this.core.startupPending;}
   get supportsLocalAudioSwitch(){return !this.media?.hls;}
   get supportsSubtitles(){return !!this.options.assets.subtitleBaseURL;}
   get byteReader(){return this.core.byteReader;}
@@ -49,7 +51,7 @@ export class UniversalRuntime implements OriginalBackend {
     };
     this.core=new PlaybackCore({present:(frame,position)=>presenter.present(frame,position),dispose:()=>resources.release()},audio=>createCoreAudioOutput({...audio,libraryBaseURL:options.assets.baseURL,
       assetKey:options.assets.assetKey,forceSoftware:options.retry?.audio}),state=>this.publish(state),(error,position)=>{
-      if(!this.disposed)options.onFailure(error.message,position/1e6);
+      if(!this.disposed)options.onFailure(error.message,position/1e6,{httpStatus:mediaHTTPStatus(error)});
     },callbacks=>new VideoDecoderRouter(presentation,packages,callbacks,options.retry?.video),options.mediaRequests);
     this.core.setVolume(this.volume,this.muted);
     options.signal.addEventListener('abort',this.abort,{once:true});
