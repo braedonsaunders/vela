@@ -6,7 +6,12 @@ export default function Layout() {
   return (
     <VelaProvider>
       <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#090b0e' }, animation: 'fade' }} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#090b0e' }, animation: 'fade' }}>
+        <Stack.Screen
+          name="title/[id]"
+          options={{ presentation: 'transparentModal', contentStyle: { backgroundColor: 'transparent' } }}
+        />
+      </Stack>
     </VelaProvider>
   );
 }

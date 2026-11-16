@@ -30,6 +30,6 @@ export function DocumentScreen({ route, entry, page }: Props) {
   // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md, "Search").
   const search = route === 'home' && host.env.query !== '' ? vela.doc?.routes.search : undefined;
   const content = <SkinRoute host={host} node={tree} after={search} />;
-  const shell = vela.doc?.shell;
+  const shell = route === 'title' ? undefined : vela.doc?.shell;
   return shell ? <SkinRoot host={{ ...host, children: content }} node={shell} /> : content;
 }
