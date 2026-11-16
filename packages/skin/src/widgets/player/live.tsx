@@ -38,9 +38,7 @@ interface PanelProps {
 }
 
 export function LivePanel({ snapshot, watch, send }: PanelProps) {
-  return (
-    <LiveControls live={snapshot?.live ?? null} onGoLive={() => send({ type: 'catchUp' })} onZap={watch.zap} />
-  );
+  return <LiveControls live={snapshot?.live ?? null} onGoLive={() => send({ type: 'catchUp' })} onZap={watch.zap} />;
 }
 
 /** The dialled channel between its neighbours, while flicking. */
