@@ -1,8 +1,11 @@
 # Android toolchain for this checkout. Source from the repository root: `source tools/android-env.sh`.
 #
-# JDK 17 comes from Homebrew (openjdk@17). The SDK, emulator images and AVDs live on the scratch
-# drive, never in ~/Library: ~/Library/Android belongs to another project. Gradle's home and every
-# project's build directory are per worktree, under ~/.scratch/vela-build/<worktree>/.
+# JDK 17: an exported JAVA_HOME, else Homebrew's openjdk@17 on macOS or the distribution's on Linux.
+# The SDK, emulator images and AVDs live on the scratch drive (ANDROID_HOME and ANDROID_AVD_HOME may
+# be exported instead), never in ~/Library: ~/Library/Android belongs to another project. Gradle's home
+# and every project's build directory are per worktree, under ~/.scratch/vela-build/<worktree>/.
+# One ABI is built: the host's (arm64-v8a on Apple silicon, x86_64 for a KVM emulator on Linux), or
+# VELA_ANDROID_ABI.
 
 vela_android_root="$(git rev-parse --show-toplevel)"
 vela_android_worktree="$(basename "$vela_android_root")"
@@ -11,12 +14,24 @@ if [ "$vela_android_worktree" = "vela" ]; then
 fi
 vela_android_build="$HOME/.scratch/vela-build/$vela_android_worktree"
 
-export JAVA_HOME="/opt/homebrew/opt/openjdk@17"
-export ANDROID_HOME="$HOME/.scratch/android-sdk"
+if [ -z "${JAVA_HOME:-}" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
+  if [ "$(uname -s)" = Darwin ]; then
+    JAVA_HOME="/opt/homebrew/opt/openjdk@17"
+  else
+    JAVA_HOME="/usr/lib/jvm/java-17-openjdk-$(dpkg --print-architecture 2>/dev/null || echo amd64)"
+  fi
+fi
+export JAVA_HOME
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/.scratch/android-sdk}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
-export ANDROID_AVD_HOME="$HOME/.scratch/android-avd"
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.scratch/android-avd}"
+case "$(uname -m)" in
+  arm64 | aarch64) vela_android_abi="${VELA_ANDROID_ABI:-arm64-v8a}" ;;
+  *) vela_android_abi="${VELA_ANDROID_ABI:-x86_64}" ;;
+esac
 export GRADLE_USER_HOME="$vela_android_build/gradle-home"
-export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 
 # Small daemons on the shared 24 GB machine, one ABI, and build output on the scratch drive.
 mkdir -p "$GRADLE_USER_HOME/init.d" "$ANDROID_AVD_HOME"
@@ -26,7 +41,7 @@ kotlin.daemon.jvmargs=-Xmx1g
 org.gradle.workers.max=4
 org.gradle.parallel=true
 org.gradle.caching=true
-reactNativeArchitectures=arm64-v8a
+reactNativeArchitectures=$vela_android_abi
 EOF
 cat > "$GRADLE_USER_HOME/init.d/build-dirs.gradle" <<EOF
 // The app's and Vela's own modules' build output goes to the scratch drive. Root projects keep
@@ -35,9 +50,10 @@ cat > "$GRADLE_USER_HOME/init.d/build-dirs.gradle" <<EOF
 // Expo's inline-module generator refuses output outside one.
 allprojects {
   if (path != ":" && !projectDir.path.contains("/node_modules/")) {
-    layout.buildDirectory = new File("$vela_android_build/gradle-build/android/" + rootProject.name + path.replace(":", "/"))
+    def key = rootProject.name + path.replace(":", "/")
+    layout.buildDirectory = new File("$vela_android_build/gradle-build/android/" + key)
   }
 }
 EOF
 
-unset vela_android_root vela_android_worktree vela_android_build
+unset vela_android_root vela_android_worktree vela_android_build vela_android_abi

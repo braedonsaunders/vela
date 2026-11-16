@@ -22,7 +22,8 @@ while [ $# -gt 0 ]; do
     --debug) variant=Debug ;;
     --device) device=$2; shift ;;
     --open) open=$2; shift ;;
-    *) echo "usage: tools/android-tv.sh [--prebuild] [--phone] [--debug] [--device <serial>] [--open <vela://route>]" >&2
+    *) echo "usage: tools/android-tv.sh [--prebuild] [--phone] [--debug] [--device <serial>]" \
+         "[--open <vela://route>]" >&2
        exit 2 ;;
   esac
   shift

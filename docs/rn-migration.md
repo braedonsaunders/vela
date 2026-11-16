@@ -376,6 +376,58 @@ Kotlin, the same contract, libmpv from mpv-android's build on a `SurfaceView`,
 `hwdec=mediacodec`. Android TV uses the same module; display mode matching through
 `Surface.setFrameRate` and `Display.Mode`.
 
+#### State and handoff (2026-11-16, thread `thr_xazq34wx52`)
+
+Moved off the shared Mac: the emulator cannot run there beside the Apple work (swap full, the guest
+swapped out, ANRs on input). It continues on a Linux machine with KVM.
+
+- **libmpv is LGPL.** The Maven AAR `dev.jdtech.mpv:libmpv` is GPLv3 (FFmpeg `--enable-gpl`, mpv's GPL
+  default), so it is not used. `modules/vela-player/android/libmpv/build.sh` builds libmpv from
+  libmpv-android's scripts at the revision in `libmpv/pin.sh` (mpv 0.42.0, FFmpeg 9.0.2, libplacebo,
+  libass, dav1d, mbedTLS, libcurl) with `-Dgpl=false` and FFmpeg `--enable-version3` only, on React
+  Native's NDK (27.1, one libc++). It refuses a result whose `config.h` is not LGPLv3 / `HAVE_GPL 0`.
+  Output: `~/.scratch/vela-build/libmpv/<revision>-lgpl/{include,jniLibs/<abi>}`, which the module's
+  Gradle build links (or `-PvelaLibmpvDir=`). Distribution must ship the LGPL notices and offer the
+  sources of this build (shared libraries, so relinking is by replacing them).
+- **The module** (`modules/vela-player/android`): its own JNI (`src/main/cpp`, one mpv handle per view,
+  events on a thread of their own) and Kotlin classes mirroring the Apple ones: `PlayerController`
+  (plans, commands, track selection by source stream index, seek generations), `PreviewPlayback`
+  (`preview`/`active`: muted, small caches, destroyed when inactive, off screen, expired or under Data
+  Saver), `PlayerReport` (the same snapshot and observation shapes as `ios/PlayerReport.swift`),
+  `PlayerCapabilities` (hardware decoders from `MediaCodecList`), `DisplayMatching`
+  (`Surface.setFrameRate`, `preferredDisplayModeId`; SDR output only), `MediaAccess`, `TrustStore`
+  (the device's CAs as one PEM file: mbedTLS cannot read Android's store). It compiles and is packaged;
+  it has **not played a file yet**.
+- **Redirects with credentials** (open question above): mpv 0.42 carries http(s) over libcurl, not
+  FFmpeg. While media access headers apply to a URL the view sets `curl-max-redirects=0` (and FFmpeg's
+  `max_redirects=0`), so a credentialed request never follows any redirect. Ether's broker URLs carry no
+  headers and keep redirects. Not yet exercised against a redirecting server.
+- **Milestone 1 (renderer on Android TV), partly verified** on the emulator (Android 14 TV image): the
+  sign-in document draws with its fonts and gradients, and D-pad focus moves into its fields with the
+  document's focus look. Not yet driven: signing in, home, title, rows and cards by D-pad.
+- **Milestone 2 (lab HEVC MKV with media auth)**: not started on a device. A suitable lab title is
+  Se7en (HEVC Main10 HDR10, 1920x800, 7.9 GB original, `EXPO_PUBLIC_VELA_TITLE=Se7en`); the lab's other
+  originals are 4K.
+- **Blocker in the app shell:** `apps/vela/src/vela.tsx` sends every signed-out route but `/sign-in` and
+  `/connect` to sign-in, which includes the spike route `/player` (it signs in by itself), so
+  `vela://player` cannot open on any native platform until it is let through.
+
+Steps on a new machine (Linux x86_64 with KVM, or a Mac):
+
+1. JDK 17 (`openjdk-17-jdk`, or Homebrew `openjdk@17`). Android command-line tools unpacked to
+   `$ANDROID_HOME/cmdline-tools/latest` (default `~/.scratch/android-sdk`), then
+   `sdkmanager platform-tools emulator "platforms;android-37.0" "build-tools;37.0.0"
+   "ndk;27.1.12297006" "cmake;3.22.1"` and a TV image (`system-images;android-34;android-tv;x86_64` on
+   Linux, `arm64-v8a` on Apple silicon); `avdmanager create avd -n vela-tv -d tv_1080p -k <image>`.
+2. `source tools/android-env.sh` (per-worktree Gradle home, the host's ABI, build output on scratch).
+3. libmpv: on Linux install autoconf, automake, libtool, pkg-config, meson, ninja, nasm, gperf, python3
+   (venv); on a Mac Homebrew's automake, autoconf, gnu-sed, meson, ninja, wget. Then
+   `modules/vela-player/android/libmpv/build.sh x86_64` (or `arm64`); about 30 minutes, clean each time.
+4. `bun install`, the mock server (`bun mock-server/main.ts`, `adb reverse tcp:7777 tcp:7777`), then
+   `tools/android-tv.sh --prebuild --open vela://` (Release, JS embedded; `--debug` for Metro with
+   `--clear`). For the lab spike, `apps/vela/.env.local` as in `app/(spike)/player.tsx` (never committed)
+   and `--open vela://player`.
+
 ### Web implementation
 
 The web keeps the Vela-owned WebCodecs/WebGPU core (`client/player/core`) behind the same
