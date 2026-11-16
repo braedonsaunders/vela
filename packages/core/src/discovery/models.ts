@@ -11,12 +11,12 @@ function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, hei
 }
 
 /** Poster, backdrop, logo and accent for one set of artwork, sized from the display's art width. */
-function pictures(artwork: ArtworkRef[], images: Images | undefined, artWidth: number) {
+function pictures(artwork: ArtworkRef[], images: Images | undefined, artWidth: number, backdropWidth = artWidth) {
   const posterWidth = Math.min(600, Math.ceil(artWidth / 6));
   const logoWidth = Math.min(800, Math.ceil(artWidth / 3));
   return {
     poster: art(artwork, 'poster', posterWidth, Math.ceil(posterWidth * 1.5), images),
-    backdrop: art(artwork, 'backdrop', artWidth, Math.ceil(artWidth * 9 / 16), images),
+    backdrop: art(artwork, 'backdrop', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images),
     logo: art(artwork, 'logo', logoWidth, Math.ceil(logoWidth / 2), images),
     accent: artwork.find(a => a.color)?.color ?? '',
   };
@@ -24,7 +24,7 @@ function pictures(artwork: ArtworkRef[], images: Images | undefined, artWidth: n
 
 const year = (value: number) => number(value, { useGrouping: false });
 
-export function card(title: Title, receipt = '', images?: Images, artWidth = 2560): Card {
+export function card(title: Title, receipt = '', images?: Images, artWidth = 2560, backdropWidth = artWidth): Card {
   const duration = title.durationSeconds;
   const position = title.watch?.positionSeconds ?? 0;
   const durationLabel = duration ? minute(Math.round(duration / 60)) : '';
@@ -49,18 +49,26 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '',
     episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
     facts: [yearLabel, title.rating ?? '', durationLabel].filter(Boolean).join(' · '),
-    ...pictures(title.artwork, images, artWidth),
+    ...pictures(title.artwork, images, artWidth, backdropWidth),
     receipt,
   };
 }
 
+/** A row card's backdrop is never wider than this many pixels, whatever the display: at the
+ * display's full art width (3840 on a 4K TV), decoded once per card, they exhausted the Apple TV's
+ * memory. Heroes and title pages keep the full width. */
+const CARD_BACKDROP_WIDTH = 1280;
+
 export function entry(item: RowEntry, images?: Images, artWidth = 2560): Card {
-  if (item.kind === 'title') return card(item.title, item.receiptToken, images, artWidth);
+  const backdropWidth = Math.min(artWidth, CARD_BACKDROP_WIDTH);
+  if (item.kind === 'title') return card(item.title, item.receiptToken, images, artWidth, backdropWidth);
   if (item.kind === 'channel') {
     const { id, name, rating, artwork } = item.channel;
-    return plainCard(id, item.kind, name, rating ?? '', pictures(artwork, images, artWidth), item.receiptToken);
+    const art = pictures(artwork, images, artWidth, backdropWidth);
+    return plainCard(id, item.kind, name, rating ?? '', art, item.receiptToken);
   }
-  return plainCard(item.targetId, item.kind, item.name, '', pictures(item.artwork, images, artWidth), item.receiptToken);
+  const art = pictures(item.artwork, images, artWidth, backdropWidth);
+  return plainCard(item.targetId, item.kind, item.name, '', art, item.receiptToken);
 }
 
 /** A card for an entry that is not a title: a name and artwork, no facts. */
