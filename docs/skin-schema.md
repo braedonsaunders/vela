@@ -145,9 +145,12 @@ skins, merged into one set. The bar is a pixel-identical match, so each is taken
 Renderer 3 is the live home above; a document using anything here names `renderer: 4`.
 
 **Node features**
-- `states: [{ when: Condition[], style: Style, hover?, focus?, groupHover? }]`: the first
+- `states: [{ when: Condition[], style: Style, hover?, focus?, groupHover?, groupFocus? }]`: the first
   state whose conditions hold replaces `style` (viewport variants still apply over it), on the same element,
-  so transitions run (dot widths, padding while searching, on/off pills).
+  so transitions run (dot widths, padding while searching, on/off pills). A state's overlays replace the
+  node's own while that state holds (a state without one keeps the node's), and an overlay written only
+  inside states still counts: a focus look in any state makes the node keyboard- and TV-focusable with
+  that look, and suppresses the platform ring as a node-level `focus` does (unless it says `outline: auto`).
 - `layoutTransition: "300ms ease-out"`, `exit: "<motion>"`. `sharedElement` is accepted and ignored for
   now: Exact runs every commit inside a view transition while any element binds one, and a
   press during a transition landed on <html> (every click lost on a page that used it).
