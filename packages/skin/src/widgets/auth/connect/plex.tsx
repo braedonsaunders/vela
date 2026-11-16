@@ -44,7 +44,7 @@ export function PlexStep({
           {link?.code ? <CodeTiles code={link.code} testID="plex-code" /> : null}
           {link?.linkUrl ? <LinkLine url={link.linkUrl} /> : null}
           <Waiting>{msg('connect.plex.waiting')}</Waiting>
-          <Pill label={msg('ui.cancel')} height={46} stretch={false} onPress={onCancel} />
+          <Pill label={msg('ui.cancel')} height={46} align="center" onPress={onCancel} />
         </View>
       ) : link?.state === 'linked' ? (
         <View style={{ gap: 8 }}>
