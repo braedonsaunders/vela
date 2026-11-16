@@ -244,7 +244,7 @@ export interface Appearance {
   /** Owner override: the default replaces viewers' own picks while true. */
   force: boolean;
   packs: SkinPack[];
-  /** Installed skin documents (protocol/v0/skin.ts), drawn by the client's renderer. */
+  /** Installed skin documents (packages/protocol/skin.ts), drawn by the client's renderer. */
   documents?: SkinDocumentRef[];
 }
 /** Where a skin document is served (same-origin, under /vela/v0/appearance/), with its picker card. */

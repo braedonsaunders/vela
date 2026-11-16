@@ -1,4 +1,4 @@
-// bun client/player/universal/audio/install-packages.ts <served-decoder-directory>
+// bun modules/vela-player/web/engine/universal/audio/install-packages.ts <served-decoder-directory>
 // Installs binaries WITH corresponding source and licenses, never into app bundle.
 import { mkdir, copyFile } from 'node:fs/promises';
 import { resolve } from 'node:path';

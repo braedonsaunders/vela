@@ -1,4 +1,4 @@
-// EMSDK=/scratch/pinned-emsdk bun client/player/universal/audio/ffmpeg/build.ts <distribution-dir>
+// EMSDK=/scratch/pinned-emsdk bun modules/vela-player/web/engine/universal/audio/ffmpeg/build.ts <distribution-dir>
 import { mkdir, copyFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';

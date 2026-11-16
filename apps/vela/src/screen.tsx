@@ -31,7 +31,7 @@ export function DocumentScreen({ route, entry, page, sharedShell = false }: Prop
   }
   const tree = vela.doc?.routes[route];
   if (!host || !tree) return <View style={{ flex: 1 }} />;
-  // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md, "Search").
+  // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md).
   const search = route === 'home' && host.env.query !== '' ? vela.doc?.routes.search : undefined;
   const content = <SkinRoute host={host} node={tree} after={search} />;
   const shell = route === 'title' || sharedShell ? undefined : vela.doc?.shell;

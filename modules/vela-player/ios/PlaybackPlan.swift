@@ -1,4 +1,4 @@
-// The parts of a Vela v0 playback plan (protocol/v0/types.ts, PlaybackPlan) the player reads.
+// The parts of a Vela v0 playback plan (packages/protocol/types.ts, PlaybackPlan) the player reads.
 import Foundation
 
 struct VelaPlan: Decodable {

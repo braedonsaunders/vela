@@ -1,4 +1,4 @@
-// VelaPlayerView and VelaPlayer on the web: Vela's WebCodecs/WebGPU core (client/player), mounted
+// VelaPlayerView and VelaPlayer on the web: Vela's WebCodecs/WebGPU core (web/engine), mounted
 // into the DOM node react-native-web draws for a View. The contract is packages/player-api; the
 // browser host (createWebPlayerHost) owns the engine, and a trailer preview is a plain muted video
 // (web/preview.ts). This file only binds them to React. Media credentials reach them through

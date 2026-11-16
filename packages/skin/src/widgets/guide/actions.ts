@@ -1,4 +1,4 @@
-// The live home's document actions (docs/skin-schema.md, "Live home"), run against the app's
+// The live home's document actions (docs/skin-schema.md), run against the app's
 // LiveController. The host's dispatch hands them here and keeps the rest.
 import type { Action } from '../../../../protocol/skin';
 import type { LiveController } from './controller';

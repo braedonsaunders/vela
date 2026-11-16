@@ -45,7 +45,7 @@ Keep generated capture/export/payload output outside source control.
 ### Preserve the export graph
 
 The archive root is Expo's generated `index.html`, with no HTML replacement loader
-or post-export JavaScript/URL string rewriting. The migration lead verified:
+or post-export JavaScript/URL string rewriting. A correct export has:
 
 - `index.html` and `metadata.json` at export root;
 - `_expo/static/js/web/` chunks named `entry`, `__common`, `_layout`, `index`,
@@ -57,12 +57,11 @@ do not invent an Exact-style `/vela/app/V/` asset subtree. Preserve every chunk,
 platform manifest, font, image, notice and linked resource, including chunks not
 requested during an initial Home visit. Fixed-name `metadata.json` revalidates.
 
-SPA mode does not emit a route manifest. The app-owned exporter landed in
-`99b47e9`: run `bun apps/vela/scripts/routes.ts [base]` from the captured repository
-root; base defaults to `/vela`. Packaging writes its stdout as `routes.json` at
-the archive root. The initial spike output contained `/vela` and `/vela/title/:id`; the current
-route tree also has auth, watch, library, collection and live screens. Generate
-from the captured tree rather than copying that old two-route observation. It derives routes from the expo-router app directory: index
+SPA mode does not emit a route manifest. The app's exporter provides one: run
+`bun apps/vela/scripts/routes.ts [base]` from the captured repository root; base
+defaults to `/vela`. Packaging writes its stdout as `routes.json` at the archive
+root. Generate it from the captured tree rather than copying an older list. It
+derives routes from the expo-router app directory: index
 maps to its directory, `[x]` maps to `:x`, route groups disappear, and `_layout`
 and `+` files are skipped. The table grows as real screens land; do not invent
 routes that are absent from the captured revision.
@@ -75,8 +74,7 @@ canonical `/vela` behavior against the real export before installer qualificatio
 release is retrievable. HTML, routes, PWA/worker and mutable metadata revalidate.
 The installer must keep previously verified hashed assets available to existing
 tabs through an update, without overwriting new files or copying arbitrary old
-HTML. Agree the exact retained paths and filename rules after inspecting Expo's
-output. Exercise an old tab requesting a previously unfetched chunk after update.
+HTML. Exercise an old tab requesting a previously unfetched chunk after update.
 
 ### Player assets and skins
 
@@ -84,8 +82,8 @@ Metro owns the web player JavaScript and view through `VelaPlayerView.web.tsx`.
 Do not package a second browser runtime.js or resurrect an Exact native host.
 Decoder WASM packages, worklets, subtitle resources and other non-Metro assets are
 a separate player-build output under `player/<digest>/` within the export; the
-player loads them relative to the configured `/vela` base. Playback owns that
-builder and dependency/source/licence inventory. The agreed static payload digest
+player loads them relative to the configured `/vela` base. The player asset builder owns
+the dependency/source/licence inventory. The static payload digest
 is the full lowercase SHA-256 of the UTF-8 concatenation of sorted records:
 
 ```
@@ -107,8 +105,8 @@ JavaScript remains in Metro. There is no runtime.js or diagnostic index. The
 manifest retains full source revision, `sourceDirty:false`, exact dependency pins,
 corresponding source archives, licences and the complete safe-relative file list.
 Its own bytes are covered by the signed full release inventory even though the
-aggregate excludes it. Playback confirmed the filename
-`PLAYER-ASSETS-MANIFEST.json` and fields `schemaVersion:1`, `digest`,
+aggregate excludes it. The manifest is named
+`PLAYER-ASSETS-MANIFEST.json` and has fields `schemaVersion:1`, `digest`,
 `sourceRevision`, `sourceDirty`, `dependencies` and `files`. The builder is now
 `bun modules/vela-player/web/assets/export-assets.ts --libraries=<prepared-libraries> --out=<staging>`.
 It writes `<staging>/PLAYER-ASSETS-MANIFEST.json` and prints the payload digest.

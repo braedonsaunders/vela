@@ -1,5 +1,5 @@
 // A server's media access (VelaPlayer.setMediaAccess): request headers scoped to one origin and path
-// prefix, as client/player/media-auth.ts applies them. Held in native memory only; never logged or
+// prefix, as modules/vela-player/web/engine/media-auth.ts applies them. Held in native memory only; never logged or
 // reported.
 package app.ether.vela.player
 

@@ -33,7 +33,7 @@ mkdir -p "$scratch/tmp"
 # Metro keeps its cache under TMPDIR: one per worktree, so a bundle never resolves another worktree's files.
 export TMPDIR="$scratch/tmp/"
 
-# One heavy native tool at a time on this Mac (simulator, xcodebuild, Gradle, emulator): the shared native lock.
+# One heavy native tool at a time (simulator, xcodebuild, Gradle, emulator), through a lock file when its directory exists.
 native_lock="$HOME/.bb/thread-storage/vela-orch/native.lock"
 locked() {
   if [ -d "$(dirname "$native_lock")" ]; then

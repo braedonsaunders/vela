@@ -1,7 +1,7 @@
 /**
  * A skin document's performance report, read off the React renderer's resolved trees
- * (packages/skin/src/resolve.ts). The budgets and their reasons are client/src/skin/budget.ts's
- * (docs/performance.md, "Skin documents"). Counts are upper bounds: every node counts, as if
+ * (packages/skin/src/resolve.ts). The budgets and their reasons are
+ * packages/skin/src/resolve/budget.ts's. Counts are upper bounds: every node counts, as if
  * each `when` held, and a repeat's item counts once.
  */
 import type { CssT, Layer, ResolvedDocument, RNode } from '../packages/skin/src/resolve';

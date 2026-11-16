@@ -1,7 +1,6 @@
-// The Vela store: the app's data state and the actions that change it, framework-free. It
-// replaces the Exact answer dispatcher (client/src/sources.ts): what each source did now lives in
-// a slice (auth, servers, home, catalogue, search, playback, live, appearance, receipts,
-// previews), and React reads the state through `@vela/core/react`.
+// The Vela store: the app's data state and the actions that change it, framework-free. What
+// each source does lives in a slice (auth, servers, home, catalogue, search, playback, live,
+// appearance, receipts, previews), and React reads the state through `@vela/core/react`.
 import type { AppearanceModel } from '../appearance';
 import type { GuideModel } from '../live/guide';
 import type { CollectionModel, Destination, DetailModel, LibraryModel, Row } from '../models';

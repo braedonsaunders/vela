@@ -1,8 +1,7 @@
 // What the player chrome shows, from the server's plan and the view's latest snapshot: the
 // clock, the timeline, the choosable tracks, qualities, speeds and chapters, and the playback
 // facts for the info card. Pure: no React, no clock. A value the engine has not reported stays
-// empty rather than estimated. (The compiled chrome read the same projection from
-// client/player/presentation.ts.)
+// empty rather than estimated.
 import { msg, number, second } from '@vela/core';
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../modules/vela-player/web/engine/video-info';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';

@@ -125,7 +125,7 @@ export interface MotionPreset {
 
 export interface SkinFont { family: string; /** weight: a number, or a range "300 700" for a variable face. */ files: { url: string; weight: number | string; style: 'normal' | 'italic' }[]; sizeAdjust?: number }
 
-/** The keys of a document's `ui` block (client/src/skin/ui-defaults.ts holds Cinematic's values). */
+/** The keys of a document's `ui` block (packages/skin/src/resolve/ui-defaults.ts holds Cinematic's values). */
 export type UiName = 'page' | 'raised' | 'ink' | 'inkSecondary' | 'inkQuiet' | 'inkInverse' | 'inkHover' | 'accent' | 'onAccent'
   | 'control' | 'controlHover' | 'glass' | 'glassEdge' | 'glassEdgeStrong' | 'popover' | 'scrim' | 'track' | 'trackStrong'
   | 'focusHalo' | 'shadow' | 'skeleton' | 'skeletonLight' | 'alert' | 'live' | 'font' | 'fontDisplay'
@@ -156,7 +156,7 @@ export interface SkinDocument {
   /** A tree per route the document draws whole (the route view); a route left out is the Vela base's.
    *  `search` is drawn in home's view, after home's nodes, while a query is open. */
   routes?: Partial<Record<'home' | 'search' | 'title' | 'collection' | 'library' | 'live' | 'watch' | 'auth', Node>>;
-  /** `home: true` makes home a live surface: the guide's listings, clock and one preview tile run there (docs/skin-schema.md, "Live home"). */
+  /** `home: true` makes home a live surface: the guide's listings, clock and one preview tile run there (docs/skin-schema.md). */
   live?: { home?: boolean };
   /** Detail route presentation per viewport class. */
   /** The title page's presentation below and from `from` px (default 640), and the home pane width in px it splits beside it from there. */

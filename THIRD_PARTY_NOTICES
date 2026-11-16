@@ -50,4 +50,46 @@ Optional JASSUB 1.8.8 assets are independently loaded. The wrapper is MIT;
 libass is ISC, FriBidi LGPL-2.1-or-later, FreeType FTL, HarfBuzz MIT/NTP,
 and Brotli MIT. Noto Sans fallback fonts use SIL OFL 1.1. The verified subtitle
 asset distribution includes JASSUB-COPYRIGHT.txt, font licences, exact matching
-source archives/build scripts and SOURCE-OFFER.txt; see docs/subtitles.md.
+source archives/build scripts and SOURCE-OFFER.txt. The pinned revisions, hashes
+and source URLs are in modules/vela-player/web/engine/universal/subtitles/assets.json.
+
+Native playback (libmpv)
+------------------------
+Apple platforms link libmpv, FFmpeg, libass and their dependencies from MPVKit 1.0.0's
+LGPL product (https://github.com/mpvkit/MPVKit), never MPVKit-GPL. The xcframeworks are
+fetched and verified by SHA-256 (modules/vela-player/ios/mpvkit-1.0.0.txt); they are not
+in this repository.
+Android builds libmpv with -Dgpl=false and FFmpeg without --enable-gpl (LGPLv3 because
+of --enable-version3) from libmpv-android, pinned in modules/vela-player/android/libmpv/pin.sh.
+The Windows host loads libmpv-2.dll at runtime; it is not in this repository and must
+ship with its licence and corresponding source.
+
+Apple TV media framework (FFmpeg)
+---------------------------------
+native/apple/media/build-ffmpeg.sh builds VelaMedia.framework from FFmpeg 7.1.2
+(LGPL-2.1-or-later, no GPL or nonfree components) as a separately linked, replaceable
+library, and keeps the pinned source archive and licence beside it.
+
+Web audio decoder (FFmpeg WebAssembly)
+--------------------------------------
+modules/vela-player/web/engine/universal/audio/ffmpeg builds an LGPL-2.1-or-later FFmpeg
+WebAssembly decoder; its distribution carries the FFmpeg and bridge sources, the LGPL text
+and VELA-AUDIO-SOURCE.txt (see the README in that directory).
+
+Fonts
+-----
+Bundled fonts are under the SIL Open Font License 1.1 unless noted:
+- apps/vela/assets/fonts: Instrument Serif (licence in
+  packages/protocol/fixtures/skins/index/licences), Fredoka and Pixelify Sans (licences in
+  packages/protocol/fixtures/skins/mochi/licences).
+- Built-in skins under packages/protocol/fixtures/skins carry their fonts' licence texts
+  in each skin's licences/ directory (Permanent Marker is Apache-2.0).
+
+Windows host
+------------
+apps/vela-windows uses the Microsoft.Web.WebView2 NuGet package under its own licence.
+
+Other dependencies
+------------------
+JavaScript dependencies resolved through bun.lock (React Native, Expo and others) and
+NuGet packages keep their own licences, as published with each package.

@@ -109,7 +109,7 @@ interface Interaction { hover: boolean; focus: boolean; active: boolean }
 
 /** The rows in force: the first holding state's layer (or the base), its overlays, then pressed and disabled. */
 function rowsFor(node: RNode, c: Ctx, e: Env, ui: Interaction, group: GroupState | null, disabled: boolean): Css {
-  // The holding state's overlays replace the node's; a state without one keeps the node's (docs/skin-schema.md, "Node features").
+  // The holding state's overlays replace the node's; a state without one keeps the node's (docs/skin-schema.md).
   const state: Layer | undefined = node.states.find(s => holds(s.when, c, e))?.layer;
   const look = (kind: 'hover' | 'focus' | 'groupHover' | 'groupFocus') => state?.[kind] ?? node.base[kind];
   const rows: Css = filled((state ?? node.base).style, c, e, false);

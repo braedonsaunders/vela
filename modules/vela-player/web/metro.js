@@ -1,6 +1,6 @@
 // Metro settings the web player needs, applied by apps/vela/metro.config.js.
 //
-// Metro bundles the player core (client/player) and the modules of the pinned upstream player
+// Metro bundles the player core (engine/) and the modules of the pinned upstream player
 // (`webgpu-player`) and its Mediabunny fork that the core imports, from their TypeScript sources.
 // The decoder workers, WASM and subtitle assets are not Metro's: they are the payload that
 // assets/export-assets.ts writes to player/<digest>/, which the dev server serves from

@@ -1,4 +1,4 @@
-// The foundation surfaces' controls, in the Vela base's look (client/src/skin/vela-base): pills,
+// The foundation surfaces' controls, in the Vela base's look (packages/skin/src/resolve/vela-base): pills,
 // fields, the waiting pulse, a code drawn one tile per character, headings and alerts. Each
 // tracks its own hover, focus and pressed states, so the same look works by pointer, keyboard,
 // the tvOS focus engine and a D-pad.
