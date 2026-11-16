@@ -667,7 +667,7 @@ const titleRest: Node = { type: 'box', style: col({ 'padding-top': '40px', 'padd
 ] };
 
 const title: Node = { type: 'box', style: col({ position: 'relative', height: '100%', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$page', color: '$ink' }), children: [
-  { type: 'box', id: 'back', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', 'box-sizing': 'border-box', width: '44px', height: '44px', border: '1px solid surface.line', 'border-radius': '22px', padding: '13px', 'background-color': 'surface.glass', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: 'ink.primary' },
+  { type: 'box', id: 'back', press: { action: 'back' }, label: '{s:closeTitle}', testId: 'detail-close', style: { position: 'absolute', top: '20px', right: '20px', 'z-index': '10', 'box-sizing': 'border-box', width: '44px', height: '44px', border: '1px solid $close-line', 'border-radius': '22px', padding: '13px', 'background-color': '$close-ground', 'backdrop-filter': 'blur(20px) saturate(1.3)', color: '$close-ink' },
     children: [{ type: 'icon', symbol: 'close', style: { width: '19px', height: '19px', 'flex-shrink': '0' } }] },
   { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{s:titleDetails}', style: col({ flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'font-family': sans }), children: [
     waiting(220, '{s:opening}'),
@@ -687,6 +687,8 @@ export default {
     accent: '#00a4dc', 'accent-soft': '#00a4dc33', violet: '#aa5cc3', hover: '#ffffff14',
     overlay: '#00000099', scrim: '#000000b3', 'scrim-clear': '#10101000', 'scrim-page': '#101010d9',
     track: '#ffffff40', popup: '#202020f7', shadow: '#000000a6', danger: '#cb272a',
+    // The title page's close button: the house glass control the compiled skin used.
+    'close-ground': '#1b2028dd', 'close-line': '#ffffff24', 'close-ink': '#f5f1e9',
     'tile-1': '#00455c', 'tile-2': '#44007e', 'tile-3': '#1e5631', 'tile-4': '#6b2c1f', 'tile-5': '#234a7a',
   },
   strings: { en: {
