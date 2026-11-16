@@ -31,11 +31,15 @@ export function AppearancePicker({ documents, current, image, onPick, onClose }:
   const small = width < 640;
 
   useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { onClose(); return true; });
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return () => sub.remove();
+    // Web has no hardware Back (react-native-web logs an error for BackHandler): Escape closes.
+    if (Platform.OS !== 'web') {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => { onClose(); return true; });
+      return () => sub.remove();
+    }
+    if (typeof window === 'undefined') return;
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
-    return () => { sub.remove(); window.removeEventListener('keydown', onKey); };
+    return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
   return (
