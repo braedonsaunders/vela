@@ -152,6 +152,8 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
       case 'corner-shape': if (v === 'squircle' && Platform.OS === 'ios') s.borderCurve = 'continuous'; break;
       case 'outline': {
         if (v === 'none' || v === '0') { s.outlineWidth = 0; break; }
+        // The platform's own focus ring: the web draws it on this box; native focus has no ring to keep.
+        if (v === 'auto') { if (web) s.outlineStyle = 'auto'; break; }
         for (const p of splitTop(v, 'space')) {
           if (/^(solid|dashed|dotted)$/.test(p)) s.outlineStyle = p;
           else if (/^\d/.test(p)) s.outlineWidth = len(p);

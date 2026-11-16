@@ -294,10 +294,11 @@ function Box({ node, ctx, route }: { node: Extract<RNode, { kind: 'box' }>; ctx:
   );
 }
 
-/** A pressable with a focus look of its own (on the node or in any state) draws no platform ring, unless the look asks for `outline: auto`. */
+/** The press button inside a box never draws the platform ring: the box is the clipping element,
+ * so the ring is the box's own, drawn from its focus look (`outline: auto` keeps the platform ring
+ * on the box). A press box without any focus look keeps the button's ring. */
 function ownFocusLook(node: RNode): boolean {
-  const looks = [node.base.focus, ...node.states.map(s => s.layer.focus)].filter(Boolean) as CssT[];
-  return web && looks.length > 0 && !looks.some(look => look.outline === 'auto' || look['outline-style'] === 'auto');
+  return web && [node.base.focus, ...node.states.map(s => s.layer.focus)].some(Boolean);
 }
 const NO_RING = { outlineWidth: 0 } as ViewStyle;
 
