@@ -21,6 +21,9 @@ export interface Measure {
 }
 
 const ROOT_FONT = 16;
+/** Points per CSS px. A TV is read from across the room: its documents draw a quarter larger, as
+ * a 1536-point-wide page filling the 1920-point screen (vw and vh still follow the screen). */
+export const PX = Platform.isTV ? 1.25 : 1;
 
 /** A theme token by name, or undefined. */
 export function themeToken(name: string): string | undefined {
@@ -59,9 +62,9 @@ export function splitTop(text: string, separator: 'space' | 'comma'): string[] {
 function unitPoints(unit: string, m: Measure): number | undefined {
   const { width, height } = m.viewport;
   switch (unit) {
-    case '':
-    case 'px': return 1;
-    case 'rem': return ROOT_FONT;
+    case '': return 1;
+    case 'px': return PX;
+    case 'rem': return ROOT_FONT * PX;
     case 'em': return m.fontSize;
     case 'ch': return m.fontSize * 0.5;
     case 'ex': return m.fontSize * 0.5;

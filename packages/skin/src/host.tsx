@@ -4,7 +4,7 @@
 import type { ImageSource } from 'expo-image';
 import { createContext, useContext, type ReactNode } from 'react';
 import type { Action } from '../../protocol/skin';
-import type { Measure, Viewport } from './css';
+import { PX, type Measure, type Viewport } from './css';
 import type { ResolvedDocument } from './resolve';
 import { textStyle, type Css } from './translate';
 import type { Ctx, Env } from './vocabulary';
@@ -31,7 +31,7 @@ export interface InheritedText { rows: Css; fontSize: number }
 export interface GroupState { hover: boolean; focus: boolean; report(kind: 'hover' | 'focus', on: boolean): void }
 
 export const HostContext = createContext<SkinHost | null>(null);
-export const InheritedContext = createContext<InheritedText>({ rows: {}, fontSize: 16 });
+export const InheritedContext = createContext<InheritedText>({ rows: {}, fontSize: 16 * PX });
 export const GroupContext = createContext<GroupState | null>(null);
 
 export function useHost(): SkinHost {

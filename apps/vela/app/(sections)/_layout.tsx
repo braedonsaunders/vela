@@ -34,7 +34,10 @@ export default function SectionsLayout() {
     : routeHost;
   const shell = vela.doc?.shell;
   const { width } = useWindowDimensions();
-  const [reducedMotion, setReducedMotion] = useState(false);
+  // A TV switches sections at once, as with Reduce Motion: the remote moves focus along the nav
+  // and each press would otherwise start a slide over the last one.
+  const [reducedMotionSetting, setReducedMotion] = useState(false);
+  const reducedMotion = reducedMotionSetting || Platform.isTV;
   const offset = useRef(new Animated.Value(0)).current;
   const previous = useRef<string | null>(null);
   const outgoingOffset = useRef(new Animated.Value(0)).current;

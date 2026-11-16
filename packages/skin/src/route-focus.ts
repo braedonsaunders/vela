@@ -46,6 +46,8 @@ export function useRouteFocusContext(): RouteFocus | null {
 const OPENING_MS = 5000;
 /** How long a drawn route waits for a play press before settling for its first content press. */
 const PRIMARY_WAIT_MS = 500;
+/** When a route's opening motion has settled (velaOpen, the longest, runs 640 ms). */
+const SETTLED_MS = 700;
 /** Presses that open a route's content, its first focus when it has no play press. */
 const CONTENT = new Set(['select', 'playExtra']);
 
@@ -66,6 +68,11 @@ function onFirstScreen(target: Focusable, answer: (visible: boolean) => void): v
   });
 }
 
+function move(target: Focusable): void {
+  if (target.requestTVFocus) target.requestTVFocus();
+  else target.focus?.();
+}
+
 function firstFocus(): RouteFocus {
   const opened = Date.now();
   const deadline = opened + OPENING_MS;
@@ -79,8 +86,14 @@ function firstFocus(): RouteFocus {
   const focus = (target: Focusable) => {
     if (!open()) return;
     settle();
-    if (target.requestTVFocus) target.requestTVFocus();
-    else target.focus?.();
+    move(target);
+    // A route that opens with a motion (the title card fades and rises in) cannot take focus while
+    // it is still all but transparent: the engine refuses it and falls back to whatever it likes
+    // (the card's close button). Asked again once the motion has settled, unless the viewer has
+    // pressed something meanwhile.
+    setTimeout(() => {
+      if (lastViewerPress <= opened) move(target);
+    }, SETTLED_MS);
   };
   // Measured once laid out; a control off the first screen is passed over.
   const tryFocus = (target: Focusable) => {
