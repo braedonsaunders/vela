@@ -34,7 +34,10 @@ export function SearchField({ ctx }: WidgetProps) {
     [ui, host.viewport],
   );
 
+  // The document's control corners: a pill by default, square for square-control documents.
+  const radius = Math.min(ui.radiusControl, FIELD_HEIGHT / 2);
   const field: ViewStyle = {
+    borderRadius: radius,
     backgroundColor: ui.glass,
     borderColor: focused ? ui.glassEdgeStrong : ui.glassEdge,
     boxShadow: focused
@@ -72,7 +75,14 @@ export function SearchField({ ctx }: WidgetProps) {
           accessibilityLabel={msg('ui.clearSearch')}
           onHoverIn={() => setClearHover(true)}
           onHoverOut={() => setClearHover(false)}
-          style={[styles.clear, { backgroundColor: clearHover ? ui.controlHover : ui.control }]}
+          style={[
+            styles.clear,
+            {
+              // Concentric with the field: its corner less the clear button's inset.
+              borderRadius: Math.max(0, radius - (FIELD_HEIGHT - CLEAR_SIZE) / 2),
+              backgroundColor: clearHover ? ui.controlHover : ui.control,
+            },
+          ]}
         >
           <Glyph symbol="close" size={16} color={ui.ink} />
         </Pressable>
@@ -81,15 +91,17 @@ export function SearchField({ ctx }: WidgetProps) {
   );
 }
 
+const FIELD_HEIGHT = 60;
+const CLEAR_SIZE = 40;
+
 const styles = StyleSheet.create({
   field: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    height: 60,
+    height: FIELD_HEIGHT,
     paddingLeft: 22,
     paddingRight: 8,
-    borderRadius: 999,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -105,9 +117,8 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as TextStyle) : {}),
   },
   clear: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: CLEAR_SIZE,
+    height: CLEAR_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,

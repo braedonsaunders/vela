@@ -3,7 +3,8 @@ import { cardRadius, display, gutter, gutterSmall, is, placeholder, pulse, small
 
 // A muted trailer preview: a landscape card that opens over the poster while the card's preview
 // plays (home rows that preview on focus). It stays mounted while idle, since the widget inside
-// reports the card's hover and focus as the intent to preview; only its state shows it.
+// reports the card's hover and focus as the intent to preview; only its state shows it. A press
+// lands on the card underneath.
 const previewOverlay = (shown: boolean): Style => ({
   position: 'absolute',
   left: '0px',
@@ -17,7 +18,9 @@ const previewOverlay = (shown: boolean): Style => ({
   'overflow-y': 'hidden',
   'background-color': '$ui.raised',
   'box-shadow': '0px 40px 80px -20px $ui.shadow, 0px 0px 0px 1px $ui.glassEdgeStrong',
-  'pointer-events': shown ? 'auto' : 'none',
+  // Never under the pointer: the card's hover is its press button's, which the overlay is not
+  // inside, so taking the pointer would end the hover and with it the preview.
+  'pointer-events': 'none',
   opacity: shown ? '1' : '0',
   scale: shown ? '1' : '0.94',
   transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1), scale 420ms cubic-bezier(0.16, 1, 0.3, 1)',
