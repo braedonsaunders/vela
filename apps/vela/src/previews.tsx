@@ -1,7 +1,7 @@
 // Trailer previews on home: tells core where previews may play (home in front and visible, no
 // query, motion allowed) and which hero is on show, and provides the cards' intents and the
 // surface that plays a grant. Core does the waiting, asking and cancelling.
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import type { Vela as Store, VelaState } from '@vela/core';
 import { PreviewProvider } from '@vela/skin/src/widgets/common/preview';
@@ -38,16 +38,22 @@ export function Previews({ store, state, onHome, heroIndex, still, children }: P
     store.previews.setContext({ allowed, heroId });
   }, [store, allowed, heroId]);
 
+  // One intent for the store's lifetime: a card's widget re-reports its intent whenever this
+  // changes, and a fresh one per grant would read as leaving and re-entering, stopping the trailer.
+  const intent = useCallback(
+    (card: string, row: string, on: boolean) => store.previews.intent(card, row, on),
+    [store],
+  );
   const { cardId, url } = state.previews;
   const source = useMemo(() => {
     if (!PreviewSurface) return null;
     return {
       cardUrl: cardId ? url : '',
       heroUrl: cardId ? '' : url,
-      intent: (card: string, row: string, on: boolean) => store.previews.intent(card, row, on),
+      intent,
       Surface: PreviewSurface,
     };
-  }, [store, cardId, url]);
+  }, [intent, cardId, url]);
 
   if (!source) return <>{children}</>;
   return <PreviewProvider value={source}>{children}</PreviewProvider>;
