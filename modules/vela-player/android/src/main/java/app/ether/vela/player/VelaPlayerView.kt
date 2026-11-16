@@ -5,6 +5,7 @@ package app.ether.vela.player
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -26,6 +27,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
 
   private val video = SurfaceView(context)
   private val previewVideo = TextureView(context)
+  private val previewPaint = Paint()
   private var videoSurface: Surface? = null
   private var previewMode = false
   private var pendingPlan: Map<String, Any?>? = null
@@ -65,7 +67,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
       }
     })
     previewVideo.isOpaque = false
-    previewVideo.alpha = 0f
+    updatePreviewVisibility()
     previewVideo.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
       override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
         videoSurface = Surface(texture)
@@ -100,7 +102,8 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private fun videoLayout() = LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
 
   private fun updatePreviewVisibility() {
-    previewVideo.alpha = if (previewHasPts && previewHasFrame) 1f else 0f
+    previewPaint.alpha = if (previewHasPts && previewHasFrame) 255 else 0
+    previewVideo.setLayerPaint(previewPaint)
   }
 
   private fun usePreview(enabled: Boolean) {
