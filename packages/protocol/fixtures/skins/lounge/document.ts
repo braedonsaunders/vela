@@ -31,9 +31,9 @@ const lounge: SkinDocument = {
   renderer: 15,
   id: 'lounge',
   name: 'Lounge',
-  version: '1.0.1',
+  version: '1.0.2',
   tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
-  preview: '/vela/v0/appearance/skins/lounge/1.0.1/preview.jpg',
+  preview: '/vela/v0/appearance/skins/lounge/1.0.2/preview.jpg',
   swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
   // Lounge's deep ground and amber, for the routes it inherits (search).
   ui: {

@@ -72,25 +72,13 @@ export const shell: Node = {
   },
   children: [
     {
-      type: 'slot',
-      slot: 'children',
-      style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px' },
-      inner: {
-        display: 'flex',
-        'flex-direction': 'column',
-        'flex-grow': '1',
-        'min-height': '0px',
-        height: '100%',
-        width: '100%',
-      } as Style,
-    },
-    {
       type: 'box',
       role: 'navigation',
       label: '{s:mainNav}',
       when: [{ test: 'env.viewer' }],
       motion: 'navIn',
       style: { position: 'absolute', top: '0px', left: '0px', right: '0px', 'z-index': '20' },
+      small: { 'background-color': '$ground' },
       children: [
         // A soft fall of shade, so the bar reads over any backdrop and the rows that scroll under it.
         {
@@ -273,6 +261,19 @@ export const shell: Node = {
           ],
         },
       ],
+    },
+    {
+      type: 'slot',
+      slot: 'children',
+      style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px' },
+      inner: {
+        display: 'flex',
+        'flex-direction': 'column',
+        'flex-grow': '1',
+        'min-height': '0px',
+        height: '100%',
+        width: '100%',
+      } as Style,
     },
     // The profile sheet: large rows a remote can step through.
     {

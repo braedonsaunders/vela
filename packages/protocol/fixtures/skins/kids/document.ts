@@ -6,7 +6,7 @@
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.0';
+const version = '1.2.1';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -137,9 +137,10 @@ const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:g
 // The shell sets no ground or ink of its own: routes this document does not draw yet
 // (sign-in, title, libraries) keep their built-in look, and Home draws the daylight.
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'font-family': rounded }, children: [
+  bar, dock,
   { type: 'slot', slot: 'children', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px' }, 
     inner: { display: 'flex', 'flex-direction': 'column', 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } as Style },
-  bar, dock, gate,
+  gate,
 ] };
 
 // ---------------------------------------------------------------- home

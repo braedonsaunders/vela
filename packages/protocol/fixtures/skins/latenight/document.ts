@@ -5,7 +5,7 @@
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.1';
+const id = 'latenight', version = '1.0.2';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -158,12 +158,12 @@ const flips: Node[] = [
 ];
 
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$page', color: '$ink', 'font-family': sans }, children: [
+  nav,
   { type: 'slot', slot: 'children', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', ...inset('0px'), 'padding-top': bezel.normal, 'padding-right': bezel.normal, 'padding-bottom': bezel.normal, 'padding-left': bezel.normal, 'box-sizing': 'border-box' } as Style,
     wide: { 'padding-top': bezel.wide, 'padding-right': bezel.wide, 'padding-bottom': bezel.wide, 'padding-left': bezel.wide } as Style,
     small: { 'padding-top': bezel.small, 'padding-right': bezel.small, 'padding-bottom': bezel.small, 'padding-left': bezel.small } as Style,
     inner: { display: 'flex', 'flex-direction': 'column', 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } as Style },
   ...flips,
-  nav,
   menu,
   glass,
 ] };
