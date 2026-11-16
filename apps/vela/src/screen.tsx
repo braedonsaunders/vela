@@ -2,8 +2,9 @@
 // that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
 // library, a collection) adds it to the host with `page`.
 import { useIsFocused } from 'expo-router';
+import { useEffect } from 'react';
 import { Text, View } from 'react-native';
-import { SkinRoot, SkinRoute, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
+import { SkinRoot, SkinRoute, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import { useVela } from './vela';
 import { useSectionFocus } from './section-focus';
 
@@ -22,6 +23,19 @@ export function DocumentScreen({ route, entry, page, sharedShell = false }: Prop
   const navigationFocused = useIsFocused();
   const sectionFocused = useSectionFocus();
   useReturnFocus(sectionFocused ?? navigationFocused);
+  const isCurrent = sectionFocused ?? navigationFocused;
+  const focusSearch = !!host?.env.flags.includes('focus-search-on-home');
+  const setFlag = host?.setFlag;
+  useEffect(() => {
+    if (route !== 'home' || !isCurrent || !focusSearch || !setFlag) return;
+    let frame = 0, attempts = 0;
+    const focus = () => {
+      if (focusElement('vela-search')) setFlag('focus-search-on-home', false);
+      else if (++attempts < 120) frame = requestAnimationFrame(focus);
+    };
+    frame = requestAnimationFrame(focus);
+    return () => cancelAnimationFrame(frame);
+  }, [route, isCurrent, focusSearch, setFlag]);
   if (vela.docError) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>

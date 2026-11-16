@@ -89,6 +89,11 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
         return store.search.clear();
       case 'search':
       case 'focusSearch':
+        // The search field belongs to home; a library or guide has no field to focus.
+        if (place.route !== 'home') {
+          view.setFlag('focus-search-on-home', true);
+          return router.dismissTo('/');
+        }
         // The field's own focus sets search-focused; on a TV it opens the keyboard.
         if (focusElement('vela-search')) return;
         return view.setFlag('search-focused', true);
