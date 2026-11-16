@@ -2,7 +2,7 @@
 // a document's own, duration, delay with stagger, easing, iterations, direction and fill. Under
 // reduced motion a preset's `still` alternative runs, or nothing.
 import { cubicBezier, type CSSAnimationKeyframes } from 'react-native-reanimated';
-import { library, type Keyframes } from './keyframes';
+import { library, type Keyframes, type Motion } from './keyframes';
 export { documentKeyframes, type Motion } from './keyframes';
 
 /** A CSS easing as Reanimated takes it. */
