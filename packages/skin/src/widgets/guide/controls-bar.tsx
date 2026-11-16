@@ -1,7 +1,7 @@
 // The guide's controls: chips, pills and the pieces of its toolbar (days, the time stepper,
 // "Now", zoom, full guide, favourites, the channel filter and the owner's named Guides).
-import { useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { Platform, ScrollView, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -14,6 +14,7 @@ import { msg, type GuideModel } from '@vela/core';
 import type { ChannelFilter } from './geometry';
 import type { GuideLook } from './look';
 import { Glyph, Line, Press, type Interaction } from './parts';
+import { holdBack } from '../../menu-key';
 
 const ring = (look: GuideLook, focused: boolean) =>
   focused ? `0px 0px 0px 2px ${look.page}, 0px 0px 0px 4px ${look.accent}` : undefined;
@@ -242,9 +243,37 @@ export function FilterMenu({
   onPick(f: ChannelFilter): void;
 }) {
   const [open, setOpen] = useState(false);
+  const box = useRef<ComponentRef<typeof View>>(null);
   const options: ChannelFilter[] = ['all', 'favourites', 'listed', ...groups.map(g => `group:${g}` as const)];
+  // An open menu closes on Escape (Back natively), returning focus to its chip, and on the web on
+  // a press anywhere outside it.
+  useEffect(() => {
+    if (!open) return;
+    const release = holdBack(() => {
+      setOpen(false);
+      return true;
+    });
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return release;
+    const node = box.current as unknown as HTMLElement | null;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      setOpen(false);
+      node?.querySelector<HTMLElement>('[role="button"]')?.focus();
+    };
+    const onDown = (event: PointerEvent) => {
+      if (node && !node.contains(event.target as globalThis.Node)) setOpen(false);
+    };
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('pointerdown', onDown, true);
+    return () => {
+      release();
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('pointerdown', onDown, true);
+    };
+  }, [open]);
   return (
-    <View style={{ position: 'relative', zIndex: 20 }}>
+    <View ref={box} style={{ position: 'relative', zIndex: 20 }}>
       <Chip
         look={look}
         label={`${msg('live.filter')}: ${filterLabel(filter)}`}
