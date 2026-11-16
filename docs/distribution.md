@@ -93,10 +93,13 @@ JavaScript remains in Metro. There is no runtime.js or diagnostic index. The
 manifest retains full source revision, `sourceDirty:false`, exact dependency pins,
 corresponding source archives, licences and the complete safe-relative file list.
 Its own bytes are covered by the signed full release inventory even though the
-aggregate excludes it. Proposed filename is `PLAYER-ASSETS-MANIFEST.json` with
-`schemaVersion:1` and a `digest` field; playback will confirm the final command and
-field names after direct-dependency extraction. The old Exact runtime-key
-algorithm and CORE-MANIFEST input are not carried forward.
+aggregate excludes it. Playback confirmed the filename
+`PLAYER-ASSETS-MANIFEST.json` and fields `schemaVersion:1`, `digest`,
+`sourceRevision`, `sourceDirty`, `dependencies` and `files`. The final builder
+command and qualified input remain pending direct-dependency extraction and the
+required real-app matrix. A diagnostic payload or host seam proof is not a release
+input. The old Exact runtime-key algorithm and CORE-MANIFEST input are not carried
+forward.
 
 Built-in skin documents and their static assets remain data, with real ids/names,
 schema/renderer compatibility and the same complete release inventory. Agree their
