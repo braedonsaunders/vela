@@ -51,8 +51,8 @@ export const banner: Node = {
       style: {
         ...col,
         position: 'relative',
-        height: 'clamp(380px, 54vh, 560px)',
-        'box-sizing': 'content-box',
+        height: 'calc(clamp(380px, 54vh, 560px) + 6px)',
+        'box-sizing': 'border-box',
         border: '3px solid $ink',
         'border-radius': '34px',
         'overflow-x': 'hidden',
@@ -60,7 +60,7 @@ export const banner: Node = {
         'background-color': '$lavender-soft',
         'box-shadow': '10px 11px 0px $lavender',
       },
-      small: { height: '440px', 'border-radius': '26px', 'box-shadow': '6px 7px 0px $lavender' },
+      small: { height: '446px', 'border-radius': '26px', 'box-shadow': '6px 7px 0px $lavender' },
       children: [
         {
           type: 'image',
@@ -204,12 +204,12 @@ export const banner: Node = {
                   testId: 'hero-more',
                   style: {
                     ...Candy,
-                    height: '54px',
+                    height: '60px',
                     'padding-left': '28px',
                     'padding-right': '30px',
                     gap: '10px',
                   },
-                  small: { height: '48px', 'padding-left': '22px', 'padding-right': '24px' },
+                  small: { height: '54px', 'padding-left': '22px', 'padding-right': '24px' },
                   ...candy,
                   children: [
                     icon('play', 14),

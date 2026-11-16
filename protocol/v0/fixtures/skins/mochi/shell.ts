@@ -54,7 +54,7 @@ export const pillBase: Style = {
   'align-items': 'center',
   'flex-shrink': '0',
   height: '42px',
-  'box-sizing': 'content-box',
+  'box-sizing': 'border-box',
   padding: '0px 16px',
   border: '2.5px solid $page-clear',
   'border-radius': '999px',
@@ -73,7 +73,7 @@ export const pillOn: Style = {
 };
 // Compact pills all wear the ink edge and shadow; only the current one is pink.
 export const pillCompact: Style = {
-  height: '38px',
+  height: '42px',
   'border-color': '$ink',
   'box-shadow': '0px 3px 0px $ink',
 };
@@ -143,9 +143,11 @@ export const destinations = (): Node[] => [
   {
     type: 'repeat',
     over: 'nav.destinations',
+    // A slot per library holding its one pill (none for a live library the viewer can't use).
     item: {
       type: 'box',
-      style: { display: 'contents' },
+      style: { ...row, 'flex-shrink': '0' },
+      states: [{ when: [is('dest.kind', 'live'), not('env.canLive')], style: { display: 'none' } }],
       children: [
         navItem(
           '{dest.name}',
@@ -533,7 +535,7 @@ export const menu: Node = {
       type: 'box',
       press: { action: 'signOut' },
       label: '{s:signOut}',
-      style: { ...Puffy, height: '42px', padding: '0px 16px', 'box-shadow': '0px 3px 0px $ink', gap: '10px' },
+      style: { ...Puffy, height: '48px', padding: '0px 16px', 'box-shadow': '0px 3px 0px $ink', gap: '10px' },
       ...puffy,
       children: [icon('out', 14), { type: 'text', text: '{s:signOut}', style: { 'font-size': '15px' } }],
     },

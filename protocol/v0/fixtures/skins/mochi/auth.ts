@@ -198,7 +198,7 @@ export const authNotice: Node[] = [
 
 // Sign in (auth.contract SignIn). Sign in waits for both fields (signin.ready: not busy, a
 // username and a password).
-export const signInButton: Style = { ...Candy, height: '54px', 'margin-top': '8px', gap: '10px' };
+export const signInButton: Style = { ...Candy, height: '60px', 'margin-top': '8px', gap: '10px' };
 export const signIn: Node = {
   type: 'box',
   when: [is('env.auth', 'signin')],
@@ -275,7 +275,7 @@ export const signIn: Node = {
       testId: 'quick-connect',
       disabled: [set('signin.busy')],
       disabledStyle: { opacity: '0.5', 'box-shadow': 'none' },
-      style: { ...Puffy, height: '52px', gap: '10px' },
+      style: { ...Puffy, height: '58px', gap: '10px' },
       ...puffy,
       children: [
         icon('phone', 16),
@@ -300,29 +300,35 @@ export const signIn: Node = {
 };
 
 // Quick connect: the code in candy tiles that pop in one by one (auth.contract QuickConnect).
-export const codeTile = (i: number): Node => ({
+// One code character on a candy tile; tiles cycle pink, lavender and mint.
+const codeTileLook = (ground: string): Style => ({
+  flex: '1',
+  'max-width': '50px',
+  height: '62px',
+  'box-sizing': 'border-box',
+  display: 'flex',
+  'align-items': 'center',
+  'justify-content': 'center',
+  'border-radius': '14px',
+  'background-color': ground,
+  border: '2.5px solid $ink',
+  'box-shadow': '0px 4px 0px $ink',
+  'font-family': fredoka,
+  'font-size': '27px',
+  'font-weight': '650',
+  color: '$ink',
+});
+export const codeTile: Node = {
   type: 'text',
   text: '{char.text}',
-  when: [{ test: 'index', is: 'mod', value: `3:${i}` }],
   motion: 'codePop',
   stagger: { step: 50, cap: 12 },
-  style: {
-    flex: '1',
-    'max-width': '46px',
-    height: '58px',
-    display: 'flex',
-    'align-items': 'center',
-    'justify-content': 'center',
-    'border-radius': '14px',
-    'background-color': ['$pink-soft', '$lavender-soft', '$mint-soft'][i],
-    border: '2.5px solid $ink',
-    'box-shadow': '0px 4px 0px $ink',
-    'font-family': fredoka,
-    'font-size': '27px',
-    'font-weight': '650',
-    color: '$ink',
-  },
-});
+  style: codeTileLook('$pink-soft'),
+  states: [
+    { when: [{ test: 'index', is: 'mod', value: '3:1' }], style: codeTileLook('$lavender-soft') },
+    { when: [{ test: 'index', is: 'mod', value: '3:2' }], style: codeTileLook('$mint-soft') },
+  ],
+};
 export const quick: Node = {
   type: 'box',
   when: [is('env.auth', 'quick')],
@@ -341,7 +347,7 @@ export const quick: Node = {
         {
           type: 'repeat',
           over: 'quick.chars',
-          item: { type: 'box', style: { display: 'contents' }, children: [0, 1, 2].map(codeTile) },
+          item: codeTile,
         },
       ],
     },
@@ -380,7 +386,7 @@ export const quick: Node = {
       type: 'box',
       press: { action: 'cancelQuick' as Action },
       label: '{s:cancel}',
-      style: { ...Puffy, height: '46px', padding: '0px 28px' },
+      style: { ...Puffy, height: '52px', padding: '0px 28px' },
       ...puffy,
       children: [{ type: 'text', text: '{s:cancel}', style: { 'font-size': '15px' } }],
     },

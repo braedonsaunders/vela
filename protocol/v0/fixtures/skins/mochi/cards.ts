@@ -34,9 +34,9 @@ export const SHADOW: Record<Accent, string> = { pink: '$shadow-pink', lavender: 
 export const stickerLook = (accent: Accent, still: boolean): Style => ({
   ...col,
   position: 'relative',
-  width: '100%',
-  'aspect-ratio': '2 / 3',
-  'box-sizing': 'content-box',
+  // The poster area is the column's width; the 3px edge sits outside it, as on compiled Mochi.
+  width: 'calc(100% + 6px)',
+  'box-sizing': 'border-box',
   border: '3px solid $ink',
   'border-radius': '20px',
   'overflow-x': 'hidden',
@@ -62,110 +62,129 @@ export const stickerStates = [true, false].flatMap(still =>
       return {
         when: [...(still ? [stillC] : []), mod('card', 3, i), mod('card', 2, j)],
         style: stickerLook(accent, still),
-        groupHover: up,
-        groupFocus: { ...up, 'box-shadow': '0px 0px 0px 3px $card, 0px 0px 0px 7px $focus' },
+        hover: up,
+        focus: { ...up, outline: 'auto', 'box-shadow': '0px 0px 0px 3px $card, 0px 0px 0px 7px $focus' },
       };
     }),
   ),
 );
+// The sticker is the card's button (so the focus ring leans and lifts with it); its poster area
+// keeps the 2:3 shape inside the edge.
 export const sticker = (): Node => {
   return {
     type: 'box',
+    group: true,
+    press: { action: 'select', arg: '{card.kindId}' },
+    label: '{card.label}',
+    testId: 'title-{card.id}',
     style: stickerLook('pink', false),
     small: { 'border-radius': '16px' },
     states: stickerStates,
     children: [
-      { type: 'image', when: [set('card.poster')], src: '{card.poster}', alt: '', fade: true, style: fadeIn },
-      // No poster: the name on a soft wash under a pixel star.
       {
         type: 'box',
-        when: [not('card.poster')],
-        style: {
-          ...col,
-          ...inset0,
-          padding: '14px',
-          gap: '10px',
-          'justify-content': 'flex-end',
-          'background-image': 'linear-gradient(160deg, $card 0%, $page-clear 70%)',
-        },
+        style: { ...col, position: 'relative', width: '100%', 'aspect-ratio': '2 / 3' },
         children: [
-          icon('star', 18, 'ink'),
           {
-            type: 'text',
-            text: '{card.name}',
-            style: { ...Title, 'font-size': '21px', 'line-clamp': '4' },
-            small: { 'font-size': '18px' },
+            type: 'image',
+            when: [set('card.poster')],
+            src: '{card.poster}',
+            alt: '',
+            fade: true,
+            style: fadeIn,
           },
-        ],
-      },
-      {
-        type: 'box',
-        style: {
-          ...inset0,
-          'pointer-events': 'none',
-          'border-radius': '17px',
-          'box-shadow': 'inset 0px 0px 0px 3px $edge',
-        },
-        small: { 'border-radius': '13px' },
-      },
-      {
-        type: 'box',
-        when: [set('card.played')],
-        style: {
-          ...row,
-          position: 'absolute',
-          top: '8px',
-          right: '8px',
-          ...sz(26),
-          'border-radius': '13px',
-          'align-items': 'center',
-          'justify-content': 'center',
-          'background-color': '$mint',
-          border: '2px solid $ink',
-          'box-sizing': 'border-box',
-          color: '$ink',
-        },
-        children: [icon('check', 12)],
-      },
-      {
-        type: 'box',
-        when: [set('card.hasProgress'), not('card.played')],
-        style: {
-          ...col,
-          position: 'absolute',
-          left: '10px',
-          right: '10px',
-          bottom: '10px',
-          height: '10px',
-          'border-radius': '5px',
-          'background-color': '$card',
-          border: '2px solid $ink',
-          'box-sizing': 'border-box',
-          'overflow-x': 'hidden',
-          'overflow-y': 'hidden',
-        },
-        children: [
+          // No poster: the name on a soft wash under a pixel star.
+          {
+            type: 'box',
+            when: [not('card.poster')],
+            style: {
+              ...col,
+              ...inset0,
+              padding: '14px',
+              gap: '10px',
+              'justify-content': 'flex-end',
+              'background-image': 'linear-gradient(160deg, $card 0%, $page-clear 70%)',
+            },
+            children: [
+              icon('star', 18, 'ink'),
+              {
+                type: 'text',
+                text: '{card.name}',
+                style: { ...Title, 'font-size': '21px', 'line-clamp': '4' },
+                small: { 'font-size': '18px' },
+              },
+            ],
+          },
           {
             type: 'box',
             style: {
-              height: '100%',
-              width: '{card.progressPct}%',
-              'background-color': '$pink',
-              'background-image':
-                'repeating-linear-gradient(135deg, $pink 0px, $pink 4px, $pink-hover 4px, $pink-hover 8px)',
+              ...inset0,
+              'pointer-events': 'none',
+              'border-radius': '17px',
+              'box-shadow': 'inset 0px 0px 0px 3px $edge',
             },
+            small: { 'border-radius': '13px' },
+          },
+          {
+            type: 'box',
+            when: [set('card.played')],
+            style: {
+              ...row,
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              ...sz(26),
+              'border-radius': '13px',
+              'align-items': 'center',
+              'justify-content': 'center',
+              'background-color': '$mint',
+              border: '2px solid $ink',
+              'box-sizing': 'border-box',
+              color: '$ink',
+            },
+            children: [icon('check', 12)],
+          },
+          {
+            type: 'box',
+            when: [set('card.hasProgress'), not('card.played')],
+            style: {
+              ...col,
+              position: 'absolute',
+              left: '10px',
+              right: '10px',
+              bottom: '10px',
+              height: '10px',
+              'border-radius': '5px',
+              'background-color': '$card',
+              border: '2px solid $ink',
+              'box-sizing': 'border-box',
+              'overflow-x': 'hidden',
+              'overflow-y': 'hidden',
+            },
+            children: [
+              {
+                type: 'box',
+                style: {
+                  height: '100%',
+                  width: '{card.progressPct}%',
+                  'background-color': '$pink',
+                  'background-image':
+                    'repeating-linear-gradient(135deg, $pink 0px, $pink 4px, $pink-hover 4px, $pink-hover 8px)',
+                },
+              },
+            ],
+          },
+          // Shown (and so popping in) only while lifted.
+          {
+            type: 'box',
+            when: [moving],
+            motion: 'sparklePop',
+            style: { position: 'absolute', top: '10px', left: '10px', color: '$card', display: 'none' },
+            groupHover: { display: 'flex' },
+            groupFocus: { display: 'flex' },
+            children: [twinkle('card', 14)],
           },
         ],
-      },
-      // Shown (and so popping in) only while lifted.
-      {
-        type: 'box',
-        when: [moving],
-        motion: 'sparklePop',
-        style: { position: 'absolute', top: '10px', left: '10px', color: '$card', display: 'none' },
-        groupHover: { display: 'flex' },
-        groupFocus: { display: 'flex' },
-        children: [twinkle('card', 14)],
       },
     ],
   } as Node;
@@ -185,16 +204,7 @@ export const card: Node = {
   small: { width: '132px' },
   children: [
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
-    // The press wraps the sticker, which carries the lift and tilt.
-    {
-      type: 'box',
-      group: true,
-      press: { action: 'select', arg: '{card.kindId}' },
-      label: '{card.label}',
-      testId: 'title-{card.id}',
-      style: { ...col, position: 'relative' },
-      children: [sticker()],
-    },
+    sticker(),
     {
       type: 'box',
       style: { ...col, gap: '3px', padding: '0px 4px' },
