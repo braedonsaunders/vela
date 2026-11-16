@@ -244,7 +244,7 @@ export const library: Node = {
         'column-gap': 'clamp(20px, 1.9vw, 40px)',
         'row-gap': 'clamp(28px, 2.6vw, 52px)',
         'padding-top': 'clamp(24px, 2vw, 40px)',
-        'padding-bottom': 'max(64px, 8vh)',
+        'padding-bottom': 'clamp(28px, 2.6vw, 52px)',
         ...gutter,
       },
       wide: { 'grid-template-columns': 'repeat(auto-fill, minmax(220px, 1fr))' },
@@ -254,12 +254,25 @@ export const library: Node = {
         'row-gap': '20px',
         ...gutterSmall,
       },
+      children: [{ type: 'repeat', over: 'library.items', item: { type: 'use', template: 'gridPoster' } }],
+    },
+    // After the grid, across its width: the next page's sentinel, its loading line, the empty state.
+    {
+      type: 'box',
+      when: [{ test: 'env.load', is: 'eq', value: 'ready' }],
+      style: {
+        display: 'flex',
+        'flex-direction': 'column',
+        gap: '12px',
+        'padding-bottom': 'max(64px, 8vh)',
+        ...gutter,
+      },
+      small: { ...gutterSmall },
       children: [
-        { type: 'repeat', over: 'library.items', item: { type: 'use', template: 'gridPoster' } },
         {
           type: 'box',
           when: [{ test: 'library.more' }],
-          style: { position: 'relative', 'grid-column': '1 / -1', height: '2px' },
+          style: { position: 'relative', height: '2px' },
           children: [{ type: 'widget', widget: 'sentinel', params: { on: 'library' } }],
         },
         {
@@ -268,7 +281,7 @@ export const library: Node = {
           text: '{s:loadingMore}',
           role: 'status',
           motion: 'pulse',
-          style: { 'grid-column': '1 / -1', 'font-size': 'clamp(15px, 1.1vw, 21px)', color: '$ink-quiet' },
+          style: { 'font-size': 'clamp(15px, 1.1vw, 21px)', color: '$ink-quiet' },
         },
         {
           type: 'box',
@@ -278,7 +291,6 @@ export const library: Node = {
           ],
           role: 'status',
           style: {
-            'grid-column': '1 / -1',
             display: 'flex',
             'flex-direction': 'column',
             gap: '10px',

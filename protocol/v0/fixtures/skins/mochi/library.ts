@@ -112,7 +112,8 @@ export const chipBase: Style = {
   ...row,
   position: 'relative',
   'align-items': 'center',
-  height: '34px',
+  height: '38px',
+  'box-sizing': 'border-box',
   padding: '0px 14px',
   border: '2px solid $page-clear',
   'border-radius': '999px',
@@ -398,7 +399,7 @@ export const library: Node = {
               label: '{s:loadMore}',
               style: {
                 ...Candy,
-                height: '52px',
+                height: '58px',
                 'padding-left': '30px',
                 'padding-right': '30px',
                 gap: '10px',

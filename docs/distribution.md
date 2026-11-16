@@ -71,10 +71,32 @@ Do not package a second browser runtime.js or resurrect an Exact native host.
 Decoder WASM packages, worklets, subtitle resources and other non-Metro assets are
 a separate player-build output under `player/<digest>/` within the export; the
 player loads them relative to the configured `/vela` base. Playback owns that
-builder, dependency/source/licence inventory and digest algorithm. Packaging
-verifies and copies its immutable output. Its exact command and manifest contract
-remain open until playback and the migration lead confirm them; the earlier
-Exact CORE-MANIFEST input contract is not assumed to fit this new split.
+builder and dependency/source/licence inventory. The agreed static payload digest
+is the full lowercase SHA-256 of the UTF-8 concatenation of sorted records:
+
+```
+relativePath + NUL + decimalByteCount + NUL + lowercaseFileSha256 + newline
+```
+
+Sort paths bytewise using ASCII names; reject control characters (including NUL
+and newline), backslashes, absolute paths, empty/dot/parent segments, duplicate
+paths and links. Byte counts are nonnegative safe integers in canonical decimal
+form, without leading zeros except zero itself. Per-file hashes are 64 lowercase
+hex characters. Exclude the payload manifest itself from this aggregate. Recompute
+every file's size/hash before accepting the aggregate, and reject unlisted files.
+The served base is exactly `/vela/player/<64-hex-digest>/` on the app's origin,
+without credentials, query or fragment.
+
+Only external asset files belong here, organized under `libraries/`, `sources/`
+and notices; include worklets/subtitle helpers in that static inventory. Core/view
+JavaScript remains in Metro. There is no runtime.js or diagnostic index. The
+manifest retains full source revision, `sourceDirty:false`, exact dependency pins,
+corresponding source archives, licences and the complete safe-relative file list.
+Its own bytes are covered by the signed full release inventory even though the
+aggregate excludes it. Proposed filename is `PLAYER-ASSETS-MANIFEST.json` with
+`schemaVersion:1` and a `digest` field; playback will confirm the final command and
+field names after direct-dependency extraction. The old Exact runtime-key
+algorithm and CORE-MANIFEST input are not carried forward.
 
 Built-in skin documents and their static assets remain data, with real ids/names,
 schema/renderer compatibility and the same complete release inventory. Agree their
@@ -93,8 +115,12 @@ policy. Build one archive and one finalized app manifest. Proposed app manifest
 `basePath` is `/vela/`; its files cover the final static root and agree exactly
 with the full build inventory. Both manifests stay outside the archive to avoid
 self-hashing. Preserve clean source and pinned workspace/toolchain provenance.
-Settle the player-asset identity field with Ether once its digest contract is
-known; do not silently reuse old runtime-key semantics. Ether has been told to
+Ether confirmed the unreleased signed descriptor uses `playerAssetsDigest` for
+the full 64-hex static-payload digest, replacing `universalRuntimeKey` with no
+legacy branch. The installer recomputes it from the installed `player/<digest>/`
+tree and refuses a mismatch; the full build inventory also covers the payload
+manifest's SHA-256. The first real Expo export supplies the signed fixture before
+Ether implements this schema change. Do not reuse old runtime-key semantics. Ether has been told to
 hold the Exact-specific app-schema change and keep the distribution implementation.
 
 Implementation and qualification order:
