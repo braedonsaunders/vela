@@ -63,7 +63,7 @@ export const wordmark = (size: number, small: number): Node => ({
 
 // The pill and icon buttons' keyboard ring, and a nav link's.
 export const focusRing = '0px 0px 0px 2px $ui.page, 0px 0px 0px 4px $ui.accent';
-export const navFocus: Style = { 'box-shadow': '0px 0px 0px 2px $ui.accent', color: '$ui.ink' };
+export const navFocus: Style = { 'box-shadow': 'inset 0px 0px 0px 2px $ui.accent', color: '$ui.ink' };
 
 export const small: Condition = { test: 'env.small' };
 // Waiting marks, as compiled cinematic draws them: three breathing dots (still under

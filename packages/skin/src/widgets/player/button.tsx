@@ -5,6 +5,7 @@
 import { useState, type Ref } from 'react';
 import { Pressable, View, type ViewStyle } from 'react-native';
 import type { Focusable } from '../../escape';
+import { isFocusVisible } from '../../focus-visible';
 import { PlayerIcon, type PlayerIconName } from './icons';
 import type { PlayerLook } from './look';
 
@@ -83,10 +84,11 @@ export function ChromeButton({
       onPress={onPress}
       onHoverIn={() => setHover(true)}
       onHoverOut={() => setHover(false)}
-      onFocus={() => {
-        setFocus(true);
+      onFocus={event => {
+        setFocus(isFocusVisible(event.currentTarget));
         onFocusChange?.(true);
       }}
+      onPointerDown={() => setFocus(false)}
       onBlur={() => {
         setFocus(false);
         onFocusChange?.(false);

@@ -16,6 +16,7 @@ import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
 import { EscapeScope, focusElement, focusTarget, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
+import { isFocusVisible } from './focus-visible';
 import { RouteFocusContext, useRouteFocus, useRouteFocusContext } from './route-focus';
 import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
@@ -348,12 +349,13 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     const button = press ? (
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, ownFocusLook(node) ? NO_RING : null]} disabled={disabled}
         onPress={onPress}
-        onFocus={() => {
-          set('focus', true);
+        onFocus={event => {
+          set('focus', isFocusVisible(event.currentTarget));
           routeFocus?.focused();
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
         onBlur={() => set('focus', false)}
+        onPointerDown={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
         accessibilityRole={a11y.accessibilityRole ?? 'button'} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={a11y.accessibilityState}
