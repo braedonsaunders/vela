@@ -10,7 +10,7 @@
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.1';
+const version = '1.0.2';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -101,6 +101,18 @@ const nav: Node = {
   ],
 };
 
+// Libraries remain reachable from the reading rail and from a scrollable phone strip.
+const libraries: Node = {
+  type: 'box', role: 'navigation', label: '{s:mainNavigation}', when: [{ test: 'env.viewer' }],
+  style: { display: 'flex', 'flex-direction': 'column', gap: '4px', padding: '0px 20px 20px', 'background-color': '$rail' },
+  small: { 'flex-direction': 'row', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', padding: '0px 12px 10px', gap: '12px' },
+  children: [{ type: 'repeat', over: 'nav.destinations', item: {
+    type: 'box', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], press: { action: 'library', arg: '{dest.id}' }, label: '{dest.name}',
+    style: { position: 'relative', padding: '4px', 'flex-shrink': '0', 'white-space': 'nowrap' },
+    children: [{ type: 'text', text: '{dest.name}' }],
+  } }],
+};
+
 const shell: Node = {
   type: 'box',
   ...responsive(
@@ -131,7 +143,7 @@ const shell: Node = {
         },
         { width: 'auto', 'flex-shrink': '1' },
       ),
-      children: [nav],
+      children: [nav, libraries],
     },
     {
       type: 'slot',
