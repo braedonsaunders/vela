@@ -122,6 +122,10 @@ export const shell: Node = {
             ...gutter,
           },
           small: { height: '64px', 'padding-top': '0px', gap: '10px', ...gutterSmall },
+          states: [{
+            when: [{ test: 'env.section', is: 'eq', value: 'live' }, { test: 'env.small', not: true }],
+            style: { height: '64px', 'padding-top': '0px' },
+          }],
           children: [
             {
               type: 'box',

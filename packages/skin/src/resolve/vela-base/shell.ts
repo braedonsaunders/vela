@@ -134,6 +134,10 @@ export const chipRow: Node = {
           over: 'nav.destinations',
           item: navChip([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}'),
         },
+        {
+          ...navChip([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'),
+          when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }],
+        },
       ],
     },
   ],
@@ -198,6 +202,7 @@ export const shell: Node = {
             gap: '10px',
           },
           small: { height: '56px', ...gutterSmall, gap: '8px' },
+          states: [{ when: [is('env.section', 'live'), { ...small, not: true }], style: { height: '60px' } }],
           children: [
             {
               type: 'box',
@@ -237,6 +242,10 @@ export const shell: Node = {
                     { action: 'library', arg: '{dest.id}' },
                     '{dest.name}',
                   ),
+                },
+                {
+                  ...navItem([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'),
+                  when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }],
                 },
               ],
             },

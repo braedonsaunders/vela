@@ -49,13 +49,13 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
           justifyContent: 'flex-end',
           paddingLeft: side,
           paddingRight: inset,
-          paddingBottom: small ? 12 : 16,
+          paddingBottom: 8,
         }}
       >
         <Animated.View
           key={`copy-${programme?.id ?? channel.id}`}
           entering={entering}
-          style={{ gap: small ? 4 : 7, minWidth: 0 }}
+          style={{ gap: small ? 4 : 3, minWidth: 0 }}
           accessibilityRole="summary"
           accessibilityLabel={msg('live.selectedProgramme')}
           accessibilityLiveRegion="polite"
@@ -152,7 +152,7 @@ function WatchPill({
         flexDirection: 'row',
         gap: 8,
         alignItems: 'center',
-        height: 34,
+        height: 30,
         paddingLeft: 14,
         paddingRight: 16,
         flexShrink: 0,
@@ -201,7 +201,7 @@ function ProgrammeCopy({
       </View>
       <Line
         look={look}
-        size={small ? 24 : 38}
+        size={small ? 24 : 26}
         style={[
           look.display(),
           { textShadowColor: look.shadow, textShadowRadius: 40, textShadowOffset: { width: 0, height: 4 } },
@@ -268,7 +268,7 @@ function ChannelCopy({
   return (
     <>
       <Eyebrow look={look}>{channel.number}</Eyebrow>
-      <Line look={look} size={small ? 24 : 38} style={look.display()}>
+      <Line look={look} size={small ? 24 : 26} style={look.display()}>
         {channel.name}
       </Line>
       <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>

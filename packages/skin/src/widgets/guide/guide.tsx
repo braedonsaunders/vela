@@ -104,8 +104,8 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     if (runOff !== 0) pickDay(model.day + runOff);
   };
 
-  const headerHeight = small ? 196 : 84 + clamp(viewport.height * 0.16, 128, 168);
-  const tileHeight = small ? 72 : clamp(viewport.height * 0.16 - 14, 120, 168);
+  const headerHeight = small ? 168 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
+  const tileHeight = small ? 60 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
   const landing = {
     minute: handOff && handOff.minute >= 0 ? handOff.minute : model.landing,
     channelId: handOff?.channelId ?? '',
@@ -143,7 +143,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
             />
           ) : null}
           {view.tile.state !== 'off' ? (
-            <View style={{ position: 'absolute', right: side, bottom: small ? 12 : 14, zIndex: 2 }}>
+            <View style={{ position: 'absolute', right: side, bottom: 8, zIndex: 2 }}>
               <GuideTile
                 look={look}
                 tile={view.tile}
@@ -203,8 +203,8 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
             alignItems: 'center',
             gap: 14,
             paddingHorizontal: side,
-            paddingTop: 6,
-            paddingBottom: 16,
+            paddingTop: 4,
+            paddingBottom: 8,
             zIndex: 10,
           }}
         >
@@ -339,7 +339,7 @@ function pickHero(model: GuideModel, selected: { channel: string; programme: str
 
 /** Room for the shell's floating bar where the header does not already leave it (On now, expanded). */
 function pageTop(expanded: boolean, showGrid: boolean, small: boolean): number {
-  if (expanded) return 96;
+  if (expanded) return small ? 108 : 68;
   if (showGrid) return 0;
   return small ? 116 : 112;
 }
