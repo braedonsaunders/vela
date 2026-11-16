@@ -369,9 +369,9 @@ const listRow: Node = {
         },
         {
           type: 'text',
+          when: [set('env.small')],
           text: '{card.facts}',
-          style: { display: 'none' },
-          small: { display: 'block', 'font-size': '13px', color: '$ink-faint', ...oneLine },
+          style: { 'font-size': '13px', color: '$ink-faint', ...oneLine },
         },
       ],
     },
