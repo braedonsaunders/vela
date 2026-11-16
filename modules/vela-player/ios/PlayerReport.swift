@@ -1,5 +1,5 @@
 // The contract's events in client/player/model.ts shapes: snapshots (at most four a second, and on
-// every state change), observations (at most one a second), errors and command results.
+// every state change), observations (at most one a second, at least one every ten), errors and command results.
 import Foundation
 
 final class PlayerReport {
@@ -175,6 +175,18 @@ final class PlayerReport {
     }
 
     // MARK: Observation
+
+    /// The longest the server goes without an observation. Ether ends a session it has not heard from in two
+    /// minutes, and a paused or stalled player changes nothing that would report.
+    static let heartbeatInterval: TimeInterval = 10
+
+    /// An observation when none was sent for `heartbeatInterval`, whatever the state.
+    func heartbeat(_ state: PlayerState) {
+        guard let plan, Date().timeIntervalSince(lastObservation) >= Self.heartbeatInterval else {
+            return
+        }
+        observe(plan, state, force: true)
+    }
 
     private func observe(_ plan: VelaPlan, _ state: PlayerState, force: Bool) {
         guard !pathId.isEmpty else {

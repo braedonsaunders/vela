@@ -37,6 +37,7 @@ final class VelaPlayerView: ExpoView {
     private var displayFacts: VideoFacts?
     private var loggedOutput = false
     private var refreshAsked = ""
+    private var heartbeat: Timer?
 
     // A trailer preview (`preview`): it excludes the plan and plays while active and on screen.
     private lazy var preview = makePreview()
@@ -230,6 +231,14 @@ final class VelaPlayerView: ExpoView {
         if !ambient {
             SystemMediaControls.shared.claim(self)
         }
+        let heartbeat = Timer(timeInterval: PlayerReport.heartbeatInterval / 4, repeats: true) { [weak self] _ in
+            guard let self else {
+                return
+            }
+            self.report.heartbeat(self.state)
+        }
+        RunLoop.main.add(heartbeat, forMode: .common)
+        self.heartbeat = heartbeat
         client.onProperty = { [weak self] name, value in
             self?.propertyChanged(name, value)
         }
@@ -268,6 +277,8 @@ final class VelaPlayerView: ExpoView {
     }
 
     private func stop() {
+        heartbeat?.invalidate()
+        heartbeat = nil
         guard let client = mpv else {
             return
         }

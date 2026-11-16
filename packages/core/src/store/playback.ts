@@ -239,15 +239,19 @@ export class Playback {
     }
   }
 
-  /** Read the session's authoritative plan again (the player found its grant expired or a reply stale). */
-  async refresh(sessionId: string): Promise<void> {
+  /** Read the session's authoritative plan again (the player found its grant expired or a reply stale).
+   * False when the session is gone (the server ended it, or it cannot be read): the caller starts over. */
+  async refresh(sessionId: string): Promise<boolean> {
     try {
       const connection = await this.session.ready();
       const snapshot = await connection.adapter.sessionSnapshot(sessionId);
       if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
+      if (snapshot.plan.state === 'ended') return false;
       if (this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(snapshot.plan) });
+      return true;
     } catch (error) {
       if (this.box.get().playback.sessionId === sessionId) this.patch({ error: message(error, 'Playback refresh failed') });
+      return false;
     }
   }
 

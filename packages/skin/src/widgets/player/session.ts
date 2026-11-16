@@ -4,7 +4,7 @@
 // talks to the server and follows the session. Core owns the server; this owns the order of things.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { msg, type PlaybackState, type PlaybackTarget } from '@vela/core';
+import { msg, VelaError, type PlaybackState, type PlaybackTarget } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { CommandInput, PlayerChromeState, StartFailure } from './context';
@@ -36,6 +36,7 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
   const [command, setCommand] = useState<Command | undefined>();
   const nextId = useRef(0);
   const position = useRef(0);
+  const paused = useRef(false);
   const { kind, id } = target;
 
   const begin = useCallback(
@@ -74,6 +75,20 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
     return () => subscription.remove();
   }, [vela, id, begin]);
 
+  // The server ended the session under the player (it heard nothing from it for two minutes, or it restarted):
+  // a new session starts where this one was, once per session, and stays paused if it was paused.
+  const restarted = useRef('');
+  const resumePaused = useRef(false);
+  const startOver = useCallback(
+    (gone: string) => {
+      if (restarted.current === gone) return;
+      restarted.current = gone;
+      resumePaused.current = paused.current;
+      begin(position.current > 0 ? position.current : undefined);
+    },
+    [begin],
+  );
+
   const stop = useCallback(() => void vela.playback.stop(), [vela]);
 
   const send = useCallback((input: CommandInput) => {
@@ -94,12 +109,22 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
 
   const plan = playback.plan;
   const sessionId = plan?.sessionId ?? '';
+
+  useEffect(() => {
+    if (!sessionId || !resumePaused.current) return;
+    resumePaused.current = false;
+    send({ type: 'pause' });
+  }, [sessionId, send]);
+
   const view: VelaPlayerProps = {
     plan: plan ?? undefined,
     command,
     onSnapshot: next => {
       setSnapshot(next);
-      if (belongs(next, plan)) position.current = next.position;
+      if (belongs(next, plan)) {
+        position.current = next.position;
+        paused.current = next.state === 'paused';
+      }
       if (next.failure === null) setFailure(null);
       vela.playback.snapshot(next);
     },
@@ -108,15 +133,22 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
       if (!event.ok && event.failure) setRefused(event.failure.message);
     },
     onObservation: event => {
-      if (event.sessionId === sessionId)
-        vela.playback.observe(event.sessionId, event.observation).catch(() => undefined);
+      if (event.sessionId !== sessionId) return;
+      vela.playback.observe(event.sessionId, event.observation).catch(error => {
+        const gone = error instanceof VelaError && (error.status === 404 || error.status === 410);
+        if (gone) startOver(event.sessionId);
+        else console.warn(`Playback observation not delivered: ${String(error)}`);
+      });
     },
     onSessionCommand: event => {
       if (event.sessionId === sessionId) void vela.playback.command(event.sessionId, event.command);
     },
-    // An expired grant or a stale reply: core re-reads the session's authoritative plan.
+    // An expired grant or a stale reply: core re-reads the session's authoritative plan; a gone session starts over.
     onSessionRefresh: event => {
-      if (event.sessionId === sessionId) void vela.playback.refresh(event.sessionId);
+      if (event.sessionId !== sessionId) return;
+      void vela.playback.refresh(event.sessionId).then(live => {
+        if (!live) startOver(event.sessionId);
+      });
     },
   };
 
