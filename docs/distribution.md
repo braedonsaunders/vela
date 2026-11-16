@@ -11,8 +11,8 @@ web artifact becomes the `apps/vela` Expo export. Keep signed distribution and t
 Ether installer; Ether 0.3.13 itself ships without Vela. The Exact single-app
 cutover commits `75c76af`, `9b200e8` and `fd6a9cc` remain unmerged. Do not use them
 as the starting point for the Expo release implementation. The packaging contract
-below is agreed with the migration lead; emitted paths still need confirmation
-against its first real spike export. Existing packaging sections below describe
+below is agreed with the migration lead, who verified the first spike export's
+file tree and `/vela` URLs. Existing packaging sections below describe
 the current installed baseline until this replacement is qualified.
 
 ### Captured inputs and export
@@ -30,25 +30,34 @@ from the frozen lockfile, then export from the staged `apps/vela` directory:
 ```
 bun install --frozen-lockfile
 # cwd: apps/vela
-bun x expo export --platform web --output-dir <staged-export>
+VELA_WEB_BASE=/vela bun x expo export --platform web --output-dir <staged-export>
 ```
 
 Expo and Metro come from that captured workspace/lockfile, never a floating CLI
-or the developer's global installation. Export configuration is
-`web.output: "single"` and `experiments.baseUrl: "/vela"`. Only deliberately public
-`EXPO_PUBLIC_*` configuration is admitted; no viewer credentials, private keys or
-other secrets belong in build values. Web builds need no Exact checkout, Contract
+or the developer's global installation. Web output is a single-page app.
+`apps/vela/app.config.ts` sets the web base from the export-only, non-secret
+`VELA_WEB_BASE=/vela` value (confirmed in `a7fc60e`). Do not put a permanent
+`experiments.baseUrl` in app.json: it breaks native embedding. Native builds omit
+this setting and remain unprefixed. Apart from that explicit build-control value,
+only deliberately public `EXPO_PUBLIC_*` app configuration is admitted; no viewer
+credentials, private keys or other secrets belong in build values. Web builds need no Exact checkout, Contract
 lowering, skin profile, custom engine loader or native prebuild. Native iOS/Android
 binaries have their own distribution and are not placed in this web archive.
 
 ### Preserve the export graph
 
 The archive root is Expo's generated `index.html`, with no HTML replacement loader
-or post-export JavaScript/URL string rewriting. Expected generated URLs are
-`/vela/_expo/static/js/web/entry-<hash>.js` and `/vela/assets/...`; the migration
-lead will confirm the actual tree and hashes from the first export. Configure the
-base at export time; do not invent an Exact-style `/vela/app/V/` asset subtree.
-Keep the export's platform manifests, fonts, images, notices and linked resources.
+or post-export JavaScript/URL string rewriting. The migration lead verified:
+
+- `index.html` and `metadata.json` at export root;
+- `_expo/static/js/web/` chunks named `entry`, `__common`, `_layout`, `index`,
+  `[id]` and `__expo-metro-runtime`, each with a content-hash suffix;
+- hashed files under `assets/`.
+
+All emitted URLs are absolute under `/vela`. Configure the base at export time;
+do not invent an Exact-style `/vela/app/V/` asset subtree. Preserve every chunk,
+platform manifest, font, image, notice and linked resource, including chunks not
+requested during an initial Home visit. Fixed-name `metadata.json` revalidates.
 
 SPA mode does not emit a route manifest. The app owns
 `apps/vela/scripts/routes.ts`; packaging runs it from the same captured revision
@@ -128,8 +137,9 @@ hold the Exact-specific app-schema change and keep the distribution implementati
 
 Implementation and qualification order:
 
-1. Migration lead supplies the first real export tree, route script and exact
-   workspace inputs; playback supplies the non-Metro asset builder contract.
+1. The first export tree and export-only base setting are verified. Migration
+   lead supplies the app-owned route script and final captured workspace inputs;
+   playback supplies the qualified non-Metro asset builder contract.
 2. Implement the exporter adapter from clean main, preserving the signing and
    installer verification modules; retire the Exact build path coherently. Update
    this document with observed paths and final metadata, not assumptions.
