@@ -148,3 +148,16 @@ RTX 3050, 1080p60 display, decoder utilization 28%, and no disable-GPU flags. Et
 reports copied H.264 1038p SDR with EAC3→AAC stereo and ~178 seconds server readiness
 ahead; this does not establish the browser buffer or frame-drop cause. Player info
 counters are requested; no speculative playback change has been applied.
+
+### Immutable skin correction — 2026-11-16
+
+Ether rejected 0.2.4: its modified Lounge document reused the immutable
+`skins/lounge/1.0.0/document.json` URL. 0.2.4 remains unchanged and is not an accepted
+installer candidate. 0.2.5 (`b1ceabf`) bumps Lounge to 1.0.1, including preview,
+exported catalogue and generated embedded asset references (`3eb009f` records the
+generated source update; the build regenerates it from the captured document).
+The parent compared all shared immutable `_expo`, assets, player and skin paths
+against 0.2.0 through 0.2.4: zero byte conflicts. All 246 release files and the
+player aggregate verify, and the artifact is locally test-key signed. Ether has
+the immutable fixture for isolated qualification; the owner preview serves 0.2.5.
+No lab restart or playback configuration change. Frame-drop diagnosis remains open.
