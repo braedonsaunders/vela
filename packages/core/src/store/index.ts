@@ -101,7 +101,22 @@ export function createVela(options: VelaOptions): Vela {
   const auth = new Auth(box, session, options);
   const servers = new Servers(box, session, options);
   const previews = new Previews(box, session);
-  const playback = new Playback(box, session);
+  const home = new Home(box, session, width);
+  const catalogue = new Catalogue(box, session, width);
+  // What the viewer watched changes their resume positions, Continue Watching and the hero:
+  // shown at once from the player's last report, then read again from the server.
+  const playback = new Playback(
+    box,
+    session,
+    watched => {
+      catalogue.watched(watched);
+      home.watched(watched);
+    },
+    watched => {
+      catalogue.reconcile(watched);
+      void home.reconcile(watched);
+    },
+  );
   const appearance = new Appearance(box, session, options.rendererVersion);
   return {
     getState: box.get,
@@ -123,8 +138,8 @@ export function createVela(options: VelaOptions): Vela {
     },
     auth,
     servers,
-    home: new Home(box, session, width),
-    catalogue: new Catalogue(box, session, width),
+    home,
+    catalogue,
     search: new Search(box, session, width),
     playback,
     live: new Live(box, session, playback),
