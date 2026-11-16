@@ -168,8 +168,9 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     setDocIndex(index);
     setPicked(true);
     setPickerOpen(false);
+    resetFlags();
     void preferences.set(SKIN_PREFERENCE, DOCUMENTS[index]!.id);
-  }, []);
+  }, [resetFlags]);
   useEffect(() => {
     if (picked) return;
     const index = DOCUMENTS.findIndex(doc => doc.id === preferences.get(SKIN_PREFERENCE));
