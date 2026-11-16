@@ -38,6 +38,8 @@ export interface Effects {
   grid?: { count?: number; min?: number; gap: number };
   /** Native backdrop blur radius in points (web uses CSS backdrop-filter directly). */
   backdropBlur?: number;
+  /** A masked box that only paints a colour: the mask and colour as one gradient fill (no mask needed). */
+  maskedFill?: string;
   /** Native gradient masks (web uses CSS mask-image directly). */
   mask?: LinearGradient;
   radialMask?: RadialGradient;
@@ -238,6 +240,11 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
     }
   }
   if (transform.length) s.transform = transform;
+  // A gradient mask over a plain colour is that colour as a gradient: drawn as a fill, it costs
+  // nothing, where a mask renders the box offscreen.
+  if ((fx.mask || fx.radialMask) && typeof s.backgroundColor === 'string' && !s.backgroundImage && !fx.backgroundUrl) {
+    fx.maskedFill = withTokens(css['mask-image']).replace(/\b(black|#000000|#000)\b/g, s.backgroundColor);
+  }
   // A sticky node is pinned at its scroll view's top (the style matrix ignores a non-zero `top`):
   // its offsets are not a relative shift, which would draw it below its own place in flow.
   if (fx.sticky) { delete s.top; delete s.bottom; }
