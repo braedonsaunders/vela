@@ -3,7 +3,7 @@
 // calc()/min()/max()/clamp() over them are evaluated here, against the viewport and the font
 // size in force. Theme token names become their colours.
 import { Platform } from 'react-native';
-import { THEME } from './theme.generated';
+import { THEME } from './theme';
 
 export interface Viewport {
   width: number;
