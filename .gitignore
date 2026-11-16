@@ -45,3 +45,7 @@ client/modules/web/universal/
 client/modules/apple/VelaMedia.xcframework
 client/modules/apple/VelaOrigin.swift
 client/app.contract.d.ts
+
+# Local Apple TV build settings and output (tools/apple-tv.sh)
+/.apple-tv.env
+/.build/

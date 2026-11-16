@@ -1,5 +1,6 @@
-// The store's platform natively (iOS, iPadOS, tvOS, Android): the configured Ether server, the
-// Keychain/Keystore, this device, and what the native player (libmpv) says it plays.
+// The store's platform natively (iOS, iPadOS, tvOS, Android): no implied server in a release (a lab
+// build may pin its Ether server), the Keychain/Keystore, this device, and what the native player
+// (libmpv) says it plays.
 import { getRandomValues } from 'expo-crypto';
 import { Dimensions, PixelRatio, Platform } from 'react-native';
 import type { VelaPlatform } from '@vela/core';
@@ -30,7 +31,9 @@ export function screenArtWidth(): number {
 
 export function platform(): VelaPlatform {
   return {
-    etherOrigin: config.server || DEVELOPMENT_SERVER,
+    // A release build is standalone: the viewer adds Ether, Jellyfin, Emby or Plex on Connect. A
+    // lab build may still pin its Ether server; a development build defaults to mock-server.
+    etherOrigin: config.server || (__DEV__ ? DEVELOPMENT_SERVER : undefined),
     secrets,
     device: device(),
     appVersion: config.appVersion,
