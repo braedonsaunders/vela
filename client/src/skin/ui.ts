@@ -34,6 +34,8 @@ export function resolveUi(block: Record<string, unknown> | undefined): UiTokens 
     if (!isUiName(name)) throw new Error(`Unknown ui key ${name}`);
     (tokens as Record<UiName, string | number>)[name] = checked(name, raw);
   }
+  // A document that sets its ink but not its hover keeps the ink under the pointer.
+  if (block?.ink !== undefined && block.inkHover === undefined) tokens.inkHover = tokens.ink;
   return tokens;
 }
 
@@ -42,4 +44,9 @@ export function uiValue(tokens: UiTokens, name: string): string {
   if (!isUiName(name)) throw new Error(`Unknown token $ui.${name}`);
   const v = tokens[name];
   return typeof v === 'number' ? `${v}px` : v;
+}
+
+/** A style value with every `$ui.<name>` filled. */
+export function withUi(text: string, tokens: UiTokens): string {
+  return text.replace(/\$ui\.([A-Za-z]+)/g, (_, name: string) => uiValue(tokens, name));
 }

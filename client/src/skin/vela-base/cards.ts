@@ -1,5 +1,5 @@
 import type { BoxNode, Node, Style } from '../../../wire/v0/skin';
-import { display, gutter, gutterSmall, is, pulse, small } from './look';
+import { display, gutter, gutterSmall, is, placeholder, pulse, small, veil } from './look';
 
 export const card: Node = {
   type: 'box',
@@ -31,7 +31,7 @@ export const card: Node = {
         'overflow-y': 'hidden',
         scale: '1',
         translate: '0px 0px',
-        'box-shadow': '0px 10px 24px -12px #00000088, 0px 0px 0px 1px #ffffff0f',
+        'box-shadow': '0px 10px 24px -12px $ui.shadow, 0px 0px 0px 1px $ui.glassEdge',
         transition: [
           'scale 360ms cubic-bezier(0.16, 1, 0.3, 1)',
           'translate 360ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -42,12 +42,12 @@ export const card: Node = {
       groupHover: {
         scale: '1.045',
         translate: '0px -6px',
-        'box-shadow': '0px 28px 50px -14px #00000088, 0px 0px 0px 1px #ffffff2e',
+        'box-shadow': '0px 28px 50px -14px $ui.shadow, 0px 0px 0px 1px $ui.glassEdgeStrong',
       },
       groupFocus: {
         scale: '1.045',
         translate: '0px -6px',
-        'box-shadow': '0px 0px 0px 3px $ui.ink, 0px 28px 50px -14px #00000088',
+        'box-shadow': '0px 0px 0px 3px $ui.ink, 0px 28px 50px -14px $ui.shadow',
       },
       children: [
         {
@@ -75,7 +75,7 @@ export const card: Node = {
             display: 'flex',
             'flex-direction': 'column',
             'justify-content': 'flex-end',
-            'background-image': 'linear-gradient(160deg, #2a2622 0%, #121418 100%)',
+            'background-image': placeholder(160),
           },
           children: [
             {
@@ -97,7 +97,7 @@ export const card: Node = {
             position: 'absolute',
             inset: '0px',
             'pointer-events': 'none',
-            'background-image': 'linear-gradient(145deg, #ffffff21 0%, #090b0e00 42%)',
+            'background-image': 'linear-gradient(145deg, #ffffff21 0%, #ffffff00 42%)',
             opacity: '0',
             transition: 'opacity 360ms cubic-bezier(0.16, 1, 0.3, 1)',
           },
@@ -133,7 +133,7 @@ export const card: Node = {
             right: '0px',
             bottom: '0px',
             height: '36px',
-            'background-image': 'linear-gradient(0deg, #090b0ed9 0%, #090b0e00 100%)',
+            'background-image': `linear-gradient(0deg, ${veil(85)} 0%, ${veil(0)} 100%)`,
           },
         },
         {
@@ -207,8 +207,8 @@ export const numeral = (ten: boolean): Node => ({
     'font-size': '348px',
     'line-height': '0.74',
     'letter-spacing': ten ? '-0.2em' : '-0.09em',
-    color: '#0e1116',
-    'text-shadow': '0px 0px 5px #d9d3c7',
+    color: '$ui.page',
+    'text-shadow': '0px 0px 5px color-mix(in srgb, $ui.ink 88%, $ui.page)',
     'mask-image': 'linear-gradient(180deg, black 0%, black 50%, rgba(0, 0, 0, 0.25) 100%)',
     'margin-right': '-50px',
     'padding-bottom': '52px',
@@ -216,7 +216,7 @@ export const numeral = (ten: boolean): Node => ({
   },
   small: {
     'font-size': '220px',
-    'text-shadow': '0px 0px 3px #d9d3c7',
+    'text-shadow': '0px 0px 3px color-mix(in srgb, $ui.ink 88%, $ui.page)',
     'margin-right': '-30px',
     'padding-bottom': '44px',
   },

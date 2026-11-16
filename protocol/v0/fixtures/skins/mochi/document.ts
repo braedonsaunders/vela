@@ -76,7 +76,7 @@ const each = <T extends Record<string, Node>>(o: T): T =>
 
 export default {
   schema: 1,
-  renderer: 13,
+  renderer: 15,
   id,
   name: 'Mochi',
   version,
@@ -84,6 +84,17 @@ export default {
   preview: asset('preview.jpg'),
   swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true },
+  // Mochi's paper, plum ink and pink accent, for the routes it inherits (search).
+  ui: {
+    page: '#fff0f6', raised: '#ffffff', ink: '#3b1f4a', inkSecondary: '#6b4f7d', inkQuiet: '#8f789f',
+    inkInverse: '#ffffff', inkHover: '#6b4f7d', accent: '#ff7eb6', onAccent: '#3b1f4a', control: '#ffffffcc',
+    controlHover: '#ffd9e9', glass: '#fff8fbd9', glassEdge: '#3b1f4a1f', glassEdgeStrong: '#3b1f4a38',
+    popover: '#fff8fbf7', scrim: '#2a1546a6', track: '#3b1f4a1f', trackStrong: '#3b1f4a38',
+    focusHalo: '#7b5ae033', shadow: '#7b5ae040', skeleton: '#f6d3e4', skeletonLight: '#fff4f9',
+    alert: '#ffe1e9', live: '#d94c8f', font: 'Fredoka, ui-rounded, system-ui, sans-serif',
+    fontDisplay: 'Fredoka, ui-rounded, system-ui, sans-serif', radiusControl: 999, radiusCard: 16,
+    radiusPanel: 22,
+  },
   tokens: {
     page: '#fff0f6',
     'page-deep': '#ffe2ee',

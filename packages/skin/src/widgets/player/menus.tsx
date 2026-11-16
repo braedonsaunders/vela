@@ -141,6 +141,9 @@ interface QualityProps extends Props {
 
 export function QualityMenu({ look, view, blocked, send, info, onInfo }: QualityProps) {
   const shared = sharedResolutions(view.qualities);
+  // Codec and range are worth a word only where the choices differ in them.
+  const distinct = new Set(view.qualities.filter(o => !o.original).map(o => o.traits)).size > 1;
+  const traits = (option: QualityOption) => (option.original || distinct ? option.traits : '');
   const chosen = (option: QualityOption) =>
     view.lockedQuality === option.id || (!view.lockedQuality && !view.qualityAuto && view.qualityId === option.id);
   return (
@@ -159,9 +162,10 @@ export function QualityMenu({ look, view, blocked, send, info, onInfo }: Quality
         const grouped = shared.has(option.resolution);
         const heading = grouped && view.qualities[i - 1]?.resolution !== option.resolution;
         const name = grouped
-          ? [option.traits, option.rate].filter(Boolean).join(' · ') || option.resolution
+          ? [traits(option), option.rate].filter(Boolean).join(' · ') || option.resolution
           : option.resolution;
-        const detail = grouped ? option.needs : [option.traits, option.rate, option.needs].filter(Boolean).join(' · ');
+        const facts = [traits(option), option.rate, option.needs].filter(Boolean).join(' · ');
+        const detail = grouped ? option.needs : facts;
         return (
           <Fragment key={option.id}>
             {heading ? <MenuHeading look={look} text={option.resolution} /> : null}

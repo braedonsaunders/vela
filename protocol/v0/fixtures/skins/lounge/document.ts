@@ -28,13 +28,25 @@ const rise = (delay: number) => ({
 
 const lounge: SkinDocument = {
   schema: 1,
-  renderer: 13,
+  renderer: 15,
   id: 'lounge',
   name: 'Lounge',
   version: '1.0.0',
   tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.0/preview.jpg',
   swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
+  // Lounge's deep ground and amber, for the routes it inherits (search).
+  ui: {
+    page: '#05060a', raised: '#1a1d24', ink: '#f5f1e9', inkSecondary: 'rgba(245, 241, 233, 0.78)',
+    inkQuiet: 'rgba(245, 241, 233, 0.52)', inkInverse: '#05060a', inkHover: '#ffffff', accent: '#f2c27e',
+    onAccent: '#05060a', control: '#ffffff16', controlHover: '#ffffff26', glass: '#1a1d24b3',
+    glassEdge: '#ffffff1a', glassEdgeStrong: '#ffffff33', popover: '#1a1d24f5', scrim: '#000000bf',
+    track: '#ffffff25', trackStrong: '#ffffff47', focusHalo: '#f2c27e33', shadow: '#00000099',
+    skeleton: '#ffffff0d', skeletonLight: '#ffffff12', alert: '#f2c27e1f', live: '#e8513f',
+    font: 'system-ui, -apple-system, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", Roboto, sans-serif',
+    fontDisplay: 'system-ui, -apple-system, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", Roboto, sans-serif',
+    radiusControl: 999, radiusCard: 10, radiusPanel: 20,
+  },
   tokens: {
     ground: '#05060a',
     raised: '#1a1d24',

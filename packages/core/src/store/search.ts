@@ -17,9 +17,9 @@ export type LiveChannelResult = LiveResults['liveChannels'][number];
 export type LiveProgrammeResult = LiveResults['liveProgrammes'][number];
 
 export interface SearchLane {
-  /** `unavailable` when the server does not offer this lane. Descriptive and AI lanes also
-   * report the server's own states (`indexing`, `queued`, `running`, `partial`, …). */
-  status: Load | 'unavailable' | string;
+  /** `unavailable` when the server does not offer this lane. The AI lane reports its job's own
+   * states (`queued`, `running`, `partial`, `complete`, `cancelled`, `failed`). */
+  status: Load | 'unavailable' | V.AISearchJob['status'];
   items: Card[];
   error: string;
 }
@@ -28,7 +28,9 @@ export interface SearchState {
   query: string;
   generation: number;
   fast: SearchLane & { liveChannels: LiveChannelResult[]; liveProgrammes: LiveProgrammeResult[] };
-  descriptive: SearchLane & { retryAllowed: boolean; retryAfterSeconds: number };
+  /** While the server is still working, it is asked again on its terms; after a failure it
+   * allows retrying, `canRetry` turns true once its backoff has passed. */
+  descriptive: SearchLane & { canRetry: boolean };
   ai: SearchLane;
 }
 
@@ -38,7 +40,7 @@ export const initialSearch: SearchState = {
   query: '',
   generation: 0,
   fast: { ...emptyLane, liveChannels: [], liveProgrammes: [] },
-  descriptive: { ...emptyLane, retryAllowed: false, retryAfterSeconds: 0 },
+  descriptive: { ...emptyLane, canRetry: false },
   ai: emptyLane,
 };
 
@@ -49,6 +51,7 @@ const ACTIVE_JOB = ['queued', 'running', 'partial'];
 
 export class Search {
   private pause: ReturnType<typeof setTimeout> | undefined;
+  private timers = new Set<ReturnType<typeof setTimeout>>();
   private aiPoll: ReturnType<typeof setTimeout> | undefined;
   private job: { generation: number; query: string; id?: string; status?: string } | undefined;
 
@@ -74,18 +77,31 @@ export class Search {
       this.box.update('search', () => ({ ...initialSearch, query, generation }));
       return;
     }
+    // A lane the server does not offer says so at once; one it offers is loading until typing pauses.
+    const { descriptive, ai } = this.offered();
     this.box.update('search', search => ({
       query,
       generation,
       fast: { ...search.fast, status: 'loading', error: '' },
-      descriptive: { ...initialSearch.descriptive },
-      ai: { ...emptyLane },
+      descriptive: { ...initialSearch.descriptive, status: descriptive ? 'loading' : 'unavailable' },
+      ai: { ...emptyLane, status: ai ? 'loading' : 'unavailable' },
     }));
     void this.fast(text, generation);
+    if (!descriptive && !ai) return;
     this.pause = setTimeout(() => {
-      void this.descriptive(text, generation);
-      void this.ai(text, generation);
+      if (descriptive) void this.descriptive(text, generation);
+      if (ai) void this.ai(text, generation);
     }, PAUSE_MS);
+  }
+
+  /** The slower lanes the selected server offers: stated in its features and implemented by its adapter. */
+  private offered(): { descriptive: boolean; ai: boolean } {
+    const features = this.session.features;
+    const api = this.session.selected().adapter;
+    return {
+      descriptive: !!features?.descriptiveSearch.available && hasDescriptiveSearch(api),
+      ai: !!features?.aiSearch.available && hasAiSearch(api),
+    };
   }
 
   clear(): void {
@@ -118,28 +134,45 @@ export class Search {
         this.patch('descriptive', { status: 'unavailable' });
         return;
       }
-      this.patch('descriptive', { status: 'loading' });
+      this.patch('descriptive', { status: 'loading', canRetry: false });
       const result = await api.searchByDescription({ query, generation, idempotencyKey: this.session.key() });
       const images = await connection.images();
       if (!this.current(generation) || result.generation !== generation) return;
-      const retry = result.descriptive?.retry;
-      const after = Number.isFinite(retry?.afterSeconds) ? Math.max(1, Math.ceil(retry!.afterSeconds!)) : 1;
-      this.patch('descriptive', {
-        status: result.descriptive?.state ?? 'ready',
-        items: result.items.map(title => card(title, '', images, this.artWidth())),
-        error: '',
-        retryAllowed: retry?.allowed === true,
-        retryAfterSeconds: after,
-      });
+      const items = result.items.map(title => card(title, '', images, this.artWidth()));
+      this.described(query, generation, result.descriptive, items);
     } catch (error) {
-      if (this.current(generation)) this.patch('descriptive', { status: 'failed', error: message(error) });
+      if (this.current(generation)) this.patch('descriptive', { status: 'failed', error: message(error), canRetry: false });
     }
   }
 
-  /** Ask the descriptive lane again (it was indexing, or failed). */
+  /** The lane's honest state for an answer, asking again while the server keeps working and allows it. */
+  private described(query: string, generation: number, state: V.DescriptiveSearchState | undefined, items: Card[]): void {
+    const status = state?.state ?? 'ready';
+    const allowed = state?.retry?.allowed === true;
+    const wait = Math.max(1, Math.ceil(state?.retry?.afterSeconds ?? 1)) * 1000;
+    const still = status === 'pending' || status === 'busy';
+    if (status === 'failed' || (still && !allowed)) {
+      this.patch('descriptive', { status: 'failed', items, error: '', canRetry: false });
+      if (allowed) this.later(wait, generation, () => this.patch('descriptive', { canRetry: true }));
+      return;
+    }
+    this.patch('descriptive', { status: still ? 'loading' : 'ready', items, error: '', canRetry: false });
+    // A partial answer shows while the server keeps working; a pending one waits for it.
+    if ((still || status === 'partial') && allowed) this.later(wait, generation, () => void this.descriptive(query, generation));
+  }
+
+  /** Ask the descriptive lane again, once the server has allowed it. */
   retryDescriptive(): void {
-    const { query, generation } = this.box.get().search;
-    if (query.trim()) void this.descriptive(query.trim(), generation);
+    const { query, generation, descriptive } = this.box.get().search;
+    if (query.trim() && descriptive.canRetry) void this.descriptive(query.trim(), generation);
+  }
+
+  private later(ms: number, generation: number, run: () => void): void {
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      if (this.current(generation)) run();
+    }, ms);
+    this.timers.add(timer);
   }
 
   private async ai(query: string, generation: number): Promise<void> {
@@ -203,6 +236,8 @@ export class Search {
   private stopTimers(): void {
     if (this.pause) clearTimeout(this.pause);
     if (this.aiPoll) clearTimeout(this.aiPoll);
+    for (const timer of this.timers) clearTimeout(timer);
+    this.timers.clear();
     this.pause = undefined;
     this.aiPoll = undefined;
   }

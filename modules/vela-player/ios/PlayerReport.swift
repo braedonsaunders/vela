@@ -15,6 +15,7 @@ final class PlayerReport {
     private let emitSnapshot: ([String: Any]) -> Void
     private let emitObservation: ([String: Any]) -> Void
     private let emitError: ([String: Any]) -> Void
+    private let emitSessionCommand: ([String: Any]) -> Void
     private var plan: VelaPlan?
     private var sequence = 0
     private var lastSnapshot = Date.distantPast
@@ -26,11 +27,26 @@ final class PlayerReport {
     init(
         snapshot: @escaping ([String: Any]) -> Void,
         observation: @escaping ([String: Any]) -> Void,
-        error: @escaping ([String: Any]) -> Void
+        error: @escaping ([String: Any]) -> Void,
+        sessionCommand: @escaping ([String: Any]) -> Void
     ) {
         emitSnapshot = snapshot
         emitObservation = observation
         emitError = error
+        emitSessionCommand = sessionCommand
+    }
+
+    /// Asks the playback controller to apply a session command (protocol/v0 SessionCommand) for the
+    /// current generations; it answers with a newer plan.
+    func sessionCommand(_ fields: [String: Any]) {
+        guard let plan else {
+            return
+        }
+        var command = fields
+        command["sourceGeneration"] = plan.sourceGeneration
+        command["seekGeneration"] = plan.seekGeneration
+        command["idempotencyKey"] = UUID().uuidString.lowercased()
+        emitSessionCommand(["sessionId": plan.sessionId, "command": command])
     }
 
     /// A newer plan: the server's track choices, unless the viewer made their own on the device.

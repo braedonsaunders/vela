@@ -9,6 +9,7 @@ import Animated from 'react-native-reanimated';
 import { msg } from '@vela/core';
 import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
+import { LiveDial, LivePanel, type LiveWatch } from './live';
 import type { CommandInput, PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
 import { MenuPanel } from './menu';
@@ -118,6 +119,7 @@ interface BottomProps {
   toggle(menu: Exclude<Opened, null>): void;
   toggleInfo(): void;
   onActive(active: boolean): void;
+  live: LiveWatch;
 }
 
 export function BottomBar(props: BottomProps) {
@@ -148,28 +150,38 @@ export function BottomBar(props: BottomProps) {
           {opened === 'chapters' && view.chapters.length ? (
             <ChapterStrip look={look} view={view} disabled={blocked} onSeek={props.seek} />
           ) : null}
-          <View>
-            <Scrubber
-              look={look}
-              view={view}
-              disabled={blocked}
-              onSeek={props.seek}
-              onActive={props.onActive}
-              thumbnail={state.thumbnail}
-            />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={[look.text(12, 400, look.inkSecondary), { fontVariant: ['tabular-nums'] }]}>
-                {view.elapsed}
-              </Text>
-              <Text style={[look.text(12, 400, look.inkSecondary), { fontVariant: ['tabular-nums'] }]}>
-                {view.remaining}
-              </Text>
+          {props.live.live ? (
+            <View style={{ alignItems: look.small ? 'stretch' : 'flex-start', gap: look.size(10) }}>
+              <LiveDial plan={state.plan} small={look.small} still={look.still} />
+              <LivePanel snapshot={state.snapshot} watch={props.live} send={props.send} />
             </View>
-          </View>
+          ) : (
+            <Timeline {...props} />
+          )}
           <Controls {...props} />
         </View>
       </FocusZone>
     </Animated.View>
+  );
+}
+
+/** The timeline and the clock under it. */
+function Timeline({ look, state, view, blocked, seek, onActive }: BottomProps) {
+  return (
+    <View>
+      <Scrubber
+        look={look}
+        view={view}
+        disabled={blocked}
+        onSeek={seek}
+        onActive={onActive}
+        thumbnail={state.thumbnail}
+      />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={[look.text(12, 400, look.inkSecondary), { fontVariant: ['tabular-nums'] }]}>{view.elapsed}</Text>
+        <Text style={[look.text(12, 400, look.inkSecondary), { fontVariant: ['tabular-nums'] }]}>{view.remaining}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -185,7 +197,10 @@ function Controls({
   toggle,
   toggleInfo,
   onActive,
+  live,
 }: BottomProps) {
+  // A channel plays at the live edge: no ten-second steps, no speed, no chapters.
+  const timeline = !live.live;
   const gap = look.size(look.small ? 4 : 8);
   const names: Record<MenuName, string> = {
     subtitles: msg('ui.subtitles'),
@@ -218,25 +233,29 @@ function Controls({
         icon={view.playing ? 'pause' : 'play'}
         preferred={look.tv && !menu}
         label={view.ended ? msg('ui.finished') : view.playing ? msg('ui.pause') : msg('ui.play')}
-        disabled={view.ended}
+        disabled={blocked}
         size={look.small ? 48 : 52}
         testID="player-toggle"
         onPress={() => send({ type: view.playing ? 'pause' : 'play' })}
       />
-      <ChromeButton
-        look={look}
-        icon="skipBack"
-        label={msg('ui.back10Seconds')}
-        disabled={blocked}
-        onPress={() => seekBy(-10)}
-      />
-      <ChromeButton
-        look={look}
-        icon="skipForward"
-        label={msg('ui.forward10Seconds')}
-        disabled={blocked || view.duration <= 0}
-        onPress={() => seekBy(10)}
-      />
+      {timeline ? (
+        <>
+          <ChromeButton
+            look={look}
+            icon="skipBack"
+            label={msg('ui.back10Seconds')}
+            disabled={blocked}
+            onPress={() => seekBy(-10)}
+          />
+          <ChromeButton
+            look={look}
+            icon="skipForward"
+            label={msg('ui.forward10Seconds')}
+            disabled={blocked || view.duration <= 0}
+            onPress={() => seekBy(10)}
+          />
+        </>
+      ) : null}
       <Volume look={look} view={view} send={send} onActive={onActive} />
       <View style={cluster}>
         {look.small ? null : (
@@ -285,23 +304,27 @@ function Controls({
           testID="player-quality-button"
           onPress={() => toggle('quality')}
         />
-        <ChromeButton
-          look={look}
-          icon="speed"
-          label={names.speed}
-          selected={opened === 'speed'}
-          testID="player-speed-button"
-          onPress={() => toggle('speed')}
-        />
-        <ChromeButton
-          look={look}
-          icon="chapters"
-          label={msg('ui.chapters')}
-          selected={opened === 'chapters'}
-          disabled={!view.chapters.length}
-          testID="player-chapters-button"
-          onPress={() => toggle('chapters')}
-        />
+        {timeline ? (
+          <>
+            <ChromeButton
+              look={look}
+              icon="speed"
+              label={names.speed}
+              selected={opened === 'speed'}
+              testID="player-speed-button"
+              onPress={() => toggle('speed')}
+            />
+            <ChromeButton
+              look={look}
+              icon="chapters"
+              label={msg('ui.chapters')}
+              selected={opened === 'chapters'}
+              disabled={!view.chapters.length}
+              testID="player-chapters-button"
+              onPress={() => toggle('chapters')}
+            />
+          </>
+        ) : null}
         {view.pip ? (
           <ChromeButton
             look={look}
