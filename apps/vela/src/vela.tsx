@@ -176,7 +176,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const image = useCallback<SkinHost['image']>(path => {
     const source = assetSource(path, origin);
     if (source === undefined) return undefined;
-    return typeof source === 'number' ? source : { uri: source };
+    // A URL; or a bundled asset, which is a module id natively and an asset object on the web.
+    return typeof source === 'string' ? { uri: source } : source;
   }, [origin]);
   const setQuery = useCallback((query: string) => store.search.setQuery(query), [store]);
 
