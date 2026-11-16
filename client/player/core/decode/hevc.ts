@@ -6,16 +6,16 @@ import {
   rewriteHEVCAccessUnitColorDescriptionToBT709,
   type HEVCNALFormat,
   type HEVCLengthSize,
-} from '../../../../vendor/webgpu-player/src/demux/dolby-vision/DolbyVisionHEVCSplitter';
+} from 'webgpu-player/src/demux/dolby-vision/DolbyVisionHEVCSplitter';
 import {
   repairHEVCSPSDefaultDisplayWindow,
   type HEVCHDRTransfer,
-} from '../../../../vendor/webgpu-player/src/demux/hevc/HEVCSPSParser';
-import { findHEVCPreferredTransferCharacteristics } from '../../../../vendor/webgpu-player/src/demux/hevc/HEVCSEI';
+} from 'webgpu-player/src/demux/hevc/HEVCSPSParser';
+import { findHEVCPreferredTransferCharacteristics } from 'webgpu-player/src/demux/hevc/HEVCSEI';
 import {
   neutralizeNativeHDRHEVCDecoderConfigWithValidation,
   repairHEVCDecoderConfigDefaultDisplayWindow,
-} from '../../../../vendor/webgpu-player/src/decode/video/native/NativeHDRHEVCColorNeutralizer';
+} from 'webgpu-player/src/decode/video/native/NativeHDRHEVCColorNeutralizer';
 import type { VideoTrack } from '../types';
 
 /** Native HEVC bitstream preparation, using parser functions as libraries.

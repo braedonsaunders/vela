@@ -1,4 +1,4 @@
-import type CustomPlaybackController from '../../../../vendor/webgpu-player/src/pipeline/CustomPlaybackController';
+import type CustomPlaybackController from 'webgpu-player/src/pipeline/CustomPlaybackController';
 import { downmixPolicy, outputLayout } from './policy';
 type Controller = Pick<CustomPlaybackController, 'setVolume' | 'setMuted' | 'reconfigureAudioOutput' | 'getAudioOutputMaximumChannelCount'>;
 

@@ -6,7 +6,7 @@
     "allowImportingTsExtensions": true,
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "types": ["@webgpu/types", "node"],
-    "paths": { "mediabunny": ["../../../vendor/webgpu-player/vendor/mediabunny/src/index.ts"] }
+    "paths": { "mediabunny": ["../../../node_modules/mediabunny/src/index.ts"] }
   },
   "include": ["../src/VelaPlayerView.web.tsx", "./*.ts"]
 }

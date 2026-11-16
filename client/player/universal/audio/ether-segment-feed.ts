@@ -1,8 +1,8 @@
 import { assertEtherAudioTimeline } from './ether-fragment-timing';
 import type { AudioFallbackResponse } from '../../../../protocol/v0/types';
-import type { OwnedNativeMediaAudioBackendPort } from '../../../../vendor/webgpu-player/src/audio/native/CustomDecodeNativeAudioBridge';
-import { MAXIMUM_NATIVE_AUDIO_SEGMENT_BYTE_LENGTH, MAXIMUM_NATIVE_AUDIO_SEGMENT_DURATION_MICROSECONDS } from '../../../../vendor/webgpu-player/src/audio/native/NativeMediaAudioLimits';
-import { secondsToMicroseconds } from '../../../../vendor/webgpu-player/src/MediaTime';
+import type { OwnedNativeMediaAudioBackendPort } from 'webgpu-player/src/audio/native/CustomDecodeNativeAudioBridge';
+import { MAXIMUM_NATIVE_AUDIO_SEGMENT_BYTE_LENGTH, MAXIMUM_NATIVE_AUDIO_SEGMENT_DURATION_MICROSECONDS } from 'webgpu-player/src/audio/native/NativeMediaAudioLimits';
+import { secondsToMicroseconds } from 'webgpu-player/src/MediaTime';
 import { parsePlaylist } from '../../hls';
 import { delay } from '../../session';
 

@@ -1,5 +1,4 @@
 vendor/*
-!vendor/webgpu-player
 .tools/
 node_modules/
 # A worktree's node_modules may be a symlink (a file to git), which node_modules/ does not match.

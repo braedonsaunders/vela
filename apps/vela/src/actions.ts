@@ -7,6 +7,7 @@ import type { Vela as Store } from '@vela/core';
 import { page, type SkinHost } from '@vela/skin';
 import { liveAction, type LiveController } from '@vela/skin/src/widgets/guide';
 import type { Action } from '../../../protocol/v0/skin';
+import { COLLECTION_KINDS, openCollection, openHit, openLibrary, playExtra } from './browse/open';
 import type { ViewState } from './view-state';
 
 const TITLE_KINDS = ['', 'movie', 'show', 'season', 'episode'];
@@ -37,8 +38,8 @@ export function useDispatcher({ store, view, live, nextDocument }: Context): Dis
   const loadMore = useCallback<SkinHost['loadMore']>((on, id) => {
     if (on === 'row') void store.home.rowItems(id);
     else if (on === 'home') void store.home.moreRows();
-    else if (on === 'collection') void store.catalogue.collection(id, true);
-    else notYet('libraryMore', id);
+    else if (on === 'collection' && id) void store.catalogue.collection(id, true);
+    // A library page reads its own next page (browse/page-host.ts); elsewhere there is none.
   }, [store]);
 
   const select = useCallback((arg: string) => {
@@ -46,15 +47,10 @@ export function useDispatcher({ store, view, live, nextDocument }: Context): Dis
     if (receipt) void store.receipts.record(receipt, 'selected');
     if (kind === 'season') view.setSeason(id);
     else if (kind === 'channel') router.push({ pathname: '/live', params: { ch: id } });
+    else if (id && COLLECTION_KINDS.includes(kind)) openCollection(id);
     else if (id && TITLE_KINDS.includes(kind)) router.push({ pathname: '/title/[id]', params: { id } });
     else notYet('select', arg);
   }, [store, view]);
-
-  const openLibrary = useCallback((id: string) => {
-    const destination = store.getState().libraries.value?.find(d => d.id === id);
-    if (destination?.kind === 'live') router.push('/live');
-    else notYet('library', id);
-  }, [store]);
 
   const retry = useCallback((place: Place) => {
     if (place.route === 'title') void store.catalogue.title(place.entry, true);
@@ -107,7 +103,11 @@ export function useDispatcher({ store, view, live, nextDocument }: Context): Dis
       case 'live':
         return router.push('/live');
       case 'library':
-        return openLibrary(arg);
+        return openLibrary(store, arg, place.route);
+      case 'playExtra':
+        return playExtra(arg);
+      case 'openHit':
+        return openHit(store, arg);
       case 'openPicker':
         return nextDocument();
       case 'signOut':
@@ -116,10 +116,9 @@ export function useDispatcher({ store, view, live, nextDocument }: Context): Dis
       case 'retry':
         return retry(place);
       default:
-        // Extras, library sort and filters, and live hits from search wait for their routes.
         notYet(action, arg);
     }
-  }, [store, view, live, select, openLibrary, retry, loadMore, nextDocument]);
+  }, [store, view, live, select, retry, loadMore, nextDocument]);
 
   return { dispatch, loadMore };
 }
