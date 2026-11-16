@@ -1,12 +1,13 @@
 // Spike (b): VelaPlayerView on Apple TV with a real lab plan (docs/rn-migration.md).
 // Signs in from configuration (apps/vela/.env.local, never committed):
 //   EXPO_PUBLIC_VELA_ORIGIN, EXPO_PUBLIC_VELA_USER, EXPO_PUBLIC_VELA_PASSWORD, EXPO_PUBLIC_VELA_TITLE (a search query),
-//   EXPO_PUBLIC_VELA_MUTED=1 to start muted (a drive at night)
+//   EXPO_PUBLIC_VELA_MUTED=1 to start muted (a drive at night),
+//   EXPO_PUBLIC_VELA_ORIGINALS=0 to declare no original playback (the server's HLS, server-applied seeks and tracks)
 // then asks Ether for a plan with this device's capabilities and plays it. Remote: the buttons below.
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { VelaPlayer, VelaPlayerView } from '@vela/player';
-import type { Command, PlaybackPlan, PlayerObservation, Snapshot } from '@vela/player-api';
+import type { Command, PlaybackPlan, PlayerObservation, SessionCommand, Snapshot } from '@vela/player-api';
 
 const origin = process.env.EXPO_PUBLIC_VELA_ORIGIN ?? '';
 const api = `${origin}/vela/v0`;
@@ -66,7 +67,8 @@ async function labPlan(): Promise<PlaybackPlan> {
     device,
   });
   token = tokens.accessToken;
-  await call('POST', '/negotiate', { idempotencyKey: key(), client });
+  const declared = process.env.EXPO_PUBLIC_VELA_ORIGINALS === '0' ? { ...client, originalPlayback: undefined } : client;
+  await call('POST', '/negotiate', { idempotencyKey: key(), client: declared });
   const query = process.env.EXPO_PUBLIC_VELA_TITLE ?? '1917';
   const found = await call<{ items: { id: string; kind: string }[] }>('POST', '/search', {
     idempotencyKey: key(), query, generation: 1, mode: 'fast', limit: 5,
@@ -75,7 +77,7 @@ async function labPlan(): Promise<PlaybackPlan> {
   if (!title) {
     throw new Error(`Nothing found for ${query}`);
   }
-  return call<PlaybackPlan>('POST', '/playback', { idempotencyKey: key(), titleId: title.id, client });
+  return call<PlaybackPlan>('POST', '/playback', { idempotencyKey: key(), titleId: title.id, client: declared });
 }
 
 /** Ends the session on the server, so its media grant is released. */
@@ -86,6 +88,15 @@ function stopSession(plan: PlaybackPlan) {
     sourceGeneration: plan.sourceGeneration,
     seekGeneration: plan.seekGeneration,
   }).catch(() => {});
+}
+
+/** The server applies a session command and answers with the plan to play. */
+function sessionCommand(event: { sessionId: string; command: SessionCommand }): Promise<PlaybackPlan> {
+  return call<PlaybackPlan>('POST', `/sessions/${event.sessionId}/commands`, event.command);
+}
+
+function freshPlan(event: { sessionId: string }): Promise<PlaybackPlan> {
+  return call<{ plan: PlaybackPlan }>('GET', `/sessions/${event.sessionId}`).then((snapshot) => snapshot.plan);
 }
 
 function postObservation(event: { sessionId: string; observation: PlayerObservation }) {
@@ -161,6 +172,8 @@ export default function PlayerSpike() {
           onSnapshot={setSnapshot}
           onError={(failure) => setProblem(`${failure.kind}: ${failure.message}`)}
           onObservation={postObservation}
+          onSessionCommand={(event) => sessionCommand(event).then(setPlan, (error) => setProblem(String(error)))}
+          onSessionRefresh={(event) => freshPlan(event).then(setPlan, (error) => setProblem(String(error)))}
           style={StyleSheet.absoluteFill}
         />
       ) : null}

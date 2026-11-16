@@ -10,6 +10,7 @@ import type {
   MediaAccess,
   PlaybackPlan,
   PlayerObservation,
+  SessionCommand,
   Snapshot,
   VelaPlayerModule,
   VelaPlayerViewProps,
@@ -35,6 +36,8 @@ interface NativeViewProps {
   onError?: (event: NativeSyntheticEvent<Failure>) => void;
   onObservation?: (event: NativeSyntheticEvent<{ sessionId: string; observation: PlayerObservation }>) => void;
   onCommand?: (event: NativeSyntheticEvent<{ id: number; ok: boolean; failure?: Failure }>) => void;
+  onSessionCommand?: (event: NativeSyntheticEvent<{ sessionId: string; command: SessionCommand }>) => void;
+  onSessionRefresh?: (event: NativeSyntheticEvent<{ sessionId: string }>) => void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -78,6 +81,8 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
     onError: forward(props.onError),
     onObservation: forward(props.onObservation),
     onCommand: forward(props.onCommand),
+    onSessionCommand: forward(props.onSessionCommand),
+    onSessionRefresh: forward(props.onSessionRefresh),
     style: props.style,
   });
 }

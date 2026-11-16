@@ -15,7 +15,7 @@ public final class VelaPlayerModule: Module {
         }
 
         View(VelaPlayerView.self) {
-            Events("onSnapshot", "onError", "onObservation", "onCommand")
+            Events("onSnapshot", "onError", "onObservation", "onCommand", "onSessionCommand", "onSessionRefresh")
 
             Prop("ambient") { (view: VelaPlayerView, ambient: Bool?) in
                 view.setAmbient(ambient ?? false)
