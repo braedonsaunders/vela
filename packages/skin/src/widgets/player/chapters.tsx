@@ -1,9 +1,9 @@
 // Chapters as a strip over the timeline: one card per chapter with its start time and name,
 // the one playing marked and filling as it plays. Choosing a card seeks to its start. The
 // strip opens on the chapter playing (on TV, with focus on it).
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import type { PlayerLook } from './look';
 import { timecode, type ChapterMark, type PlayerView } from './present';
 
@@ -22,7 +22,7 @@ export function chapterAt(chapters: ChapterMark[], position: number): number {
 }
 
 export function ChapterStrip({ look, view, disabled, onSeek }: Props) {
-  const scroller = useRef<ScrollView>(null);
+  const scroller = useRef<ComponentRef<typeof ScrollView>>(null);
   const current = chapterAt(view.chapters, view.position);
   const width = look.size(look.small ? 168 : 208);
   const gap = look.size(10);

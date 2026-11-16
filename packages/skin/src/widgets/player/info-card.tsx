@@ -3,7 +3,7 @@
 // path and dropped frames. A fact the engine does not report is left out, never guessed.
 import { BlurView } from 'expo-blur';
 import { StyleSheet, Text, View } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import type { PlayerLook } from './look';
 import type { PlayerView } from './present';
 

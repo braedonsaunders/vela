@@ -9,7 +9,7 @@ import { colour } from '../../css';
 import { fontFace } from '../../fonts';
 import { useHost } from '../../host';
 
-type Colours = { [K in keyof typeof uiDefaults as (typeof uiDefaults)[K] extends string ? K : never]: string };
+type Colours = { -readonly [K in keyof typeof uiDefaults as (typeof uiDefaults)[K] extends string ? K : never]: string };
 
 export interface PlayerLook extends Omit<Colours, 'font' | 'fontDisplay'> {
   radiusControl: number;

@@ -3,8 +3,8 @@
 // commands and refreshes the engine asks for with newer plans, and stop the session on the way
 // out. The controller owns the server and the credentials; this owns the order of things.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Command, Failure, PlaybackPlan, SessionCommand, Snapshot, VelaPlayerProps } from '@vela/player-api';
-import { msg } from '../../../../../client/foundation/i18n';
+import type { Command, Failure, PlaybackPlan, PlayerObservation, SessionCommand, Snapshot, VelaPlayerProps } from '@vela/player-api';
+import { msg } from '@vela/core';
 import type { CommandInput, PlayerChromeState, StartFailure } from './context';
 
 export type StartOutcome =
@@ -20,6 +20,8 @@ export interface PlaybackController {
   command(plan: PlaybackPlan, command: SessionCommand): Promise<PlaybackPlan>;
   /** Read the session's current authoritative plan. */
   refresh(sessionId: string): Promise<PlaybackPlan>;
+  /** Report what the player observed (position, state, ranges); at most one a second. */
+  observe(sessionId: string, observation: PlayerObservation): Promise<void>;
 }
 
 export interface PlaybackSession {
@@ -131,6 +133,9 @@ export function usePlaybackSession(controller: PlaybackController, titleId: stri
     onError: setFailure,
     onCommand: event => {
       if (!event.ok && event.failure) setActionError(event.failure.message);
+    },
+    onObservation: event => {
+      if (held.current?.sessionId === event.sessionId) controller.observe(event.sessionId, event.observation).catch(() => undefined);
     },
     onSessionCommand: event => {
       const current = held.current;

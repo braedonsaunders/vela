@@ -5,7 +5,7 @@
 // playback runs untouched and comes back on any pointer, key or remote input.
 import { useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { useHost } from '../../host';
 import { BottomBar, TopBar, type Opened } from './bars';
 import { usePlayerChrome, type PlayerChromeState } from './context';

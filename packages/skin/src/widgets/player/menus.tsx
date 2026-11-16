@@ -2,7 +2,7 @@
 // audio, quality (grouped by resolution, each by its bitrate and what it needs, with the info
 // card's switch) and speed. Items the engine cannot switch to right now stay listed, dimmed.
 import { Fragment } from 'react';
-import { msg, number } from '../../../../../client/foundation/i18n';
+import { msg, number } from '@vela/core';
 import type { CommandInput } from './context';
 import type { PlayerLook } from './look';
 import { ChoiceRow, MenuHeading, MenuRule, SegmentRow } from './menu';

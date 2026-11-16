@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { Platform, Text, TVFocusGuideView, View, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
 import type { CommandInput, PlayerChromeState } from './context';

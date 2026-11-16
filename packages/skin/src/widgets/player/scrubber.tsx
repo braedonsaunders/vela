@@ -4,9 +4,9 @@
 // takes left and right as ten-second steps and seeks when the presses stop. A bubble over the
 // thumb shows the target time and, once a session offers trickplay, its frame.
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Pressable, Text, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import type { PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
 import { timecode, type PlayerView } from './present';
@@ -30,7 +30,7 @@ interface Props {
 }
 
 export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: Props) {
-  const box = useRef<View>(null);
+  const box = useRef<ComponentRef<typeof View>>(null);
   const frame = useRef({ left: 0, width: 1 });
   const [target, setTarget] = useState<number | null>(null);
   const [held, setHeld] = useState<{ seconds: number; at: number } | null>(null);

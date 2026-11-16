@@ -4,7 +4,7 @@
 import { BlurView } from 'expo-blur';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { PlayerIcon } from './icons';
 import type { PlayerLook } from './look';
 import { Spinner } from './spinner';

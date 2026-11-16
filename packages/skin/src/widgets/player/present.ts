@@ -3,12 +3,11 @@
 // facts for the info card. Pure: no React, no clock. A value the engine has not reported stays
 // empty rather than estimated. (The compiled chrome read the same projection from
 // client/player/presentation.ts.)
-import { msg, number } from '../../../../../client/foundation/i18n';
+import { msg, number } from '@vela/core';
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../client/player/video-info';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 
 type Path = PlaybackPlan['paths'][number];
-type PlanTrack = PlaybackPlan['audioTracks'][number];
 type Range = VideoInfo['dynamicRange'];
 
 /** A track as the menus list it: its name, then one muted detail ("English", "TrueHD · 8 ch"). */
@@ -141,8 +140,20 @@ function codecName(codec: string | undefined): string {
   return CODECS[codec] ?? codec.toUpperCase();
 }
 
+/** A track from the plan (named) or the engine (labelled). */
+interface AnyTrack {
+  id: string;
+  name?: string;
+  label?: string;
+  language?: string;
+  codec?: string;
+  channels?: number;
+  forced?: boolean;
+  hearingImpaired?: boolean;
+}
+
 /** Name, language, codec, channels, forced, SDH: the first is the name, the rest its detail. */
-function trackOption(track: Pick<PlanTrack, 'id' | 'language' | 'codec' | 'channels' | 'forced' | 'hearingImpaired'> & { name?: string; label?: string }): TrackOption {
+function trackOption(track: AnyTrack): TrackOption {
   const parts = [
     track.name ?? track.label ?? '',
     track.language && track.language !== 'und' ? track.language : '',

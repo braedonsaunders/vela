@@ -2,7 +2,7 @@
 // no text; screen readers hear what the engine is doing. The chrome keeps one mounted from the
 // press of Play through every waiting phase, so the arc never restarts.
 import { View } from 'react-native';
-import Animated, { cubicBezier } from 'react-native-reanimated';
+import Animated, { cubicBezier, type CSSAnimationProperties } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 import type { PlayerLook } from './look';
 
@@ -11,16 +11,16 @@ const breath = { '50%': { opacity: 0.45 } };
 
 export function Spinner({ look, size, label }: { look: PlayerLook; size: number; label?: string }) {
   const dot = Math.max(4, Math.round(size / 8));
-  const spin = look.still ? undefined : {
+  const spin: CSSAnimationProperties | undefined = look.still ? undefined : {
     animationName: turn,
     animationDuration: '1.1s',
-    animationIterationCount: 'infinite' as const,
+    animationIterationCount: 'infinite',
     animationTimingFunction: cubicBezier(0.5, 0.15, 0.5, 0.85),
   };
-  const breathe = look.still ? undefined : {
+  const breathe: CSSAnimationProperties | undefined = look.still ? undefined : {
     animationName: breath,
     animationDuration: '1.6s',
-    animationIterationCount: 'infinite' as const,
+    animationIterationCount: 'infinite',
     animationTimingFunction: cubicBezier(0.45, 0, 0.55, 1),
   };
   return (

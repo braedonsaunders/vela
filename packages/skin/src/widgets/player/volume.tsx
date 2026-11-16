@@ -1,8 +1,8 @@
 // Mute and the volume slider. The slider is for pointers: phones use their buttons and
 // televisions their own volume, so there only the mute button shows.
-import { useRef, useState } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import { View, type GestureResponderEvent } from 'react-native';
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import { ChromeButton } from './button';
 import type { CommandInput } from './context';
 import type { PlayerLook } from './look';
@@ -27,7 +27,7 @@ export function Volume({ look, view, send, onActive }: Props) {
 }
 
 function Slider({ look, level, send, onActive }: { look: PlayerLook; level: number; send: Props['send']; onActive: Props['onActive'] }) {
-  const box = useRef<View>(null);
+  const box = useRef<ComponentRef<typeof View>>(null);
   const frame = useRef({ left: 0, width: 1 });
   const [dragging, setDragging] = useState<number | null>(null);
   const width = look.size(104);
