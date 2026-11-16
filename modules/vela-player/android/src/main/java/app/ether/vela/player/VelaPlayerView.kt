@@ -18,12 +18,16 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private val onError by EventDispatcher<Map<String, Any?>>()
   private val onObservation by EventDispatcher<Map<String, Any?>>()
   private val onCommand by EventDispatcher<Map<String, Any?>>()
+  private val onSessionCommand by EventDispatcher<Map<String, Any?>>()
+  private val onSessionRefresh by EventDispatcher<Map<String, Any?>>()
 
   private val video = SurfaceView(context)
   private val report = PlayerReport(
     emitSnapshot = { onSnapshot(it) },
     emitObservation = { onObservation(it) },
     emitError = { onError(it) },
+    emitSessionCommand = { onSessionCommand(it) },
+    emitSessionRefresh = { onSessionRefresh(it) },
   )
   private val controller = PlayerController(context, this, report)
   private val preview = PreviewPlayback(context, this, report)

@@ -15,6 +15,8 @@ internal class MpvClient(options: Map<String, String>) {
     data object FileLoaded : Event
     data class EndFile(val reason: Int, val error: Int) : Event
     data object SeekDone : Event
+    /** The server refused a media request (401, 403, 404, 410): an expired or revoked grant. */
+    data class Refused(val status: Int) : Event
   }
 
   var onProperty: ((String, Any?) -> Unit)? = null
@@ -146,10 +148,16 @@ internal class MpvClient(options: Map<String, String>) {
         MpvEvent.FILE_LOADED -> post(Event.FileLoaded)
         MpvEvent.END_FILE -> post(Event.EndFile(event.reason, event.error))
         MpvEvent.PLAYBACK_RESTART -> post(Event.SeekDone)
-        MpvEvent.LOG_MESSAGE -> Log.w(LOG_TAG, "${event.name}: ${(event.value as? String)?.trimEnd()}")
+        MpvEvent.LOG_MESSAGE -> logMessage(event.name, event.value as? String)
         MpvEvent.SHUTDOWN -> return
       }
     }
+  }
+
+  private fun logMessage(prefix: String?, text: String?) {
+    val line = text?.trimEnd() ?: return
+    Log.w(LOG_TAG, "$prefix: $line")
+    refusedStatus(line)?.let { post(Event.Refused(it)) }
   }
 
   private fun post(event: Event) {
@@ -164,6 +172,14 @@ internal class MpvClient(options: Map<String, String>) {
 
   companion object {
     const val LOG_TAG = "VelaPlayer"
+
+    private val httpError = Regex("HTTP error (\\d{3})")
+
+    /** libcurl's "HTTP error 404" and FFmpeg's "HTTP error 404 Not Found", for a refused grant. */
+    private fun refusedStatus(line: String): Int? {
+      val status = httpError.find(line)?.groupValues?.get(1)?.toInt() ?: return null
+      return status.takeIf { it in listOf(401, 403, 404, 410) }
+    }
 
     /** libplacebo on OpenGL ES through mpv's Android context (gpu if gpu-next cannot start);
      * MediaCodec decodes into it through AImageReader. */
