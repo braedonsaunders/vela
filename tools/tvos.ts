@@ -15,6 +15,7 @@ import { existsSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { generateLocales } from './locales';
+import { generate } from './renderer';
 
 const root = resolve(import.meta.dir, '..');
 const args = process.argv.slice(2);
@@ -50,6 +51,8 @@ if (existsSync(join(root, 'tools/engine.ts'))) {
   await prepareEngine(client, 'doc');
 }
 await generateLocales(client);
+// A native host has no stylesheet: the renderer's native emission binds every style row inline.
+await generate(join(client, 'renderer'), false, true);
 
 // 3. FFmpeg (LGPL) and the Vela shim, built once into the scratch drive.
 const media = join(scratch, 'media-out');

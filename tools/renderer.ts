@@ -72,7 +72,11 @@ const CONTENT_ONLY = new Set(['lineClamp', 'objectFit', 'outlineStyle']);
  * carries ten bindings, not a hundred. Kept: what Exact itself reads (display, overflow), the
  * bindable rows (\`d*\` overrides) and motion. Roots and slot boxes bind every row (\`full\`). */
 export const BOUND_ROWS = new Set(['display', 'width', 'overflowX', 'overflowY', 'color', 'backgroundColor', 'backgroundImage', 'opacity', 'translate', 'animation']);
-const rows = (full: boolean) => STYLE.filter(([field]) => !CONTENT_ONLY.has(field) && (full ? true : BOUND_ROWS.has(field))).map(([field, row]) => {
+/** The native emission (`--native`, the tvOS build): a native host has no stylesheet, so every box binds
+ * every row from its Style record, and its state looks come from Contract state alone (the focus look through
+ * styleIx and the focus engine's focus and blur; Exact's pressed state; no hover). The web output is unchanged. */
+let NATIVE = false;
+const rows = (full: boolean, colourScheme = full) => STYLE.filter(([field]) => !CONTENT_ONLY.has(field) && (full ? colourScheme || field !== 'colorScheme' : BOUND_ROWS.has(field))).map(([field, row]) => {
   const bind = BINDABLE.find(([f]) => f === field);
   // A box that clips or scrolls takes only relative/absolute/sticky (lower-attr-value); the checker reads the choice off a prop.
   if (field === 'position') return 'position=pos';
@@ -94,10 +98,12 @@ ${BINDABLE.map(([, f]) => `    ${f}: string`).join('\n')}`;
  * data-vs, data-vf and data-vg), so a pointer moving over the page runs no script: the
  * element has no hover or press handlers, and no actions capture the level's props. */
 function elements(): string {
-  const box = (name: string, note: string, scheme: boolean, key: boolean, motion = true) => `${note}
+  const box = (name: string, note: string, scheme: boolean, key: boolean, motion = true) => {
+  const full = scheme || NATIVE;
+  return `${note}
 component ${name}
   props
-${scheme ? elementProps : elementProps.replace('    pos: string\n', '')}
+${full ? elementProps : elementProps.replace('    pos: string\n', '')}
     test: string
     domId: string
     role: string
@@ -112,9 +118,10 @@ ${scheme ? '' : `    // The node's state rules (the document's css): its state's
     vg: bool
 `}${key ? '    keying: action\n' : ''}  slot
   view
-    box id=domId${key ? ' key=keying' : ''} tabindex=-1 testId=test role=role aria-label=label aria-hidden=ahid${scheme ? '' : ' data-st=s.id.toString() data-vs=vs data-vf=(vf ? "1" : "") data-vg=(vg ? "1" : "")'}${motion ? ' -exact-layout-transition=lt -exact-exit-animation=exitAnim' : ''} ${rows(scheme)}
+    box id=domId${key ? ' key=keying' : ''} tabindex=-1 testId=test role=role aria-label=label aria-hidden=ahid${full ? '' : ' data-st=s.id.toString() data-vs=vs data-vf=(vf ? "1" : "") data-vg=(vg ? "1" : "")'}${motion ? ' -exact-layout-transition=lt -exact-exit-animation=exitAnim' : ''} ${rows(full, scheme)}
       children
 `;
+  };
   return [
     `// An image that fades in once loaded (image.fade): its own load state, so its load action
 // captures its three strings rather than a level's node, context and environment.
@@ -225,7 +232,7 @@ ${d <= FIELD_DEPTH ? `  // A sign-in field shows its focus look whenever it has 
 ` : ''}  view
     // One element per node: a box, text, image or icon is its styled box; a widget sits in a box
     // that draws nothing (display: contents).
-    ${motion ? 'MoBoxEl' : 'BoxEl'}(s=(${boxy} ? ${ST} : contentsStyle()), ahid=n.ahid, vs=(dis or not ${boxy} ? "" : e.still ? sr.v2 : sr.v), vf=(not dis and ((focused and n.hf) or (c.hot and n.gf))), vg=n.grp, anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, c.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=(n.act != "" or not ${boxy} ? "" : fill(n.dom, vals, e)), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : "")${motion ? ', lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex)' : ''})
+    ${motion ? 'MoBoxEl' : 'BoxEl'}(s=(${boxy} ? ${ST} : contentsStyle()), ahid=n.ahid, vs=(dis or not ${boxy} ? "" : e.still ? sr.v2 : sr.v), vf=(not dis and ((focused and n.hf) or (c.hot and n.gf))), vg=n.grp, ${NATIVE ? 'pos=(sr.pos == 1 ? "absolute" : sr.pos == 2 ? "sticky" : "relative"), ' : ''}anim=(n.mk == "" ? "" : motion(n.mk, n.md, n.mdl, n.me, n.mf, n.mit, n.mdir, n.msk, n.msd, n.step, n.cap, c.index, e)), fade=false, ${BINDABLE.map(([, f]) => `${f}=fill(n.${f}, vals, e)`).join(', ')}, test=(n.t == "box" ? fill(n.test, vals, e) : ""), domId=(n.act != "" or not ${boxy} ? "" : fill(n.dom, vals, e)), role=(n.t == "box" ? n.role : ""), label=(n.t == "box" and n.act == "" ? fill(n.label, vals, e) : "")${motion ? ', lt=(e.still ? "none" : n.lt), exitAnim=(e.still ? n.exs : n.ex)' : ''})
       if n.t == "box"${next}
         if n.act != ""
           // The platform focus ring is left to Exact unless the node suppresses it (outline: none, or a focus overlay).
@@ -771,12 +778,14 @@ async function fixedTokens(): Promise<Record<string, string>> {
   return fixed;
 }
 
-export async function generate(out = resolve(import.meta.dir, '../client/renderer'), bump = process.argv.includes('--bump')) {
+export async function generate(out = resolve(import.meta.dir, '../client/renderer'), bump = process.argv.includes('--bump'), native = false) {
+  NATIVE = native;
   // Player plumbing (plans, commands, media credentials) is foundation-only: no document may bind it.
   const leak = vocabulary.find(([, expr]) => /mediaAuth|planJson|commandJson|headers/.test(expr));
   if (leak) throw new Error(`Vocabulary ${leak[0]} reads player plumbing`);
   const renderer = await rendererVersion(out, bump);
-  await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order, and the renderer's compatibility version.\nexport const RENDERER_VERSION = ${renderer.version};\nexport const RENDERER_DIGEST = ${JSON.stringify(renderer.digest)};\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\nexport const STYLE: [string, string][] = ${JSON.stringify(STYLE)};\n// Rows a renderer box binds; its other rows are the document's css (data-st).\nexport const BOUND_ROWS: string[] = ${JSON.stringify([...BOUND_ROWS])};\n// Theme tokens with one value (client/app.tamber): Tamber folds them, so the page declares no property for them.\nexport const FIXED_TOKENS: Record<string, string> = ${JSON.stringify(await fixedTokens())};\n// The renderer's shape: its levels, the shell's first level, and how deep widgets and pagers may sit.\nexport const DEPTH = ${DEPTH};\nexport const SHELL_FROM = ${SHELL_FROM};\nexport const MOTION_DEPTH = ${MOTION_DEPTH};\nexport const WIDGET_DEPTH = ${WIDGET_DEPTH};\nexport const PAGER_DEPTH = ${PAGER_DEPTH};\nexport const FIELD_DEPTH = ${FIELD_DEPTH};\n`);
+  // The native emission draws the same tables: the data module's vocabulary stays the web build's.
+  if (!native) await writeFile(resolve(import.meta.dir, '../client/src/skin/vocabulary.ts'), `// Generated by tools/renderer.ts: the binding vocabulary in the renderer's order, and the renderer's compatibility version.\nexport const RENDERER_VERSION = ${renderer.version};\nexport const RENDERER_DIGEST = ${JSON.stringify(renderer.digest)};\nexport const VOCAB: string[] = ${JSON.stringify(vocabulary.map(([key]) => key))};\nexport const STYLE: [string, string][] = ${JSON.stringify(STYLE)};\n// Rows a renderer box binds; its other rows are the document's css (data-st).\nexport const BOUND_ROWS: string[] = ${JSON.stringify([...BOUND_ROWS])};\n// Theme tokens with one value (client/app.tamber): Tamber folds them, so the page declares no property for them.\nexport const FIXED_TOKENS: Record<string, string> = ${JSON.stringify(await fixedTokens())};\n// The renderer's shape: its levels, the shell's first level, and how deep widgets and pagers may sit.\nexport const DEPTH = ${DEPTH};\nexport const SHELL_FROM = ${SHELL_FROM};\nexport const MOTION_DEPTH = ${MOTION_DEPTH};\nexport const WIDGET_DEPTH = ${WIDGET_DEPTH};\nexport const PAGER_DEPTH = ${PAGER_DEPTH};\nexport const FIELD_DEPTH = ${FIELD_DEPTH};\n`);
   let levels = '';
   for (let d = 1; d <= DEPTH; d++) levels += level(d) + '\n';
   // The shell's own levels (its tree enters at SHELL_FROM): the same code with motion everywhere.
@@ -793,4 +802,10 @@ export async function generate(out = resolve(import.meta.dir, '../client/rendere
   const body = all.slice(cut).replace(/^fn noStyle\(\): Style = [^\n]*\n/m, '');
   await writeFile(join(out, 'levels.contract'), `${header}\nuse ${shapeNames.join(', ')} from "./shapes.contract"\n\n${body}\n${elements()}\n${levels}`);
 }
-if (import.meta.main) await generate();
+if (import.meta.main) {
+  // bun tools/renderer.ts [--bump]                    the web renderer, into client/renderer
+  // bun tools/renderer.ts --native --out <dir>         the native renderer (tvOS), into a staged client's renderer
+  const at = process.argv.indexOf('--out');
+  const out = at > 0 ? resolve(process.argv[at + 1]) : undefined;
+  await generate(out, process.argv.includes('--bump'), process.argv.includes('--native'));
+}
