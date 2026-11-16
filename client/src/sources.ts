@@ -53,8 +53,9 @@ function parseMediaCapabilities(json: string): MediaCapabilities {
       if (!Array.isArray(items) || items.length > 32 || items.some(item => typeof item !== 'string' || !item || item.length > 80)) throw new Error('Invalid original playback capabilities');
       return items;
     };
-    if (candidate.version !== 1 || candidate.range !== true || candidate.webgpu !== true) throw new Error('Invalid original playback capabilities');
-    originalPlayback = { version: 1, range: true, webgpu: true, demuxContainers: names('demuxContainers'), videoDecoders: names('videoDecoders'), audioDecoders: names('audioDecoders') };
+    // webgpu is the web core's presenter; a native engine (tvOS) declares false and presents natively.
+    if (candidate.version !== 1 || candidate.range !== true || typeof candidate.webgpu !== 'boolean') throw new Error('Invalid original playback capabilities');
+    originalPlayback = { version: 1, range: true, webgpu: candidate.webgpu, demuxContainers: names('demuxContainers'), videoDecoders: names('videoDecoders'), audioDecoders: names('audioDecoders') };
   }
   return { containers: list('containers'), videoCodecs: list('videoCodecs'), audioCodecs: list('audioCodecs'), subtitleFormats: list('subtitleFormats'), hls: value.hls, mse: value.mse, ...(originalPlayback ? { originalPlayback } : {}) };
 }

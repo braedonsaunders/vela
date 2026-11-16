@@ -170,6 +170,9 @@ int vm_read(VMDemuxer *d, VMPacket *out) {
 
 int vm_seek(VMDemuxer *d, double seconds) {
     av_packet_unref(d->pkt);
+    // An interrupted read leaves the I/O context's error and end flags set; a seek starts afresh.
+    atomic_store(&d->interrupted, 0);
+    if (d->fmt->pb) { d->fmt->pb->error = 0; d->fmt->pb->eof_reached = 0; }
     int64_t ts = (int64_t)llround((seconds < 0 ? 0 : seconds) * AV_TIME_BASE);
     if (d->fmt->start_time != AV_NOPTS_VALUE) ts += d->fmt->start_time;
     int r = avformat_seek_file(d->fmt, -1, INT64_MIN, ts, ts, 0);

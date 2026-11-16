@@ -10,7 +10,8 @@
     "name": "Vela"
   },
   "host": {
-    "web": {}
+    "web": {},
+    "ios": {}
   },
   "deploy": {
     "store": {
