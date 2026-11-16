@@ -109,3 +109,23 @@ The signed iOS simulator app renders sign-in; Device Hub automation later failed
 `cgWindowNotFound`, preventing a complete phone interaction pass. These are explicit
 delivery limits, not passing checks. The immutable 0.2.1 fixture captures the later native
 sign-in and preview attempts; its existence does not close their remaining device gates.
+
+### Owner web feedback — 2026-11-16
+
+Candidate 0.2.3 (`e67b559`) incorporates title overlay continuity (`c8098a1`),
+8 px desktop EPG outer margins (`18f76b5`), web sticky backdrop stacking (`22635a7`),
+and account-menu dismissal after skin selection (`9659fb2`). The parent browser look
+confirmed Lounge foreground, guide geometry, menu dismissal, and the same home DOM
+with scrollTop 360 before/during/after title opening. Standalone title typography
+was corrected in `e67b559` and visually checked; 0.2.2 is rejected, not a release candidate.
+App TypeScript and Expo export pass. 0.2.3 is locally test-key signed, with all 245
+files and the player aggregate verified. The owner preview now serves 0.2.3.
+
+Player provenance moved to the release root (`3cb4e7e`, `d552c01`) so a source
+revision change cannot alter a URL inside the unchanged player digest namespace.
+Ether reports its isolated 0.2.0 → 0.2.1 → 0.2.0 → 0.2.1 installer cycle passes,
+including 226 retained immutable URLs and scaled icons; the old provenance collision
+was an explicit exception. The new 0.2.3 fixture is handed to Ether for that final contract check.
+No real lab restart or public publication was performed. Cinematic's reported thin
+top strip remains unreproduced: desktop header/root bounds start at y=0; a screenshot
+is needed to identify the affected pixels. Native delivery limits above remain open.
