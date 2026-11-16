@@ -25,16 +25,21 @@ export class PacketDemux {
   private originalReader?:ByteReader;
   private originalPosition=0;
   private operationStage='metadata';
+  private metadataReady=false;
   private readonly packetOffsets=new Map<string,number>();
 
   constructor(makeSource:(signal:()=>AbortSignal,count:(bytes:number)=>void,forward:(offset:number)=>void)=>Source,
-    sourceSignal:AbortSignal,private readonly originUs=0,private readonly liveEnded?:()=>boolean,subtitleClusters?:MatroskaSubtitleStream,private readonly auditCache?:()=>BufferCacheState,streaming?:{reader:ByteReader;startSeconds:number}) {
+    sourceSignal:AbortSignal,private readonly originUs=0,private readonly liveEnded?:()=>boolean,subtitleClusters?:MatroskaSubtitleStream,private readonly auditCache?:()=>BufferCacheState,streaming?:{reader:ByteReader;startSeconds:number},private readonly concurrentPackets=false) {
     const sourceLifetime=AbortSignal.any([sourceSignal,this.lifetime.signal]);
     this.operationSignal=sourceLifetime;
     const report=(note:string)=>{if(this.diagnostics.length<16&&!this.diagnostics.includes(note))this.diagnostics.push(note);};
     const source=makeSource(()=>this.operationSignal,bytes=>{
-      this.operationSignal.throwIfAborted();this.readBytes+=bytes;
-      if(this.readBytes>32*1024*1024)throw new Error('Demux operation exceeded its bounded search budget');
+      this.operationSignal.throwIfAborted();
+      // HLS packet readers share immutable indexed objects, each independently
+      // bounded by SegmentReader. A global search counter/queue must not make
+      // cached audio wait behind a future video segment's network request.
+      if(!this.concurrentPackets||!this.metadataReady){this.readBytes+=bytes;
+        if(this.readBytes>32*1024*1024)throw new Error('Demux operation exceeded its bounded search budget');}
     },offset=>{if(this.operationStage==='video-packet'||this.operationStage==='audio-packet'){
       this.packetOffsets.set(this.operationStage,offset);streaming?.reader.prefetch?.(offset,sourceLifetime);}});
     this.auditSource=source;
@@ -57,7 +62,7 @@ export class PacketDemux {
       const operation=AbortSignal.any([signal,this.lifetime.signal]);
       return abortable(Promise.resolve().then(()=>{operation.throwIfAborted();return run();}),operation).catch(error=>{
         if(signal.aborted)throw error;
-        throw new Error(`Demux ${stage}: ${error instanceof Error?error.message:'operation failed'}`);
+        throw new Error(`Demux ${stage}: ${error instanceof Error?error.message:'operation failed'}`,{cause:error});
       });
     }
     const work = this.serial.then(async () => {
@@ -71,7 +76,7 @@ export class PacketDemux {
       catch(error){
         if(signal.aborted)throw error;
         const detail=error instanceof Error?`${error.name}: ${error.message}`:'operation failed';
-        throw new Error(`Demux ${stage} (${this.readBytes} requested bytes): ${detail}`);
+        throw new Error(`Demux ${stage} (${this.readBytes} requested bytes): ${detail}`,{cause:error});
       }
       finally { this.operationSignal.removeEventListener('abort',abort); }
     });
@@ -116,6 +121,7 @@ export class PacketDemux {
         tracks.push(actual); this.tracks.set(id,track);
       }
       const indexed=await indexing;warming?.correct(indexed);finishMatroskaMetadata(this.auditSource);
+      this.metadataReady=true;
       return {tracks,durationUs:duration === null ? null : Math.round(duration*1e6)+this.originUs,container:format.name};
     },signal);
   }
@@ -125,7 +131,7 @@ export class PacketDemux {
     if (!track) throw new Error('Unknown demux track');
     if (!Number.isFinite(positionUs) || positionUs < 0) throw new Error('Invalid demux seek position');
     const reader = new PacketReader(track);
-    const parallel=hasStreamingMatroskaBacking(track);
+    const parallel=this.concurrentPackets||hasStreamingMatroskaBacking(track);
     if(this.originalReader){const note=`${track instanceof InputVideoTrack?'Video':'Audio'} packet acquisition: ${parallel?'streaming':'library'}`;
       if(!this.diagnostics.includes(note)&&this.diagnostics.length<16)this.diagnostics.push(note);}
     const read=<T>(run:()=>PromiseLike<T>|T)=>this.operation(run,signal,track instanceof InputVideoTrack?'video-packet':'audio-packet',parallel);
