@@ -2,17 +2,18 @@
 // provides them here; the document's `textInput` widgets edit them.
 // They never enter the binding environment, so a document can test `signin.ready` but cannot
 // read what was typed.
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import type { TextInput } from 'react-native';
 
 export type AuthField = 'username' | 'password';
+type InputHandle = ComponentRef<typeof TextInput>;
 
 export interface AuthForm {
   values: Record<AuthField, string>;
   edit(field: AuthField, value: string): void;
   /** Enter in a field: sign in when the form is ready. */
   submit(): void;
-  registerPasswordInput(input: TextInput | null): void;
+  registerPasswordInput(input: InputHandle | null): void;
   focusPassword(): void;
 }
 
@@ -34,8 +35,8 @@ export function useAuthFields() {
 export function AuthFormProvider({ values, edit, submit, children }: Pick<AuthForm, 'values' | 'edit' | 'submit'> & {
   children: ReactNode;
 }) {
-  const passwordInput = useRef<TextInput | null>(null);
-  const registerPasswordInput = useCallback((input: TextInput | null) => {
+  const passwordInput = useRef<InputHandle | null>(null);
+  const registerPasswordInput = useCallback((input: InputHandle | null) => {
     passwordInput.current = input;
   }, []);
   const focusPassword = useCallback(() => passwordInput.current?.focus(), []);
