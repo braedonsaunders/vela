@@ -9,6 +9,7 @@ import type {
   Failure,
   MediaAccess,
   PlaybackPlan,
+  PreviewSource,
   PlayerCapabilities,
   PlayerObservation,
   SessionCommand,
@@ -31,6 +32,8 @@ interface NativeModule {
 
 interface NativeViewProps {
   plan?: PlaybackPlan;
+  preview?: PreviewSource;
+  active?: boolean;
   command?: Command;
   ambient?: boolean;
   serverError?: Failure | null;
@@ -80,6 +83,8 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
   }
   return createElement(NativeView, {
     plan: props.plan,
+    preview: props.preview,
+    active: props.active,
     command: props.command,
     ambient: props.ambient,
     serverError: props.serverError ?? null,

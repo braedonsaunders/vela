@@ -38,6 +38,11 @@ final class VelaPlayerView: ExpoView {
     private var loggedOutput = false
     private var refreshAsked = ""
 
+    // A trailer preview (`preview`): it excludes the plan and plays while active and on screen.
+    private lazy var preview = makePreview()
+    private var previewSource: PreviewPlayback.Source?
+    private var previewActive = true
+
     /// Direct play: the playing source is an original file, so seeks and its tracks are the view's own.
     private var playsOriginal: Bool {
         plan?.selectedPath?.isOriginalFile == true
@@ -55,6 +60,12 @@ final class VelaPlayerView: ExpoView {
 
     deinit {
         stop()
+        preview.stop()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updatePreview()
     }
 
     override func layoutSubviews() {
@@ -71,8 +82,36 @@ final class VelaPlayerView: ExpoView {
         ambient = value
     }
 
+    func setPreview(_ map: [String: Any]?) {
+        previewSource = PreviewPlayback.Source(map)
+        if previewSource != nil {
+            stop()
+        }
+        updatePreview()
+    }
+
+    func setActive(_ value: Bool?) {
+        previewActive = value ?? true
+        updatePreview()
+    }
+
+    private func updatePreview() {
+        preview.update(previewSource, wanted: previewActive && window != nil)
+    }
+
+    private func makePreview() -> PreviewPlayback {
+        let playback = PreviewPlayback(layer: metalLayer)
+        playback.onState = { [weak self] state in
+            self?.onSnapshot(["state": state])
+        }
+        playback.onFailure = { [weak self] message in
+            self?.onError(["kind": "source", "message": message, "recoverable": false])
+        }
+        return playback
+    }
+
     func setPlan(_ object: [String: Any]?) {
-        guard let object, let next = VelaPlan.decode(object) else {
+        guard previewSource == nil, let object, let next = VelaPlan.decode(object) else {
             return
         }
         let previous = plan
@@ -120,7 +159,7 @@ final class VelaPlayerView: ExpoView {
             return
         }
         lastCommand = id
-        let failure = perform(command)
+        let failure = previewSource == nil ? perform(command) : performOnPreview(command)
         var result: [String: Any] = ["id": id, "ok": failure == nil]
         if let failure {
             result["failure"] = ["kind": "action", "message": failure, "recoverable": true]
@@ -334,6 +373,19 @@ final class VelaPlayerView: ExpoView {
     }
 
     // MARK: Commands
+
+    /// A preview takes play and pause only.
+    private func performOnPreview(_ command: [String: Any]) -> String? {
+        switch command["type"] as? String {
+        case "play":
+            preview.setPaused(false)
+        case "pause":
+            preview.setPaused(true)
+        default:
+            return "A preview takes play and pause only"
+        }
+        return nil
+    }
 
     /// Performs a command; a refusal's reason, or nil when done.
     private func perform(_ command: [String: Any]) -> String? {
