@@ -288,7 +288,7 @@ export class LiveController {
     }
     const base = this.surfaces.has('guide') && this.guideIds.length ? this.guideIds : channels.slice(0, 48).map(c => c.id);
     const ids = [...new Set([...base, ...retained].filter(Boolean))].sort();
-    loadGuide(this.options.source, day, this.now, this.options.scope, this.options.images, undefined, ids, this.guideRange ?? { from: 0, to: 240 }).then(
+    loadGuide(this.options.source, day, this.now, this.options.scope, this.options.images, undefined, ids, this.guideRange ?? { from: -1, to: 240 }).then(
       model => {
         if (generation !== this.loadGeneration) return;
         this.guide = model;

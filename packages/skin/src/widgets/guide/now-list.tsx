@@ -1,6 +1,6 @@
 // Phones: every channel with what is on now and next, one tap from watching.
 import { useRef } from 'react';
-import { FlatList, View, type ViewToken } from 'react-native';
+import { FlatList, View } from 'react-native';
 import { msg, type GuideChannel } from '@vela/core';
 import type { GuideLook } from './look';
 import { Glyph, Line, LogoTile, Press, Progress } from './parts';
@@ -18,7 +18,7 @@ export function NowList({
 }) {
   const latest = useRef({ rows, onVisible });
   latest.current = { rows, onVisible };
-  const changed = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+  const changed = useRef(({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
     const indexes = viewableItems.map(item => item.index).filter((i): i is number => i !== null);
     if (!indexes.length) return;
     const start = Math.max(0, Math.min(...indexes) - 6);

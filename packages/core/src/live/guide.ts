@@ -136,6 +136,15 @@ const picture = (artwork: ArtworkRef[], kinds: ArtworkRef['kind'][], width: numb
   return '';
 };
 
+// Channel objects are shared by the metadata cache. Keep image-provider variants separate.
+const channelLogos = new WeakMap<Channel, Map<Images | undefined, string>>();
+function channelLogo(channel: Channel, images?: Images): string {
+  let variants = channelLogos.get(channel);
+  if (!variants) { variants = new Map(); channelLogos.set(channel, variants); }
+  if (!variants.has(images)) variants.set(images, picture(channel.artwork, ['logo', 'channel'], 160, 90, images));
+  return variants.get(images)!;
+}
+
 const valid = (p: Programme) => {
   const a = Date.parse(p.start), b = Date.parse(p.end);
   return Number.isFinite(a) && Number.isFinite(b) && b > a;
@@ -164,6 +173,8 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
     // A DST day can run 25 hours; the protocol's window is at most 24.
     return { start, end: Math.min(midnight(now, day + 1), start + DAY) };
   });
+  const initialMinute = Math.max(0, (now - withLocale(localeJSON, () => midnight(now, 0))) / MINUTE);
+  if (range && range.from === -1) range = { from: Math.max(0, initialMinute - 150), to: initialMinute + 240 };
   const from = range ? Math.max(start, start + Math.floor(range.from / 30) * 30 * MINUTE) : start;
   const until = range ? Math.min(end, start + Math.ceil(range.to / 30) * 30 * MINUTE) : end;
   const window = await listings(api, scope, from, Math.max(from + MINUTE, until), now, channelIds);
@@ -202,7 +213,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       return {
         id: channel.id, number: channel.number, name: channel.name, favorite: channel.favorite, group: channel.group ?? '',
         guideIds: [...new Set((channel.guides ?? []).map(g => g.id))],
-        logo: picture(channel.artwork, ['logo', 'channel'], 160, 90, images), listed: entries.length > 0, listingsLoaded: !loadedIds || loadedIds.has(channel.id),
+        logo: channelLogo(channel, images), listed: entries.length > 0, listingsLoaded: !loadedIds || loadedIds.has(channel.id),
         now: airing?.name ?? '', next: next?.name ?? '', nowId: airing?.id ?? '',
         nowProgress: airing ? Math.round((now - airingStart) / (airingEnd - airingStart) * 1000) / 10 : 0,
         nowRemaining: airing ? left(airingEnd - now) : '',
