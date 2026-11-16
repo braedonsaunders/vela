@@ -149,8 +149,9 @@ Renderer 3 is the live home above; a document using anything here names `rendere
   state whose conditions hold replaces `style` (viewport variants still apply over it), on the same element,
   so transitions run (dot widths, padding while searching, on/off pills). A state's overlays replace the
   node's own while that state holds (a state without one keeps the node's), and an overlay written only
-  inside states still counts: a focus look in any state makes the node keyboard- and TV-focusable with
-  that look, and suppresses the platform ring as a node-level `focus` does (unless it says `outline: auto`).
+  inside states still counts: a pressable node's focus look in any state shows under keyboard and TV focus
+  while that state holds, and suppresses the platform ring as a node-level `focus` does (unless it says
+  `outline: auto`).
 - `layoutTransition: "300ms ease-out"`, `exit: "<motion>"`. `sharedElement` is accepted and ignored for
   now: Exact runs every commit inside a view transition while any element binds one, and a
   press during a transition landed on <html> (every click lost on a page that used it).
