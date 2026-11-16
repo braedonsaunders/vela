@@ -33,7 +33,7 @@ export GRADLE_USER_HOME="$vela_android_build/gradle-home"
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 
-# Small daemons on the shared 24 GB machine, one ABI, and build output on the scratch drive.
+# Small daemons, one ABI, and build output on the scratch drive.
 mkdir -p "$GRADLE_USER_HOME/init.d" "$ANDROID_AVD_HOME"
 cat > "$GRADLE_USER_HOME/gradle.properties" <<EOF
 org.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8
