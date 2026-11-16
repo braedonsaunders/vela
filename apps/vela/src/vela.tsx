@@ -24,6 +24,10 @@ import { useDispatcher } from './actions';
 import { config } from './data/config';
 import { platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
+import { preferences } from './data/preferences';
+import { AppearancePicker } from './picker';
+
+const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { environment } from './env';
 import { useLiveController } from './live';
@@ -150,11 +154,24 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     void Promise.all([loadFonts(APP_FONTS, source), loadFonts(raw.fonts, source)]).finally(() => setFontsReady(true));
   }, [raw, origin]);
 
-  const nextDocument = useCallback(() => {
-    setDocIndex(i => i + 1);
+  // The appearance picker: the viewer's choice applies at once and is remembered on this device.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const openPicker = useCallback(() => setPickerOpen(true), []);
+  const closePicker = useCallback(() => setPickerOpen(false), []);
+  const pickDocument = useCallback((index: number) => {
+    setDocIndex(index);
     setPicked(true);
+    setPickerOpen(false);
+    void preferences.set(SKIN_PREFERENCE, DOCUMENTS[index]!.id);
   }, []);
-  const { dispatch, loadMore } = useDispatcher({ store, view, live, nextDocument });
+  useEffect(() => {
+    if (picked) return;
+    const index = DOCUMENTS.findIndex(doc => doc.id === preferences.get(SKIN_PREFERENCE));
+    if (index >= 0) { setDocIndex(index); setPicked(true); }
+  // Only at start: a stored choice never overrides one made in this session.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const { dispatch, loadMore } = useDispatcher({ store, view, live, openPicker });
   const viewport: Viewport = useMemo(() => ({ width, height, insets }), [width, height, insets]);
   const image = useCallback<SkinHost['image']>(path => {
     const source = assetSource(path, origin);
@@ -202,6 +219,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       <Previews store={store} state={state} onHome={pathname === '/'} heroIndex={view.heroIndex} still={view.still}>
         {children}
       </Previews>
+      {pickerOpen ? <AppearancePicker documents={DOCUMENTS} current={docIndex % DOCUMENTS.length} image={image} onPick={pickDocument} onClose={closePicker} /> : null}
     </VelaContext.Provider>
   );
 }
