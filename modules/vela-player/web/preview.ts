@@ -1,4 +1,4 @@
-// A trailer preview on the web (docs/rn-migration.md, "Previews"): a muted <video> in the view's DOM
+// A trailer preview on the web (docs/architecture.md, "Previews"): a muted <video> in the view's DOM
 // node. It plays only while active, on screen, with the page visible, without save-data and before
 // the grant expires; otherwise the element drops its source, which releases the decoder. It never
 // retries an expired grant. Commands are limited to play and pause.

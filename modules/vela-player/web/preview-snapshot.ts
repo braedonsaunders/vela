@@ -1,5 +1,5 @@
 // A preview's snapshot: only its state is meaningful; every other field is empty, since a preview
-// has no session, tracks or telemetry (docs/rn-migration.md, "Previews").
+// has no session, tracks or telemetry (docs/architecture.md, "Previews").
 import type { Snapshot } from '@vela/player-api';
 import { readSubtitlePreferences } from './engine/universal/subtitles/preferences';
 

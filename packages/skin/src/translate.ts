@@ -1,5 +1,5 @@
 // Style rows (CSS by name, as documents write them) translated to React Native styles, per the
-// style matrix in docs/rn-migration.md. Box rows become a ViewStyle plus effects the renderer
+// style matrix in docs/architecture.md. Box rows become a ViewStyle plus effects the renderer
 // draws with extra components (blur, mask, background image, scrolling, grid). Text rows are
 // translated where text is drawn, with the inherited rows of every ancestor merged in.
 import { Platform, type TextStyle, type ViewStyle } from 'react-native';

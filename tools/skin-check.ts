@@ -23,7 +23,7 @@ async function load(path: string): Promise<SkinDocument> {
   return (mod.default ?? Object.values(mod).find(v => v && typeof v === 'object' && 'schema' in (v as object))) as SkinDocument;
 }
 
-/** The style matrix (docs/rn-migration.md): rows refused on native fail, approximated rows are noted. */
+/** The style matrix (docs/architecture.md): rows refused on native fail, approximated rows are noted. */
 function printPortability(findings: PortabilityFinding[]): boolean {
   const counts = new Map<string, { finding: PortabilityFinding; count: number }>();
   for (const finding of findings) {

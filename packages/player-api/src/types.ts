@@ -1,4 +1,4 @@
-// The player view contract (docs/rn-migration.md, "Player view contract"). Every implementation
+// The player view contract (docs/architecture.md, "Player view contract"). Every implementation
 // (Apple and Android on libmpv, web on the WebCodecs/WebGPU core) takes these props and emits
 // these events. The shapes are the browser engine's own (client/player/model.ts) until that file
 // moves into modules/vela-player at conversion.

@@ -47,6 +47,10 @@ Vela supports skins that change the presentation of the app. Choose a look that 
 
 ## Where it stands
 
-Vela 0.2.6 runs on the web with Ether. TV, iOS and Android apps are in development; native device and installer qualification is still underway. Desktop plans are still being decided.
+Vela 0.2.6 runs on the web with Ether. TV, iOS and Android apps are in development; native device and installer qualification is still underway. A Windows desktop app with native mpv playback is in development.
 
 Vela is built with React Native and Expo, with shared client packages and platform-specific playback. Ether is the reference server.
+
+## License
+
+Vela is licensed under [GPL-3.0](LICENSE). Third-party components retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES).

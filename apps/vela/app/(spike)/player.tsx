@@ -1,4 +1,4 @@
-// Spike: VelaPlayerView with a real lab plan on any platform (docs/rn-migration.md, spike b).
+// Spike: VelaPlayerView with a real lab plan on any platform (docs/architecture.md, spike b).
 // Signs in from configuration (apps/vela/.env.local, never committed):
 //   EXPO_PUBLIC_VELA_ORIGIN, EXPO_PUBLIC_VELA_USER, EXPO_PUBLIC_VELA_PASSWORD, EXPO_PUBLIC_VELA_TITLE (a search query),
 //   EXPO_PUBLIC_VELA_MUTED=1 to start muted (a drive at night),
