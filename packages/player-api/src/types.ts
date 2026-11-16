@@ -3,7 +3,12 @@
 // these events. The shapes are the browser engine's own (client/player/model.ts) until that file
 // moves into modules/vela-player at conversion.
 import type { Command, Failure, PlaybackSession, Snapshot } from '../../../client/player/model';
-import type { PlaybackPlan, PlayerObservation, SessionCommand } from '../../../protocol/v0/types';
+import type {
+  ClientCapabilities,
+  PlaybackPlan,
+  PlayerObservation,
+  SessionCommand,
+} from '../../../protocol/v0/types';
 
 export type { Command, Failure, PlaybackSession, Snapshot, PlaybackPlan, PlayerObservation, SessionCommand };
 
@@ -41,9 +46,14 @@ export interface MediaAccess {
   nativeURL?(url: string): Promise<string>;
 }
 
+/** What this device plays through the player view, for the client's negotiation request. */
+export type PlayerCapabilities = Omit<ClientCapabilities, 'device' | 'protocolVersions'>;
+
 /** The imperative side every implementation exports as `VelaPlayer`. */
 export interface VelaPlayerModule {
   setMediaAccess(access: MediaAccess | null): void;
+  /** Probed once per page or process; the controller adds the device and protocol versions. */
+  capabilities(): Promise<PlayerCapabilities>;
 }
 
 /** The web implementation's seam: the browser host the playback lead extracts from

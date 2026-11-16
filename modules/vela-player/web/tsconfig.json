@@ -1,0 +1,12 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "types": ["@webgpu/types", "node"],
+    "paths": { "mediabunny": ["../../../vendor/webgpu-player/vendor/mediabunny/src/index.ts"] }
+  },
+  "include": ["../src/VelaPlayerView.web.tsx", "./*.ts"]
+}
