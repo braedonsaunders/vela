@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
 import { EscapeScope, focusTarget, noteOpener, type Focusable } from './escape';
@@ -244,8 +244,9 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const drawn: Record<string, unknown> = { ...style, ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion };
   // A native mask wraps the box: the mask takes the box's geometry and the box fills it in flow,
   // so the mask is as large as the box's content.
-  const [geometry, inner] = fx.mask ? partition(drawn, GEOMETRY) : [{}, drawn];
-  const boxStyleFinal = fx.mask ? { ...inner, flexGrow: 1 } : drawn;
+  const masked = !!(fx.mask || fx.radialMask);
+  const [geometry, inner] = masked ? partition(drawn, GEOMETRY) : [{}, drawn];
+  const boxStyleFinal = masked ? { ...inner, flexGrow: 1 } : drawn;
   const a11y = a11yProps(node, ctx, env);
   const hoverProps = web && (node.base.hover || node.group || node.states.some(s => s.layer.hover))
     ? { onMouseEnter: () => set('hover', true), onMouseLeave: () => set('hover', false) } : {};
@@ -301,7 +302,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
       </AView>
     );
   }
-  if (fx.mask) element = <Mask mask={fx.mask} style={geometry}>{element}</Mask>;
+  if (masked) element = <Mask linear={fx.mask} radial={fx.radialMask} style={geometry}>{element}</Mask>;
   if (node.escape?.length) {
     const returnFocus = node.returnFocus ? fill(node.returnFocus, ctx, env) : undefined;
     element = <EscapeScope flags={node.escape} returnFocus={returnFocus || undefined}>{element}</EscapeScope>;
@@ -348,14 +349,55 @@ function ownFocusLook(node: RNode): boolean {
 }
 const NO_RING = { outlineWidth: 0 } as ViewStyle;
 
+interface MaskProps {
+  linear?: Effects['mask'];
+  radial?: Effects['radialMask'];
+  style: Record<string, unknown>;
+  children: ReactNode;
+}
+
 /** A native gradient mask with the box's geometry, around the box. */
-function Mask({ mask, style, children }: { mask: NonNullable<Effects['mask']>; style: Record<string, unknown>; children: ReactNode }) {
+function Mask({ linear, radial, style, children }: MaskProps) {
   return (
-    <Masked style={style as ViewStyle} maskElement={
-      <LinearGradient colors={mask.colors as [string, string, ...string[]]} locations={mask.locations as [number, number, ...number[]]} start={mask.start} end={mask.end} style={StyleSheet.absoluteFill} />
-    }>
+    <Masked style={style as ViewStyle} maskElement={linear ? <LinearMask mask={linear} /> : <RadialMask mask={radial!} />}>
       {children}
     </Masked>
+  );
+}
+
+function LinearMask({ mask }: { mask: NonNullable<Effects['mask']> }) {
+  return (
+    <LinearGradient
+      colors={mask.colors as [string, string, ...string[]]}
+      locations={mask.locations as [number, number, ...number[]]}
+      start={mask.start}
+      end={mask.end}
+      style={StyleSheet.absoluteFill}
+    />
+  );
+}
+
+/** An elliptical radial mask, drawn with an SVG gradient stretched over the box. */
+function RadialMask({ mask }: { mask: NonNullable<Effects['radialMask']> }) {
+  return (
+    <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
+      <Defs>
+        <RadialGradient
+          id="mask"
+          cx={mask.centre.x * 100}
+          cy={mask.centre.y * 100}
+          rx={mask.radius.x * 100}
+          ry={mask.radius.y * 100}
+          gradientUnits="userSpaceOnUse"
+        >
+          {mask.colors.map((colour, i) => (
+            <Stop key={i} offset={mask.locations[i]} stopColor={colour === 'transparent' ? '#000' : colour}
+              stopOpacity={colour === 'transparent' ? 0 : 1} />
+          ))}
+        </RadialGradient>
+      </Defs>
+      <Rect x={0} y={0} width={100} height={100} fill="url(#mask)" />
+    </Svg>
   );
 }
 

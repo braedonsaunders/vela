@@ -42,6 +42,9 @@ interface Common {
   hidden?: boolean;
   a11y?: { selected?: Test[]; expanded?: Test[]; current?: Test[]; pressed?: Test[]; checked?: Test[] };
   group: boolean;
+  /** Flags Escape closes while open (`escape: "menu drawer"`), and the element id focus returns to. */
+  escape?: string[];
+  returnFocus?: Template;
   /** The static `order` row, used to reorder siblings. */
   order: number;
 }
@@ -225,6 +228,8 @@ function convert(node: Node, depth: number, r: Context): RNode {
     a11y: node.a11y && { selected: node.a11y.selected && tests(node.a11y.selected), expanded: node.a11y.expanded && tests(node.a11y.expanded),
       current: node.a11y.current && tests(node.a11y.current), pressed: node.a11y.pressed && tests(node.a11y.pressed), checked: node.a11y.checked && tests(node.a11y.checked) },
     group: node.group === true,
+    escape: node.escape ? node.escape.split(/\s+/).filter(Boolean) : undefined,
+    returnFocus: compile(node.returnFocus, r),
     order: Number(style.order) || 0,
   };
   for (const row of ['grid-row', 'grid-column', 'grid-template-rows', '-webkit-text-stroke']) if (style[row as keyof Style]) r.unsupported.add(row);

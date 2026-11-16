@@ -207,7 +207,7 @@ of Approximated or Unsupported rows.
 |---|---|---|
 | Supported | `display` (`flex`, `none`), `position` (`relative`, `absolute`), `top`/`right`/`bottom`/`left`/`inset`, `z-index`, `width`/`height`/`min-*`/`max-*`, `aspect-ratio`, `flex`, `flex-grow`/`-shrink`/`-basis`, `flex-direction`, `flex-wrap`, `align-items`/`-self`, `justify-content`, `gap`/`row-gap`/`column-gap`, `order` (resolver reorders), `margin*`, `padding*`, `overflow` (`hidden`, `visible`), `color`, `background-color`, `opacity`, `border*` (width, colour, radius, style, per side), `outline`, `box-shadow` (incl. inset, several), `font-family`, `font-size`, `font-weight`, `font-style`, `line-height`, `letter-spacing`, `text-transform`, `text-align`, `font-variant-numeric`, `translate`/`scale`/`rotate`/`perspective`, `transform-origin`, `pointer-events`, `transition`, `animation` | As written |
 | Mapped | `background-image: linear-gradient(...)` / `radial-gradient(...)` → `experimental_backgroundImage`; `background-image: url(...)` → an absolutely filled expo-image under the content; `line-clamp` → `numberOfLines`; `text-overflow: ellipsis` → `ellipsizeMode`; `white-space: nowrap` → one line; `text-shadow` → `textShadow*` (the first shadow); `object-fit` → expo-image `contentFit`; `overflow-x/-y: auto/scroll` → a `ScrollView` on that axis; units `rem`, `em`, `vw`, `vh`, `clamp()`, `min()`, `max()` and simple `calc()` → resolved to numbers per viewport; `color-mix(in srgb, <colour> p%, <colour or transparent>)` → folded to one hex colour at resolve, after `$ui.*` and document tokens are filled (`currentColor` stays unfolded: it draws on the web and is dropped natively) | Same result |
-| Approximated | `backdrop-filter: blur(n)` → expo-blur `BlurView` (other functions dropped); `mask-image: linear-gradient(...)` → MaskedView + gradient (`url()` masks unsupported); `display: grid` with `grid-template-columns` of equal or fixed tracks → wrapped flex rows with computed widths (`grid-row`, `grid-column` spans, named areas unsupported); `filter` → `filter` where the platform supports the function, else dropped; `corner-shape: squircle` → `borderCurve: 'continuous'` on Apple, round elsewhere; `scroll-snap-type`/`-align` → `snapToInterval` when items have a fixed width, else none; `position: sticky` only on a **direct child of a vertical scroll box**: the route root (the renderer wraps every route root's children in the route's vertical ScrollView) or a box the document itself scrolls (`overflow-y: auto`/`scroll`) → that ScrollView's `stickyHeaderIndices`, pinned at its top (a non-zero `top` is ignored); anywhere else it is refused | Close, noted by the validator |
+| Approximated | `backdrop-filter: blur(n)` → expo-blur `BlurView` (other functions dropped); `mask-image: linear-gradient(...)` / `radial-gradient(...)` → MaskedView + gradient (a radial mask is an ellipse over the box; `url()` masks unsupported); `display: grid` with `grid-template-columns` of equal or fixed tracks → wrapped flex rows with computed widths (`grid-row`, `grid-column` spans, named areas unsupported); `filter` → natively only `brightness()` and `opacity()`, plus `blur()` on an image (expo-image's own blur); other functions are dropped, because they render the whole box offscreen; `corner-shape: squircle` → `borderCurve: 'continuous'` on Apple, round elsewhere; `scroll-snap-type`/`-align` → `snapToInterval` when items have a fixed width, else none; `position: sticky` only on a **direct child of a vertical scroll box**: the route root (the renderer wraps every route root's children in the route's vertical ScrollView) or a box the document itself scrolls (`overflow-y: auto`/`scroll`) → that ScrollView's `stickyHeaderIndices`, pinned at its top (a non-zero `top` is ignored); anywhere else it is refused | Close, noted by the validator |
 | Web only | `cursor`, `scrollbar-width`, `scroll-behavior`, `scroll-padding-*`, `color-scheme`, `box-sizing: border-box` (React Native is always border-box) | Ignored |
 | Unsupported | `-webkit-text-stroke`, `position: fixed`/`static`, `position: sticky` outside a scroll box's direct children, `box-sizing: content-box`, `display: block`/`inline`/`contents`, multiple text shadows, `mask-image: url()`, grid placement (`grid-row`, `grid-column`, `grid-template-rows`, areas) | Refused |
 
@@ -375,6 +375,58 @@ first external build. The GPL product (`MPVKit-GPL`) is never linked.
 Kotlin, the same contract, libmpv from mpv-android's build on a `SurfaceView`,
 `hwdec=mediacodec`. Android TV uses the same module; display mode matching through
 `Surface.setFrameRate` and `Display.Mode`.
+
+#### State and handoff (2026-11-16, thread `thr_xazq34wx52`)
+
+Moved off the shared Mac: the emulator cannot run there beside the Apple work (swap full, the guest
+swapped out, ANRs on input). It continues on a Linux machine with KVM.
+
+- **libmpv is LGPL.** The Maven AAR `dev.jdtech.mpv:libmpv` is GPLv3 (FFmpeg `--enable-gpl`, mpv's GPL
+  default), so it is not used. `modules/vela-player/android/libmpv/build.sh` builds libmpv from
+  libmpv-android's scripts at the revision in `libmpv/pin.sh` (mpv 0.42.0, FFmpeg 9.0.2, libplacebo,
+  libass, dav1d, mbedTLS, libcurl) with `-Dgpl=false` and FFmpeg `--enable-version3` only, on React
+  Native's NDK (27.1, one libc++). It refuses a result whose `config.h` is not LGPLv3 / `HAVE_GPL 0`.
+  Output: `~/.scratch/vela-build/libmpv/<revision>-lgpl/{include,jniLibs/<abi>}`, which the module's
+  Gradle build links (or `-PvelaLibmpvDir=`). Distribution must ship the LGPL notices and offer the
+  sources of this build (shared libraries, so relinking is by replacing them).
+- **The module** (`modules/vela-player/android`): its own JNI (`src/main/cpp`, one mpv handle per view,
+  events on a thread of their own) and Kotlin classes mirroring the Apple ones: `PlayerController`
+  (plans, commands, track selection by source stream index, seek generations), `PreviewPlayback`
+  (`preview`/`active`: muted, small caches, destroyed when inactive, off screen, expired or under Data
+  Saver), `PlayerReport` (the same snapshot and observation shapes as `ios/PlayerReport.swift`),
+  `PlayerCapabilities` (hardware decoders from `MediaCodecList`), `DisplayMatching`
+  (`Surface.setFrameRate`, `preferredDisplayModeId`; SDR output only), `MediaAccess`, `TrustStore`
+  (the device's CAs as one PEM file: mbedTLS cannot read Android's store). It compiles and is packaged;
+  it has **not played a file yet**.
+- **Redirects with credentials** (open question above): mpv 0.42 carries http(s) over libcurl, not
+  FFmpeg. While media access headers apply to a URL the view sets `curl-max-redirects=0` (and FFmpeg's
+  `max_redirects=0`), so a credentialed request never follows any redirect. Ether's broker URLs carry no
+  headers and keep redirects. Not yet exercised against a redirecting server.
+- **Milestone 1 (renderer on Android TV), partly verified** on the emulator (Android 14 TV image): the
+  sign-in document draws with its fonts and gradients, and D-pad focus moves into its fields with the
+  document's focus look. Not yet driven: signing in, home, title, rows and cards by D-pad.
+- **Milestone 2 (lab HEVC MKV with media auth)**: not started on a device. A suitable lab title is
+  Se7en (HEVC Main10 HDR10, 1920x800, 7.9 GB original, `EXPO_PUBLIC_VELA_TITLE=Se7en`); the lab's other
+  originals are 4K.
+- **Blocker in the app shell:** `apps/vela/src/vela.tsx` sends every signed-out route but `/sign-in` and
+  `/connect` to sign-in, which includes the spike route `/player` (it signs in by itself), so
+  `vela://player` cannot open on any native platform until it is let through.
+
+Steps on a new machine (Linux x86_64 with KVM, or a Mac):
+
+1. JDK 17 (`openjdk-17-jdk`, or Homebrew `openjdk@17`). Android command-line tools unpacked to
+   `$ANDROID_HOME/cmdline-tools/latest` (default `~/.scratch/android-sdk`), then
+   `sdkmanager platform-tools emulator "platforms;android-37.0" "build-tools;37.0.0"
+   "ndk;27.1.12297006" "cmake;3.22.1"` and a TV image (`system-images;android-34;android-tv;x86_64` on
+   Linux, `arm64-v8a` on Apple silicon); `avdmanager create avd -n vela-tv -d tv_1080p -k <image>`.
+2. `source tools/android-env.sh` (per-worktree Gradle home, the host's ABI, build output on scratch).
+3. libmpv: on Linux install autoconf, automake, libtool, pkg-config, meson, ninja, nasm, gperf, python3
+   (venv); on a Mac Homebrew's automake, autoconf, gnu-sed, meson, ninja, wget. Then
+   `modules/vela-player/android/libmpv/build.sh x86_64` (or `arm64`); about 30 minutes, clean each time.
+4. `bun install`, the mock server (`bun mock-server/main.ts`, `adb reverse tcp:7777 tcp:7777`), then
+   `tools/android-tv.sh --prebuild --open vela://` (Release, JS embedded; `--debug` for Metro with
+   `--clear`). For the lab spike, `apps/vela/.env.local` as in `app/(spike)/player.tsx` (never committed)
+   and `--open vela://player`.
 
 ### Web implementation
 

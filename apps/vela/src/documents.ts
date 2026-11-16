@@ -1,14 +1,23 @@
-// The built-in skin documents (the Vela base as Cinematic, and Mochi), the app's own faces the
+// The built-in skin documents, the app's own faces the
 // Vela base names, and where a document's image paths come from: the app's bundled assets, an
 // absolute URL, or a path on the selected server.
 import { Platform } from 'react-native';
 import type { SkinDocument } from '../../../protocol/v0/skin';
+import { cinematicDoc } from '../../../protocol/v0/fixtures/skins/cinematic';
+import broadcast from '../../../protocol/v0/fixtures/skins/broadcast/document';
+import index from '../../../protocol/v0/fixtures/skins/index/document';
+import jellytwin from '../../../protocol/v0/fixtures/skins/jellytwin/document';
+import kids from '../../../protocol/v0/fixtures/skins/kids/document';
+import latenight from '../../../protocol/v0/fixtures/skins/latenight/document';
+import lounge from '../../../protocol/v0/fixtures/skins/lounge/document';
+import marquee from '../../../protocol/v0/fixtures/skins/marquee/document';
 import mochi from '../../../protocol/v0/fixtures/skins/mochi/document';
-import { velaBase } from '../../../client/src/skin/base';
 import { ASSETS } from './assets.generated';
 import { config } from './data/config';
 
-export const DOCUMENTS: SkinDocument[] = [velaBase, mochi as SkinDocument];
+/** The built-in documents the appearance picker offers, Cinematic first. Each draws over the
+ * Vela base (the resolver inherits it), so none needs to draw every route. */
+export const DOCUMENTS: SkinDocument[] = [cinematicDoc, mochi, marquee, jellytwin, index, lounge, latenight, kids, broadcast] as SkinDocument[];
 
 /** The app's own faces, which the Vela base's display type names. */
 export const APP_FONTS = {

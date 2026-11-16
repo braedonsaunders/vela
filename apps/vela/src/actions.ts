@@ -27,14 +27,15 @@ interface Context {
   store: Store;
   view: ViewState;
   live: LiveController | null;
-  nextDocument(): void;
+  /** Open the appearance picker. */
+  openPicker(): void;
 }
 
 function notYet(action: string, arg: string): void {
   console.info(`Vela: ${action} ${arg} is not carried out yet`);
 }
 
-export function useDispatcher({ store, view, live, nextDocument }: Context): Dispatcher {
+export function useDispatcher({ store, view, live, openPicker }: Context): Dispatcher {
   const loadMore = useCallback<SkinHost['loadMore']>((on, id) => {
     if (on === 'row') void store.home.rowItems(id);
     else if (on === 'home') void store.home.moreRows();
@@ -109,7 +110,7 @@ export function useDispatcher({ store, view, live, nextDocument }: Context): Dis
       case 'openHit':
         return openHit(store, arg);
       case 'openPicker':
-        return nextDocument();
+        return openPicker();
       case 'signOut':
         void store.auth.signOut();
         return;
@@ -118,7 +119,7 @@ export function useDispatcher({ store, view, live, nextDocument }: Context): Dis
       default:
         notYet(action, arg);
     }
-  }, [store, view, live, select, retry, loadMore, nextDocument]);
+  }, [store, view, live, select, retry, loadMore, openPicker]);
 
   return { dispatch, loadMore };
 }

@@ -24,6 +24,10 @@ import { useDispatcher } from './actions';
 import { config } from './data/config';
 import { platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
+import { preferences } from './data/preferences';
+import { AppearancePicker } from './picker';
+
+const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { environment } from './env';
 import { useLiveController } from './live';
@@ -93,16 +97,15 @@ function AppProvider({ store, children }: { store: Store; children: ReactNode })
     [servers, store],
   );
 
-  const app = (
-    <AppHost store={store} state={state} live={live}>
-      {children}
-    </AppHost>
-  );
-  const withServers = signedIn ? <ServersProvider value={serverSwitch}>{app}</ServersProvider> : app;
-  if (!live) return withServers;
+  // The providers wrap the app whether or not they have a value: wrapping on sign-in would remount
+  // every route under them (a watch route would start its session again).
   return (
     <LiveProvider controller={live} Player={VelaPlayerView}>
-      {withServers}
+      <ServersProvider value={signedIn ? serverSwitch : null}>
+        <AppHost store={store} state={state} live={live}>
+          {children}
+        </AppHost>
+      </ServersProvider>
     </LiveProvider>
   );
 }
@@ -150,16 +153,30 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     void Promise.all([loadFonts(APP_FONTS, source), loadFonts(raw.fonts, source)]).finally(() => setFontsReady(true));
   }, [raw, origin]);
 
-  const nextDocument = useCallback(() => {
-    setDocIndex(i => i + 1);
+  // The appearance picker: the viewer's choice applies at once and is remembered on this device.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const openPicker = useCallback(() => setPickerOpen(true), []);
+  const closePicker = useCallback(() => setPickerOpen(false), []);
+  const pickDocument = useCallback((index: number) => {
+    setDocIndex(index);
     setPicked(true);
+    setPickerOpen(false);
+    void preferences.set(SKIN_PREFERENCE, DOCUMENTS[index]!.id);
   }, []);
-  const { dispatch, loadMore } = useDispatcher({ store, view, live, nextDocument });
+  useEffect(() => {
+    if (picked) return;
+    const index = DOCUMENTS.findIndex(doc => doc.id === preferences.get(SKIN_PREFERENCE));
+    if (index >= 0) { setDocIndex(index); setPicked(true); }
+  // Only at start: a stored choice never overrides one made in this session.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const { dispatch, loadMore } = useDispatcher({ store, view, live, openPicker });
   const viewport: Viewport = useMemo(() => ({ width, height, insets }), [width, height, insets]);
   const image = useCallback<SkinHost['image']>(path => {
     const source = assetSource(path, origin);
     if (source === undefined) return undefined;
-    return typeof source === 'number' ? source : { uri: source };
+    // A URL; or a bundled asset, which is a module id natively and an asset object on the web.
+    return typeof source === 'string' ? { uri: source } : source;
   }, [origin]);
   const setQuery = useCallback((query: string) => store.search.setQuery(query), [store]);
 
@@ -202,6 +219,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       <Previews store={store} state={state} onHome={pathname === '/'} heroIndex={view.heroIndex} still={view.still}>
         {children}
       </Previews>
+      {pickerOpen ? <AppearancePicker documents={DOCUMENTS} current={docIndex % DOCUMENTS.length} image={image} onPick={pickDocument} onClose={closePicker} /> : null}
     </VelaContext.Provider>
   );
 }

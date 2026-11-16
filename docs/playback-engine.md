@@ -2290,6 +2290,13 @@ server (seek commands 200, local resume). English SDH PGS drew on screen (44,249
 pixels at the capture). The TrueHD Atmos 7.1 to English AC-3 5.1 switch applied while
 playing. Close sent Stop (200), the token was revoked (200) and Ether was asked to
 unpin. Connection measured 16–25 Mbps against the release's 48 Mbps average, with
-about 0.3 s of buffer and no stall during the ~7 minutes driven. Open: a seek issued
-while the previous server seek was still in flight was dropped (no command sent); the
-watch route's remount during sign-in re-posted /playback twice (404 after the first 200).
+about 0.3 s of buffer and no stall during the ~7 minutes driven.
+
+Follow-ups, checked on the mock. The "dropped" back seeks were the test driver's: its
+element clicks landed while the chrome was hidden, and a press on a hidden chrome only
+wakes it. With pointer input, forward then back 400 ms apart sent both seeks
+(seekGeneration 3 and 4, both 200). The mock's refused audio switch is the mock's
+policy: its transcode path is muxed, it answers `tracks` with 403 "Changing active
+tracks needs a new source", and the chrome shows that message. Ether switches. The
+repeated /playback came from the app's providers remounting every route on sign-in,
+fixed in apps/vela (one /playback per watch now).

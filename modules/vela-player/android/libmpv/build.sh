@@ -37,7 +37,9 @@ perl -pi -e "s/^v_ndk=.*/v_ndk=$LIBMPV_NDK/" include/depinfo.sh
 
 # Meson installs under its default prefix inside each DESTDIR; Homebrew's meson defaults to
 # /opt/homebrew, so the cross file names the prefix the flat staging layout expects.
-grep -q "^prefix = '/usr/local'" build.sh || perl -pi -e "s/^default_library = 'static'\$/\$&\nprefix = '\/usr\/local'/" build.sh
+if ! grep -q "^prefix = '/usr/local'" build.sh; then
+  perl -pi -e "s/^default_library = 'static'\$/\$&\nprefix = '\/usr\/local'/" build.sh
+fi
 
 # The LGPL configuration.
 perl -pi -e 's/--enable-\{gpl,version3\}/--enable-version3/' scripts/ffmpeg.sh
