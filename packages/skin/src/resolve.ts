@@ -60,7 +60,8 @@ export interface ResolvedDocument {
   name: string;
   document: SkinDocument;
   shell?: RNode;
-  routes: Partial<Record<'home' | 'title', RNode>>;
+  /** `search` is drawn in home's view, after home's nodes, while a query is open. */
+  routes: Partial<Record<'home' | 'title' | 'search', RNode>>;
   motion: Record<string, Motion>;
   keyframes: ReturnType<typeof documentKeyframes>;
   /** Rows the style matrix refuses, named once per document. */
@@ -68,7 +69,7 @@ export interface ResolvedDocument {
 }
 
 /** Image URLs (Plex puts a short-lived token in them) may be read only by an image source or a background image. */
-const URL_KEYS = /^(card|hero|detail|dest|person|ch|tile)\.(poster|backdrop|logo|portrait|nowArt)$/;
+const URL_KEYS = /^(card|hero|detail|dest|person|ch|tile|hit)\.(poster|backdrop|logo|portrait|nowArt|artwork)$/;
 const UNSAFE = /expression\(|javascript:|@import|[;{}<>\\]/i;
 
 interface Context {
@@ -263,6 +264,7 @@ export function resolveDocument(own: SkinDocument, width: number, locale = 'en')
     routes: {
       home: home && convert(home, 1, r),
       title: doc.routes?.title && convert(doc.routes.title, 1, r),
+      search: doc.routes?.search && convert(doc.routes.search, 1, r),
     },
     motion: (doc.motion ?? {}) as Record<string, Motion>,
     keyframes: documentKeyframes(doc.keyframes),
