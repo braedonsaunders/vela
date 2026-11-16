@@ -17,8 +17,8 @@ export interface EnvInput {
   skinName: string;
 }
 
-function load(value: { load: string } | undefined): Env['load'] {
-  if (value?.load === 'ready') return 'ready';
+function load(value: { load: string; value?: unknown } | undefined): Env['load'] {
+  if (value?.value !== undefined || value?.load === 'ready') return 'ready';
   if (value?.load === 'failed') return 'failed';
   return 'loading';
 }
@@ -40,7 +40,7 @@ export function environment({ state, view, live, route, entry, width, skinCount,
     libraries: state.libraries.value ?? [],
     skinCount,
     skinName,
-    homeLoading: home.load === 'loading',
+    homeLoading: !home.value && home.load === 'loading',
     detail: title?.value,
     season: view.season,
     route,

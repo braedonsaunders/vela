@@ -82,7 +82,17 @@ async function start(store: Store): Promise<void> {
 }
 
 function AppProvider({ store, children }: { store: Store; children: ReactNode }) {
-  const state = useVelaState(s => s);
+  // Library/collection pages subscribe to their own keyed values. Their loading and
+  // paging must not invalidate every host, the shell and all retained sections.
+  const selectHostState = useMemo(() => {
+    let previous: VelaState | undefined;
+    return (next: VelaState): VelaState => {
+      if (previous && (Object.keys(next) as (keyof VelaState)[]).every(key =>
+        key === 'library' || key === 'collections' || next[key] === previous![key])) return previous;
+      return previous = next;
+    };
+  }, []);
+  const state = useVelaState(selectHostState);
   const { auth, servers } = state;
   const signedIn = auth.phase === 'signed-in';
   const live = useLiveController(store, signedIn ? auth.revision : null);
@@ -133,8 +143,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const insets = useSafeAreaInsets();
   const liveView = useLiveView();
   const heroPreviewing = state.previews.heroId !== '' && state.previews.url !== '';
-  const view = useViewState(state.home.value?.hero.length ?? 0, state.search.query, heroPreviewing);
   const pathname = usePathname();
+  const view = useViewState(state.home.value?.hero.length ?? 0, state.search.query, heroPreviewing, pathname === '/');
   const [docIndex, setDocIndex] = useState(initialDocument);
   /** Whether the viewer chose the document (`?skin=`, the picker); else the server's default applies. */
   const [picked, setPicked] = useState(() => DOCUMENTS[initialDocument()]?.id !== DOCUMENTS[0]?.id);

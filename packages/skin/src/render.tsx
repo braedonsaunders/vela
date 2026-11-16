@@ -9,7 +9,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TVFocusGuideView, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -38,6 +38,9 @@ const Direction = createContext<'row' | 'column'>('column');
 const Band = createContext(false);
 /** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
 const ReadingStop = createContext(false);
+/** First content layout releases the skeleton covering a newly loaded route. */
+const InstantContent = createContext(false);
+const RouteLayout = createContext<{ grid(): void; drawn(): void } | null>(null);
 /** Scroll views of row pagers, by row id, so pageNext/pagePrev can move them. */
 interface Scroller { scrollTo(options: { x?: number; y?: number; animated: boolean }): void }
 const pagers = new Map<string, { view: Scroller; x: number; width: number }>();
@@ -67,12 +70,46 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
  * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is open). */
 export function SkinRoute({ host, node, after }: { host: SkinHost; node: RNode; after?: RNode }) {
   const focus = useRouteFocus();
+  const loading = useRef<SkinHost | null>(null);
+  const gridWaiting = useRef(false);
+  const [, reveal] = useState(0);
+  const section = host.env.route === 'home' || host.env.route === 'library';
+  if (section && host.env.load === 'loading') loading.current = host;
+  const layout = useMemo(() => ({
+    grid() { gridWaiting.current = true; },
+    drawn() {
+      if (!loading.current) return;
+      loading.current = null;
+      reveal(value => value + 1);
+    },
+  }), []);
+  useLayoutEffect(() => {
+    if (host.env.load !== 'ready' || !loading.current) return;
+    // Non-grid routes (including empty libraries) need a committed layout too.
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => { if (!gridWaiting.current) layout.drawn(); });
+    });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [host.env.load, layout]);
+  const cover = host.env.load === 'ready' ? loading.current : null;
   return (
-    <Host.Provider value={host}>
-      <RouteFocusContext.Provider value={focus}>
-        <SkinNode node={node} ctx={{ index: 0 }} route after={after} />
-      </RouteFocusContext.Provider>
-    </Host.Provider>
+    <View style={{ flex: 1 }}>
+      <Host.Provider value={host}>
+        <RouteFocusContext.Provider value={focus}>
+          <RouteLayout.Provider value={layout}>
+            <InstantContent.Provider value={section && host.env.load === 'ready'}>
+              <SkinNode node={node} ctx={{ index: 0 }} route after={after} />
+            </InstantContent.Provider>
+          </RouteLayout.Provider>
+        </RouteFocusContext.Provider>
+      </Host.Provider>
+      {cover ? (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Host.Provider value={cover}><InstantContent.Provider value><SkinNode node={node} ctx={{ index: 0 }} route /></InstantContent.Provider></Host.Provider>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -233,7 +270,8 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const translated = translatedBox(own, viewport, text.fontSize);
   const fx = translated.fx;
   const style = shrinkFor(translated.style, own, parentDirection) as typeof translated.style;
-  const motion = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger);
+  const instant = useContext(InstantContent);
+  const motion = animation(instant && node.motion?.iterations !== 'infinite' ? undefined : node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger);
   const rowId = ctx.row?.id ?? '';
 
   const report = useCallback((kind: 'hover' | 'focus', on: boolean) => {
@@ -548,6 +586,8 @@ const BOX_SCROLL: ViewStyle = { flexGrow: 0 };
  * auto-fill takes as many columns as fit at the minimum, then stretches them to fill the row. */
 function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>; rowGap: unknown; items: ReactElement[] }) {
   const [width, setWidth] = useState(0);
+  const layout = useContext(RouteLayout);
+  useLayoutEffect(() => { layout?.grid(); }, [layout]);
   const gap = grid.gap;
   const count = grid.count ?? Math.max(1, Math.floor((width + gap) / ((grid.min ?? 160) + gap)));
   // A pixel of slack, then rounded down to the hundredth, so a row's cells and gaps never sum past
@@ -555,8 +595,13 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
   const cell = Math.floor(((width - 1 - gap * (count - 1)) / count) * 100) / 100;
   const track = { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', rowGap, columnGap: gap } as ViewStyle;
   return (
-    <View style={track} onLayout={e => setWidth(e.nativeEvent.layout.width)}>
-      {width > 0 ? items.map(item => <View key={item.key} style={{ width: cell }}>{item}</View>) : null}
+    <View style={track} onLayout={e => {
+      // Hidden retained sections report zero width. Keep their cells and scroll
+      // extent mounted until a visible layout supplies the new usable width.
+      const next = e.nativeEvent.layout.width;
+      if (next > 0) setWidth(next);
+    }}>
+      {width > 0 ? items.map((item, index) => <View key={item.key} style={{ width: cell }} onLayout={index === 0 ? () => layout?.drawn() : undefined}>{item}</View>) : null}
     </View>
   );
 }
@@ -642,7 +687,8 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const text = inheritFrom(parentText, inherited, viewport);
   const parentDirection = useContext(Direction);
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
-  const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger);
+  const instant = useContext(InstantContent);
+  const motion = animation(instant && node.motion?.iterations !== 'infinite' ? undefined : node.motion, doc.keyframes, env.still, ctx.index, node.stagger);
   return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion } as Record<string, unknown>, fx };
 }
 

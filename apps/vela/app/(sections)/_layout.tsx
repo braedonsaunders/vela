@@ -1,9 +1,13 @@
 import { Navigator, useIsFocused, usePathname } from 'expo-router';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Platform, useWindowDimensions, View } from 'react-native';
+import { useVelaState } from '@vela/core/react';
 import { SkinRoot } from '@vela/skin';
 import Reanimated from 'react-native-reanimated';
 import { useVela } from '../../src/vela';
+import Home from './index';
+import { LibrarySection } from './library/[id]';
+import type { LibraryParams } from '../../src/browse/library-query';
 import { SectionFocusContext } from '../../src/section-focus';
 
 const slideInForward = { from: { transform: [{ translateX: '100%' }] }, to: { transform: [{ translateX: '0%' }] } };
@@ -51,7 +55,7 @@ export default function SectionsLayout() {
   const previousOrder = useRef(order);
   const transition = useRef({ key, direction: 1, animated: false });
   if (transition.current.key !== key) {
-    transition.current = { key, direction: order >= previousOrder.current ? 1 : -1, animated: !reducedMotion };
+    transition.current = { key, direction: order >= previousOrder.current ? 1 : -1, animated: !reducedMotion && !Platform.isTV };
   }
 
   useEffect(() => {
@@ -61,7 +65,7 @@ export default function SectionsLayout() {
   }, []);
 
   useLayoutEffect(() => {
-    if (Platform.OS !== 'web' && previous.current !== null && previous.current !== key && !reducedMotion) {
+    if (!Platform.isTV && Platform.OS !== 'web' && previous.current !== null && previous.current !== key && !reducedMotion) {
       const direction = order >= previousOrder.current ? 1 : -1;
       offset.setValue(direction * width);
       outgoingOffset.setValue(0);
@@ -77,10 +81,11 @@ export default function SectionsLayout() {
     previousOrder.current = order;
   }, [key, offset, outgoingOffset, order, reducedMotion, width]);
 
+  const session = useVelaState(state => state.auth.revision);
   const content = (
     <View style={{ flex: 1, overflow: 'hidden' }}>
       <Navigator>
-        <SectionScenes focused={focused} sectionKey={key} offset={offset} outgoingOffset={outgoingOffset} reducedMotion={reducedMotion} transition={transition.current} />
+        <SectionScenes key={session} focused={focused} sectionKey={key} offset={offset} outgoingOffset={outgoingOffset} reducedMotion={reducedMotion} transition={transition.current} />
       </Navigator>
     </View>
   );
@@ -88,7 +93,7 @@ export default function SectionsLayout() {
   return <SkinRoot host={{ ...host, children: content }} node={shell} />;
 }
 
-/** Retain the previous navigator descriptor briefly so both pages move together. */
+/** Keep visited sections mounted; only the active and briefly outgoing scenes are visible. */
 function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMotion, transition }: {
   focused: boolean;
   sectionKey: string;
@@ -99,12 +104,18 @@ function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMot
 }) {
   const { state, descriptors } = Navigator.useContext();
   const route = state.routes[state.index];
-  const current = route ? descriptors[route.key]?.render() : null;
+  const libraryId = sectionKey.startsWith('library:') ? sectionKey.slice('library:'.length) : '';
+  // Render data sections directly: Expo descriptors carry replaceable route identities
+  // and navigation activity boundaries, which otherwise remount a revisited library.
+  const current = libraryId
+    ? <LibrarySection id={libraryId} params={(route?.params as { id?: string })?.id === libraryId ? route.params as LibraryParams : {}} />
+    : sectionKey === 'home:home' ? <Home /> : route ? descriptors[route.key]?.render() : null;
+  const retained = useRef(new Map<string, { key: string; content: ReactNode }>());
   const last = useRef<{ key: string; content: ReactNode } | null>(null);
   const outgoing = useRef<{ key: string; content: ReactNode } | null>(null);
   const [, refresh] = useState(0);
   if (route && last.current?.key !== sectionKey) {
-    outgoing.current = reducedMotion ? null : last.current;
+    outgoing.current = reducedMotion || Platform.isTV ? null : last.current;
     last.current = { key: sectionKey, content: current };
   } else if (route) {
     last.current = { key: sectionKey, content: current };
@@ -117,14 +128,14 @@ function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMot
     }, 260);
     return () => clearTimeout(timer);
   }, [sectionKey, reducedMotion]);
-  const scenes = [outgoing.current, last.current].filter(
-    (scene): scene is { key: string; content: ReactNode } => scene !== null,
-  );
+  if (last.current) retained.current.set(sectionKey, last.current);
+  const scenes = [...retained.current.values()];
   return (
     <View style={{ flex: 1 }}>
       {scenes.map(scene => {
         const isCurrent = scene.key === sectionKey;
-        const webAnimation = Platform.OS === 'web' && transition.animated && !reducedMotion
+        const visible = isCurrent || scene.key === outgoing.current?.key;
+        const webAnimation = visible && Platform.OS === 'web' && transition.animated && !reducedMotion
           ? {
             animationName: isCurrent
               ? transition.direction > 0 ? slideInForward : slideInBackward
@@ -138,10 +149,12 @@ function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMot
         return (
           <SceneView
             key={scene.key}
+            testID={`section-${scene.key}`}
             pointerEvents={isCurrent ? 'auto' : 'none'}
             accessibilityElementsHidden={!isCurrent}
             importantForAccessibility={isCurrent ? 'auto' : 'no-hide-descendants'}
             style={{
+              display: visible ? 'flex' : 'none',
               position: 'absolute',
               top: 0,
               bottom: 0,

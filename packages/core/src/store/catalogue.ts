@@ -36,6 +36,7 @@ const PAGE = 100;
 const RECONCILE_ATTEMPTS = 3;
 
 export class Catalogue {
+  private readonly libraryReads = new Map<string, { pages: number; promise: Promise<void> }>();
   /** What each collection has read so far, and where the server said to continue. */
   private readonly collectionReads = new Map<string, { items: V.RowEntry[]; cursor?: string; continuation: string }>();
   /** Titles on screen whose answer was partial, read again until complete. */
@@ -47,6 +48,7 @@ export class Catalogue {
     private readonly artWidth: () => number,
   ) {
     session.onReset(() => {
+      this.libraryReads.clear();
       this.collectionReads.clear();
       this.pending.clear();
       this.box.update('titles', () => ({}));
@@ -158,10 +160,17 @@ export class Catalogue {
     });
   }
 
-  /** One library view, `pages` pages deep (100 items a page). */
-  async library(id: string, query: LibraryQuery = {}, pages = 1): Promise<void> {
+  /** One library view, `pages` pages deep (100 items a page). A background revisit
+   * keeps a cached view ready, including if the refresh fails. Concurrent reads share work. */
+  library(id: string, query: LibraryQuery = {}, pages = 1, background = false): Promise<void> {
     const key = libraryKey(id, query);
-    await this.read('library', key, async connection => {
+    const active = this.libraryReads.get(key);
+    if (active) {
+      if (pages <= active.pages) return active.promise;
+      const epoch = this.session.epoch;
+      return active.promise.then(() => epoch === this.session.epoch ? this.library(id, query, pages, background) : undefined);
+    }
+    const reading = this.read('library', key, async connection => {
       const api = connection.adapter;
       const browse: V.LibraryBrowseQuery = { ...query, limit: PAGE };
       let result = await api.library(id, browse);
@@ -178,7 +187,12 @@ export class Catalogue {
       if (result.continuation === 'more' && !result.nextCursor) throw new Error('Invalid library continuation');
       const images = await connection.images();
       return libraryModel(result, items, read, query, images, this.artWidth());
+    }, background);
+    this.libraryReads.set(key, { pages, promise: reading });
+    void reading.finally(() => {
+      if (this.libraryReads.get(key)?.promise === reading) this.libraryReads.delete(key);
     });
+    return reading;
   }
 
   /** A collection's first page, or with `more` its next one, continued from the server's cursor. */
@@ -213,19 +227,21 @@ export class Catalogue {
     slice: K,
     key: string,
     work: (connection: Connection) => Promise<SliceValue<K>>,
+    background = false,
   ): Promise<void> {
     const epoch = this.session.epoch;
     const set = (value: Loadable<SliceValue<K>>) => {
       this.box.update(slice, map => ({ ...map, [key]: value }) as VelaState[K]);
     };
     const previous = this.box.get()[slice][key] as Loadable<SliceValue<K>> | undefined;
-    set(loading(previous));
+    const quiet = background && !!previous?.value;
+    if (!quiet) set(loading(previous));
     try {
       const connection = await this.session.ready();
       const value = await work(connection);
       if (epoch === this.session.epoch) set(ready(value));
     } catch (error) {
-      if (epoch === this.session.epoch) set(failed(error, previous));
+      if (epoch === this.session.epoch && !quiet) set(failed(error, previous));
     }
   }
 }

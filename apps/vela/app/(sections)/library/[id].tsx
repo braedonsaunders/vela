@@ -10,7 +10,11 @@ import { DocumentScreen } from '../../../src/screen';
 
 export default function Library() {
   const params = useLocalSearchParams<LibraryParams & { id: string }>();
-  const id = params.id ?? '';
+  return <LibrarySection id={params.id ?? ''} params={params} />;
+}
+
+/** A retained section has a stable identity independent of the navigator's route key. */
+export function LibrarySection({ id, params }: { id: string; params: LibraryParams }) {
   const { sort, dir, kind, genre, year, played, fav } = params;
   const query = useMemo(
     () => queryOf({ sort, dir, kind, genre, year, played, fav }),

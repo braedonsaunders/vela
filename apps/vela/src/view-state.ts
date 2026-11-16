@@ -1,7 +1,7 @@
 // The view state documents read beside the data: open flags (menus, panels), the chosen season,
 // each row pager's ends, the hero on show (rotating every 9 seconds unless motion is reduced, a
 // query is open or the hero's trailer is playing), and the system's reduced-motion setting.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import type { Env } from '@vela/skin';
 
@@ -23,7 +23,7 @@ export interface ViewState {
   still: boolean;
 }
 
-export function useViewState(heroCount: number, query: string, heroPreviewing: boolean): ViewState {
+export function useViewState(heroCount: number, query: string, heroPreviewing: boolean, onHome = true): ViewState {
   const [flags, setFlags] = useState<string[]>([]);
   const [season, setSeason] = useState('');
   const [pagers, setPagers] = useState<Env['pagers']>({});
@@ -37,7 +37,7 @@ export function useViewState(heroCount: number, query: string, heroPreviewing: b
   }, []);
 
   // A playing hero trailer holds the hero on show, as compiled Cinematic did; rotation resumes when it stops.
-  const rotating = heroCount > 1 && !still && query === '' && !heroPreviewing;
+  const rotating = onHome && heroCount > 1 && !still && query === '' && !heroPreviewing;
   useEffect(() => {
     if (!rotating) return;
     const timer = setInterval(() => setHeroIndex(i => (i + 1) % heroCount), HERO_SECONDS * 1000);
@@ -61,7 +61,7 @@ export function useViewState(heroCount: number, query: string, heroPreviewing: b
     setPagers(p => (p[rowId]?.atStart === state.atStart && p[rowId]?.atEnd === state.atEnd ? p : { ...p, [rowId]: state }));
   }, []);
 
-  return {
+  return useMemo(() => ({
     flags,
     setFlag,
     toggleFlag,
@@ -74,5 +74,5 @@ export function useViewState(heroCount: number, query: string, heroPreviewing: b
     heroIndex: heroCount ? heroIndex % heroCount : 0,
     setHeroIndex,
     still,
-  };
+  }), [flags, setFlag, toggleFlag, onlyFlag, resetFlags, season, pagers, setPager, heroCount, heroIndex, still]);
 }
