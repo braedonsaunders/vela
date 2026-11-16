@@ -276,6 +276,9 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     </>
   );
   const drawn: Record<string, unknown> = { ...style, ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...tvRing, ...motion };
+  // Web sticky headers add a z-index: 10 wrapper, which puts decorative backdrops
+  // above their foreground. Native CSS keeps the document's own stacking order.
+  if (web && fx.sticky) drawn.position = 'sticky';
   // A masked box that only paints a colour draws the masked colour as a gradient fill.
   const filled = !!fx.maskedFill && node.children.length === 0;
   if (filled) {
@@ -297,7 +300,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   if (route || fx.scrollX || fx.scrollY) {
     const horizontal = !route && !!fx.scrollX && !fx.scrollY;
     const [contentStyle, outerStyle] = partition(boxStyleFinal, CONTENT);
-    const sticky = horizontal ? undefined : node.children.flatMap((child, i) => (child.base.style.position === 'sticky' && holds(child.when, ctx, env) ? [i] : []));
+    const sticky = web || horizontal ? undefined : node.children.flatMap((child, i) => (child.base.style.position === 'sticky' && holds(child.when, ctx, env) ? [i] : []));
     const onPagerScroll = node.pager && rowId ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
       const pager = pagers.get(rowId);
