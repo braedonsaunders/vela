@@ -63,7 +63,6 @@ const navRow = (
     transition: quick,
   });
   const text = (lit: boolean): Style => ({
-    display: 'block',
     'font-size': '15px',
     'font-weight': lit ? '700' : '600',
     ...oneLine,
@@ -147,7 +146,7 @@ const destinations = (full: boolean, extra: Style = {}): Node => {
     padding: slim ? '10px 8px' : '10px 10px',
     ...extra,
   });
-  const heading: Style = { display: 'block', ...label, padding: '18px 12px 8px', 'white-space': 'nowrap' };
+  const heading: Style = { ...label, padding: '18px 12px 8px', 'white-space': 'nowrap' };
   const divider: Style = { display: 'flex', height: '1px', margin: '10px 8px', 'background-color': '$line' };
   return {
     type: 'box',
