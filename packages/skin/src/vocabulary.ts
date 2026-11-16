@@ -4,6 +4,7 @@
 // key for key. A template calls only the accessors it names.
 import { msg } from '../../../client/foundation/i18n';
 import type { detailModel, entry, homeModel } from '../../../client/src/discovery/models';
+import { AREAS } from './areas';
 
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
 export type Card = ReturnType<typeof entry>;
@@ -16,8 +17,8 @@ export type Person = DetailModel['castPeople'][number];
 
 export interface Destination { id: string; name: string; kind: string; backdrop: string }
 
-/** The view state documents read. Routes the spike does not draw yet (library, live, auth,
- * collection, search) have no model here, so their keys read nothing. */
+/** The view state documents read. Areas (areas.ts) add their models by augmenting this
+ * interface; a key whose area has no model yet reads nothing. */
 export interface Env {
   viewer: string;
   section: string;
@@ -44,7 +45,8 @@ export interface Env {
   pagers: Record<string, { atStart: boolean; atEnd: boolean }>;
 }
 
-/** The binding context: the item a node is repeated over, and its position. */
+/** The binding context: the item a node is repeated over, and its position. Areas add their
+ * item kinds by augmenting this interface. */
 export interface Ctx {
   card?: Card;
   hero?: Card;
@@ -237,6 +239,8 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.selectedSeason': (_, e) => e.season,
 };
 
+for (const area of AREAS) Object.assign(VOCABULARY, area.vocabulary);
+
 /** A key's accessor, or undefined for a key no document may name. */
 export function accessor(key: string): Accessor | undefined {
   const known = VOCABULARY[key];
@@ -270,6 +274,17 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
     case 'detail.mediaFacts': return at(d?.mediaFacts ?? [], fact => ({ fact }));
     case 'detail.genres': return at(d?.title[0]?.genres ?? [], fact => ({ fact }));
     case 'detail.related': return at(d?.related ?? [], row => ({ row: row as Row }));
-    default: return [];
+    default:
+      for (const area of AREAS) {
+        const items = area.collection?.(over, c, e, limit);
+        if (items) return items;
+      }
+      return [];
   }
+}
+
+/** A stable key for a repeated item: its position and the id of the item it binds. */
+export function itemKey(c: Ctx): string {
+  const item = Object.values(c).find((v): v is { id: string } => typeof v === 'object' && v !== null && typeof (v as { id?: unknown }).id === 'string');
+  return `${c.index}:${item?.id ?? (typeof c.fact === 'string' ? c.fact : '')}`;
 }

@@ -13,14 +13,14 @@ import { Platform, Pressable, StyleSheet, View, type LayoutChangeEvent, type Nat
 import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import type { Viewport } from './css';
-import { GroupContext, HostContext, InheritedContext, measure, useHost, type GroupState, type SkinHost } from './host';
+import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
 import { SYMBOLS } from './icons';
 import { WIDGETS } from './widgets';
 import { SearchInput } from './widgets/search-input';
 import { animation } from './motion';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
-import { collection, type Ctx, type Env } from './vocabulary';
+import { collection, itemKey, type Ctx, type Env } from './vocabulary';
 
 const Host = HostContext;
 const Inherited = InheritedContext;
@@ -48,28 +48,29 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
   );
 }
 
-/** A route tree: its root's children scroll in the route's own vertical ScrollView. */
-export function SkinRoute({ host, node }: { host: SkinHost; node: RNode }) {
+/** A route tree: its root's children scroll in the route's own vertical ScrollView. `after` is a
+ * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is open). */
+export function SkinRoute({ host, node, after }: { host: SkinHost; node: RNode; after?: RNode }) {
   return (
     <Host.Provider value={host}>
-      <SkinNode node={node} ctx={{ index: 0 }} route />
+      <SkinNode node={node} ctx={{ index: 0 }} route after={after} />
     </Host.Provider>
   );
 }
 
-function SkinNode({ node, ctx, route }: { node: RNode; ctx: Ctx; route?: boolean }) {
+function SkinNode({ node, ctx, route, after }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode }) {
   const { env } = useHost();
   if (node.kind === 'repeat') {
     return (
       <>
         {collection(node.over, ctx, env, node.limit).map(c =>
-          holds(node.when, c, env) ? <SkinNode key={`${c.index}:${c.card?.id ?? c.row?.id ?? c.hero?.id ?? c.dest?.id ?? ''}`} node={node.item} ctx={c} /> : null)}
+          holds(node.when, c, env) ? <SkinNode key={itemKey(c)} node={node.item} ctx={c} /> : null)}
       </>
     );
   }
   if (!holds(node.when, ctx, env)) return null;
   switch (node.kind) {
-    case 'box': return <Box node={node} ctx={ctx} route={route} />;
+    case 'box': return <Box node={node} ctx={ctx} route={route} after={after} />;
     case 'text': return <TextNode node={node} ctx={ctx} />;
     case 'image': return <ImageNode node={node} ctx={ctx} />;
     case 'icon': return <Icon node={node} ctx={ctx} />;
@@ -168,7 +169,7 @@ function partition(style: Record<string, unknown>, keys: Set<string>): [Record<s
   return [inside, outside];
 }
 
-function Box({ node, ctx, route }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean }) {
+function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode }) {
   const host = useHost();
   const { env, viewport } = host;
   const parentText = useContext(Inherited);
@@ -205,6 +206,7 @@ function Box({ node, ctx, route }: { node: Extract<RNode, { kind: 'box' }>; ctx:
   if (fx.hidden) return null;
 
   const children = node.children.map((child, i) => <SkinNode key={i} node={child} ctx={ctx} />);
+  if (after) children.push(<SkinNode key="after" node={after} ctx={ctx} />);
   let content: ReactNode = children;
   if (fx.grid && gridWidth > 0) {
     const gap = fx.grid.gap;
@@ -218,7 +220,11 @@ function Box({ node, ctx, route }: { node: Extract<RNode, { kind: 'box' }>; ctx:
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}
     </>
   );
-  const boxStyleFinal: Record<string, unknown> = { ...style, ...(fx.grid ? { flexDirection: 'row', flexWrap: 'wrap' } : {}), ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion };
+  const drawn: Record<string, unknown> = { ...style, ...(fx.grid ? { flexDirection: 'row', flexWrap: 'wrap' } : {}), ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion };
+  // A native mask wraps the box: the mask takes the box's geometry and the box fills it in flow,
+  // so the mask is as large as the box's content.
+  const [geometry, inner] = fx.mask ? partition(drawn, GEOMETRY) : [{}, drawn];
+  const boxStyleFinal = fx.mask ? { ...inner, flexGrow: 1 } : drawn;
   const a11y = a11yProps(node, ctx, env);
   const hoverProps = web && (node.base.hover || node.group || node.states.some(s => s.layer.hover))
     ? { onMouseEnter: () => set('hover', true), onMouseLeave: () => set('hover', false) } : {};
@@ -264,7 +270,7 @@ function Box({ node, ctx, route }: { node: Extract<RNode, { kind: 'box' }>; ctx:
       </AView>
     );
   }
-  if (fx.mask) element = <Mask mask={fx.mask} style={boxStyleFinal}>{element}</Mask>;
+  if (fx.mask) element = <Mask mask={fx.mask} style={geometry}>{element}</Mask>;
   return (
     <Inherited.Provider value={text}>
       <Group.Provider value={groupValue}>{element}</Group.Provider>
@@ -280,14 +286,13 @@ function ownFocusLook(node: RNode): boolean {
 }
 const NO_RING = { outlineWidth: 0 } as ViewStyle;
 
-/** A native gradient mask: the mask takes the box's geometry; the box fills it. */
+/** A native gradient mask with the box's geometry, around the box. */
 function Mask({ mask, style, children }: { mask: NonNullable<Effects['mask']>; style: Record<string, unknown>; children: ReactNode }) {
-  const [geometry] = partition(style, GEOMETRY);
   return (
-    <Masked style={geometry as ViewStyle} maskElement={
+    <Masked style={style as ViewStyle} maskElement={
       <LinearGradient colors={mask.colors as [string, string, ...string[]]} locations={mask.locations as [number, number, ...number[]]} start={mask.start} end={mask.end} style={StyleSheet.absoluteFill} />
     }>
-      <View style={StyleSheet.absoluteFill}>{children}</View>
+      {children}
     </Masked>
   );
 }
@@ -300,11 +305,13 @@ function BackgroundImage({ src }: { src: string }) {
 
 // ---- Leaves ----
 
-function useLeafStyle(node: RNode, ctx: Ctx) {
+const IDLE: Interaction = { hover: false, focus: false, active: false };
+
+function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const { env, viewport, doc } = useHost();
   const parentText = useContext(Inherited);
   const group = useContext(Group);
-  const rows = rowsFor(node, ctx, env, { hover: false, focus: false, active: false }, group, false);
+  const rows = rowsFor(node, ctx, env, ui, group, false);
   const { own, inherited } = split(rows);
   const text = inheritFrom(parentText, inherited, viewport);
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
@@ -383,13 +390,25 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   );
 }
 
+/** A widget draws inside its node's box. The widget reports its own hover and focus
+ * (useWidgetInteraction), and the box shows the node's hover and focus looks for them. */
 function Widget({ node, ctx }: { node: Extract<RNode, { kind: 'widget' }>; ctx: Ctx }) {
-  const { style, text, fx } = useLeafStyle(node, ctx);
+  const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
+  const group = useContext(Group);
+  const interaction = useMemo(() => ({
+    report(kind: 'hover' | 'focus', on: boolean) {
+      setUi(u => (u[kind] === on ? u : { ...u, [kind]: on }));
+      group?.report(kind, on);
+    },
+  }), [group]);
+  const { style, text, fx } = useLeafStyle(node, ctx, ui);
   const Part = WIDGETS[node.widget];
   if (fx.hidden || !Part) return null;
   return (
     <Inherited.Provider value={text}>
-      <AView style={style as ViewStyle}><Part params={node.params} ctx={ctx} /></AView>
+      <WidgetInteractionContext.Provider value={interaction}>
+        <AView style={style as ViewStyle}><Part params={node.params} ctx={ctx} /></AView>
+      </WidgetInteractionContext.Provider>
     </Inherited.Provider>
   );
 }

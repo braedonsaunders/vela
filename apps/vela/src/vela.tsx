@@ -10,7 +10,8 @@ import mochi from '../../../protocol/v0/fixtures/skins/mochi/document';
 import { velaBase } from '../../../client/src/skin/base';
 import { detailModel, homeModel } from '../../../client/src/discovery/models';
 import { artworkURL } from '../../../client/src/discovery/artwork';
-import { loadFonts, page, resolveDocument, type Destination, type DetailModel, type Env, type HomeModel, type ResolvedDocument, type SkinHost, type Viewport } from '@vela/skin';
+import { loadFonts, page, resolveDocument, type Destination, type DetailModel, type Env, type HomeModel, type ResolvedDocument, type RouteName, type SkinHost, type Viewport } from '@vela/skin';
+import { useAreas } from './areas';
 import { ASSETS } from './assets.generated';
 import { EtherClient } from './ether';
 
@@ -27,7 +28,7 @@ const APP_FONTS = { instrument: { family: 'Instrument Serif', files: [
 type Load = Env['load'];
 
 interface Vela {
-  host(route: 'home' | 'title', entry: string): SkinHost | null;
+  host(route: RouteName, entry: string): SkinHost | null;
   doc: ResolvedDocument | null;
   docError: string | null;
   openTitle(id: string): void;
@@ -143,7 +144,10 @@ export function VelaProvider({ children }: { children: ReactNode }) {
     setFlags(list => (on ? (list.includes(flag) ? list : [...list, flag]) : list.filter(f => f !== flag)));
   }, []);
 
+  const areas = useAreas({ client, session: () => { if (!session.current) start(); return session.current!; }, query, home });
+
   const dispatch = useCallback((action: Action, arg: string) => {
+    for (const area of areas) if (area.dispatch?.(action, arg)) return;
     switch (action) {
       case 'select': {
         const [id, kind] = arg.split('|');
@@ -171,23 +175,27 @@ export function VelaProvider({ children }: { children: ReactNode }) {
         // Playback is spike (b); libraries, live TV, auth and collections follow at conversion.
         console.info(`Vela spike: ${action} ${arg} is not part of spike (a)`);
     }
-  }, [setFlag, start]);
+  }, [setFlag, start, areas]);
 
   const viewport: Viewport = useMemo(() => ({ width, height, insets }), [width, height, insets]);
 
-  const host = useCallback((route: 'home' | 'title', entry: string): SkinHost | null => {
+  const host = useCallback((route: RouteName, entry: string): SkinHost | null => {
     if (!resolved.doc || !fontsReady) return null;
     const detail = route === 'title' ? details[entry] : undefined;
     const env: Env = {
       viewer, section: 'home', query, small: width < 640, tv: width >= 1600 || Platform.isTV, still, canLive: home?.liveAvailable ?? false,
       width, home, heroIndex: home ? heroIndex % Math.max(1, home.hero.length) : 0, libraries, skinCount: DOCUMENTS.length, skinName: resolved.doc.name,
       homeLoading: false, detail: detail?.model, season, route, load: route === 'title' ? detail?.load ?? 'loading' : load, entry, flags, rowLoading: [], pagers,
+      ...Object.assign({}, ...areas.map(area => area.env)),
     };
     return {
       doc: resolved.doc, env, viewport, dispatch, image: path => { const s = source(path); return s === undefined ? undefined : typeof s === 'number' ? s : { uri: s }; },
       setQuery, setFlag, setPager: (rowId, state) => setPagers(p => (p[rowId]?.atStart === state.atStart && p[rowId]?.atEnd === state.atEnd ? p : { ...p, [rowId]: state })),
+      // Pages beyond the first arrive with packages/core's paging; the spike draws the first page.
+      loadMore: () => undefined,
+      ...Object.assign({}, ...areas.map(area => area.host)),
     };
-  }, [resolved.doc, fontsReady, details, viewer, query, width, still, home, heroIndex, libraries, season, load, flags, pagers, viewport, dispatch, setFlag]);
+  }, [resolved.doc, fontsReady, details, viewer, query, width, still, home, heroIndex, libraries, season, load, flags, pagers, viewport, dispatch, setFlag, areas]);
 
   const value = useMemo<Vela>(() => ({ host, doc: resolved.doc, docError: resolved.error, openTitle }), [host, resolved, openTitle]);
   return <VelaContext.Provider value={value}>{children}</VelaContext.Provider>;
