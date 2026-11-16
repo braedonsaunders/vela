@@ -245,13 +245,16 @@ export class Playback {
     try {
       return await sendCommand(api, sessionId, command);
     } catch (error) {
-      // A stop can race an authorized seek or switch. Retry once only when the server supplies
-      // authoritative generations, with a new key because the rejected precondition is itself
-      // idempotently recorded.
+      // A stop, seek, pause, resume or track change can race a generation the server moved on its own (an
+      // authorized switch or recovery). Each names an absolute outcome, so it is retried once
+      // when the server supplies the authoritative generations, with a new key because the
+      // rejected precondition is itself idempotently recorded. A switch is tied to the source it
+      // was planned against and is not.
       const stale = error instanceof VelaError && error.detail.code === 'stale_generation';
       const generations = stale ? error.detail.currentGenerations : undefined;
-      if (command.kind !== 'stop' || !generations) throw error;
-      return api.command(sessionId, { kind: 'stop', ...generations, idempotencyKey: this.session.key() });
+      const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks'].includes(command.kind);
+      if (!absolute || !generations) throw error;
+      return sendCommand(api, sessionId, { ...command, ...generations, idempotencyKey: this.session.key() });
     }
   }
 

@@ -39,6 +39,8 @@ export interface HostSessionState {
     position: number;
     startedAt: number;
     authorized: boolean;
+    /** A later target, asked for while the server had yet to answer the seek before it. */
+    queued?: boolean;
   };
 }
 export interface HostMediaState {

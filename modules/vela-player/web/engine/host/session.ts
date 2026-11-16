@@ -9,7 +9,7 @@ import { publishHostState, emitHostEvent } from './events';
 import { canRetainOriginal, seekRetainedOriginal } from './file-retention';
 import { readPosition, readDuration, readFrameMetrics } from './position';
 import { failPlayback } from './recovery';
-import { requestSwitch } from './authorizations';
+import { requestSwitch, sendQueuedSeek } from './authorizations';
 import { applySubtitle } from './subtitles';
 import { applyNativeAudio } from './platform';
 import { playMedia } from './transport';
@@ -34,6 +34,23 @@ export async function loadSession(context: HostContext, session: PlaybackSession
       adaptCoreQuality(context);
       publishHostState(context);
     }, 1000);
+  const waiting = context.session.pendingSeek;
+  if (
+    waiting?.queued &&
+    !waiting.authorized &&
+    session.id === context.session.current?.id &&
+    session.serverState !== 'ended' &&
+    session.seekGeneration !== context.session.controller.seek
+  ) {
+    // The answer to a seek the viewer has already moved past: ask for the latest target at its
+    // generations rather than open media at a position left behind. Its own answer loads.
+    sendQueuedSeek(
+      context,
+      session.sourceGeneration ?? context.session.controller.source,
+      session.seekGeneration ?? context.session.controller.seek,
+    );
+    return;
+  }
   if (
     session.id !== context.session.current?.id ||
     session.sourceGeneration !== context.session.controller.source ||
