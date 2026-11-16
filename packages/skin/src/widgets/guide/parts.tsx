@@ -15,9 +15,13 @@ export function Glyph({ name, size, color }: { name: string; size: number; color
   if (!symbol) return null;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" pointerEvents="none">
-      {symbol.paths.map((d, i) => (symbol.stroke
-        ? <Path key={i} d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-        : <Path key={i} d={d} fill={color} />))}
+      {symbol.paths.map((d, i) =>
+        symbol.stroke ? (
+          <Path key={i} d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        ) : (
+          <Path key={i} d={d} fill={color} />
+        ),
+      )}
     </Svg>
   );
 }
@@ -39,7 +43,10 @@ export function Line({ look, size, weight = 400, color, lines = 1, tabular, styl
   const face = look.font(weight);
   const variant: TextStyle = tabular ? { fontVariant: ['tabular-nums'] } : {};
   return (
-    <Text numberOfLines={lines || undefined} style={[face, { fontSize: size, color: color ?? look.ink }, variant, style]}>
+    <Text
+      numberOfLines={lines || undefined}
+      style={[face, { fontSize: size, color: color ?? look.ink }, variant, style]}
+    >
       {children}
     </Text>
   );
@@ -48,7 +55,11 @@ export function Line({ look, size, weight = 400, color, lines = 1, tabular, styl
 /** The press layer draws its own focus look, so the browser's outline stays off. */
 const WEB_PRESS = { outlineStyle: 'none', cursor: 'pointer' } as unknown as ViewStyle;
 
-export interface Interaction { hovered: boolean; focused: boolean; pressed: boolean }
+export interface Interaction {
+  hovered: boolean;
+  focused: boolean;
+  pressed: boolean;
+}
 
 interface PressProps {
   onPress?: () => void;
@@ -75,9 +86,13 @@ export function Press(props: PressProps) {
   const [pressed, setPressed] = useState(false);
   const state = { hovered, focused, pressed };
   // react-native-web hands Pressable its DOM key events; native TV moves focus itself.
-  const keys = Platform.OS === 'web' && onKey
-    ? { onKeyDown: (e: { nativeEvent: object; preventDefault(): void }) => onKey((e.nativeEvent as { key?: string }).key ?? '', () => e.preventDefault()) }
-    : {};
+  const keys =
+    Platform.OS === 'web' && onKey
+      ? {
+          onKeyDown: (e: { nativeEvent: object; preventDefault(): void }) =>
+            onKey((e.nativeEvent as { key?: string }).key ?? '', () => e.preventDefault()),
+        }
+      : {};
   return (
     <Pressable
       onPress={onPress}
@@ -108,19 +123,40 @@ export function Press(props: PressProps) {
 /** The broadcast "LIVE" badge. */
 export function LiveBadge({ look, size = 10 }: { look: GuideLook; size?: number }) {
   return (
-    <View style={{
-      flexDirection: 'row', gap: 6, alignItems: 'center', paddingVertical: 2, paddingHorizontal: 7, borderRadius: 6,
-      backgroundColor: look.now,
-    }}>
+    <View
+      style={{
+        flexDirection: 'row',
+        gap: 6,
+        alignItems: 'center',
+        paddingVertical: 2,
+        paddingHorizontal: 7,
+        borderRadius: 6,
+        backgroundColor: look.now,
+      }}
+    >
       <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: look.ink }} />
-      <Line look={look} size={size} weight={750} style={{ letterSpacing: size * 0.14 }}>{msg('live.liveBadge')}</Line>
+      <Line look={look} size={size} weight={750} style={{ letterSpacing: size * 0.14 }}>
+        {msg('live.liveBadge')}
+      </Line>
     </View>
   );
 }
 
 /** A thin progress track, filled to `percent`. */
-export function Progress({ look, percent, height = 3, width, flex, color }: {
-  look: GuideLook; percent: number; height?: number; width?: number; flex?: number; color?: string;
+export function Progress({
+  look,
+  percent,
+  height = 3,
+  width,
+  flex,
+  color,
+}: {
+  look: GuideLook;
+  percent: number;
+  height?: number;
+  width?: number;
+  flex?: number;
+  color?: string;
 }) {
   const fill = `${Math.max(0, Math.min(100, percent))}%` as const;
   return (
@@ -131,17 +167,51 @@ export function Progress({ look, percent, height = 3, width, flex, color }: {
 }
 
 /** A channel's logo contained on a neutral tile, or its monogram. */
-export function LogoTile({ look, logo, name, width, height, radius = 8, size = 13 }: {
-  look: GuideLook; logo: string; name: string; width: number; height: number; radius?: number; size?: number;
+export function LogoTile({
+  look,
+  logo,
+  name,
+  width,
+  height,
+  radius = 8,
+  size = 13,
+}: {
+  look: GuideLook;
+  logo: string;
+  name: string;
+  width: number;
+  height: number;
+  radius?: number;
+  size?: number;
 }) {
   return (
-    <View style={{
-      width, height, flexShrink: 0, borderRadius: radius, overflow: 'hidden', padding: 6, alignItems: 'center',
-      justifyContent: 'center', backgroundColor: look.logoTile, borderWidth: 1, borderColor: look.hairline,
-    }}>
-      {logo
-        ? <Image source={{ uri: logo }} contentFit="contain" style={{ width: '100%', height: '100%' }} accessible={false} />
-        : <Line look={look} size={size} weight={750} color={look.inkSecondary} style={{ letterSpacing: size * 0.04 }}>{monogram(name)}</Line>}
+    <View
+      style={{
+        width,
+        height,
+        flexShrink: 0,
+        borderRadius: radius,
+        overflow: 'hidden',
+        padding: 6,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: look.logoTile,
+        borderWidth: 1,
+        borderColor: look.hairline,
+      }}
+    >
+      {logo ? (
+        <Image
+          source={{ uri: logo }}
+          contentFit="contain"
+          style={{ width: '100%', height: '100%' }}
+          accessible={false}
+        />
+      ) : (
+        <Line look={look} size={size} weight={750} color={look.inkSecondary} style={{ letterSpacing: size * 0.04 }}>
+          {monogram(name)}
+        </Line>
+      )}
     </View>
   );
 }

@@ -14,7 +14,10 @@ export interface LiveSource extends GuideApi {
 /** The adapter operations a LiveSource is made of (core's ServerAdapter and LiveTv shapes). */
 export interface LiveAdapter extends GuideApi {
   startPlayback(request: V.PlaybackRequest): Promise<V.PlaybackPlan | V.PlaybackPreparing>;
-  command(sessionId: string, command: Extract<V.SessionCommand, { kind: 'seek' | 'pause' | 'resume' | 'stop' }>): Promise<V.PlaybackPlan>;
+  command(
+    sessionId: string,
+    command: Extract<V.SessionCommand, { kind: 'seek' | 'pause' | 'resume' | 'stop' }>,
+  ): Promise<V.PlaybackPlan>;
 }
 
 const key = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -26,7 +29,8 @@ export function liveSource(adapter: LiveAdapter, client: V.ClientCapabilities): 
     guide: query => adapter.guide(query),
     async tune(channelId) {
       const answer = await adapter.startPlayback({ channelId, client, idempotencyKey: key('tune') });
-      if ('state' in answer && answer.state === 'preparing') throw new Error(`Channel ${channelId} is not ready to play`);
+      if ('state' in answer && answer.state === 'preparing')
+        throw new Error(`Channel ${channelId} is not ready to play`);
       return answer as V.PlaybackPlan;
     },
     async stop(plan) {

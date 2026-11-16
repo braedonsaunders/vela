@@ -60,9 +60,23 @@ export class LiveController {
   private canPreview = false;
 
   constructor(private readonly options: LiveOptions) {
-    this.tile = new Tile(options.source, () => this.emit(), id => this.watchNow(id, false));
-    this.homeZap = new Zap(HOME_ZAP_WAIT, () => this.channels(), id => this.preview(id), () => this.emit());
-    this.watchZap = new Zap(WATCH_ZAP_WAIT, () => this.channels(), id => this.watchNow(id, true), () => this.emit());
+    this.tile = new Tile(
+      options.source,
+      () => this.emit(),
+      id => this.watchNow(id, false),
+    );
+    this.homeZap = new Zap(
+      HOME_ZAP_WAIT,
+      () => this.channels(),
+      id => this.preview(id),
+      () => this.emit(),
+    );
+    this.watchZap = new Zap(
+      WATCH_ZAP_WAIT,
+      () => this.channels(),
+      id => this.watchNow(id, true),
+      () => this.emit(),
+    );
     this.current = this.compose();
   }
 

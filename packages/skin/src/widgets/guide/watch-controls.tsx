@@ -23,8 +23,13 @@ interface ControlsProps {
 /** Whether the live panel must show while the rest of the chrome is hidden: a state the viewer should see. */
 export function liveNeedsAttention(live: LiveSnapshot | null): boolean {
   if (!live) return false;
-  return live.reconnecting || live.delivery === 'upstream-gap' || live.delivery === 'segment-delayed'
-    || live.delivery === 'waiting-for-publication' || behind(live) > 0;
+  return (
+    live.reconnecting ||
+    live.delivery === 'upstream-gap' ||
+    live.delivery === 'segment-delayed' ||
+    live.delivery === 'waiting-for-publication' ||
+    behind(live) > 0
+  );
 }
 
 /** Whole seconds behind the live edge, when playback can catch up. */
@@ -44,10 +49,19 @@ export function LiveControls({ live, onGoLive, onZap }: ControlsProps) {
   const drift = live ? behind(live) : 0;
   const delivery = live ? DELIVERY[live.delivery] : undefined;
   return (
-    <View style={{
-      gap: 10, paddingVertical: 14, paddingHorizontal: 16, minWidth: 240, borderRadius: 18, borderWidth: 1,
-      borderColor: look.edge, backgroundColor: look.glass, boxShadow: `0px 24px 70px ${look.shadow}`,
-    }}>
+    <View
+      style={{
+        gap: 10,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        minWidth: 240,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: look.edge,
+        backgroundColor: look.glass,
+        boxShadow: `0px 24px 70px ${look.shadow}`,
+      }}
+    >
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
         <LiveBadge look={look} />
         <View style={{ flex: 1 }} />
@@ -63,13 +77,21 @@ export function LiveControls({ live, onGoLive, onZap }: ControlsProps) {
             label={msg('live.catchUp')}
             onPress={onGoLive}
             style={({ hovered, focused, pressed }) => ({
-              alignSelf: 'flex-start', height: 34, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 999,
-              borderWidth: 1, borderColor: look.edge, backgroundColor: hovered ? look.controlHover : look.control,
+              alignSelf: 'flex-start',
+              height: 34,
+              paddingHorizontal: 14,
+              justifyContent: 'center',
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: look.edge,
+              backgroundColor: hovered ? look.controlHover : look.control,
               transform: [{ scale: pressed ? 0.97 : 1 }],
               boxShadow: focused ? `0px 0px 0px 2px ${look.accent}` : undefined,
             })}
           >
-            <Line look={look} size={13} weight={600}>{msg('live.catchUp')}</Line>
+            <Line look={look} size={13} weight={600}>
+              {msg('live.catchUp')}
+            </Line>
           </Press>
         </>
       ) : null}
@@ -80,31 +102,55 @@ export function LiveControls({ live, onGoLive, onZap }: ControlsProps) {
 function Status({ look, text }: { look: GuideLook; text: string }) {
   return (
     <View accessibilityLiveRegion="polite">
-      <Line look={look} size={13} color={look.inkSecondary} lines={2} tabular>{text}</Line>
+      <Line look={look} size={13} color={look.inkSecondary} lines={2} tabular>
+        {text}
+      </Line>
     </View>
   );
 }
 
-function ZapButton({ look, label, rotate, onPress }: { look: GuideLook; label: string; rotate: string; onPress(): void }) {
+function ZapButton({
+  look,
+  label,
+  rotate,
+  onPress,
+}: {
+  look: GuideLook;
+  label: string;
+  rotate: string;
+  onPress(): void;
+}) {
   return (
     <Press
       label={label}
       onPress={onPress}
       style={({ hovered, focused, pressed }) => ({
-        width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 999, borderWidth: 1,
-        borderColor: look.edge, backgroundColor: hovered ? look.controlHover : look.control,
+        width: 30,
+        height: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: look.edge,
+        backgroundColor: hovered ? look.controlHover : look.control,
         transform: [{ scale: pressed ? 0.94 : 1 }],
         boxShadow: focused ? `0px 0px 0px 2px ${look.accent}` : undefined,
       })}
     >
-      <View style={{ transform: [{ rotate }] }}><Glyph name="back" size={13} color={look.ink} /></View>
+      <View style={{ transform: [{ rotate }] }}>
+        <Glyph name="back" size={13} color={look.ink} />
+      </View>
     </Press>
   );
 }
 
 const ZAP_KEYS: Record<string, -1 | 1> = {
-  ArrowUp: -1, PageUp: -1, ChannelUp: -1,
-  ArrowDown: 1, PageDown: 1, ChannelDown: 1,
+  ArrowUp: -1,
+  PageUp: -1,
+  ChannelUp: -1,
+  ArrowDown: 1,
+  PageDown: 1,
+  ChannelDown: 1,
 };
 
 /**

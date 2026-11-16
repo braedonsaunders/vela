@@ -36,7 +36,12 @@ export interface TileInputs {
 const STOP_RETRIES = [1000, 3000, 8000];
 const AUTOMATIC_TRIES = 3;
 
-interface Stopping { plan: PlaybackPlan; tries: number; failed: boolean; timer?: ReturnType<typeof setTimeout> }
+interface Stopping {
+  plan: PlaybackPlan;
+  tries: number;
+  failed: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+}
 
 export class Tile {
   private inputs: TileInputs = { open: false, order: [], remembered: '', quiet: false, canPreview: false };
@@ -64,7 +69,8 @@ export class Tile {
   get target(): string {
     if (this.chosen) return this.chosen;
     const { order, remembered } = this.inputs;
-    const candidates = remembered && order.includes(remembered) ? [remembered, ...order.filter(id => id !== remembered)] : order;
+    const candidates =
+      remembered && order.includes(remembered) ? [remembered, ...order.filter(id => id !== remembered)] : order;
     return candidates[this.attempt] ?? '';
   }
 
@@ -78,7 +84,13 @@ export class Tile {
   }
 
   view(): TileView {
-    return { state: this.state(), channelId: this.target, muted: this.muted, plan: this.wanted ? this.held : null, command: this.command };
+    return {
+      state: this.state(),
+      channelId: this.target,
+      muted: this.muted,
+      plan: this.wanted ? this.held : null,
+      command: this.command,
+    };
   }
 
   private state(): TileState {

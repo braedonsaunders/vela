@@ -10,27 +10,53 @@ import { HostContext } from '../../host';
 
 /** Genre cues: the data module's tone slots (news, sport, film, kids, factual, drama, comedy,
  * music, lifestyle, other). Fixed hues, so a genre reads the same in every document. */
-const TONES = ['#5b8def', '#3fbf7f', '#e0904f', '#f2c94c', '#45b5b0', '#b06ad9', '#f07f9c', '#d95fd0', '#9fbf5a', '#8d96a3'];
+const TONES = [
+  '#5b8def',
+  '#3fbf7f',
+  '#e0904f',
+  '#f2c94c',
+  '#45b5b0',
+  '#b06ad9',
+  '#f07f9c',
+  '#d95fd0',
+  '#9fbf5a',
+  '#8d96a3',
+];
 
-interface Rgba { r: number; g: number; b: number; a: number }
+interface Rgba {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
 
 function parse(colour: string): Rgba | null {
   const hex = /^#([0-9a-f]{3,8})$/i.exec(colour.trim());
   if (hex) {
     const h = hex[1]!;
-    const full = h.length <= 4 ? h.split('').map(x => x + x).join('') : h;
+    const full =
+      h.length <= 4
+        ? h
+            .split('')
+            .map(x => x + x)
+            .join('')
+        : h;
     const n = (i: number) => parseInt(full.slice(i, i + 2), 16);
     return { r: n(0), g: n(2), b: n(4), a: full.length === 8 ? n(6) / 255 : 1 };
   }
   const fn = /^rgba?\(([^)]*)\)$/i.exec(colour.trim());
   if (fn) {
-    const [r = 0, g = 0, b = 0, a = 1] = fn[1]!.split(/[\s,/]+/).filter(Boolean).map(Number);
+    const [r = 0, g = 0, b = 0, a = 1] = fn[1]!
+      .split(/[\s,/]+/)
+      .filter(Boolean)
+      .map(Number);
     return { r, g, b, a };
   }
   return null;
 }
 
-const text = (c: Rgba) => `rgba(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)}, ${Math.round(c.a * 1000) / 1000})`;
+const text = (c: Rgba) =>
+  `rgba(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)}, ${Math.round(c.a * 1000) / 1000})`;
 
 /** The colour at an opacity (multiplied with its own). A colour it cannot read stays as written. */
 export function alpha(colour: string, amount: number): string {

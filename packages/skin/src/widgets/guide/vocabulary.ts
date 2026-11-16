@@ -5,8 +5,13 @@ import type { GuideChannel } from '@vela/core';
 import type { LiveView } from './controller';
 
 /** The binding context and environment fields Live TV adds. */
-export interface LiveCtx { ch?: GuideChannel; index: number }
-export interface LiveEnv { live?: LiveView }
+export interface LiveCtx {
+  ch?: GuideChannel;
+  index: number;
+}
+export interface LiveEnv {
+  live?: LiveView;
+}
 
 type LiveAccessor = (c: LiveCtx, e: LiveEnv) => string;
 

@@ -56,21 +56,39 @@ export function TimelineRow(props: RowProps) {
 function NoListings({ look, channel, row, visibleWidth, scrollX, onWatch, onFocus }: RowProps) {
   const follow = useAnimatedStyle(() => ({ transform: [{ translateX: scrollX.value }] }));
   return (
-    <Animated.View style={[{ position: 'absolute', left: 6, top: 6, height: row - 13, width: Math.max(120, visibleWidth - 12) }, follow]}>
+    <Animated.View
+      style={[
+        { position: 'absolute', left: 6, top: 6, height: row - 13, width: Math.max(120, visibleWidth - 12) },
+        follow,
+      ]}
+    >
       <Press
         label={msg('ui.watchChannel', { channel: channel.name })}
         onPress={() => onWatch(channel.id)}
         onFocus={() => onFocus(channel, null)}
         style={({ hovered, focused }) => ({
-          flex: 1, flexDirection: 'row', gap: 10, alignItems: 'center', paddingLeft: 16, borderRadius: look.radiusCell,
-          borderWidth: 1, borderStyle: 'dashed', borderColor: look.edge,
+          flex: 1,
+          flexDirection: 'row',
+          gap: 10,
+          alignItems: 'center',
+          paddingLeft: 16,
+          borderRadius: look.radiusCell,
+          borderWidth: 1,
+          borderStyle: 'dashed',
+          borderColor: look.edge,
           backgroundColor: hovered ? look.cell : 'transparent',
           boxShadow: focused ? `inset 0px 0px 0px 2px ${look.accent}` : undefined,
         })}
       >
-        <Line look={look} size={13} color={look.inkQuiet}>{msg('live.noListings')}</Line>
-        <Line look={look} size={13} color={look.inkQuiet}>·</Line>
-        <Line look={look} size={13} weight={600} color={look.inkSecondary}>{msg('live.watch')}</Line>
+        <Line look={look} size={13} color={look.inkQuiet}>
+          {msg('live.noListings')}
+        </Line>
+        <Line look={look} size={13} color={look.inkQuiet}>
+          ·
+        </Line>
+        <Line look={look} size={13} weight={600} color={look.inkSecondary}>
+          {msg('live.watch')}
+        </Line>
       </Press>
     </Animated.View>
   );

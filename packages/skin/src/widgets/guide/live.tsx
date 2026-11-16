@@ -56,7 +56,13 @@ export function useLiveContext(): LiveContextValue | null {
 }
 
 const IDLE: LiveView = {
-  load: 'idle', guide: null, day: 0, clock: '', zapping: '', tunedId: '', watchZap: '',
+  load: 'idle',
+  guide: null,
+  day: 0,
+  clock: '',
+  zapping: '',
+  tunedId: '',
+  watchZap: '',
   tile: { state: 'off', channelId: '', muted: true, plan: null, command: null },
 };
 const none = () => () => {};
@@ -64,7 +70,11 @@ const none = () => () => {};
 /** The live view, re-rendering on every change; idle where there is no controller. */
 export function useLiveView(): LiveView {
   const live = useContext(LiveContext);
-  return useSyncExternalStore(live?.controller.subscribe ?? none, live?.controller.view ?? (() => IDLE), live?.controller.view ?? (() => IDLE));
+  return useSyncExternalStore(
+    live?.controller.subscribe ?? none,
+    live?.controller.view ?? (() => IDLE),
+    live?.controller.view ?? (() => IDLE),
+  );
 }
 
 /** Keeps a surface open while `active` (the screen holding it is focused). */

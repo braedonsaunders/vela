@@ -3,11 +3,13 @@
 // view state). The semantics are those of the Contract renderer's table (tools/renderer.ts),
 // key for key. A template calls only the accessors it names.
 import { msg } from '@vela/core';
-import type { detailModel, entry, homeModel } from '@vela/core';
+import type { detailModel, entry, GuideChannel, homeModel } from '@vela/core';
 import type { Hit, SearchView } from './widgets/search/model';
 import type { AuthView } from './widgets/auth/model';
 import { AUTH_VOCABULARY, quickChars } from './widgets/auth/vocabulary';
 import { SEARCH_VOCABULARY, searchCollection } from './widgets/search/vocabulary';
+import type { LiveView } from './widgets/guide/controller';
+import { LIVE_VOCABULARY, liveCollection } from './widgets/guide/vocabulary';
 
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
 export type Card = ReturnType<typeof entry>;
@@ -49,6 +51,8 @@ export interface Env {
   search?: SearchView;
   /** The signed-out page (routes.auth); none while signed in. */
   auth?: AuthView;
+  /** Live TV (the guide, a live home's monitor and listings); none where the server has no live TV. */
+  live?: LiveView;
 }
 
 /** The binding context: the item a node is repeated over, and its position. */
@@ -62,6 +66,8 @@ export interface Ctx {
   person?: Person;
   fact?: string;
   hit?: Hit;
+  /** A channel of live.channels or live.favorites. */
+  ch?: GuideChannel;
   index: number;
 }
 
@@ -99,8 +105,7 @@ function detail(read: (d: DetailModel, e: Env) => string, none = ''): Accessor {
 
 const CARD_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rating', 'progressLabel', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
 const DETAIL_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
-const NO_MODEL = ['ch.', 'tile.', 'library.', 'opt.', 'collection.', 'env.library', 'env.collection',
-  'env.clock', 'env.liveReady', 'env.channelCount', 'env.favoriteCount', 'env.hasLiveLibrary'];
+const NO_MODEL = ['library.', 'opt.', 'collection.', 'env.library', 'env.collection', 'env.hasLiveLibrary'];
 
 export const VOCABULARY: Record<string, Accessor> = {
   ...Object.fromEntries(CARD_FIELDS.flatMap(f => [[`card.${f}`, from('card', x => String(x[f]))], [`hero.${f}`, from('hero', x => String(x[f]))]])),
@@ -245,6 +250,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.selectedSeason': (_, e) => e.season,
   ...SEARCH_VOCABULARY,
   ...AUTH_VOCABULARY,
+  ...LIVE_VOCABULARY,
 };
 
 /** A key's accessor, or undefined for a key no document may name. */
@@ -263,6 +269,8 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
   const search = searchCollection(over, c, e, limit);
   if (search) return search;
   if (over === 'quick.chars') return quickChars(c, e, limit);
+  const channels = liveCollection(over, c, e, limit);
+  if (channels) return channels;
   switch (over) {
     case 'home.rows': return at(e.home?.rows ?? [], row => ({ row }));
     case 'row.items': return at(c.row?.items ?? [], card => ({ card }));

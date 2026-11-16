@@ -18,7 +18,11 @@ import { NowList } from './now-list';
 import { GuideStatus } from './status';
 
 /** A search hand-off: open on this channel (and programme) at this minute of the shown day. */
-export interface GuideFocus { channelId: string; programmeId: string; minute: number }
+export interface GuideFocus {
+  channelId: string;
+  programmeId: string;
+  minute: number;
+}
 
 export function GuideWidget(_: WidgetProps) {
   return <Guide />;
@@ -31,7 +35,13 @@ export function Guide({ focus }: { focus?: GuideFocus }) {
   if (!live) return <GuideStatus look={look} text={msg('live.noChannels')} />;
   if (!view.guide) {
     if (view.load === 'failed') {
-      return <GuideStatus look={look} text={msg('ui.theGuideCouldnTBeLoadedCheckYourConnection')} onRetry={() => live.controller.retry()} />;
+      return (
+        <GuideStatus
+          look={look}
+          text={msg('ui.theGuideCouldnTBeLoadedCheckYourConnection')}
+          onRetry={() => live.controller.retry()}
+        />
+      );
     }
     return <GuideStatus look={look} text={msg('ui.loadingTheGuide')} busy />;
   }
@@ -107,10 +117,14 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
   const favourites = filter === 'favourites';
   const toggleFavourites = () => setFilter(favourites ? 'all' : 'favourites');
   const page = {
-    flex: 1, minHeight: 0, backgroundColor: look.page, paddingTop: expanded ? 96 : 0,
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: look.page,
+    paddingTop: expanded ? 96 : 0,
     backgroundImage: `radial-gradient(ellipse 70% 60% at 82% 0%, ${look.aura}, transparent 70%)`,
   } as ViewStyle;
-  const highlighted = selected.channel || !handOff ? selected : { channel: handOff.channelId, programme: handOff.programmeId };
+  const highlighted =
+    selected.channel || !handOff ? selected : { channel: handOff.channelId, programme: handOff.programmeId };
 
   return (
     <View style={page}>
@@ -130,14 +144,31 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
           ) : null}
           {view.tile.state !== 'off' ? (
             <View style={{ position: 'absolute', right: side, bottom: small ? 12 : 14, zIndex: 2 }}>
-              <GuideTile look={look} tile={view.tile} channelName={tunedName} height={tileHeight} small={small} still={still} controller={controller} />
+              <GuideTile
+                look={look}
+                tile={view.tile}
+                channelName={tunedName}
+                height={tileHeight}
+                small={small}
+                still={still}
+                controller={controller}
+              />
             </View>
           ) : null}
         </View>
       ) : null}
       {small ? (
         <View style={{ zIndex: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: side, paddingTop: 10, paddingBottom: showGrid ? 8 : 12 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              paddingHorizontal: side,
+              paddingTop: 10,
+              paddingBottom: showGrid ? 8 : 12,
+            }}
+          >
             <Segments<'now' | 'guide'>
               look={look}
               label={msg('live.view')}
@@ -149,20 +180,46 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
               ]}
             />
             <View style={{ flex: 1 }} />
-            <IconButton look={look} label={msg('live.favourites')} glyph="star-fill" on={favourites} color={favourites ? look.accent : look.inkSecondary} onPress={toggleFavourites} />
+            <IconButton
+              look={look}
+              label={msg('live.favourites')}
+              glyph="star-fill"
+              on={favourites}
+              color={favourites ? look.accent : look.inkSecondary}
+              onPress={toggleFavourites}
+            />
             {showGrid ? <NowChip look={look} still={still} onPress={jumpNow} /> : null}
           </View>
-          {showGrid ? <View style={{ paddingBottom: 12 }}><DayChips look={look} model={model} onPick={pickDay} side={side} /></View> : null}
+          {showGrid ? (
+            <View style={{ paddingBottom: 12 }}>
+              <DayChips look={look} model={model} onPick={pickDay} side={side} />
+            </View>
+          ) : null}
         </View>
       ) : (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: side, paddingTop: 6, paddingBottom: 16, zIndex: 10 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 14,
+            paddingHorizontal: side,
+            paddingTop: 6,
+            paddingBottom: 16,
+            zIndex: 10,
+          }}
+        >
           <View style={{ flexShrink: 1, minWidth: 0, marginLeft: -side }}>
             <DayChips look={look} model={model} onPick={pickDay} side={side} />
           </View>
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center', flexShrink: 0 }}>
             <IconButton look={look} label={msg('ui.earlierProgrammes')} glyph="back" onPress={() => shift(-2)} />
             <NowChip look={look} still={still} onPress={jumpNow} />
-            <IconButton look={look} label={msg('ui.laterProgrammes')} glyph="forward-chevron" onPress={() => shift(2)} />
+            <IconButton
+              look={look}
+              label={msg('ui.laterProgrammes')}
+              glyph="forward-chevron"
+              onPress={() => shift(2)}
+            />
           </View>
           <View style={{ flex: 1, minWidth: 0 }} />
           <Segments<Zoom> look={look} label={msg('live.zoom')} value={zoom} onPick={setZoom} options={zoomOptions} />
@@ -174,12 +231,21 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
               on={expanded}
               onPress={() => setExpanded(e => !e)}
             />
-            <IconButton look={look} label={msg('live.favourites')} glyph="star-fill" on={favourites} color={favourites ? look.accent : look.inkSecondary} onPress={toggleFavourites} />
+            <IconButton
+              look={look}
+              label={msg('live.favourites')}
+              glyph="star-fill"
+              on={favourites}
+              color={favourites ? look.accent : look.inkSecondary}
+              onPress={toggleFavourites}
+            />
             <FilterMenu look={look} filter={filter} groups={model.groups} onPick={setFilter} />
           </View>
         </View>
       )}
-      {model.guides.length > 0 ? <GuideTabs look={look} model={model} tab={tabOn} onPick={setTab} side={side} small={small} /> : null}
+      {model.guides.length > 0 ? (
+        <GuideTabs look={look} model={model} tab={tabOn} onPick={setTab} side={side} small={small} />
+      ) : null}
       <GuideBody
         look={look}
         model={model}
@@ -224,14 +290,27 @@ interface BodyProps {
 function GuideBody(props: BodyProps) {
   const { look, model, rows, small, side } = props;
   if (model.channels.length === 0) return <GuideStatus look={look} text={msg('live.noChannels')} />;
-  if (rows.length === 0) return <GuideStatus look={look} text={msg('live.noMatches')} action={msg('live.allChannels')} onRetry={props.onAll} />;
+  if (rows.length === 0)
+    return (
+      <GuideStatus look={look} text={msg('live.noMatches')} action={msg('live.allChannels')} onRetry={props.onAll} />
+    );
   if (!props.showGrid) return <NowList look={look} rows={rows} onWatch={props.onWatch} />;
   return (
-    <View style={{
-      flex: 1, minHeight: 0, marginHorizontal: small ? 0 : side, marginBottom: small ? 0 : 24, overflow: 'hidden',
-      borderRadius: small ? 0 : look.radiusPanel, borderWidth: small ? 0 : 1, borderTopWidth: 1, borderColor: look.edge,
-      backgroundColor: look.panel, boxShadow: small ? undefined : `0px 40px 120px ${look.shadow}`,
-    }}>
+    <View
+      style={{
+        flex: 1,
+        minHeight: 0,
+        marginHorizontal: small ? 0 : side,
+        marginBottom: small ? 0 : 24,
+        overflow: 'hidden',
+        borderRadius: small ? 0 : look.radiusPanel,
+        borderWidth: small ? 0 : 1,
+        borderTopWidth: 1,
+        borderColor: look.edge,
+        backgroundColor: look.panel,
+        boxShadow: small ? undefined : `0px 40px 120px ${look.shadow}`,
+      }}
+    >
       <GuideGrid
         key={props.gridKey}
         handle={props.grid}
@@ -257,7 +336,8 @@ function pickHero(model: GuideModel, selected: { channel: string; programme: str
   const channel = model.channels.find(c => c.id === id);
   if (!channel) return undefined;
   const wanted = selected.channel ? selected.programme : handOff?.programmeId || channel.nowId;
-  const programme = channel.programmes.find(p => p.id === wanted) ?? channel.programmes.find(p => p.id === channel.nowId);
+  const programme =
+    channel.programmes.find(p => p.id === wanted) ?? channel.programmes.find(p => p.id === channel.nowId);
   return { channel, programme };
 }
 

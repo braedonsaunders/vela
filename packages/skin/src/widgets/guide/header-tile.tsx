@@ -3,7 +3,14 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { msg } from '@vela/core';
 import type { LiveController } from './controller';
 import type { GuideLook } from './look';
@@ -24,15 +31,30 @@ interface TileProps {
 export function GuideTile({ look, tile, channelName, height, small, still, controller }: TileProps) {
   const radius = small ? 10 : look.radiusTile;
   return (
-    <View style={{
-      position: 'relative', height, aspectRatio: 16 / 9, borderRadius: radius, overflow: 'hidden', backgroundColor: look.media,
-      borderWidth: 1, borderColor: look.edgeStrong, boxShadow: `0px 18px 50px ${look.shadow}`,
-    }}>
+    <View
+      style={{
+        position: 'relative',
+        height,
+        aspectRatio: 16 / 9,
+        borderRadius: radius,
+        overflow: 'hidden',
+        backgroundColor: look.media,
+        borderWidth: 1,
+        borderColor: look.edgeStrong,
+        boxShadow: `0px 18px 50px ${look.shadow}`,
+      }}
+    >
       <TilePicture />
       {tile.state === 'connecting' ? <Tuning look={look} still={still} channelName={channelName} /> : null}
       {tile.state === 'unavailable' ? (
-        <View style={[StyleSheet.absoluteFill, styles.centre, { padding: 10 }]} accessibilityRole="text" accessibilityLiveRegion="polite">
-          <Line look={look} size={12} color={look.inkSecondary} lines={3} style={{ textAlign: 'center' }}>{msg('live.previewUnavailable')}</Line>
+        <View
+          style={[StyleSheet.absoluteFill, styles.centre, { padding: 10 }]}
+          accessibilityRole="text"
+          accessibilityLiveRegion="polite"
+        >
+          <Line look={look} size={12} color={look.inkSecondary} lines={3} style={{ textAlign: 'center' }}>
+            {msg('live.previewUnavailable')}
+          </Line>
         </View>
       ) : null}
       <TileAction look={look} tile={tile} channelName={channelName} controller={controller} />
@@ -43,34 +65,76 @@ export function GuideTile({ look, tile, channelName, height, small, still, contr
       >
         <LiveBadge look={look} size={9} />
         {!small ? (
-          <Line look={look} size={11} weight={650} style={{ flexShrink: 1, textShadowColor: look.shadow, textShadowRadius: 4 }}>{channelName}</Line>
+          <Line
+            look={look}
+            size={11}
+            weight={650}
+            style={{ flexShrink: 1, textShadowColor: look.shadow, textShadowRadius: 4 }}
+          >
+            {channelName}
+          </Line>
         ) : null}
       </LinearGradient>
-      {tile.state === 'playing' ? <Speaker look={look} muted={tile.muted} small={small} onPress={() => controller.toggleMute()} /> : null}
+      {tile.state === 'playing' ? (
+        <Speaker look={look} muted={tile.muted} small={small} onPress={() => controller.toggleMute()} />
+      ) : null}
     </View>
   );
 }
 
 /** The whole tile's press: try the stop again, tune in, or open full watch. */
-function TileAction({ look, tile, channelName, controller }: { look: GuideLook; tile: TileView; channelName: string; controller: LiveController }) {
+function TileAction({
+  look,
+  tile,
+  channelName,
+  controller,
+}: {
+  look: GuideLook;
+  tile: TileView;
+  channelName: string;
+  controller: LiveController;
+}) {
   const inset = (focused: boolean) => (focused ? `inset 0px 0px 0px 2px ${look.accent}` : undefined);
   if (tile.state === 'stuck') {
     return (
-      <Press label={msg('live.previewStuck')} onPress={() => controller.retryStop()} style={({ hovered, focused }) => [
-        StyleSheet.absoluteFill, styles.centre, { gap: 4, padding: 10, backgroundColor: hovered ? look.scrimSoft : look.scrimMid, boxShadow: inset(focused) },
-      ]}>
-        <Line look={look} size={12} color={look.inkSecondary} lines={2} style={{ textAlign: 'center' }}>{msg('live.previewStuck')}</Line>
-        <Line look={look} size={12} weight={650}>{msg('ui.tryAgain')}</Line>
+      <Press
+        label={msg('live.previewStuck')}
+        onPress={() => controller.retryStop()}
+        style={({ hovered, focused }) => [
+          StyleSheet.absoluteFill,
+          styles.centre,
+          { gap: 4, padding: 10, backgroundColor: hovered ? look.scrimSoft : look.scrimMid, boxShadow: inset(focused) },
+        ]}
+      >
+        <Line look={look} size={12} color={look.inkSecondary} lines={2} style={{ textAlign: 'center' }}>
+          {msg('live.previewStuck')}
+        </Line>
+        <Line look={look} size={12} weight={650}>
+          {msg('ui.tryAgain')}
+        </Line>
       </Press>
     );
   }
   if (tile.state === 'tune-in') {
     return (
-      <Press label={msg('live.tuneInTo', { channel: channelName })} onPress={() => controller.tuneIn()} style={({ hovered, focused }) => [
-        StyleSheet.absoluteFill, styles.centre, { flexDirection: 'row', gap: 8, backgroundColor: hovered ? look.scrimSoft : look.scrimMid, boxShadow: inset(focused) },
-      ]}>
+      <Press
+        label={msg('live.tuneInTo', { channel: channelName })}
+        onPress={() => controller.tuneIn()}
+        style={({ hovered, focused }) => [
+          StyleSheet.absoluteFill,
+          styles.centre,
+          {
+            flexDirection: 'row',
+            gap: 8,
+            backgroundColor: hovered ? look.scrimSoft : look.scrimMid,
+            boxShadow: inset(focused),
+          },
+        ]}
+      >
         <Glyph name="play-fill" size={12} color={look.ink} />
-        <Line look={look} size={13} weight={650}>{msg('live.tuneIn')}</Line>
+        <Line look={look} size={13} weight={650}>
+          {msg('live.tuneIn')}
+        </Line>
       </Press>
     );
   }
@@ -79,7 +143,10 @@ function TileAction({ look, tile, channelName, controller }: { look: GuideLook; 
       label={msg('ui.watchChannel', { channel: channelName })}
       onPress={() => controller.watch(tile.channelId)}
       testID="guide-tile"
-      style={({ hovered, focused }) => [StyleSheet.absoluteFill, { backgroundColor: hovered ? look.scrimSoft : 'transparent', boxShadow: inset(focused) }]}
+      style={({ hovered, focused }) => [
+        StyleSheet.absoluteFill,
+        { backgroundColor: hovered ? look.scrimSoft : 'transparent', boxShadow: inset(focused) },
+      ]}
     >
       {null}
     </Press>
@@ -101,12 +168,34 @@ function Tuning({ look, still, channelName }: { look: GuideLook; still: boolean;
       accessibilityRole="progressbar"
       accessibilityLabel={msg('live.tuning', { channel: channelName })}
     >
-      <Animated.View style={[{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: look.trackStrong, borderTopColor: look.accent }, spin]} />
+      <Animated.View
+        style={[
+          {
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            borderWidth: 2,
+            borderColor: look.trackStrong,
+            borderTopColor: look.accent,
+          },
+          spin,
+        ]}
+      />
     </View>
   );
 }
 
-function Speaker({ look, muted, small, onPress }: { look: GuideLook; muted: boolean; small: boolean; onPress(): void }) {
+function Speaker({
+  look,
+  muted,
+  small,
+  onPress,
+}: {
+  look: GuideLook;
+  muted: boolean;
+  small: boolean;
+  onPress(): void;
+}) {
   const size = small ? 26 : 30;
   return (
     <Press
@@ -115,8 +204,16 @@ function Speaker({ look, muted, small, onPress }: { look: GuideLook; muted: bool
       role="togglebutton"
       onPress={onPress}
       style={({ hovered, focused }) => ({
-        position: 'absolute', right: small ? 4 : 8, bottom: small ? 4 : 8, width: size, height: size, padding: small ? 6 : 7,
-        borderRadius: 999, borderWidth: 1, borderColor: look.edge, backgroundColor: hovered ? look.controlHover : look.glass,
+        position: 'absolute',
+        right: small ? 4 : 8,
+        bottom: small ? 4 : 8,
+        width: size,
+        height: size,
+        padding: small ? 6 : 7,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: look.edge,
+        backgroundColor: hovered ? look.controlHover : look.glass,
         boxShadow: focused ? `0px 0px 0px 2px ${look.accent}` : undefined,
       })}
     >

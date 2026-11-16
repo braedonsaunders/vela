@@ -58,27 +58,36 @@ export function GuideGrid(props: GridProps) {
   const lastScale = useRef(scale);
   const focusMinute = useRef(-1);
 
-  const onTimeline = useAnimatedScrollHandler({
-    onScroll: e => {
-      scrollX.value = e.contentOffset.x;
-      runOnJS(setColumn)(Math.floor(e.contentOffset.x / scale / 30));
+  const onTimeline = useAnimatedScrollHandler(
+    {
+      onScroll: e => {
+        scrollX.value = e.contentOffset.x;
+        runOnJS(setColumn)(Math.floor(e.contentOffset.x / scale / 30));
+      },
     },
-  }, [scale]);
-  const onRows = useAnimatedScrollHandler({
-    onScroll: e => {
-      scrollY.value = e.contentOffset.y;
-      runOnJS(setRowBase)(Math.floor(e.contentOffset.y / row / 4) * 4);
+    [scale],
+  );
+  const onRows = useAnimatedScrollHandler(
+    {
+      onScroll: e => {
+        scrollY.value = e.contentOffset.y;
+        runOnJS(setRowBase)(Math.floor(e.contentOffset.y / row / 4) * 4);
+      },
     },
-  }, [row]);
+    [row],
+  );
 
-  const scrollTo = useCallback((minute: number, animated: boolean) => {
-    const x = Math.max(0, Math.min(width - (body.width - rail), minute * scale));
-    timeline.current?.scrollTo({ x, animated: animated && !still });
-    if (!animated || still) {
-      scrollX.value = x;
-      setColumn(Math.floor(x / scale / 30));
-    }
-  }, [width, body.width, rail, scale, still, scrollX]);
+  const scrollTo = useCallback(
+    (minute: number, animated: boolean) => {
+      const x = Math.max(0, Math.min(width - (body.width - rail), minute * scale));
+      timeline.current?.scrollTo({ x, animated: animated && !still });
+      if (!animated || still) {
+        scrollX.value = x;
+        setColumn(Math.floor(x / scale / 30));
+      }
+    },
+    [width, body.width, rail, scale, still, scrollX],
+  );
 
   // Open with the landing time a third of the way across, so the past reads to its left.
   useEffect(() => {
@@ -95,20 +104,24 @@ export function GuideGrid(props: GridProps) {
     scrollTo(minute, false);
   }, [scale, scrollTo, scrollX]);
 
-  useImperativeHandle(props.handle, () => ({
-    jumpNow() {
-      if (model.nowMinute < 0) return false;
-      scrollTo(leftFor(model.nowMinute, visibleMinutes, model.minutes), true);
-      return true;
-    },
-    shift(hours) {
-      const target = Math.floor(scrollX.value / scale / 30) * 30 + hours * 60;
-      if (target < 0 && model.day > 0) return -1;
-      if (target > model.minutes - 60 && model.day < model.days.length - 1) return 1;
-      scrollTo(Math.max(0, Math.min(model.minutes - 30, target)), true);
-      return 0;
-    },
-  }), [model, visibleMinutes, scale, scrollTo, scrollX]);
+  useImperativeHandle(
+    props.handle,
+    () => ({
+      jumpNow() {
+        if (model.nowMinute < 0) return false;
+        scrollTo(leftFor(model.nowMinute, visibleMinutes, model.minutes), true);
+        return true;
+      },
+      shift(hours) {
+        const target = Math.floor(scrollX.value / scale / 30) * 30 + hours * 60;
+        if (target < 0 && model.day > 0) return -1;
+        if (target > model.minutes - 60 && model.day < model.days.length - 1) return 1;
+        scrollTo(Math.max(0, Math.min(model.minutes - 30, target)), true);
+        return 0;
+      },
+    }),
+    [model, visibleMinutes, scale, scrollTo, scrollX],
+  );
 
   const leftMinute = Math.max(0, column) * 30;
   const window = { from: leftMinute - MARGIN, to: leftMinute + visibleMinutes + MARGIN };
@@ -152,7 +165,8 @@ export function GuideGrid(props: GridProps) {
       const start = programme.at * scale;
       const end = start + programme.span * scale;
       const viewWidth = body.width - rail;
-      if (end < scrollX.value + 40 || start > scrollX.value + viewWidth - 40) scrollTo(Math.max(0, programme.at - 15), false);
+      if (end < scrollX.value + 40 || start > scrollX.value + viewWidth - 40)
+        scrollTo(Math.max(0, programme.at - 15), false);
     }
     const id = programme ? cellId(programme.id) : channel ? railId(channel.id) : '';
     focusLater(id);
@@ -169,15 +183,36 @@ export function GuideGrid(props: GridProps) {
   const listHeight = Math.max(0, body.height - RULER);
 
   return (
-    <View style={{ flex: 1, minHeight: 0 }} onLayout={onBody} accessibilityLabel={msg('ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch')}>
+    <View
+      style={{ flex: 1, minHeight: 0 }}
+      onLayout={onBody}
+      accessibilityLabel={msg('ui.programmeGuideUseArrowKeysToMoveAndEnterToWatch')}
+    >
       <Ruler look={look} model={model} scale={scale} rail={rail} small={small} scrollX={scrollX} />
       {body.width > 0 ? (
         <View style={{ flex: 1, flexDirection: 'row', minHeight: 0 }}>
           <View style={{ width: rail, height: listHeight, overflow: 'hidden', backgroundColor: look.rail, zIndex: 3 }}>
             <Animated.View style={[{ height: rows.length * row }, followRows]}>
               {rows.slice(firstRow, lastRow).map((c, i) => (
-                <View key={c.id} style={{ position: 'absolute', top: (firstRow + i) * row, left: 0, borderBottomWidth: 1, borderBottomColor: look.hairline }}>
-                  <RailCell look={look} channel={c} small={small} width={rail} row={row} selected={c.id === selected.channel} onWatch={props.onWatch} />
+                <View
+                  key={c.id}
+                  style={{
+                    position: 'absolute',
+                    top: (firstRow + i) * row,
+                    left: 0,
+                    borderBottomWidth: 1,
+                    borderBottomColor: look.hairline,
+                  }}
+                >
+                  <RailCell
+                    look={look}
+                    channel={c}
+                    small={small}
+                    width={rail}
+                    row={row}
+                    selected={c.id === selected.channel}
+                    onWatch={props.onWatch}
+                  />
                 </View>
               ))}
             </Animated.View>
@@ -226,10 +261,19 @@ export function GuideGrid(props: GridProps) {
                 )}
               />
               {model.nowMinute >= 0 ? (
-                <View pointerEvents="none" style={{
-                  position: 'absolute', left: model.nowMinute * scale - 1, top: 0, bottom: 0, width: 2, zIndex: 2,
-                  backgroundColor: look.now, boxShadow: `0px 0px 14px ${look.nowGlow}`,
-                }} />
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    left: model.nowMinute * scale - 1,
+                    top: 0,
+                    bottom: 0,
+                    width: 2,
+                    zIndex: 2,
+                    backgroundColor: look.now,
+                    boxShadow: `0px 0px 14px ${look.nowGlow}`,
+                  }}
+                />
               ) : null}
             </View>
           </Animated.ScrollView>
@@ -242,15 +286,34 @@ export function GuideGrid(props: GridProps) {
 /** Half-hour and hour lines under every row, and the past dimmed: drawn once for the whole panel. */
 function TimeLines({ look, model, scale }: { look: GuideLook; model: GuideModel; scale: number }) {
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: model.minutes * scale }}>
+    <View
+      pointerEvents="none"
+      style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: model.minutes * scale }}
+    >
       {model.ticks.map(tick => (
-        <View key={tick.id} style={{
-          position: 'absolute', left: tick.minute * scale, top: 0, bottom: 0, width: 1,
-          backgroundColor: tick.hour ? look.hour : look.half,
-        }} />
+        <View
+          key={tick.id}
+          style={{
+            position: 'absolute',
+            left: tick.minute * scale,
+            top: 0,
+            bottom: 0,
+            width: 1,
+            backgroundColor: tick.hour ? look.hour : look.half,
+          }}
+        />
       ))}
       {model.nowMinute >= 0 ? (
-        <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: model.nowMinute * scale, backgroundColor: look.past }} />
+        <View
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: model.nowMinute * scale,
+            backgroundColor: look.past,
+          }}
+        />
       ) : null}
     </View>
   );

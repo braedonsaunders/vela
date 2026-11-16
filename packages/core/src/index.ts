@@ -7,7 +7,6 @@ export { clock, localeContext, minute, msg, number, percent, plural, second, set
 export type { LocaleContext } from './i18n';
 export { VelaError } from './adapter/errors';
 export { guideFocus, liveIdentity, loadGuide } from './live/guide';
-export type { GuideApi, GuideChannel, GuideModel, GuideProgramme } from './live/guide';
 export { liveSearch } from './live/search';
 export { randomId } from './protocol/id';
 export * from './models';
@@ -24,6 +23,6 @@ export type { LiveState } from './store/live';
 export type { Preview } from './store/previews';
 export type { ReceiptKind } from './store/receipts';
 export type { AppearanceModel, DocEntryModel } from './appearance';
-export type { GuideChannel, GuideModel, GuideProgramme } from './live/guide';
+export type { GuideApi, GuideChannel, GuideModel, GuideProgramme } from './live/guide';
 export type { SecretStore } from './session';
 export type { ServerKind } from './session/servers';
