@@ -1,6 +1,7 @@
 // A short muted trailer preview from a preview grant (packages/player-api PreviewSource): no audio
 // session, no display matching, no observations or session commands, a small cache. It plays while
-// it is wanted (active, on screen, unexpired) and releases mpv at once when any of those ends.
+// it is wanted (active, on screen, unexpired) and releases mpv at once when any of those ends. It fills
+// its box, cropped, as the web preview does (object-fit: cover).
 import Foundation
 import Libmpv
 import QuartzCore
@@ -79,6 +80,8 @@ final class PreviewPlayback {
                 "sid": "no",
                 "pause": paused ? "yes" : "no",
                 "loop-file": source.loop ? "inf" : "no",
+                // Aspect fill (CSS object-fit: cover): a preview fills its box edge to edge, cropped.
+                "panscan": "1.0",
                 "demuxer-max-bytes": "16MiB",
                 "demuxer-max-back-bytes": "4MiB",
                 "demuxer-readahead-secs": "5",
