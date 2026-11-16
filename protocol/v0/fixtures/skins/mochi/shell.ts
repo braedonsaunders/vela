@@ -531,6 +531,13 @@ export const menu: Node = {
     },
     { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
     { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
+    // Your servers: the current one checked; choosing another switches, and "Add a server" connects one.
+    // Its rows sit 10px outside their column, as in the base's menu, so the column is inset to match.
+    {
+      type: 'box',
+      style: { ...col, padding: '0px 10px' },
+      children: [{ type: 'widget', widget: 'serverSwitcher' }],
+    },
     {
       type: 'box',
       press: { action: 'signOut' },

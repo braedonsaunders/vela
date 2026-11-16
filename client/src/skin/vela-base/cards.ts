@@ -1,5 +1,84 @@
-import type { BoxNode, Node, Style } from '../../../wire/v0/skin';
+import type { BoxNode, Condition, Node, Style } from '../../../wire/v0/skin';
 import { cardRadius, display, gutter, gutterSmall, is, placeholder, pulse, small, veil } from './look';
+
+// A muted trailer preview: a landscape card that opens over the poster while the card's preview
+// plays (home rows that preview on focus). It stays mounted while idle, since the widget inside
+// reports the card's hover and focus as the intent to preview; only its state shows it.
+const previewOverlay = (shown: boolean): Style => ({
+  position: 'absolute',
+  left: '0px',
+  top: '0px',
+  'z-index': '6',
+  width: '190%',
+  'aspect-ratio': '16 / 9',
+  translate: '-23.7% 20%',
+  'border-radius': '$ui.radiusCard',
+  'overflow-x': 'hidden',
+  'overflow-y': 'hidden',
+  'background-color': '$ui.raised',
+  'box-shadow': '0px 40px 80px -20px $ui.shadow, 0px 0px 0px 1px $ui.glassEdgeStrong',
+  'pointer-events': shown ? 'auto' : 'none',
+  opacity: shown ? '1' : '0',
+  scale: shown ? '1' : '0.94',
+  transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1), scale 420ms cubic-bezier(0.16, 1, 0.3, 1)',
+});
+const previewing: Condition = { test: 'card.previewing' };
+const fill: Style = { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' };
+export const cardPreview: Node = {
+  type: 'box',
+  a11y: { hidden: true },
+  style: previewOverlay(false),
+  states: [{ when: [previewing], style: previewOverlay(true) }],
+  children: [
+    {
+      type: 'image',
+      when: [previewing, { test: 'card.backdrop' }],
+      src: '{card.backdrop}',
+      alt: '',
+      style: fill,
+    },
+    {
+      type: 'image',
+      when: [previewing, { test: 'card.backdrop', not: true }],
+      src: '{card.poster}',
+      alt: '',
+      style: fill,
+    },
+    { type: 'widget', widget: 'cardPreview', style: { position: 'absolute', inset: '0px' } },
+    {
+      type: 'box',
+      when: [previewing],
+      style: {
+        position: 'absolute',
+        left: '0px',
+        right: '0px',
+        bottom: '0px',
+        display: 'flex',
+        'flex-direction': 'column',
+        gap: '3px',
+        padding: '40px 14px 12px',
+        'background-image': `linear-gradient(0deg, ${veil(94)} 0%, ${veil(0)} 100%)`,
+      },
+      children: [
+        {
+          type: 'text',
+          text: '{card.name}',
+          style: { 'font-size': '14px', 'font-weight': '650', 'line-clamp': '1', color: '$ui.ink' },
+        },
+        {
+          type: 'text',
+          text: '{card.facts}',
+          style: {
+            'font-size': '11px',
+            color: '$ui.inkSecondary',
+            'line-clamp': '1',
+            'font-variant-numeric': 'tabular-nums',
+          },
+        },
+      ],
+    },
+  ],
+};
 
 export const card: Node = {
   type: 'box',
@@ -189,6 +268,7 @@ export const card: Node = {
         },
       ],
     },
+    cardPreview,
   ],
 };
 
@@ -221,11 +301,20 @@ export const numeral = (ten: boolean): Node => ({
     'padding-bottom': '44px',
   },
 });
+const rowItemStyle = (layer: string): Style => ({
+  position: 'relative',
+  display: 'flex',
+  'flex-direction': 'row',
+  'align-items': 'flex-end',
+  'z-index': layer,
+});
 export const rowItem: Node = {
   type: 'box',
   motion: 'velaCard',
   stagger: { step: 45, cap: 8 },
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'flex-end' },
+  style: rowItemStyle('0'),
+  // The previewing card's overlay opens over its neighbours.
+  states: [{ when: [previewing], style: rowItemStyle('5') }],
   children: [numeral(false), numeral(true), { type: 'use', template: 'velaCard' }],
 };
 // The row's end cell: its next page loads as the end comes near (home rows only).
@@ -312,8 +401,10 @@ export const titleGrid: Node = {
   } as Style,
   children: [],
 };
+// Browse grids never preview: the grid card leaves the overlay out.
 export const gridCard: Node = {
   ...card,
+  children: ((card as BoxNode).children ?? []).filter(child => child !== cardPreview),
   style: { ...(card as BoxNode).style, width: '100%' },
   small: { width: '100%' },
 } as Node;
