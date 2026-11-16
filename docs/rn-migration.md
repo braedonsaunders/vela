@@ -244,6 +244,23 @@ Player chrome stays in JavaScript (skin-styled widgets over the view). The view 
 video and bitmap subtitles; text subtitles may be drawn by the engine (`sub-ass`) for
 exact ASS styling.
 
+**Capabilities.** `VelaPlayer.capabilities()` returns what this device plays through the
+view (`ClientCapabilities` without `device` and `protocolVersions`); the controller adds
+those and negotiates with it. Web probes the browser and the installed player payload;
+Apple and Android report what their libmpv build decodes.
+
+**Previews** (card and hero trailers). `preview={{ url, mimeType, expiresAt, loop? }}`
+(a preview grant's fields) replaces `plan`/`session`, and `active={false}` stops it
+without unmounting. A preview is ambient: muted, no chrome, no audio focus, no
+observations, no session commands, no fullscreen or picture-in-picture; commands are
+limited to `play` and `pause`. It plays from the start while `active !== false`, on
+screen and before `expiresAt`. The decoder is released at once when any of those ends,
+on save-data, when `preview` is unset, or on unmount; there is no retry after expiry
+(the host asks for a new grant). `onSnapshot` reports its state (`loading`, `playing`,
+`ended`, `failed`; other fields empty) and `onError` its source failures. URLs are
+absolute or relative to the media access origin and use the same `setMediaAccess`
+scope. Native implementations may use small cache limits for previews.
+
 ### Apple implementation (spike b: tvOS on the Basement Apple TV)
 
 - Expo module `modules/vela-player/ios`, Swift. `VelaPlayerView` is an `ExpoView` hosting
