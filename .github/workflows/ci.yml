@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: Typecheck, test and skins
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # The pinned toolchain (tools/env.sh, .tools/bun-*); release builds refuse any other.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock', 'mock-server/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+
+      # The mock server is a standalone package with its own lockfile; it also supplies
+      # Bun's types to the test tsconfig.
+      - name: Install mock server dependencies
+        run: bun install --frozen-lockfile
+        working-directory: mock-server
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Check built-in skins
+        run: bun run check:skins
+
+  windows:
+    name: Windows host builds
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('apps/vela-windows/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Compiles the host only. Its runtime inputs (libmpv-2.dll and the bundled web UI in
+      # ui/) are delivery artifacts built outside the repository.
+      - name: Publish
+        run: dotnet publish apps/vela-windows/Vela.Windows.csproj -c Release -r win-x64 --self-contained true
