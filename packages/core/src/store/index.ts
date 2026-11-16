@@ -14,7 +14,7 @@ import { Home, initialHome, type HomeState } from './home';
 import { initialLive, Live, type LiveState } from './live';
 import { initialPlayback, Playback, type PlaybackState } from './playback';
 import type { MediaCapabilities, VelaPlatform } from './platform';
-import { Previews } from './previews';
+import { initialPreviews, Previews, type PreviewState } from './previews';
 import { Receipts } from './receipts';
 import { initialSearch, Search, type SearchState } from './search';
 import { initialServers, Servers, type ServersState } from './servers';
@@ -38,6 +38,8 @@ export interface VelaState {
   playback: PlaybackState;
   live: LiveState;
   appearance: Loadable<AppearanceModel>;
+  /** The trailer preview playing now. */
+  previews: PreviewState;
 }
 
 export interface VelaOptions extends VelaPlatform {
@@ -48,7 +50,8 @@ export interface VelaOptions extends VelaPlatform {
 export interface Vela {
   getState(): VelaState;
   subscribe(listener: () => void): () => void;
-  /** Settle the session (redeem a sign-in link, validate what is stored) and read the server list. */
+  /** Settle the session (redeem a sign-in link, validate what is stored), then read the server list
+   * and the server's public appearance. */
   start(): Promise<void>;
   /** The display's locale, time zone and offset; labels read afterwards use it. */
   setLocale(context: LocaleContext): void;
@@ -83,6 +86,7 @@ const initialState: VelaState = {
   playback: initialPlayback,
   live: initialLive,
   appearance: idle(),
+  previews: initialPreviews,
 };
 
 /** Art widths come in steps, so a window resized by a few pixels reads the same images. */
@@ -96,14 +100,15 @@ export function createVela(options: VelaOptions): Vela {
   const width = () => artWidth;
   const auth = new Auth(box, session, options);
   const servers = new Servers(box, session, options);
-  const previews = new Previews(session);
+  const previews = new Previews(box, session);
   const playback = new Playback(box, session);
+  const appearance = new Appearance(box, session, options.rendererVersion);
   return {
     getState: box.get,
     subscribe: box.subscribe,
     async start() {
       await auth.start();
-      await servers.refresh().catch(() => {});
+      await Promise.all([servers.refresh().catch(() => {}), appearance.load()]);
     },
     setLocale(context) {
       setLocale(JSON.stringify(context));
@@ -123,7 +128,7 @@ export function createVela(options: VelaOptions): Vela {
     search: new Search(box, session, width),
     playback,
     live: new Live(box, session, playback),
-    appearance: new Appearance(box, session, options.rendererVersion),
+    appearance,
     receipts: new Receipts(session),
     previews,
   };
