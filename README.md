@@ -1,12 +1,13 @@
 # Vela
 
-A cinematic, document-skinnable viewing client migrating to React Native + Expo.
+A cinematic, document-skinnable viewing client built with React Native + Expo.
 Ether is the reference server; Jellyfin/Emby and Plex adapters share the client boundary.
 Vela includes no media or provider credentials.
 
-**Status: migration in progress.** The RN app, renderer and player modules are present;
-individual historical observations do not establish current app or device completion.
-Web/PWA remains a delivery target alongside native apps. Dedicated desktop hosts come later.
+**Status: integrated development candidate.** Source migration and Expo packaging are complete.
+The packaged web app plays against Ether; native Apple and Android builds compile, and
+Android TV plays the synthetic fixture. Device and installer qualification still have open
+gates in the build plan. Dedicated desktop hosts come later.
 
 - [Contributor instructions](AGENTS.md)
 - [Current architecture, ownership and delivery gates](docs/build-plan.md)
@@ -18,8 +19,8 @@ Web/PWA remains a delivery target alongside native apps. Dedicated desktop hosts
 ## Contribute
 
 The root is a Bun workspace. `apps/vela` is the Expo app; shared code lives in
-`packages/`, and native/web playback in `modules/vela-player`. Source moves have landed;
-consumer/release cleanup continues. See the build plan before changing shared paths.
+`packages/`, and native/web playback in `modules/vela-player`. The source moves and
+release exporter have landed. See the build plan before changing shared paths.
 
 From the repository root, compile a coherent chunk once:
 

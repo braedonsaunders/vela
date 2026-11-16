@@ -4,26 +4,24 @@ Vela is built separately from Ether. Ether installs a pinned static artifact and
 serves it on its own origin under `/vela/`. No separate API hostname is part of
 the production deployment. Build and signing commands never publish. Publishing is a separate owner-approved command, first shipping with Ether 0.3.13; Ether 0.3.12 did not ship Vela.
 
-## Expo web export migration plan
+## Expo web export
 
 Current orchestration: `thr_4q8296jknz`; release tooling: `thr_88bpxte5e5`.
 RN/Expo is the current architecture. Web/PWA remains a delivery target: Ether
 serves the `apps/vela` export at `/vela`. Ether 0.3.13 itself ships without Vela.
 The old Exact 0.1.42 installer result below is historical evidence, not Expo
-qualification. No new Expo release, native delivery or public publication is
-established by these documentation changes.
+qualification. The dated Expo evidence below records the current local candidate;
+no public publication has occurred.
 
 Source relocation landed in `5d7a099` / `dfd862e`, renderer identity in `3b933a2`.
-The Exact app/dispatch was removed in `d47098c`; final exporter integration is
-owned by the release worker. The legacy sections
+The Exact app/dispatch was removed in `d47098c`; exporter integration landed in
+`a9d195c`. The legacy sections
 below preserve prior installer/signing contracts and proof; their Exact commands
 must not be used as the current RN build instructions.
 
 ### Expo packaging command and captured inputs
 
-The release owner confirmed this CLI/contract for the replacement implementation.
-It is coding-only work: no built artifact or qualified flow has yet been reported.
-Use it only once the exporter implementation/tooling is committed:
+The exporter captures a committed workspace and builds the single Expo app:
 
 ```sh
 source tools/env.sh
@@ -178,6 +176,52 @@ Implementation and qualification order:
    and owner-staged additive preservation, with no public upload.
 5. Obtain owner approval for the exact version before production signing and the
    deliberate public publish command. No public release is authorized by this plan.
+
+## Expo candidate evidence (2026-11-16)
+
+The parent built Vela 0.2.0 from clean source
+`a9d195c2378aad63adc7ed4d60264e7d5be4398a`. The archive is 98,321,945 bytes,
+SHA-256 `c8acd01b86eb9c18e4a4181e840c9072f04bc344d724458d90602468c24c2c99`.
+`verify-release.py` accepted all 245 files and player digest
+`1ca493ce565369eb83a8c9479dfad9c397931e5b5686d4b66356ffd4ca4e1b80`.
+The exported entry chunk is 1,117,094 bytes, or 293,015 bytes with gzip level 9.
+These are file sizes, not cold-load timing measurements.
+
+The actual exported HTML includes `/vela/manifest.webmanifest` and `/vela/pwa.js`
+through the app-owned `public/index.html` template. A browser observed the active
+service worker scoped to `/vela`. Through a temporary same-origin lab proxy, the
+archive supported non-owner sign-in, Outlander episodes while extras were pending,
+automatic detail refresh, completed Extras/trailer actions, and decoded Se7en video
+with an advancing playback clock. Escape closed Audio while playback remained on
+the watch route. This is web evidence; it does not qualify physical tvOS Menu behavior.
+
+The existing `lab-test-v1` Keychain identity signed the exact fixture. Its local
+publish dry run verified four signed/upload inputs and reported `publicActions:0`.
+The fixture is under
+`~/.scratch/vela-build/rn-spike/artifacts/release/signed-0.2.0-ready/`;
+`lab-test-v1.pub` contains only the public pin. No production key or public channel
+was used. Preserve this immutable fixture while qualification is pending.
+
+Ether owner `thr_9jsg8ia37s` reports signed check/install and real 0.2.0 sign-in
+passing. Rollback exposed an Ether retention defect: outgoing Expo chunk/player
+requests returned old SPA HTML. The installer owner is correcting additive retention
+and repeating rollback/reinstall and untouched-tab navigation. Until that completes,
+the new distribution flow is not release-qualified. Offline/update PWA behavior,
+physical native playback/preview transitions, and full phone/tablet interaction also
+remain open. Later native sign-in/preview source commits are not in this web fixture;
+any new release must capture and identify its own committed revision.
+
+The later 0.2.1 fixture captures
+`469c8006ff954b03d4c6a6908c5e2694d6d61cbd`, including the native sign-in/preview
+attempts and the first-card preview alignment. Its archive is 98,322,068 bytes,
+SHA-256 `579de1109659166602f82cd997157e99e1359a018a63d11b69e7599ffc057a1f`.
+All 245 files and the same player digest verify; lab-test signing and a zero-action
+publish dry run pass. The packaged app signs in with Enter and shows the first
+card's actual synthetic preview and complete caption inside the viewport.
+The immutable fixture is in the sibling `signed-0.2.1-ready/` directory. Ether
+owns the actual 0.2.0-to-0.2.1 update/rollback check. Android's focused preview
+still remains hidden after the later native build, so neither fixture is presented
+as full native qualification or approval for production publication.
 
 ## Historical Exact packaging and installer reference
 

@@ -1,6 +1,6 @@
 # Build plan
 
-Status: RN/Expo migration in progress (2026-11-16), not a completed app release.
+Status: RN/Expo source migration and packaging complete (2026-11-16); release qualification remains open.
 The orchestrator is `thr_4q8296jknz`; prior orchestration threads are archived.
 Product scope comes from [design.md](design.md) and [protocol-design.md](protocol-design.md).
 [RN migration](rn-migration.md) records architecture and dated observations;
@@ -11,18 +11,17 @@ Product scope comes from [design.md](design.md) and [protocol-design.md](protoco
 Source moves landed in `5d7a099`, `dfd862e`, `3b933a2` and `2394e9a`.
 Core is in `packages/core/src`, resolver/base in `packages/skin/src/resolve`, protocol
 in `packages/protocol`, web engine in `modules/vela-player/web/engine`, and app assets
-in `apps/vela/assets`. The Exact app/dispatch was removed in `d47098c`; residual
-tooling/release consumers
-still need closure. Theme values now live in `packages/skin/src/theme.ts`, and
+in `apps/vela/assets`. The Exact app/dispatch was removed in `d47098c`, and the
+release exporter was replaced in `a9d195c`. Theme values now live in `packages/skin/src/theme.ts`, and
 `tools/skin-renderer.ts` supplies React renderer release metadata. The parent owns
-integrated compilation after these moves.
+integrated compilation and delivery after these moves.
 
 | Path | Responsibility | Current coordination |
 |---|---|---|
 | `apps/vela/` | Expo app, expo-router routes, screen wiring, platform storage and player views | Parent coordinates app/UI workers |
 | `packages/core/` | Adapters (Ether, Jellyfin/Emby, Plex), session, discovery, search, live, telemetry, models, i18n; React subscription entry kept separate | Source migration `thr_3iwkrbqy77` |
 | `packages/skin/` | Resolver/base, vocabulary/style translation, recursive React renderer, interactive widgets | Source migration for moves; parent coordinates renderer/UI edits |
-| `packages/protocol/` | Wire types moved from `protocol/v0`,, skin schema and fixtures | Source migration; coordinate all wire changes |
+| `packages/protocol/` | Wire types moved from `protocol/v0`, skin schema and fixtures | Parent; coordinate all wire changes |
 | `packages/player-api/` | Shared player view contract | Parent coordinates player owners |
 | `modules/vela-player/` | Expo module: Swift/MPVKit, Kotlin/libmpv and Metro web view | Parent coordinates playback workers |
 | `modules/vela-player/web/engine/` | Web engine moved from `client/player` | Source migration; coordinate with playback |
@@ -83,8 +82,9 @@ Release owner confirmed `bun tools/release/build.ts --player-assets=<payload-dir
 --committed` for the replacement implementation, where the directory contains
 `PLAYER-ASSETS-MANIFEST.json`. Version is captured `apps/vela/package.json`; one
 archive/manifest records `skinRenderer` and `playerAssetsDigest`. Catalog generation
-moves to `tools/skin-documents.ts`. This is unbuilt/unqualified coding work; see
-[distribution.md](distribution.md) before using it. It is not a routine check.
+moves to `tools/skin-documents.ts`. The parent built and test-key signed the 0.2.0
+candidate from `a9d195c`; see [distribution.md](distribution.md) for its evidence and
+remaining installer gates. This is not a routine check.
 
 ## Current delivery ledger
 
@@ -93,12 +93,19 @@ only with evidence for the integrated revision, not inherited spike proof.
 
 | Area | Current state / next gate |
 |---|---|
-| Construction | Source moves committed (`5d7a099`, `dfd862e`, `3b933a2`, `2394e9a`), Exact app removed (`d47098c`); release integration and remaining legacy consumers still need closure, then integrated compile and real Expo artifact. |
-| UI/playback | `c742d66` has reported typecheck/web observation. Native previews `f96f622` / `009c9d9` remain unbuilt/unverified; Menu is unresolved despite one saved passing run. Parent still needs affected web/PWA and Apple/Android playback flows plus phone/tablet pass. |
-| Ether cold detail | Merged, not lab-deployed. Deploy first, then drive cold-title against that revision. |
-| Distribution | New Expo signed fixture still needs install/update/rollback, asset-retention and PWA qualification. Earlier Exact dry run is historical proof only. |
+| Construction | Source moves and Exact app removal complete; Expo export and app/mock TypeScript compile pass. Standalone web-player TypeScript still reports errors in pinned Mediabunny source; the real Expo export succeeds. |
+| UI/playback | Packaged web sign-in, title, extras, video and Audio-menu dismissal pass against Ether. tvOS, iOS simulator and Android TV builds succeed. Android TV sign-in/home and synthetic video playback pass. Android focused preview remains hidden after `f5b5107`; the native preview fix loop stopped at the three-attempt limit. Physical Apple TV Menu and phone/tablet interactions remain open. Native username Next fix `2d2d2a7` / `504b30c` compiles; runtime interaction proof remains pending. |
+| Ether cold detail | Lab `3ca533ffe` deployed. Outlander displays seasons/episodes while extras are pending, refetches automatically, then displays Extras/trailer actions after the lab's missing TMDB configuration was corrected. No client or protocol workaround was needed. |
+| Distribution | Expo 0.2.0 (`a9d195c`) and 0.2.1 (`469c800`) exported, each 245-file inventory/player digest verified, signed with the existing lab test key, and publish dry runs passed with zero public actions. The 0.2.1 first-card preview plays fully inside the screen on web. Ether owner `thr_9jsg8ia37s` owns isolated installer/update/rollback and old-tab retention qualification. PWA manifest and active service worker observed; offline/update qualification remains open. |
 | Publication | Release not yet publicly published. Exact-version owner approval remains required before deliberate production publication. |
 | Later scope | Dedicated macOS/Windows hosts; residual Exact cleanup follows migrated consumers and release path. |
 
 The parent selects concrete affected flows; this ledger is not an exhaustive matrix
 or a claim of broad app completion/device parity.
+
+The Mac is at the office. Basement Apple TV is unavailable to `devicectl`; home LAN
+reachability from the GPU workstation does not establish an install/screenshot route.
+The signed iOS simulator app renders sign-in; Device Hub automation later failed with
+`cgWindowNotFound`, preventing a complete phone interaction pass. These are explicit
+delivery limits, not passing checks. The immutable 0.2.1 fixture captures the later native
+sign-in and preview attempts; its existence does not close their remaining device gates.

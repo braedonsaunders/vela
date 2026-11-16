@@ -1,6 +1,6 @@
 # React Native migration
 
-Status: migration in progress (2026-11-16). Current orchestration is
+Status: source migration and Expo packaging complete; delivery qualification open (2026-11-16). Current orchestration is
 `thr_4q8296jknz`; prior architecture/orchestration threads are archived. This file
 retains design decisions and dated spike observations, which qualify only the
 recorded revision/flow. They do not prove current main or every target.
@@ -15,14 +15,24 @@ See [build-plan.md](build-plan.md) for current ownership and remaining delivery 
 - Release worker `thr_88bpxte5e5` owns `tools/release`; the Expo artifact and its
   installer/PWA qualification are separate from the old Exact release proof. The
   agreed exporter CLI is `bun tools/release/build.ts --player-assets=<payload-directory>
-  --committed`; implementation is unbuilt/unqualified pending the parent.
-- Reported evidence: `c742d66` UI changes were typechecked and observed on web.
-  Native previews `f96f622` / `009c9d9` are new unverified work, with no new native
-  build/device proof. Earlier preview observations below do not qualify those commits.
-- Menu is unresolved; one saved run passed, which is insufficient to close it.
-  Ether cold-detail is merged but not deployed to the lab. Cold-title proof must
-  wait for the new deployment. Phone/tablet and affected Apple/Android playback
-  flows remain parent delivery gates, alongside integrated compile/web packaging.
+  --committed`; the parent built and test-key signed 0.2.0 from `a9d195c`.
+- App and mock TypeScript compile, Expo export, tvOS device build, iOS simulator
+  build and Android TV release build pass. The signed iOS simulator app renders
+  sign-in. Android TV signs in, renders home and plays the synthetic HLS fixture.
+  Real web playback and pending-to-complete extras were observed against Ether.
+- Physical Apple TV Menu remains unresolved; Basement is unavailable to the Mac
+  from the office. Android preview frame gating required a further correction
+  (`f5b5107`) after the first device look. That build succeeds but the focused preview
+  still shows its backing artwork on Android TV; no successful preview proof is claimed.
+  The parent stopped this fix loop at the project three-attempt limit.
+  Native username Next now focuses Password
+  (`2d2d2a7`, type correction `504b30c`); it compiles, but Device Hub automation's
+  `cgWindowNotFound` prevented the complete phone interaction pass.
+- The first-card preview alignment correction is `72e2615`; it was observed playing
+  within the screen in the packaged 0.2.1 web app. Native preview
+  transitions, phone/tablet interactions and installer/PWA update qualification
+  remain parent gates. See the current build-plan ledger rather than inheriting
+  earlier spike observations.
 
 ## Why
 
@@ -538,7 +548,7 @@ the renderer, each a rule now:
 Still differs from the Exact build: the framed title page draws as its own route, without home
 underneath. The tvOS text field is the platform's (a grey button that opens the TV keyboard).
 
-Lab builds: the lab admits client builds 0.1.0 up to, not including, 0.2.0 (`compatibleClientBuilds`).
+During the original spike, the lab admitted client builds 0.1.0 up to, not including, 0.2.0 (`compatibleClientBuilds`).
 apps/vela reports 0.2.0 unless `EXPO_PUBLIC_VELA_APP_VERSION` says otherwise, so lab builds set it
 until Ether's range admits 0.2.x.
 
@@ -547,14 +557,14 @@ bisect by build switches pinned it on gradient masks, which render their box off
 across a home of masked rows. From e30c765 on, Cinematic's home stays up against the lab, with masks
 left out on TV and row-card backdrops capped at 1280 px.
 
-Open: the iOS (phone) Simulator pass, held behind the one-native-tool rule on this Mac.
+The later iOS simulator build and sign-in launch succeeded; full interaction remains
+open as recorded in the current handoff above.
 
 ## Delivery after the spikes
 
-Source relocation and consumer cleanup are in progress, not future architecture work.
-The parent owns the integrated compile and Expo artifact, actual web/PWA and affected
-Apple/Android playback flows, cold-title against newly deployed Ether, and phone/tablet
-pass. Release qualification includes signed fixture install/update/rollback and static
+Source relocation, consumer cleanup and the Expo artifact are complete.
+The parent owns the remaining affected Apple/Android flows and phone/tablet pass.
+Release qualification includes signed fixture install/update/rollback and static
 asset/PWA behavior. See [distribution.md](distribution.md) for the concrete contract.
 These gates do not prescribe an exhaustive matrix or imply current app completion.
 Residual Exact tooling retirement follows migrated consumers; app removal is already
