@@ -3,6 +3,7 @@
 // on the device, and what AVPlayer takes when the server must remux or convert.
 import AVFoundation
 import Foundation
+import UIKit
 import VideoToolbox
 
 enum VelaCapabilities {
@@ -33,6 +34,7 @@ enum VelaCapabilities {
             "audioCodecs": ["aac", "ac3", "eac3"],
             "subtitleFormats": subtitleFormats,
             "hls": true,
+            "device": ["name": UIDevice.current.name, "platform": "tvos"],
             "mse": false,
         ]
         let data = (try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])) ?? Data("{}".utf8)
