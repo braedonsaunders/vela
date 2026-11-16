@@ -666,3 +666,63 @@ pair in each order. Production remains the wrapper; default evaluation will use
 the parent's updated relative/aggregate criterion, including the wrapper's own
 underrun duration, drops and buffering, with no extra core fallback/recovery or
 refetch failure mode permitted.
+
+## Overlap candidate: two controlled pairs on 50da5db16
+
+The requested two orders completed with signed 0.1.43/host `70623c5d…a567`,
+wrapper `3c579` and overlap core `4f43`, fixed throughout all four fresh cold
+resets. Every outgoing position was omitted; every opening plan was 1390.5 s.
+Startup was sampled every 100 ms for five seconds after playable, then each
+cold seek to 900 was followed by 480 seconds. All source pins were independently
+verified. Raw private files: `paired43k-{core,wrapper}.json` and
+`paired43l-{wrapper,core}.json`.
+
+| Half | Plan | First image | Playable | Seek | Startup drops | Post-seek drops |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A1 core first | 2.250 s | 8.857 s | 9.859 s | 3.958 s | 0 | 0 |
+| A2 wrapper second | 1.848 s | 7.009 s | 7.025 s | 2.402 s | 0 | 3 |
+| B1 wrapper first | 1.954 s | 7.730 s | 7.735 s | 2.527 s | 0 | 0 |
+| B2 core second | 2.000 s | 6.100 s | 9.674 s | 2.743 s | 1 | 0 |
+
+All four startup and post-seek windows had zero underruns (count and duration),
+zero buffering, zero retries, and zero fallback/recovery. Both core runs had
+zero repeated completed pages and 15,251 unique pages in their final epochs.
+Core totaled one drop against wrapper's three. Thus reliability is at least at
+parity on this sample; absolute zero was not imposed on the wrapper comparison.
+
+Mean first-image time was core 7.479 s versus wrapper 7.369 s. After plan arrival
+it was core 5.354 s versus wrapper 5.468 s. First image is now approximately equal,
+but actual playable and seek means remain slower: 9.766/3.351 s versus
+7.380/2.465 s. No weighted score is invented to erase those differences.
+
+The core's startup reserve held 0.964 and 3.465 s; seek reserve held 1.429 and
+0.441 s. Those holds closely account for the remaining mean playable (+2.387 s)
+and seek (+0.886 s) gaps. Subtracting a hold is diagnostic decomposition, not a
+qualification result: viewers experience the actual hold. B2 had three host-cap
+waits (250–336 ms) inside the startup hold and supply below consumption
+(68.9/80.6 Mbps), so blindly reducing it would remove a real safety margin.
+
+The real-file estimate missed as predicted. A1 guessed a 16-MiB window at
+11,393,826,816 bytes, then corrected to 11,426,856,960. It opened a following
+64-MiB run while the corrected 16-MiB run was still active. Before first
+presentation it had acquired 67.15 MB, including speculative data, compared
+with about 28 MB in the earlier b76 run. This is bounded extra unique acquisition,
+not refetch. It remains a potential cost to measure, not a demonstrated free
+startup optimization. Corrected warm/Cues overlap exists in the trace, but the
+local hit-case gain is not asserted as a universal real-file speedup.
+
+Ether also cancelled an internal read at 11,232,870,400 at the seek in both core
+halves, and a similar block in the wrapper. No browser request covers that offset;
+the producer confirmed it is a block-aligned internal read and is investigating
+warm/read-behind ownership separately. It was not a startup explanation.
+
+Every half stopped and revoked via UI (all 200), mounted players were zero,
+all dedicated browsers/contexts/profiles closed. The operator unpinned (204),
+read pins empty and confirmed zero sessions/FFmpeg; baseline hold was released.
+The architect received FINISHED before its quiet performance A/B. No further
+playback was requested. No default switch was proposed from this result.
+
+The parent's next step is delivery-aware reserve admission: a small PCM target
+only when priming goodput is >=1.3x media bitrate AND contiguous forward bytes
+cover >=2 seconds; retain full reserve for under-supply or cap waits. Healthy
+and under-supplied local proofs must precede another pair in each order.
