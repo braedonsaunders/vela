@@ -1206,7 +1206,7 @@ const title: Node = {
 
 export default {
   schema: 1,
-  renderer: 13,
+  renderer: 15,
   status: true,
   id,
   name: 'Index',
@@ -1219,6 +1219,18 @@ export default {
     display: { family: 'Index Display', files: [{ url: asset('instrument-serif.ttf'), weight: 400, style: 'normal' }] },
   },
   traits: { panSections: false, barMask: false, page: '$page', ink: '$ink', splashOnPaper: true },
+  // Index's paper, ink and oxblood accent, for the routes it inherits (search).
+  ui: {
+    page: '#f3f0e8', raised: '#ffffff', ink: '#22221e', inkSecondary: '#55554d', inkQuiet: '#76746b',
+    inkInverse: '#f3f0e8', inkHover: '#3d3d36', accent: '#813b31', onAccent: '#f3f0e8', control: '#22221e0f',
+    controlHover: '#22221e1a', glass: '#f3f0e8d9', glassEdge: '#d6d1c6', glassEdgeStrong: '#bcb8ae',
+    popover: '#fffffff7', scrim: '#22221e66', track: '#22221e1f', trackStrong: '#22221e38',
+    focusHalo: '#813b3133', shadow: '#22221e33', skeleton: '#e9e1d3', skeletonLight: '#f7f3ea',
+    alert: '#813b311a', live: '#b3261e',
+    font: 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif',
+    fontDisplay: '"Index Display", "Iowan Old Style", Georgia, serif', radiusControl: 999, radiusCard: 4,
+    radiusPanel: 14,
+  },
   tokens: {
     // The signed-out stage and the title page's close control keep the default skin's night palette.
     stage: '#090b0e',
