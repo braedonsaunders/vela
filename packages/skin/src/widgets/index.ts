@@ -26,3 +26,15 @@ export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   liveTile: LiveTileWidget,
   yearInput: YearInput,
 };
+
+/** The widgets that take focus themselves. The rest (sentinel, previews, the live tile) only draw,
+ * so a TV focus guide around nothing but them would be an empty destination (render.tsx). */
+export const FOCUSABLE_WIDGETS = new Set([
+  'searchInput',
+  'textInput',
+  'serverSwitcher',
+  'select',
+  'playerChrome',
+  'guide',
+  'yearInput',
+]);

@@ -9,4 +9,4 @@ export * from './widgets/player';
 export { searchView } from './widgets/search/view';
 export type { Hit, SearchView } from './widgets/search/model';
 export { LiveProvider, useLiveContext, useLiveSurface, useLiveView } from './widgets/guide';
-export { focusElement } from './escape';
+export { focusElement, useReturnFocus } from './escape';

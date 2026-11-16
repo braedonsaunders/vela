@@ -3,10 +3,11 @@
 // the clock, then icon transport and the screening controls with their menus). Both slide
 // and fade with the chrome's visibility.
 import { LinearGradient } from 'expo-linear-gradient';
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { Platform, Text, TVFocusGuideView, View, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { msg } from '@vela/core';
+import type { Focusable } from '../../escape';
 import { easing } from '../../motion';
 import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
@@ -122,6 +123,8 @@ interface BottomProps {
   toggleInfo(): void;
   onActive(active: boolean): void;
   live: LiveWatch;
+  /** The play toggle's view: on TV the chrome puts focus there whenever it comes up. */
+  toggleRef?: Ref<Focusable>;
 }
 
 export function BottomBar(props: BottomProps) {
@@ -200,6 +203,7 @@ function Controls({
   toggleInfo,
   onActive,
   live,
+  toggleRef,
 }: BottomProps) {
   // A channel plays at the live edge: no ten-second steps, no speed, no chapters.
   const timeline = !live.live;
@@ -227,9 +231,17 @@ function Controls({
   const cluster: ViewStyle = look.small
     ? { flexGrow: 1, flexDirection: 'row', justifyContent: 'flex-end', gap }
     : { flex: 1, minWidth: 0, flexDirection: 'row', justifyContent: 'flex-end', gap };
+  // On TV the control row is one focus destination, entered at the play toggle (or the control
+  // last used there): down from the full-width timeline would otherwise land on whatever lies
+  // under the timeline's middle, past the transport.
+  const Row = look.tv && Platform.isTV ? TVFocusGuideView : View;
   return (
-    <View style={{ flexDirection: 'row', flexWrap: look.small ? 'wrap' : 'nowrap', alignItems: 'center', gap }}>
+    <Row
+      autoFocus={Row === TVFocusGuideView ? true : undefined}
+      style={{ flexDirection: 'row', flexWrap: look.small ? 'wrap' : 'nowrap', alignItems: 'center', gap }}
+    >
       <ChromeButton
+        buttonRef={toggleRef}
         look={look}
         primary
         icon={view.playing ? 'pause' : 'play'}
@@ -349,6 +361,6 @@ function Controls({
           {contents(menu)}
         </MenuPanel>
       ) : null}
-    </View>
+    </Row>
   );
 }

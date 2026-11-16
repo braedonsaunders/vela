@@ -27,7 +27,9 @@ export const band: Node = {
     display: 'flex',
     'flex-direction': 'column',
     'justify-content': 'flex-end',
-    'min-height': 'min(80vh, 780px)',
+    // The frame starts below the shell's bar (title, below), so the band leaves that much of the
+    // screen: on a 540px TV the actions stay above the fold.
+    'min-height': 'min(calc(80vh - 70px), 780px)',
     'overflow-x': 'hidden',
     'overflow-y': 'hidden',
   },
@@ -128,7 +130,7 @@ export const band: Node = {
         display: 'flex',
         'flex-direction': 'column',
         gap: '18px',
-        'padding-top': '120px',
+        'padding-top': 'min(120px, 8vh)',
         'padding-bottom': '12px',
         ...side,
         'max-width': '58rem',
@@ -239,6 +241,8 @@ export const band: Node = {
             'line-height': '1.6',
             'max-width': '42rem',
           },
+          // On a TV the synopsis keeps three lines, so the actions stay above the fold.
+          states: [{ when: [{ test: 'env.tv' }], style: { 'line-clamp': '3' } }],
           small: { 'font-size': '15px' },
         },
         {
@@ -1041,8 +1045,9 @@ export const titleLoading: Node = {
   ],
 };
 // The page frame; the scrim, blur and dissolve behind it are the route column's (the foundation's).
-// It starts below the shell's 84px bar, so its close button never sits on the bar's profile
-// (a 540px-tall TV screen leaves only 22px of 4vh).
+// The frame starts below the shell's 84px bar, so its close button never sits on the bar's
+// profile (a 540px-tall TV screen leaves only 22px of 4vh). Its spacing is the frame's margin:
+// the root is the route's scroll view, whose own padding native ignores.
 export const title: Node = {
   type: 'box',
   style: {
@@ -1050,11 +1055,7 @@ export const title: Node = {
     inset: '0px',
     display: 'flex',
     'flex-direction': 'column',
-    padding: '4vh 4vw',
-    'padding-top': 'max(4vh, 92px)',
-    'box-sizing': 'border-box',
   },
-  small: { padding: '0px', 'padding-top': '0px' },
   children: [
     {
       type: 'box',
@@ -1070,8 +1071,10 @@ export const title: Node = {
         'border-radius': '$ui.radiusPanel',
         'background-color': '$ui.page',
         'box-shadow': '0px 50px 160px $ui.shadow, 0px 0px 0px 1px $ui.glassEdge',
+        margin: '4vh 4vw',
+        'margin-top': 'max(4vh, 92px)',
       },
-      small: { 'border-radius': '0px' },
+      small: { 'border-radius': '0px', margin: '0px', 'margin-top': '0px' },
       children: [
         {
           type: 'box',

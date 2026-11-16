@@ -1,8 +1,10 @@
 // An icon-only chrome control. Pointer platforms wash it on hover; keyboards and TV remotes
 // show the document's accent ring on the button itself, and on TV the focused control fills
-// with the ink so it reads from across the room.
-import { useState } from 'react';
+// with the ink and wears the ring too, so it reads from across the room and stands apart from
+// the play toggle, which is always filled.
+import { useState, type Ref } from 'react';
 import { Pressable, type ViewStyle } from 'react-native';
+import type { Focusable } from '../../escape';
 import { PlayerIcon, type PlayerIconName } from './icons';
 import type { PlayerLook } from './look';
 
@@ -20,6 +22,8 @@ interface Props {
   preferred?: boolean;
   testID?: string;
   onFocusChange?(focused: boolean): void;
+  /** The button's view, so the chrome can move TV focus onto it. */
+  buttonRef?: Ref<Focusable>;
 }
 
 export function ChromeButton({
@@ -34,6 +38,7 @@ export function ChromeButton({
   preferred,
   testID,
   onFocusChange,
+  buttonRef,
 }: Props) {
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
@@ -50,12 +55,13 @@ export function ChromeButton({
     opacity: disabled ? 0.35 : 1,
     outlineColor: look.accent,
     outlineStyle: 'solid',
-    outlineWidth: focus && !look.tv ? 2 : 0,
-    outlineOffset: 0,
+    outlineWidth: focus ? (look.tv ? look.size(3) : 2) : 0,
+    outlineOffset: look.tv ? look.size(3) : 0,
     transform: [{ scale: look.tv && focus && !look.still ? 1.1 : 1 }],
   };
   return (
     <Pressable
+      ref={buttonRef as never}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled, selected }}
