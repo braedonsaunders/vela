@@ -33,8 +33,11 @@ internal sealed class MainWindow : Form
         BackColor = Color.FromArgb(9, 11, 14);
         ForeColor = Color.White;
         MinimumSize = new Size(960, 600);
-        settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Vela", "server.txt");
+        // VELA_DATA_DIR keeps a second copy (a test run) apart from the installed app's server,
+        // window placement and WebView profile.
+        string data = Environment.GetEnvironmentVariable("VELA_DATA_DIR") is { Length: > 0 } custom ? custom
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Vela");
+        settingsPath = Path.Combine(data, "server.txt");
         windowPath = Path.Combine(Path.GetDirectoryName(settingsPath)!, "window.txt");
         PlaceWindow();
         Controls.Add(browser);
@@ -197,8 +200,11 @@ internal sealed class MainWindow : Form
             if (kind == "media-access")
             {
                 string? origin = TextOf(message, "origin");
-                if (origin != null && (server == null || new Uri(origin).GetLeftPart(UriPartial.Authority)
-                    != server.GetLeftPart(UriPartial.Authority))) throw new InvalidOperationException("Untrusted media origin");
+                // The selected server may be Ether or one added in the app's server switcher (Jellyfin,
+                // Emby, Plex); the message comes from the bundled page, so any web origin is accepted.
+                if (origin != null && !(Uri.TryCreate(origin, UriKind.Absolute, out var media)
+                    && media.Scheme is ("http" or "https") && media.UserInfo.Length == 0))
+                    throw new InvalidOperationException("Invalid media origin");
                 mediaOrigin = origin;
                 mediaPrefix = TextOf(message, "pathPrefix");
                 mediaHeaders = message.TryGetProperty("headers", out var headers)
