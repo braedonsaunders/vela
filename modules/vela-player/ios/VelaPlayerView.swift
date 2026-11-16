@@ -38,6 +38,10 @@ final class VelaPlayerView: ExpoView {
     private var loggedOutput = false
     private var refreshAsked = ""
     private var heartbeat: Timer?
+    /// A seek the server applies (its HLS): asked for, not yet answered by the plan with the next seek
+    /// generation. Distinct from `pendingSeek`, which mpv is carrying out.
+    private var awaitedSeek: Double?
+    private var awaitedSeekLimit: Timer?
 
     // A trailer preview (`preview`): it excludes the plan and plays while active and on screen.
     private lazy var preview = makePreview()
@@ -283,6 +287,7 @@ final class VelaPlayerView: ExpoView {
     private func stop() {
         heartbeat?.invalidate()
         heartbeat = nil
+        endAwaitedSeek()
         guard let client = mpv else {
             return
         }
@@ -410,11 +415,45 @@ final class VelaPlayerView: ExpoView {
         }
     }
 
+    /// A plan with a new seek generation: mpv moves to the server's position, unless it is already going there.
     private func seekConfirmed(_ position: Double) {
+        if awaitedSeek != nil {
+            endAwaitedSeek()
+            seek(to: position)
+            return
+        }
         if let target = pendingSeek, abs(target - position) < 1.5 {
             return
         }
         seek(to: position)
+    }
+
+    /// Shows `target` until the server's answer arrives; observations of the old position are held meanwhile.
+    /// An answer that never comes is given up after ten seconds, and playback carries on where it is.
+    private func awaitSeek(_ target: Double) {
+        awaitedSeek = target
+        pendingSeek = target
+        report.holdsObservations = true
+        awaitedSeekLimit?.invalidate()
+        awaitedSeekLimit = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { [weak self] _ in
+            self?.giveUpAwaitedSeek()
+        }
+    }
+
+    private func endAwaitedSeek() {
+        awaitedSeek = nil
+        awaitedSeekLimit?.invalidate()
+        awaitedSeekLimit = nil
+        report.holdsObservations = false
+    }
+
+    private func giveUpAwaitedSeek() {
+        guard awaitedSeek != nil else {
+            return
+        }
+        endAwaitedSeek()
+        pendingSeek = nil
+        report.publish(state, seekTarget: nil, force: true)
     }
 
     private func seek(to seconds: Double) {
@@ -499,7 +538,7 @@ final class VelaPlayerView: ExpoView {
             seek(to: target)
             return
         }
-        pendingSeek = target
+        awaitSeek(target)
         report.sessionCommand(["kind": "seek", "positionSeconds": target])
     }
 

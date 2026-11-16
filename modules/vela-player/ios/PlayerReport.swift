@@ -180,9 +180,12 @@ final class PlayerReport {
     /// minutes, and a paused or stalled player changes nothing that would report.
     static let heartbeatInterval: TimeInterval = 10
 
+    /// True while a seek the server applies is awaited: the old position is not reported meanwhile.
+    var holdsObservations = false
+
     /// An observation when none was sent for `heartbeatInterval`, whatever the state.
     func heartbeat(_ state: PlayerState) {
-        guard let plan, Date().timeIntervalSince(lastObservation) >= Self.heartbeatInterval else {
+        guard let plan, !holdsObservations, Date().timeIntervalSince(lastObservation) >= Self.heartbeatInterval else {
             return
         }
         observe(plan, state, force: true)
@@ -193,6 +196,9 @@ final class PlayerReport {
             return
         }
         let ended = state.phase == .ended
+        if holdsObservations && !force && !ended {
+            return
+        }
         let generation = "\(plan.sessionId):\(plan.sourceGeneration):\(plan.seekGeneration)"
         if ended && endedReported == generation {
             return
