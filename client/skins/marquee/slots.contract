@@ -537,7 +537,7 @@ component Spotlight
         row gap=10 align-items="center" margin-top=(small ? 4 : 8) flex-wrap="wrap"
           // The server's predicted action (play, resume, next episode) in amber, then More info.
           for act in primary key=act.heroId
-            button press=playHero(act.targetId, act.positionSeconds, act.hasPosition) testId="hero-primary" class=Primary height=(small ? 38 : 40) padding="0px 20px"
+            button press=playHero(act.targetId) testId="hero-primary" class=Primary height=(small ? 38 : 40) padding="0px 20px"
               row gap=8 align-items="center"
                 Solid(name="play", size=16)
                 text act.actionLabel font-size=15

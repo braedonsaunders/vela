@@ -83,7 +83,7 @@ members Client
     if name == "play"
       if scope.startsWith("route:home:")
         if homeKnown
-          playHero(heroActFor(homeSurface, arg).map(a => a.targetId).join(""), num(heroActFor(homeSurface, arg).map(a => a.positionSeconds.toString()).join("")), heroActFor(homeSurface, arg).map(a => a.hasPosition).includes(true))
+          playHero(heroActFor(homeSurface, arg).map(a => a.targetId).join(""))
       else
         play(arg)
     if name == "playExtra"
