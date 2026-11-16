@@ -1,7 +1,8 @@
 // Connect a server (the foundation's page, in every document's `ui` look): an address checked as
 // it is typed, the server it found, then that kind's own sign-in. Plex links with a code at
-// plex.tv/link; Jellyfin and Emby take a password or Quick Connect. Your servers are listed to
-// switch. A signed-out Plex server's sign-in is this page too, opened on that server.
+// plex.tv/link; Jellyfin and Emby take a password or Quick Connect; an Ether server (in a standalone
+// app) is selected and signs in on the app's own sign-in page. Your servers are listed to switch.
+// A signed-out Plex server's sign-in is this page too, and so is a standalone app's first start.
 import { useState } from 'react';
 import Animated from 'react-native-reanimated';
 import { msg } from '@vela/core';
@@ -22,6 +23,7 @@ export interface ConnectProps {
   onClose?(): void;
 }
 
+// The store's server actions are methods: each is called on `actions`, never passed on detached.
 export function Connect({ servers, actions, serverId = '', onClose }: ConnectProps) {
   const look = useLook();
   const { busy, run } = usePending();
@@ -41,6 +43,8 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
     const outcome = await run(actions.add(found.kind, foundName(found), found.normalizedUrl));
     if (!outcome) return;
     if (outcome.error) fail('add', outcome.error);
+    // An Ether server signs in on its own page: selecting it hands over to the app's sign-in.
+    else if (found.kind === 'ether') await switchTo(outcome.id);
     else setAdded({ id: outcome.id, kind: found.kind, name: foundName(found) });
   };
   const switchTo = async (id: string) => {
@@ -80,7 +84,7 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
         <AddressStep
           servers={servers.list}
           busy={busy}
-          probe={actions.probe}
+          probe={url => actions.probe(url)}
           onAdd={add}
           onSelect={switchTo}
           onRemove={remove}
@@ -100,7 +104,7 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
               error={errors.plex}
               onStart={startPlex}
               onChoose={choosePlex}
-              onCancel={actions.plexCancel}
+              onCancel={() => actions.plexCancel()}
             />
           ) : (
             <JellyfinStep
@@ -109,7 +113,7 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
               error={errors.jellyfin}
               onSignIn={signIn}
               onQuick={() => run(actions.jellyfinQuickStart(target))}
-              onCancelQuick={actions.jellyfinQuickCancel}
+              onCancelQuick={() => actions.jellyfinQuickCancel()}
             />
           )}
         </>

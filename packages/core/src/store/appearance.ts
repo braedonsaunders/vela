@@ -23,6 +23,9 @@ export class Appearance {
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly rendererVersion: number,
+    /** The app's own page, which serves the release's built-in skins (/vela/skins/). Natively
+     * there is none, and the built-ins come from the selected Ether server. */
+    private readonly appOrigin?: string,
   ) {
     session.onReset(kind => {
       if (kind === 'server') void this.load();
@@ -30,7 +33,12 @@ export class Appearance {
   }
 
   private get origin(): string {
-    return this.session.selected().record.origin;
+    return this.session.hasServer() ? this.session.selected().record.origin : this.appOrigin ?? '';
+  }
+
+  /** Where the built-in skins live: the app's own page, else the selected server. */
+  private get builtInOrigin(): string {
+    return this.appOrigin ?? this.origin;
   }
 
   /** Read the selected server's appearance (or the local one). */
@@ -38,16 +46,16 @@ export class Appearance {
     const epoch = this.session.epoch;
     this.box.update('appearance', appearance => loading(appearance));
     try {
-      const adapter = this.session.selected().adapter;
+      const adapter = this.session.hasServer() ? this.session.selected().adapter : undefined;
       let appearance = LOCAL;
-      if (hasAppearance(adapter)) {
+      if (adapter && hasAppearance(adapter)) {
         try {
           appearance = await adapter.appearance();
         } catch (error) {
           if (!missing(error)) throw error;
         }
       }
-      const model = appearanceModel(appearance, this.origin, await builtInDocuments(this.origin, this.rendererVersion));
+      const model = appearanceModel(appearance, this.origin, await builtInDocuments(this.builtInOrigin, this.rendererVersion), this.builtInOrigin);
       if (epoch === this.session.epoch) this.box.update('appearance', () => ready(model));
     } catch (error) {
       if (epoch === this.session.epoch) this.box.update('appearance', appearance => failed(error, appearance));
@@ -85,9 +93,9 @@ export class Appearance {
    * server's own under its appearance tree. Anything else is refused.
    */
   async document(url: string): Promise<unknown> {
-    const path = new URL(url, `${this.origin}/`).pathname;
+    const path = new URL(url, `${this.builtInOrigin}/`).pathname;
     if (path.startsWith('/vela/skins/') && path.endsWith('/document.json')) {
-      const response = await fetch(`${this.origin}${path}`);
+      const response = await fetch(`${this.builtInOrigin}${path}`);
       if (!response.ok) throw new Error(`Built-in skin document ${path}: ${response.status}`);
       return response.json();
     }

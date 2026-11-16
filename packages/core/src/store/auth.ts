@@ -79,6 +79,7 @@ export class Auth {
   /** Settle the selected server's session: redeem a sign-in link, validate what is stored. */
   async start(): Promise<void> {
     this.patch({ phase: 'starting', error: '' });
+    if (!this.session.hasServer()) return this.noServer();
     const connection = this.session.selected();
     const code = this.platform.page?.webCode;
     try {
@@ -114,8 +115,18 @@ export class Auth {
     if (this.session.selected() === ether) this.session.resetSession();
   }
 
+  /** A standalone app with no server yet: signed out, and the app offers Connect. */
+  private noServer(): void {
+    this.patch({
+      phase: 'signed-out', serverId: '', serverKind: '', serverName: '', viewer: '',
+      passwordAvailable: false, quickAvailable: false, secureOrigin: '', error: '',
+      revision: this.session.epoch, quick: null,
+    });
+  }
+
   /** Re-read the selected server's sign-in options and session into state. */
   async refresh(error = '', phase?: AuthPhase): Promise<void> {
+    if (!this.session.hasServer()) return this.noServer();
     const connection = this.session.selected();
     const tokens = await this.session.tokens(connection);
     let options = { passwordAvailable: false, quickAvailable: false, secureOrigin: '' };
@@ -145,7 +156,9 @@ export class Auth {
     const capabilities = await capabilitiesOf(connection.adapter);
     if (capabilities.server.name) this.session.names.set(connection.record.id, capabilities.server.name);
     // A secure switch hands the session over with a web code, so only a server with web codes offers one.
-    const secure = hasWebCodeSignIn(connection.adapter) ? secureOriginFor(this.platform, capabilities.secureOrigins) : '';
+    // A standalone app has no page to move, so it is never offered (its server record keeps its address).
+    const secure = hasWebCodeSignIn(connection.adapter) && !this.session.servers.standalone
+      ? secureOriginFor(this.platform, capabilities.secureOrigins) : '';
     return {
       passwordAvailable: capabilities.features.passwordSignIn.available,
       quickAvailable: capabilities.features.quickConnect.available,

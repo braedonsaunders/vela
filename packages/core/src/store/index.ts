@@ -117,7 +117,7 @@ export function createVela(options: VelaOptions): Vela {
       void home.reconcile(watched);
     },
   );
-  const appearance = new Appearance(box, session, options.rendererVersion);
+  const appearance = new Appearance(box, session, options.rendererVersion, options.page?.origin);
   return {
     getState: box.get,
     subscribe: box.subscribe,

@@ -83,15 +83,16 @@ export function builtInDocuments(origin: string, rendererVersion: number): Promi
   return builtIn;
 }
 
-export function appearanceModel(a: Appearance, origin: string, builtInDocs: SkinDocumentRef[] = []): AppearanceModel {
+/** `origin` is the server's (its own documents and packs); `builtInOrigin` serves the release's built-ins. */
+export function appearanceModel(a: Appearance, origin: string, builtInDocs: SkinDocumentRef[] = [], builtInOrigin = origin): AppearanceModel {
   if (!a || typeof a.revision !== 'number' || typeof a.defaultSkinId !== 'string') throw new Error('Invalid appearance');
   const packs = (Array.isArray(a.packs) ? a.packs.slice(0, 32) : []).flatMap(p => pack(p, origin) ?? []);
   // The server's documents, then the release's built-ins it does not replace.
   const server = Array.isArray(a.documents) ? a.documents.slice(0, 32) : [];
   const docs = [...server, ...builtInDocs.filter(b => !server.some(d => d?.id === b.id))].flatMap(d => {
-    const url = asset(d?.url, origin, /\.json$/) || builtInAsset(d?.url, origin, /\/document\.json$/);
+    const url = asset(d?.url, origin, /\.json$/) || builtInAsset(d?.url, builtInOrigin, /\/document\.json$/);
     return d && typeof d.id === 'string' && NAME.test(d.id) && !ENGINES.includes(d.id) && url ? [{ id: d.id, name: text(d.name, 40), tagline: text(d.tagline, 120), url,
-      preview: asset(d.preview, origin, /\.(svg|png|jpe?g|webp|avif)$/) || builtInAsset(d.preview, origin, /\.(svg|png|jpe?g|webp|avif)$/), swatches: (Array.isArray(d.swatches) ? d.swatches : []).slice(0, 5).flatMap(c => colour(c) ?? []) }] : [];
+      preview: asset(d.preview, origin, /\.(svg|png|jpe?g|webp|avif)$/) || builtInAsset(d.preview, builtInOrigin, /\.(svg|png|jpe?g|webp|avif)$/), swatches: (Array.isArray(d.swatches) ? d.swatches : []).slice(0, 5).flatMap(c => colour(c) ?? []) }] : [];
   });
   return { revision: a.revision, defaultSkinId: text(a.defaultSkinId, 64), defaultEngineId: text(a.defaultEngineId, 64), force: a.force === true, packs, docs };
 }

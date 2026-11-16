@@ -35,9 +35,11 @@ function candidates(input: string): string[] {
 
 /**
  * Identify a server by its public endpoints: Jellyfin and Emby `System/Info/Public`, Plex `/identity`,
- * Vela `/vela/v0/capabilities`. Every read is bounded; nothing here carries a credential.
+ * Vela `/vela/v0/capabilities`. Every read is bounded; nothing here carries a credential. Ether also
+ * answers in other servers' protocols, so its own endpoint decides first. It is offered (`found`)
+ * only where Ether servers can be added (a standalone app); elsewhere it is `unsupported`.
  */
-export async function probeServer(input: string, clientIdentifier: string, pageSecure: boolean): Promise<Probe> {
+export async function probeServer(input: string, clientIdentifier: string, pageSecure: boolean, ether = false): Promise<Probe> {
   const tried = candidates(input);
   let parsed = false, blocked = '';
   for (const candidate of tried) {
@@ -52,6 +54,8 @@ export async function probeServer(input: string, clientIdentifier: string, pageS
       address.basePath === '/' ? read(`${address.origin}/identity`, plexHeaders(clientIdentifier)) : Promise.resolve(undefined),
       address.basePath === '/' ? read(`${address.origin}/vela/v0/capabilities`, { Accept: 'application/json' }) : Promise.resolve(undefined),
     ]);
+    const server = (vela?.server ?? undefined) as Record<string, unknown> | undefined;
+    if (server && vela?.protocolVersion === 0) return { state: ether ? 'found' : 'unsupported', kind: 'ether', name: text(server.name), version: text(server.version, 40), url: address.origin };
     if (jellyfin && text(jellyfin.Id) && text(jellyfin.Version)) {
       // Jellyfin names itself; Emby's public info carries no Jellyfin product name.
       const kind: ServerKind = /jellyfin/i.test(text(jellyfin.ProductName)) ? 'jellyfin' : 'emby';
@@ -59,8 +63,6 @@ export async function probeServer(input: string, clientIdentifier: string, pageS
     }
     const identity = plex?.MediaContainer as Record<string, unknown> | undefined;
     if (identity && text(identity.machineIdentifier)) return { state: 'found', kind: 'plex', name: '', version: text(identity.version, 40), url: address.origin };
-    const server = (vela?.server ?? undefined) as Record<string, unknown> | undefined;
-    if (server && vela?.protocolVersion === 0) return { state: 'unsupported', kind: 'ether', name: text(server.name), version: text(server.version, 40), url: address.origin };
     // Any readable answer (even an error page) means the address is reachable but not a media server.
     if (await fetch(base, { method: 'HEAD', redirect: 'manual', credentials: 'omit', signal: timeoutSignal(PROBE_MS) }).then(() => true, () => false)) return { state: 'unsupported', kind: '', name: '', version: '', url: base };
   }

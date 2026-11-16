@@ -16,6 +16,14 @@ import type { MediaCapabilities, VelaPlatform } from './platform';
 /** `session`: the viewer signed in or out. `server`: another server was selected. */
 export type ResetKind = 'session' | 'server';
 
+/** A standalone app before its first server is added: nothing to read from or sign in to. */
+export class NoServerError extends Error {
+  constructor() {
+    super('No server has been added');
+    this.name = 'NoServerError';
+  }
+}
+
 export class Session {
   /** Moves on whenever the session or the selected server changes; answers from an older epoch are dropped. */
   epoch = 0;
@@ -28,7 +36,8 @@ export class Session {
   private readonly registry: ServerRegistry;
   private readonly connections = new Map<string, Connection>();
   private readonly resetListeners = new Set<(kind: ResetKind) => void>();
-  private activeId = '';
+  /** The server last read as selected: undefined before the first read, '' while there is none. */
+  private activeId: string | undefined;
   private deviceValue: V.Device | undefined;
   private clientValue: V.ClientCapabilities | undefined;
   /** Settles once the player has said what it plays; negotiation and playback wait for it. */
@@ -39,7 +48,14 @@ export class Session {
 
   constructor(platform: VelaPlatform) {
     this.platform = platform;
-    this.registry = new ServerRegistry(platform.secrets, validOrigin(platform.etherOrigin));
+    this.registry = new ServerRegistry(platform.secrets, platform.etherOrigin ? validOrigin(platform.etherOrigin) : undefined);
+    // A standalone app that starts with no server is already "on none", so the first server added
+    // is a change of server that every slice hears.
+    try {
+      if (!this.hasServer()) this.activeId = '';
+    } catch {
+      // An unreadable registry fails where it is first used, as before.
+    }
     this.media = Promise.resolve(platform.media).then(media => this.setMedia(media));
   }
 
@@ -110,7 +126,10 @@ export class Session {
     };
     let made: Connection;
     if (record.kind === 'ether') {
-      const credentials = new SessionCredentials(this.platform.secrets, this.device, () => this.key());
+      // The implicit server keeps the original session key; an added Ether server has its own.
+      const credentials = id === 'ether'
+        ? new SessionCredentials(this.platform.secrets, this.device, () => this.key())
+        : new ServerCredentials(this.platform.secrets, this.device, () => this.key(), id);
       const context = this.clientValue ? JSON.stringify(this.clientValue) : '';
       const adapter = new EtherAdapter(record.origin, credentials, context, rejected);
       made = etherConnection(record, adapter, credentials);
@@ -122,14 +141,24 @@ export class Session {
     return made;
   }
 
+  /** Whether any server is known; a standalone app starts with none. */
+  hasServer(): boolean {
+    return this.registry.read().servers.length > 0;
+  }
+
   /** The selected server. A selection changed since the last read resets that server's state. */
   selected(): Connection {
     const selectedId = this.registry.read().selectedId;
+    if (!selectedId) {
+      this.activeId = '';
+      throw new NoServerError();
+    }
     if (selectedId !== this.activeId) {
-      // Recorded before the reset, so listeners that read the selected server see the new one.
+      // Recorded before the reset, so listeners that read the selected server see the new one. The
+      // first server added to a standalone app is a change too (from none).
       const previous = this.activeId;
       this.activeId = selectedId;
-      if (previous) this.resetServer();
+      if (previous !== undefined) this.resetServer();
     }
     return this.connection(selectedId);
   }
@@ -179,7 +208,7 @@ export class Session {
   private async signInIfDemo(connection: Connection): Promise<void> {
     if (await this.tokens(connection)) return;
     const adapter = connection.adapter;
-    const demo = this.platform.mock && connection.record.kind === 'ether'
+    const demo = this.platform.mock && connection.record.id === 'ether'
       && this.platform.secrets.get('vela.session') !== '';
     if (!demo || !hasPasswordSignIn(adapter)) throw new Error(this.signInMessage(connection));
     const tokens = await adapter.signInWithPassword({
@@ -193,7 +222,7 @@ export class Session {
 
   /** Whether the demo sign-in applies (development builds against mock-server). */
   demoSignIn(connection: Connection): boolean {
-    return !!this.platform.mock && connection.record.kind === 'ether'
+    return !!this.platform.mock && connection.record.id === 'ether'
       && this.platform.secrets.get('vela.session') === null;
   }
 

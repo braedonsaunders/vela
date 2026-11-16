@@ -15,24 +15,35 @@ export function serverAddress(value: string, kind: ServerKind): { origin: string
   return { origin: url.origin, basePath };
 }
 
-/** The Ether server is implicit, so old installs continue using the existing session. */
+/**
+ * Where Ether hosts the app, its server is implicit (ID `ether`), so old installs continue using the
+ * existing session. A standalone app has no implicit server: every server, Ether included, is added.
+ */
 export class ServerRegistry {
-  constructor(private readonly store: SecretStore, private readonly etherOrigin: string) {}
+  constructor(private readonly store: SecretStore, private readonly etherOrigin?: string) {}
+  /** Ether servers can be added by address only where none is implicit. */
+  get standalone(): boolean {
+    return !this.etherOrigin;
+  }
+  private addable(kind: string): boolean {
+    return ['jellyfin', 'emby', 'plex'].includes(kind) || (kind === 'ether' && this.standalone);
+  }
   read(): Registry {
-    const ether: ServerRecord = { id: 'ether', name: 'Vela', kind: 'ether', origin: this.etherOrigin, basePath: '/' };
+    const implicit: ServerRecord[] = this.etherOrigin
+      ? [{ id: 'ether', name: 'Vela', kind: 'ether', origin: this.etherOrigin, basePath: '/' }] : [];
     const raw = this.store.get(registryKey);
-    if (!raw) return { selectedId: ether.id, servers: [ether] };
+    if (!raw) return { selectedId: implicit[0]?.id ?? '', servers: implicit };
     const parsed = JSON.parse(raw) as Registry;
     if (!parsed || !Array.isArray(parsed.servers) || typeof parsed.selectedId !== 'string') throw new Error('Invalid server registry');
-    const servers = [ether];
+    const servers = [...implicit];
     for (const item of parsed.servers) {
       if (!item || item.id === 'ether') continue;
-      if (!/^[a-f0-9-]{36}$/.test(item.id) || !['jellyfin', 'emby', 'plex'].includes(item.kind) || typeof item.name !== 'string' || !item.name.trim() || item.name.length > 100) throw new Error('Invalid server record');
+      if (!/^[a-f0-9-]{36}$/.test(item.id) || !this.addable(item.kind) || typeof item.name !== 'string' || !item.name.trim() || item.name.length > 100) throw new Error('Invalid server record');
       const address = serverAddress(item.origin + (item.basePath === '/' ? '' : item.basePath), item.kind);
       if (address.origin !== item.origin || address.basePath !== item.basePath || servers.some(s => s.id === item.id)) throw new Error('Invalid server record');
       servers.push({ id: item.id, name: item.name, kind: item.kind, ...address });
     }
-    return { selectedId: servers.some(s => s.id === parsed.selectedId) ? parsed.selectedId : 'ether', servers };
+    return { selectedId: servers.some(s => s.id === parsed.selectedId) ? parsed.selectedId : servers[0]?.id ?? '', servers };
   }
   private write(value: Registry): void { this.store.set(registryKey, JSON.stringify(value)); }
   get(id: string): ServerRecord {
@@ -41,8 +52,8 @@ export class ServerRegistry {
     return record;
   }
   /** The record for this address, added once; a server reached again keeps its ID and session. */
-  add(kind: Exclude<ServerKind, 'ether'>, name: string, url: string): ServerRecord {
-    if (!['jellyfin', 'emby', 'plex'].includes(kind) || !name.trim() || name.length > 100) throw new Error('Invalid server');
+  add(kind: ServerKind, name: string, url: string): ServerRecord {
+    if (!this.addable(kind) || !name.trim() || name.length > 100) throw new Error('Invalid server');
     const current = this.read(), address = serverAddress(url, kind);
     const known = current.servers.find(s => s.kind === kind && s.origin === address.origin && s.basePath === address.basePath);
     if (known) return known;
@@ -58,7 +69,7 @@ export class ServerRegistry {
   /** A record's proven address and name replace the ones it was added with; its ID and session stay. */
   relocate(id: string, name: string, url: string): ServerRecord {
     const current = this.read(), known = current.servers.find(s => s.id === id);
-    if (!known || known.kind === 'ether' || !name.trim() || name.length > 100) throw new Error('Server not found');
+    if (!known || known.id === 'ether' || !name.trim() || name.length > 100) throw new Error('Server not found');
     const address = serverAddress(url, known.kind);
     if (current.servers.some(s => s.id !== id && s.kind === known.kind && s.origin === address.origin && s.basePath === address.basePath)) throw new Error('Server already added');
     const record = { ...known, name: name.trim(), ...address };
@@ -69,7 +80,8 @@ export class ServerRegistry {
     if (id === 'ether') throw new Error('Cannot remove the default server');
     const current = this.read();
     if (!current.servers.some(s => s.id === id)) throw new Error('Server not found');
-    this.write({ selectedId: current.selectedId === id ? 'ether' : current.selectedId, servers: current.servers.filter(s => s.id !== id) });
+    const servers = current.servers.filter(s => s.id !== id);
+    this.write({ selectedId: current.selectedId === id ? servers[0]?.id ?? '' : current.selectedId, servers });
   }
 }
 

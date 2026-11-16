@@ -75,7 +75,7 @@ const PLEX_LINK_URL = 'https://plex.tv/link';
 const PLEX_POLL_MS = 2000;
 
 export function kindLabel(kind: ServerKind | ''): string {
-  if (kind === 'ether') return 'Vela';
+  if (kind === 'ether') return 'Ether';
   if (kind === 'jellyfin') return 'Jellyfin';
   if (kind === 'emby') return 'Emby';
   if (kind === 'plex') return 'Plex';
@@ -103,6 +103,10 @@ export class Servers {
 
   /** Re-read every server's status. Other servers' sessions are checked with a bounded wait. */
   async refresh(): Promise<void> {
+    if (!this.session.hasServer()) {
+      this.patch({ list: [], selectedId: '' });
+      return;
+    }
     const selected = this.session.selected();
     const registry = this.session.servers.read();
     const rows = await Promise.all(registry.servers.map(record => this.row(record, selected, registry.selectedId)));
@@ -144,7 +148,7 @@ export class Servers {
   /** Identify what answers at a typed address, before any credential is sent. */
   async probe(url: string): Promise<ProbeResult> {
     const secure = pageSecure(this.platform);
-    const probe = await probeServer(url, this.session.device.id, secure);
+    const probe = await probeServer(url, this.session.device.id, secure, this.session.servers.standalone);
     let note = '';
     if (probe.state !== 'found') {
       if (probe.kind === 'ether') note = msg('server.probe.vela');
@@ -175,7 +179,8 @@ export class Servers {
 
   async add(kind: ServerKind, name: string, url: string): Promise<ServerResult> {
     try {
-      if (kind !== 'jellyfin' && kind !== 'emby' && kind !== 'plex') throw new Error(msg('server.probe.unsupported'));
+      const ether = kind === 'ether' && this.session.servers.standalone;
+      if (kind !== 'jellyfin' && kind !== 'emby' && kind !== 'plex' && !ether) throw new Error(msg('server.probe.unsupported'));
       if (pageSecure(this.platform) && /^http:/i.test(url.trim())) {
         throw new Error(msg('server.probe.insecure', { url: url.trim() }));
       }

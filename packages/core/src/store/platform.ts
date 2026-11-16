@@ -10,8 +10,10 @@ export type MediaCapabilities = Pick<
 >;
 
 export interface VelaPlatform {
-  /** The Ether server the app belongs to: the serving page's origin on the web, the configured one natively. */
-  etherOrigin: string;
+  /** The Ether server the app belongs to: the serving page's origin when Ether hosts the web app,
+   * the configured one natively. Absent in a standalone app (the desktop apps), where every server,
+   * Ether included, is one the viewer adds. */
+  etherOrigin?: string;
   /** Sessions, server tokens and the device ID: Keychain or Keystore natively, page storage on the web. */
   secrets: SecretStore;
   /** This device as servers list it ("Apple TV", "tvos"). */

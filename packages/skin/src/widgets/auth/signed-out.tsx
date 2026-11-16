@@ -68,7 +68,9 @@ function quickError(auth: SessionAuth): string {
 
 export function SignedOut(props: SignedOutProps) {
   const { auth, servers, serverActions, host } = props;
-  if (auth.phase === 'signed-out' && auth.serverKind === 'plex') {
+  // A signed-out Plex server signs in by linking, and a standalone app with no server starts by
+  // adding one: both are Connect.
+  if (auth.phase === 'signed-out' && (auth.serverKind === 'plex' || auth.serverKind === '')) {
     return (
       <HostContext.Provider value={host}>
         <Stage>

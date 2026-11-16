@@ -448,7 +448,7 @@
   "server.codeExpired": "The code expired.",
   "server.probe.invalid": "Enter a server address, like 192.168.1.20:8096.",
   "server.probe.unreachable": "Nothing answered at that address.",
-  "server.probe.unsupported": "That address isn't a Jellyfin, Emby or Plex server.",
+  "server.probe.unsupported": "That address isn't a media server Vela can connect to.",
   "server.probe.vela": "That's a Vela server. Open Vela from its own address.",
   "server.plex.again": "Link with Plex again to choose a server.",
   "server.plex.relay": "Relay",
