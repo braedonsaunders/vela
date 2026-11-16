@@ -1,5 +1,6 @@
 // The platform symbols documents name (`symbol: 'play-fill'`), as 24x24 path data drawn in the
-// text colour. Vela's own geometry; a document may instead give its own `paths`.
+// text colour. Vela's own geometry; a document may instead give its own `paths`. The roles from
+// `filter` down are the compiled skins' shapes (Exact's symbol table at exact-client-final).
 export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
   'play-fill': { paths: ['M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z'] },
   play: { paths: ['M7.5 5.2v13.6L19 12z'], stroke: true },
@@ -21,4 +22,23 @@ export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
   speaker: { paths: ['M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11'], stroke: true },
   'speaker-mute': { paths: ['M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5'], stroke: true },
   layers: { paths: ['M12 3.5l9 4.5-9 4.5L3 8zM3 12.5l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5'], stroke: true },
+  filter: { paths: ['M4 7h16M7 12h10M10 17h4'], stroke: true },
+  sparkles: {
+    paths: ['M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z'],
+    stroke: true,
+  },
+  home: { paths: ['M3 10l9-7 9 7M5 9v12h5v-7h4v7h5V9'], stroke: true },
+  menu: { paths: ['M4 6h16M4 12h16M4 18h16'], stroke: true },
+  person: {
+    paths: ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zM15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM6 19v-1a6 4 0 0 1 12 0v1'],
+    stroke: true,
+  },
+  radio: {
+    paths: [
+      'M4 9h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM6 9l12-5',
+      'M10.5 14.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0zM14 13h4M14 16h4',
+    ],
+    stroke: true,
+  },
+  list: { paths: ['M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01'], stroke: true },
 };

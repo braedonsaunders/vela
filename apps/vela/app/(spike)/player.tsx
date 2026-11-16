@@ -2,12 +2,15 @@
 // Signs in from configuration (apps/vela/.env.local, never committed):
 //   EXPO_PUBLIC_VELA_ORIGIN, EXPO_PUBLIC_VELA_USER, EXPO_PUBLIC_VELA_PASSWORD, EXPO_PUBLIC_VELA_TITLE (a search query),
 //   EXPO_PUBLIC_VELA_MUTED=1 to start muted (a drive at night),
-//   EXPO_PUBLIC_VELA_ORIGINALS=0 to declare no original playback (the server's HLS, server-applied seeks and tracks)
+//   EXPO_PUBLIC_VELA_ORIGINALS=0 to declare no original playback (the server's HLS, server-applied seeks and tracks),
+//   EXPO_PUBLIC_VELA_PREVIEW=1 to play the title's trailer preview instead (VelaPlayerView's preview mode)
 // then asks Ether for a plan with this device's capabilities and plays it. Remote: the buttons below.
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { VelaPlayer, VelaPlayerView } from '@vela/player';
-import type { Command, PlaybackPlan, PlayerObservation, SessionCommand, Snapshot } from '@vela/player-api';
+import type {
+  Command, PlaybackPlan, PlayerObservation, PreviewSource, SessionCommand, Snapshot,
+} from '@vela/player-api';
 
 const origin = process.env.EXPO_PUBLIC_VELA_ORIGIN ?? '';
 const api = `${origin}/vela/v0`;
@@ -38,7 +41,8 @@ async function call<T>(method: string, path: string, body?: object): Promise<T> 
 const key = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 /** Signs in, negotiates and asks for the first movie the configured query finds. */
-async function labPlan(): Promise<PlaybackPlan> {
+/** Signs in, negotiates and finds the first movie the configured query names. */
+async function labTitle(): Promise<{ id: string; client: object }> {
   const tokens = await call<{ accessToken: string }>('POST', '/auth/sign-in', {
     idempotencyKey: key(),
     username: process.env.EXPO_PUBLIC_VELA_USER,
@@ -59,8 +63,40 @@ async function labPlan(): Promise<PlaybackPlan> {
   if (!title) {
     throw new Error(`Nothing found for ${query}`);
   }
-  return call<PlaybackPlan>('POST', '/playback', { idempotencyKey: key(), titleId: title.id, client: declared });
+  return { id: title.id, client: declared };
 }
+
+async function labPlan(): Promise<PlaybackPlan> {
+  const title = await labTitle();
+  return call<PlaybackPlan>('POST', '/playback', { idempotencyKey: key(), titleId: title.id, client: title.client });
+}
+
+type PreviewAnswer = { state: 'ready'; grant: { url: string; mimeType: string; expiresAt: string } }
+  | { state: 'preparing'; retryAfterSeconds: number } | { state: 'unavailable'; reason: string };
+
+/** The title's trailer preview grant, asked again while the server prepares it (up to a minute). */
+async function labPreview(): Promise<PreviewSource> {
+  const title = await labTitle();
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const answer = await call<PreviewAnswer>('POST', `/titles/${title.id}/trailer-preview`, {
+      idempotencyKey: key(), client: title.client,
+    });
+    if (answer.state === 'ready') {
+      return { url: answer.grant.url, mimeType: answer.grant.mimeType, expiresAt: answer.grant.expiresAt, loop: true };
+    }
+    if (answer.state === 'unavailable') {
+      throw new Error(`No preview: ${answer.reason}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.max(1, answer.retryAfterSeconds) * 1000));
+  }
+  throw new Error('The preview was still preparing after a minute');
+}
+
+// The root layout may remount this route while the app signs in: one lab request per app run, and a stop
+// only when the route has really gone (not remounted within a few seconds).
+let sharedPlan: Promise<PlaybackPlan> | undefined;
+let sharedPreview: Promise<PreviewSource> | undefined;
+let pendingStop: ReturnType<typeof setTimeout> | undefined;
 
 /** Ends the session on the server, so its media grant is released. */
 function stopSession(plan: PlaybackPlan) {
@@ -99,27 +135,38 @@ export default function PlayerSpike() {
   const [command, setCommand] = useState<Command>();
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [problem, setProblem] = useState('');
+  const [preview, setPreview] = useState<PreviewSource>();
   const commandId = useRef(0);
+  const latestPlan = useRef<PlaybackPlan | undefined>(undefined);
+  latestPlan.current = plan;
 
   useEffect(() => {
+    clearTimeout(pendingStop);
     // Ether's broker paths need no headers; the origin resolves the plan's relative URLs.
-    VelaPlayer.setMediaAccess({ origin, pathPrefix: '/sessions/media/', headers: async () => ({}) });
-    labPlan().then(setPlan, (error) => setProblem(String(error)));
-    return () => VelaPlayer.setMediaAccess(null);
+    VelaPlayer.setMediaAccess({ origin, pathPrefix: '/', headers: async () => ({}) });
+    if (process.env.EXPO_PUBLIC_VELA_PREVIEW === '1') {
+      sharedPreview ??= labPreview();
+      sharedPreview.then(setPreview, (error) => setProblem(String(error)));
+    } else {
+      sharedPlan ??= labPlan();
+      sharedPlan.then(setPlan, (error) => setProblem(String(error)));
+    }
+    return () => {
+      pendingStop = setTimeout(() => {
+        if (latestPlan.current) {
+          stopSession(latestPlan.current);
+        }
+        sharedPlan = undefined;
+        sharedPreview = undefined;
+        VelaPlayer.setMediaAccess(null);
+      }, 3000);
+    };
   }, []);
 
   const send = (next: CommandBody) => {
     commandId.current += 1;
     setCommand({ ...next, id: commandId.current } as Command);
   };
-
-  useEffect(() => {
-    return () => {
-      if (plan) {
-        stopSession(plan);
-      }
-    };
-  }, [plan]);
 
   useEffect(() => {
     if (plan && process.env.EXPO_PUBLIC_VELA_MUTED === '1') {
@@ -147,6 +194,9 @@ export default function PlayerSpike() {
   const muted = snapshot?.muted ?? false;
   return (
     <View style={styles.stage}>
+      {preview ? (
+        <VelaPlayerView preview={preview} active onSnapshot={setSnapshot} style={StyleSheet.absoluteFill} />
+      ) : null}
       {plan ? (
         <VelaPlayerView
           plan={plan}
