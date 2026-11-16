@@ -1,7 +1,7 @@
 // A minimal v0 client for the spike: sign-in, negotiation, bootstrap, libraries, title detail
-// and fast search, with the protocol's device header and idempotency keys. At conversion the
-// app uses packages/core's adapters instead (docs/rn-migration.md), which also cover Jellyfin,
-// Plex, refresh, events and playback.
+// and search (fast and descriptive), with the protocol's device header and idempotency keys. At
+// conversion the app uses packages/core's adapters instead (docs/rn-migration.md), which also
+// cover Jellyfin, Plex, refresh, events and playback.
 import { Platform } from 'react-native';
 import type * as V from '../../../protocol/v0/types';
 
@@ -56,7 +56,7 @@ export class EtherClient {
     return this.request('GET', `/titles/${encodeURIComponent(id)}`);
   }
 
-  search(query: string, generation: number): Promise<V.SearchResponse> {
-    return this.request('POST', '/search', { query, generation, mode: 'fast', limit: 30, idempotencyKey: key() } satisfies V.SearchRequest);
+  search(query: string, generation: number, mode: V.SearchRequest['mode'] = 'fast'): Promise<V.SearchResponse> {
+    return this.request('POST', '/search', { query, generation, mode, limit: 30, idempotencyKey: key() } satisfies V.SearchRequest);
   }
 }

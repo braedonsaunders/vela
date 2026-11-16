@@ -268,6 +268,38 @@ first frame, steady playback with A/V sync, seek, audio and subtitle switching, 
 resume, a clean stop, and correct snapshots. Record what HDR/Dolby Vision output it
 actually achieves (tone-mapped SDR is acceptable for the spike; say which).
 
+#### Spike (b) result (2026-11-16, Basement, Apple TV 4K 3rd gen, tvOS 27)
+
+Passed on the device with 1917 from the lab Ether: a 74 GB MKV, HEVC Main10 3840x2160 HDR10 with
+Dolby Vision profile 7, TrueHD Atmos 7.1, E-AC-3, AC-3 and 26 PGS tracks. Ether offered the original
+(`primary`, `direct`, `file`, `original: true`) to the libmpv capabilities, so nothing was converted.
+The view played it from the plan (resuming at the server's position), with steady 4K playback (0 to 2 dropped
+frames over minutes), pause and resume, seek (+10 min and back), client-side audio switching (TrueHD to AC-3 5.1)
+and PGS subtitle switching (rendered by mpv into the picture), snapshots and observations, and a stop.
+`modules/vela-player/ios`, `apps/vela/app/(spike)/player.tsx`, `tools/apple-tv.sh`.
+
+- **Linking.** `spm_dependency` on MPVKit's `MPVKit` product resolved, but through CocoaPods only `Libmpv`
+  reached the app's link (FFmpeg, libass and the rest were undefined). The podspec vendors the release
+  xcframeworks instead: the 28 binary targets of the LGPL product, pinned by the SHA-256 in MPVKit's
+  `Package.swift` (`ios/mpvkit-1.0.0.txt`), fetched by `ios/fetch-mpvkit.sh` into the scratch drive.
+  They are static libraries: the LGPL's relinking obligation applies to a distributed build (object files).
+  AVKit is linked explicitly (`UIWindow.avDisplayManager`).
+- **Rendering.** `vo=gpu-next`, Vulkan on MoltenVK into a `CAMetalLayer`, `hwdec=videotoolbox`.
+  Dolby Vision profile 7 plays its HDR10 base layer (FFmpeg warns about the enhancement layer's NAL units).
+- **HDR.** With `target-colorspace-hint=yes`, mpv's output target is PQ/BT.2020 (HDR10 passed through, not
+  tone-mapped). The TV is HDR10-eligible (`AVPlayer.availableHDRModes`: hdr10; no Dolby Vision display).
+  Basement has Match Content off, so `AVDisplayManager` reports matching disabled and neither range nor frame
+  rate is switched; the view sets `preferredDisplayCriteria` before the first frame (mpv paused until the switch
+  ends) when it is on. Not verified on a display with matching on.
+- **Audio.** TrueHD and DTS are decoded by FFmpeg inside mpv to PCM; AC-3/E-AC-3 too (no bitstream passthrough).
+  Output channels follow the session (`audio-channels=auto-safe` when the output takes more than two).
+- **Ending a session.** mpv raises `eof-reached` for a moment while it switches tracks on a network stream.
+  Ether ends a session on an `ended` observation and its media URL then answers 404, so the view reports
+  `ended` only at the file's end. The contract has no session commands: seeks are local (observations carry
+  the position) and the host stops the server session itself.
+- **Redirects** (open question above): not exercised; Ether's broker URLs need no headers.
+- **Client build.** The lab Ether admits client builds below 0.2.0; the app is 0.2.0, so the spike reported 0.1.43.
+
 ### Android implementation (conversion)
 
 Kotlin, the same contract, libmpv from mpv-android's build on a `SurfaceView`,

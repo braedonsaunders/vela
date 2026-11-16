@@ -2,7 +2,7 @@
 // is the app's own string in the viewer's locale, so the Vela base needs no strings of its own
 // and stays translated. A string's placeholders may be bound to the vocabulary:
 // `{t:secure.body|origin=signin.secureOrigin}` fills {origin} with the binding at render time.
-import { msg } from '../../foundation/i18n';
+import { msg } from '@vela/core';
 
 const CLIENT_STRING = /\{t:([a-zA-Z0-9._-]+)(?:\|([a-zA-Z0-9_]+=[a-zA-Z.]+(?:,[a-zA-Z0-9_]+=[a-zA-Z.]+)*))?\}/g;
 

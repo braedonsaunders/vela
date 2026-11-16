@@ -4,10 +4,20 @@
 import type { ComponentType } from 'react';
 import type { WidgetProps } from '../host';
 import { GuideWidget, LiveTileWidget } from './guide';
+import { PlayerChrome } from './player/chrome';
 import { SearchInput } from './search-input';
+import { ServerSwitcher } from './auth/server-switcher';
+import { TextInput } from './auth/text-input';
+import { Select } from './common/select';
+import { Sentinel } from './common/sentinel';
 
 export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   searchInput: SearchInput,
+  textInput: TextInput,
+  serverSwitcher: ServerSwitcher,
+  select: Select,
+  sentinel: Sentinel,
+  playerChrome: PlayerChrome,
   guide: GuideWidget,
   liveTile: LiveTileWidget,
 };
