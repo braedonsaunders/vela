@@ -28,9 +28,12 @@ interface Scope {
 const scopes = new Set<Scope>();
 const targets = new Map<string, Focusable>();
 const openers = new Map<string, Focusable>();
-/** Press buttons that are drawn now, and the one pressed last (the opener of the route on top). */
-const mounted = new Set<Focusable>();
-let lastPressed: Focusable | null = null;
+/** Press buttons that are drawn now, by what they do (`action:arg`), and the one pressed last (the
+ * opener of the route on top). A row that refreshes while a route is over it (Continue Watching
+ * after playback) draws its cards anew; the opener is then found again by what it does. */
+const mounted = new Map<Focusable, string>();
+interface Pressed { target: Focusable; does: string }
+let lastPressed: Pressed | null = null;
 const Level = createContext(0);
 let registered = 0;
 let unlisten: (() => void) | undefined;
@@ -61,35 +64,42 @@ export function focusTarget(id: string | undefined) {
 }
 
 /** A ref callback's registration of a drawn press button; the returned cleanup forgets it. */
-export function trackButton(target: Focusable | null) {
+export function trackButton(target: Focusable | null, does: string) {
   if (!target) return undefined;
-  mounted.add(target);
+  mounted.set(target, does);
   return () => {
     mounted.delete(target);
-    if (lastPressed === target) lastPressed = null;
   };
 }
 
 /** Remember the button pressed last: a route it opens returns focus to it when it closes. */
-export function notePress(button: Focusable | null): void {
-  lastPressed = button;
+export function notePress(button: Focusable | null, does: string): void {
+  lastPressed = button ? { target: button, does } : null;
+}
+
+/** The pressed button if it is still drawn, else a drawn button that does the same. */
+function drawn(pressed: Pressed): Focusable | undefined {
+  if (mounted.has(pressed.target)) return pressed.target;
+  for (const [target, does] of mounted) if (does === pressed.does) return target;
+  return undefined;
 }
 
 /** On TV, a route that comes back to the top (Back from a title over home) puts focus back on the
  * button that left it, which is still drawn underneath; without this nothing on it shows focus. */
 export function useReturnFocus(focused: boolean): void {
-  const opener = useRef<Focusable | null>(null);
+  const opener = useRef<Pressed | null>(null);
   useEffect(() => {
     if (!Platform.isTV) return;
     if (!focused) {
       opener.current = lastPressed;
       return;
     }
-    const target = opener.current;
+    const pressed = opener.current;
     opener.current = null;
-    if (!target) return;
+    if (!pressed) return;
     const frame = requestAnimationFrame(() => {
-      if (mounted.has(target)) focusOn(target);
+      const target = drawn(pressed);
+      if (target) focusOn(target);
     });
     return () => cancelAnimationFrame(frame);
   }, [focused]);

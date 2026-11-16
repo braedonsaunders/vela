@@ -33,6 +33,8 @@ const Group = GroupContext;
 const Direction = createContext<'row' | 'column'>('column');
 /** A direct child of a route: on TV one focus band (see tvGuide). */
 const Band = createContext(false);
+/** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
+const ReadingStop = createContext(false);
 /** Scroll views of row pagers, by row id, so pageNext/pagePrev can move them. */
 interface Scroller { scrollTo(options: { x: number; animated: boolean }): void }
 const pagers = new Map<string, { view: Scroller; x: number; width: number }>();
@@ -206,6 +208,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const buttonRef = useRef<Focusable | null>(null);
   const guideRef = useRef<Focusable | null>(null);
   const band = useContext(Band);
+  const stop = useContext(ReadingStop);
   const routeFocus = useRouteFocusContext();
   const reveal = useContext(RevealContext);
   const offsetY = useRef(0);
@@ -240,8 +243,12 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
 
   if (fx.hidden) return null;
 
-  const tvRing = Platform.isTV && ui.focus && !!node.press && !tvFocusLook(node) ? ringOf(host.doc) : undefined;
-  const children = node.children.map((child, i) => <SkinNode key={i} node={child} ctx={ctx} />);
+  const tvRing = Platform.isTV && ui.focus && (!!node.press || stop) && !tvFocusLook(node) ? ringOf(host.doc) : undefined;
+  const vertical = !!route || (!!fx.scrollY && !fx.scrollX);
+  const stops = Platform.isTV && vertical ? readingStops(node) : undefined;
+  const children = node.children.map((child, i) => stops?.has(i)
+    ? <ReadingStop.Provider key={i} value><SkinNode node={child} ctx={ctx} /></ReadingStop.Provider>
+    : <SkinNode key={i} node={child} ctx={ctx} />);
   if (after) children.push(<SkinNode key="after" node={after} ctx={ctx} />);
   let content: ReactNode = children;
   if (fx.grid) {
@@ -309,7 +316,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     const bindButton = (target: Focusable | null) => {
       buttonRef.current = target;
       const unregister = registerButton(target);
-      const untrack = trackButton(target);
+      const untrack = press ? trackButton(target, `${press.action}:${fill(press.arg, ctx, env)}`) : undefined;
       if (target && press) routeFocus?.offer(target, press.action);
       return () => {
         unregister?.();
@@ -320,7 +327,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
       const arg = fill(press.arg, ctx, env);
       const focus = press.focus ? fill(press.focus, ctx, env) : '';
       noteOpener(press.action, arg, buttonRef.current);
-      notePress(buttonRef.current);
+      notePress(buttonRef.current, `${press.action}:${arg}`);
       host.dispatch(press.action, arg);
       // press.focus: the element the action draws (a drawer's first row) takes focus once drawn.
       if (focus) requestAnimationFrame(() => focusElement(focus));
@@ -340,13 +347,15 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
         testID={a11y.testID} />
     ) : null;
     const guide = tvGuide(node, env.flags, band);
+    // A reading stop takes focus without doing anything, so the remote can scroll to it.
+    const stopProps = stop ? { focusable: true, onFocus: () => set('focus', true), onBlur: () => set('focus', false) } : {};
     const barLayout = revealing && node.role === 'navigation'
       ? { onLayout: (e: LayoutChangeEvent) => noteTopBar(e.nativeEvent.layout.height, style.position === 'absolute') }
       : {};
     const Frame = (guide ? AGuide : AView) as typeof AView;
     element = (
       <Frame ref={guide ? (guideRef as never) : undefined} style={boxStyleFinal as ViewStyle} {...(guide as object)}
-        {...barLayout} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)}>
+        {...barLayout} {...stopProps} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)}>
         {layers}
         {content}
         {button}
@@ -367,8 +376,10 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     <Inherited.Provider value={text}>
       <Group.Provider value={groupValue}>
         <Direction.Provider value={direction}>
-          <Band.Provider value={!!route}>
-            {routeReveal ? <RevealContext.Provider value={routeReveal}>{element}</RevealContext.Provider> : element}
+          <Band.Provider value={Platform.isTV && vertical}>
+            <ReadingStop.Provider value={false}>
+              {routeReveal ? <RevealContext.Provider value={routeReveal}>{element}</RevealContext.Provider> : element}
+            </ReadingStop.Provider>
           </Band.Provider>
         </Direction.Provider>
       </Group.Provider>
@@ -379,9 +390,9 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
 /** On TV, the boxes the focus engine must treat as one region. A navigation bar or rail is one
  * destination: focus moving onto it from anywhere in line with the bar (a centred search field
  * under a bar whose items sit at its edges) lands on the item last focused there, else the first.
- * So is each band of a route (a direct child of the route's box with something focusable in it:
- * home's hero copy, its search field, its rows), so up and down move band by band whatever the
- * horizontal offsets. Bands are tvOS's alone: its focus engine only moves to what lies in line,
+ * So is each band of a route or of a vertical scroll box (a direct child with something focusable
+ * in it: home's hero copy, its search field, its rows; a title page's sections), so up and down
+ * move band by band whatever the horizontal offsets. Bands are tvOS's alone: its focus engine only moves to what lies in line,
  * while Android's focus search takes the nearest item in the direction anyway, and there a band
  * around the sign-in card kept the first D-pad press from reaching its fields. An escape scope
  * (a menu, a drawer) is one too, and while open it keeps focus inside: moving off its edges stays
@@ -411,6 +422,22 @@ function focusableWithin(node: RNode): boolean {
   }
   focusables.set(node, found);
   return found;
+}
+
+/** The sections of a vertical scroll (by index) after its last focusable one: the remote moves
+ * from control to control, so content below the last control (a cast list without actions, the
+ * end of a synopsis) could never be scrolled to. On TV each such section in flow takes focus as a
+ * reading stop and wears the focus ring; it does nothing when selected. */
+function readingStops(node: Extract<RNode, { kind: 'box' }>): Set<number> {
+  let last = -1;
+  node.children.forEach((child, i) => {
+    if (focusableWithin(child)) last = i;
+  });
+  const stops = new Set<number>();
+  node.children.forEach((child, i) => {
+    if (i > last && child.kind === 'box' && !child.hidden && child.base.style.position !== 'absolute') stops.add(i);
+  });
+  return stops;
 }
 
 /** Whether the document gives a press box a look for TV focus: its focus look, else its hover look,

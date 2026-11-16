@@ -2,14 +2,14 @@
 // screen through VelaPlayerView, under the player chrome in the active document's look. Core's
 // playback slice starts, follows and stops the session; this route is the trusted host that hands
 // the server's media authorization to the player.
-import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
 import { useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { msg, type PlaybackTarget } from '@vela/core';
 import { VelaPlayer, VelaPlayerView } from '@vela/player';
 import type { DetailModel } from '@vela/skin';
 import { useLiveView, useLiveWatch } from '@vela/skin/src/widgets/guide';
-import { usePlaybackSession, WatchSurface } from '@vela/skin/src/widgets/player';
+import { backFromNavigation, useBackHeld, usePlaybackSession, WatchSurface } from '@vela/skin/src/widgets/player';
 import { useVela } from '../../src/vela';
 
 /** "S1 · E2 · Name" for an episode, the name otherwise. */
@@ -39,6 +39,9 @@ export default function Watch() {
   const channels = useLiveView().guide?.channels;
   const focused = useIsFocused();
   useLiveWatch(focused && target.kind === 'channel');
+  // Back with a player menu open closes the menu. tvOS's Menu also reaches the native stack,
+  // which would pop the player: its removal waits while a menu holds Back.
+  usePreventRemove(useBackHeld(), backFromNavigation);
 
   useEffect(() => {
     if (id && target.kind === 'title') openTitle(id);
