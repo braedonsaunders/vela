@@ -16,7 +16,7 @@ import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
 import { EscapeScope, focusElement, focusTarget, noteOpener, notePress, scopeOpen, trackButton, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
-import { WIDGETS } from './widgets';
+import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
 import { resolveUi } from '../../../client/src/skin/ui';
@@ -379,7 +379,7 @@ function focusableWithin(node: RNode): boolean {
     case 'box': found = !!node.press || node.children.some(focusableWithin); break;
     case 'repeat': found = focusableWithin(node.item); break;
     case 'slot': found = node.slot === 'searchField'; break;
-    case 'widget': found = true; break;
+    case 'widget': found = FOCUSABLE_WIDGETS.has(node.widget); break;
     default: found = false;
   }
   focusables.set(node, found);
