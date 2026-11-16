@@ -177,7 +177,10 @@ horizontal one, so long homes virtualize. Other repeats map over their items.
 **Interaction.** A `press` box is a `Pressable`. `hover` overlays apply on pointer
 platforms (web, iPad, Mac). On TV, `focus` drives the same overlays through the native
 focus engine (tvOS) and D-pad focus (Android TV); a node with `hover` but no `focus`
-uses its hover overlay as its TV focus look. `group`/`groupHover` is a context flag set
+uses its hover overlay as its TV focus look. The overlays of the active `states` entry replace the node's own (hover, focus, groupHover,
+groupFocus); a state without one keeps the node's. A focus look written only inside states is
+still the node's TV and keyboard focus look, and it replaces the platform focus ring unless it
+says `outline: auto`. `group`/`groupHover` is a context flag set
 by the nearest group's hover or focus. Rows use `TVFocusGuideView` so focus moves
 between rows the way the server ordered them.
 
