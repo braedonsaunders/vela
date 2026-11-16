@@ -3,15 +3,15 @@
  *
  *   VELA_TV_ORIGIN=https://<ether> bun tools/tvos.ts [--device <udid|name>] [--run] [--release] [--sim]
  *
- * The client (tracked and untracked files) is staged under .artifacts/tvos/ and built with
+ * The client (tracked and untracked files) is staged on the scratch drive (vela-build/tvos/stage) and built with
  * Exact's Apple host (`exact.mjs ios --tvos`): the data module and the renderer run natively,
  * and modules/apple/*.swift supplies the native views (the player above all). The staged
  * copy gains what a checkout never holds: VelaMedia.xcframework (FFmpeg, LGPL, built by
  * native/apple/media/build-ffmpeg.sh into the scratch drive) and VelaOrigin.swift, the Ether
  * this build signs in to. The checkout is never touched.
  */
-import { cp, lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
-import { existsSync, statSync } from 'node:fs';
+import { cp, mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { generateLocales } from './locales';
@@ -24,24 +24,24 @@ const origin = process.env.VELA_TV_ORIGIN ?? '';
 if (!/^https?:\/\/[^/?#]+$/.test(origin)) throw new Error('Set VELA_TV_ORIGIN to the Ether origin this build signs in to (https://host:port, no path)');
 const simulator = flag('--sim');
 const developer = process.env.DEVELOPER_DIR ?? '/Applications/Xcode.app/Contents/Developer';
-const scratch = join(homedir(), '.scratch/vela-build/tvos');
-const stage = join(root, '.artifacts/tvos');
+// Exact opens a static app's files without following any symlink, from the root down: the
+// stage is a real path (the scratch drive's, resolved) and holds no links of its own.
+const scratch = realpathSync(join(homedir(), '.scratch')) + '/vela-build/tvos';
+const stage = join(scratch, 'stage');
 
-// 1. Stage the client and protocol, as tools/check.ts does.
+// 1. Stage the client and protocol, as tools/check.ts does, keeping the build's caches.
 const git = Bun.spawnSync(['git', 'ls-files', '-co', '--exclude-standard', '-z', '--', 'client', 'protocol'], { cwd: root });
-// Keep the staged build's .exact and target (Cargo and Swift caches) across runs.
-for (const keep of ['client/.exact', 'client/target']) await mkdir(join(scratch, 'stage', keep), { recursive: true });
-await rm(join(stage, 'client'), { recursive: true, force: true });
+await mkdir(join(stage, 'client'), { recursive: true });
+for (const entry of await readdir(join(stage, 'client'))) if (entry !== '.exact' && entry !== 'target') await rm(join(stage, 'client', entry), { recursive: true, force: true });
 await rm(join(stage, 'protocol'), { recursive: true, force: true });
-for (const path of git.stdout.toString().split('\0').filter(p => p && !p.includes('node_modules') && !p.startsWith('client/target') && !p.startsWith('client/.exact'))) {
+for (const path of git.stdout.toString().split('\0').filter(p => p && !p.includes('node_modules') && !p.startsWith('client/target') && !p.startsWith('client/.exact') && p !== 'client/wire')) {
   const from = join(root, path), to = join(stage, path);
   await mkdir(dirname(to), { recursive: true });
-  if ((await lstat(from).catch(() => null))?.isSymbolicLink()) await symlink(await readlink(from), to);
-  else await cp(from, to).catch(() => {});
+  await cp(from, to, { recursive: true, dereference: true }).catch(() => {});
 }
-for (const keep of ['client/.exact', 'client/target']) await symlink(join(scratch, 'stage', keep), join(stage, keep)).catch(() => {});
+await rm(join(stage, 'vendor/exact'), { force: true });
 await mkdir(join(stage, 'vendor'), { recursive: true });
-if (!existsSync(join(stage, 'vendor/exact'))) await symlink(join(root, 'vendor/exact'), join(stage, 'vendor/exact'));
+await symlink(realpathSync(join(root, 'vendor/exact')), join(stage, 'vendor/exact'));
 const client = join(stage, 'client');
 
 // 2. While compiled skins exist, a native build carries one engine: the document renderer.
@@ -125,7 +125,7 @@ e['get-task-allow'] = True
 e['keychain-access-groups'] = [prefix + '.' + app]
 sys.stdout.write(plistlib.dumps(e).decode())
 `, chosen.prefix, chosen.team, appId], adhoc);
-const entitlementsPath = join(stage, 'tvos-entitlements.plist');
+const entitlementsPath = join(scratch, 'tvos-entitlements.plist');
 await writeFile(entitlementsPath, entitlements);
 // Inside out: every nested framework and dylib, then the app.
 const nested = sh(['sh', '-c', `cd "${bundle}" && find . -depth \\( -name '*.framework' -o -name '*.dylib' -o -name '*.appex' \\) -print`]).split('\n').filter(Boolean);
