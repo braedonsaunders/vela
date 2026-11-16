@@ -218,7 +218,7 @@ function Controls({
         icon={view.playing ? 'pause' : 'play'}
         preferred={look.tv && !menu}
         label={view.ended ? msg('ui.finished') : view.playing ? msg('ui.pause') : msg('ui.play')}
-        disabled={view.ended}
+        disabled={blocked}
         size={look.small ? 48 : 52}
         testID="player-toggle"
         onPress={() => send({ type: view.playing ? 'pause' : 'play' })}
