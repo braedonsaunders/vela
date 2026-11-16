@@ -5,6 +5,7 @@ export { artworkURL, type Images } from './discovery/artwork';
 export { card, detailModel, entry, feedRow, homeModel } from './discovery/models';
 export { clock, localeContext, minute, msg, number, percent, plural, second, setLocale, time, withLocale } from './i18n';
 export type { LocaleContext } from './i18n';
+export { liveSearch } from './live/search';
 export { randomId } from './protocol/id';
 export * from './models';
 export { createVela, type Vela, type VelaOptions, type VelaState } from './store';
