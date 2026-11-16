@@ -543,8 +543,9 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
   const [width, setWidth] = useState(0);
   const gap = grid.gap;
   const count = grid.count ?? Math.max(1, Math.floor((width + gap) / ((grid.min ?? 160) + gap)));
-  // Rounded down to the hundredth so a row's cells and gaps never sum past the track and wrap.
-  const cell = Math.floor(((width - gap * (count - 1)) / count) * 100) / 100;
+  // A pixel of slack, then rounded down to the hundredth, so a row's cells and gaps never sum past
+  // the track and wrap: layout reports a rounded width (1325 for a 1324.81 px track on the web).
+  const cell = Math.floor(((width - 1 - gap * (count - 1)) / count) * 100) / 100;
   const track = { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', rowGap, columnGap: gap } as ViewStyle;
   return (
     <View style={track} onLayout={e => setWidth(e.nativeEvent.layout.width)}>

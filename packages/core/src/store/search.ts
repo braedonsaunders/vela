@@ -1,10 +1,10 @@
-// Search: three independent lanes for one query. The fast lane (titles by name, plus live
-// channels and programmes) answers every keystroke; the descriptive lane ("films about a heist
-// in Lisbon") and the AI lane start once typing pauses, and only on a server that offers them.
-// Each query is a new generation: answers for an older one are dropped, and an AI job for an
-// older query is cancelled.
+// Search: independent lanes for one query. The fast lane (titles by name, plus live channels and
+// programmes) answers every keystroke; the descriptive lane ("films about a heist in Lisbon")
+// starts once typing pauses, only on a server that offers it, and shows its answer once final.
+// Each query is a new generation: answers for an older one are dropped. The AI discovery lane
+// ("a little further afield") is not run: no surface shows it, and it stays idle.
 import type * as V from '../wire';
-import { hasAiSearch, hasDescriptiveSearch, type AiSearch } from '../adapter/capabilities';
+import { hasDescriptiveSearch } from '../adapter/capabilities';
 import { card } from '../discovery/models';
 import { liveSearch } from '../live/search';
 import { randomId } from '../protocol/id';
@@ -47,14 +47,10 @@ export const initialSearch: SearchState = {
 
 /** How long typing must pause before the slower lanes start. */
 const PAUSE_MS = 600;
-const AI_POLL_MS = 1500;
-const ACTIVE_JOB = ['queued', 'running', 'partial'];
 
 export class Search {
   private pause: ReturnType<typeof setTimeout> | undefined;
   private timers = new Set<ReturnType<typeof setTimeout>>();
-  private aiPoll: ReturnType<typeof setTimeout> | undefined;
-  private job: { scope: string; generation: number; query: string; id?: string; status?: string } | undefined;
   /**
    * Makes each generation's idempotency keys unique to this run and session. Generations restart
    * at 1 after a launch or sign-in, and a key the server has already seen with another query is
@@ -69,7 +65,6 @@ export class Search {
   ) {
     session.onReset(() => {
       this.stopTimers();
-      this.job = undefined;
       this.scope = randomId();
       this.box.update('search', () => initialSearch);
     });
@@ -79,37 +74,28 @@ export class Search {
   setQuery(query: string): void {
     const generation = this.box.get().search.generation + 1;
     this.stopTimers();
-    void this.cancelAi();
     const text = query.trim();
     if (!text) {
       this.box.update('search', () => ({ ...initialSearch, query, generation }));
       return;
     }
     // A lane the server does not offer says so at once; one it offers is loading until typing pauses.
-    const { descriptive, ai } = this.offered();
+    const descriptive = this.offersDescriptive();
     this.box.update('search', search => ({
       query,
       generation,
       fast: { ...search.fast, status: 'loading', error: '' },
       descriptive: { ...initialSearch.descriptive, status: descriptive ? 'loading' : 'unavailable' },
-      ai: { ...emptyLane, status: ai ? 'loading' : 'unavailable' },
+      ai: emptyLane,
     }));
     void this.fast(text, generation);
-    if (!descriptive && !ai) return;
-    this.pause = setTimeout(() => {
-      if (descriptive) void this.descriptive(text, generation);
-      if (ai) void this.ai(text, generation);
-    }, PAUSE_MS);
+    if (!descriptive) return;
+    this.pause = setTimeout(() => void this.descriptive(text, generation), PAUSE_MS);
   }
 
-  /** The slower lanes the selected server offers: stated in its features and implemented by its adapter. */
-  private offered(): { descriptive: boolean; ai: boolean } {
-    const features = this.session.features;
-    const api = this.session.selected().adapter;
-    return {
-      descriptive: !!features?.descriptiveSearch.available && hasDescriptiveSearch(api),
-      ai: !!features?.aiSearch.available && hasAiSearch(api),
-    };
+  /** The selected server offers descriptive search: stated in its features and implemented by its adapter. */
+  private offersDescriptive(): boolean {
+    return !!this.session.features?.descriptiveSearch.available && hasDescriptiveSearch(this.session.selected().adapter);
   }
 
   clear(): void {
@@ -164,9 +150,12 @@ export class Search {
       if (allowed) this.later(wait, generation, () => this.patch('descriptive', { canRetry: true }));
       return;
     }
-    this.patch('descriptive', { status: still ? 'loading' : 'ready', items, error: '', canRetry: false });
-    // A partial answer shows while the server keeps working; a pending one waits for it.
-    if ((still || status === 'partial') && allowed) this.later(wait, generation, () => void this.descriptive(query, generation));
+    // While the server keeps working and will be asked again, the lane keeps waiting rather than
+    // showing each partial answer in turn; the final answer (or the last one allowed) shows once.
+    const more = (still || status === 'partial') && allowed;
+    if (more) this.patch('descriptive', { status: 'loading', error: '', canRetry: false });
+    else this.patch('descriptive', { status: 'ready', items, error: '', canRetry: false });
+    if (more) this.later(wait, generation, () => void this.descriptive(query, generation));
   }
 
   /** Ask the descriptive lane again, once the server has allowed it. */
@@ -183,74 +172,14 @@ export class Search {
     this.timers.add(timer);
   }
 
-  private async ai(query: string, generation: number): Promise<void> {
-    try {
-      const connection = await this.session.ready();
-      const api = connection.adapter;
-      if (!this.session.features?.aiSearch.available || !hasAiSearch(api)) {
-        this.patch('ai', { status: 'unavailable' });
-        return;
-      }
-      const current: NonNullable<Search['job']> = { scope: this.scope, generation, query };
-      this.job = current;
-      this.patch('ai', { status: 'loading' });
-      const job = await api.startAiSearch({ query, generation, idempotencyKey: `ai-${this.scope}-${generation}` });
-      current.id = job.id;
-      current.status = job.status;
-      if (this.job !== current) {
-        await api.cancelAiSearch(job.id, { generation, idempotencyKey: `cancel-${current.scope}-${generation}` });
-        return;
-      }
-      await this.showJob(job, current, api);
-    } catch (error) {
-      if (this.current(generation)) this.patch('ai', { status: 'failed', error: message(error) });
-    }
-  }
-
-  /** Show a job's results so far, and read it again while it is still working. */
-  private async showJob(job: V.AISearchJob, current: NonNullable<Search['job']>, api: AiSearch): Promise<void> {
-    if (this.job !== current || !this.current(current.generation) || job.generation !== current.generation) return;
-    if (job.results && (job.results.query !== current.query || job.results.generation !== current.generation)) return;
-    const connection = await this.session.ready();
-    const images = await connection.images();
-    const items = (job.results?.items ?? []).map(title => card(title, '', images, this.artWidth()));
-    this.patch('ai', { status: job.status, items, error: '' });
-    if (!ACTIVE_JOB.includes(job.status)) return;
-    this.aiPoll = setTimeout(async () => {
-      try {
-        const next = await api.aiSearchJob(job.id);
-        current.status = next.status;
-        await this.showJob(next, current, api);
-      } catch (error) {
-        if (this.job === current) this.patch('ai', { status: 'failed', error: message(error) });
-      }
-    }, AI_POLL_MS);
-  }
-
-  /** A job still working for an older query is cancelled at the server. */
-  private async cancelAi(): Promise<void> {
-    const previous = this.job;
-    this.job = undefined;
-    if (!previous?.id || !ACTIVE_JOB.includes(previous.status ?? '')) return;
-    try {
-      const api = (await this.session.ready()).adapter;
-      const idempotencyKey = `cancel-${previous.scope}-${previous.generation}`;
-      if (hasAiSearch(api)) await api.cancelAiSearch(previous.id, { generation: previous.generation, idempotencyKey });
-    } catch {
-      // The job ends on its own; nothing waits on the cancellation.
-    }
-  }
-
   private stopTimers(): void {
     if (this.pause) clearTimeout(this.pause);
-    if (this.aiPoll) clearTimeout(this.aiPoll);
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
     this.pause = undefined;
-    this.aiPoll = undefined;
   }
 
-  private patch<K extends 'fast' | 'descriptive' | 'ai'>(lane: K, change: Partial<SearchState[K]>): void {
+  private patch<K extends 'fast' | 'descriptive'>(lane: K, change: Partial<SearchState[K]>): void {
     this.box.update('search', search => ({ ...search, [lane]: { ...search[lane], ...change } }));
   }
 }

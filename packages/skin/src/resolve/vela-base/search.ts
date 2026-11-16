@@ -1,34 +1,25 @@
-// Search (routes.search), as compiled Cinematic's SearchSurface draws it, on the document's ui
-// look: drawn in home's view under the search field while a query is open. The title matches
-// (or the honest empty or failed state), live hits on now and coming up, the descriptive lane
-// with its partial and failed answers, and discovery with its running, failed and empty states.
+// Search (routes.search), on the document's ui look: drawn in home's view under the search field
+// while a query is open. The title matches (or the honest empty or failed state), live hits on now
+// and coming up, and the descriptive lane with its failed answers. Titles lie in the library's
+// multi-row grid, not a sideways shelf.
 import type { Condition, Node, Style } from '../../../../protocol/skin';
+import { gridCard, titleGrid } from './cards';
 import { display, emptyState, enter, gutter, gutterSmall, is, pill, placeholder, pulse, rowSkeleton } from './look';
 
 const some = (test: string): Condition => ({ test, is: 'gt', value: '0' });
 const none = (test: string): Condition => ({ test, is: 'gt', value: '0', not: true });
 const isNot = (test: string, value: string): Condition => ({ test, is: 'ne', value });
 
-/** Nothing further down answers yet: no live hits, no descriptive answer coming or found, no discovery running. */
+/** Nothing further down answers yet: no live hits, and no descriptive answer coming or found. */
 const quiet: Condition[] = [
   none('search.onNowCount'),
   none('search.comingUpCount'),
   isNot('search.descriptiveState', 'loading'),
   none('search.descriptiveCount'),
-  isNot('search.aiState', 'running'),
 ];
 
 const column = (gap: string): Style => ({ display: 'flex', 'flex-direction': 'column', gap });
 const secondary = (size: string): Style => ({ 'font-size': size, color: '$ui.inkSecondary' });
-
-/** A line of help in the gutter. */
-const note = (text: string, when: Condition[], size = '14px'): Node => ({
-  type: 'text',
-  when,
-  text,
-  style: { ...secondary(size), ...gutter },
-  small: { ...gutterSmall },
-});
 
 /** Ask the descriptive lane again, once the server allows it. */
 const retry = (height: number, padding: string, size: string): Node => ({
@@ -88,31 +79,23 @@ const shelf = (over: string, item: Node): Node => ({
   children: [{ type: 'repeat', over, item }],
 });
 
-/** The base's card, rising in turn. */
-const cardItem: Node = {
-  type: 'box',
-  motion: 'velaCard',
-  stagger: { step: 45, cap: 8 },
-  style: { position: 'relative', display: 'flex' },
-  children: [{ type: 'use', template: 'velaCard' }],
-};
-
-/** A lane of titles: a heading over a shelf of cards. */
+/** A lane of titles: a heading over the library's grid of cards, rising in turn. */
 const titleLane = (name: string, over: string, when: Condition[], motion?: string): Node => ({
   type: 'box',
   when,
   ...(motion ? { motion } : {}),
-  style: { position: 'relative', ...column('4px'), 'padding-bottom': '28px' },
-  small: { gap: '2px', 'padding-bottom': '18px' },
-  children: [laneHeading(name), shelf(over, cardItem)],
+  style: { position: 'relative', ...column('18px'), 'padding-bottom': '28px' },
+  small: { gap: '12px', 'padding-bottom': '18px' },
+  children: [
+    laneHeading(name),
+    {
+      ...titleGrid,
+      children: [{ type: 'repeat', over, item: { ...gridCard, motion: 'velaCard', stagger: { step: 30, cap: 18 } } as Node }],
+    } as Node,
+  ],
 });
 
 // ---- Live hits ----
-
-const sparkles = [
-  'M10 2.5l1.9 5.6 5.6 1.9-5.6 1.9L10 17.5l-1.9-5.6L2.5 10l5.6-1.9z',
-  'M18.5 14l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z',
-];
 
 const fill: Style = { position: 'absolute', inset: '0px', width: '100%', height: '100%' };
 const glassChip: Style = {
@@ -388,47 +371,6 @@ const descriptive: Node[] = [
   partial('{t:search.moodUnavailableBelowTitles}', [none('search.descriptiveCount'), some('search.titleCount')]),
 ];
 
-// ---- Discovery ----
-
-const discovery: Node = {
-  type: 'box',
-  when: [isNot('search.aiState', 'off')],
-  motion: enter(160),
-  style: column('10px'),
-  children: [
-    {
-      type: 'box',
-      style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center', ...gutter },
-      small: { ...gutterSmall },
-      children: [
-        {
-          type: 'icon',
-          paths: sparkles,
-          viewBox: '0 0 24 24',
-          a11y: { hidden: true },
-          style: { width: '18px', height: '18px', color: '$ui.accent' },
-        },
-        {
-          type: 'text',
-          text: '{t:ui.aLittleFurtherAfield}',
-          role: 'heading',
-          level: 2,
-          style: { ...display, 'font-size': '30px' },
-          small: { 'font-size': '26px' },
-        },
-      ],
-    },
-    waiting('{t:ui.exploringYourDescription}', [is('search.aiState', 'running')], '14px'),
-    titleLane('{t:ui.discoveredForYou}', 'search.ai', [some('search.aiCount')]),
-    note(
-      '{t:ui.discoveryCouldnTFinishYourTitleMatchesAreReadyAbove}',
-      [is('search.aiState', 'failed'), some('search.titleCount')],
-    ),
-    note('{t:search.discoveryUnavailable}', [is('search.aiState', 'failed'), none('search.titleCount')]),
-    note('{t:search.discoveryEmpty}', [is('search.aiState', 'complete'), none('search.aiCount')]),
-  ],
-};
-
 export const search: Node = {
   type: 'box',
   motion: enter(160),
@@ -454,7 +396,6 @@ export const search: Node = {
     liveLane('{t:live.onNow}', 'search.onNow', 'search.onNowCount'),
     liveLane('{t:search.live.comingUp}', 'search.comingUp', 'search.comingUpCount'),
     ...descriptive,
-    discovery,
   ],
 };
 
