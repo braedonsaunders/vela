@@ -14,6 +14,8 @@ internal sealed class Playback : IDisposable
     long sequence;
     DateTime observed;
     bool disposed;
+    double? pendingSeek;
+    string appliedAudio = "", appliedSubtitle = "";
     static JsonElement Get(JsonElement e, string k) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(k, out var v) ? v : default;
     static string? Str(JsonElement e, string k) => Get(e,k).ValueKind == JsonValueKind.String ? Get(e,k).GetString() : null;
     static double Num(JsonElement e,string k) => Get(e,k).TryGetDoubleSafe();
@@ -38,6 +40,7 @@ internal sealed class Playback : IDisposable
             if (Get(props,"serverError").ValueKind is JsonValueKind.Object or JsonValueKind.String) { Fail(); return; }
             var next = Get(props,"plan"); if (next.ValueKind != JsonValueKind.Object) { Stop(); return; }
             if (Str(plan,"sessionId") == Str(next,"sessionId") && (Num(next,"sourceGeneration") < Num(plan,"sourceGeneration") || Num(next,"seekGeneration") < Num(plan,"seekGeneration"))) return;
+            if (Str(plan,"sessionId") != Str(next,"sessionId")) sequence = 0;
             plan = next.Clone(); var paths = Get(plan,"paths");
             var path = paths.EnumerateArray().FirstOrDefault(p => Str(p,"id") == Str(plan,"selectedPathId"));
             string key = $"{Str(plan,"sessionId")}:{Str(path,"id")}:{Num(plan,"sourceGeneration")}";
@@ -47,43 +50,59 @@ internal sealed class Playback : IDisposable
                 if (!(Str(path,"transport") == "hls" || Str(path,"transport") == "file" && Get(path,"original").ValueKind == JsonValueKind.True)) throw new InvalidOperationException();
                 offset = Num(path,"timelineOriginSeconds");
                 mpv.Command("loadfile",Url(Str(path,"url") ?? throw new InvalidOperationException()),"replace");
-                source = key; phase = "loading";
+                source = key; phase = "loading"; appliedAudio = ""; appliedSubtitle = "";
             }
-            if (seek != seekKey) { mpv.Command("seek",Format(Math.Max(0,Num(plan,"positionSeconds")-offset)),"absolute+exact"); seek = seekKey; }
-            ApplyTrack("audio",Str(plan,"selectedAudioTrackId")); ApplyTrack("subtitle",Str(plan,"selectedSubtitleTrackId"));
+            if (seek != seekKey) { pendingSeek = Math.Max(0,Num(plan,"positionSeconds")-offset); seek = seekKey; }
+            
             var cmd = Get(props,"command"); string raw = cmd.ValueKind == JsonValueKind.Object ? cmd.GetRawText() : "";
-            if (raw != command) { command = raw; if (Str(cmd,"type") is string type) LocalCommand(type,Get(cmd,"value")); }
+            if (raw != command) { command = raw; if ((Str(cmd,"kind") ?? Str(cmd,"type")) is string type) ApplyCommand(type,cmd); }
         }
         catch { Fail(); }
     }
     void ApplyTrack(string kind,string? id)
     {
+        if (kind == "audio" && appliedAudio == id || kind == "subtitle" && appliedSubtitle == (id ?? "none")) return;
         string property = kind == "audio" ? "aid" : "sid";
-        if (id == null) { if (kind == "subtitle") mpv.Command("set",property,"no"); return; }
+        if (id == null) { if (kind == "subtitle") { mpv.Command("set",property,"no"); appliedSubtitle = "none"; } return; }
         var list = Get(plan,kind == "audio" ? "audioTracks" : "subtitleTracks");
         if (list.ValueKind != JsonValueKind.Array) return;
         var track = list.EnumerateArray().FirstOrDefault(t => Str(t,"id") == id);
         using var native = JsonDocument.Parse(mpv.Property("track-list") ?? "[]");
         foreach (var item in native.RootElement.EnumerateArray())
-            if (Str(item,"type") == (kind == "audio" ? "audio" : "sub") && Num(item,"ff-index") == Num(track,"streamIndex")) { mpv.Command("set",property,Format(Num(item,"id"))); return; }
+            if (Str(item,"type") == (kind == "audio" ? "audio" : "sub") && Num(item,"ff-index") == Num(track,"streamIndex")) { mpv.Command("set",property,Format(Num(item,"id"))); if (kind == "audio") appliedAudio=id; else appliedSubtitle=id; return; }
         var delivery = Get(track,"delivery");
-        if (kind == "subtitle" && Str(delivery,"kind") == "external" && (Str(delivery,"url") ?? Str(track,"url")) is string url) mpv.Command("sub-add",Url(url),"select");
+        if (kind == "subtitle" && Str(delivery,"kind") == "external" && (Str(delivery,"url") ?? Str(track,"url")) is string url) { mpv.Command("sub-add",Url(url),"select"); appliedSubtitle=id; }
     }
-    public void LocalCommand(string type, object? value = null)
+    void ApplyCommand(string kind, JsonElement command)
+    {
+        switch (kind)
+        {
+            case "play": case "resume": mpv.Command("set", "pause", "no"); break;
+            case "pause": mpv.Command("set", "pause", "yes"); break;
+            case "seek": pendingSeek = Math.Max(0, Num(command, "seconds") - offset); break;
+            case "volume": mpv.Command("set", "volume", Format(Math.Clamp(Num(command, "volume"), 0, 1) * 100)); break;
+            case "mute": mpv.Command("set", "mute", Get(command, "muted").ValueKind == JsonValueKind.True ? "yes" : "no"); break;
+            case "speed": mpv.Command("set", "speed", Format(Math.Clamp(Num(command, "speed"), .25, 4))); break;
+        }
+    }
+    public void LocalCommand(string kind, object? value = null)
     {
         try
         {
-            double number = value is JsonElement e ? e.TryGetDoubleSafe() : value is IConvertible c ? c.ToDouble(CultureInfo.InvariantCulture) : 0;
-            switch(type)
+            var payload = new Dictionary<string, object?> { ["kind"] = kind == "play" ? "resume" : kind };
+            string? field = kind switch
             {
-                case "play": case "resume": mpv.Command("set","pause","no"); break;
-                case "pause": mpv.Command("set","pause","yes"); break;
-                case "seek": mpv.Command("seek",Format(Math.Max(0,number-offset)),"absolute+exact"); break;
-                case "volume": mpv.Command("set","volume",Format(Math.Clamp(number,0,1)*100)); return;
-                case "mute": mpv.Command("cycle","mute"); return;
-                case "speed": mpv.Command("set","speed",Format(Math.Clamp(number,.25,4))); return;
-            }
-            emit("session-command",new { sessionId=Str(plan,"sessionId"), command=new { type=type == "play" ? "resume" : type, positionSeconds= type == "seek" ? (double?)number : null, sourceGeneration=Num(plan,"sourceGeneration"), seekGeneration=Num(plan,"seekGeneration"), idempotencyKey=Guid.NewGuid().ToString() } });
+                "seek" => "seconds", "audio" => "audioTrackId", "subtitle" => "subtitleTrackId",
+                "volume" => "volume", "mute" => "muted", "speed" => "speed", _ => null
+            };
+            if (field != null) payload[field] = value;
+            var serialized = JsonSerializer.SerializeToElement(payload);
+            ApplyCommand(kind, serialized);
+            if (kind is "volume" or "mute" or "speed") return;
+            payload["sourceGeneration"] = Num(plan, "sourceGeneration");
+            payload["seekGeneration"] = Num(plan, "seekGeneration");
+            payload["idempotencyKey"] = Guid.NewGuid().ToString();
+            emit("session-command", new { sessionId = Str(plan, "sessionId"), command = payload });
         }
         catch { Fail(); }
     }
@@ -92,6 +111,14 @@ internal sealed class Playback : IDisposable
     {
         if (disposed || source.Length == 0) return;
         try {
+            string? time = mpv.Property("time-pos");
+            if (time == null) { emit("snapshot", new { state = "loading" }); return; }
+            if (pendingSeek is double target)
+            {
+                mpv.Command("seek", Format(target), "absolute+exact"); pendingSeek = null;
+            }
+            ApplyTrack("audio", Str(plan, "selectedAudioTrackId"));
+            ApplyTrack("subtitle", Str(plan, "selectedSubtitleTrackId"));
             double position=Read("time-pos")+offset, ahead=Read("demuxer-cache-duration");
             string state=mpv.Property("eof-reached")=="yes" ? "ended" : mpv.Property("paused-for-cache")=="yes" ? "buffering" : mpv.Property("pause")=="yes" ? "paused" : "playing";
             emit("snapshot",new { state,position,duration=Read("duration")+offset,bufferAheadSeconds=ahead,volume=Read("volume")/100,muted=mpv.Property("mute")=="yes",speed=Read("speed"),droppedFrames=Read("frame-drop-count") });
@@ -101,7 +128,15 @@ internal sealed class Playback : IDisposable
             }
         } catch { Fail(); }
     }
-    void Fail() { Stop(); emit("snapshot",new {state="failed",failure=new {message="Native playback failed",kind="unknown"}}); }
+    void Fail() {
+        emit("observation", new { sessionId = Str(plan, "sessionId"), observation = new {
+            idempotencyKey = Guid.NewGuid().ToString(), sequence = ++sequence,
+            sourceGeneration = Num(plan, "sourceGeneration"), seekGeneration = Num(plan, "seekGeneration"),
+            observedAt = DateTime.UtcNow.ToString("O"), positionSeconds = Read("time-pos") + offset,
+            state = "buffering", selectedPathId = Str(plan, "selectedPathId"), playableRanges = Array.Empty<object>(),
+            error = new { @class = "source", message = "Native playback failed" }
+        }});
+        Stop(); emit("snapshot",new {state="failed",failure=new {message="Native playback failed",kind="source",recoverable=false}}); }
     public void Stop() { if (!disposed) { try {mpv.Command("stop");} catch {} } source="";seek="";phase="idle"; }
     public void Dispose() { if(disposed)return; Stop();disposed=true;mpv.Dispose();proxy.Dispose(); }
 }
