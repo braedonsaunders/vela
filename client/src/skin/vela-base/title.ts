@@ -1041,6 +1041,8 @@ export const titleLoading: Node = {
   ],
 };
 // The page frame; the scrim, blur and dissolve behind it are the route column's (the foundation's).
+// It starts below the shell's 84px bar, so its close button never sits on the bar's profile
+// (a 540px-tall TV screen leaves only 22px of 4vh).
 export const title: Node = {
   type: 'box',
   style: {
@@ -1049,9 +1051,10 @@ export const title: Node = {
     display: 'flex',
     'flex-direction': 'column',
     padding: '4vh 4vw',
+    'padding-top': 'max(4vh, 92px)',
     'box-sizing': 'border-box',
   },
-  small: { padding: '0px' },
+  small: { padding: '0px', 'padding-top': '0px' },
   children: [
     {
       type: 'box',
@@ -1089,6 +1092,8 @@ export const title: Node = {
             'background-color': '$ui.glass',
             'backdrop-filter': 'blur(20px) saturate(1.3)',
           },
+          // On a phone the page is full-bleed under the shell's bar and tabs: the button sits below them.
+          small: { top: 'calc(104px + env(safe-area-inset-top))', right: '16px' },
           children: [{ type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } }],
         },
         {

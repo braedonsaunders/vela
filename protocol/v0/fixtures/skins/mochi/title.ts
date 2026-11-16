@@ -995,13 +995,16 @@ export const related: Node = {
 // The title page opens as a framed page over the route frame's blurred scrim (detail.frame),
 // with an ink-ringed close button.
 // The frame wears an ink edge and a hard lavender shadow (the compiled detailShadow trait).
+// The page fills the route, as the base's does.
 export const title: Node = {
   type: 'box',
-  style: { ...col, position: 'relative', height: '100%' },
+  style: { ...col, position: 'absolute', inset: '0px' },
   children: [
     {
       type: 'box',
-      style: { ...col, ...inset0, 'box-sizing': 'border-box', padding: '4vh 4vw', color: '$ink' },
+      // In flow: a route root's children scroll in the route's scroll view, where an absolute
+      // box has no height.
+      style: { ...col, flex: '1', 'box-sizing': 'border-box', padding: '4vh 4vw', color: '$ink' },
       small: { padding: '0px' },
       children: [
         {
