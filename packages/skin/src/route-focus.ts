@@ -3,12 +3,13 @@
 // series page) on its first piece of content there (a season, an extra). Otherwise the focus
 // engine takes the top-left-most control on screen, which is the shell's logo.
 //
-// Only while the route opens: once anything in it takes focus (a press, a widget, the search
-// field) or the opening window passes, nothing is moved for the viewer any more. Content drawn
-// later (search results, more rows) never takes focus by itself. A control below the first screen
-// is never chosen, so a route always opens at its top.
+// Only while the route opens: once the viewer has moved focus to anything in it (a press, a widget,
+// the search field) or the opening window passes, nothing is moved for them any more. Focus the
+// engine gives on its own (the first control on screen, a hero's carousel dot) does not count. Content drawn
+// later (search results, more rows) never takes focus by itself. A control that starts below the
+// first screen is never chosen, so a route always opens at its top.
 import { createContext, useContext, useMemo } from 'react';
-import { Dimensions, Platform } from 'react-native';
+import { Dimensions, Platform, TVEventHandler } from 'react-native';
 import type { Focusable } from './escape';
 
 export interface RouteFocus {
@@ -20,8 +21,20 @@ export interface RouteFocus {
 
 export const RouteFocusContext = createContext<RouteFocus | null>(null);
 
+/** When the viewer last pressed or swiped on the remote (focus changes are not theirs). */
+let lastViewerPress = 0;
+let listening = false;
+function listen(): void {
+  if (listening || typeof TVEventHandler?.addListener !== 'function') return;
+  listening = true;
+  TVEventHandler.addListener(event => {
+    if (event.eventType !== 'focus' && event.eventType !== 'blur') lastViewerPress = Date.now();
+  });
+}
+
 /** The route's first focus, for SkinRoute to provide (TV only; null elsewhere). */
 export function useRouteFocus(): RouteFocus | null {
+  if (Platform.isTV) listen();
   return useMemo(() => (Platform.isTV ? firstFocus() : null), []);
 }
 
@@ -40,7 +53,8 @@ interface Measurable {
   measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void;
 }
 
-/** Answers whether the control lies on the first screen, in full. */
+/** Answers whether the control starts on the first screen. Only its top counts: a control still
+ * rising into place (a hero's entrance) measures lower than it will stand. */
 function onFirstScreen(target: Focusable, answer: (visible: boolean) => void): void {
   const measurable = target as Measurable;
   if (!measurable.measureInWindow) {
@@ -48,12 +62,13 @@ function onFirstScreen(target: Focusable, answer: (visible: boolean) => void): v
     return;
   }
   measurable.measureInWindow((_x, y, _width, height) => {
-    answer(height > 0 && y >= 0 && y + height <= Dimensions.get('window').height);
+    answer(height > 0 && y < Dimensions.get('window').height);
   });
 }
 
 function firstFocus(): RouteFocus {
-  const deadline = Date.now() + OPENING_MS;
+  const opened = Date.now();
+  const deadline = opened + OPENING_MS;
   let settled = false;
   let fallback: ReturnType<typeof setTimeout> | undefined;
   const open = () => !settled && Date.now() < deadline;
@@ -83,6 +98,8 @@ function firstFocus(): RouteFocus {
       if (fallback || !CONTENT.has(action)) return;
       fallback = setTimeout(() => tryFocus(target), PRIMARY_WAIT_MS);
     },
-    focused: settle,
+    focused() {
+      if (lastViewerPress > opened) settle();
+    },
   };
 }

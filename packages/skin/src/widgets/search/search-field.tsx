@@ -77,6 +77,15 @@ export function SearchField({ ctx }: WidgetProps) {
   // beside that destination, not inside it: the focus engine never focuses a focusable view's
   // subviews, so a clear button inside could not be reached.
   const [tvFocused, setTvFocused] = useState(false);
+  // Opening search folds what stands above the field (the hero's copy) and moves it up under the
+  // bar without a focus change: once the page has settled, a focused field is brought back below.
+  const searching = host.env.query !== '';
+  const held = focused || tvFocused;
+  useEffect(() => {
+    if (!reveal || !held) return;
+    const timer = setTimeout(() => frame.current && reveal(frame.current), SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [searching]);
   const Frame = Platform.isTV ? Pressable : View;
   const tvProps = Platform.isTV
     ? {
@@ -141,6 +150,8 @@ export function SearchField({ ctx }: WidgetProps) {
   );
 }
 
+/** How long opening search takes to lay out before the field is checked against the bar. */
+const SETTLE_MS = 250;
 const FIELD_HEIGHT = 60;
 const CLEAR_SIZE = 40;
 
