@@ -20,3 +20,7 @@ client/modules/apple/VelaOrigin.swift
 
 # MPVKit xcframeworks, fetched into the scratch drive by modules/vela-player/ios/fetch-mpvkit.sh
 modules/vela-player/ios/Frameworks
+
+# Local browser automation and legacy generated declarations
+.playwright-cli/
+client/app.contract.d.ts
