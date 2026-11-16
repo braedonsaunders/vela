@@ -1,4 +1,4 @@
-// Runs in the page host, outside Exact's data module. No credentials or API access.
+// App-owned Expo HTML loads this install/update bridge. No credentials or API access.
 let deferred, registration;
 const listeners = new Set();
 const state = { installable: false, installed: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true, updateAvailable: false, offline: !navigator.onLine };

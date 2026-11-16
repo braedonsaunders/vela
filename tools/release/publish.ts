@@ -1,5 +1,5 @@
 /** Deliberate public release operation. Never called by build.ts or sign.ts. */
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { command, keychain, output, sha256, verifySignature } from './signing';
 const version = process.argv[2], dryRun = process.argv.includes('--dry-run'), testKey = process.argv.includes('--test-key');
@@ -11,7 +11,9 @@ const bytes = await readFile(descriptorFile), descriptor = JSON.parse(bytes.toSt
 verifySignature(bytes,await readFile(descriptorFile+'.sig','utf8'),await keychain('public',testKey?'lab-test-v1':process.argv.includes('--next-key')?'production-v2':'production-v1'));
 if (descriptor.schemaVersion !== 1 || descriptor.kind !== 'vela-release' || descriptor.channel !== 'stable' || descriptor.version !== version || descriptor.sourceDirty !== false || Date.parse(descriptor.expiresAt) <= Date.now() || !Number.isFinite(Date.parse(descriptor.publishedAt))) throw new Error('Invalid/expired signed descriptor');
 const base = `https://github.com/braedonsaunders/vela/releases/download/v${version}/`;
-const refs = [descriptor.archive, descriptor.manifest, ...Object.values(descriptor.engines).map((e:any)=>e.manifest)];
+if (!/^[a-f0-9]{64}$/.test(descriptor.playerAssetsDigest) || 'engines' in descriptor
+  || 'universalRuntimeKey' in descriptor) throw new Error('Expected a single-app player-assets descriptor');
+const refs = [descriptor.archive, descriptor.manifest];
 const uploads = [descriptorFile, descriptorFile+'.sig'];
 for (const ref of refs) {
   const url = new URL(ref.url), name = decodeURIComponent(url.pathname.split('/').at(-1)!);

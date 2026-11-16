@@ -1,76 +1,126 @@
-/** One local release containing supported static Exact engine builds. Never publishes. */
-import { createHash } from 'node:crypto';
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
-import { gzipSync } from 'node:zlib';
-import { stageUniversalAssets, stageUniversalFromRelease } from './universal-assets';
-import { engines as installedEngines } from '../engine';
-import { finalizeEngineRoot } from './engine-root';
-import { writePwaAssets, pwaIcons } from './pwa-assets';
-const root = resolve(import.meta.dir, '../..'), output = join(root, '.artifacts/release');
-const assetArgument = process.argv.find(arg => arg.startsWith('--universal-assets='));
-const releaseIndex = process.argv.indexOf('--universal-from-release');
-const releaseArgument = process.argv.find(arg => arg.startsWith('--universal-from-release='))?.slice('--universal-from-release='.length) ?? (releaseIndex >= 0 ? process.argv[releaseIndex + 1] : undefined);
-const excludedSkinDocuments = process.argv.filter(arg => arg.startsWith('--exclude-document=')).map(arg => arg.slice('--exclude-document='.length));
-if (excludedSkinDocuments.some(id => !/^[a-z][a-z0-9-]{0,31}$/.test(id))) throw new Error('Invalid excluded skin document id');
-if (Boolean(assetArgument) === Boolean(releaseArgument) || assetArgument === '--universal-assets=' || process.argv.includes('--universal-assets') || releaseArgument?.startsWith('--')) throw new Error('Provide exactly one of --universal-assets=<verified payload> or --universal-from-release <verified release.tar.gz>');
-const version = (await readFile(join(import.meta.dir, 'VERSION'), 'utf8')).trim();
-const hash = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex');
-async function run(cmd: string[], cwd = root) { const child = Bun.spawn(cmd, { cwd, env: { ...process.env, COPYFILE_DISABLE: '1' }, stdout: 'inherit', stderr: 'inherit' }); if (await child.exited) throw new Error(`${cmd[0]} failed`); }
-const revision = (await new Response(Bun.spawn(['git','rev-parse','HEAD'], {cwd:root, stdout:'pipe'}).stdout).text()).trim();
-await mkdir(output, {recursive:true});
-const archiveName = `vela-${version}.tar.gz`, manifestName = `vela-${version}.manifest.json`;
-for (const name of [archiveName,manifestName]) if (await Bun.file(join(output,name)).exists()) throw new Error(`${name} exists; release versions are immutable`);
-const work = await mkdtemp(join(output,'.multi-'));
+/** One committed Expo SPA. Build only: never signs or publishes. */
+import { copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { inventory, sha256 } from './inventory';
+import { stagePlayerAssets } from './player-assets';
+import { capture, run } from './snapshot';
+import { pwaIcons, writePwaAssets } from './pwa-assets';
+
+if (Bun.version !== '1.4.2') throw new Error('Release builds require the pinned Bun 1.4.2 toolchain');
+const root = resolve(import.meta.dir, '../..');
+const args = process.argv.slice(2);
+const playerInput = args.find(arg => arg.startsWith('--player-assets='))?.slice('--player-assets='.length);
+if (!playerInput || args.some(arg => arg !== '--committed' && !arg.startsWith('--player-assets='))) {
+  throw new Error('Usage: bun tools/release/build.ts --player-assets=<verified payload directory> [--committed]');
+}
+// Bulky intermediates and finalized artifacts stay on the shared scratch drive.
+const scratch = join(homedir(), '.scratch/vela-build', root.split('/').at(-1)!);
+await mkdir(scratch, { recursive: true });
+const artifacts = join(root, '.artifacts');
+const artifactsStat = await lstat(artifacts).catch(() => null);
+if (!artifactsStat?.isSymbolicLink()) {
+  throw new Error('Before building, make .artifacts a symlink into ~/.scratch/vela-build/<worktree>/');
+}
+const output = join(artifacts, 'release');
+await mkdir(output, { recursive: true });
+const work = await mkdtemp(join(scratch, '.expo-release-'));
 try {
-  const dist = join(work,'dist'); await mkdir(dist);
-  const universalAssets = releaseArgument ? await stageUniversalFromRelease(releaseArgument, dist) : await stageUniversalAssets(assetArgument!.slice('--universal-assets='.length), dist);
-  await run([process.execPath, join(root, 'tools/skin.ts'), 'documents', join(dist, 'skins')]);
-  if (excludedSkinDocuments.length) {
-    const catalogFile = join(dist, 'skins/catalog.json');
-    const catalog = JSON.parse(await readFile(catalogFile, 'utf8'));
-    catalog.documents = catalog.documents.filter((doc: { id: string; version: string }) => !excludedSkinDocuments.includes(doc.id));
-    await writeFile(catalogFile, JSON.stringify(catalog, null, 2) + '\n');
+  const { source, revision, version, env, node } = await capture(root, work, args.includes('--committed'));
+  const archiveName = `vela-${version}.tar.gz`;
+  const manifestName = `vela-${version}.manifest.json`;
+  for (const name of [archiveName, manifestName, `${archiveName}.sha256`, `${manifestName}.sha256`]) {
+    if (await Bun.file(join(output, name)).exists()) throw new Error(`${name} exists; release versions are immutable`);
   }
-  const engines: Record<string,{base:string;appBytes:number;appGzipBytes:number}> = {};
-  for (const engine of await installedEngines(join(root, 'client'))) {
-    const stem = `vela-${version}-${engine}`, childManifest = join(output,`${stem}.manifest.json`);
-    if (!await Bun.file(childManifest).exists()) await run([process.execPath,join(import.meta.dir,'engine-build.ts'),'--committed','--engine',engine,...process.argv.includes('--map-report')?['--map-report']:[]]);
-    const metadata = await Bun.file(childManifest).json();
-    if (metadata.sourceDirty || metadata.sourceRevision !== revision) throw new Error(`Stale/dirty engine ${engine}`);
-    const target = join(dist,'engines',engine,version); await mkdir(target,{recursive:true});
-    await run(['tar','-xf',join(output,`${stem}.tar.gz`),'-C',target]);
-    const base = await finalizeEngineRoot(target,engine,version);
-    // A single root worker owns the entire install. Engines never register independent workers.
-    for (const name of ['sw.js','pwa.js','offline.html']) await rm(join(target,name),{force:true});
-    const entry = await readFile(join(target,'app.js'));
-    engines[engine] = {base,appBytes:entry.length,appGzipBytes:gzipSync(entry,{level:9}).length};
+  const app = join(source, 'apps/vela');
+  const config = JSON.parse(await readFile(join(app, 'app.json'), 'utf8'));
+  if (config.expo.web.output !== 'single') throw new Error('Release requires Expo single SPA output');
+  const dist = join(work, 'export');
+  const payload = join(work, 'payload');
+  await mkdir(payload);
+  const playerAssets = await stagePlayerAssets(playerInput, payload, revision);
+  console.log(await run([process.execPath, 'install', '--frozen-lockfile'], source, env));
+  const buildEnv = {
+    ...env,
+    NODE_ENV: 'production',
+    VELA_WEB_BASE: '/vela',
+    EXPO_PUBLIC_VELA_APP_VERSION: version,
+    EXPO_PUBLIC_VELA_PLAYER_ASSETS: playerAssets.digest,
+  };
+  console.log(await run([process.execPath, 'apps/vela/scripts/assets.ts'], source, buildEnv));
+  const routes = JSON.parse(await run([process.execPath, 'apps/vela/scripts/routes.ts', '/vela'], source, buildEnv));
+  if (routes.schema !== 1 || routes.base !== '/vela' || !Array.isArray(routes.routes)
+    || !routes.routes.includes('/vela') || routes.routes.some((path: string) =>
+      typeof path !== 'string' || !(path === '/vela' || path.startsWith('/vela/')))) {
+    throw new Error('Invalid app-owned route table');
   }
-  await writePwaAssets(dist);
-  await copyFile(join(import.meta.dir,'pwa.js'),join(dist,'pwa.js'));
-  const loader = await readFile(join(import.meta.dir,'loader.js'));
-  const loaderName = `loader-${hash(loader).slice(0,20)}.js`; await writeFile(join(dist,loaderName),loader);
-  const pwaHash = hash(await readFile(join(dist,'pwa.js'))), pwaUrl = `/vela/pwa.js?v=${pwaHash}`;
-  const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090B0E"><link rel="manifest" href="/vela/manifest.json"><link rel="icon" href="/vela/vela-icon.svg"><link rel="apple-touch-icon" href="/vela/vela-icon-180.png"><title>Vela</title><style>body{margin:0;background:#090B0E;color:#f2e9d6;font:16px system-ui;min-height:100vh;display:grid;place-items:center}</style><p role="status">Opening Vela…</p><script type="module" src="/vela/${loaderName}"></script></html>`;
-  await writeFile(join(dist,'index.html'),html);
-  await writeFile(join(dist,'offline.html'),'<!doctype html><meta charset="utf-8"><title>Vela · Offline</title><style>body{background:#090B0E;color:#f2e9d6;font:18px system-ui;padding:3rem}</style><h1>You’re offline</h1><p>Reconnect to browse and play.</p><a href="/vela">Try again</a>');
-  await writeFile(join(dist,'engines.json'),JSON.stringify({version,engines,universalAssets:{baseURL:universalAssets.baseURL,assetKey:universalAssets.assetKey}})+'\n');
-  await writeFile(join(dist,'app.version.json'),JSON.stringify({version})+'\n');
-  await writeFile(join(dist,'manifest.json'),JSON.stringify({id:'/vela',name:'Vela',short_name:'Vela',start_url:'/vela',scope:'/vela',display:'standalone',theme_color:'#090B0E',background_color:'#090B0E',icons:pwaIcons})+'\n');
-  const files: {path:string;bytes:number;sha256:string}[]=[];
-  async function inventory(dir:string) {for(const e of (await readdir(dir,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))) {const path=join(dir,e.name);if(e.isDirectory())await inventory(path);else {const b=await readFile(path);files.push({path:relative(dist,path).split('\\').join('/'),bytes:b.length,sha256:hash(b)});}}}
-  await inventory(dist);
-  const rootFiles=[{url:`/vela/${loaderName}`,sha256:hash(loader)},{url:pwaUrl,sha256:pwaHash},...files.filter(f=>f.path==='offline.html').map(f=>({url:`/vela/${f.path}`,sha256:f.sha256}))];
-  const engineFiles=files.filter(f=>f.path.startsWith('engines/') || f.path.startsWith('universal/') || (f.path.startsWith('skins/') && f.path !== 'skins/catalog.json')).flatMap(f=>[{url:`/vela/${f.path}`,sha256:f.sha256}, ...(f.path.startsWith('universal/') ? [{url:`/vela/${f.path}?v=${universalAssets.assetKey}`,sha256:f.sha256}] : [])]);
-  const shell={version,digest:hash(JSON.stringify(files)).slice(0,16),offlineUrl:'/vela/offline.html',files:rootFiles,engineFiles};
-  const sw=(await readFile(join(import.meta.dir,'sw.js'),'utf8')).replace('const shell = __VELA_SHELL__;',`const shell = ${JSON.stringify(shell)};`);
-  await writeFile(join(dist,'sw.js'),sw);const swBytes=await readFile(join(dist,'sw.js'));files.push({path:'sw.js',bytes:swBytes.length,sha256:hash(swBytes)});
-  await run(['tar','--format=ustar','-czf',join(output,archiveName),'-C',dist,'.']);
-  const archive=await readFile(join(output,archiveName));
-  // What skin documents this release draws (docs/distribution.md, "Skin document compatibility").
-  const skinRenderer={schema:1,...JSON.parse(await readFile(join(root,'client/renderer/version.json'),'utf8'))};
-  const manifest={schemaVersion:1,version,protocolVersions:[0],skinRenderer,excludedSkinDocuments,exactRevision:(await readFile(join(root,'EXACT_REVISION'),'utf8')).trim(),buildTime:new Date().toISOString(),sourceRevision:revision,sourceDirty:false,apiOrigin:'same-origin',basePath:'/vela/',serviceWorker:{path:'/vela/sw.js',scope:'/vela',headers:{'Service-Worker-Allowed':'/vela','Cache-Control':'no-cache'}},engines,universalAssets,archive:{file:archiveName,bytes:archive.length,sha256:hash(archive)},files};
-  const json=JSON.stringify(manifest,null,2)+'\n';await writeFile(join(output,manifestName),json);
-  await writeFile(join(output,`${archiveName}.sha256`),`${hash(archive)}  ${archiveName}\n`);await writeFile(join(output,`${manifestName}.sha256`),`${hash(json)}  ${manifestName}\n`);
-  console.log(JSON.stringify({archive:join(output,archiveName),sha256:hash(archive),manifest:join(output,manifestName),manifestSha256:hash(json),engines},null,2));
-} finally {await rm(work,{recursive:true,force:true});}
+  const skinRenderer = JSON.parse(await run([process.execPath, 'tools/skin-renderer.ts'], source, buildEnv));
+  if (skinRenderer.schema !== 1 || !Number.isSafeInteger(skinRenderer.version)
+    || !/^[a-f0-9]{64}$/.test(skinRenderer.digest)) throw new Error('Invalid React renderer identity');
+  // Invoke the captured workspace CLI directly: bun x must never download a replacement Expo.
+  await run([node, join(source, 'node_modules/expo/bin/cli'), 'export', '--platform', 'web',
+    '--output-dir', dist], app, buildEnv);
+  const html = await readFile(join(dist, 'index.html'), 'utf8');
+  if (!html.includes('/vela/manifest.webmanifest') || !html.includes('/vela/pwa.js')) {
+    throw new Error('App-owned Expo HTML must link manifest.webmanifest and pwa.js');
+  }
+  for (const obsolete of ['engines', 'engines.json', 'universal', 'app', 'runtime.js']) {
+    if (await lstat(join(dist, obsolete)).catch(() => null)) {
+      throw new Error(`Obsolete output in Expo export: ${obsolete}`);
+    }
+  }
+  // Add data and shell resources; preserve every byte and path in Expo's generated graph.
+  await rename(join(payload, 'player'), join(dist, 'player'));
+  await run([process.execPath, 'tools/skin-documents.ts', join(dist, 'skins')], source, buildEnv);
+  await writePwaAssets(dist, join(source, 'brand'));
+  await copyFile(join(source, 'tools/release/pwa.js'), join(dist, 'pwa.js'));
+  await writeFile(join(dist, 'routes.json'), JSON.stringify(routes, null, 2) + '\n');
+  await writeFile(join(dist, 'app.version.json'), JSON.stringify({ version }) + '\n');
+  await writeFile(join(dist, 'manifest.webmanifest'), JSON.stringify({
+    id: '/vela', name: 'Vela', short_name: 'Vela', start_url: '/vela', scope: '/vela',
+    display: 'standalone', theme_color: '#090B0E', background_color: '#090B0E', icons: pwaIcons,
+  }) + '\n');
+  await writeFile(join(dist, 'offline.html'), '<!doctype html><html lang="en"><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Vela · Offline</title>'
+    + '<style>body{background:#090B0E;color:#f2e9d6;font:18px system-ui;padding:3rem}</style>'
+    + '<h1>You’re offline</h1><p>Reconnect to browse and play.</p><a href="/vela">Try again</a></html>');
+  const staticFiles = await inventory(dist);
+  const shell = {
+    version, digest: sha256(JSON.stringify(staticFiles)), offlineUrl: '/vela/offline.html', routes: routes.routes,
+    files: staticFiles.filter(file => file.path === 'offline.html').map(file => ({
+      url: `/vela/${file.path}`, sha256: file.sha256,
+    })),
+    staticFiles: staticFiles.filter(file => file.path.startsWith('_expo/static/')
+      || file.path.startsWith('assets/') || file.path.startsWith(`player/${playerAssets.digest}/`)
+      || file.path.startsWith('skins/') && file.path !== 'skins/catalog.json').map(file => ({
+      url: `/vela/${file.path}`, sha256: file.sha256,
+    })),
+  };
+  const worker = (await readFile(join(source, 'tools/release/sw.js'), 'utf8'))
+    .replace('const shell = __VELA_SHELL__;', `const shell = ${JSON.stringify(shell)};`);
+  await writeFile(join(dist, 'sw.js'), worker);
+  const files = await inventory(dist);
+  const archivePath = join(work, archiveName);
+  await run(['tar', '--format=ustar', '-czf', archivePath, '-C', dist, '.'], source, env);
+  const archive = await readFile(archivePath);
+  const manifest = {
+    schemaVersion: 1, version, protocolVersions: [0], skinRenderer,
+    buildTime: new Date().toISOString(), sourceRevision: revision, sourceDirty: false,
+    apiOrigin: 'same-origin', basePath: '/vela/', playerAssetsDigest: playerAssets.digest, playerAssets,
+    toolchain: { bun: Bun.version, lockfileSha256: sha256(await readFile(join(source, 'bun.lock'))),
+      expo: JSON.parse(await readFile(join(source, 'node_modules/expo/package.json'), 'utf8')).version },
+    serviceWorker: { path: '/vela/sw.js', scope: '/vela', headers: {
+      'Service-Worker-Allowed': '/vela', 'Cache-Control': 'no-cache',
+    } },
+    archive: { file: archiveName, bytes: archive.length, sha256: sha256(archive) }, files,
+  };
+  const json = JSON.stringify(manifest, null, 2) + '\n';
+  await rename(archivePath, join(output, archiveName));
+  await writeFile(join(output, manifestName), json, { flag: 'wx' });
+  await writeFile(join(output, `${archiveName}.sha256`), `${sha256(archive)}  ${archiveName}\n`, { flag: 'wx' });
+  await writeFile(join(output, `${manifestName}.sha256`), `${sha256(json)}  ${manifestName}\n`, { flag: 'wx' });
+  console.log(JSON.stringify({ archive: join(output, archiveName), manifest: join(output, manifestName),
+    sourceRevision: revision, playerAssetsDigest: playerAssets.digest }, null, 2));
+} finally {
+  await rm(work, { recursive: true, force: true });
+}
