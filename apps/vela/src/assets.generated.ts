@@ -78,5 +78,5 @@ export const ASSETS: Record<string, number | string> = {
   "/vela/v0/appearance/skins/broadcast/1.0.0/barlow-condensed-600.ttf": require("../../../packages/protocol/fixtures/skins/broadcast/assets/barlow-condensed-600.ttf"),
   "/vela/v0/appearance/skins/broadcast/1.0.0/barlow-condensed-500.ttf": require("../../../packages/protocol/fixtures/skins/broadcast/assets/barlow-condensed-500.ttf"),
   "/vela/v0/appearance/skins/broadcast/1.0.0/barlow-condensed-700.ttf": require("../../../packages/protocol/fixtures/skins/broadcast/assets/barlow-condensed-700.ttf"),
-  "/vela/v0/appearance/skins/cinematic-doc/1.0.0/preview.jpg": require("../assets/skins/cinematic.jpg"),
+  "/vela/v0/appearance/skins/cinematic-doc/1.0.1/preview.jpg": require("../assets/skins/cinematic.jpg"),
 };
