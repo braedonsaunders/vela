@@ -14,6 +14,7 @@ import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
+import { EscapeScope, focusTarget, noteOpener, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
@@ -192,6 +193,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
   const [groupUi, setGroupUi] = useState({ hover: false, focus: false });
   const scrollRef = useRef<Scroller>(null);
+  const buttonRef = useRef<Focusable | null>(null);
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
   const rows = rowsFor(node, ctx, env, ui, parentGroup, disabled);
@@ -270,10 +272,21 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   } else {
     // A press box is the schema's full-size transparent button over its content: the button takes
     // focus (keyboard, tvOS focus engine, D-pad) and carries the label; the box keeps its motion.
+    // The button registers under the box's id, so Escape's returnFocus can land on it.
     const press = node.press;
+    const registerButton = focusTarget(a11y.nativeID);
+    const bindButton = (target: Focusable | null) => {
+      buttonRef.current = target;
+      return registerButton(target);
+    };
+    const onPress = press && (() => {
+      const arg = fill(press.arg, ctx, env);
+      noteOpener(press.action, arg, buttonRef.current);
+      host.dispatch(press.action, arg);
+    });
     const button = press ? (
-      <Pressable style={[StyleSheet.absoluteFill, ownFocusLook(node) ? NO_RING : null]} disabled={disabled}
-        onPress={() => host.dispatch(press.action, fill(press.arg, ctx, env))}
+      <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, ownFocusLook(node) ? NO_RING : null]} disabled={disabled}
+        onPress={onPress}
         onFocus={() => set('focus', true)} onBlur={() => set('focus', false)}
         onHoverIn={() => set('hover', true)} onHoverOut={() => set('hover', false)}
         onPressIn={() => set('active', true)} onPressOut={() => set('active', false)}
@@ -289,6 +302,10 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     );
   }
   if (fx.mask) element = <Mask mask={fx.mask} style={geometry}>{element}</Mask>;
+  if (node.escape?.length) {
+    const returnFocus = node.returnFocus ? fill(node.returnFocus, ctx, env) : undefined;
+    element = <EscapeScope flags={node.escape} returnFocus={returnFocus || undefined}>{element}</EscapeScope>;
+  }
   const direction = fx.grid || (fx.scrollX && !fx.scrollY) || String(style.flexDirection ?? 'column').startsWith('row') ? 'row' : 'column';
   return (
     <Inherited.Provider value={text}>
