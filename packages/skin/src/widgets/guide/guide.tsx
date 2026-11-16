@@ -251,7 +251,6 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
         model={model}
         rows={rows}
         small={small}
-        side={side}
         showGrid={showGrid}
         zoom={zoom}
         still={still}
@@ -273,7 +272,6 @@ interface BodyProps {
   model: GuideModel;
   rows: GuideChannel[];
   small: boolean;
-  side: number;
   showGrid: boolean;
   zoom: Zoom;
   still: boolean;
@@ -288,7 +286,7 @@ interface BodyProps {
 }
 
 function GuideBody(props: BodyProps) {
-  const { look, model, rows, small, side } = props;
+  const { look, model, rows, small } = props;
   if (model.channels.length === 0) return <GuideStatus look={look} text={msg('live.noChannels')} />;
   if (rows.length === 0)
     return (
@@ -300,15 +298,13 @@ function GuideBody(props: BodyProps) {
       style={{
         flex: 1,
         minHeight: 0,
-        marginHorizontal: small ? 0 : side,
-        marginBottom: small ? 0 : 24,
+        marginHorizontal: small ? 0 : 8,
+        marginBottom: small ? 0 : 8,
         overflow: 'hidden',
-        borderRadius: small ? 0 : look.radiusPanel,
-        borderWidth: small ? 0 : 1,
+        borderRadius: small ? 0 : 8,
         borderTopWidth: 1,
         borderColor: look.edge,
         backgroundColor: look.panel,
-        boxShadow: small ? undefined : `0px 40px 120px ${look.shadow}`,
       }}
     >
       <GuideGrid
