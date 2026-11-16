@@ -9,7 +9,7 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, TVFocusGuideView, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TVFocusGuideView, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -546,21 +546,43 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
 function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: Ctx }) {
   const { env, viewport } = useHost();
   const { own, text, style, fx } = useLeafStyle(node, ctx);
-  const drawn = cached(`t${viewport.width}x${viewport.height}|${text.fontSize}|${JSON.stringify(text.rows)}|${own['text-overflow'] ?? ''}|${own['line-clamp'] ?? ''}`,
+  const textKey = `t${viewport.width}x${viewport.height}|${text.fontSize}|${JSON.stringify(text.rows)}`;
+  const drawn = cached(`${textKey}|${own['text-overflow'] ?? ''}|${own['line-clamp'] ?? ''}`,
     () => textStyle({ ...text.rows, ...pick(own, ['text-overflow', 'line-clamp']) }, measure(viewport, text.fontSize)));
   if (fx.hidden) return null;
   const value = fill(node.text, ctx, env);
-  // A text drawn as a centring flex box (a badge, an initial in a circle) centres its line.
-  const centred: { textAlign?: TextStyle["textAlign"]; lineHeight?: number } = {};
-  if (own['justify-content'] === 'center' && !text.rows['text-align']) centred.textAlign = 'center';
-  if (own['align-items'] === 'center' && typeof style.height === 'number' && !text.rows['line-height']) {
-    centred.lineHeight = style.height - (Number(style.borderTopWidth ?? style.borderWidth) || 0) - (Number(style.borderBottomWidth ?? style.borderWidth) || 0);
+  const lines = { numberOfLines: drawn.numberOfLines, ellipsizeMode: drawn.ellipsize ? ('tail' as const) : undefined };
+
+  // Natively a text view does not paint a gradient or a shadow (Android's never does): a text that
+  // paints its box (an initial in a gradient disc) draws as that box with the text centred inside.
+  if (!web && (style.backgroundImage || style.boxShadow)) {
+    return (
+      <AView style={style as ViewStyle} {...a11yProps(node, ctx, env)}>
+        <Text style={[drawn.style, centredLine(own, text.rows)]} {...lines}>{value}</Text>
+      </AView>
+    );
   }
   return (
-    <AText style={[drawn.style, style as TextStyle, centred]} numberOfLines={drawn.numberOfLines} ellipsizeMode={drawn.ellipsize ? 'tail' : undefined} {...a11yProps(node, ctx, env)}>
+    <AText style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style)]} {...lines} {...a11yProps(node, ctx, env)}>
       {value}
     </AText>
   );
+}
+
+/** A text drawn as a centring flex box (a badge, an initial in a circle) centres its line. */
+function centredLine(own: Css, inherited: Css): TextStyle {
+  return own['justify-content'] === 'center' && !inherited['text-align'] ? { textAlign: 'center' } : {};
+}
+
+/** As centredLine, and the line's height is the box's, so the text sits in the middle. */
+function centredBox(own: Css, inherited: Css, style: Record<string, unknown>): TextStyle {
+  const centred: TextStyle = { ...centredLine(own, inherited) };
+  if (own['align-items'] === 'center' && typeof style.height === 'number' && !inherited['line-height']) {
+    const top = Number(style.borderTopWidth ?? style.borderWidth) || 0;
+    const bottom = Number(style.borderBottomWidth ?? style.borderWidth) || 0;
+    return { ...centred, lineHeight: style.height - top - bottom };
+  }
+  return centred;
 }
 
 function pick(rows: Css, keys: string[]): Css {
