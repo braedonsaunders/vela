@@ -54,6 +54,8 @@ export class LiveController {
   private load: LiveView['load'] = 'idle';
   private guide: GuideModel | null = null;
   private loadGeneration = 0;
+  private guideIds: string[] = [];
+  private guideIdsKey = "";
   private timer: ReturnType<typeof setTimeout> | undefined;
   private visible = true;
   private quiet = false;
@@ -127,6 +129,15 @@ export class LiveController {
     this.guide = null;
     this.fetch();
     this.emit();
+  }
+
+  setGuideChannels(ids: string[]): void {
+    const next = [...new Set(ids)].sort();
+    const key = next.join("|");
+    if (key === this.guideIdsKey) return;
+    this.guideIds = next;
+    this.guideIdsKey = key;
+    this.fetch();
   }
 
   retry(): void {
@@ -244,7 +255,7 @@ export class LiveController {
     if (!this.now) return;
     const generation = ++this.loadGeneration;
     const day = this.day;
-    loadGuide(this.options.source, day, this.now, this.options.scope, this.options.images).then(
+    loadGuide(this.options.source, day, this.now, this.options.scope, this.options.images, undefined, this.guideIds).then(
       model => {
         if (generation !== this.loadGeneration) return;
         this.guide = model;

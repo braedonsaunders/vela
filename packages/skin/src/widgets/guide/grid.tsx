@@ -33,6 +33,7 @@ export interface GridProps {
   onSelect(channel: GuideChannel, programme: GuideProgramme | null): void;
   onPress(channel: GuideChannel, programme: GuideProgramme): void;
   onWatch(channelId: string): void;
+  onVisible(ids: string[]): void;
   handle: Ref<GridHandle>;
 }
 
@@ -181,6 +182,10 @@ export function GuideGrid(props: GridProps) {
   const firstRow = Math.max(0, rowBase - 6);
   const lastRow = Math.min(rows.length, rowBase + Math.ceil(body.height / row) + 8);
   const listHeight = Math.max(0, body.height - RULER);
+  useEffect(() => {
+    const start = focusRow > 0 && rowBase === 0 ? Math.max(0, focusRow - 6) : firstRow;
+    props.onVisible(rows.slice(start, start + Math.ceil(body.height / row) + 14).map(c => c.id));
+  }, [rows, firstRow, rowBase, focusRow, body.height, row, props.onVisible]);
 
   return (
     <View

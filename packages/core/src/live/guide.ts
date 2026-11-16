@@ -65,18 +65,29 @@ async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise
 interface Listings { channels: Channel[]; programmes: Programme[] }
 const cache = new Map<string, { at: number; value: Promise<Listings> }>();
 /** Every page of one window, shared by the minute-by-minute re-projections of that window. */
-function listings(api: GuideApi, scope: string, from: number, until: number, now: number): Promise<Listings> {
-  const key = `${scope}|${from}|${until}`;
+function listings(api: GuideApi, scope: string, from: number, until: number, now: number, ids?: string[]): Promise<Listings> {
+  const key = `${scope}|${from}|${until}|${ids?.join(",") ?? "*"}`;
   const hit = cache.get(key);
   if (hit && now >= hit.at && now - hit.at < FRESH) return hit.value;
   const value = (async () => {
-    const channels = await allPages(cursor => api.channels(cursor, 100));
-    const programmes = await allPages(cursor => api.guide({ from: new Date(from).toISOString(), until: new Date(until).toISOString(), cursor, limit: 100 }));
+    const channels = await channelMetadata(api, scope, now);
+    const requested = ids && ids.length === 0 ? [...channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 30).map(c => c.id) : ids;
+    const programmes = requested?.length === 0 ? [] : await allPages(cursor => api.guide({ from: new Date(from).toISOString(), until: new Date(until).toISOString(), cursor, limit: 100, channelIds: requested }));
     return { channels, programmes };
   })();
   cache.set(key, { at: now, value });
   value.catch(() => { if (cache.get(key)?.value === value) cache.delete(key); });
-  for (const old of cache.keys()) if (cache.size > 4 && old !== key) cache.delete(old);
+  for (const old of cache.keys()) if (cache.size > 8 && old !== key) cache.delete(old);
+  return value;
+}
+
+const channelCache = new Map<string, { at: number; value: Promise<Channel[]> }>();
+function channelMetadata(api: GuideApi, scope: string, now: number): Promise<Channel[]> {
+  const hit = channelCache.get(scope);
+  if (hit && now >= hit.at && now - hit.at < FRESH) return hit.value;
+  const value = allPages(cursor => api.channels(cursor, 100));
+  channelCache.set(scope, { at: now, value });
+  value.catch(() => { if (channelCache.get(scope)?.value === value) channelCache.delete(scope); });
   return value;
 }
 
@@ -134,17 +145,17 @@ function group(programmes: Programme[]) {
  * One local day of listings, every page fetched; incomplete pages are never presented as complete.
  * `day` counts days from today. Airing state and progress are projected at `now`.
  */
-export async function loadGuide(api: GuideApi, day: number, now: number, scope: string, images?: Images, localeJSON?: string): Promise<GuideModel> {
+export async function loadGuide(api: GuideApi, day: number, now: number, scope: string, images?: Images, localeJSON?: string, channelIds?: string[]): Promise<GuideModel> {
   if (!Number.isInteger(day) || day < 0 || day >= DAYS) throw new Error('Invalid guide day');
   const { start, end } = withLocale(localeJSON, () => {
     const start = midnight(now, day);
     // A DST day can run 25 hours; the protocol's window is at most 24.
     return { start, end: Math.min(midnight(now, day + 1), start + DAY) };
   });
-  const window = await listings(api, scope, start, end, now);
+  const window = await listings(api, scope, start, end, now, channelIds);
   // Mobile now/next and the channel column stay current even while the grid browses another day.
   const currentStart = Math.floor(now / 1800000) * 1800000;
-  const current = day === 0 ? window : await listings(api, scope, currentStart, currentStart + 2 * HOUR, now);
+  const current = day === 0 ? window : await listings(api, scope, currentStart, currentStart + 2 * HOUR, now, channelIds);
   const grouped = group(window.programmes.filter(p => Date.parse(p.start) < end && Date.parse(p.end) > start));
   const currentByChannel = group(current.programmes);
   return withLocale(localeJSON, () => {

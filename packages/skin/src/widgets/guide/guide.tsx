@@ -2,7 +2,7 @@
 // the selected programme beside the live preview tile, a toolbar of days, time and filters, the
 // owner's named Guides, then the EPG grid scrolling inside its panel. Phones open on the On now
 // list and switch to the grid. Its look comes from the document's `ui` block.
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useCallback, useRef, useState } from 'react';
 import { View, type ViewStyle } from 'react-native';
 import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@vela/core';
 import { useHost, type WidgetProps } from '../../host';
@@ -90,6 +90,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     else controller.preview(channel.id);
   };
   const watch = (channelId: string) => controller.watch(channelId);
+  const onVisible = useCallback((ids: string[]) => controller.setGuideChannels(ids), [controller]);
   const pickDay = (day: number) => {
     setSelected({ channel: '', programme: '' });
     controller.chooseDay(day);
@@ -261,6 +262,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
         onSelect={select}
         onPress={press}
         onWatch={watch}
+        onVisible={onVisible}
         onAll={() => setFilter('all')}
       />
     </View>
@@ -282,6 +284,7 @@ interface BodyProps {
   onSelect(channel: GuideChannel, programme: GuideProgramme | null): void;
   onPress(channel: GuideChannel, programme: GuideProgramme): void;
   onWatch(channelId: string): void;
+  onVisible(ids: string[]): void;
   onAll(): void;
 }
 
@@ -292,7 +295,7 @@ function GuideBody(props: BodyProps) {
     return (
       <GuideStatus look={look} text={msg('live.noMatches')} action={msg('live.allChannels')} onRetry={props.onAll} />
     );
-  if (!props.showGrid) return <NowList look={look} rows={rows} onWatch={props.onWatch} />;
+  if (!props.showGrid) return <NowList look={look} rows={rows} onWatch={props.onWatch} onVisible={props.onVisible} />;
   return (
     <View
       style={{
@@ -321,6 +324,7 @@ function GuideBody(props: BodyProps) {
         onSelect={props.onSelect}
         onPress={props.onPress}
         onWatch={props.onWatch}
+        onVisible={props.onVisible}
       />
     </View>
   );
