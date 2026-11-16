@@ -31,7 +31,12 @@ export const cardPreview: Node = {
   type: 'box',
   a11y: { hidden: true },
   style: previewOverlay(false),
-  states: [{ when: [previewing], style: previewOverlay(true) }],
+  states: [
+    // The first poster has only the page gutter to its left. Expand its preview inward
+    // so the title and video do not start outside the screen.
+    { when: [previewing, is('index', '0')], style: { ...previewOverlay(true), translate: '0% 20%' } },
+    { when: [previewing], style: previewOverlay(true) },
+  ],
   children: [
     {
       type: 'image',
