@@ -1,4 +1,5 @@
 // The chrome's icons: 24x24 strokes and fills in one colour, the compiled Cinematic geometry.
+import { View } from 'react-native';
 import Svg, { Circle, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 export type PlayerIconName =
@@ -116,14 +117,7 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
         </>
       );
     case 'fullscreen':
-      return (
-        <Path
-          d={FULLSCREEN}
-          stroke={color}
-          {...STROKE}
-          strokeWidth={1.8}
-        />
-      );
+      return <Path d={FULLSCREEN} stroke={color} {...STROKE} strokeWidth={1.8} />;
     case 'alert':
       return <Path d="M12 3.5l9.5 16.5h-19zM12 10v4.5M12 17.4v.1" stroke={color} {...STROKE} />;
     case 'check':
@@ -131,10 +125,13 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
   }
 }
 
+/** In a view of its own, so it stacks in order over a panel's absolutely placed glass (on the web too). */
 export function PlayerIcon({ name, size, color }: Props) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" pointerEvents="none">
-      <Shape name={name} color={color} />
-    </Svg>
+    <View pointerEvents="none" style={{ width: size, height: size }}>
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Shape name={name} color={color} />
+      </Svg>
+    </View>
   );
 }
