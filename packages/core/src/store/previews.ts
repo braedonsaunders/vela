@@ -57,8 +57,11 @@ export class Previews {
   /** The app's view changed: whether previews may play, and which hero is on show. */
   setContext(context: PreviewContext): void {
     const previous = this.context;
+    const wanted = this.desired();
     this.context = context;
-    if (context.allowed === previous.allowed && context.heroId === previous.heroId) return;
+    // Only a change in what should play restarts: the hero carousel moving on while a card's
+    // trailer plays must not stop that trailer.
+    if (this.desired() === wanted) return;
     const newSlide = context.heroId !== previous.heroId && !this.target.cardId;
     this.restart(newSlide ? HERO_DWELL_MS : CARD_DWELL_MS);
   }
