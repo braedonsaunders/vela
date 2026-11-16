@@ -5,40 +5,26 @@
 // the host, which owns navigation and data; nothing in a document executes.
 import MaskedView from '@react-native-masked-view/masked-view';
 import { BlurView } from 'expo-blur';
-import { Image, type ImageSource } from 'expo-image';
+import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, TextInput, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Platform, Pressable, StyleSheet, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
-import type { Action } from '../../../protocol/v0/skin';
-import { withClientStrings } from '../../../client/src/skin/client-strings';
-import type { Measure, Viewport } from './css';
+import type { Viewport } from './css';
+import { GroupContext, HostContext, InheritedContext, measure, useHost, type GroupState, type SkinHost } from './host';
 import { SYMBOLS } from './icons';
+import { WIDGETS } from './widgets';
+import { SearchInput } from './widgets/search-input';
 import { animation } from './motion';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
 import { collection, type Ctx, type Env } from './vocabulary';
 
-export interface SkinHost {
-  doc: ResolvedDocument;
-  env: Env;
-  viewport: Viewport;
-  dispatch(action: Action, arg: string): void;
-  /** An image source for a document path: an app asset, the document's own asset, or a URL. */
-  image(src: string): ImageSource | number | undefined;
-  setQuery(query: string): void;
-  setFlag(flag: string, on: boolean): void;
-  setPager(rowId: string, state: { atStart: boolean; atEnd: boolean }): void;
-  /** Where the shell draws the route (slot `children`). */
-  children?: ReactNode;
-}
-
-const Host = createContext<SkinHost | null>(null);
-const Inherited = createContext<{ rows: Css; fontSize: number }>({ rows: {}, fontSize: 16 });
-interface GroupState { hover: boolean; focus: boolean; report(kind: 'hover' | 'focus', on: boolean): void }
-const Group = createContext<GroupState | null>(null);
+const Host = HostContext;
+const Inherited = InheritedContext;
+const Group = GroupContext;
 /** Scroll views of row pagers, by row id, so pageNext/pagePrev can move them. */
 interface Scroller { scrollTo(options: { x: number; animated: boolean }): void }
 const pagers = new Map<string, { view: Scroller; x: number; width: number }>();
@@ -50,11 +36,6 @@ const AText = Animated.Text;
 const AScroll = Animated.ScrollView;
 const web = Platform.OS === 'web';
 
-function useHost(): SkinHost {
-  const host = useContext(Host);
-  if (!host) throw new Error('Skin nodes draw inside <SkinRoot>');
-  return host;
-}
 
 export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
   useEffect(() => {
@@ -142,9 +123,6 @@ function split(rows: Css): { own: Css; inherited: Css } {
   return { own, inherited };
 }
 
-function measure(viewport: Viewport, fontSize: number): Measure {
-  return { viewport, fontSize, axis: 'x' };
-}
 
 function translatedBox(rows: Css, viewport: Viewport, fontSize: number) {
   return cached(`b${viewport.width}x${viewport.height}|${fontSize}|${JSON.stringify(rows)}`, () => boxStyle(rows, measure(viewport, fontSize)));
@@ -395,7 +373,7 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const { style, text, fx } = useLeafStyle(node, ctx);
   const inner = node.inner ? translatedBox(split(filled(node.inner, ctx, host.env, false)).own, host.viewport, text.fontSize).style : undefined;
   if (fx.hidden) return null;
-  const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
+  const content = node.slot === 'children' ? host.children : <SearchInput params={{}} ctx={ctx} />;
   return (
     <Inherited.Provider value={text}>
       <AView style={style as ViewStyle}>
@@ -407,32 +385,12 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
 
 function Widget({ node, ctx }: { node: Extract<RNode, { kind: 'widget' }>; ctx: Ctx }) {
   const { style, text, fx } = useLeafStyle(node, ctx);
-  if (fx.hidden) return null;
-  switch (node.widget) {
-    case 'searchInput':
-      return (
-        <Inherited.Provider value={text}>
-          <AView style={style as ViewStyle}><SearchField params={node.params} ctx={ctx} /></AView>
-        </Inherited.Provider>
-      );
-    default:
-      // Widgets outside the spike (install, observe, sentinel, select, previews, live tile) draw nothing yet.
-      return null;
-  }
-}
-
-function SearchField({ params, ctx }: { params: Record<string, string>; ctx: Ctx }) {
-  const host = useHost();
-  const text = useContext(Inherited);
-  const drawn = textStyle(text.rows, measure(host.viewport, text.fontSize));
-  const placeholder = params.placeholder ? withClientStrings(params.placeholder) : undefined;
-  const label = params.label ? withClientStrings(params.label) : placeholder;
+  const Part = WIDGETS[node.widget];
+  if (fx.hidden || !Part) return null;
   return (
-    <TextInput value={host.env.query} onChangeText={host.setQuery} placeholder={placeholder} accessibilityLabel={label}
-      placeholderTextColor={params.placeholderColor ?? (drawn.style.color as string | undefined)} autoCorrect={false} autoCapitalize="none"
-      returnKeyType="search" testID={`search-${ctx.index}`} nativeID="vela-search"
-      onFocus={() => host.setFlag('search-focused', true)} onBlur={() => host.setFlag('search-focused', false)}
-      style={[drawn.style, { flex: 1, minWidth: 0, padding: 0, ...(web ? { outlineStyle: 'none' } : {}) } as TextStyle]} />
+    <Inherited.Provider value={text}>
+      <AView style={style as ViewStyle}><Part params={node.params} ctx={ctx} /></AView>
+    </Inherited.Provider>
   );
 }
 
