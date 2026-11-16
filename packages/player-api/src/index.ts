@@ -4,9 +4,9 @@
 // moves into modules/vela-player at conversion.
 import type { StyleProp, ViewStyle } from 'react-native';
 import type { Command, Failure, PlaybackSession, Snapshot } from '../../../client/player/model';
-import type { PlaybackPlan, PlayerObservation } from '../../../protocol/v0/types';
+import type { PlaybackPlan, PlayerObservation, SessionCommand } from '../../../protocol/v0/types';
 
-export type { Command, Failure, PlaybackSession, Snapshot, PlaybackPlan, PlayerObservation };
+export type { Command, Failure, PlaybackSession, Snapshot, PlaybackPlan, PlayerObservation, SessionCommand };
 
 export interface VelaPlayerViewProps {
   /** The session to play. A newer revision or generation of the same session replaces it. */
@@ -24,6 +24,11 @@ export interface VelaPlayerViewProps {
   onObservation?: (event: { sessionId: string; observation: PlayerObservation }) => void;
   /** A command finished: done, or refused with the reason (unsupported, no user activation, stale). */
   onCommand?: (event: { id: number; ok: boolean; failure?: Failure }) => void;
+  /** The engine needs the server to apply a session command (a seek, track change, path switch or
+   * fallback it initiated): the controller sends it with the adapter and answers with a new plan. */
+  onSessionCommand?: (event: { sessionId: string; command: SessionCommand }) => void;
+  /** The engine needs a fresh authoritative plan (a stale generation or an expired grant). */
+  onSessionRefresh?: (event: { sessionId: string }) => void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -49,4 +54,11 @@ export interface WebPlayerHost {
   update(props: VelaPlayerViewProps): void;
   dispose(): void;
 }
-export type CreateWebPlayerHost = (element: HTMLElement, props: VelaPlayerViewProps, access: () => MediaAccess | null) => WebPlayerHost;
+export interface WebPlayerHostOptions {
+  /** Where the player's static payload lives: `${baseUrl}/player/<digest>/` (decoder packages,
+   * worklets, subtitle assets). Not a prop, so skins never see or set it. */
+  assetBaseURL: string;
+  /** The trusted controller's current media access. */
+  access(): MediaAccess | null;
+}
+export type CreateWebPlayerHost = (element: HTMLElement, props: VelaPlayerViewProps, options: WebPlayerHostOptions) => WebPlayerHost;
