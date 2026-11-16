@@ -76,7 +76,8 @@ if [ -n "$(find "$root/modules" -path '*/ios/*' -newer Pods/Manifest.lock -print
   pod install >/dev/null
 fi
 if [ "$simulator" = 1 ]; then
-  set -- -sdk appletvsimulator -destination 'generic/platform=tvOS Simulator' CODE_SIGNING_ALLOWED=NO
+  # Signed to run locally: an unsigned app has no Keychain, where the app keeps its sessions.
+  set -- -sdk appletvsimulator -destination 'generic/platform=tvOS Simulator' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=""
   products=Release-appletvsimulator
 else
   set -- -sdk appletvos -destination 'generic/platform=tvOS' -allowProvisioningUpdates DEVELOPMENT_TEAM="$team" CODE_SIGN_STYLE=Automatic
@@ -90,9 +91,10 @@ fi
 app=$derived/Build/Products/$products/Vela.app
 
 if [ "$simulator" = 1 ]; then
-  sim=$(xcrun simctl list devices booted | awk -F '[()]' '/Apple TV/ {print $2; exit}')
+  uuid='[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}'
+  sim=$(xcrun simctl list devices booted | grep 'Apple TV' | grep -oE "$uuid" | head -1)
   if [ -z "$sim" ]; then
-    sim=$(xcrun simctl list devices available | awk -F '[()]' '/Apple TV/ {print $2; exit}')
+    sim=$(xcrun simctl list devices available | grep 'Apple TV' | grep -oE "$uuid" | head -1)
     [ -n "$sim" ] || { echo "apple-tv: no Apple TV simulator (Xcode > Settings > Platforms)" >&2; exit 2; }
     xcrun simctl boot "$sim"
   fi
