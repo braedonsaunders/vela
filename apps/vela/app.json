@@ -3,7 +3,7 @@
     "name": "Vela",
     "slug": "vela",
     "scheme": "vela",
-    "version": "0.2.4",
+    "version": "0.2.5",
     "orientation": "default",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#090b0e",

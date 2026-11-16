@@ -19,6 +19,10 @@ The Exact app/dispatch was removed in `d47098c`; exporter integration landed in
 below preserve prior installer/signing contracts and proof; their Exact commands
 must not be used as the current RN build instructions.
 
+A built-in skin document or bundled asset change requires a new skin version and
+matching preview/font references before packaging. `skins/<id>/<version>/` URLs are
+immutable across releases; renderer-only changes use the renderer source digest.
+
 ### Expo packaging command and captured inputs
 
 The exporter captures a committed workspace and builds the single Expo app:
