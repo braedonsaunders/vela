@@ -12,8 +12,18 @@ test('episode details show series context including specials, with separate port
   const model = detailModel({ title, extras: [], chapters: [], cast: [] } satisfies TitleDetail).title[0]!;
   expect(model.episodeContext).toBe('Meridian Station · Season 0, Episode 3');
   expect(model.poster).toContain('/poster');
-  expect(model.backdrop).toContain('/still');
+  expect(model.backdrop).toContain('/backdrop');
+  expect(card(title).backdrop).toContain('/still');
   expect(card({ ...title, showName: undefined, seasonNumber: undefined }).episodeContext).toBe('Episode 3');
   expect(card({ ...title, kind: 'movie' }).episodeContext).toBe('');
   expect(card({ ...title, kind: 'movie' }).backdrop).toContain('/backdrop');
+});
+
+
+test('episode air dates and the server-selected next item reach the display model', () => {
+  const next = { ...title, id: 'server-next', airDate: '2025-02-03' };
+  const model = detailModel({ title, nextUp: next, episodes: [title, next], extras: [], chapters: [], cast: [] });
+  expect(model.nextUp?.[0]?.id).toBe('server-next');
+  expect(model.episodes[1]?.facts).toContain('Feb 3, 2025');
+  expect(detailModel({ title, nextUp: null, extras: [], chapters: [], cast: [] }).nextUp).toEqual([]);
 });

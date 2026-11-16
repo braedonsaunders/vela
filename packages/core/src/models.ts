@@ -11,6 +11,7 @@ export interface Card {
   kind: string;
   name: string;
   summary: string;
+  airDate: string;
   year: number;
   rating: string;
   durationSeconds: number;
@@ -126,6 +127,7 @@ export interface DetailModel {
   resumeSeconds: number;
   seasons: Card[];
   episodes: Card[];
+  nextUp?: Card[];
   extras: Extra[];
   cast: string[];
   castPeople: Person[];

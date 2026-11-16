@@ -3,7 +3,7 @@
 import type { ArtworkRef, Bootstrap, Row as WireRow, RowEntry, Title, TitleDetail } from '../wire';
 import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Rating, Row } from '../models';
 import { artworkURL, type Images } from './artwork';
-import { clock, minute, msg, number, percent, plural } from '../i18n';
+import { clock, minute, msg, number, percent, plural, localeContext } from '../i18n';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number, images?: Images): string {
   const ref = artwork.find(item => item.kind === kind);
@@ -24,6 +24,14 @@ function pictures(artwork: ArtworkRef[], images: Images | undefined, artWidth: n
   };
 }
 
+function airDateLabel(value?: string): string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat(localeContext().formatLocale, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(date)
+    : '';
+}
+
 const year = (value: number) => number(value, { useGrouping: false });
 
 export function card(title: Title, receipt = '', images?: Images, artWidth = 2560, backdropWidth = artWidth): Card {
@@ -36,6 +44,7 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     kind: title.kind,
     name: title.name,
     summary: title.summary,
+    airDate: title.airDate ?? '',
     year: title.year ?? 0,
     rating: title.rating ?? '',
     durationSeconds: duration ?? 0,
@@ -57,7 +66,7 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     progressLabel: duration ? percent(Math.min(1, Math.max(0, position / duration))) : '',
     seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '',
     episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
-    facts: [yearLabel, title.rating ?? '', durationLabel].filter(Boolean).join(' · '),
+    facts: [title.kind === 'episode' ? airDateLabel(title.airDate) || yearLabel : yearLabel, title.rating ?? '', durationLabel].filter(Boolean).join(' · '),
     ...pictures(title.artwork, images, artWidth, backdropWidth, title.kind === 'episode'),
     ...(title.kind === 'episode' ? { logo: '' } : {}),
     receipt,
@@ -94,6 +103,7 @@ function plainCard(id: string, kind: string, name: string, rating: string, art: 
     progressLabel: '',
     seasonNumberLabel: '',
     episodeNumberLabel: '',
+    airDate: '',
     year: 0,
     rating,
     durationSeconds: 0,
@@ -270,8 +280,11 @@ export function detailModel(
   const trailers = data.extras.filter(extra => extra.kind === 'trailer');
   const trailer = trailers.find(extra => extra.availability !== 'unavailable') ?? trailers[0];
   const position = data.title.watch?.positionSeconds ?? 0;
+  const titleCard = card(data.title, '', images, artWidth);
+  // Title pages use the background; shelves and episode rows keep their landscape still.
+  const backdrop = art(data.title.artwork, 'backdrop', artWidth, Math.ceil(artWidth * 9 / 16), images) || titleCard.backdrop;
   return {
-    title: [card(data.title, '', images, artWidth)],
+    title: [{ ...titleCard, backdrop }],
     ratings: ratings(data.title),
     trailerId: trailer?.id ?? '',
     trailerReady: !!trailer && extraPlayback && trailer.availability !== 'unavailable',
@@ -285,6 +298,7 @@ export function detailModel(
     canPlay: data.canPlay ?? false,
     resumeSeconds: position,
     seasons: (data.seasons ?? []).map(t => card(t, '', images, artWidth)),
+    nextUp: data.nextUp === undefined ? undefined : data.nextUp ? [card(data.nextUp, '', images, artWidth)] : [],
     episodes: (data.episodes ?? []).map(t => card(t, '', images, artWidth)),
     extras: data.extras.map(e => ({
       id: e.id,

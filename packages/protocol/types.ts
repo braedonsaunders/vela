@@ -49,7 +49,7 @@ export interface TitleRating { source: string; kind: 'critic' | 'audience'; valu
 export interface ThemeMusic { url: string; expiresAt: Timestamp; durationSeconds?: number;
   /** Measured integrated loudness in LUFS; omitted when unmeasured. */ loudness?: number }
 export interface Title {
-  id: ID; kind: TitleKind; name: string; summary: string; year?: number; genres: string[];
+  id: ID; kind: TitleKind; name: string; summary: string; year?: number; /** Original air date, YYYY-MM-DD. */ airDate?: string; genres: string[];
   durationSeconds?: number; rating?: string; ratings?: TitleRating[]; artwork: ArtworkRef[]; watch?: WatchState; themeMusic?: ThemeMusic;
   showId?: ID; showName?: string; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
 }
@@ -63,6 +63,7 @@ export type PendingPart = 'seasons' | 'episodes' | 'extras' | 'trailer';
 /** A partial answer: `pending` names the parts still in flight; ask again after `refreshAfterMs`. */
 export interface PartialAnswer { pending?: PendingPart[]; refreshAfterMs?: number }
 export interface TitleDetail extends PartialAnswer { title: Title; canPlay?: boolean; seasons?: Title[]; episodes?: Title[];
+  /** Server-selected next episode; null means none. Omitted by older servers. */ nextUp?: Title | null;
   extras: Extra[]; chapters: Chapter[]; crew?: { name: string; role?: string; artwork?: ArtworkRef }[]; mediaSummary?: MediaSummary; cast: { name: string; role?: string; artwork?: ArtworkRef }[] }
 export type RowEntry = { id: ID; receiptToken: string } & (
   { kind: 'title'; title: Title } | { kind: 'channel'; channel: Channel } |

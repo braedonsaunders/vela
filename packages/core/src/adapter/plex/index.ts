@@ -3,6 +3,7 @@ import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescripti
 import type { LiveTv, PathSwitching, SwitchCommand } from '../capabilities';
 import { VelaError } from '../errors';
 import { plexHeaders } from './auth';
+import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
 export * from './auth';
 
@@ -13,6 +14,8 @@ interface PlexSession {
   part: Node;
   metadata: Node;
   sequence: number;
+  pending: Promise<unknown>;
+  scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
 }
@@ -126,26 +129,34 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
     this.sessions.clear(); this.rotateTransientToken(); await this.config.credentials.set(null); return ack;
   }
   private artwork(n: Node): V.ArtworkRef[] {
+    const image = (type: string) => (n.Image || []).find((i: Node) => i.type === type)?.url;
     const poster = n.type === 'episode' ? n.grandparentThumb
-      : n.type === 'season' ? n.parentThumb || n.grandparentThumb || n.thumb : n.thumb;
+      : n.type === 'season' ? n.parentThumb || n.grandparentThumb || n.thumb : n.thumb || n.logo || n.composite || image('coverPoster');
     const refs: [string | undefined, V.ArtworkRef['kind']][] = [
       [poster, 'poster'],
       [n.type === 'episode' ? n.thumb : undefined, 'still'],
-      [n.art, 'backdrop'],
+      [n.art || n.parentArt || n.grandparentArt || image('background'), 'backdrop'],
+      [n.clearLogo || n.parentClearLogo || n.grandparentClearLogo || image('clearLogo'), 'logo'],
     ];
     return refs.flatMap(([path, kind]) => {
       if (!path) return [];
-      try { return [{ id: String(path), kind, tag: String(n.updatedAt || ''), sizes: [{ width: 0, height: 0, url: this.mediaURL(path) }] }]; } catch { return []; }
+      try { return [{ id: String(path), kind, tag: String(n.updatedAt || ''), sizes: [{ width: 0, height: 0, url: this.artworkURL(path) }] }]; } catch { return []; }
     });
   }
 
+  private artworkURL(path: string): string {
+    const u = new URL(path, this.origin);
+    if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.hash) fail('Invalid Plex artwork');
+    for (const key of u.searchParams.keys()) if (/token|api_key/i.test(key)) fail('Credential in Plex artwork');
+    return u.href;
+  }
   private title(n: Node): V.Title {
     const ratings: V.TitleRating[] = [];
     for (const [field, image, kind] of [['rating', 'ratingImage', 'critic'], ['audienceRating', 'audienceRatingImage', 'audience']] as const)
       if (n[field] !== undefined) ratings.push({ source: n[image] || 'Plex', kind, value: Number(n[field]), scale: 10 });
     let themeMusic: V.ThemeMusic | undefined;
     if (n.theme) { try { themeMusic = { url: this.mediaURL(n.theme), expiresAt: '9999-12-31T23:59:59Z' }; } catch {} }
-    return { id: String(n.ratingKey), kind: n.type, name: n.title || '', summary: n.summary || '', year: n.year,
+    return { id: String(n.ratingKey), kind: n.type, name: n.title || '', summary: n.summary || '', year: n.year, airDate: n.originallyAvailableAt,
       genres: (n.Genre || []).map((g: Node) => g.tag), durationSeconds: seconds(n.duration), rating: n.contentRating, ratings,
       artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: Number(n.viewCount || 0) > 0, favorite: false, watchlisted: false },
       ...(themeMusic ? { themeMusic } : {}), showId: n.grandparentRatingKey ? String(n.grandparentRatingKey) : n.type === 'season' ? String(n.parentRatingKey) : undefined,
@@ -207,18 +218,35 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
     return { collection: { id, kind: kind === 'playlist' ? 'playlist' : 'collection', name: n.title || '', summary: n.summary, artwork: this.artwork(n) }, ...page(this.nodes(children).map(n => this.entry(n)), start, children.totalSize) };
   }
   private async metadata(id: string): Promise<Node> {
-    const c = await this.request(`/library/metadata/${enc(id)}`, { includeExtras: 1, includeChapters: 1 });
+    const c = await this.request(`/library/metadata/${enc(id)}`, { includeExtras: 1, includeChapters: 1, includeOnDeck: 1 });
     const n = this.nodes(c)[0]; if (!n) fail('Plex title not found', 'not-found'); return n;
   }
   async detail(id: string): Promise<V.TitleDetail> {
     const n = await this.metadata(id);
-    const children = ['show','season'].includes(n.type) ? this.nodes(await this.request(`/library/metadata/${enc(id)}/children`)).map(n => this.title(n)) : undefined;
+    const series = n.type === 'show' || n.type === 'season';
+    const children = series ? await this.children(id, 'children') : [];
+    const episodes = n.type === 'show' ? await this.children(id, 'allLeaves') : n.type === 'season' ? children : undefined;
+    let nextUp: V.Title | null | undefined;
+    if (series) {
+      const deck = n.OnDeck ?? {};
+      const next = this.nodes(deck)[0];
+      nextUp = next ? this.title(next) : null;
+    }
     const streams: Node[] = (n.Media || []).flatMap((m: Node) => (m.Part || []).flatMap((p: Node) => p.Stream || []));
     const person = (p: Node, role?: string) => ({ name: p.tag, role: role || p.role, artwork: p.thumb ? { ...this.artwork({ thumb: p.thumb })[0], kind: 'person' as const } : undefined });
-    return { title: this.title(n), canPlay: ['movie','episode'].includes(n.type) && !!n.Media?.length, seasons: n.type === 'show' ? children : undefined, episodes: n.type === 'season' ? children : undefined,
+    return { title: this.title(n), canPlay: ['movie','episode'].includes(n.type) && !!n.Media?.length, seasons: n.type === 'show' ? seriesOrder(children) : undefined, episodes: episodes ? seriesOrder(episodes) : undefined, nextUp,
       cast: (n.Role || []).map((p: Node) => person(p)), crew: [...(n.Director || []).map((p: Node) => person(p, 'Director')), ...(n.Writer || []).map((p: Node) => person(p, 'Writer'))],
       chapters: this.chapters(n), extras: (n.Extras?.Metadata || []).map((e: Node) => ({ id: String(e.ratingKey), parentId: id, kind: Number(e.extraType) === 1 ? 'trailer' : 'other', name: e.title, durationSeconds: seconds(e.duration), artwork: this.artwork(e)[0], availability: e.Media?.length ? 'ready' : 'unresolved' })),
       mediaSummary: { video: streams.filter(s => Number(s.streamType) === 1).map(s => ({ codec: s.codec, width: s.width, height: s.height, bitDepth: s.bitDepth, colorTransfer: s.colorTrc })), audio: streams.filter(s => Number(s.streamType) === 2).map(s => ({ codec: s.codec, channels: s.channels, language: s.languageCode })) } };
+  }
+  private async children(id: string, kind: 'children' | 'allLeaves'): Promise<V.Title[]> {
+    const items: V.Title[] = [];
+    for (;;) {
+      const c = await this.request(`/library/metadata/${enc(id)}/${kind}`, { 'X-Plex-Container-Start': items.length, 'X-Plex-Container-Size': 200, excludeAllLeaves: kind === 'children' ? 1 : undefined });
+      const nodes = this.nodes(c);
+      items.push(...nodes.map(n => this.title(n)));
+      if (!nodes.length || (c.totalSize !== undefined ? items.length >= c.totalSize : nodes.length < 200)) return items;
+    }
   }
   private chapters(n: Node): V.Chapter[] { return (n.Chapter || []).map((c: Node) => ({ id: String(c.id), name: c.tag || `Chapter ${Number(c.index || 0) + 1}`, startSeconds: seconds(c.startTimeOffset), endSeconds: c.endTimeOffset === undefined ? undefined : seconds(c.endTimeOffset) })); }
   async search(r: CatalogueSearch): Promise<V.SearchResponse> {
@@ -273,8 +301,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
       ...(r.extraId ? { extraId: id } : { titleId: id }), state: 'ready', positionSeconds: r.positionSeconds ?? seconds(n.viewOffset), durationSeconds: seconds(n.duration),
       paths, selectedPathId: paths[0].id, audioTracks, subtitleTracks, selectedAudioTrackId: audio, selectedSubtitleTrackId: subtitle, chapters: this.chapters(n),
       fallback: { state: 'unsupported', reason: 'Plex does not expose proactive preparation; select the HLS path to start transcoding' } };
-    this.sessions.set(sessionId, { plan, part, metadata: n, sequence: -1, mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]) });
-    return plan;
+    this.sessions.set(sessionId, { plan, part, metadata: n, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]) });
+    return structuredClone(plan);
   }
   private session(id: string): PlexSession {
     const s = this.sessions.get(id);
@@ -292,18 +320,25 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
   private async timeline(s: PlexSession, state: string) {
     if (s.plan.channelId) return;
     await this.request('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`, time: Math.round(s.plan.positionSeconds * 1000),
-      duration: s.metadata.duration, state, session: s.plan.sessionId, hasMDE: 1 });
+      duration: s.metadata.duration, state, session: s.plan.sessionId, hasMDE: 1, identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': s.plan.sessionId }, 'POST');
   }
   async reportObservation(id: string, r: V.PlayerObservation): Promise<V.Ack> {
-    const s = this.session(id); this.generations(s.plan, r);
-    if (r.sequence <= s.sequence || s.plan.state === 'ended') return ack;
-    if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0) fail('Invalid playback position');
-    s.plan.positionSeconds = r.positionSeconds;
-    await this.timeline(s, r.state === 'ended' ? 'stopped' : r.state === 'buffering' ? 'buffering' : r.state);
-    // PMS uses timeline progress to maintain resume/watched thresholds; never mark a partial stop watched.
-    s.sequence = r.sequence; s.plan.state = r.state === 'ended' ? 'ended' : r.state === 'paused' ? 'paused' : 'playing'; s.plan.revision++;
-    if (r.state === 'ended') await this.stopTranscode(id);
-    return ack;
+    const s = this.session(id);
+    return this.serialize(s, async () => {
+      this.generations(s.plan, r);
+      if (r.sequence <= s.sequence || s.plan.state === 'ended') return ack;
+      if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0) fail('Invalid playback position');
+      s.plan.positionSeconds = r.positionSeconds;
+      await this.timeline(s, r.state === 'ended' ? 'stopped' : r.state === 'buffering' ? 'buffering' : r.state);
+      // A natural end is completion; a user's partial stop is only a timeline update.
+      if (r.state === 'ended' && s.plan.titleId && !s.scrobbled) {
+        await this.request('/:/scrobble', { key: s.metadata.ratingKey, identifier: 'com.plexapp.plugins.library' }, 'PUT');
+        s.scrobbled = true;
+      }
+      s.sequence = r.sequence; s.plan.state = r.state === 'ended' ? 'ended' : r.state === 'paused' ? 'paused' : 'playing'; s.plan.revision++;
+      if (r.state === 'ended') await this.stopTranscode(id);
+      return ack;
+    });
   }
   command(id: string, r: TransportCommand): Promise<V.PlaybackPlan> {
     return this.mutate(id, r, async s => {
@@ -312,7 +347,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
           if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0) fail('Invalid seek');
           s.plan.positionSeconds = r.positionSeconds;
           s.plan.seekGeneration++;
-          await this.timeline(s, 'playing');
+          await this.timeline(s, s.plan.state === 'paused' ? 'paused' : 'playing');
           break;
         case 'stop':
           await this.timeline(s, 'stopped');
@@ -350,15 +385,24 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
     apply: (s: PlexSession) => Promise<void> | void,
   ): Promise<V.PlaybackPlan> {
     const s = this.session(id);
-    const saved = s.mutations.get(r.idempotencyKey);
-    if (saved) return saved;
-    this.generations(s.plan, r);
-    if (s.plan.state === 'ended') fail('Plex playback session ended', 'conflict');
-    await apply(s);
-    s.plan.revision++;
-    const result = structuredClone(s.plan);
-    s.mutations.set(r.idempotencyKey, result);
-    return result;
+    return this.serialize(s, async () => {
+      const saved = s.mutations.get(r.idempotencyKey);
+      if (saved) return saved;
+      this.generations(s.plan, r);
+      if (s.plan.state === 'ended') fail('Plex playback session ended', 'conflict');
+      await apply(s);
+      s.plan.revision++;
+      const result = structuredClone(s.plan);
+      s.mutations.set(r.idempotencyKey, result);
+      return result;
+    });
+  }
+
+  // Commands and observations share one order, including the final stopped timeline.
+  private serialize<T>(s: PlexSession, run: () => Promise<T>): Promise<T> {
+    const work = s.pending.then(run);
+    s.pending = work.catch(() => undefined);
+    return work;
   }
 
   async sessionSnapshot(id: string): Promise<V.SessionSnapshot> {
@@ -381,7 +425,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
     await this.requireLive();
     const c = await this.request('/livetv/epg/channels');
     const all: V.Channel[] = (c.Channel || []).map((n: Node) => ({ id: String(n.id), number: String(n.vcn || ''), name: n.title || n.callSign || '', kind: 'tv',
-      artwork: this.artwork(n).map(a => ({ ...a, kind: 'channel' as const })), favorite: false }));
+      artwork: this.artwork(n).sort((a, b) => Number(b.kind === 'logo') - Number(a.kind === 'logo')).map(a => ({ ...a, kind: 'channel' as const })), favorite: false }));
     return page(all.slice(offset(cursor), offset(cursor) + limit), offset(cursor), all.length);
   }
   async guide(q: V.GuideQuery): Promise<V.GuideResponse> {
@@ -410,7 +454,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
     const plan: V.PlaybackPlan = { sessionId, channelId: r.channelId, revision: 1, sourceGeneration: 0, seekGeneration: 0, state: 'ready', positionSeconds: 0,
       paths: [{ id: 'live-hls', kind: 'direct', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl', readiness: 'ready', url: this.mediaURL(part.key), qualities: [], boundaries: [] }],
       selectedPathId: 'live-hls', audioTracks: [], subtitleTracks: [], selectedSubtitleTrackId: null, chapters: [], fallback: { state: 'unsupported' }, live: { mode: 'adaptive' } };
-    this.sessions.set(sessionId, { plan, part, metadata: { ...n, subscriptionId: String(sub.key) }, sequence: -1, mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]) });
-    return plan;
+    this.sessions.set(sessionId, { plan, part, metadata: { ...n, subscriptionId: String(sub.key) }, sequence: -1, pending: Promise.resolve(), mutations: new Map([[r.idempotencyKey, structuredClone(plan)]]) });
+    return structuredClone(plan);
   }
 }

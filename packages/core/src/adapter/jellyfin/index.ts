@@ -2,6 +2,7 @@ import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
 import type { ClientDeclaration, LiveTv, PasswordSignIn, QuickConnectSignIn } from '../capabilities';
 import { VelaError } from '../errors';
+import { seriesOrder } from '../series';
 import type { Item, Result, User, Auth, Info, MediaSource } from './types';
 const seconds = (ticks?: number) => ticks === undefined ? undefined : ticks / 10000000;
 const ticks = (value: number) => Math.round(value * 10000000);
@@ -21,6 +22,8 @@ interface Session {
     sequence: number;
     started: boolean;
     stopped: boolean;
+    pending: Promise<unknown>;
+    mutations: Map<string, V.PlaybackPlan>;
 }
 /** All API requests are pinned to this server/base path and refuse redirects.
  * Media URLs contain no account credential. The host supplies scoped media headers.
@@ -213,6 +216,10 @@ export class JellyfinAdapter
             if (i.ImageTags?.[type])
                 if (!(seriesPoster && type === 'Primary' && !episode))
                     art.push(this.image(i.Id, type, i.ImageTags[type], episode && type === 'Primary' ? 'still' : kind));
+        if (!i.ImageTags?.Logo && i.ParentLogoItemId && i.ParentLogoImageTag)
+            art.push(this.image(i.ParentLogoItemId, 'Logo', i.ParentLogoImageTag, 'logo'));
+        if (!i.BackdropImageTags?.[0] && i.ParentBackdropItemId && i.ParentBackdropImageTags?.[0])
+            art.push(this.image(i.ParentBackdropItemId, 'Backdrop/0', i.ParentBackdropImageTags[0], 'backdrop'));
         if (i.BackdropImageTags?.[0])
             art.push(this.image(i.Id, 'Backdrop/0', i.BackdropImageTags[0], 'backdrop'));
         return art;
@@ -221,7 +228,7 @@ export class JellyfinAdapter
         if (!kinds[i.Type ?? ''])
             throw this.error('request', 'unsupported_item', 'Unsupported catalogue item');
         return {
-            id: i.Id, kind: kinds[i.Type!], name: i.Name, summary: i.Overview ?? '', year: i.ProductionYear, genres: i.Genres ?? [], durationSeconds: seconds(i.RunTimeTicks), rating: i.OfficialRating, ratings: [...(i.CommunityRating === undefined ? [] : [{
+            id: i.Id, kind: kinds[i.Type!], name: i.Name, summary: i.Overview ?? '', year: i.ProductionYear, airDate: i.PremiereDate?.slice(0, 10), genres: i.Genres ?? [], durationSeconds: seconds(i.RunTimeTicks), rating: i.OfficialRating, ratings: [...(i.CommunityRating === undefined ? [] : [{
                         source: 'Community', kind: 'audience' as const, value: i.CommunityRating, scale: 10
                     }]), ...(i.CriticRating === undefined ? [] : [{
                         source: 'Critic', kind: 'critic' as const, value: i.CriticRating, scale: 100
@@ -366,17 +373,21 @@ export class JellyfinAdapter
             } : {})
         }));
         const streams = item.MediaSources?.[0]?.MediaStreams ?? [];
-        const child = item.Type === 'Series' ? await this.request<Result>('GET', `Shows/${e(id)}/Seasons${query({
-            UserId: (await this.credentials.get())?.viewer.id, Fields: fields
-        })}`) : item.Type === 'Season' && item.SeriesId ? await this.request<Result>('GET', `Shows/${e(item.SeriesId)}/Episodes${query({
-            SeasonId: id, UserId: (await this.credentials.get())?.viewer.id, Fields: fields
-        })}`) : null;
+        const userId = (await this.credentials.get())?.viewer.id;
+        const seriesId = item.Type === 'Series' ? id : item.Type === 'Season' ? item.SeriesId : undefined;
+        const seasons = item.Type === 'Series' ? await this.children(`Shows/${e(id)}/Seasons`, { UserId: userId }) : undefined;
+        const episodes = seriesId ? await this.children(`Shows/${e(seriesId)}/Episodes`, {
+            UserId: userId, SeasonId: item.Type === 'Season' ? id : undefined, SortBy: 'ParentIndexNumber,IndexNumber', SortOrder: 'Ascending'
+        }) : undefined;
+        const next = seriesId ? await this.request<Result>('GET', `Shows/NextUp${query({
+            UserId: userId, SeriesId: seriesId, Limit: 1, Fields: fields, EnableResumable: true
+        })}`) : undefined;
+        const nextItem = next?.Items[0];
         return {
-            title: this.title(item), canPlay: item.Type === 'Movie' || item.Type === 'Episode', ...(child ? item.Type === 'Series' ? {
-                seasons: child.Items.map(i => this.title(i))
-            } : {
-                episodes: child.Items.map(i => this.title(i))
-            } : {}), cast: people.filter((_p, n) => item.People![n].Type === 'Actor'), crew: people.filter((_p, n) => item.People![n].Type !== 'Actor'), extras: [...trailers.map(i => this.extra(i, id, 'trailer')), ...extras.map(i => this.extra(i, id, 'other'))], chapters: this.chapters(item), mediaSummary: {
+            title: this.title(item), canPlay: item.Type === 'Movie' || item.Type === 'Episode', seasons: seasons ? seriesOrder(seasons) : undefined,
+            episodes: episodes ? seriesOrder(episodes) : undefined,
+            nextUp: next ? nextItem && (item.Type !== 'Season' || nextItem.SeasonId === id) ? this.title(nextItem) : null : undefined,
+            cast: people.filter((_p, n) => item.People![n].Type === 'Actor'), crew: people.filter((_p, n) => item.People![n].Type !== 'Actor'), extras: [...trailers.map(i => this.extra(i, id, 'trailer')), ...extras.map(i => this.extra(i, id, 'other'))], chapters: this.chapters(item), mediaSummary: {
                 video: streams.filter(s => s.Type === 'Video').map(s => ({
                     codec: s.Codec, width: s.Width, height: s.Height, bitDepth: s.BitDepth, colorTransfer: s.ColorTransfer
                 })), audio: streams.filter(s => s.Type === 'Audio').map(s => ({
@@ -384,6 +395,14 @@ export class JellyfinAdapter
                 }))
             }
         };
+    }
+    private async children(path: string, params: object): Promise<V.Title[]> {
+        const items: V.Title[] = [];
+        for (;;) {
+            const result = await this.request<Result>('GET', `${path}${query({ ...params, Fields: fields, StartIndex: items.length, Limit: 200 })}`);
+            items.push(...result.Items.map(i => this.title(i)));
+            if (!result.Items.length || (result.TotalRecordCount !== undefined ? items.length >= result.TotalRecordCount : result.Items.length < 200)) return items;
+        }
     }
     private extra(i: Item, parentId: string, kind: V.Extra['kind']): V.Extra {
         return {
@@ -520,7 +539,7 @@ export class JellyfinAdapter
             }
         };
         this.sessions.set(sessionId, {
-            plan, itemId: id, source, sequence: -1, started: false, stopped: false
+            plan, itemId: id, source, sequence: -1, started: false, stopped: false, pending: Promise.resolve(), mutations: new Map()
         });
         return plan;
     }
@@ -546,10 +565,11 @@ export class JellyfinAdapter
             }, 409);
     }
     private async report(s: Session, stopped = false) {
+        const path = s.plan.paths.find(p => p.id === s.plan.selectedPathId);
         const body = {
-            ItemId: s.itemId, MediaSourceId: s.source.Id, PlaySessionId: s.plan.sessionId, PositionTicks: ticks(s.plan.positionSeconds), IsPaused: s.plan.state === 'paused', CanSeek: !s.plan.channelId, PlayMethod: s.plan.selectedPathId === 'direct' ? 'DirectPlay' : 'Transcode', AudioStreamIndex: s.plan.selectedAudioTrackId === undefined ? undefined : Number(s.plan.selectedAudioTrackId), SubtitleStreamIndex: s.plan.selectedSubtitleTrackId === null ? -1 : Number(s.plan.selectedSubtitleTrackId), LiveStreamId: s.source.LiveStreamId
+            ItemId: s.itemId, MediaSourceId: s.source.Id, PlaySessionId: s.plan.sessionId, PositionTicks: ticks(s.plan.positionSeconds), IsPaused: s.plan.state === 'paused', CanSeek: !s.plan.channelId, PlayMethod: path?.kind === 'direct' ? 'DirectPlay' : path?.kind === 'remux' ? 'DirectStream' : 'Transcode', AudioStreamIndex: s.plan.selectedAudioTrackId === undefined ? undefined : Number(s.plan.selectedAudioTrackId), SubtitleStreamIndex: s.plan.selectedSubtitleTrackId === undefined ? undefined : s.plan.selectedSubtitleTrackId === null ? -1 : Number(s.plan.selectedSubtitleTrackId), LiveStreamId: s.source.LiveStreamId
         };
-        if (!s.started && !stopped) {
+        if (!s.started) {
             await this.request('POST', 'Sessions/Playing', body);
             s.started = true;
         }
@@ -560,74 +580,91 @@ export class JellyfinAdapter
                 await this.request('POST', `LiveStreams/Close${query({
                     LiveStreamId: s.source.LiveStreamId
                 })}`);
-            await this.request('DELETE', `Videos/ActiveEncodings${query({
+            if (path?.kind !== 'direct') await this.request('DELETE', `Videos/ActiveEncodings${query({
                 DeviceId: this.credentials.device.id, PlaySessionId: s.plan.sessionId
             })}`);
         }
     }
     async reportObservation(id: string, r: V.PlayerObservation): Promise<V.Ack> {
         const s = this.session(id);
-        this.generation(s, r);
-        if (s.stopped || r.sequence <= s.sequence)
+        return this.serialize(s, async () => {
+            this.generation(s, r);
+            if (s.stopped || r.sequence <= s.sequence)
+                return {
+                    accepted: true
+                };
+            if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0)
+                throw this.error('request', 'invalid_position', 'Invalid playback position');
+            s.plan = {
+                ...s.plan, positionSeconds: r.positionSeconds, state: r.state === 'ended' ? 'ended' : r.state === 'paused' ? 'paused' : 'playing',
+                selectedAudioTrackId: r.audioTrackId ?? s.plan.selectedAudioTrackId,
+                selectedSubtitleTrackId: r.subtitleTrackId === undefined ? s.plan.selectedSubtitleTrackId : r.subtitleTrackId, revision: s.plan.revision + 1
+            };
+            await this.report(s, r.state === 'ended');
+            s.sequence = r.sequence;
             return {
                 accepted: true
             };
-        if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0)
-            throw this.error('request', 'invalid_position', 'Invalid playback position');
-        s.plan = {
-            ...s.plan, positionSeconds: r.positionSeconds, state: r.state === 'ended' ? 'ended' : r.state === 'paused' ? 'paused' : 'playing', revision: s.plan.revision + 1
-        };
-        await this.report(s, r.state === 'ended');
-        s.sequence = r.sequence;
-        return {
-            accepted: true
-        };
+        });
     }
     async command(id: string, r: TransportCommand): Promise<V.PlaybackPlan> {
         const s = this.session(id);
-        this.generation(s, r);
-        if (r.kind === 'seek') {
-            if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0)
-                throw this.error('request', 'invalid_position', 'Invalid playback position');
-            if (s.plan.channelId)
-                throw this.error('request', 'unsupported', 'Seeking live TV is unavailable');
+        return this.serialize(s, async () => {
+            const saved = s.mutations.get(r.idempotencyKey);
+            if (saved) return saved;
+            this.generation(s, r);
+            if (s.stopped) return structuredClone(s.plan);
+            if (r.kind === 'seek') {
+                if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0)
+                    throw this.error('request', 'invalid_position', 'Invalid playback position');
+                if (s.plan.channelId)
+                    throw this.error('request', 'unsupported', 'Seeking live TV is unavailable');
+                s.plan = {
+                    ...s.plan, paths: s.plan.paths.map(path => {
+                        if (path.transport !== 'hls' || path.readiness === 'on-demand')
+                            return path;
+                        const url = new URL(this.mediaURL(path.url));
+                        url.searchParams.set('StartTimeTicks', String(ticks(r.positionSeconds)));
+                        return {
+                            ...path, url: url.href, timelineOriginSeconds: r.positionSeconds
+                        };
+                    })
+                };
+                s.plan = {
+                    ...s.plan, positionSeconds: r.positionSeconds, seekGeneration: s.plan.seekGeneration + 1
+                };
+            }
+            else
+                s.plan = {
+                    ...s.plan, state: r.kind === 'stop' ? 'ended' : r.kind === 'pause' ? 'paused' : 'playing'
+                };
             s.plan = {
-                ...s.plan, paths: s.plan.paths.map(path => {
-                    if (path.transport !== 'hls' || path.readiness === 'on-demand')
-                        return path;
-                    const url = new URL(this.mediaURL(path.url));
-                    url.searchParams.set('StartTimeTicks', String(ticks(r.positionSeconds)));
-                    return {
-                        ...path, url: url.href, timelineOriginSeconds: r.positionSeconds
-                    };
-                })
+                ...s.plan, revision: s.plan.revision + 1
             };
-            s.plan = {
-                ...s.plan, positionSeconds: r.positionSeconds, seekGeneration: s.plan.seekGeneration + 1
-            };
-        }
-        else
-            s.plan = {
-                ...s.plan, state: r.kind === 'stop' ? 'ended' : r.kind === 'pause' ? 'paused' : 'playing'
-            };
-        s.plan = {
-            ...s.plan, revision: s.plan.revision + 1
-        };
-        if (!s.stopped)
-            await this.report(s, r.kind === 'stop');
-        return s.plan;
+            if (!s.stopped)
+                await this.report(s, r.kind === 'stop');
+            const result = structuredClone(s.plan);
+            s.mutations.set(r.idempotencyKey, result);
+            return result;
+        });
+    }
+    // Never let delayed progress arrive after a stop and revive the server's session.
+    private serialize<T>(s: Session, run: () => Promise<T>): Promise<T> {
+        const work = s.pending.then(run);
+        s.pending = work.catch(() => undefined);
+        return work;
     }
     async sessionSnapshot(id: string): Promise<V.SessionSnapshot> {
         const s = this.session(id);
         return {
-            cursor: String(s.plan.revision), revision: s.plan.revision, plan: s.plan, publishedRanges: [], ...(s.sequence >= 0 ? {
+            cursor: String(s.plan.revision), revision: s.plan.revision, plan: structuredClone(s.plan), publishedRanges: [], ...(s.sequence >= 0 ? {
                 lastObservationSequence: s.sequence
             } : {})
         };
     }
     private channel(i: Item): V.Channel {
         return {
-            id: i.Id, number: i.Number ?? i.ChannelNumber ?? '', name: i.Name, kind: 'tv', artwork: this.artwork(i).map(a => ({
+            id: i.Id, number: i.Number ?? i.ChannelNumber ?? '', name: i.Name, kind: 'tv', artwork: this.artwork(i).sort((a, b) => Number(b.kind === 'logo') - Number(a.kind === 'logo')).map(a => ({
                 ...a, kind: 'channel'
             })), favorite: i.UserData?.IsFavorite ?? false, rating: i.OfficialRating
         };

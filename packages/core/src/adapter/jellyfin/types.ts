@@ -5,6 +5,7 @@ export interface Item {
     Type?: string;
     Overview?: string;
     ProductionYear?: number;
+    PremiereDate?: string;
     Genres?: string[];
     RunTimeTicks?: number;
     OfficialRating?: string;
@@ -19,6 +20,10 @@ export interface Item {
     CollectionType?: string;
     ImageTags?: Record<string, string>;
     BackdropImageTags?: string[];
+    ParentBackdropItemId?: string;
+    ParentBackdropImageTags?: string[];
+    ParentLogoItemId?: string;
+    ParentLogoImageTag?: string;
     UserData?: {
         PlaybackPositionTicks?: number;
         Played?: boolean;

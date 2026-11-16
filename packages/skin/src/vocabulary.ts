@@ -302,7 +302,7 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
     case 'hero.genres': return at(c.hero?.genres ?? [], fact => ({ fact }));
     case 'detail.seasons': return at(d?.seasons ?? [], card => ({ card }));
     case 'detail.episodes': return at(d?.episodes ?? [], card => ({ card }));
-    case 'detail.upNext': return at((d?.episodes ?? []).filter(x => !x.played).slice(0, 1), card => ({ card }));
+    case 'detail.upNext': return at(d?.nextUp ?? (d?.episodes ?? []).filter(x => !x.played).slice(0, 1), card => ({ card }));
     case 'detail.extras': return at(d?.extras ?? [], extra => ({ extra }));
     case 'detail.trailers': return at((d?.extras ?? []).filter(x => x.kind === 'trailer' && x.ready), extra => ({ extra }));
     case 'detail.cast': return at(d?.castPeople ?? [], person => ({ person }));

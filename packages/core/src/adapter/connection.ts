@@ -59,10 +59,11 @@ export function nativeConnection(record: ServerRecord, credentials: Credentials,
 
 /** PMS scales its own artwork; the transient delegation token lives only in this URL in memory. */
 function plexImage(origin: string, url: URL, width: number, height: number, token: string): string | undefined {
-  if (url.origin !== origin || url.username || url.password || url.hash || !/^\/(library|photo)\//.test(url.pathname) || url.pathname.startsWith('/photo/:/transcode')) return undefined;
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) return undefined;
+  if (url.origin === origin && (!/^\/(library|photo|playlists|livetv)\//.test(url.pathname) || url.pathname.startsWith('/photo/:/transcode'))) return undefined;
   for (const key of url.searchParams.keys()) if (/token/i.test(key)) return undefined;
   const sized = new URL('/photo/:/transcode', origin);
-  sized.search = new URLSearchParams({ width: String(width), height: String(height), minSize: '1', upscale: '1', url: url.pathname + url.search, 'X-Plex-Token': token }).toString();
+  sized.search = new URLSearchParams({ width: String(width), height: String(height), minSize: '1', upscale: '1', url: url.origin === origin ? url.pathname + url.search : url.href, 'X-Plex-Token': token }).toString();
   return sized.href;
 }
 
