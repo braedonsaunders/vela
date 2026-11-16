@@ -1,10 +1,10 @@
 // One route drawn by the active document: the shell's tree around the route's tree. A document
 // that fails to resolve says so; nothing half-draws.
 import { Text, View } from 'react-native';
-import { SkinRoot, SkinRoute } from '@vela/skin';
+import { SkinRoot, SkinRoute, type RouteName } from '@vela/skin';
 import { useVela } from './vela';
 
-export function DocumentScreen({ route, entry }: { route: 'home' | 'title'; entry: string }) {
+export function DocumentScreen({ route, entry }: { route: RouteName; entry: string }) {
   const vela = useVela();
   const host = vela.host(route, entry);
   if (vela.docError) {
@@ -16,7 +16,9 @@ export function DocumentScreen({ route, entry }: { route: 'home' | 'title'; entr
   }
   const tree = vela.doc?.routes[route];
   if (!host || !tree) return <View style={{ flex: 1 }} />;
-  const content = <SkinRoute host={host} node={tree} />;
+  // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md, "Search").
+  const search = route === 'home' && host.env.query !== '' ? vela.doc?.routes.search : undefined;
+  const content = <SkinRoute host={host} node={tree} after={search} />;
   const shell = vela.doc?.shell;
   return shell ? <SkinRoot host={{ ...host, children: content }} node={shell} /> : content;
 }
