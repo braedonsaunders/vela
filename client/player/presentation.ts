@@ -1,5 +1,5 @@
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from './video-info';
-import { clock, number, msg, setLocale } from '../foundation/i18n';
+import { clock, number, msg, setLocale } from '@vela/core';
 import type { PlaybackPlan } from '../wire/v0/types';
 import type { Snapshot } from './model';
 const snapshots = new Map<string, Snapshot>();

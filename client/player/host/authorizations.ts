@@ -1,6 +1,6 @@
 import type { Source } from '../model';
 import { type Generation } from '../session';
-import { randomId } from '../../src/protocol/id';
+import { randomId } from '@vela/core';
 import type { HostContext } from './state';
 import { emitHostEvent, publishHostState } from './events';
 import { failPlayback } from './recovery';

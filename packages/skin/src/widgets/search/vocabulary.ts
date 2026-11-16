@@ -2,7 +2,7 @@
 // the keys): the lanes' states and sizes, a live hit's fields, and the collections routes.search
 // repeats over. The semantics are those of the Contract renderer's table (tools/renderer.ts at
 // afc4578), key for key.
-import { msg } from '../../../../../client/foundation/i18n';
+import { msg } from '@vela/core';
 import type { Accessor, Ctx, Env } from '../../vocabulary';
 import type { Hit, LiveChannelHit, LiveProgrammeHit, SearchView } from './model';
 

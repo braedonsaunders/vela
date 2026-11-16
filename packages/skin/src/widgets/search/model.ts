@@ -1,7 +1,7 @@
 // The search view state documents read (docs/skin-schema.md, "Search"): for the open query, the
 // three lanes of titles and the live hits, each lane with its honest state. The app's search
 // generations produce it (env.search); the vocabulary reads it.
-import type { liveSearch } from '../../../../../client/src/live/search';
+import type { liveSearch } from '@vela/core';
 import type { Card } from '../../vocabulary';
 
 type LiveAnswer = ReturnType<typeof liveSearch>;

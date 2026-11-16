@@ -5,9 +5,7 @@
 // search) reads `off` here: the spike's client does not run its jobs.
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import type { SearchResponse, Title } from '../../../protocol/v0/types';
-import type { Images } from '../../../client/src/discovery/artwork';
-import { card } from '../../../client/src/discovery/models';
-import { liveSearch } from '../../../client/src/live/search';
+import { card, liveSearch, type Images } from '@vela/core';
 import type { DescriptiveLane, SearchView } from '../../../packages/skin/src/widgets/search/model';
 
 /** Where answers come from: the server's search, by mode. */
