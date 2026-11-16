@@ -145,7 +145,7 @@ skins, merged into one set. The bar is a pixel-identical match, so each is taken
 Renderer 3 is the live home above; a document using anything here names `renderer: 4`.
 
 **Node features**
-- `states: [{ when: Condition[], style: Style, hover?, focus?, groupHover?, groupFocus? }]`: the first
+- `states: [{ when: Condition[], style: Style, hover?, focus?, groupHover?, groupFocus? }]` (up to 16): the first
   state whose conditions hold replaces `style` (viewport variants still apply over it), on the same element,
   so transitions run (dot widths, padding while searching, on/off pills). A state's overlays replace the
   node's own while that state holds (a state without one keeps the node's), and an overlay written only
@@ -366,6 +366,11 @@ document's `ui` block. A document draws what it wants to own and inherits the re
   locale. A string's placeholders bind to the vocabulary: `{t:secure.body|origin=signin.secureOrigin}`.
   A document's own text stays `{s:key}`.
 - `env.skinName`: the document's name.
+- **Limits are refusals**: a document over a limit is refused at load with an error naming it, never
+  trimmed: 16 states a node (48 states x breakpoints), 32 keyframes of 16 steps, 8 font families of 4
+  files (weights 1 to 1000), 8 `library.played` choices (text labels), pager inset and peek 0 to 400 px,
+  `detail.from` 0 to 4000 px. An unknown `{s:key}`, an unknown sentinel `on`, a non-boolean trait and an
+  unknown `detail` presentation are refused too.
 
 These are resolver features: whatever renderer draws the resolved document gets them. The version
 number 14 went to the Exact renderer's arrow-key focus, which is held on a branch; main skips it.

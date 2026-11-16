@@ -181,7 +181,7 @@ export const ghost: Style = {
 } as Style;
 export const sectionHeading = (key: string): Node => ({
   type: 'text',
-  text: `{s:${key}}`,
+  text: `{t:ui.${key}}`,
   role: 'heading',
   level: 2,
   style: { ...display, 'font-size': '34px' },
