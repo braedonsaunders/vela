@@ -21,6 +21,43 @@ interface Track {id:number;codecDelay:number;defaultDuration:number|null;codecId
  demuxer:{segments:unknown[];input:{_rootSource:object};loadDeferredCues(segment:Segment):Promise<void>|null;expandLacedBlocks(blocks:RawBlock[],track:Track):RawBlock[];decodeBlockData(track:Track,data:Uint8Array):Uint8Array}}
 interface Scope {metadata:boolean;prefetch:WeakMap<object,Promise<void>>;reader:ByteReader;signal:AbortSignal;startSeconds:number;videoStart?:{cluster:number;time:number};subtitles?:MatroskaSubtitleStream;tracks:WeakMap<object,StreamingMatroskaTrack>;cues:WeakMap<object,Promise<void>>}
 const scopes=new WeakMap<object,Scope>();
+/** Network-only speculation. No estimated position is ever passed to demux or
+ * the clock. Cues selects the cluster; its header is checked in the warmed bytes. */
+export function warmMatroskaResume(reader:ByteReader,position:number,duration:number|null,signal:AbortSignal,report:(note:string)=>void){
+ if(!reader.speculateMedia||!duration||!Number.isFinite(duration)||position<=0||position>=duration)return;
+ let window:ReturnType<NonNullable<ByteReader['speculateMedia']>>|undefined;
+ let actual:{cluster:number;time:number}|undefined,bytes:Uint8Array|undefined,closed=false,size=0;
+ const validate=()=>{
+  if(!window||!actual||!bytes)return;
+  const at=actual.cluster-window.start;if(at<0||at>=bytes.length){report('Matroska resume warm window missed; Cues corrected it');return;}
+  try{
+   const id=vint(bytes,at,true),length=vint(bytes,at+id.length),data=at+id.length+length.length;
+   if(id.value!==CLUSTER||!length.unknown&&actual.cluster+id.length+length.length+length.value>size)throw Error();
+   let cursor=data,found=false;
+   for(let n=0;n<16&&cursor<Math.min(bytes.length,data+4096);n++){
+    const child=vint(bytes,cursor,true),span=vint(bytes,cursor+child.length),start=cursor+child.length+span.length,end=start+span.value;
+    if(span.unknown||end>bytes.length||end<=cursor)break;
+    if(child.value===TIMESTAMP){if(span.value>8)break;unsigned(bytes.subarray(start,end));found=true;break;}
+    if(![0xbf,0xec,0xa7,0xab].includes(child.value))break;cursor=end;
+   }
+   report(found?'Matroska resume warm boundary validated against Cues':'Matroska resume warm boundary unavailable; authoritative parser retained');
+  }catch{report('Matroska resume warm boundary rejected; authoritative parser retained');}
+ };
+ void(async()=>{
+  size=await reader.size(signal);signal.throwIfAborted();if(closed)return;
+  const estimate=Math.max(0,Math.min(size-1,Math.floor(size*position/duration)-8*1024*1024));
+  window=reader.speculateMedia!(estimate,16*1024*1024,signal);
+  if(actual)window.settle(actual.cluster);
+  bytes=await window.bytes;validate();
+ })().catch(()=>{if(!signal.aborted&&!closed)report('Matroska resume warm request retired; authoritative acquisition retained');});
+ return{correct:(value:{cluster:number;time:number}|undefined)=>{
+  if(!value){closed=true;window?.cancel();return;}
+  actual=value;
+  if(!window){closed=true;reader.prefetch?.(value.cluster,signal);return;}
+  if(value.cluster<window.start||value.cluster>=window.end){closed=true;report('Matroska resume warm window missed; Cues corrected it');}
+  window.settle(value.cluster);validate();
+ }};
+}
 export function installMatroskaStreaming(source:object,reader:ByteReader,signal:AbortSignal,startSeconds:number,subtitles?:MatroskaSubtitleStream){
  const scope:Scope={metadata:true,reader,signal,startSeconds,subtitles,tracks:new WeakMap(),cues:new WeakMap(),prefetch:new WeakMap()};scopes.set(source,scope);
  return()=>{if(scopes.get(source)===scope)scopes.delete(source);};
@@ -260,6 +297,7 @@ export function primeMatroskaIndex(backing:unknown){
   let low=0,high=cues.length;while(low<high){const mid=(low+high)>>>1;if(cues[mid].time<=ticks)low=mid+1;else high=mid;}
   const cue=low?cues[low-1]:undefined;
   scope.videoStart={cluster:cue?.clusterPosition??track.segment.clusterSeekStartPos,time:cue?(cue.time-track.codecDelay)/track.segment.timestampFactor:0};
+  return scope.videoStart;
  })();void work.catch(()=>{});return work;
 }
 export function finishMatroskaMetadata(source:object){const scope=scopes.get(source);if(scope)scope.metadata=false;}

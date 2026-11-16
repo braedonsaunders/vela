@@ -568,3 +568,32 @@ in both new pairs, and its seek is slower in A and faster in B. Sustained playba
 is clean, and the core avoids B1's startup underrun, but those facts do not make
 it equal or faster on every requested metric. No default switch is proposed;
 prior failed or differently versioned pairs are not relabelled as qualification.
+
+## Resume-window overlap implementation (local qualification pending)
+
+The next core change starts a network-only 16-MiB window around the byte estimate
+`sourceSize × resumeTime / metadataDuration` as track metadata becomes available,
+while deferred Cues is still being read. It does not establish a playback cursor
+or feed any estimated bytes to the decoder. Cues still selects the actual
+cluster. A matching window is adopted; a miss cancels its unfinished request and
+starts authoritative acquisition. Completed warmed pages remain in the bounded
+source cache, so correction does not evict and later refetch completed pages.
+The actual Cues cluster's EBML header and timestamp are checked in warmed bytes
+when present, and the existing authoritative parser continues to gate packets.
+
+The transport exposes optional `speculateMedia` on its borrowed byte-reader
+boundary. Speculative requests use the same pinned length/revision, scoped
+fetcher, request-slot bound, streaming publication, cancellation and shared page
+promises as ordinary forward media. Their edge is the explicit bounded window;
+they never advance the media playhead or clock. The back-buffer allowance is
+64 MiB so metadata, a missed window and parser leases cannot fight the front
+window. Total raw cache remains 72–128 MiB, with no speculative extra cache.
+Unknown duration, start zero and non-Matroska sources retain the existing path.
+
+Scoped TypeScript passed. A private generated-fixture proof is prepared with
+2-second cue first-byte latency, 400-ms media first-byte latency and a shared
+65-Mbps body limit, comparing first-media request, first presentation, reserve,
+correct target frames, repeated pages and cache capacity for hit and miss cases.
+Matching asset assembly is queued under the shared build lock. This change is
+not yet locally or lab qualified; production remains the frozen wrapper and no
+further lab pair has been started.

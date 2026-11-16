@@ -5,7 +5,7 @@ import type { ByteReader } from '../types';
 
 const PAGE = 256 * 1024;
 const MAX_READ = 16 * 1024 * 1024;
-const CACHE = 48 * 1024 * 1024;
+const CACHE = 72 * 1024 * 1024;
 const MIB=1024*1024,WINDOW=64*MIB;
 const METADATA=24*MIB;
 class RangeFailure extends Error {}
@@ -13,6 +13,7 @@ class RangePreempt extends Error {}
 interface ReadEpoch {id:number;seen:Uint8Array|null|undefined;unique:number;repeated:number}
 interface PageSlot {promise:Promise<Uint8Array>;resolve(bytes:Uint8Array):void;reject(error:unknown):void}
 interface ForwardRun {
+  speculative?:boolean;
   end:number;next:number;demand:number;scope:ReadEpoch;
   abort:AbortController;signal:AbortSignal;slots:Map<number,PageSlot>;
   request?:AbortController;
@@ -31,7 +32,7 @@ export class RangeReader implements ByteReader {
   private cachedBytes = 0;
   private cacheLimit=CACHE;
   private ahead=8*MIB;
-  private back=40*MIB;
+  private back=64*MIB;
   private playhead:number|null=null;
   private readonly metadata=new Set<number>();
   private metadataBytes=0;
@@ -72,7 +73,9 @@ export class RangeReader implements ByteReader {
   configureBuffer(durationSeconds:number|null){
     const rate=this.total!==null&&durationSeconds!==null&&Number.isFinite(durationSeconds)&&durationSeconds>0?this.total/durationSeconds:null;
     this.ahead=Math.ceil(rate===null?8*MIB:Math.max(8*MIB,Math.min(64*MIB,rate*5)));
-    this.back=Math.max(40*MIB,Math.min(64*MIB,this.ahead));
+    // Reserve room for one 16-MiB speculative window, metadata and parser leases
+    // without evicting the authoritative front window. Total remains <=128 MiB.
+    this.back=64*MIB;
     this.cacheLimit=this.ahead+this.back;
     this.trim();this.wakeProgress();
   }
@@ -82,6 +85,28 @@ export class RangeReader implements ByteReader {
     if(!this.forwardSignal){this.forwardSignal=signal;this.forwardAnchor=offset;this.forwardDemand=offset;this.playhead=offset;this.trim();}
     this.forwardAnchor=Math.min(this.forwardAnchor,offset);
     this.maintainForward(offset,offset,true);
+  }
+  speculateMedia(offset:number,length:number,signal:AbortSignal){
+    signal.throwIfAborted();
+    if(this.total===null||!Number.isSafeInteger(offset)||offset<0||offset>=this.total||!Number.isSafeInteger(length)||length<=0||length>MAX_READ||length%PAGE!==0)
+      throw new RangeFailure('Invalid speculative source window');
+    this.cacheLimit=Math.max(this.cacheLimit,72*MIB);
+    const start=Math.floor(offset/PAGE)*PAGE,end=Math.min(this.total,start+length),abort=new AbortController();
+    const lifetime=AbortSignal.any([signal,abort.signal]),runs:ForwardRun[]=[];
+    let index=start/PAGE;
+    while(index*PAGE<end){
+      if(this.pages.has(index)||this.pending.has(index)){index++;continue;}
+      let limit=end;
+      for(const at of [...this.pages.keys(),...this.pending.keys()])if(at>index&&at*PAGE<limit)limit=at*PAGE;
+      runs.push(this.startForward(index*PAGE,limit,lifetime,true));index=Math.ceil(limit/PAGE);
+    }
+    const cancel=()=>{for(const run of runs)this.cancelForward(run);abort.abort();};
+    const bytes=this.read(start,end-start,lifetime);void bytes.catch(()=>{});
+    return{start,end,bytes,cancel,settle:(actualCluster:number)=>{
+      if(actualCluster<start||actualCluster>=end)cancel();
+      else for(const run of runs)run.speculative=false;
+      this.prefetch(actualCluster,signal);
+    }};
   }
   private maintainForward(offset:number,end:number,foreground=false){
     const signal=this.forwardSignal,previous=this.forward;
@@ -107,19 +132,20 @@ export class RangeReader implements ByteReader {
       foreground=false;
     }
   }
-  private startForward(start:number,limit:number,signal:AbortSignal){
+  private startForward(start:number,limit:number,signal:AbortSignal,speculative=false){
     const abort=new AbortController();
-    const run:ForwardRun={end:limit,next:start,demand:this.playhead??start,scope:this.readEpoch,
+    const run:ForwardRun={speculative,end:limit,next:start,demand:this.playhead??start,scope:this.readEpoch,
       abort,signal:AbortSignal.any([signal,this.lifetime.signal,abort.signal]),slots:new Map()};
     for(let at=start;at<limit;at+=PAGE){
       let resolve!:(bytes:Uint8Array)=>void,reject!:(error:unknown)=>void;
       const promise=new Promise<Uint8Array>((yes,no)=>{resolve=yes;reject=no;});
       void promise.catch(()=>{});const slot={promise,resolve,reject};run.slots.set(at/PAGE,slot);this.pending.set(at/PAGE,promise);
     }
-    this.forward=run;this.forwardRuns.add(run);
+    if(!speculative)this.forward=run;this.forwardRuns.add(run);
     void this.loadForward(run).catch(error=>{this.rejectForward(run,error);if(error instanceof RangeFailure&&!run.signal.aborted)this.lifetime.abort(error);}).finally(()=>{
       this.forwardRuns.delete(run);this.wakeProgress();
     });
+    return run;
   }
   private rejectForward(run:ForwardRun,error:unknown){
     for(const [index,slot]of run.slots){if(this.pending.get(index)===slot.promise)this.pending.delete(index);slot.reject(error);}run.slots.clear();
@@ -135,6 +161,7 @@ export class RangeReader implements ByteReader {
     for(const run of this.forwardRuns){
       const cut=index*PAGE;
       if(!run.slots.has(index))continue;
+      if(run.speculative)return;
       if(cut<=run.next+PAGE)return;
       const abort=new AbortController(),tail:ForwardRun={end:run.end,next:cut,demand:this.playhead??cut,scope:run.scope,
         abort,signal:AbortSignal.any([this.forwardSignal!,this.lifetime.signal,abort.signal]),slots:new Map()};
@@ -179,6 +206,7 @@ export class RangeReader implements ByteReader {
     this.trim();this.wakeProgress();
   }
   private edge(run?:ForwardRun){
+    if(run?.speculative)return run.end;
     let edge=(this.playhead??this.forwardAnchor)+this.ahead;
     for(const read of this.reads)if(read.media&&(!run||read.start<run.end&&read.end>run.next))edge=Math.max(edge,read.end);
     return Math.min(this.total??Number.MAX_SAFE_INTEGER,Math.ceil(edge/PAGE)*PAGE);
