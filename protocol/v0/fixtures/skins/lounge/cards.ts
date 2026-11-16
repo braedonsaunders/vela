@@ -116,8 +116,8 @@ export const poster: Node = {
             display: 'flex',
             'align-items': 'center',
             'justify-content': 'center',
-            'background-color': 'rgba(10, 12, 16, 0.6)',
-            'backdrop-filter': 'blur(14px)',
+            // A solid badge, no blur: a filter per card is costly on a TV's GPU.
+            'background-color': 'rgba(10, 12, 16, 0.82)',
           },
           children: [{ type: 'icon', symbol: 'checkmark', style: { width: '50%', height: '50%', color: '$ink' } }],
         },
@@ -247,15 +247,14 @@ export const wide: Node = {
           when: [{ test: 'card.backdrop', not: true }, { test: 'card.poster' }],
           src: '{card.poster}',
           alt: '',
+          // No still: the poster, dimmed under the name (no blur; a filter per card is costly on a TV).
           style: {
             position: 'absolute',
-            top: '-30%',
-            left: '-10%',
-            width: '120%',
-            height: '160%',
+            inset: '0px',
+            width: '100%',
+            height: '100%',
             'object-fit': 'cover',
-            filter: 'blur(28px) saturate(1.3)',
-            opacity: '0.8',
+            opacity: '0.45',
           },
         },
         {

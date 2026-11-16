@@ -123,6 +123,12 @@ export interface MotionPreset {
 
 export interface SkinFont { family: string; /** weight: a number, or a range "300 700" for a variable face. */ files: { url: string; weight: number | string; style: 'normal' | 'italic' }[]; sizeAdjust?: number }
 
+/** The keys of a document's `ui` block (client/src/skin/ui-defaults.ts holds Cinematic's values). */
+export type UiName = 'page' | 'raised' | 'ink' | 'inkSecondary' | 'inkQuiet' | 'inkInverse' | 'accent' | 'onAccent'
+  | 'control' | 'controlHover' | 'glass' | 'glassEdge' | 'glassEdgeStrong' | 'popover' | 'scrim' | 'track' | 'trackStrong'
+  | 'focusHalo' | 'shadow' | 'skeleton' | 'skeletonLight' | 'alert' | 'live' | 'font' | 'fontDisplay'
+  | 'radiusControl' | 'radiusCard' | 'radiusPanel';
+
 export interface SkinDocument {
   schema: 1;
   /** The renderer version the document needs (the client's RENDERER_VERSION must be at least this). */
@@ -132,6 +138,10 @@ export interface SkinDocument {
   preview?: string; swatches: string[];
   /** `$name` in any style value. Colours become CSS properties the theme sheet sets. */
   tokens?: Record<string, string>;
+  /** Renderer 15: the look of the Vela base (the built-in routes the document inherits), read as
+   *  `$ui.<name>` in any style. Colours, the two font stacks (`font`, `fontDisplay`) and radii in px
+   *  (`radiusControl`, `radiusCard`, `radiusPanel`); a key left out takes Cinematic's value. */
+  ui?: Partial<Record<UiName, string | number>>;
   /** `{s:key}` in any template, by locale (`en` is the fallback). */
   strings?: Record<string, Record<string, string>>;
   fonts?: Record<string, SkinFont>;
