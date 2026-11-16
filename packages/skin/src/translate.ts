@@ -237,6 +237,9 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
     }
   }
   if (transform.length) s.transform = transform;
+  // A sticky node is pinned at its scroll view's top (the style matrix ignores a non-zero `top`):
+  // its offsets are not a relative shift, which would draw it below its own place in flow.
+  if (fx.sticky) { delete s.top; delete s.bottom; }
   if (fx.grid && s.columnGap !== undefined) fx.grid.gap = typeof s.columnGap === 'number' ? s.columnGap : 0;
   for (const key of Object.keys(s)) if (s[key] === undefined) delete s[key];
   return { style: s as ViewStyle & Transitions, fx };
