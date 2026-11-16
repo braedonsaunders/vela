@@ -71,6 +71,7 @@ try {
   }
   // Add data and shell resources; preserve every byte and path in Expo's generated graph.
   await rename(join(payload, 'player'), join(dist, 'player'));
+  await rename(join(payload, 'PLAYER-ASSETS-MANIFEST.json'), join(dist, 'PLAYER-ASSETS-MANIFEST.json'));
   await run([process.execPath, 'tools/skin-documents.ts', join(dist, 'skins')], source, buildEnv);
   await writePwaAssets(dist, join(source, 'brand'));
   await copyFile(join(source, 'tools/release/pwa.js'), join(dist, 'pwa.js'));
