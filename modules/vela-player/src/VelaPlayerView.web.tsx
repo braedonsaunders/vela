@@ -6,7 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import type { Failure, MediaAccess, VelaPlayerModule, VelaPlayerProps, VelaPlayerViewProps } from '@vela/player-api';
-import { createWebPlayerHost } from '../../../client/player/host';
+import { createWebPlayerHost } from '../web/engine/host';
 import { playerAssetBase } from '../web/asset-base';
 import { playerCapabilities } from '../web/capabilities';
 import { currentMediaAccess, onMediaAccessChange, setMediaAccess } from '../web/media-access';

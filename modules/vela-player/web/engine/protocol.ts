@@ -1,5 +1,5 @@
 import { codecFamily } from './video-info';
-import type { PlaybackPlan, PlaybackPath, PlayerObservation } from '../../protocol/v0/types';
+import type { PlaybackPlan, PlaybackPath, PlayerObservation } from '../../../../protocol/v0/types';
 import type { PlaybackSession, Snapshot } from './model';
 /** Protocol paths contain server-qualified codec strings, never guessed capabilities. */
 /** The plan's media URLs may be relative to the server; `mediaBase` is that server's origin (the

@@ -2,7 +2,7 @@
 // (Apple and Android on libmpv, web on the WebCodecs/WebGPU core) takes these props and emits
 // these events. The shapes are the browser engine's own (client/player/model.ts) until that file
 // moves into modules/vela-player at conversion.
-import type { Command, Failure, PlaybackSession, Snapshot } from '../../../client/player/model';
+import type { Command, Failure, PlaybackSession, Snapshot } from '../../../modules/vela-player/web/engine/model';
 import type {
   ClientCapabilities,
   PlaybackPlan,

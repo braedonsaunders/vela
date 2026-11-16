@@ -4,7 +4,7 @@
 // empty rather than estimated. (The compiled chrome read the same projection from
 // client/player/presentation.ts.)
 import { msg, number, second } from '@vela/core';
-import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../client/player/video-info';
+import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../modules/vela-player/web/engine/video-info';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 
 type Path = PlaybackPlan['paths'][number];

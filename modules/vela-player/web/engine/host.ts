@@ -1,4 +1,4 @@
-import type { CreateWebPlayerHost, VelaPlayerProps } from '../../packages/player-api/src/types';
+import type { CreateWebPlayerHost, VelaPlayerProps } from '../../../../packages/player-api/src/types';
 import { PlaybackEngine } from './engine';
 import type { Failure } from './model';
 import { sessionFromPlan } from './protocol';

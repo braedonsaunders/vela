@@ -2,7 +2,7 @@ import type { VideoInfo } from '../video-info';
 import { abortable } from '../core/async';
 import { playbackMark } from '../timing';
 import { QUALIFIED_ORIGINAL_VIDEO, QUALIFIED_ORIGINAL_AUDIO } from './qualified';
-import type { ClientCapabilities } from '../../wire/v0/types';
+import type { ClientCapabilities } from '../../../../../client/wire/v0/types';
 import type { DecoderRetry } from './retry';
 import type { OriginalMedia } from './source';
 import type { ByteReader } from '../core/types';
@@ -83,7 +83,7 @@ export interface OriginalRuntimeOptions {
  * descriptor uses diagnostic-relative assets; invalid explicit bases fail closed. */
 function assetLocation(): { base: URL; assetKey?: string } {
   const descriptor = (window as Window & { velaUniversalAssets?: unknown }).velaUniversalAssets;
-  if (descriptor === undefined) return { base: new URL('./universal/', import.meta.url) };
+  if (descriptor === undefined) return { base: new URL('./universal', import.meta.url) };
   if (!descriptor || typeof descriptor !== 'object')
     throw new Error('Invalid shared original runtime descriptor');
   const { baseURL, assetKey } = descriptor as { baseURL?: unknown; assetKey?: unknown };

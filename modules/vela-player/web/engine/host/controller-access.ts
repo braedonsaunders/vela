@@ -1,4 +1,4 @@
-import type { MediaAccess as ControllerAccess } from '../../../packages/player-api/src/types';
+import type { MediaAccess as ControllerAccess } from '../../../../../packages/player-api/src/types';
 import {
   authorizedMediaFetch,
   parseMediaAuthorization,

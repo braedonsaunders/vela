@@ -2,7 +2,7 @@ import { createBrowserSurface } from './host/surface';
 import { PlaybackEngine } from './engine';
 import { MediaAccess, redactMediaError } from './media-auth';
 import type { Command, PlaybackSession } from './model';
-import type { PlaybackPlan } from '../../protocol/v0/types';
+import type { PlaybackPlan } from '../../../../protocol/v0/types';
 import { observation, sessionFromPlan } from './protocol';
 import { playbackMark } from './timing';
 import { loadedRuntimeServices } from './universal/loader';

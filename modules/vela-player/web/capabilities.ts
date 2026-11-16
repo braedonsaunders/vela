@@ -4,8 +4,8 @@
 // browser declares, not a promise of real-time decode.
 import type { PlayerCapabilities } from '@vela/player-api';
 import type { OriginalPlaybackCapabilities } from '../../../protocol/v0/types';
-import { canAttemptOriginal } from '../../../client/player/original-support';
-import { QUALIFIED_ORIGINAL_AUDIO, QUALIFIED_ORIGINAL_VIDEO } from '../../../client/player/universal/qualified';
+import { canAttemptOriginal } from './engine/original-support';
+import { QUALIFIED_ORIGINAL_AUDIO, QUALIFIED_ORIGINAL_VIDEO } from './engine/universal/qualified';
 import { playerAssetBase } from './asset-base';
 
 /** The payload's declaration: installed decoder families and embedded subtitle formats. */

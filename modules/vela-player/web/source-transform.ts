@@ -2,11 +2,11 @@
 // The pinned checkouts stay pristine; each bundler that reads them (Metro for the core on the page,
 // Bun for the decoder workers in the asset payload) applies the same chain through this module.
 // It runs under Node (Metro's transformer workers) as well as Bun, so it imports with extensions.
-import { transformCoreAudio } from '../../../client/player/core/audio/transform.ts';
-import { transformCoreDemux } from '../../../client/player/core/demux/transform.ts';
-import { transformUpstreamAudio } from '../../../client/player/universal/audio/ffmpeg/upstream-transform.ts';
-import { transformUpstreamTransport } from '../../../client/player/universal/transport-transform.ts';
-import { transformUpstreamVideo } from '../../../client/player/universal/video/upstream-transform.ts';
+import { transformCoreAudio } from './engine/core/audio/transform.ts';
+import { transformCoreDemux } from './engine/core/demux/transform.ts';
+import { transformUpstreamAudio } from './engine/universal/audio/ffmpeg/upstream-transform.ts';
+import { transformUpstreamTransport } from './engine/universal/transport-transform.ts';
+import { transformUpstreamVideo } from './engine/universal/video/upstream-transform.ts';
 
 type Transform = (path: string, source: string) => string | null;
 

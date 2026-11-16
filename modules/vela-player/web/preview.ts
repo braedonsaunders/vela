@@ -3,7 +3,7 @@
 // the grant expires; otherwise the element drops its source, which releases the decoder. It never
 // retries an expired grant. Commands are limited to play and pause.
 import type { Command, Failure, MediaAccess, PreviewSource, Snapshot } from '@vela/player-api';
-import { parseMediaAuthorization, permittedMediaURL } from '../../../client/player/media-auth';
+import { parseMediaAuthorization, permittedMediaURL } from './engine/media-auth';
 import { previewSnapshot, type PreviewState } from './preview-snapshot';
 
 export interface PreviewProps {

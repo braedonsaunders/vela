@@ -1,6 +1,6 @@
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from './video-info';
 import { clock, number, msg, setLocale } from '@vela/core';
-import type { PlaybackPlan } from '../wire/v0/types';
+import type { PlaybackPlan } from '../../../../client/wire/v0/types';
 import type { Snapshot } from './model';
 const snapshots = new Map<string, Snapshot>();
 const errors = new Map<string, string>();

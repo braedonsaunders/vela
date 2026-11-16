@@ -14,9 +14,9 @@ import { inventory, MANIFEST_NAME, payloadDigest } from './inventory';
 import { copyLibraries, payloadCapabilities } from './libraries';
 import { assertPinnedPackages, MEDIABUNNY, sourceRevision, UPSTREAM, writeSources } from './sources';
 import { buildWorkers } from './workers';
-import { audioPackageRelease } from '../../../../client/player/universal/audio/packages';
+import { audioPackageRelease } from '../engine/universal/audio/packages';
 import decoderPins from 'webgpu-player/tools/pinned-releases.json';
-import subtitleManifest from '../../../../client/player/universal/subtitles/assets.json';
+import subtitleManifest from '../engine/universal/subtitles/assets.json';
 
 const root = resolve(import.meta.dir, '../../../..');
 

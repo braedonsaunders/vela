@@ -1,5 +1,5 @@
 import type { VideoInfo, DynamicRange } from './video-info';
-import type { SessionCommand, AudioRendition, OriginalVideo, Chapter } from '../wire/v0/types';
+import type { SessionCommand, AudioRendition, OriginalVideo, Chapter } from '../../../../client/wire/v0/types';
 import type { SubtitleDelivery, SubtitlePreferences } from './universal/subtitles/types';
 /** Local engine input. protocol.ts translates the versioned server plan here. */
 export interface Track {

@@ -1,4 +1,4 @@
-import type { VelaPlayerProps } from '../../../packages/player-api/src/types';
+import type { VelaPlayerProps } from '../../../../../packages/player-api/src/types';
 import type { PlaybackEngine } from '../engine';
 import type { EngineEvent, Failure } from '../model';
 import { redactMediaError } from '../media-auth';

@@ -1,4 +1,4 @@
-import type { AudioFallbackRequest, AudioFallbackResponse, Mutation, Ack } from '../../../../protocol/v0/types';
+import type { AudioFallbackRequest, AudioFallbackResponse, Mutation, Ack } from '../../../../../../protocol/v0/types';
 
 /** Authenticated adapter calls stay outside the native view. Implemented by EtherAdapter. */
 export interface AudioFallbackTransport {
