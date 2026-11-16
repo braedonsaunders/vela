@@ -35,10 +35,10 @@ export function transformPlayerSource(path: string, source: string): string | nu
 
 /** Every file whose contents decide the adaptation, for bundler cache keys and the source offer. */
 export const transformSources = [
-  'client/player/core/audio/transform.ts',
-  'client/player/core/demux/transform.ts',
-  'client/player/universal/audio/ffmpeg/upstream-transform.ts',
-  'client/player/universal/audio/ffmpeg/codecs.json',
-  'client/player/universal/transport-transform.ts',
-  'client/player/universal/video/upstream-transform.ts',
+  'modules/vela-player/web/engine/core/audio/transform.ts',
+  'modules/vela-player/web/engine/core/demux/transform.ts',
+  'modules/vela-player/web/engine/universal/audio/ffmpeg/upstream-transform.ts',
+  'modules/vela-player/web/engine/universal/audio/ffmpeg/codecs.json',
+  'modules/vela-player/web/engine/universal/transport-transform.ts',
+  'modules/vela-player/web/engine/universal/video/upstream-transform.ts',
 ];

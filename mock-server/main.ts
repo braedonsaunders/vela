@@ -1,9 +1,9 @@
 import { renderArtwork } from './artwork';
 import { previewSessions, stopPreview, trailerPreview } from './previews';
-import { libraries, libraryEntries } from '../protocol/v0/fixtures/libraries';
+import { libraries, libraryEntries } from '../packages/protocol/fixtures/libraries';
 import { createHmac } from 'node:crypto';
-import type * as V from '../protocol/v0/types';
-import { allTitles, channels, detail, extras, featuredSources, featuredTitles, guide, rows, titles } from '../protocol/v0/fixtures/catalogue';
+import type * as V from '../packages/protocol/types';
+import { allTitles, channels, detail, extras, featuredSources, featuredTitles, guide, rows, titles } from '../packages/protocol/fixtures/catalogue';
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia } from './media';
 import { serveLive, liveFaults } from './live';
 import { applyCommand, createSession, events, observe, requestedInit, sessions, snapshot, type Session } from './sessions';

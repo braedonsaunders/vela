@@ -2,7 +2,7 @@
 // and a channel session for the preview tile, which it must also be able to stop. The app builds
 // one from its adapter; nothing under widgets/ issues a request of its own.
 import { VelaError, type GuideApi } from '@vela/core';
-import type * as V from '../../../../../protocol/v0/types';
+import type * as V from '../../../../protocol/types';
 
 export interface LiveSource extends GuideApi {
   /** A playback plan for a channel. The app adds its device and client capabilities. */

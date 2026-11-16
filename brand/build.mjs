@@ -7,7 +7,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const app = join(here, "../client/assets/brand");
+const app = join(here, "../apps/vela/assets/brand");
 
 // The two beams. The light side reaches the baseline; the shadow side stops short against it.
 export const LIGHT = "M9 8H26.4L41 57.6H32.4Z";

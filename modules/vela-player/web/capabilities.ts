@@ -3,7 +3,7 @@
 // keeps only what the browser can run and what playback has qualified. Format support is what the
 // browser declares, not a promise of real-time decode.
 import type { PlayerCapabilities } from '@vela/player-api';
-import type { OriginalPlaybackCapabilities } from '../../../protocol/v0/types';
+import type { OriginalPlaybackCapabilities } from '../../../packages/protocol/types';
 import { canAttemptOriginal } from './engine/original-support';
 import { QUALIFIED_ORIGINAL_AUDIO, QUALIFIED_ORIGINAL_VIDEO } from './engine/universal/qualified';
 import { playerAssetBase } from './asset-base';

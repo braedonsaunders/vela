@@ -21,7 +21,7 @@ import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
-import { resolveUi } from '../../../client/src/skin/ui';
+import { resolveUi } from './resolve/ui';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
 import { collection, itemKey, type Ctx, type Env } from './vocabulary';

@@ -2,7 +2,7 @@
 // look: drawn in home's view under the search field while a query is open. The title matches
 // (or the honest empty or failed state), live hits on now and coming up, the descriptive lane
 // with its partial and failed answers, and discovery with its running, failed and empty states.
-import type { Condition, Node, Style } from '../../../wire/v0/skin';
+import type { Condition, Node, Style } from '../../../../protocol/skin';
 import { display, emptyState, enter, gutter, gutterSmall, is, pill, placeholder, pulse, rowSkeleton } from './look';
 
 const some = (test: string): Condition => ({ test, is: 'gt', value: '0' });

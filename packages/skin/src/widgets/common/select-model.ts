@@ -3,7 +3,7 @@
 // an `opt`) or from the document's fixed `params.choices` (`value|label;…`, for `library.played`);
 // the current value; and the action a choice runs (`params.action` with `params.arg`, where
 // `{value}` is the chosen id).
-import type { Action } from '../../../../../protocol/v0/skin';
+import type { Action } from '../../../../protocol/skin';
 import { useHost, type WidgetProps } from '../../host';
 import { accessor, collection, type Ctx, type Env } from '../../vocabulary';
 

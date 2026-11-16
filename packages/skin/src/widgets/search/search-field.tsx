@@ -8,7 +8,7 @@ import { useContext, useEffect, useMemo, useRef, useState, type ElementRef } fro
 import { Platform, Pressable, StyleSheet, TextInput, View, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useQueryText } from './query-text';
-import { resolveUi } from '../../../../../client/src/skin/ui';
+import { resolveUi } from '../../resolve/ui';
 import { focusTarget, type Focusable } from '../../escape';
 import { useRouteFocusContext } from '../../route-focus';
 import { RevealContext } from '../../tv-reveal';

@@ -1,7 +1,7 @@
 // Skin documents (protocol/v0/skin.ts) resolved for the renderer: validated, templates
 // inlined, viewport variants and document tokens applied, motion presets expanded,
 // and the tree converted to the renderer's bounded levels. Nothing in a document runs.
-import type { Condition, Node, SkinDocument, Style } from '../../wire/v0/skin';
+import type { Condition, Node, SkinDocument, Style } from '../../../protocol/skin';
 import { perfReport } from './budget';
 import { resolveFonts } from './fonts';
 import { portabilityReport } from './portability';

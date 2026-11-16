@@ -3,7 +3,7 @@
 // that box and takes the inherited text rows. Enter in either field signs in when the form is
 // ready. `params`: field (`username` | `password`), placeholder, label, placeholderColor.
 import { Platform, TextInput as NativeInput, type TextStyle } from 'react-native';
-import { withClientStrings } from '../../../../../client/src/skin/client-strings';
+import { withClientStrings } from '../../resolve/client-strings';
 import { colour } from '../../css';
 import { useInheritedText, useWidgetInteraction, type WidgetProps } from '../../host';
 import { useAuthForm, type AuthField } from './form';

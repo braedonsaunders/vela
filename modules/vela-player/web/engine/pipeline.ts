@@ -1,5 +1,5 @@
 import { AudioBuffer } from './audio';
-import type { AudioRendition } from '../../../../protocol/v0/types';
+import type { AudioRendition } from '../../../../packages/protocol/types';
 import { PlaybackFault, mutation, appendBuffer } from './buffer';
 export { PlaybackFault } from './buffer';
 import { AdaptiveBitrate, BandwidthEstimator } from './abr';

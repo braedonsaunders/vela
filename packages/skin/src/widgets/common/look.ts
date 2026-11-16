@@ -4,8 +4,8 @@
 // surfaces through its `ui` values, as it reaches the Vela base's routes.
 import { useMemo } from 'react';
 import type { TextStyle, ViewStyle } from 'react-native';
-import { resolveUi, uiValue } from '../../../../../client/src/skin/ui';
-import type { UiTokens } from '../../../../../client/src/skin/ui-defaults';
+import { resolveUi, uiValue } from '../../resolve/ui';
+import type { UiTokens } from '../../resolve/ui-defaults';
 import { animation } from '../../motion';
 import { measure, useHost } from '../../host';
 import { boxStyle, fontSizeOf, textStyle, type Css } from '../../translate';

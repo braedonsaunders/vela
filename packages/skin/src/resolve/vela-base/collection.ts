@@ -1,4 +1,4 @@
-import type { Node, Style } from '../../../wire/v0/skin';
+import type { Node, Style } from '../../../../protocol/skin';
 import { gridCard, titleGrid } from './cards';
 import {
   display,

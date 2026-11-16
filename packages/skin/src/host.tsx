@@ -3,7 +3,7 @@
 // renderer provides them.
 import type { ImageSource } from 'expo-image';
 import { createContext, useContext, type ReactNode } from 'react';
-import type { Action } from '../../../protocol/v0/skin';
+import type { Action } from '../../protocol/skin';
 import type { Measure, Viewport } from './css';
 import type { ResolvedDocument } from './resolve';
 import { textStyle, type Css } from './translate';

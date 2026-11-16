@@ -1,4 +1,4 @@
-import type { Condition, Node, Style } from '../../../wire/v0/skin';
+import type { Condition, Node, Style } from '../../../../protocol/skin';
 import { display, enter, eyebrow, focusRing, is, pill, pulse, veil } from './look';
 
 // The signed-out page (compiled cinematic's AuthStage with its notices, SignIn and

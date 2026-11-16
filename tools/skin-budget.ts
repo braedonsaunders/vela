@@ -5,7 +5,7 @@
  * each `when` held, and a repeat's item counts once.
  */
 import type { CssT, Layer, ResolvedDocument, RNode } from '../packages/skin/src/resolve';
-import { BUDGETS, type Finding, type PageCost, type PerfReport } from '../client/src/skin/budget';
+import { BUDGETS, type Finding, type PageCost, type PerfReport } from '../packages/skin/src/resolve/budget';
 
 /** Collections that draw many items at once: what a node inside one costs is multiplied. */
 const MANY = new Set([

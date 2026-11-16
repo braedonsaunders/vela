@@ -2,16 +2,16 @@
 // Vela base names, and where a document's image paths come from: the app's bundled assets, an
 // absolute URL, or a path on the selected server.
 import { Platform } from 'react-native';
-import type { SkinDocument } from '../../../protocol/v0/skin';
-import { cinematicDoc } from '../../../protocol/v0/fixtures/skins/cinematic';
-import broadcast from '../../../protocol/v0/fixtures/skins/broadcast/document';
-import index from '../../../protocol/v0/fixtures/skins/index/document';
-import jellytwin from '../../../protocol/v0/fixtures/skins/jellytwin/document';
-import kids from '../../../protocol/v0/fixtures/skins/kids/document';
-import latenight from '../../../protocol/v0/fixtures/skins/latenight/document';
-import lounge from '../../../protocol/v0/fixtures/skins/lounge/document';
-import marquee from '../../../protocol/v0/fixtures/skins/marquee/document';
-import mochi from '../../../protocol/v0/fixtures/skins/mochi/document';
+import type { SkinDocument } from '../../../packages/protocol/skin';
+import { cinematicDoc } from '../../../packages/protocol/fixtures/skins/cinematic';
+import broadcast from '../../../packages/protocol/fixtures/skins/broadcast/document';
+import index from '../../../packages/protocol/fixtures/skins/index/document';
+import jellytwin from '../../../packages/protocol/fixtures/skins/jellytwin/document';
+import kids from '../../../packages/protocol/fixtures/skins/kids/document';
+import latenight from '../../../packages/protocol/fixtures/skins/latenight/document';
+import lounge from '../../../packages/protocol/fixtures/skins/lounge/document';
+import marquee from '../../../packages/protocol/fixtures/skins/marquee/document';
+import mochi from '../../../packages/protocol/fixtures/skins/mochi/document';
 import { ASSETS } from './assets.generated';
 import { config } from './data/config';
 

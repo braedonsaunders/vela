@@ -2,7 +2,7 @@
 // home and search routes read as env.query (held by the field, useQueryText). Its text takes the
 // node's inherited text rows.
 import { Platform, TextInput, type TextStyle } from 'react-native';
-import { withClientStrings } from '../../../../client/src/skin/client-strings';
+import { withClientStrings } from '../resolve/client-strings';
 import { useQueryText } from './search/query-text';
 import { useHost, useInheritedText, useWidgetInteraction, type WidgetProps } from '../host';
 

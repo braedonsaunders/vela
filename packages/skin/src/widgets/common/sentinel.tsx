@@ -5,7 +5,7 @@
 // state around it.
 import { useRef } from 'react';
 import { View, type HostInstance } from 'react-native';
-import type { Action } from '../../../../../protocol/v0/skin';
+import type { Action } from '../../../../protocol/skin';
 import { useHost, type WidgetProps } from '../../host';
 import { useInView, type Reach } from './in-view';
 

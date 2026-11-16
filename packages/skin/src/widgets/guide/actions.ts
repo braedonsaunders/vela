@@ -1,6 +1,6 @@
 // The live home's document actions (docs/skin-schema.md, "Live home"), run against the app's
 // LiveController. The host's dispatch hands them here and keeps the rest.
-import type { Action } from '../../../../../protocol/v0/skin';
+import type { Action } from '../../../../protocol/skin';
 import type { LiveController } from './controller';
 
 /** Runs a live action and says whether it was one. `guide` opens the full guide through the app. */

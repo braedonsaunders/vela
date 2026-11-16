@@ -1,7 +1,7 @@
 // A skin document's fonts (docs/skin-schema.md, "Fonts"): same-origin font files the vela-theme
 // view registers under their family names. A document over a limit or with an invalid entry is
 // refused, never trimmed.
-import type { SkinDocument } from '../../wire/v0/skin';
+import type { SkinDocument } from '../../../protocol/skin';
 
 export const MAX_FAMILIES = 8;
 export const MAX_FILES_PER_FAMILY = 4;

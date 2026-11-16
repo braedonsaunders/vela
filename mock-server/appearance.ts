@@ -1,9 +1,9 @@
 // The server's appearance: its default skin, the owner's force flag and its installed
 // runtime skin packs, with the viewer-level event stream that pushes changes live.
 // Ether's equivalent is the Vela Apps card (docs/skin-distribution.md, "Ether side").
-import type * as V from '../protocol/v0/types';
-import type { SkinDocument } from '../protocol/v0/skin';
-import { cinematicDoc } from '../protocol/v0/fixtures/skins/cinematic';
+import type * as V from '../packages/protocol/types';
+import type { SkinDocument } from '../packages/protocol/skin';
+import { cinematicDoc } from '../packages/protocol/fixtures/skins/cinematic';
 import { existsSync, readdirSync } from 'node:fs';
 
 const harbor: V.SkinPack = {
@@ -20,7 +20,7 @@ const engines = ['cinematic', 'index', 'jellytwin', 'mochi', 'marquee', 'example
 // Skin documents (protocol/v0/skin.ts): whole skins as data, drawn by the client's doc engine.
 // Besides cinematic, every `protocol/v0/fixtures/skins/<id>/document.ts` (default export) is
 // installed, its files in `<id>/assets/` served at `/vela/v0/appearance/skins/<id>/<version>/<file>`.
-const skinsDir = new URL('../protocol/v0/fixtures/skins/', import.meta.url);
+const skinsDir = new URL('../packages/protocol/fixtures/skins', import.meta.url);
 const packaged: { doc: SkinDocument; assets?: URL }[] = [{ doc: cinematicDoc }];
 for (const entry of readdirSync(skinsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)))
   if (entry.isDirectory() && existsSync(new URL(`${entry.name}/document.ts`, skinsDir)))
@@ -61,7 +61,7 @@ export function serverEvents(req: Request, authorized: () => boolean): Response 
   return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' } });
 }
 
-const fontFile = new URL('../client/assets/fonts/mochi/Fredoka.ttf', import.meta.url);
+const fontFile = new URL('../apps/vela/assets/fonts/mochi/Fredoka.ttf', import.meta.url);
 const svg = (body: string, w: number, h: number) => new Response(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${body}</svg>`, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=31536000, immutable' } });
 const sea = `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b2a3a"/><stop offset="1" stop-color="#06121a"/></linearGradient><radialGradient id="m" cx=".72" cy=".22" r=".5"><stop offset="0" stop-color="#7fd6cb" stop-opacity=".55"/><stop offset="1" stop-color="#7fd6cb" stop-opacity="0"/></radialGradient></defs><rect width="1600" height="1000" fill="url(#g)"/><rect width="1600" height="1000" fill="url(#m)"/>${[0, 1, 2, 3, 4].map(i => `<path d="M0 ${620 + i * 70} C 300 ${580 + i * 70}, 500 ${680 + i * 70}, 800 ${630 + i * 70} S 1300 ${590 + i * 70}, 1600 ${640 + i * 70} V 1000 H 0 Z" fill="#139c8f" fill-opacity="${0.08 + i * 0.05}"/>`).join('')}`;
 
@@ -74,7 +74,7 @@ export async function packAsset(path: string): Promise<Response | undefined> {
   const owner = file && packaged.find(p => p.assets && p.doc.id === file[1] && p.doc.version === file[2]);
   if (file && owner?.assets && existsSync(new URL(file[3], owner.assets)))
     return immutable(Bun.file(new URL(file[3], owner.assets)), ({ svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf' } as Record<string, string>)[file[4]]);
-  if (path === cinematicDoc.preview) return new Response(Bun.file(new URL('../client/assets/skins/cinematic.jpg', import.meta.url)), { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable' } });
+  if (path === cinematicDoc.preview) return new Response(Bun.file(new URL('../apps/vela/assets/skins/cinematic.jpg', import.meta.url)), { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable' } });
   const m = /^\/vela\/v0\/appearance\/packs\/([a-z0-9-]+)\/([0-9.]+)\/([a-z]+\.(?:svg|ttf))$/.exec(path);
   const pack = m && packs.find(p => p.id === m[1] && p.version === m[2]);
   if (!m || !pack) return undefined;

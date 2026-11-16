@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { msg } from '@vela/core';
-import { display, eyebrow } from '../../../../../../client/src/skin/vela-base/look';
+import { display, eyebrow } from '../../../resolve/vela-base/look';
 import { Alert, Field, Heading, Label, Pill, Waiting, Words } from '../../common/controls';
 import { useLook } from '../../common/look';
 import type { ServerOption, ServerProbe } from './model';

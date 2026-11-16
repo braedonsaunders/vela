@@ -1,4 +1,4 @@
-import type { Condition, Node, Style } from '../../../wire/v0/skin';
+import type { Condition, Node, Style } from '../../../../protocol/skin';
 
 export const gutter: Style = { 'padding-left': 'max(28px, 4vw)', 'padding-right': 'max(28px, 4vw)' } as Style;
 export const gutterSmall = { 'padding-left': '18px', 'padding-right': '18px' } as Style;

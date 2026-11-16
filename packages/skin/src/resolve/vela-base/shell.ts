@@ -1,4 +1,4 @@
-import type { BoxNode, Condition, Node, Style } from '../../../wire/v0/skin';
+import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
 import { display, focusRing, gutter, gutterSmall, is, navFocus, sans, small, veil, wordmark } from './look';
 
 // A primary destination: the current one in full ink and weight, with the underline that

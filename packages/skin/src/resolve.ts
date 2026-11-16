@@ -2,12 +2,12 @@
 // inlined, viewport variants applied for the current width class, tokens substituted, client
 // and document strings filled, templates and conditions compiled to accessors. Done once per
 // document, viewport width and locale; drawing never re-parses a document.
-import type { Action, Condition, Node, SkinDocument, Style } from '../../../protocol/v0/skin';
-import { velaBase } from '../../../client/src/skin/base';
-import { withBase } from '../../../client/src/skin/inherit';
-import { resolveUi, withUi } from '../../../client/src/skin/ui';
-import { mixColours } from '../../../client/src/skin/colour-mix';
-import { withClientStrings } from '../../../client/src/skin/client-strings';
+import type { Action, Condition, Node, SkinDocument, Style } from '../../protocol/skin';
+import { velaBase } from './resolve/base';
+import { withBase } from './resolve/inherit';
+import { resolveUi, withUi } from './resolve/ui';
+import { mixColours } from './resolve/colour-mix';
+import { withClientStrings } from './resolve/client-strings';
 import { documentKeyframes, type Motion } from './keyframes';
 import { accessor, type Accessor, type Ctx, type Env } from './vocabulary';
 

@@ -2,7 +2,7 @@
 // Vela base (base.ts), the built-in routes and slots in the document's own `ui` look. A slot or
 // route the document defines replaces the base's; templates, motion, keyframes, fonts, tokens and
 // strings merge by name, the document's winning.
-import type { Node, SkinDocument } from '../../wire/v0/skin';
+import type { Node, SkinDocument } from '../../../protocol/skin';
 
 /** A document with the base under it: every table filled, slots always present. */
 export type InheritedDocument = SkinDocument & Required<Pick<SkinDocument, 'slots'>>;

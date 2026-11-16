@@ -8,12 +8,12 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { resolveDocument } from '../packages/skin/src/resolve';
-import { BUDGETS } from '../client/src/skin/budget';
+import { BUDGETS } from '../packages/skin/src/resolve/budget';
 import { perfReport } from './skin-budget';
 import { SYMBOLS } from '../packages/skin/src/icons';
 import type { ResolvedDocument, RNode } from '../packages/skin/src/resolve';
-import { portabilityReport, type PortabilityFinding } from '../client/src/skin/portability';
-import type { SkinDocument } from '../protocol/v0/skin';
+import { portabilityReport, type PortabilityFinding } from '../packages/skin/src/resolve/portability';
+import type { SkinDocument } from '../packages/protocol/skin';
 
 const WIDTHS = [1440, 390, 1920];
 

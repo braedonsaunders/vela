@@ -3,8 +3,8 @@
 // reads Cinematic's value, so every document gets a coherent chrome in its own colours.
 import { useMemo } from 'react';
 import { Platform, type TextStyle } from 'react-native';
-import { resolveUi } from '../../../../../client/src/skin/ui';
-import { uiDefaults } from '../../../../../client/src/skin/ui-defaults';
+import { resolveUi } from '../../resolve/ui';
+import { uiDefaults } from '../../resolve/ui-defaults';
 import { colour } from '../../css';
 import { fontFace } from '../../fonts';
 import { useHost } from '../../host';

@@ -1,4 +1,4 @@
-import type { BoxNode, Node } from '../../../wire/v0/skin';
+import type { BoxNode, Node } from '../../../../protocol/skin';
 
 // Compiled's pill buttons (PrimaryPill, GhostPill) shrink to .97 while pressed and its round
 // icon buttons (IconButton) to .94; links, chips, tabs and dots keep their size.

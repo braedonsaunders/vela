@@ -1,7 +1,7 @@
 // Which of a skin document's style rows draw the same on every platform (docs/rn-migration.md,
 // "Style matrix"). Unsupported rows are refused by the checker; approximated rows draw close to
 // their meaning on native and are noted. Supported, mapped and web-only rows pass silently.
-import type { SkinDocument } from '../../wire/v0/skin';
+import type { SkinDocument } from '../../../protocol/skin';
 
 export interface PortabilityFinding {
   level: 'error' | 'warning';

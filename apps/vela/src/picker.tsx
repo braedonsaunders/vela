@@ -15,7 +15,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import type { SkinDocument } from '../../../protocol/v0/skin';
+import type { SkinDocument } from '../../../packages/protocol/skin';
 import { msg } from '@vela/core';
 
 interface Props {

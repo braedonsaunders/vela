@@ -6,7 +6,7 @@ import { useCallback } from 'react';
 import type { Vela as Store } from '@vela/core';
 import { focusElement, page, type SkinHost } from '@vela/skin';
 import { liveAction, type LiveController } from '@vela/skin/src/widgets/guide';
-import type { Action } from '../../../protocol/v0/skin';
+import type { Action } from '../../../packages/protocol/skin';
 import { COLLECTION_KINDS, openCollection, openHit, openLibrary, playExtra } from './browse/open';
 import type { ViewState } from './view-state';
 

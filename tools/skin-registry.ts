@@ -15,7 +15,7 @@
  */
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { FIXED_TOKENS } from '../client/src/skin/vocabulary';
+import { FIXED_TOKENS } from '../packages/skin/src/resolve/vocabulary';
 
 /** The slot ABI: each slot's record prop and the app actions it offers, by the names a skin injects. */
 /** `frame`: the element the foundation lays every skin's slot out in (a skin draws inside it). */

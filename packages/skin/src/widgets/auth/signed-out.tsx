@@ -5,7 +5,7 @@
 import { msg } from '@vela/core';
 import { useCallback, useState } from 'react';
 import { Linking, Platform, View } from 'react-native';
-import type { Action } from '../../../../../protocol/v0/skin';
+import type { Action } from '../../../../protocol/skin';
 import { HostContext, type SkinHost } from '../../host';
 import { SkinRoute } from '../../render';
 import type { RNode } from '../../resolve';

@@ -1,4 +1,4 @@
-import type { PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, SessionEvent, SessionSnapshot } from '../protocol/v0/types';
+import type { PlaybackPlan, PlaybackRequest, PlayerObservation, SessionCommand, SessionEvent, SessionSnapshot } from '../packages/protocol/types';
 import { faults, mediaRoot, fixtureDurationSeconds } from './media';
 import { liveWindow } from './live';
 import { mseFixture } from './mse';

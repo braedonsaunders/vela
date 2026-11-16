@@ -13,10 +13,10 @@ import { createHash } from 'node:crypto';
 import { cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, statSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
-import type { SkinDocument } from '../protocol/v0/skin';
+import type { SkinDocument } from '../packages/protocol/skin';
 
 const root = resolve(import.meta.dir, '..');
-const fixtures = join(root, 'protocol/v0/fixtures/skins');
+const fixtures = join(root, 'packages/protocol/fixtures/skins');
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 
 export async function writeDocuments(out: string): Promise<{ id: string; version: string; renderer: number }[]> {
@@ -30,16 +30,14 @@ export async function writeDocuments(out: string): Promise<{ id: string; version
   const sharedAssets = new Map<string, string>();
   await mkdir(out, { recursive: true });
   for (const { doc: source, assets } of found) {
-    // A conversion of a compiled skin ships beside it as its "(data)" variant until the compiled one is deleted.
-    const collides = existsSync(join(root, 'client/skins', source.id));
-    const doc = collides ? { ...source, id: `${source.id}-data`, name: `${source.name} (data)` } : source;
+    const doc = source;
     const from = `/vela/v0/appearance/skins/${source.id}/${source.version}/`;
     if (doc.schema !== 1 || !/^[a-z][a-z0-9-]{0,31}$/.test(doc.id) || !/^[0-9A-Za-z.+-]+$/.test(doc.version)) throw new Error(`Skin document ${doc.id}: bad id, version or schema`);
     const dir = join(out, doc.id, doc.version);
     await mkdir(dir, { recursive: true });
     if (assets && existsSync(assets)) await cp(assets, dir, { recursive: true });
     // The legacy cinematic fixture has no assets folder: its preview is the client's.
-    else if (source.id === 'cinematic-doc') await cp(join(root, 'client/assets/skins/cinematic.jpg'), join(dir, 'preview.jpg'));
+    else if (source.id === 'cinematic-doc') await cp(join(root, 'apps/vela/assets/skins/cinematic.jpg'), join(dir, 'preview.jpg'));
     if (assets) {
       const licences = join(assets, '..', 'licences');
       if (existsSync(licences)) await cp(licences, join(dir, 'licences'), { recursive: true });
@@ -52,8 +50,8 @@ export async function writeDocuments(out: string): Promise<{ id: string; version
       const source = JSON.parse(literal) as string;
       let url = sharedAssets.get(source);
       if (!url) {
-        const file = resolve(root, 'client', source);
-        if (!file.startsWith(join(root, 'client/assets') + '/')) throw new Error(`App asset escapes assets: ${source}`);
+        const file = resolve(root, 'apps/vela', source);
+        if (!file.startsWith(join(root, 'apps/vela/assets') + '/')) throw new Error(`App asset escapes assets: ${source}`);
         const bytes = await readFile(file);
         const name = createHash('sha256').update(bytes).digest('hex') + extname(file);
         await mkdir(join(out, 'assets'), { recursive: true });

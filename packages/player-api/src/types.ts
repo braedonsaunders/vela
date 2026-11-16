@@ -8,7 +8,7 @@ import type {
   PlaybackPlan,
   PlayerObservation,
   SessionCommand,
-} from '../../../protocol/v0/types';
+} from '../../protocol/types';
 
 export type { Command, Failure, PlaybackSession, Snapshot, PlaybackPlan, PlayerObservation, SessionCommand };
 

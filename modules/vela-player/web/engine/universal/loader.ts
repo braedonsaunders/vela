@@ -2,7 +2,7 @@ import type { VideoInfo } from '../video-info';
 import { abortable } from '../core/async';
 import { playbackMark } from '../timing';
 import { QUALIFIED_ORIGINAL_VIDEO, QUALIFIED_ORIGINAL_AUDIO } from './qualified';
-import type { ClientCapabilities } from '../../../../../client/wire/v0/types';
+import type { ClientCapabilities } from '../../../../../packages/protocol/types';
 import type { DecoderRetry } from './retry';
 import type { OriginalMedia } from './source';
 import type { ByteReader } from '../core/types';

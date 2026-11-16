@@ -1,4 +1,4 @@
-import type { BoxNode, Condition, Node, Style } from '../../../wire/v0/skin';
+import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
 import { cardRadius, display, gutter, gutterSmall, is, placeholder, pulse, small, veil } from './look';
 
 // A muted trailer preview: a landscape card that opens over the poster while the card's preview

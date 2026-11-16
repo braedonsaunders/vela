@@ -30,7 +30,11 @@ if (!librariesInput || !out) {
   throw new Error('Usage: export-assets.ts --libraries=<prepared libraries> --out=<dir> [--allow-dirty]');
 }
 
-const source = await sourceRevision(root);
+const revision = option('source-revision');
+if (revision && !/^[0-9a-f]{40}$/.test(revision)) {
+  throw new Error('--source-revision must be a full Git commit hash');
+}
+const source = revision ? { revision, dirty: false } : await sourceRevision(root);
 if (source.dirty && !Bun.argv.includes('--allow-dirty')) {
   throw new Error('The Vela tree has uncommitted changes; commit them or pass --allow-dirty');
 }

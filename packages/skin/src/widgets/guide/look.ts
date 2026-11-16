@@ -3,8 +3,8 @@
 // it reproduces the compiled Cinematic guide's tokens (cinematic.guide-*).
 import { useContext, useMemo } from 'react';
 import type { TextStyle } from 'react-native';
-import { resolveUi } from '../../../../../client/src/skin/ui';
-import type { UiTokens } from '../../../../../client/src/skin/ui-defaults';
+import { resolveUi } from '../../resolve/ui';
+import type { UiTokens } from '../../resolve/ui-defaults';
 import { fontFace } from '../../fonts';
 import { HostContext } from '../../host';
 

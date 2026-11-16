@@ -1,4 +1,4 @@
-import type { AudioRendition } from '../../../../protocol/v0/types';
+import type { AudioRendition } from '../../../../packages/protocol/types';
 import { parsePlaylist, type Playlist, type Segment } from './hls';
 import { appendBuffer, mutation, PlaybackFault } from './buffer';
 import { cancelled } from './session';

@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 import { msg } from '@vela/core';
-import { eyebrow } from '../../../../../client/src/skin/vela-base/look';
+import { eyebrow } from '../../resolve/vela-base/look';
 import { useInheritedText, type WidgetProps } from '../../host';
 import { serverDetail } from './connect/server-row';
 import type { ServerOption } from './connect/model';

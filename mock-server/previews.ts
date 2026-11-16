@@ -1,4 +1,4 @@
-import type { ClientCapabilities, PlaybackPlan, PreviewGrant, Title, TrailerPreviewResponse } from '../protocol/v0/types';
+import type { ClientCapabilities, PlaybackPlan, PreviewGrant, Title, TrailerPreviewResponse } from '../packages/protocol/types';
 import { mediaRoot } from './media';
 
 export interface PreviewSession { owner: string; viewerId: string; titleId: string; token: string; expires: number; grant: PreviewGrant; ended: boolean }

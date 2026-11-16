@@ -1,7 +1,7 @@
 // The Vela base: the built-in document every skin document inherits route by route (decision 7).
 // Its look is compiled Cinematic's, written on the document's ui tokens ($ui.*), so each skin
 // wears it in its own colours until it draws a route of its own. Its parts live in vela-base/.
-import type { Node, SkinDocument } from '../../wire/v0/skin';
+import type { Node, SkinDocument } from '../../../protocol/skin';
 import { auth } from './vela-base/auth';
 import { card, relatedRow, row } from './vela-base/cards';
 import { collection } from './vela-base/collection';
