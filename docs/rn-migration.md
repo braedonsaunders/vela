@@ -424,22 +424,23 @@ swapped out, ANRs on input). It continues on a Linux machine with KVM.
   FFmpeg. While media access headers apply to a URL the view sets `curl-max-redirects=0` (and FFmpeg's
   `max_redirects=0`), so a credentialed request never follows any redirect. Ether's broker URLs carry no
   headers and keep redirects. Not yet exercised against a redirecting server.
-- **Milestone 1 (renderer on Android TV), partly verified** on the emulator (Android 14 TV image): the
-  sign-in document draws with its fonts and gradients, and D-pad focus moves into its fields with the
-  document's focus look. Not yet driven: signing in, home, title, rows and cards by D-pad.
-- **Milestone 2 (lab HEVC MKV with media auth)**: not started on a device. A suitable lab title is
-  Se7en (HEVC Main10 HDR10, 1920x800, 7.9 GB original, `EXPO_PUBLIC_VELA_TITLE=Se7en`); the lab's other
-  originals are 4K.
-- **Blocker in the app shell:** `apps/vela/src/vela.tsx` sends every signed-out route but `/sign-in` and
-  `/connect` to sign-in, which includes the spike route `/player` (it signs in by itself), so
-  `vela://player` cannot open on any native platform until it is let through.
+- **Milestone 1 (renderer on Android TV): driven** on the emulator (960x540 dp): sign-in, home, search,
+  title and watch by D-pad (thread `thr_4vhzwizqsa`). Open UI findings went to the TV focus and layout
+  worker: the top bar's scrim, D-pad UP out of a lower row, the account menu's items, the watch
+  page's bottom bar at 960x540, and the title page's Play button off screen.
+- **Milestone 2 (lab HEVC MKV with media auth): passed** (details with the orchestrator).
+- **Emulator notes.** The Linux TV image is `system-images;android-36;android-tv;x86_64` (Linux has no
+  API 34 TV image). Start it with `tools/android-emulator.sh` (`swangle_indirect`): the default
+  SwiftShader renderer segfaults on the title page. On the emulator mpv decodes in software (goldfish
+  MediaCodec crashes the emulator process), so expect dropped frames there. `libmpv/build.sh` needs
+  Meson 1.11+, which it pip-installs.
 
 Steps on a new machine (Linux x86_64 with KVM, or a Mac):
 
 1. JDK 17 (`openjdk-17-jdk`, or Homebrew `openjdk@17`). Android command-line tools unpacked to
    `$ANDROID_HOME/cmdline-tools/latest` (default `~/.scratch/android-sdk`), then
    `sdkmanager platform-tools emulator "platforms;android-37.0" "build-tools;37.0.0"
-   "ndk;27.1.12297006" "cmake;3.22.1"` and a TV image (`system-images;android-34;android-tv;x86_64` on
+   "ndk;27.1.12297006" "cmake;3.22.1"` and a TV image (`system-images;android-36;android-tv;x86_64` on
    Linux, `arm64-v8a` on Apple silicon); `avdmanager create avd -n vela-tv -d tv_1080p -k <image>`.
 2. `source tools/android-env.sh` (per-worktree Gradle home, the host's ABI, build output on scratch).
 3. libmpv: on Linux install autoconf, automake, libtool, pkg-config, meson, ninja, nasm, gperf, python3
