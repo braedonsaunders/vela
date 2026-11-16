@@ -247,9 +247,17 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     </>
   );
   const drawn: Record<string, unknown> = { ...style, ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion };
+  // A masked box that only paints a colour draws the masked colour as a gradient fill.
+  const filled = !!fx.maskedFill && node.children.length === 0;
+  if (filled) {
+    delete drawn.backgroundColor;
+    drawn.backgroundImage = fx.maskedFill;
+  }
   // A native mask wraps the box: the mask takes the box's geometry and the box fills it in flow,
-  // so the mask is as large as the box's content.
-  const masked = drawing('mask') && !!(fx.mask || fx.radialMask);
+  // so the mask is as large as the box's content. It renders the box offscreen at full size, which
+  // a TV cannot afford across a home of masked rows (Basement was killed at 1.6 GB): on TV other
+  // masks are left out and the box draws with hard edges.
+  const masked = !filled && !Platform.isTV && drawing('mask') && !!(fx.mask || fx.radialMask);
   const [geometry, inner] = masked ? partition(drawn, GEOMETRY) : [{}, drawn];
   const boxStyleFinal = masked ? { ...inner, flexGrow: 1 } : drawn;
   const a11y = a11yProps(node, ctx, env);
