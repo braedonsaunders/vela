@@ -127,6 +127,8 @@ export interface DetailModel {
   extras: Extra[];
   cast: string[];
   castPeople: Person[];
+  /** Parts the server is still making (`seasons`, `episodes`, `extras`, `trailer`): not yet there, not absent. */
+  pending: V.PendingPart[];
 }
 
 /** A library as a destination in the shell. */

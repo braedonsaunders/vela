@@ -283,5 +283,6 @@ export function detailModel(
     })),
     cast: data.cast.map(credit),
     castPeople: data.cast.map(person),
+    pending: data.pending ?? [],
   };
 }

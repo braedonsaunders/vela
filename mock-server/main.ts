@@ -64,6 +64,15 @@ function cached(req: Request, data: unknown, scope: string): Response {
   return new Response(req.headers.get('if-none-match') === etag ? null : body, { status: req.headers.get('if-none-match') === etag ? 304 : 200, headers });
 }
 const json = (data: unknown) => Response.json(data, { headers: { 'Cache-Control': 'no-store' } });
+// VELA_MOCK_COLD=1: a title's first detail read is partial (its extras still being made), as
+// Ether answers a title it is still filling: pending parts, refreshAfterMs, never cached.
+const coldServed = new Set<string>();
+function coldTitle(id: string): boolean {
+  if (process.env.VELA_MOCK_COLD !== '1' || coldServed.has(id)) return false;
+  coldServed.add(id);
+  return true;
+}
+const partial = (data: unknown) => Response.json(data, { headers: { 'Cache-Control': 'private, no-store', ETag: `W/"partial-${Date.now()}"` } });
 interface Pairing { device: V.Device; code: string; expires: number; approved: boolean; result?: V.Tokens }
 const devices = new Map<string, Pairing>(), quick = new Map<string, Pairing>(), webCodes = new Map<string, number>();
 const idempotency = new Map<string, { body: string; response: Promise<Response>; expires: number }>();
@@ -173,6 +182,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (titleMatch) {
     const d = detail(titleMatch[1]); if (!d) fail('not-found', 'title_not_found', 'Title not found');
     if (method === 'POST' && titleMatch[2] === 'watch') { const t = allTitles.find(t => t.id === titleMatch[1])!; t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false }; for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key]; return json({ accepted: true }); }
+    if (method === 'GET' && !titleMatch[2] && coldTitle(d.title.id)) return partial({ ...d, extras: [], pending: ['extras'], refreshAfterMs: 2000 });
     if (method === 'GET') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: d.extras } : d, g.id);
   }
   if (method === 'POST' && path === '/search') {

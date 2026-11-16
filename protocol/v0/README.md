@@ -37,7 +37,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /collections/:id | cursor, limit (query) | CollectionContents |
 | GET | /titles/:id | — | TitleDetail |
 | GET, HEAD | /themes/:grant/theme.m4a | opaque URL grant; optional Range header | theme audio bytes |
-| GET | /titles/:id/children | cursor, limit (query) | Page<Title> |
+| GET | /titles/:id/children | cursor, limit (query) | ChildrenPage |
 | GET | /titles/:id/extras | — | ExtrasResponse |
 | POST | /titles/:id/trailer-preview | TrailerPreviewRequest | TrailerPreviewResponse |
 | GET | /titles/:id/trailer-preview | — | TrailerPreviewResponse |
@@ -256,6 +256,16 @@ guide. Return `ETag`, `Cache-Control: private, max-age=0, must-revalidate` and h
 `If-None-Match` with 304. Cache keys include instance, viewer, policy revision,
 query, device capability context and protocol version. Never reuse across viewers.
 Auth, search jobs, sessions, events and mutation responses use `no-store`.
+
+Title detail, children and extras may be partial while the server still fills a title (a new
+show's seasons, its extras, a trailer). Optional `pending` names the parts in flight
+(`seasons`, `episodes`, `extras`, `trailer`), only for work that is confirmed queued or
+running, never speculatively; `refreshAfterMs` (2000 from Ether) says when to ask again. A
+partial answer carries `Cache-Control: private, no-store` and a weak `ETag`: clients never
+cache it or revalidate against it. A complete answer (no `pending`, or an empty list) has the
+cacheable semantics above. Clients re-read a partial answer after `refreshAfterMs` while the
+title is on screen, backing off and stopping after a few tries, and update the parts in place
+as they arrive; a part still pending is shown as not yet available, not as absent.
 Opaque cursors bind viewer, query, ranking snapshot and policy; invalid/expired
 cursors return 409 `cursor_expired`, requiring refresh from the first page.
 

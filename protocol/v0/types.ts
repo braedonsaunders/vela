@@ -58,7 +58,11 @@ export interface Extra { id: ID; parentId: ID; kind: 'trailer' | 'clip' | 'featu
 export interface Chapter { id: ID; name: string; startSeconds: number; endSeconds?: number }
 /** Verified source stream facts only; omitted when streams are estimated or unknown. */
 export interface MediaSummary { video: { codec?: string; width?: number; height?: number; bitDepth?: number; colorTransfer?: string; dolbyVisionProfile?: number }[]; audio: { codec?: string; channels?: number; language?: string }[] }
-export interface TitleDetail { title: Title; canPlay?: boolean; seasons?: Title[]; episodes?: Title[];
+/** Parts of a title answer the server is still producing (confirmed queued or running work only). */
+export type PendingPart = 'seasons' | 'episodes' | 'extras' | 'trailer';
+/** A partial answer: `pending` names the parts still in flight; ask again after `refreshAfterMs`. */
+export interface PartialAnswer { pending?: PendingPart[]; refreshAfterMs?: number }
+export interface TitleDetail extends PartialAnswer { title: Title; canPlay?: boolean; seasons?: Title[]; episodes?: Title[];
   extras: Extra[]; chapters: Chapter[]; crew?: { name: string; role?: string; artwork?: ArtworkRef }[]; mediaSummary?: MediaSummary; cast: { name: string; role?: string; artwork?: ArtworkRef }[] }
 export type RowEntry = { id: ID; receiptToken: string } & (
   { kind: 'title'; title: Title } | { kind: 'channel'; channel: Channel } |
@@ -179,7 +183,8 @@ export interface Programme { id: ID; channelId: ID; name: string; summary: strin
   titleId?: ID; episodeTitle?: string; seasonNumber?: number; episodeNumber?: number; artwork: ArtworkRef[]; rating?: string; genres?: string[] }
 export interface GuideQuery { from: Timestamp; until: Timestamp; channelIds?: ID[]; cursor?: Cursor; limit?: number }
 export interface GuideResponse extends Page<Programme> { from: Timestamp; until: Timestamp }
-export interface ExtrasResponse { items: Extra[] }
+export interface ExtrasResponse extends PartialAnswer { items: Extra[] }
+export interface ChildrenPage extends Page<Title>, PartialAnswer {}
 /** One-use console Watch hand-off; redeem against the same Ether instance. */
 export interface WebCodeRedeemRequest extends Mutation { code: string; device: Device }
 

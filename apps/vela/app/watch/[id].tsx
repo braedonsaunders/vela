@@ -43,9 +43,7 @@ export default function Watch() {
   // which would pop the player: its removal waits while a menu holds Back.
   usePreventRemove(useBackHeld(), backFromNavigation);
 
-  useEffect(() => {
-    if (id && target.kind === 'title') openTitle(id);
-  }, [id, target.kind, openTitle]);
+  useEffect(() => (id && target.kind === 'title' ? openTitle(id) : undefined), [id, target.kind, openTitle]);
 
   // Each session's media authorization goes straight to the player, never through props or state.
   useEffect(() => {
