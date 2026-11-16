@@ -726,3 +726,78 @@ The parent's next step is delivery-aware reserve admission: a small PCM target
 only when priming goodput is >=1.3x media bitrate AND contiguous forward bytes
 cover >=2 seconds; retain full reserve for under-supply or cap waits. Healthy
 and under-supplied local proofs must precede another pair in each order.
+
+## Delivery-aware audio admission
+
+The core now measures media publication over the entire decode/priming window,
+including first-byte wait and idle time. Random metadata and unadopted speculative
+reads cannot inflate that measure. The comparison bitrate is the greater of the
+file average and the observed audio/video packet rate; contiguous cached bytes
+ahead are counted from the authoritative playhead, not a guessed file offset.
+
+Admission uses a 0.4-second PCM target only after at least 250 ms of measurement,
+sufficient published bytes, goodput at least 1.3 times that bitrate, at least two
+seconds of contiguous forward bytes, and an explicit zero
+`X-Ether-Media-Cap-Wait-Ms`. Otherwise it retains 1.8 seconds. Missing, empty,
+malformed, negative or nonfinite hints mean unknown, never zero; any positive
+queue hint remains a risk throughout that admission. The same rule applies
+after seeks. HLS keeps the full hold because this change does not invent a
+contiguous file-byte reserve for segments. Decoder, PCM, cache and output bounds
+are unchanged.
+
+The first local version sampled only the trailing second. It stayed safe but
+could falsely classify a healthy source as slow after intentional read-ahead
+backpressure filled the byte reserve. The correction measures the requested
+whole priming window. This does not remove first-byte latency from the sample.
+The lab fast path remains gated until the server header is deployed; production
+continues to use the wrapper.
+
+Validation status: the standalone player TypeScript compile and fresh asset
+assembly passed (`678c0e0109cf1334`). The previous trailing-second version
+(`e507be62a3479c0f`) and baseline each completed 20 seconds after startup plus
+20 seconds after seek with zero underruns, drops or repeated completed pages.
+Its healthy startup still chose 1.8 seconds (observed headroom 1.168 despite
+five seconds of forward bytes), motivating the whole-window correction; its
+seek selected 0.4 seconds. This is evidence for the measurement issue, not a
+completed fast-start qualification.
+
+The corrected healthy run could not persist its result because the external
+scratch drive disconnected during the write. Its browser closed, and the
+fixture server was stopped. That run is not counted. Healthy and under-supplied
+playback proofs, followed by the header-enabled lab pairs, remain pending.
+Ballast before the baseline was WATCH (3.08 GB headroom, 90.9 MB/min paging),
+before the first candidate WATCH (4.38 GB, 36.3 MB/min), and before the corrected
+run WARNING for usage with low paging (3.27 GB, 5.38 MB/min). These local timing
+samples are not presented as quiet-machine lab performance comparisons.
+
+After the drive returned, the corrected candidate completed both proofs. Each
+played for 20 seconds after initial 48.08-second admission and 20 seconds after
+a seek to 52.5. The generated 3840x2160 Main10/DTS fixture averages 46.9 Mbps;
+every range waited 400 ms before streaming, with aggregate body delivery at
+200 Mbps in the healthy case. The under-supplied case delivered 35 Mbps for
+five seconds after media open/seek, then 200 Mbps, and explicitly reported
+300 ms cap wait. This is a controlled synthetic hint, not a lab-header claim.
+
+| Case | First image | Playable | PCM target | Admission hold | Seek ready | Seek target |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Prior baseline, healthy | 2.542 s | 3.898 s | 1.8 s | 1.355 s | 3.011 s | 0.819 s |
+| Whole-window candidate, healthy | 2.527 s | 3.816 s | 0.4 s | 1.289 s | 2.972 s | 0.4 s |
+| Whole-window candidate, slow/queued | 3.212 s | 6.634 s | 1.8 s | 3.421 s | 5.798 s | 1.8 s |
+
+Both corrected cases had zero underruns (count and frames), zero drops,
+zero completed-page repeats, no failure/fallback, and bounded cache use
+96,325,334 <= 96,428,575 bytes. Healthy admission observed 2.371x headroom,
+5.004 seconds of contiguous forward bytes and explicit zero cap wait. Slow
+admission observed 1.188x/300 ms; seek 1.150x/300 ms. The healthy measured
+playable gain here is only 82 ms, not an inferred multi-second lab gain. PCM
+arrived in decoder/output batches, so selecting 0.4 seconds did not imply
+exactly 0.4 seconds were queued when the clock started.
+
+Ballast before these runs reported WARNING for usage with no paging and
+2.85 GB headroom (healthy), then WATCH with 3.80 GB headroom and 127 KB/min
+paging (slow). Each runner closed its browser/context/profile; the owned
+fixture server stopped after both. Small numeric records also reside in the
+playback thread storage, independent of scratch. The scalar policy proof also
+kept 1.8 seconds for absent/empty/malformed/negative/nonfinite hints, low
+goodput and insufficient forward bytes. The real-app header-enabled matrix
+remains necessary before any launch/default claim.

@@ -1,5 +1,101 @@
 # Playback engine
 
+## Core-only launch plan (owner directive, pending qualification)
+
+Ship one Vela player and one source-complete build. First finish delivery-aware
+admission and the real-app matrix below; then remove the legacy implementation;
+finally repeat the full matrix with only the core installed. Send this plan to
+the orchestrator before deleting. Production remains unchanged during the work.
+
+| Remove | Concrete repository scope |
+| --- | --- |
+| Frozen wrapper runtime | Descriptor/payload `3c579f70de6e1cfe`, its release reuse instructions and wrapper qualification gates. No wrapper bytes enter the new release. |
+| Upstream orchestration | `client/player/universal/runtime.ts` (`upstream-controller`), controller/frame-loop/decode-session integration and wrapper-only audio/control/transport/audit adapters under `universal/`. Check imports before removing each shared helper. |
+| Old player dependency | `vendor/webgpu-player` gitlink, `.gitmodules` entry, upstream revision pin/checks, inherited tsconfig/npm tooling and imports into its `src/` or `tools/`. The core currently uses some of these: removing only the controller would be incomplete. |
+| Two runtime build modes | Replace `tools/player/prepare-upstream.ts` and its `--core` branch with one core asset builder. Remove wrapper build transforms and wrapper audit payload generation. |
+| Frozen-release reuse | Remove `--universal-from-release`, `stageUniversalFromRelease` and `tools/release/universal-from-release.py` with the packager. Release tooling accepts/verifies the freshly built core input and emits its one immutable descriptor. |
+| Migration switches | Remove `upstream-controller` unions, wrapper-compatible optional methods, core-vs-wrapper host checks, migration manifest flags (`core.vodHls/liveHls`) and descriptor overrides used for paired qualification. Hardware capability and installed-decoder checks remain. |
+| Obsolete documentation/proofs | Replace this historical wrapper integration narrative and wrapper build instructions with the current core contract. Remove wrapper-only fixture/proof scripts and stale generated references; retain a concise dated evidence record rather than instructions for reviving the old player. |
+
+Before removing the submodule, give the core direct, explicit dependencies:
+Mediabunny's demux source and licence; separately loaded audio/video decoder
+packages, hashes and corresponding sources; and subtitle assets. Replace the
+upstream presentation/audio-output/worker/asset plumbing the core still imports.
+If a small permissively licensed format or colour primitive is retained, keep
+its minimal reviewed source and attribution with the core. Do not copy the old
+controller or whole player into a renamed directory. Preserve MPL/LGPL source
+and licence obligations, including replaceable decoder modules. Install build
+dependencies directly, without the old submodule's `node_modules`.
+
+The retained fallback chain belongs to the same Vela engine: native WebCodecs
+or installed decoder packages; core HLS demux when Ether remuxes/transcodes an
+unsupported original; bounded, typed server conversion/burn-in when necessary;
+and Vela's native-element/MSE compatibility backend where browser capabilities
+require it. These are delivery/decoder backends, not a second controller. A core
+error must never silently load the deleted wrapper. Keep scoped media-header
+authorization, native fallback token handling, observations, progress/epoch
+semantics, chrome commands, trickplay and cleanup across every backend.
+
+Coordinate release inputs/defaults with `thr_tgszknwfsb` and the unchanged
+foundation/player event and prop contract with `thr_2e6r64an8e`. Qualify the
+current candidate in the actual watch view, then qualify again after excision:
+1917 HLS; verified 4K HDR10 TrueHD; Inception UHD DTS-HD and VC-1 server
+conversion; PGS pixels and Off; live channels/latency/preview stop; audio and
+subtitle changes; quality/Auto; trickplay; off-grid and backward seeks. Record
+the actual release, backend, start/seek/transition timing, decoded/presented and
+dropped frames, audio underrun duration, buffering, fallback/recovery and byte
+refetch. Stop/revoke/unpin each run. Only the clean core-only pass goes to the
+packager for the launch release.
+
+## Core capability matrix (current routes, not package-presence claims)
+
+Native below means exact-configuration WebCodecs support on the device, usually
+hardware, not a guarantee that the browser selected hardware. WASM modules load
+only for the selected codec. All decoded video uses the same WebGPU presenter.
+The owner's launch scope retains server conversion for older video codecs;
+installed VC-1/MPEG packages are **not** wired or advertised by this work.
+
+| Container/delivery | Core path | Limits / server requirement |
+| --- | --- | --- |
+| Matroska/MKV, WebM | Mediabunny metadata plus shared streaming clusters and bounded range cache | MKV qualified on real originals; WebM reader exists but is not a separate real-library qualification. Codec support is independent. |
+| MP4, MOV/QuickTime | Mediabunny sample tables/fragments over the same reader | Real MP4 and local edit-list/fragment proofs exist; encrypted samples require an authorized browser DRM backend, which the custom core does not implement. |
+| Clear fMP4 HLS, VOD/live | Core segment reader/demux, generation identity and exact live anchor | Producer remux/encode remains necessary when the original codec is unavailable locally. Playlist/timing admission fails honestly when unprovable. |
+| MPEG-TS / HLS-TS | Library demux exists | Not independently qualified as an original-file route; server remux is the launch fallback. |
+| AVI, ASF, MPEG-PS | Library readers exist | Not advertised as qualified originals. Legacy video remains server conversion. |
+| MP3, ADTS, FLAC, Ogg, WAV, AIFF | Library audio readers exist | Audio-only UI/transport is not qualified by the current video launch set. Ogg presence does not establish Theora video support. |
+| DVD/BD disc menus, ISO, encrypted/DRM media | No custom-core disc/DRM path | Requires server handling or a compatible licensed native path; no browser VLC-equivalence claim. |
+
+| Video | Local route | Qualification / remaining fallback |
+| --- | --- | --- |
+| H.264/AVC | WebCodecs, hardware preferred; browser software if supported | Real direct and HLS proofs; exact profile/level still checked. |
+| HEVC Main/Main10 SDR, HDR10, HLG | WebCodecs; installed HEVC parser/WGSL decoder package when native route cannot be used | Real Main10/HDR originals; package route has generated local proof. HDR presentation remains device-qualified. |
+| Dolby Vision | Supported HEVC base layer through the same route | No FEL reconstruction, full DV metadata display or certification claim; base-layer rendering is explicit. |
+| AV1, VP8, VP9 | Exact-config WebCodecs component can accept these | Not in the current advertised qualified-original video list (H.264/HEVC only). Do not infer real-library qualification from browser API support. |
+| VC-1/WVC1, WMV3 | Server video conversion | Owner-selected launch fallback; no installed VC-1 package activation. Inception DDB must demonstrate bounded, honest conversion playback. |
+| MPEG-1/2, MPEG-4 Part 2/Xvid/DivX, older WMV/H.263 | Server video conversion | No new software decoder work or package activation in this scope. |
+| Theora, ProRes, JPEG2000 and other unqualified codecs | Server conversion where available | No local performance or correctness claim from a dormant package/library codec name. |
+
+| Audio | Local route | Qualification / limits |
+| --- | --- | --- |
+| AAC, MP3, AC3/EAC3, FLAC, Opus, Vorbis, ALAC, MP2, admitted PCM variants | Independently loaded FFmpeg WASM/audio output | Exact codec/config/layout admission; general package also contains unadvertised codecs. |
+| DTS / DTS-HD | Separately loaded libdcadec WASM | DTS-HD core decoding qualified; do not claim lossless MA extension reconstruction without a measured matching proof. |
+| TrueHD / MLP | Separately loaded FFmpeg WASM | TrueHD PCM path; Atmos object rendering/passthrough not claimed. Real 7.1 title is in the launch matrix. |
+| WMA, ADPCM, APE, WavPack and other dormant package codecs | Package code may exist; not advertised as qualified | Server audio conversion until explicitly admitted and qualified. |
+
+| Subtitles | Local route | Limits / fallback |
+| --- | --- | --- |
+| SRT/SubRip, WebVTT/wvtt | Text parser and clocked canvas, embedded or external | Growing VTT polls honor completeness only on successful responses. |
+| ASS/SSA | Lazy JASSUB/libass WASM, attached fonts | Independently licensed assets/sources; exact history failures are visible. |
+| PGS/SUP | Streaming selected MKV blocks, PGS bitmap decoder/canvas | Direct-play pixels proven previously; repeat in final app matrix. Header stripping/zlib supported; unsupported encodings remain explicit fallback. |
+| tx3g/mov_text | MP4 text decoder and canvas | Local edit-list fixture; repeat source/seek/Off behavior in final pass. |
+| VobSub/DVD, DVB, teletext, encrypted/unsupported subtitle encodings | Server conversion or burn-in | No invisible selection or endless retry. |
+
+No CPU-throughput limit is invented here: a device's unsupported configuration,
+measured decoder failure/insufficient throughput, missing browser capabilities,
+or explicitly unsupported format determines fallback. Native-element/MSE
+compatibility remains available for browsers without the core's GPU/decoder
+facilities. Report the selected path and reason in the real-app evidence.
+
 Decision: use Exact's **app web native-view module**, with a `vela-player`
 custom view owning one HTMLVideoElement. Contract owns all chrome. No iframe,
 DOM escape in the data module, or change to pinned Exact is required.
