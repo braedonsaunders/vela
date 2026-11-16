@@ -47,20 +47,39 @@ export function requestTracks(
   });
 }
 export function requestSeek(context: HostContext, seconds: number) {
+  // One seek awaits the server at a time. Sending another now would carry the generations the
+  // first is about to retire and be refused as stale, so the viewer's latest target waits and
+  // goes out at the generations the first reply brings (see loadSession).
+  const pending = context.session.pendingSeek;
+  if (pending && !pending.authorized) {
+    context.session.pendingSeek = { ...pending, position: seconds, queued: true };
+    publishHostState(context);
+    return;
+  }
   context.session.pendingSeek = { position: seconds, startedAt: performance.now(), authorized: false };
   context.playback.status = 'buffering';
   context.media.runtime?.pause();
   context.surface.video.pause();
   context.telemetry.lastObservation = -Infinity;
   publishHostState(context);
+  sendSeek(context, seconds, context.session.controller.source, context.session.controller.seek);
+}
+/** The queued target, now that the server has answered the seek before it at these generations. */
+export function sendQueuedSeek(context: HostContext, sourceGeneration: number, seekGeneration: number) {
+  const pending = context.session.pendingSeek!;
+  context.session.pendingSeek = { position: pending.position, startedAt: performance.now(), authorized: false };
+  publishHostState(context);
+  sendSeek(context, pending.position, sourceGeneration, seekGeneration);
+}
+function sendSeek(context: HostContext, seconds: number, sourceGeneration: number, seekGeneration: number) {
   emitHostEvent(context, {
     type: 'session-command',
     sessionId: context.session.current!.id,
     command: {
       kind: 'seek',
       positionSeconds: seconds,
-      sourceGeneration: context.session.controller.source,
-      seekGeneration: context.session.controller.seek,
+      sourceGeneration,
+      seekGeneration,
       idempotencyKey: randomId(),
     },
   });

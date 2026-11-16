@@ -67,6 +67,8 @@ const SNAPSHOT_POLL_SECONDS = 5;
 export class Auth {
   private quick: { secret: string; serverId: string; timer?: ReturnType<typeof setTimeout> } | undefined;
   private redemption: { code: string; idempotencyKey: string; consumed: boolean } | undefined;
+  /** Asking a server that did not answer for its sign-in options again, while signed out. */
+  private reconnect: { timer: ReturnType<typeof setTimeout>; attempt: number } | undefined;
 
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -91,7 +93,11 @@ export class Auth {
     } catch (error) {
       const stillSignedIn = !!(await this.session.tokens(connection));
       // A transient failure is not sign-out: the stored session stays and the app says it is offline.
-      await this.refresh(message(error, msg('server.unreachable')), stillSignedIn ? 'offline' : undefined);
+      // A session the server no longer accepts was dropped: the viewer is asked to sign in again
+      // rather than shown the server's own wording ("Refresh invalid").
+      const rejected = !stillSignedIn && error instanceof VelaError && (error.status === 401 || error.detail.class === 'auth');
+      const text = rejected ? msg('server.sessionEnded') : message(error, msg('server.unreachable'));
+      await this.refresh(text, stillSignedIn ? 'offline' : undefined);
     }
   }
 
@@ -139,6 +145,19 @@ export class Auth {
     let settled: AuthPhase = tokens ? 'signed-in' : 'signed-out';
     if (phase) settled = phase;
     else if (!reachable && tokens) settled = 'offline';
+    // Signed out from a server that did not answer: its sign-in options are unknown, not absent.
+    // Say so, and ask again with backoff until it answers (or another server is selected).
+    const attempt = this.reconnect?.attempt ?? 0;
+    if (this.reconnect) clearTimeout(this.reconnect.timer);
+    this.reconnect = undefined;
+    if (!reachable && !tokens && settled === 'signed-out') {
+      error ||= msg('server.unreachable');
+      const serverId = connection.record.id;
+      const timer = setTimeout(() => {
+        if (this.session.selected().record.id === serverId && this.box.get().auth.phase === 'signed-out') void this.refresh().catch(() => {});
+      }, Math.min(60, 5 * 2 ** attempt) * 1000);
+      this.reconnect = { timer, attempt: attempt + 1 };
+    }
     this.patch({
       phase: settled,
       serverId: connection.record.id,

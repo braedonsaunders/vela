@@ -325,6 +325,8 @@ export const signIn: Node = {
       when: [
         { test: 'signin.canPassword', not: true },
         { test: 'signin.canQuick', not: true },
+        // An unanswered server's options are unknown; its error says so instead.
+        { test: 'signin.error', not: true },
       ],
       role: 'status',
       text: '{t:ui.noSignInMethodsOffered}',

@@ -194,6 +194,9 @@ const GEOMETRY = new Set(['position', 'top', 'right', 'bottom', 'left', 'zIndex'
   'aspectRatio', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft']);
 /** The rows that lay out a scroll box's content. */
 const CONTENT = new Set(['flexDirection', 'flexWrap', 'alignItems', 'justifyContent', 'alignContent', 'rowGap', 'columnGap', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']);
+// A route is the page the window scrolls, so its minimum height is its content's, as in CSS:
+// a `min-height: 100dvh` stage fills the window and centres within it.
+const ROUTE_CONTENT = new Set([...CONTENT, 'minHeight']);
 
 function partition(style: Record<string, unknown>, keys: Set<string>): [Record<string, unknown>, Record<string, unknown>] {
   const inside: Record<string, unknown> = {}, outside: Record<string, unknown> = {};
@@ -300,7 +303,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   let element: ReactNode;
   if (route || fx.scrollX || fx.scrollY) {
     const horizontal = !route && !!fx.scrollX && !fx.scrollY;
-    const [contentStyle, outerStyle] = partition(boxStyleFinal, CONTENT);
+    const [contentStyle, outerStyle] = partition(boxStyleFinal, route ? ROUTE_CONTENT : CONTENT);
     const sticky = web || horizontal ? undefined : node.children.flatMap((child, i) => (child.base.style.position === 'sticky' && holds(child.when, ctx, env) ? [i] : []));
     const onPagerScroll = node.pager && rowId ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;

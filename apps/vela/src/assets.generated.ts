@@ -62,6 +62,7 @@ export const ASSETS: Record<string, number | string> = {
   "/vela/v0/appearance/skins/marquee/1.0.0/preview.jpg": require("../../../packages/protocol/fixtures/skins/marquee/assets/preview.jpg"),
   "/vela/v0/appearance/skins/index/1.0.0/preview.jpg": require("../../../packages/protocol/fixtures/skins/index/assets/preview.jpg"),
   "/vela/v0/appearance/skins/index/1.0.0/instrument-serif.ttf": require("../../../packages/protocol/fixtures/skins/index/assets/instrument-serif.ttf"),
+  "/vela/v0/appearance/skins/kids/1.1.0/nunito.woff2": require("../../../packages/protocol/fixtures/skins/kids/assets/nunito.woff2"),
   "/vela/v0/appearance/skins/kids/1.1.0/preview.jpg": require("../../../packages/protocol/fixtures/skins/kids/assets/preview.jpg"),
   "/vela/v0/appearance/skins/kids/1.1.0/sparkle.svg": require("../../../packages/protocol/fixtures/skins/kids/assets/sparkle.svg"),
   "/vela/v0/appearance/skins/kids/1.1.0/toys.svg": require("../../../packages/protocol/fixtures/skins/kids/assets/toys.svg"),
