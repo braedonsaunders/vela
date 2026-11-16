@@ -5,6 +5,7 @@ import type { Command, PlaybackSession } from './model';
 import type { PlaybackPlan } from '../../protocol/v0/types';
 import { observation, sessionFromPlan } from './protocol';
 import { playbackMark } from './timing';
+import { loadedRuntimeServices } from './universal/loader';
 export interface BrowserPlayerView {
   media: MediaAccess;
   engine: PlaybackEngine;
@@ -112,6 +113,7 @@ export function createBrowserPlayerView(
     element.parentElement ?? element,
     ambient,
     media,
+    loadedRuntimeServices,
   );
   try {
     updateBrowserPlayerView(handle, json);

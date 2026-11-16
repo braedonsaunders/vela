@@ -2,8 +2,8 @@
  * Apply through the bundler's onLoad; originals remain pristine. Fail closed on
  * an upstream change so codec-private metadata cannot silently be omitted. */
 import { resolve } from 'node:path';
-import codecs from './codecs.json';
-const runtimeImport = resolve(import.meta.dir, 'track-configuration.ts');
+import codecs from './codecs.json' with { type: 'json' };
+const runtimeImport = resolve(import.meta.dirname, 'track-configuration.ts');
 function replaceOnce(source: string, before: string, after: string) {
   if (source.split(before).length !== 2) throw new Error(`Pinned audio hook anchor changed: ${before.slice(0, 80)}`);
   return source.replace(before, after);

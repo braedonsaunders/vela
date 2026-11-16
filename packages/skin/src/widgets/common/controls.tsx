@@ -17,7 +17,7 @@ const web = Platform.OS === 'web';
 /** A pressable that runs the look's CSS transitions (background, scale) as a document box does. */
 export const APressable = Animated.createAnimatedComponent(Pressable);
 /** The platform ring is replaced by the control's own focus look. */
-export const NO_RING = (web ? { outlineWidth: 0 } : {}) as ViewStyle;
+export const NO_RING = (web ? { outlineStyle: 'none' } : {}) as unknown as ViewStyle;
 
 export interface Interaction {
   hover: boolean;
@@ -201,8 +201,8 @@ interface PillProps {
   /** Draws the pulse in place of the label's start while something is in flight. */
   busy?: boolean;
   testID?: string;
-  /** Fill the row (sign-in buttons) or hug the label (Cancel). */
-  stretch?: boolean;
+  /** Fill the column (sign-in buttons), or hug the label where the column places it (Cancel). */
+  align?: 'stretch' | 'center' | 'flex-start';
   children?: ReactNode;
 }
 
@@ -215,7 +215,7 @@ export function Pill({
   disabled = false,
   busy = false,
   testID,
-  stretch = true,
+  align = 'stretch',
   children,
 }: PillProps) {
   const look = useLook();
@@ -225,7 +225,7 @@ export function Pill({
       ...pill(primary, height),
       'padding-left': '28px',
       'padding-right': '28px',
-      ...(stretch ? {} : { 'align-self': 'flex-start' }),
+      'align-self': align,
     },
     state,
     {

@@ -415,6 +415,8 @@ export const shell: Node = {
         },
         { type: 'widget', widget: 'install', params: { action: 'install', label: '{t:pwa.install}' } },
         { type: 'widget', widget: 'install', params: { action: 'update', label: '{t:pwa.update}' } },
+        // Your servers: the current one checked; choosing another switches, and Connect adds one.
+        { type: 'widget', widget: 'serverSwitcher' },
         {
           type: 'box',
           press: { action: 'signOut' },

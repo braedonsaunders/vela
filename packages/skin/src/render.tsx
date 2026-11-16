@@ -16,7 +16,7 @@ import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
 import { SYMBOLS } from './icons';
 import { WIDGETS } from './widgets';
-import { SearchInput } from './widgets/search-input';
+import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
@@ -380,7 +380,7 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const { style, text, fx } = useLeafStyle(node, ctx);
   const inner = node.inner ? translatedBox(split(filled(node.inner, ctx, host.env, false)).own, host.viewport, text.fontSize).style : undefined;
   if (fx.hidden) return null;
-  const content = node.slot === 'children' ? host.children : <SearchInput params={{}} ctx={ctx} />;
+  const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
   return (
     <Inherited.Provider value={text}>
       <AView style={style as ViewStyle}>
