@@ -27,6 +27,8 @@ internal class PlayerReport(
   var muted = false
   /** A muted preview reports its state but sends the server no observations. */
   var ambient = false
+  /** The server is applying a seek: observations wait for the plan that answers it. */
+  var awaitingSeek = false
 
   private var plan: PlaybackPlan? = null
   private var previewing = false
@@ -205,7 +207,7 @@ internal class PlayerReport(
   // Observation
 
   private fun observe(plan: PlaybackPlan, state: PlayerState, force: Boolean) {
-    if (ambient || pathId.isEmpty()) {
+    if (ambient || pathId.isEmpty() || (awaitingSeek && !force)) {
       return
     }
     val ended = state.phase == PlayerState.Phase.ENDED

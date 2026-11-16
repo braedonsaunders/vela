@@ -42,6 +42,8 @@ internal class PlayerController(
   private var activeSource = ""
   private var lastCommand = -1
   private var pendingSeek: Double? = null
+  /** A seek the server applies (its HLS, an extra): sent as a session command, made when its plan arrives. */
+  private var awaitedSeek: Double? = null
   private var wantsPlay = true
   private var displayFacts: VideoFacts? = null
   private var loggedOutput = false
@@ -153,6 +155,7 @@ internal class PlayerController(
     activeSource = source
     state = PlayerState()
     pendingSeek = null
+    awaitSeek(null)
     loggedOutput = false
     report.pathId = path.id
     report.backend = if (path.isOriginalFile) "mpv-original" else "mpv-hls"
@@ -206,6 +209,7 @@ internal class PlayerController(
   }
 
   private fun stop() {
+    awaitSeek(null)
     val client = mpv ?: return
     mpv = null
     client.destroy()
@@ -320,12 +324,33 @@ internal class PlayerController(
     }
   }
 
+  /** The plan moved the clock (a new seek generation). A seek mpv already made locally needs no second one;
+   * a seek the server applied is made now, at the plan's position. */
   private fun seekConfirmed(position: Double) {
+    val awaited = awaitedSeek
+    awaitSeek(null)
     val target = pendingSeek
-    if (target != null && abs(target - position) < 1.5) {
+    if (awaited == null && target != null && abs(target - position) < 1.5) {
       return
     }
     seek(position)
+  }
+
+  /** While the server applies a seek, observations wait: one sent meanwhile carries the seek generation the
+   * server is leaving, and is refused as stale. A seek the server never answers is dropped after 10 s. */
+  private fun awaitSeek(target: Double?) {
+    awaitedSeek = target
+    report.awaitingSeek = target != null
+    main.removeCallbacks(seekUnanswered)
+    if (target != null) {
+      main.postDelayed(seekUnanswered, SEEK_ANSWER_MS)
+    }
+  }
+
+  private val seekUnanswered = Runnable {
+    awaitSeek(null)
+    pendingSeek = null
+    report.publish(state, null, force = true)
   }
 
   private fun seek(seconds: Double) {
@@ -380,6 +405,7 @@ internal class PlayerController(
       return
     }
     pendingSeek = target
+    awaitSeek(target)
     report.sessionCommand(mapOf("kind" to "seek", "positionSeconds" to target))
   }
 
@@ -446,5 +472,9 @@ internal class PlayerController(
     activeSource = ""
     state.failure = null
     start(plan, path, url, "${plan.sessionId}:${path.id}:${plan.sourceGeneration}")
+  }
+
+  private companion object {
+    const val SEEK_ANSWER_MS = 10_000L
   }
 }
