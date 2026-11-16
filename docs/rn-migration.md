@@ -487,8 +487,12 @@ Lab builds: the lab admits client builds 0.1.0 up to, not including, 0.2.0 (`com
 apps/vela reports 0.2.0 unless `EXPO_PUBLIC_VELA_APP_VERSION` says otherwise, so lab builds set it
 until Ether's range admits 0.2.x.
 
-Open: the iOS (phone) Simulator pass, held behind the one-native-tool rule on this Mac; and the
-Basement home route, which Jetsam killed on a build before 9315369 (resolution pending its next install).
+Basement (Apple TV 4K), resolved: Cinematic's home was killed by Jetsam (up to 2 GB resident). A
+bisect by build switches pinned it on gradient masks, which render their box offscreen at full size
+across a home of masked rows. From e30c765 on, Cinematic's home stays up against the lab, with masks
+left out on TV and row-card backdrops capped at 1280 px.
+
+Open: the iOS (phone) Simulator pass, held behind the one-native-tool rule on this Mac.
 
 ## After the spikes
 
