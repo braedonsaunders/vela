@@ -1,6 +1,6 @@
 // The server's appearance: its default skin, the owner's force flag and its installed
 // runtime skin packs, with the viewer-level event stream that pushes changes live.
-// Ether's equivalent is the Vela Apps card (docs/skin-distribution.md, "Ether side").
+// Ether's equivalent is the Vela Apps card (docs/skin-distribution.md).
 import type * as V from '../packages/protocol/types';
 import type { SkinDocument } from '../packages/protocol/skin';
 import { cinematicDoc } from '../packages/protocol/fixtures/skins/cinematic';
@@ -17,8 +17,8 @@ const harbor: V.SkinPack = {
 };
 const packs = [harbor];
 const engines = ['cinematic', 'index', 'jellytwin', 'mochi', 'marquee', 'example'];
-// Skin documents (protocol/v0/skin.ts): whole skins as data, drawn by the client's doc engine.
-// Besides cinematic, every `protocol/v0/fixtures/skins/<id>/document.ts` (default export) is
+// Skin documents (packages/protocol/skin.ts): whole skins as data, drawn by the client's doc engine.
+// Besides cinematic, every `packages/protocol/fixtures/skins/<id>/document.ts` (default export) is
 // installed, its files in `<id>/assets/` served at `/vela/v0/appearance/skins/<id>/<version>/<file>`.
 const skinsDir = new URL('../packages/protocol/fixtures/skins', import.meta.url);
 const packaged: { doc: SkinDocument; assets?: URL }[] = [{ doc: cinematicDoc }];

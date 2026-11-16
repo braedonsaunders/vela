@@ -1,4 +1,4 @@
-// Cinematic as a skin document. The Vela base (client/src/skin/base.ts) is Cinematic's surfaces
+// Cinematic as a skin document. The Vela base (packages/skin/src/resolve/base.ts) is Cinematic's surfaces
 // drawn on the ui tokens, and the ui defaults are Cinematic's values, so this document draws
 // nothing of its own: it names Cinematic and keeps the bar mask over its home.
 import type { SkinDocument } from '../../skin';
@@ -12,7 +12,7 @@ export const cinematicDoc: SkinDocument = {
   tagline: 'Vela\'s own look: full-bleed art, serif titles and a ranked Top 10.',
   preview: '/vela/v0/appearance/skins/cinematic-doc/1.0.1/preview.jpg',
   swatches: ['#090b0e', '#f5f1e9', '#dcb998', '#c0703f', '#1f5a6b'],
-  // The Vela base's own look: Cinematic's values (client/src/skin/ui-defaults.ts).
+  // The Vela base's own look: Cinematic's values (packages/skin/src/resolve/ui-defaults.ts).
   ui: {
     page: '#090b0e', raised: '#15191e', ink: '#f5f1e9', inkSecondary: '#b6b8bb', inkQuiet: '#858d98',
     inkInverse: '#111419', inkHover: '#ffffff', accent: '#dcb998', onAccent: '#111419', control: '#ffffff16',

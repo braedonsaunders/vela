@@ -1,6 +1,5 @@
-// Metro sees the whole workspace: apps/vela imports packages/* and, until the conversion
-// moves them, client/src and protocol/ by path. Exact's build output and the old app's
-// bundles are not part of this graph.
+// Metro sees the whole workspace: apps/vela imports packages/* and modules/*. Build output,
+// vendor checkouts and legacy paths are blocked from the graph.
 const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');
 const { withVelaPlayer } = require('../../modules/vela-player/web/metro');

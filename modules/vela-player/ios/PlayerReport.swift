@@ -1,4 +1,4 @@
-// The contract's events in client/player/model.ts shapes: snapshots (at most four a second, and on
+// The contract's events in modules/vela-player/web/engine/model.ts shapes: snapshots (at most four a second, and on
 // every state change), observations (at most one a second, at least one every ten), errors and command results.
 import Foundation
 
@@ -36,7 +36,7 @@ final class PlayerReport {
         emitSessionCommand = sessionCommand
     }
 
-    /// Asks the playback controller to apply a session command (protocol/v0 SessionCommand) for the
+    /// Asks the playback controller to apply a session command (packages/protocol SessionCommand) for the
     /// current generations; it answers with a newer plan.
     func sessionCommand(_ fields: [String: Any]) {
         guard let plan else {

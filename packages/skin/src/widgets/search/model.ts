@@ -1,4 +1,4 @@
-// The search view state documents read (docs/skin-schema.md, "Search"): for the open query, the
+// The search view state documents read (docs/skin-schema.md): for the open query, the
 // three lanes of titles and the live hits, each lane with its honest state. The app's search
 // generations produce it (env.search); the vocabulary reads it.
 import type { LiveChannelResult, LiveProgrammeResult } from '@vela/core';

@@ -1,5 +1,5 @@
 // Builds every Vela brand file from one set of geometry.
-//   node brand/build.mjs          SVG sources in brand/svg and the app's assets in client/assets/brand
+//   node brand/build.mjs          SVG sources in brand/svg and the app's assets in apps/vela/assets/brand
 //   node brand/build.mjs --png    also the PNG icons in brand/png (needs Google Chrome and playwright-core)
 // Geometry is on the 64-unit symbol grid; the wordmark is on its own 100-unit ascender grid.
 import { writeFileSync, mkdirSync } from "node:fs";

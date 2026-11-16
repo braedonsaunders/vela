@@ -1,6 +1,6 @@
 // VelaPlayerView and VelaPlayer on native platforms (Apple today: libmpv from MPVKit) behind the player view
 // contract (packages/player-api). Props are typed objects; events carry the shapes of
-// client/player/model.ts. Media credentials go to the native side through VelaPlayer only.
+// modules/vela-player/web/engine/model.ts. Media credentials go to the native side through VelaPlayer only.
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
 import { createElement } from 'react';
 import type { NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';

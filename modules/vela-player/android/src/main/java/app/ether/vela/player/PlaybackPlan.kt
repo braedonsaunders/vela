@@ -1,4 +1,4 @@
-// The parts of a Vela v0 playback plan (protocol/v0/types.ts, PlaybackPlan) the player reads, from
+// The parts of a Vela v0 playback plan (packages/protocol/types.ts, PlaybackPlan) the player reads, from
 // the `plan` prop (React Native passes JSON numbers as Double).
 package app.ether.vela.player
 

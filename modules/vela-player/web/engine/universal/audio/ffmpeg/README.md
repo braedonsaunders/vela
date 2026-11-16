@@ -6,7 +6,7 @@ version3 or missing decoder configurations. Its memory is capped at 256 MiB.
 
 Set EMSDK to the existing Emscripten4.0.13 SDK and run:
 
-    bun client/player/universal/audio/ffmpeg/build.ts <served-audio-decoder-directory>
+    bun modules/vela-player/web/engine/universal/audio/ffmpeg/build.ts <served-audio-decoder-directory>
 
 The scratch build/cache stays under ~/.scratch/tmp/vela/audio-general-build.
 The distribution contains vela-audio.wasm, its manifest/hash, complete FFmpeg
@@ -45,7 +45,7 @@ limiter lookahead, which the existing pipeline/clock already accounts for.
 
 To assemble an already built distribution without downloading or rebuilding:
 
-    bun client/player/universal/audio/install-packages.ts <destination> --from=<prepared-directory>
+    bun modules/vela-player/web/engine/universal/audio/install-packages.ts <destination> --from=<prepared-directory>
 
 The prepared directory must contain all four hash-pinned modules and all matching
 source archives/licences/source-offer files. A missing general package or source

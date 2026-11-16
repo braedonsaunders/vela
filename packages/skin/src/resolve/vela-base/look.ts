@@ -48,7 +48,7 @@ export const pill = (primary: boolean, height = 56): Style =>
     transition: 'background-color 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)',
   }) as Style;
 
-// The brand lockup (client/assets/brand, two-tone), one image node.
+// The brand lockup (apps/vela/assets/brand, two-tone), one image node.
 export const markSize = (size: number): Style => ({
   width: `${+(size * 2.629).toFixed(3)}px`,
   height: `${size}px`,

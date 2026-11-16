@@ -1,6 +1,6 @@
 /**
- * The built-in skin documents a release ships (docs/distribution.md, "Built-in skin documents"):
- * every protocol/v0/fixtures/skins/<id>/document.ts (default export) and the legacy cinematic
+ * The built-in skin documents a release ships (docs/distribution.md, "Player assets and skins"):
+ * every packages/protocol/fixtures/skins/<id>/document.ts (default export) and the legacy cinematic
  * fixture, written as static files the client loads from its own origin:
  *
  *   <out>/catalog.json                          { schema: 1, documents: [ref…] }

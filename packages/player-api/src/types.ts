@@ -1,7 +1,7 @@
-// The player view contract (docs/architecture.md, "Player view contract"). Every implementation
+// The player view contract (docs/architecture.md). Every implementation
 // (Apple and Android on libmpv, web on the WebCodecs/WebGPU core) takes these props and emits
-// these events. The shapes are the browser engine's own (client/player/model.ts) until that file
-// moves into modules/vela-player at conversion.
+// these events. The shapes are the browser engine's own
+// (modules/vela-player/web/engine/model.ts).
 import type { Command, Failure, PlaybackSession, Snapshot } from '../../../modules/vela-player/web/engine/model';
 import type {
   ClientCapabilities,

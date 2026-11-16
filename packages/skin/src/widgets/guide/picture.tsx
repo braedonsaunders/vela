@@ -1,6 +1,6 @@
 // The preview tile's picture: the one ambient session, drawn by the app's player view, filling
 // its box. The `liveTile` widget is this picture alone; a document draws every state, bug and
-// caption over it from `tile.*` (docs/skin-schema.md, "Live home").
+// caption over it from `tile.*` (docs/skin-schema.md).
 import { StyleSheet, View } from 'react-native';
 import type { WidgetProps } from '../../host';
 import { useLiveContext, useLiveView } from './live';

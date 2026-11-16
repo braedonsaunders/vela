@@ -2,7 +2,7 @@
 // and the state reports. The same behaviour as the Apple view (ios/VelaPlayerView.swift):
 //   - `plan`: the selected ready path plays (an original file or the server's HLS). A newer plan of
 //     the same source moves the clock only when its seek generation changed.
-//   - `command`: { id, type, ... } (client/player/model.ts Command); each id is consumed once.
+//   - `command`: { id, type, ... } (modules/vela-player/web/engine/model.ts Command); each id is consumed once.
 // On an original file (direct play) seeks and the file's own tracks change here; anything the server
 // must apply (a seek on its HLS, a track the file does not carry, a path switch) is a session command,
 // and the view moves when the answering plan arrives. A refused media request asks for a fresh plan.

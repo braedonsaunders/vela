@@ -1,5 +1,5 @@
 // A server's media access (VelaPlayer.setMediaAccess): scoped request headers, as
-// client/player/media-auth.ts applies them. Held in native memory only; never logged or reported.
+// modules/vela-player/web/engine/media-auth.ts applies them. Held in native memory only; never logged or reported.
 import Foundation
 
 struct VelaMediaAuth {

@@ -9,7 +9,7 @@ Everything here comes from one file, [build.mjs](build.mjs):
 
 ```sh
 node brand/build.mjs --readme # only the animated GitHub README logo
-node brand/build.mjs          # SVG sources in brand/svg and the app's assets in client/assets/brand
+node brand/build.mjs          # SVG sources in brand/svg and the app's assets in apps/vela/assets/brand
 node brand/build.mjs --png    # also the PNG icons in brand/png (uses Google Chrome through playwright-core)
 ```
 
@@ -33,7 +33,7 @@ that led here are kept as `options*.html` (open them in a browser).
 
 ## Motion
 
-The signature animation (`client/foundation/splash.contract`) treats each beam as a
+The signature animation treats each beam as a
 motorised lamp turning rigidly about its own base (light beam about (36.7, 57.6), shadow beam
 about (34.6, 54.2)):
 
@@ -85,7 +85,7 @@ The app has these as theme tokens: `brand.light`, `brand.shadow`, `brand.paper-l
 | `png/vela-icon-{192,512}.png` | PWA icons, purpose `any` |
 | `png/vela-icon-maskable-{192,512}.png` | PWA icons, purpose `maskable` |
 
-The app loads the mark as **image assets, one node per use**, from `client/assets/brand/`.
+The app loads the mark as **image assets, one node per use**, from `apps/vela/assets/brand/`.
 Use `image "assets/brand/vela-lockup.svg"` and the like, never an inline SVG copied into a
 component. The only inline drawing of the mark is the animated splash, which is mounted once.
 PWA colours: `theme_color` and `background_color` are both `#090B0E`.

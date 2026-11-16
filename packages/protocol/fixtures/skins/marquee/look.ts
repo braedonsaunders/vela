@@ -1,6 +1,6 @@
 import type { Condition, Node, Style } from '../../../skin';
 
-// Marquee, as a skin document (protocol/v0/skin.ts): a charcoal media-server look with
+// Marquee, as a skin document (packages/protocol/skin.ts): a charcoal media-server look with
 // amber accents. A left sidebar of Home and the libraries (an icon rail on narrower
 // screens, a drawer on phones), a top bar with the wordmark, a centred search and the
 // account menu; a featured banner over hubs of posters; flat title pages with the

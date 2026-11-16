@@ -1,4 +1,4 @@
-// The contract's events in client/player/model.ts shapes: snapshots (at most four a second, and on
+// The contract's events in modules/vela-player/web/engine/model.ts shapes: snapshots (at most four a second, and on
 // every state change), observations (at most one a second), errors, session commands and session
 // refreshes. The same shapes as the Apple implementation (ios/PlayerReport.swift).
 package app.ether.vela.player
@@ -42,7 +42,7 @@ internal class PlayerReport(
     timeZone = TimeZone.getTimeZone("UTC")
   }
 
-  /** Asks the playback controller to apply a session command (protocol/v0 SessionCommand) for the
+  /** Asks the playback controller to apply a session command (packages/protocol SessionCommand) for the
    * current generations; it answers with a newer plan. */
   fun sessionCommand(fields: Map<String, Any?>) {
     val plan = plan ?: return
