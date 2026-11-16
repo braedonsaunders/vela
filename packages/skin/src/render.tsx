@@ -18,6 +18,7 @@ import { EscapeScope, focusElement, focusTarget, noteOpener, type Focusable } fr
 import { SYMBOLS } from './icons';
 import { WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
+import { drawing } from './diagnostics';
 import { animation } from './motion';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
@@ -203,7 +204,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const translated = translatedBox(own, viewport, text.fontSize);
   const fx = translated.fx;
   const style = shrinkFor(translated.style, own, parentDirection) as typeof translated.style;
-  const motion = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger);
+  const motion = drawing('motion') ? animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger) : undefined;
   const rowId = ctx.row?.id ?? '';
 
   const report = useCallback((kind: 'hover' | 'focus', on: boolean) => {
@@ -237,14 +238,18 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   }
   const layers = (
     <>
-      {fx.backdropBlur ? <BlurView intensity={Math.min(100, Math.round(fx.backdropBlur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+      {/* On a TV a live backdrop blur re-blurs everything moving behind it each frame; the
+          document's glass colour stays and the blur is left out. */}
+      {fx.backdropBlur && !Platform.isTV ? (
+        <BlurView intensity={Math.min(100, Math.round(fx.backdropBlur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} />
+      ) : null}
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}
     </>
   );
   const drawn: Record<string, unknown> = { ...style, ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion };
   // A native mask wraps the box: the mask takes the box's geometry and the box fills it in flow,
   // so the mask is as large as the box's content.
-  const masked = !!(fx.mask || fx.radialMask);
+  const masked = drawing('mask') && !!(fx.mask || fx.radialMask);
   const [geometry, inner] = masked ? partition(drawn, GEOMETRY) : [{}, drawn];
   const boxStyleFinal = masked ? { ...inner, flexGrow: 1 } : drawn;
   const a11y = a11yProps(node, ctx, env);
@@ -423,7 +428,7 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const text = inheritFrom(parentText, inherited, viewport);
   const parentDirection = useContext(Direction);
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
-  const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger);
+  const motion = drawing('motion') ? animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger) : undefined;
   return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion } as Record<string, unknown>, fx };
 }
 
@@ -460,7 +465,15 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
   // The box carries the node's style and motion; the image fills it.
   return (
     <AView style={style as ViewStyle} pointerEvents="none" accessible={!!alt} accessibilityLabel={alt || undefined} accessibilityRole={alt ? 'image' : undefined}>
-      {source ? <Image source={source} style={StyleSheet.absoluteFill} contentFit={fx.contentFit ?? 'fill'} blurRadius={fx.imageBlur} transition={node.fade ? 420 : 0} /> : null}
+      {source && drawing('images') ? (
+        <Image
+          source={source}
+          style={StyleSheet.absoluteFill}
+          contentFit={fx.contentFit ?? 'fill'}
+          blurRadius={drawing('image-blur') ? fx.imageBlur : undefined}
+          transition={node.fade ? 420 : 0}
+        />
+      ) : null}
     </AView>
   );
 }
