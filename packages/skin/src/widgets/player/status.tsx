@@ -124,8 +124,8 @@ function Pill({ look, label, primary, preferred, onPress, testID }: PillProps) {
         opacity: hover && filled ? 0.9 : 1,
         outlineColor: look.accent,
         outlineStyle: 'solid',
-        outlineWidth: focus && !look.tv ? 2 : 0,
-        outlineOffset: 2,
+        outlineWidth: focus ? (look.tv ? look.size(3) : 2) : 0,
+        outlineOffset: look.tv ? look.size(3) : 2,
         transform: [{ scale: look.tv && focus && !look.still ? 1.06 : 1 }],
       }}
     >

@@ -3,9 +3,10 @@
 // middle shows the spinner or an honest failure, the bottom bar holds the timeline and the
 // controls with their menus, and the info card sits at the top right. It hides itself while
 // playback runs untouched and comes back on any pointer, key or remote input.
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { msg } from '@vela/core';
+import type { Focusable } from '../../escape';
 import { useHost } from '../../host';
 import { BottomBar, TopBar, type Opened } from './bars';
 import { usePlayerChrome, type PlayerChromeState } from './context';
@@ -51,6 +52,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const [info, setInfo] = useState(false);
   const [active, setActive] = useState(false);
   const lastStep = useRef<{ seconds: number; at: number } | null>(null);
+  const toggleRef = useRef<Focusable>(null);
 
   const failed = failureOf(state, view);
   const blocked = !state.plan || view.ended || !!failed;
@@ -100,6 +102,15 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     liveKey: live.live ? live.key : undefined,
   });
 
+  // TV: whenever the chrome comes up, focus is on the play toggle, never on the top bar's close
+  // (select there would leave the player when the viewer meant to pause).
+  const tv = look.tv && Platform.isTV;
+  useEffect(() => {
+    if (!tv || !idle.visible || failed) return;
+    const frame = requestAnimationFrame(() => toggleRef.current?.requestTVFocus?.());
+    return () => cancelAnimationFrame(frame);
+  }, [tv, idle.visible, !!failed]);
+
   // Touch: a tap on the picture shows a hidden chrome, or hides a standing one (closing a menu first).
   const tapStage = () => {
     if (opened) setOpened(null);
@@ -138,6 +149,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           toggleInfo={toggleInfo}
           onActive={setActive}
           live={live}
+          toggleRef={toggleRef}
         />
       </View>
       <View
