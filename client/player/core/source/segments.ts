@@ -5,7 +5,9 @@ import { CustomPathedSource, CustomSource } from 'mediabunny';
 import { abortable, delay } from '../async';
 
 const MAX_OBJECT=16*1024*1024,MAX_PLAYLIST=1024*1024,CACHE_BYTES=32*1024*1024;
-class SegmentFailure extends Error {}
+class SegmentFailure extends Error {
+  constructor(message:string,readonly httpStatus?:number){super(message);}
+}
 interface ObjectBytes {bytes:Uint8Array;playlist:boolean;at:number}
 
 /** Vela owns acquisition, URL policy, retries and caching; HLS parsing is a library. */
@@ -128,7 +130,7 @@ export class SegmentReader {
     try{
       if(response.status!==200){
         if(response.status===408||response.status===429||response.status>=500)throw new TypeError(`Segment HTTP ${response.status}`);
-        throw new SegmentFailure(`Segment HTTP ${response.status}`);
+        throw new SegmentFailure(`Segment HTTP ${response.status}`,response.status);
       }
       const type=response.headers.get('Content-Type')??'';
       if(/text\/html|application\/json/i.test(type))throw new SegmentFailure('Media endpoint returned a document instead of media');

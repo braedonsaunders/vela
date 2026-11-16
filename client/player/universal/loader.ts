@@ -43,7 +43,7 @@ export interface OriginalRuntimeOptions {
   assets: {baseURL: string; assetKey: string; audioDecoderURL: string; videoDecoderURL: string; subtitleBaseURL?:string};
   retry?: DecoderRetry;
   signal: AbortSignal; onEvent: (event: {type: string}) => void;
-  onFailure: (reason: string, position: number) => void;
+  onFailure: (reason: string, position: number, transport?:{httpStatus:number|null}) => void;
 }
 /** Production shares an immutable payload across skin engines. Only an absent
  * descriptor uses diagnostic-relative assets; invalid explicit bases fail closed. */

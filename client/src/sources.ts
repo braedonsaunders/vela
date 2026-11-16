@@ -53,9 +53,13 @@ function parseMediaCapabilities(json: string): MediaCapabilities {
       if (!Array.isArray(items) || items.length > 32 || items.some(item => typeof item !== 'string' || !item || item.length > 80)) throw new Error('Invalid original playback capabilities');
       return items;
     };
-    if (candidate.version !== 1 || candidate.range !== true || candidate.webgpu !== true) throw new Error('Invalid original playback capabilities');
-    originalPlayback = { version: 1, range: true, webgpu: true, demuxContainers: names('demuxContainers'), videoDecoders: names('videoDecoders'), audioDecoders: names('audioDecoders') };
+    // webgpu is the web core's presenter; a native engine (tvOS) declares false and presents natively.
+    if (candidate.version !== 1 || candidate.range !== true || typeof candidate.webgpu !== 'boolean') throw new Error('Invalid original playback capabilities');
+    originalPlayback = { version: 1, range: true, webgpu: candidate.webgpu, demuxContainers: names('demuxContainers'), videoDecoders: names('videoDecoders'), audioDecoders: names('audioDecoders') };
   }
+  // A native host names itself (tvOS: "Apple TV"); a browser leaves the web default.
+  const host = value.device as Record<string, unknown> | undefined;
+  if (host && typeof host === 'object' && typeof host.name === 'string' && typeof host.platform === 'string' && /^[a-z]{2,16}$/.test(host.platform) && host.name.length <= 80) hostDevice = { name: host.name, platform: host.platform };
   return { containers: list('containers'), videoCodecs: list('videoCodecs'), audioCodecs: list('audioCodecs'), subtitleFormats: list('subtitleFormats'), hls: value.hls, mse: value.mse, ...(originalPlayback ? { originalPlayback } : {}) };
 }
 // Idempotency keys are unique per operation without mutating the shared store,
@@ -122,11 +126,12 @@ function resetServerState(): void {
   activeQuick = undefined; authCapabilities = undefined; health = undefined; media = undefined;
   appearanceAvailable = true; lastAppearance = undefined;
 }
+let hostDevice = { name: 'Vela browser', platform: 'web' };
 function deviceFor(store: Store): Device {
   if (!device) {
     let id = store.get('vela.device');
     if (!id) { id = randomId(); store.set('vela.device', id); }
-    device = { id, name: 'Vela browser', platform: 'web', appVersion: version };
+    device = { id, name: hostDevice.name, platform: hostDevice.platform, appVersion: version };
   }
   return device;
 }
