@@ -31,22 +31,36 @@ function topLevelCommas(text: string): number {
   return commas;
 }
 
-/** Why a row is refused on native, or null. */
-function unsupported(row: string, value: string): string | null {
+/** Where a style sits: whether its node is a direct child of a vertical scroll box. */
+interface Place {
+  inScroll: boolean;
+}
+
+/** Why a row is refused on native, or null. Sticky pins only a direct child of a route's root
+ *  (the page's scroll content, whose scroll view the renderer owns) or of a vertical scroll box. */
+function unsupported(row: string, value: string, place: Place): string | null {
   if (row === '-webkit-text-stroke') return 'text stroke has no native equivalent; use one text-shadow';
-  if (row === 'position' && /^(fixed|sticky|static)$/.test(value)) return `position: ${value} has no native equivalent`;
+  if (row === 'position' && /^(fixed|static)$/.test(value)) return `position: ${value} has no native equivalent`;
+  if (row === 'position' && value === 'sticky' && !place.inScroll) {
+    return 'position: sticky only pins a direct child of a route root or of a vertical scroll box';
+  }
   if (row === 'box-sizing' && value === 'content-box') return 'native layout is always border-box';
   if (row === 'display' && /^(block|inline|inline-block|inline-flex|contents|table)$/.test(value)) {
     return `display: ${value} has no native equivalent (flex or none)`;
   }
   if (row === 'text-shadow' && topLevelCommas(value) > 0) return 'native draws one text shadow';
   if (row === 'mask-image' && value.includes('url(')) return 'an image mask has no native equivalent';
-  if (/^grid-(row|column|template-rows|template-areas|area)/.test(row)) return 'grid placement has no native equivalent';
+  if (/^grid-(row|column|template-rows|template-areas|area)/.test(row)) {
+    return 'grid placement has no native equivalent';
+  }
   return null;
 }
 
 /** How a row is approximated on native, or null. */
 function approximated(row: string, value: string): string | null {
+  if (row === 'position' && value === 'sticky') {
+    return 'native pins it at the top of its scroll box or page (a non-zero top is ignored)';
+  }
   if (row === 'backdrop-filter') return 'native blurs behind (expo-blur) and drops other filter functions';
   if (row === 'mask-image') return 'native masks with a gradient view';
   if (row === 'display' && value === 'grid') return 'native lays a grid out as wrapped flex rows';
@@ -57,10 +71,10 @@ function approximated(row: string, value: string): string | null {
   return null;
 }
 
-function checkStyle(style: Record<string, unknown>, at: string, out: PortabilityFinding[]): void {
+function checkStyle(style: Record<string, unknown>, at: string, place: Place, out: PortabilityFinding[]): void {
   for (const [row, raw] of Object.entries(style)) {
     const value = String(raw).trim();
-    const refused = unsupported(row, value);
+    const refused = unsupported(row, value, place);
     if (refused) {
       out.push({ level: 'error', at, row, value, message: refused });
       continue;
@@ -70,31 +84,69 @@ function checkStyle(style: Record<string, unknown>, at: string, out: Portability
   }
 }
 
-function walk(value: unknown, at: string, out: PortabilityFinding[]): void {
-  if (Array.isArray(value)) {
-    value.forEach((item, i) => walk(item, `${at}[${i}]`, out));
-    return;
-  }
-  if (!value || typeof value !== 'object') return;
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+type NodeLike = Record<string, unknown>;
+
+function isNode(value: unknown): value is NodeLike {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && typeof (value as NodeLike).type === 'string';
+}
+
+/** A box whose base style scrolls vertically (its direct children may stick). */
+function scrollsVertically(node: NodeLike): boolean {
+  const style = (node.style ?? {}) as Record<string, unknown>;
+  const overflow = String(style['overflow-y'] ?? style.overflow ?? '').trim();
+  return /^(auto|scroll)$/.test(overflow);
+}
+
+/** A node's own styles (its style, variants and states), then its children and repeated item.
+ *  `scrolls`: the node is a vertical scroll box for its children (a page's root always is). */
+function walkNode(
+  node: NodeLike,
+  at: string,
+  place: Place,
+  out: PortabilityFinding[],
+  scrolls = scrollsVertically(node),
+): void {
+  for (const [key, value] of Object.entries(node)) {
+    if (!value || typeof value !== 'object') continue;
     const path = `${at}.${key}`;
-    if (STYLE_KEYS.has(key) && child && typeof child === 'object') {
-      checkStyle(child as Record<string, unknown>, path, out);
-    } else if (STYLE_MAP_KEYS.has(key) && child && typeof child === 'object') {
-      for (const [width, style] of Object.entries(child as Record<string, unknown>)) {
-        if (style && typeof style === 'object') checkStyle(style as Record<string, unknown>, `${path}.${width}`, out);
+    if (STYLE_KEYS.has(key)) {
+      checkStyle(value as Record<string, unknown>, path, place, out);
+    } else if (STYLE_MAP_KEYS.has(key)) {
+      for (const [width, style] of Object.entries(value as Record<string, unknown>)) {
+        if (!style || typeof style !== 'object') continue;
+        checkStyle(style as Record<string, unknown>, `${path}.${width}`, place, out);
       }
-    } else {
-      walk(child, path, out);
+    } else if (key === 'states' && Array.isArray(value)) {
+      value.forEach((state, i) => {
+        walkNode({ type: 'state', ...(state as NodeLike) }, `${path}[${i}]`, place, out);
+      });
+    } else if (key === 'children' && Array.isArray(value)) {
+      const childPlace = { inScroll: scrolls };
+      value.forEach((child, i) => {
+        if (isNode(child)) walkNode(child, `${path}[${i}]`, childPlace, out);
+      });
+    } else if (key === 'item' && isNode(value)) {
+      // A repeat draws no box: its item sits where the repeat does.
+      walkNode(value, path, place, out);
     }
+  }
+}
+
+/** Each tree of a table (slots, routes or templates). A route's or home's root is the page's
+ *  content inside its scroll view, so the root's direct children may stick. */
+function walkTrees(trees: Record<string, unknown> | undefined, at: string, out: PortabilityFinding[]): void {
+  for (const [name, root] of Object.entries(trees ?? {})) {
+    if (!isNode(root)) continue;
+    const pageRoot = at === 'routes' || (at === 'slots' && name === 'home');
+    walkNode(root, `${at}.${name}`, { inScroll: false }, out, pageRoot || scrollsVertically(root));
   }
 }
 
 /** Every unsupported and approximated row the document writes (not the base it inherits). */
 export function portabilityReport(doc: SkinDocument): PortabilityFinding[] {
   const out: PortabilityFinding[] = [];
-  walk(doc.slots, 'slots', out);
-  walk(doc.routes, 'routes', out);
-  walk(doc.templates, 'templates', out);
+  walkTrees(doc.slots, 'slots', out);
+  walkTrees(doc.routes, 'routes', out);
+  walkTrees(doc.templates, 'templates', out);
   return out;
 }
