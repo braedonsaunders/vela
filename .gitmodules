@@ -1,3 +1,0 @@
-[submodule "vendor/webgpu-player"]
-	path = vendor/webgpu-player
-	url = https://github.com/alchemyyy/WebGPU-Player.git

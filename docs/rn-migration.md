@@ -373,26 +373,31 @@ the auth screens (the spike signs in from configuration).
 Exact build of the same documents, with focus moving through hero, rows and cards on tvOS
 by remote. Known differences go in this document, row by row.
 
-### Spike (a) findings so far (web, 2026-11-16)
+### Spike (a) findings (web and tvOS Simulator, 2026-11-16)
 
-Drawn from live mock data at 1440 px: the Vela base home (shell, hero, rows, Top 10
-numerals, pill buttons), the Vela base title page, and Mochi's home (sticker cards,
-fonts, SVG assets, hero, search field). Differences from the Exact build, and what the
-renderer still lacks:
+Drawn from live mock data: the Vela base (Cinematic) and Mochi home and title on the web at
+1440 and 1920 px, and on the tvOS Simulator at 1920x1080. Native differences found and fixed in
+the renderer, each a rule now:
 
-- **Search results** draw nothing: the base draws them with compiled code, and no document
-  has `routes.search` yet. The search vocabulary reads empty until one does.
-- **The framed title over home** (`detail.wide`/`small`, scrim and blur over the page
-  underneath) is drawn as a route of its own, without home underneath.
-- **Widgets** other than `searchInput` (install, observe, sentinel, select, previews, live
-  tile) draw nothing yet.
-- **Mixed-percentage lengths** (`calc(100% + 6px)`, `min(560px, 80%)`) are exact on the web
-  (CSS evaluates them). Natively `calc(P% ± …)` keeps the percentage and `min`/`max` keep the
-  argument that wins at the viewport's size.
-- **SVG assets** are bundled as data URIs (`apps/vela/svg-transformer.js`): Metro rejects
-  SVGs sized `100%` as image assets.
-- **A text drawn as a centring flex box** (a badge, an initial in a circle) centres its line
-  with `textAlign` and a line height equal to the box's height.
+- **Native masks wrap their box in flow.** The mask takes the box's geometry and the box fills
+  it. An absolutely filled child left the mask with no height, which hid every masked shelf
+  and the nav natively.
+- **Column items keep their size natively.** CSS's `min-height: auto` keeps a column's items at
+  least as tall as their content; Yoga has no automatic minimum. Natively a column item shrinks
+  only when the document sets `flex`/`flex-shrink`. Row items shrink, as in CSS.
+- **Native font weights** round to the nine named steps (`650` → `700`).
+- **No base URL natively**: `/vela` is the web export's alone (it broke `export:embed`).
+- **Hermes formats `Intl` units through the platform** (90 minutes came out "5,400s").
+  Duration and percentage labels use catalog strings around plain numbers (`@vela/core` i18n).
+- **SVG assets** are bundled as data URIs (`apps/vela/svg-transformer.js`): Metro rejects SVGs
+  sized `100%` as image assets.
+- **Mixed-percentage lengths** (`calc(100% + 6px)`, `min(560px, 80%)`) are exact on the web.
+  Natively `calc(P% ± …)` keeps the percentage, and `min`/`max` keep the argument that wins at
+  the viewport's size.
+- **A text drawn as a centring flex box** (a badge, an initial in a circle) centres its line.
+
+Still differs from the Exact build: the framed title page draws as its own route, without home
+underneath.
 
 ## After the spikes
 

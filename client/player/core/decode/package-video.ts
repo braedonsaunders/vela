@@ -1,16 +1,16 @@
-import { createEngineWorker } from '../../../../vendor/webgpu-player/src/EngineAssets';
+import { createEngineWorker } from 'webgpu-player/src/EngineAssets';
 import GPUDecoderCoordinatorHost, {
   type GPUDecoderParserRemotePipeline,
-} from '../../../../vendor/webgpu-player/src/decode/video/gpu/GPUDecoderCoordinatorHost';
-import { getGPUDecoderParserModule } from '../../../../vendor/webgpu-player/src/decode/video/gpu/GPUDecoderParser';
+} from 'webgpu-player/src/decode/video/gpu/GPUDecoderCoordinatorHost';
+import { getGPUDecoderParserModule } from 'webgpu-player/src/decode/video/gpu/GPUDecoderParser';
 import GPUVideoDecodeFeed, {
   type GPUVideoDecodeSessionFactory,
-} from '../../../../vendor/webgpu-player/src/decode/video/gpu/GPUVideoDecodeFeed';
-import { createGPUDecodeStreamFacts } from '../../../../vendor/webgpu-player/src/decode/video/gpu/GPUFramePool';
-import type { GPUDecoderOutputFormat } from '../../../../vendor/webgpu-player/src/decode/video/gpu/GPUDecodeFormats';
-import type { VideoDecoderPackage } from '../../../../vendor/webgpu-player/src/decode/packages/DecoderPackage';
-import type { DecodedFramePoolPresentationFrame } from '../../../../vendor/webgpu-player/src/presentation/WebGPUPresenter';
-import { secondsToMicroseconds } from '../../../../vendor/webgpu-player/src/MediaTime';
+} from 'webgpu-player/src/decode/video/gpu/GPUVideoDecodeFeed';
+import { createGPUDecodeStreamFacts } from 'webgpu-player/src/decode/video/gpu/GPUFramePool';
+import type { GPUDecoderOutputFormat } from 'webgpu-player/src/decode/video/gpu/GPUDecodeFormats';
+import type { VideoDecoderPackage } from 'webgpu-player/src/decode/packages/DecoderPackage';
+import type { DecodedFramePoolPresentationFrame } from 'webgpu-player/src/presentation/WebGPUPresenter';
+import { secondsToMicroseconds } from 'webgpu-player/src/MediaTime';
 import { abortable } from '../async';
 import type { DecodedVideoFrame, EncodedPacket, VideoTrack } from '../types';
 

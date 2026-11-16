@@ -1,0 +1,165 @@
+// The parts of a Vela v0 playback plan (protocol/v0/types.ts, PlaybackPlan) the player reads, from
+// the `plan` prop (React Native passes JSON numbers as Double).
+package app.ether.vela.player
+
+internal class PlaybackPlan(
+  val sessionId: String,
+  val revision: Int,
+  val sourceGeneration: Int,
+  val seekGeneration: Int,
+  val positionSeconds: Double,
+  val paths: List<PlanPath>,
+  val selectedPathId: String,
+  val audioTracks: List<PlanTrack>,
+  val subtitleTracks: List<PlanTrack>,
+  val selectedAudioTrackId: String?,
+  val selectedSubtitleTrackId: String?,
+  val chapters: List<PlanChapter>,
+) {
+  val selectedPath: PlanPath?
+    get() = paths.firstOrNull { it.id == selectedPathId }
+
+  fun audioTrack(id: String?): PlanTrack? = audioTracks.firstOrNull { it.id == id }
+
+  fun subtitleTrack(id: String?): PlanTrack? = subtitleTracks.firstOrNull { it.id == id }
+
+  companion object {
+    /** A plan, or null when a required field is missing. */
+    fun from(value: Map<String, Any?>): PlaybackPlan? {
+      return PlaybackPlan(
+        sessionId = value.text("sessionId") ?: return null,
+        revision = value.int("revision") ?: return null,
+        sourceGeneration = value.int("sourceGeneration") ?: return null,
+        seekGeneration = value.int("seekGeneration") ?: return null,
+        positionSeconds = value.number("positionSeconds") ?: 0.0,
+        paths = value.objects("paths").mapNotNull(PlanPath::from),
+        selectedPathId = value.text("selectedPathId") ?: return null,
+        audioTracks = value.objects("audioTracks").mapNotNull(PlanTrack::from),
+        subtitleTracks = value.objects("subtitleTracks").mapNotNull(PlanTrack::from),
+        selectedAudioTrackId = value.text("selectedAudioTrackId"),
+        selectedSubtitleTrackId = value.text("selectedSubtitleTrackId"),
+        chapters = value.objects("chapters").mapNotNull(PlanChapter::from),
+      )
+    }
+  }
+}
+
+internal class PlanPath(
+  val id: String,
+  val kind: String,
+  val transport: String,
+  val readiness: String,
+  val url: String?,
+  val original: Boolean,
+  /** The original's verified frame rate (OriginalVideo), for display matching before the first frame. */
+  val originalFrameRate: Double?,
+) {
+  /** An original file the server serves by byte range: the native engine's input. */
+  val isOriginalFile: Boolean
+    get() = original && transport == "file"
+
+  companion object {
+    fun from(value: Map<String, Any?>): PlanPath? {
+      return PlanPath(
+        id = value.text("id") ?: return null,
+        kind = value.text("kind") ?: return null,
+        transport = value.text("transport") ?: return null,
+        readiness = value.text("readiness") ?: return null,
+        url = value.text("url"),
+        original = value["original"] == true,
+        originalFrameRate = value.map("originalVideo")?.number("frameRate"),
+      )
+    }
+  }
+}
+
+internal class PlanTrack(
+  val id: String,
+  val name: String,
+  val language: String?,
+  val codec: String?,
+  val channels: Int?,
+  val streamIndex: Int?,
+  val forced: Boolean?,
+  val hearingImpaired: Boolean?,
+  val url: String?,
+  val deliveryKind: String?,
+  val deliveryUrl: String?,
+) {
+  val isExternal: Boolean
+    get() = deliveryKind == "external"
+
+  val externalUrl: String?
+    get() = if (isExternal) deliveryUrl ?: url else null
+
+  /** The model.ts Track a snapshot carries. */
+  val snapshot: Map<String, Any?>
+    get() {
+      val out = mutableMapOf<String, Any?>("id" to id, "label" to name)
+      language?.let { out["language"] = it }
+      codec?.let { out["codec"] = it }
+      channels?.let { out["channels"] = it }
+      streamIndex?.let { out["streamIndex"] = it }
+      forced?.let { out["forced"] = it }
+      hearingImpaired?.let { out["hearingImpaired"] = it }
+      deliveryKind?.let { kind ->
+        out["delivery"] = buildMap { put("kind", kind); deliveryUrl?.let { put("url", it) } }
+      }
+      return out
+    }
+
+  companion object {
+    fun from(value: Map<String, Any?>): PlanTrack? {
+      val delivery = value.map("delivery")
+      return PlanTrack(
+        id = value.text("id") ?: return null,
+        name = value.text("name") ?: return null,
+        language = value.text("language"),
+        codec = value.text("codec"),
+        channels = value.int("channels"),
+        streamIndex = value.int("streamIndex"),
+        forced = value["forced"] as? Boolean,
+        hearingImpaired = value["hearingImpaired"] as? Boolean,
+        url = value.text("url"),
+        deliveryKind = delivery?.text("kind"),
+        deliveryUrl = delivery?.text("url"),
+      )
+    }
+  }
+}
+
+internal class PlanChapter(val id: String, val name: String, val startSeconds: Double, val endSeconds: Double?) {
+  val snapshot: Map<String, Any?>
+    get() = buildMap {
+      put("id", id)
+      put("name", name)
+      put("startSeconds", startSeconds)
+      endSeconds?.let { put("endSeconds", it) }
+    }
+
+  companion object {
+    fun from(value: Map<String, Any?>): PlanChapter? {
+      return PlanChapter(
+        id = value.text("id") ?: return null,
+        name = value.text("name") ?: return null,
+        startSeconds = value.number("startSeconds") ?: return null,
+        endSeconds = value.number("endSeconds"),
+      )
+    }
+  }
+}
+
+// Reading JSON-shaped maps.
+
+internal fun Map<String, Any?>.text(key: String): String? = this[key] as? String
+
+internal fun Map<String, Any?>.number(key: String): Double? = (this[key] as? Number)?.toDouble()
+
+internal fun Map<String, Any?>.int(key: String): Int? = (this[key] as? Number)?.toInt()
+
+@Suppress("UNCHECKED_CAST")
+internal fun Map<String, Any?>.map(key: String): Map<String, Any?>? = this[key] as? Map<String, Any?>
+
+@Suppress("UNCHECKED_CAST")
+internal fun Map<String, Any?>.objects(key: String): List<Map<String, Any?>> =
+  (this[key] as? List<*>)?.mapNotNull { it as? Map<String, Any?> } ?: emptyList()

@@ -2,7 +2,7 @@
   "name": "@vela/player",
   "version": "0.1.0",
   "private": true,
-  "description": "VelaPlayerView: libmpv on Apple (MPVKit, LGPL) behind the player view contract in @vela/player-api",
+  "description": "VelaPlayerView: libmpv on Apple (MPVKit, LGPL) and Android (libmpv/build.sh, LGPL) behind the player view contract in @vela/player-api",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "peerDependencies": {
@@ -12,9 +12,13 @@
     "react-native": "*"
   },
   "dependencies": {
-    "@vela/player-api": "workspace:*"
+    "@vela/player-api": "workspace:*",
+    "mediabunny": "github:alchemyyy/mediabunny#e9303e8dbf1e77140328a417ac07306defc42cf6",
+    "webgpu-player": "github:alchemyyy/WebGPU-Player#a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2"
   },
   "devDependencies": {
+    "@types/dom-mediacapture-transform": "0.1.12",
+    "@types/dom-webcodecs": "0.1.13",
     "@webgpu/types": "0.1.71"
   }
 }

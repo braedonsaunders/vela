@@ -8,7 +8,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
@@ -25,6 +25,8 @@ import { collection, itemKey, type Ctx, type Env } from './vocabulary';
 const Host = HostContext;
 const Inherited = InheritedContext;
 const Group = GroupContext;
+/** The direction of the parent's flex layout (native shrinking follows it; see shrinkFor). */
+const Direction = createContext<'row' | 'column'>('column');
 /** Scroll views of row pagers, by row id, so pageNext/pagePrev can move them. */
 interface Scroller { scrollTo(options: { x: number; animated: boolean }): void }
 const pagers = new Map<string, { view: Scroller; x: number; width: number }>();
@@ -125,6 +127,14 @@ function split(rows: Css): { own: Css; inherited: Css } {
 }
 
 
+/** CSS flex items shrink, but a column item never below its content (min-height: auto); Yoga has
+ * no automatic minimum, so natively a column's items keep their size unless the document says
+ * how they shrink. Row items shrink, as CSS's do, so long text can ellipsize. */
+function shrinkFor<T extends object>(style: T, own: Css, parent: 'row' | 'column'): T {
+  if (web || parent === 'row' || own['flex-shrink'] !== undefined || own.flex !== undefined) return style;
+  return { ...style, flexShrink: 0 };
+}
+
 function translatedBox(rows: Css, viewport: Viewport, fontSize: number) {
   return cached(`b${viewport.width}x${viewport.height}|${fontSize}|${JSON.stringify(rows)}`, () => boxStyle(rows, measure(viewport, fontSize)));
 }
@@ -183,7 +193,10 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const rows = rowsFor(node, ctx, env, ui, parentGroup, disabled);
   const { own, inherited } = split(rows);
   const text = inheritFrom(parentText, inherited, viewport);
-  const { style, fx } = translatedBox(own, viewport, text.fontSize);
+  const parentDirection = useContext(Direction);
+  const translated = translatedBox(own, viewport, text.fontSize);
+  const fx = translated.fx;
+  const style = shrinkFor(translated.style, own, parentDirection) as typeof translated.style;
   const motion = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger);
   const rowId = ctx.row?.id ?? '';
 
@@ -212,7 +225,12 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     const gap = fx.grid.gap;
     const count = fx.grid.count ?? Math.max(1, Math.floor((gridWidth + gap) / ((fx.grid.min ?? 160) + gap)));
     const cell = (gridWidth - gap * (count - 1)) / count;
-    content = children.map((child, i) => <View key={i} style={{ width: cell }}>{child}</View>);
+    // A grid's cells are its drawn items: a repeat contributes one cell per item, as CSS grid
+    // places each element a repeat draws.
+    const items = node.children.flatMap((child, i) => child.kind === 'repeat'
+      ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(c)}`} node={child.item} ctx={c} />)
+      : holds(child.when, ctx, env) ? [<SkinNode key={i} node={child} ctx={ctx} />] : []);
+    content = items.map(item => <View key={item.key} style={{ width: cell }}>{item}</View>);
   }
   const layers = (
     <>
@@ -271,9 +289,12 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     );
   }
   if (fx.mask) element = <Mask mask={fx.mask} style={geometry}>{element}</Mask>;
+  const direction = fx.grid || (fx.scrollX && !fx.scrollY) || String(style.flexDirection ?? 'column').startsWith('row') ? 'row' : 'column';
   return (
     <Inherited.Provider value={text}>
-      <Group.Provider value={groupValue}>{element}</Group.Provider>
+      <Group.Provider value={groupValue}>
+        <Direction.Provider value={direction}>{element}</Direction.Provider>
+      </Group.Provider>
     </Inherited.Provider>
   );
 }
@@ -314,9 +335,10 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const rows = rowsFor(node, ctx, env, ui, group, false);
   const { own, inherited } = split(rows);
   const text = inheritFrom(parentText, inherited, viewport);
+  const parentDirection = useContext(Direction);
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
   const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger);
-  return { own, text, style: { ...style, ...motion } as Record<string, unknown>, fx };
+  return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion } as Record<string, unknown>, fx };
 }
 
 function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: Ctx }) {

@@ -1,12 +1,20 @@
 // One route drawn by the active document: the shell's tree around the route's tree. A document
-// that fails to resolve says so; nothing half-draws.
+// that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
+// library, a collection) adds it to the host with `page`.
 import { Text, View } from 'react-native';
-import { SkinRoot, SkinRoute, type RouteName } from '@vela/skin';
+import { SkinRoot, SkinRoute, type RouteName, type SkinHost } from '@vela/skin';
 import { useVela } from './vela';
 
-export function DocumentScreen({ route, entry }: { route: RouteName; entry: string }) {
+interface Props {
+  route: RouteName;
+  entry: string;
+  page?: (host: SkinHost) => SkinHost;
+}
+
+export function DocumentScreen({ route, entry, page }: Props) {
   const vela = useVela();
-  const host = vela.host(route, entry);
+  const app = vela.host(route, entry);
+  const host = app && page ? page(app) : app;
   if (vela.docError) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>

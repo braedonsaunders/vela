@@ -2225,3 +2225,44 @@ requests reaching the outside route; credential query parameters were stripped
 from header-authenticated fetches. Native query credentials remained attachment-only.
 No `runtime.js` was requested, and disposal left zero media nodes. This is a DOM-host
 proof, not yet an Expo export or real-app release qualification.
+
+### Expo web module (modules/vela-player, web)
+
+`modules/vela-player/src/VelaPlayerView.web.tsx` mounts `createWebPlayerHost` into the
+DOM node react-native-web draws for a `View`. `VelaPlayer.setMediaAccess` keeps the
+trusted controller's access in `web/media-access.ts`; a change re-applies the view's
+props so the host retires the old request scope. `VelaPlayer.capabilities()` (now part
+of the contract) is the browser probe in `web/capabilities.ts`: the payload's
+`capabilities.json` says what was installed, the browser and the qualified lists decide
+what is advertised.
+
+The upstream player and its Mediabunny fork are pinned package dependencies of
+`modules/vela-player` (`webgpu-player` at a7a95ef, `mediabunny` at e9303e8, from GitHub
+through bun.lock); there are no submodules, and `bun install` is the only setup. Metro
+bundles the core and the upstream modules it imports from their TypeScript sources
+(`web/metro.js`, applied by `apps/vela/metro.config.js`); the core is an async chunk
+loaded on first playback. The wrapper controller, the runtime.js loader and the frozen
+wrapper payload are not reachable from the Expo app. `web/metro-transformer.js` applies the same source
+adaptations the qualified core build used (`web/source-transform.ts`) and strips the
+upstream TypeScript (Expo's preset refuses `declare` fields). The transformer loads the
+adaptation modules in Node, which needs Node 23.6 or newer. The old player is not in
+this graph: host runtime services are required, and only the Exact host still passes
+`loadedRuntimeServices` (runtime.js by URL), which goes with the Exact app.
+
+The payload is built by
+
+    bun modules/vela-player/web/assets/export-assets.ts --libraries=<prepared libraries> --out=<dir>
+
+It writes `<dir>/player/<digest>/` and prints the digest. Export the app with
+`EXPO_PUBLIC_VELA_PLAYER_ASSETS=<digest>` and copy `<dir>/player/` to the export root;
+for `expo start --web`, set `VELA_PLAYER_ASSETS_DIR=<dir>` and the dev server serves it.
+The builder refuses a dirty tree (`--allow-dirty` records `sourceDirty:true`) and a
+bun.lock that does not pin both packages. It verifies every decoder and subtitle
+file with a Vela pin, rebuilds the four decoder workers from source with the same
+adaptations as the page, and ships Mediabunny's compiled sources as a reproducible
+archive, the licences and every Vela file compiled into a worker. Two builds of one revision give the same digest.
+
+Open: the libraries input is still a prepared tree. Decoder packages and subtitle
+assets are pinned, but the Dolby Vision parser, audio output stage and range-extension
+vectors (built by the upstream WASM toolchain) are accepted by hash and listed under
+`prebuilt` in the manifest until that build runs from source here.
