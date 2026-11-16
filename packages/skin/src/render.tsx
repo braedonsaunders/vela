@@ -99,12 +99,17 @@ function rowsFor(node: RNode, c: Ctx, e: Env, ui: Interaction, group: GroupState
   const state: Layer | undefined = node.states.find(s => holds(s.when, c, e))?.layer;
   const look = (kind: 'hover' | 'focus' | 'groupHover' | 'groupFocus') => state?.[kind] ?? node.base[kind];
   const rows: Css = filled((state ?? node.base).style, c, e, false);
+  // `outline: auto` in a plain style is the platform's focus ring (CSS's :focus-visible outline):
+  // it draws only while the node is focused. Written inside a focus look, it applies as written.
+  const ring = rows.outline === 'auto';
+  if (ring) delete rows.outline;
   const overlay = (css: CssT | undefined) => Object.assign(rows, filled(css, c, e, e.still));
   if (group?.hover) overlay(look('groupHover'));
   if (group?.focus) overlay(look('groupFocus'));
   if (ui.hover) overlay(look('hover'));
   // On TV, focus is the only pointer: a node with a hover look and no focus look shows its hover look.
   if (ui.focus) overlay(look('focus') ?? (Platform.isTV ? look('hover') : undefined));
+  if (ui.focus && ring && rows.outline === undefined) rows.outline = 'auto';
   if (ui.active) overlay(node.active);
   if (disabled) overlay(node.disabledStyle);
   return rows;
@@ -305,10 +310,12 @@ const ROUTE_SCROLL: ViewStyle = { flex: 1 };
 const BOX_SCROLL: ViewStyle = { flexGrow: 0 };
 
 /** The press button inside a box never draws the platform ring: the box is the clipping element,
- * so the ring is the box's own, drawn from its focus look (`outline: auto` keeps the platform ring
- * on the box). A press box without any focus look keeps the button's ring. */
+ * so the ring is the box's own, drawn from its focus look (`outline: auto`, written in the style or
+ * the focus look, draws the platform ring on the box while focused). A press box without any focus
+ * look keeps the button's ring. */
 function ownFocusLook(node: RNode): boolean {
-  return web && [node.base.focus, ...node.states.map(s => s.layer.focus)].some(Boolean);
+  const layers = [node.base, ...node.states.map(s => s.layer)];
+  return web && layers.some(layer => layer.focus || layer.style.outline === 'auto');
 }
 const NO_RING = { outlineWidth: 0 } as ViewStyle;
 
