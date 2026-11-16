@@ -48,6 +48,14 @@ Vela is a greenfield client. Speed of high-quality code is the priority. Read
   `source tools/env.sh` once it exists).
 - Exact is pinned at `vendor/exact` (revision in `EXACT_REVISION`). The app is consumed by
   path; `client/exact.mjs` forwards to it.
+- Dependencies: `bun install --frozen-lockfile` with Bun 1.4.2 is the routine install. Adding or
+  changing a dependency with Bun 1.4.2 fails in this repo (garbled registry names such as
+  `ehttps:%2f%2fregistry` or `js@babel%2fcode-fra`). Workaround: edit the package.json, run
+  `~/.bun/bin/bun install` (Bun 1.3.x) once only to read the new `bun.lock` entries, then
+  `git checkout bun.lock` and copy just those entries (the workspace's dependency lines and
+  the package lines) into it by hand. Never commit a Bun 1.3 lockfile: it rewrites
+  `lockfileVersion` and re-resolves unrelated packages. Finish with
+  `bun install --frozen-lockfile` under 1.4.2.
 - Large scratch output goes under `~/.scratch/tmp/vela/`, never `/tmp`.
 - Bulky build output lives on the scratch drive, not the internal disk: make `.artifacts`,
   `client/.exact` and `client/target` in your worktree symlinks into
