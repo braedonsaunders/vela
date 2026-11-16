@@ -8,6 +8,7 @@ stroke matches the weight of the beams.
 Everything here comes from one file, [build.mjs](build.mjs):
 
 ```sh
+node brand/build.mjs --readme # only the animated GitHub README logo
 node brand/build.mjs          # SVG sources in brand/svg and the app's assets in client/assets/brand
 node brand/build.mjs --png    # also the PNG icons in brand/png (uses Google Chrome through playwright-core)
 ```

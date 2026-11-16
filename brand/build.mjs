@@ -56,6 +56,31 @@ function icon({ round = 14.5, scale = 0.58, label = "Vela" } = {}) {
   return svg("0 0 64 64", body, label);
 }
 
+function readmeLogo() {
+  const s = 186 / MARK.h, mw = MARK.w * s, wx = mw + 64 - WM.x, top = -43;
+  const letters = LETTERS.map((path, index) => `<path class="letter letter-${index}" d="${path}"/>`).join("");
+  const style = `<style>
+    .light { fill: #f5f1e9; transform-origin: 36.7px 57.6px; animation: light 1.93s linear both; }
+    .shadow { fill: #dcb998; transform-origin: 34.6px 54.2px; animation: shadow 1.93s linear both; }
+    .letter { animation: illuminate .3s steps(2, end) both; }
+    .letter-0 { animation-delay: 1.99s; } .letter-1 { animation-delay: 2.08s; }
+    .letter-2 { animation-delay: 2.17s; } .letter-3 { animation-delay: 2.26s; }
+    @keyframes light { 0%, 15% { transform: rotate(20deg); opacity: .35; } 17% { opacity: 1; } 32% { transform: rotate(-20deg); } 34% { transform: rotate(-20deg); } 49% { transform: rotate(20deg); } 51% { transform: rotate(20deg); } 66% { transform: rotate(-20deg); } 68% { transform: rotate(-20deg); } 84% { transform: rotate(20deg); } 100% { transform: rotate(0); opacity: 1; } }
+    @keyframes shadow { 0%, 15% { transform: rotate(-20deg); opacity: .35; } 17% { opacity: 1; } 32% { transform: rotate(20deg); } 34% { transform: rotate(20deg); } 49% { transform: rotate(-20deg); } 51% { transform: rotate(-20deg); } 66% { transform: rotate(20deg); } 68% { transform: rotate(20deg); } 84% { transform: rotate(-20deg); } 100% { transform: rotate(0); opacity: 1; } }
+    @keyframes illuminate { 0%, 40% { opacity: .15; } 50% { opacity: .8; } 70% { opacity: .3; } 100% { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .light, .shadow, .letter { animation: none; } }
+  </style>`;
+  const body = `${style}<rect x="-35" y="-75" width="${r(wx + WM.x + WM.w + 70)}" height="250" rx="24" fill="#090b0e"/><g transform="translate(0 ${top}) scale(${r(s)}) translate(${-MARK.x} ${-MARK.y})"><path class="shadow" d="${SHADOW}"/><path class="light" d="${LIGHT}"/></g><g transform="translate(${r(wx)} 0)" fill="none" stroke="#f5f1e9" stroke-width="${STROKE}" stroke-linecap="round" stroke-linejoin="round">${letters}</g>`;
+  return svg(`-35 -75 ${r(wx + WM.x + WM.w + 70)} 250`, body, "Vela");
+}
+
+if (process.argv.includes("--readme")) {
+  const destination = join(here, "../.github/assets");
+  mkdirSync(destination, { recursive: true });
+  writeFileSync(join(destination, "vela-logo.svg"), readmeLogo());
+  process.exit(0);
+}
+
 const files = {
   "vela-symbol.svg": symbol(COLORS.dark),
   "vela-symbol-paper.svg": symbol(COLORS.paper),

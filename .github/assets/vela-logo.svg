@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-35 -75 559 250" role="img" aria-label="Vela"><style>
+    .light { fill: #f5f1e9; transform-origin: 36.7px 57.6px; animation: light 1.93s linear both; }
+    .shadow { fill: #dcb998; transform-origin: 34.6px 54.2px; animation: shadow 1.93s linear both; }
+    .letter { animation: illuminate .3s steps(2, end) both; }
+    .letter-0 { animation-delay: 1.99s; } .letter-1 { animation-delay: 2.08s; }
+    .letter-2 { animation-delay: 2.17s; } .letter-3 { animation-delay: 2.26s; }
+    @keyframes light { 0%, 15% { transform: rotate(20deg); opacity: .35; } 17% { opacity: 1; } 32% { transform: rotate(-20deg); } 34% { transform: rotate(-20deg); } 49% { transform: rotate(20deg); } 51% { transform: rotate(20deg); } 66% { transform: rotate(-20deg); } 68% { transform: rotate(-20deg); } 84% { transform: rotate(20deg); } 100% { transform: rotate(0); opacity: 1; } }
+    @keyframes shadow { 0%, 15% { transform: rotate(-20deg); opacity: .35; } 17% { opacity: 1; } 32% { transform: rotate(20deg); } 34% { transform: rotate(20deg); } 49% { transform: rotate(-20deg); } 51% { transform: rotate(-20deg); } 66% { transform: rotate(20deg); } 68% { transform: rotate(20deg); } 84% { transform: rotate(-20deg); } 100% { transform: rotate(0); opacity: 1; } }
+    @keyframes illuminate { 0%, 40% { opacity: .15; } 50% { opacity: .8; } 70% { opacity: .3; } 100% { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .light, .shadow, .letter { animation: none; } }
+  </style><rect x="-35" y="-75" width="559" height="250" rx="24" fill="#090b0e"/><g transform="translate(0 -43) scale(3.75) translate(-9 -8)"><path class="shadow" d="M38 8H55L36.8 50.8 32.4 57.6Z"/><path class="light" d="M9 8H26.4L41 57.6H32.4Z"/></g><g transform="translate(242.75 0)" fill="none" stroke="#f5f1e9" stroke-width="12.5" stroke-linecap="round" stroke-linejoin="round"><path class="letter letter-0" d="M0 36L26 100L52 36"/><path class="letter letter-1" d="M72 68H136A32 32 0 1 0 128.51 88.57"/><path class="letter letter-2" d="M156 0V100"/><path class="letter letter-3" d="M240 68A32 32 0 1 0 176 68A32 32 0 1 0 240 68M240 36V100"/></g></svg>
