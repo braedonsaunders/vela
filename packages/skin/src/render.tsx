@@ -237,9 +237,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   }
   const layers = (
     <>
-      {/* On a TV a live backdrop blur re-blurs everything moving behind it each frame; the
-          document's glass colour stays and the blur is left out. */}
-      {fx.backdropBlur && !Platform.isTV ? (
+      {fx.backdropBlur ? (
         <BlurView intensity={Math.min(100, Math.round(fx.backdropBlur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} />
       ) : null}
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}

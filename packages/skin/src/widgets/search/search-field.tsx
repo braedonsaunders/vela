@@ -74,7 +74,7 @@ export function SearchField({ ctx }: WidgetProps) {
 
   return (
     <Frame style={[styles.field, field, ring]} {...tvProps}>
-      {Platform.isTV ? null : <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />}
+      <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />
       <Glyph symbol="search" size={20} color={focused ? ui.ink : ui.inkSecondary} />
       <TextInput
         ref={input}
