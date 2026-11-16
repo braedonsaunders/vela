@@ -138,6 +138,11 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const [picked, setPicked] = useState(() => DOCUMENTS[initialDocument()]?.id !== DOCUMENTS[0]?.id);
   const [fontsReady, setFontsReady] = useState(false);
   const origin = state.servers.list.find(s => s.selected)?.origin ?? '';
+  // Open menus and panels belong to the session they were opened in: signing out or in, or
+  // switching server, closes them (a menu left open on sign-out would greet the next sign-in).
+  const { resetFlags } = view;
+  const session = `${state.auth.phase === 'signed-in'}|${origin}`;
+  useEffect(() => resetFlags(), [session, resetFlags]);
 
   const raw = DOCUMENTS[docIndex % DOCUMENTS.length]!;
   const resolved = useMemo(() => {
