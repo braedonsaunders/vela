@@ -1,7 +1,8 @@
 // Escape on a document's menus (docs/skin-schema.md, `escape`): Escape anywhere on the page, or
 // Back on a TV remote or Android, clears the open flags of the innermost node that names them and
 // returns focus to its `returnFocus` element, else to the press button that opened the flag.
-// Press buttons register here by element id, so focus can be moved to one by id.
+// Press buttons register here by element id, so focus can be moved to one by id (Escape's
+// returnFocus, and a press's `focus`).
 import { createContext, createElement, useContext, useEffect, useRef, type ReactNode } from 'react';
 import { BackHandler, Platform } from 'react-native';
 import { useHost } from './host';
@@ -29,12 +30,18 @@ const Level = createContext(0);
 let registered = 0;
 let unlisten: (() => void) | undefined;
 
-/** Move focus to the press button with this element id; false when none is drawn. */
+/** Move focus to the press button with this element id, or on the web to any focusable element
+ * with that id (a widget's own field, such as vela-search); false when none is drawn. */
 export function focusElement(id: string): boolean {
-  const target = targets.get(id);
+  const target = targets.get(id) ?? domElement(id);
   if (!target) return false;
   focusOn(target);
   return true;
+}
+
+function domElement(id: string): Focusable | undefined {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return undefined;
+  return document.getElementById(id) ?? undefined;
 }
 
 /** A ref callback that registers a press button under its element id while it is mounted. */

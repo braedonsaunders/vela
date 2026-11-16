@@ -14,7 +14,7 @@ import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
-import { EscapeScope, focusTarget, noteOpener, type Focusable } from './escape';
+import { EscapeScope, focusElement, focusTarget, noteOpener, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
@@ -282,8 +282,11 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     };
     const onPress = press && (() => {
       const arg = fill(press.arg, ctx, env);
+      const focus = press.focus ? fill(press.focus, ctx, env) : '';
       noteOpener(press.action, arg, buttonRef.current);
       host.dispatch(press.action, arg);
+      // press.focus: the element the action draws (a drawer's first row) takes focus once drawn.
+      if (focus) requestAnimationFrame(() => focusElement(focus));
     });
     const button = press ? (
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, ownFocusLook(node) ? NO_RING : null]} disabled={disabled}
