@@ -414,6 +414,7 @@ export const titleCopy: Node = {
       },
       small: { 'font-size': '40px', 'max-width': 'none' },
     },
+    { type: 'use', template: 'velaEpisodeContext' },
     {
       type: 'text',
       text: '{detail.factsLine}',

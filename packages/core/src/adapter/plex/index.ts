@@ -126,11 +126,19 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
     this.sessions.clear(); this.rotateTransientToken(); await this.config.credentials.set(null); return ack;
   }
   private artwork(n: Node): V.ArtworkRef[] {
-    return (['thumb', 'art'] as const).flatMap(k => {
-      if (!n[k]) return [];
-      try { return [{ id: String(n[k]), kind: k === 'art' ? 'backdrop' as const : 'poster' as const, tag: String(n.updatedAt || ''), sizes: [{ width: 0, height: 0, url: this.mediaURL(n[k]) }] }]; } catch { return []; }
+    const poster = n.type === 'episode' ? n.grandparentThumb
+      : n.type === 'season' ? n.parentThumb || n.grandparentThumb || n.thumb : n.thumb;
+    const refs: [string | undefined, V.ArtworkRef['kind']][] = [
+      [poster, 'poster'],
+      [n.type === 'episode' ? n.thumb : undefined, 'still'],
+      [n.art, 'backdrop'],
+    ];
+    return refs.flatMap(([path, kind]) => {
+      if (!path) return [];
+      try { return [{ id: String(path), kind, tag: String(n.updatedAt || ''), sizes: [{ width: 0, height: 0, url: this.mediaURL(path) }] }]; } catch { return []; }
     });
   }
+
   private title(n: Node): V.Title {
     const ratings: V.TitleRating[] = [];
     for (const [field, image, kind] of [['rating', 'ratingImage', 'critic'], ['audienceRating', 'audienceRatingImage', 'audience']] as const)
@@ -141,6 +149,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
       genres: (n.Genre || []).map((g: Node) => g.tag), durationSeconds: seconds(n.duration), rating: n.contentRating, ratings,
       artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: Number(n.viewCount || 0) > 0, favorite: false, watchlisted: false },
       ...(themeMusic ? { themeMusic } : {}), showId: n.grandparentRatingKey ? String(n.grandparentRatingKey) : n.type === 'season' ? String(n.parentRatingKey) : undefined,
+      showName: n.type === 'episode' ? n.grandparentTitle : n.type === 'season' ? n.parentTitle : undefined,
       seasonId: n.type === 'episode' ? String(n.parentRatingKey) : undefined, seasonNumber: n.type === 'season' ? n.index : n.parentIndex, episodeNumber: n.type === 'episode' ? n.index : undefined };
   }
   private entry(n: Node): V.RowEntry {

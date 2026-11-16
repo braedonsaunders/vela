@@ -154,8 +154,19 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.CollectionContents>('GET', path, undefined, CACHED);
   }
 
-  detail(id: string) {
-    return this.http.request<V.TitleDetail>('GET', `/titles/${segment(id)}`, undefined, CACHED);
+  async detail(id: string) {
+    const data = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(id)}`, undefined, CACHED);
+    // Older Ether servers supply the show's id but omit its display name.
+    if (data.title?.kind === 'episode' && data.title.showId && data.title.showId !== id && !data.title.showName) {
+      try {
+        const show = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(data.title.showId)}`, undefined, CACHED);
+        return { ...data, title: { ...data.title, showName: show.title.name } };
+      } catch (error) {
+        // A removed parent must not hide a still-playable episode.
+        if (!(error instanceof VelaError) || error.status !== 404) throw error;
+      }
+    }
+    return data;
   }
 
   requestTrailerPreview(titleId: string, request: V.TrailerPreviewRequest) {

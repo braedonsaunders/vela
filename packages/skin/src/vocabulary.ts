@@ -222,6 +222,8 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.entry': (_, e) => e.entry,
 
   ...Object.fromEntries(DETAIL_FIELDS.map(f => [`detail.${f}`, title(x => String(x[f]))])),
+  'detail.showName': title(x => x.showName),
+  'detail.episodeContext': title(x => x.episodeContext),
   'detail.yearLabel': title(x => x.yearLabel),
   'detail.year': title(x => String(x.year)),
   'detail.rating': title(x => x.rating),

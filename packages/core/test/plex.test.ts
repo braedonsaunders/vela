@@ -189,3 +189,19 @@ describe('discoverPlexServers', () => {
     ]);
   });
 });
+
+test('episode and season posters use series art, while landscape cards keep episode stills', async () => {
+  routeFetch({ 'GET /hubs/search': { MediaContainer: { Hub: [{ Metadata: [
+    { ...episode, grandparentTitle: 'Severance', thumb: '/library/metadata/20/thumb', grandparentThumb: '/library/metadata/18/thumb', art: '/library/metadata/18/art' },
+    { ratingKey: 19, type: 'season', title: 'Season 2', index: 2, parentRatingKey: 18, parentTitle: 'Severance', thumb: '/library/metadata/19/thumb', parentThumb: '/library/metadata/18/thumb' },
+    { ...episode, ratingKey: 21, thumb: '/library/metadata/21/thumb' },
+  ] }] } } });
+  const { items } = await plex().search({ query: 'show', generation: 1, idempotencyKey: 'art' });
+  expect(items[0]).toMatchObject({ showName: 'Severance', seasonNumber: 2, episodeNumber: 1 });
+  expect(items[0]!.artwork.map(a => [a.kind, a.sizes[0]!.url])).toEqual([
+    ['poster', `${ORIGIN}/library/metadata/18/thumb`], ['still', `${ORIGIN}/library/metadata/20/thumb`], ['backdrop', `${ORIGIN}/library/metadata/18/art`],
+  ]);
+  expect(items[1]).toMatchObject({ showName: 'Severance', seasonNumber: 2 });
+  expect(items[1]!.artwork[0]!.sizes[0]!.url).toBe(`${ORIGIN}/library/metadata/18/thumb`);
+  expect(items[2]!.artwork.map(a => a.kind)).toEqual(['still']);
+});

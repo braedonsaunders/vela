@@ -16,6 +16,8 @@ export interface Card {
   durationSeconds: number;
   progressSeconds: number;
   played: boolean;
+  showName: string;
+  episodeContext: string;
   seasonId: string;
   seasonNumber: number;
   episodeNumber: number;

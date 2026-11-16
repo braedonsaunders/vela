@@ -778,6 +778,7 @@ const titleHead: Node = {
             'letter-spacing': '-0.01em',
           },
         },
+        { type: 'use', template: 'velaEpisodeContext' },
         {
           type: 'box',
           style: {
@@ -857,6 +858,7 @@ const titleHeadSmall: Node = {
               level: 1,
               style: { 'font-size': '24px', 'font-weight': '700', 'line-height': '1.15' },
             },
+            { type: 'use', template: 'velaEpisodeContext' },
             {
               type: 'text',
               when: [set('detail.facts')],

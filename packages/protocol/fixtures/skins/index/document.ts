@@ -1108,6 +1108,7 @@ const detail: Node = {
               level: 1,
               ...responsive({ 'font-size': '48px', 'font-weight': '700' }, { 'font-size': '32px' }),
             },
+            { type: 'use', template: 'velaEpisodeContext' },
             { type: 'text', text: '{detail.facts}', style: { 'font-size': '13px' } },
             { type: 'text', text: '{detail.summary}', style: { 'font-size': '16px', 'line-height': '1.6' } },
             playButton('{s:resume}', [{ test: 'detail.canPlay' }, { test: 'detail.hasResume' }]),

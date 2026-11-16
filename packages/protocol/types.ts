@@ -51,7 +51,7 @@ export interface ThemeMusic { url: string; expiresAt: Timestamp; durationSeconds
 export interface Title {
   id: ID; kind: TitleKind; name: string; summary: string; year?: number; genres: string[];
   durationSeconds?: number; rating?: string; ratings?: TitleRating[]; artwork: ArtworkRef[]; watch?: WatchState; themeMusic?: ThemeMusic;
-  showId?: ID; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
+  showId?: ID; showName?: string; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
 }
 export interface Extra { id: ID; parentId: ID; kind: 'trailer' | 'clip' | 'featurette' | 'other'; name: string;
   durationSeconds?: number; artwork?: ArtworkRef; cachedPlayback?: { status: 'ready'; url: string; expiresAt: Timestamp }; availability: 'ready' | 'unresolved' | 'unavailable' }

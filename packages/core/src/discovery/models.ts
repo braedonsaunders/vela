@@ -11,14 +11,14 @@ function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, hei
 }
 
 /** Poster, backdrop (or still), logo and accent for one set of artwork, sized from the display's art width. */
-function pictures(artwork: ArtworkRef[], images: Images | undefined, artWidth: number, backdropWidth = artWidth) {
+function pictures(artwork: ArtworkRef[], images: Images | undefined, artWidth: number, backdropWidth = artWidth, preferStill = false) {
   const posterWidth = Math.min(600, Math.ceil(artWidth / 6));
   const logoWidth = Math.min(800, Math.ceil(artWidth / 3));
   return {
     poster: art(artwork, 'poster', posterWidth, Math.ceil(posterWidth * 1.5), images),
     // An episode often has only a still (a frame from it): that is its landscape art.
-    backdrop: art(artwork, 'backdrop', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images)
-      || art(artwork, 'still', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images),
+    backdrop: art(artwork, preferStill ? 'still' : 'backdrop', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images)
+      || art(artwork, preferStill ? 'backdrop' : 'still', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images),
     logo: art(artwork, 'logo', logoWidth, Math.ceil(logoWidth / 2), images),
     accent: artwork.find(a => a.color)?.color ?? '',
   };
@@ -41,6 +41,13 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     durationSeconds: duration ?? 0,
     progressSeconds: position,
     played: title.watch?.played ?? false,
+    showName: title.showName ?? '',
+    episodeContext: title.kind === 'episode' ? [
+      title.showName,
+      title.seasonNumber !== undefined && title.episodeNumber !== undefined
+        ? msg('detail.seasonEpisode', { season: year(title.seasonNumber), episode: year(title.episodeNumber) })
+        : title.episodeNumber !== undefined ? msg('marquee.episodeNumber', { episode: year(title.episodeNumber) }) : '',
+    ].filter(Boolean).join(' · ') : '',
     seasonId: title.seasonId ?? '',
     seasonNumber: title.seasonNumber ?? 0,
     episodeNumber: title.episodeNumber ?? 0,
@@ -51,7 +58,8 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     seasonNumberLabel: title.seasonNumber ? number(title.seasonNumber) : '',
     episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
     facts: [yearLabel, title.rating ?? '', durationLabel].filter(Boolean).join(' · '),
-    ...pictures(title.artwork, images, artWidth, backdropWidth),
+    ...pictures(title.artwork, images, artWidth, backdropWidth, title.kind === 'episode'),
+    ...(title.kind === 'episode' ? { logo: '' } : {}),
     receipt,
   };
 }
@@ -91,6 +99,8 @@ function plainCard(id: string, kind: string, name: string, rating: string, art: 
     durationSeconds: 0,
     progressSeconds: 0,
     played: false,
+    showName: '',
+    episodeContext: '',
     seasonId: '',
     seasonNumber: 0,
     episodeNumber: 0,

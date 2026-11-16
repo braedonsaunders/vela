@@ -124,3 +124,19 @@ describe('EtherAdapter', () => {
     expect(seen).toHaveLength(0);
   });
 });
+
+test('older Ether episode details resolve the series name through showId', async () => {
+  routeFetch({
+    'GET /vela/v0/titles/episode': { title: { id: 'episode', kind: 'episode', showId: 'show', seasonNumber: 0, episodeNumber: 3 } },
+    'GET /vela/v0/titles/show': { title: { id: 'show', name: 'Severance' } },
+  });
+  expect((await ether().detail('episode')).title).toMatchObject({ showName: 'Severance', seasonNumber: 0, episodeNumber: 3 });
+});
+
+test('a missing Ether parent leaves the episode detail available', async () => {
+  routeFetch({
+    'GET /vela/v0/titles/episode': { title: { id: 'episode', kind: 'episode', showId: 'removed-show', seasonNumber: 1, episodeNumber: 3 } },
+    'GET /vela/v0/titles/removed-show': () => Response.json({ error: { class: 'not-found', code: 'not_found', message: 'Show removed', retry: { allowed: false } } }, { status: 404 }),
+  });
+  expect((await ether().detail('episode')).title.id).toBe('episode');
+});

@@ -207,6 +207,7 @@ const titleTop: Node = {
               },
               small: { 'font-size': '28px' },
             },
+            { type: 'use', template: 'velaEpisodeContext' },
             {
               type: 'box',
               style: row({

@@ -27,8 +27,8 @@ export const titles: Title[] = collections.flatMap(([_, ...names], row) => names
   ...(row === 0 && n < 3 ? { watch: { positionSeconds: 12 + n * 8, played: false, favorite: n === 0, watchlisted: false } } : {}),
 })));
 const show: Title = { id: 'show-meridian', kind: 'show', name: 'Meridian Station', summary: 'At a remote coastal weather station, a new team maps the strange rhythms of an isolated island.', year: 2025, genres: ['Drama', 'Mystery'], rating: 'TV-14', artwork: [artwork('show-meridian'), artwork('show-meridian', 'backdrop')] };
-export const seasons: Title[] = [1, 2].map(n => ({ ...show, id: `season-meridian-${n}`, kind: 'season', name: `Season ${n}`, showId: show.id, seasonNumber: n }));
-export const episodes: Title[] = seasons.flatMap(s => ['Arrival', 'The Night Watch', 'Pressure Drop', 'A Distant Light', 'The Sounding', 'Home Waters'].map((name, i) => ({ ...show, id: `episode-${s.seasonNumber}-${i + 1}`, kind: 'episode', name, showId: show.id, seasonId: s.id, seasonNumber: s.seasonNumber, episodeNumber: i + 1, durationSeconds: 180, watch: { positionSeconds: i === 1 ? 68 : 0, played: i === 0, favorite: false, watchlisted: false } })));
+export const seasons: Title[] = [1, 2].map(n => ({ ...show, id: `season-meridian-${n}`, kind: 'season', name: `Season ${n}`, showId: show.id, showName: show.name, seasonNumber: n }));
+export const episodes: Title[] = seasons.flatMap(s => ['Arrival', 'The Night Watch', 'Pressure Drop', 'A Distant Light', 'The Sounding', 'Home Waters'].map((name, i) => ({ ...show, id: `episode-${s.seasonNumber}-${i + 1}`, kind: 'episode', name, showId: show.id, showName: show.name, seasonId: s.id, seasonNumber: s.seasonNumber, episodeNumber: i + 1, durationSeconds: 180, watch: { positionSeconds: i === 1 ? 68 : 0, played: i === 0, favorite: false, watchlisted: false } })));
 titles.splice(14, 1, show);
 // Fictional follow-up titles keep the twenty-card first pages genuinely pageable.
 const additionalTitles: Title[] = collections.flatMap((_, row) => Array.from({ length: 12 }, (_, n) => {

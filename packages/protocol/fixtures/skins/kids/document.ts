@@ -345,6 +345,7 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
         { type: 'box', style: { position: 'absolute', left: '40px', right: '40px', bottom: '34px', display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-start' }, small: { left: '20px', right: '20px', bottom: '20px' }, children: [
           { type: 'image', when: [{ test: 'detail.logo' }], src: '{detail.logo}', alt: '{detail.name}', role: 'heading', level: 1, motion: 'zoomIn', style: { height: '128px', width: 'auto', 'max-width': 'min(460px, 80%)', 'object-fit': 'contain' }, small: { height: '76px' } },
           { type: 'text', when: [{ test: 'detail.logo', not: true }], text: '{detail.name}', role: 'heading', level: 1, motion: 'zoomIn', style: { 'font-size': '60px', 'font-weight': '800', 'line-height': '1', color: '#FFFFFF', 'text-shadow': '0px 4px 0px rgba(12, 20, 52, 0.35)', 'line-clamp': '2' }, small: { 'font-size': '34px' } },
+        { type: 'use', template: 'velaEpisodeContext' },
         ] },
       ] },
       { type: 'image', src: art('star.svg'), alt: '', motion: 'wobble', style: { position: 'absolute', top: '-26px', right: '-22px', width: '96px', height: '96px' }, small: { top: '-18px', right: '-8px', width: '60px', height: '60px' } },

@@ -173,3 +173,19 @@ describe('JellyfinAdapter requests', () => {
     expect(page.items[0]!.artwork.map(a => a.kind)).toEqual(['channel']);
   });
 });
+
+test('Jellyfin and Emby episode primaries remain stills and series primaries supply posters', async () => {
+  routeFetch({ 'GET /jf/Users/viewer-1/Items': { Items: [
+    { ...episode, SeriesName: 'Severance', SeriesPrimaryImageTag: 'series-p', ImageTags: { Primary: 'still' } },
+    { Id: 'se1', Name: 'Season 1', Type: 'Season', SeriesId: 's1', SeriesName: 'Severance', SeriesPrimaryImageTag: 'series-p', IndexNumber: 1, ImageTags: { Primary: 'season-p' } },
+    { ...episode, Id: 'e2', ImageTags: { Primary: 'still-only' } },
+  ], TotalRecordCount: 3 } });
+  const { items } = await new JellyfinAdapter(BASE, new FakeCredentials()).search({ query: 'show', generation: 1, idempotencyKey: 'art' });
+  expect(items[0]).toMatchObject({ showName: 'Severance', seasonNumber: 1, episodeNumber: 2 });
+  expect(items[0]!.artwork.map(a => [a.kind, a.sizes[0]!.url])).toEqual([
+    ['poster', `${BASE}/Items/s1/Images/Primary?tag=series-p`], ['still', `${BASE}/Items/e1/Images/Primary?tag=still`],
+  ]);
+  expect(items[1]).toMatchObject({ showName: 'Severance', seasonNumber: 1, episodeNumber: undefined });
+  expect(items[1]!.artwork[0]!.sizes[0]!.url).toBe(`${BASE}/Items/s1/Images/Primary?tag=series-p`);
+  expect(items[2]!.artwork.map(a => a.kind)).toEqual(['still']);
+});

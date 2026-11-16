@@ -423,6 +423,7 @@ export const titleHead: Node = {
               level: 1,
               style: { ...Title, 'font-size': '34px' },
             },
+            { type: 'use', template: 'velaEpisodeContext' },
             {
               type: 'box',
               style: { ...row, gap: '6px', 'flex-wrap': 'wrap' },

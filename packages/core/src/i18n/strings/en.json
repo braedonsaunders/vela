@@ -438,6 +438,7 @@
   "player.info.video": "Video",
   "player.info.delivery": "Delivery",
   "player.info.dropped": "Dropped frames",
+  "detail.seasonEpisode": "Season {season}, Episode {episode}",
   "detail.themeMusic": "Theme music",
   "live.previewStuck": "The preview didn't end.",
   "server.signIn": "Sign in to {name}",

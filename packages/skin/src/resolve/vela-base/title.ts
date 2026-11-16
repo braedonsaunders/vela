@@ -51,6 +51,14 @@ const pendingSection = (binding: string, label: string): Node => ({
   small: { ...sideSmall },
 });
 
+export const episodeContext: Node = {
+  type: 'text',
+  when: [{ test: 'detail.episodeContext' }],
+  text: '{detail.episodeContext}',
+  style: { 'font-size': '20px', 'font-weight': '600' },
+  small: { 'font-size': '17px' },
+};
+
 export const band: Node = {
   type: 'box',
   when: [{ test: 'env.load', is: 'eq', value: 'ready' }],
@@ -228,6 +236,7 @@ export const band: Node = {
           style: { ...display, 'font-size': '84px', 'text-shadow': '0px 4px 40px $ui.shadow' },
           small: { 'font-size': '46px' },
         },
+        { type: 'use', template: 'velaEpisodeContext' },
         {
           type: 'text',
           text: '{detail.factsLine}',

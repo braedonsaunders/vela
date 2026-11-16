@@ -4,7 +4,7 @@ import type { Condition, Node, Style } from '../../../skin';
 import { PIXEL } from './pixel';
 
 export const id = 'mochi',
-  version = '1.0.0';
+  version = '1.0.1';
 export const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 export const fredoka = 'Fredoka, ui-rounded, system-ui, sans-serif';

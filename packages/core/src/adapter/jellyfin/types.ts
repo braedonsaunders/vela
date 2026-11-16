@@ -11,6 +11,8 @@ export interface Item {
     CommunityRating?: number;
     CriticRating?: number;
     SeriesId?: string;
+    SeriesName?: string;
+    SeriesPrimaryImageTag?: string;
     SeasonId?: string;
     ParentIndexNumber?: number;
     IndexNumber?: number;

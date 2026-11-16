@@ -206,9 +206,13 @@ export class JellyfinAdapter
     }
     private artwork(i: Item): V.ArtworkRef[] {
         const art: V.ArtworkRef[] = [];
+        const episode = i.Type === 'Episode';
+        const seriesPoster = (episode || i.Type === 'Season') && i.SeriesId && i.SeriesPrimaryImageTag;
+        if (seriesPoster) art.push(this.image(i.SeriesId!, 'Primary', i.SeriesPrimaryImageTag!, 'poster'));
         for (const [type, kind] of [['Primary', 'poster'], ['Thumb', 'still'], ['Logo', 'logo']] as const)
             if (i.ImageTags?.[type])
-                art.push(this.image(i.Id, type, i.ImageTags[type], kind));
+                if (!(seriesPoster && type === 'Primary' && !episode))
+                    art.push(this.image(i.Id, type, i.ImageTags[type], episode && type === 'Primary' ? 'still' : kind));
         if (i.BackdropImageTags?.[0])
             art.push(this.image(i.Id, 'Backdrop/0', i.BackdropImageTags[0], 'backdrop'));
         return art;
@@ -221,7 +225,7 @@ export class JellyfinAdapter
                         source: 'Community', kind: 'audience' as const, value: i.CommunityRating, scale: 10
                     }]), ...(i.CriticRating === undefined ? [] : [{
                         source: 'Critic', kind: 'critic' as const, value: i.CriticRating, scale: 100
-                    }])], artwork: this.artwork(i), showId: i.SeriesId, seasonId: i.SeasonId, seasonNumber: i.ParentIndexNumber, episodeNumber: i.IndexNumber, watch: {
+                    }])], artwork: this.artwork(i), showId: i.SeriesId, showName: i.SeriesName, seasonId: i.SeasonId, seasonNumber: i.Type === 'Season' ? i.IndexNumber : i.ParentIndexNumber, episodeNumber: i.Type === 'Episode' ? i.IndexNumber : undefined, watch: {
                 positionSeconds: seconds(i.UserData?.PlaybackPositionTicks) ?? 0, played: i.UserData?.Played ?? false, favorite: i.UserData?.IsFavorite ?? false, watchlisted: false
             }
         };
