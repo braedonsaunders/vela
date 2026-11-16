@@ -148,6 +148,13 @@ internal class PlayerController(
     report.publish(state, null, force = true)
   }
 
+  /** Forget the previous plan when a preview takes over this view. */
+  fun releaseForPreview() {
+    release()
+    plan = null
+    activeSource = ""
+  }
+
   // Playback
 
   private fun start(plan: PlaybackPlan, path: PlanPath, url: Uri, source: String) {

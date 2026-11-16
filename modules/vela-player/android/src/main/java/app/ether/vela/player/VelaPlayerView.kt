@@ -1,4 +1,4 @@
-// VelaPlayerView on Android and Android TV: libmpv drawing into a TextureView, driven by the
+// VelaPlayerView on Android and Android TV: libmpv drawing into a SurfaceView or preview TextureView, driven by the
 // contract's props: a plan through PlayerController, or a trailer preview through PreviewPlayback.
 // Chrome is drawn by JavaScript above it.
 package app.ether.vela.player
@@ -7,6 +7,8 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.SurfaceTexture
 import android.view.Surface
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
@@ -22,8 +24,13 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   private val onSessionCommand by EventDispatcher<Map<String, Any?>>()
   private val onSessionRefresh by EventDispatcher<Map<String, Any?>>()
 
-  private val video = TextureView(context)
+  private val video = SurfaceView(context)
+  private val previewVideo = TextureView(context)
   private var videoSurface: Surface? = null
+  private var previewMode = false
+  private var pendingPlan: Map<String, Any?>? = null
+  private var previewHasPts = false
+  private var previewHasFrame = false
   private val report = PlayerReport(
     emitSnapshot = { onSnapshot(it) },
     emitObservation = { onObservation(it) },
@@ -33,42 +40,84 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   )
   private val controller = PlayerController(context, this, report)
   private val preview = PreviewPlayback(context, this, report) { visible ->
-    video.alpha = if (visible) 1f else 0f
+    previewHasPts = visible
+    if (!visible) {
+      previewHasFrame = false
+    }
+    updatePreviewVisibility()
   }
 
-  // The TextureView fills the view by Android layout; React Native sizes this view.
   override val shouldUseAndroidLayout = true
 
   init {
-    setBackgroundColor(Color.TRANSPARENT)
-    video.isOpaque = false
-    video.alpha = 0f
-    video.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+    setBackgroundColor(Color.BLACK)
+    video.holder.addCallback(object : SurfaceHolder.Callback {
+      override fun surfaceCreated(holder: SurfaceHolder) {
+        controller.surfaceCreated(holder.surface)
+      }
+
+      override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        controller.surfaceChanged(width, height)
+      }
+
+      override fun surfaceDestroyed(holder: SurfaceHolder) {
+        controller.surfaceDestroyed()
+      }
+    })
+    previewVideo.isOpaque = false
+    previewVideo.alpha = 0f
+    previewVideo.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
       override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
         videoSurface = Surface(texture)
-        controller.surfaceCreated(videoSurface!!)
         preview.surfaceCreated()
-        controller.surfaceChanged(width, height)
         preview.surfaceChanged(width, height)
       }
 
       override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
-        controller.surfaceChanged(width, height)
         preview.surfaceChanged(width, height)
       }
 
       override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
-        controller.surfaceDestroyed()
         preview.surfaceDestroyed()
+        previewHasFrame = false
+        updatePreviewVisibility()
         videoSurface?.release()
         videoSurface = null
         return true
       }
 
-      override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
+      override fun onSurfaceTextureUpdated(texture: SurfaceTexture) {
+        if (previewHasPts) {
+          previewHasFrame = true
+          updatePreviewVisibility()
+        }
+      }
     }
-    addView(video, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    addView(video, videoLayout())
     live.add(this)
+  }
+
+  private fun videoLayout() = LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+
+  private fun updatePreviewVisibility() {
+    previewVideo.alpha = if (previewHasPts && previewHasFrame) 1f else 0f
+  }
+
+  private fun usePreview(enabled: Boolean) {
+    if (previewMode == enabled) return
+    if (enabled) {
+      controller.releaseForPreview()
+      removeView(video)
+      previewMode = true
+      setBackgroundColor(Color.TRANSPARENT)
+      addView(previewVideo, videoLayout())
+    } else {
+      preview.release()
+      removeView(previewVideo)
+      previewMode = false
+      setBackgroundColor(Color.BLACK)
+      addView(video, videoLayout())
+    }
   }
 
   // Props (VelaPlayerModule)
@@ -78,21 +127,19 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   }
 
   fun setPlan(plan: Map<String, Any?>?) {
-    if (plan != null && !preview.isSet) {
-      setBackgroundColor(Color.BLACK)
-      video.alpha = 1f
+    pendingPlan = plan
+    if (!previewMode) {
+      controller.setPlan(plan)
     }
-    controller.setPlan(plan)
   }
 
   fun setPreview(value: Map<String, Any?>?) {
     if (value != null) {
-      // A preview excludes a plan.
-      controller.release()
-      setBackgroundColor(Color.TRANSPARENT)
-    }
-    if (value != null || preview.isSet) {
+      usePreview(true)
       preview.setPreview(value)
+    } else if (previewMode) {
+      usePreview(false)
+      controller.setPlan(pendingPlan)
     }
   }
 
@@ -118,6 +165,7 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
     live.remove(this)
     preview.release()
     controller.release()
+    removeView(if (previewMode) previewVideo else video)
   }
 
   // A preview plays only while its view is on screen.
@@ -135,7 +183,11 @@ internal class VelaPlayerView(context: Context, appContext: AppContext) : ExpoVi
   // PlayerHost
 
   override val surface
-    get() = videoSurface?.takeIf { it.isValid }
+    get() = if (previewMode) {
+      videoSurface?.takeIf { it.isValid }
+    } else {
+      video.holder.surface?.takeIf { it.isValid }
+    }
 
   override fun preferDisplay(facts: VideoFacts?) =
     DisplayMatching.prefer(facts, surface, appContext.currentActivity)

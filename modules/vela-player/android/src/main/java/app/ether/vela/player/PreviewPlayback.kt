@@ -127,7 +127,8 @@ internal class PreviewPlayback(
       return
     }
     mpv = client
-    client.onProperty = { name, value ->
+    client.onProperty = property@{ name, value ->
+      if (mpv !== client) return@property
       if (name == "video-pts" && value is Double) {
         showVideo(true)
       }
