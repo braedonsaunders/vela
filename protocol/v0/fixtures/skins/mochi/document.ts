@@ -28,11 +28,7 @@ const Label: Style = { 'font-family': pixelFace, 'font-size': '12px', 'font-weig
 const Candy: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$pink', color: '$ink', 'font-family': fredoka, 'font-weight': '650', 'box-shadow': '0px 4px 0px $ink', cursor: 'pointer' };
 const Puffy: Style = { ...Candy, 'background-color': '$card', 'font-weight': '600' };
 const Bubble: Style = { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '2.5px solid $ink', 'border-radius': '999px', 'background-color': '$card', color: '$ink', cursor: 'pointer', 'flex-shrink': '0' };
-// Renderer 15 fields (pressed overlay, aria-controls/busy, replay on press) arrive as spreads
-// until protocol/v0/skin.ts types them.
 const press94 = { scale: '0.94' };
-const pending = (fields: Record<string, unknown>) => fields as object;
-const active = (style: Style) => pending({ active: style });
 const candy = { hover: { 'background-color': '$pink-hover' }, focus: { outline: 'auto', 'box-shadow': ring }, active: press94 };
 const puffy = { hover: { 'background-color': '$lavender-soft' }, focus: { outline: 'auto', 'box-shadow': ring }, active: press94 };
 const bubble = { hover: { 'background-color': '$pink-wash' }, focus: { outline: 'auto', 'box-shadow': ring }, active: { scale: '0.9' } };
@@ -107,12 +103,6 @@ const hopper = (size: number, mood = 'happy'): Node => ({ type: 'box', style: { 
   { type: 'box', motion: 'hopShadow', style: { position: 'absolute', bottom: '0px', width: `${size * 0.7}px`, height: `${size * 0.12}px`, 'border-radius': '50%', 'background-color': '$shadow-soft' } },
   mascot(mood, size, { motion: 'hopBounce', style: { position: 'relative', 'margin-bottom': `${size * 0.06}px`, 'transform-origin': '50% 100%' } }),
 ] });
-// Sparkles flying out from a point when something is chosen (look.contract Burst): drawn
-// afresh on every press, never before the first; nothing under reduced motion.
-const burst: Node = { type: 'box', replayOnPress: true, when: [moving], style: { ...col, position: 'absolute', left: '50%', top: '40%', width: '0px', height: '0px', 'pointer-events': 'none', 'z-index': '4' },
-  children: [0, 50, 105, 160, 215, 265, 315].map((a, i) => ({ type: 'box', style: { position: 'absolute', left: '-6px', top: '-6px', rotate: `${a}` }, children: [
-    icon(i % 2 === 0 ? 'sparkle' : 'star', 12, ['pink', 'butter', 'mint'][i % 3], { motion: 'burst' }),
-  ] } as Node)) } as Node;
 // The loading line: Mochi hopping above a caption with a blinking pixel cursor.
 const loader = (message: string, size: number): Node => ({ type: 'box', role: 'status', label: message, style: { ...col, 'align-items': 'center', gap: '14px' }, children: [
   hopper(size),
@@ -151,7 +141,7 @@ const pillOn: Style = { ...pillBase, 'border-color': '$ink', 'background-color':
 const pillCompact: Style = { height: '38px', 'border-color': '$ink', 'box-shadow': '0px 3px 0px $ink' };
 const compactC: Condition = { test: 'env.width', is: 'lt', value: COMPACT };
 const navItem = (label: string, iconName: (on: Condition[]) => Node[], on: Condition[], press: { action: 'home' | 'live' | 'library'; arg?: string }, extra: Extra = {}): Node => ({ type: 'box', press, label, testId: `nav-${label}`, ...extra,
-  style: pillBase, below: { [COMPACT]: pillCompact }, states: [{ when: on, style: pillOn }, { when: [compactC], style: { ...pillBase, 'background-color': '$card' } }], a11y: { current: on }, hover: { 'border-color': '$ink' }, focus: { outline: 'auto', 'box-shadow': ring }, ...active(press94), children: [
+  style: pillBase, below: { [COMPACT]: pillCompact }, states: [{ when: on, style: pillOn }, { when: [compactC], style: { ...pillBase, 'background-color': '$card' } }], a11y: { current: on }, hover: { 'border-color': '$ink' }, focus: { outline: 'auto', 'box-shadow': ring }, active: press94, children: [
     ...iconName(on),
     { type: 'text', text: label, style: { 'font-size': '15px', 'font-weight': '550', 'white-space': 'nowrap' }, states: [{ when: on, style: { 'font-size': '15px', 'font-weight': '650', 'white-space': 'nowrap' } }] },
   ] } as Node);
@@ -197,7 +187,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
   style: { ...col, position: 'relative', 'z-index': '20', 'flex-shrink': '0', 'padding-top': '14px', ...gutter, 'padding-bottom': '8px' }, below: { [COMPACT]: { 'padding-top': '10px', ...gutterSmall, 'padding-bottom': '4px' } }, children: [
     { type: 'box', style: { ...row, height: '66px', 'box-sizing': 'border-box', 'padding-left': '22px', 'padding-right': '10px', 'align-items': 'center', gap: '10px', border: '3px solid $ink', 'border-radius': '999px', 'background-color': '$card', 'box-shadow': '0px 5px 0px $ink' },
       below: { [COMPACT]: { height: '56px', 'padding-left': '14px', 'padding-right': '8px', gap: '6px' } }, children: [
-        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', ...pending({ controlStates: false }), style: { ...row, position: 'relative', 'align-items': 'center', gap: `${26 * 0.24}px`, 'margin-right': '18px', 'flex-shrink': '0', color: '$ink' },
+        { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', controlStates: false, style: { ...row, position: 'relative', 'align-items': 'center', gap: `${26 * 0.24}px`, 'margin-right': '18px', 'flex-shrink': '0', color: '$ink' },
           below: { [COMPACT]: { gap: `${22 * 0.24}px`, 'margin-right': '0px' } }, children: [
             { type: 'box', style: { ...row, 'align-items': 'center', gap: `${26 * 0.24}px` }, below: { [COMPACT]: { display: 'none' } }, children: wordmark(26) },
             { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { ...row, 'align-items': 'center', gap: `${22 * 0.24}px` } }, children: wordmark(22) },
@@ -211,7 +201,7 @@ const nav: Node = { type: 'box', role: 'navigation', label: '{s:mainNavigation}'
           searchTip,
         ] },
         // The profile button, washed pink while its menu is open.
-        { type: 'box', id: 'profile-menu-trigger', press: { action: 'toggle', arg: 'menu' }, label: '{s:profileAndAppearance}', testId: 'profile-menu', a11y: { expanded: [set('flag:menu')], ...pending({ controls: 'viewer-settings' }) },
+        { type: 'box', id: 'profile-menu-trigger', press: { action: 'toggle', arg: 'menu' }, label: '{s:profileAndAppearance}', testId: 'profile-menu', a11y: { expanded: [set('flag:menu')] },
           style: profileButton, states: [{ when: [set('flag:menu')], style: { ...profileButton, 'background-color': '$pink-wash' } }], below: { [COMPACT]: { 'padding-right': '4px' } }, ...bubble, children: [
             { type: 'text', text: '{env.viewerInitial}', style: { ...sz(32), 'border-radius': '16px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-family': pixelFace, 'font-size': '16px', 'font-weight': '700', color: '$ink', 'background-color': '$pink-soft', border: '2px solid $ink', 'box-sizing': 'border-box' } },
             { type: 'text', text: '{env.viewer}', style: { 'font-size': '15px', 'font-weight': '600', 'max-width': '140px', 'white-space': 'nowrap', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis' }, below: { [COMPACT]: { display: 'none' } } },
@@ -236,7 +226,7 @@ const menu: Node = { type: 'box', id: 'viewer-settings', role: 'dialog', label: 
     { type: 'box', style: { height: '0px', 'border-style': 'dashed', 'border-width': '0px', 'border-top-width': '2.5px', 'border-top-color': '$line-strong' } },
     { type: 'box', press: { action: 'openPicker' }, label: '{s:appearance}', testId: 'skin-picker', when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
       style: { ...row, position: 'relative', gap: '12px', 'align-items': 'center', 'box-sizing': 'border-box', width: '100%', padding: '10px 12px', border: '2.5px solid $ink', 'border-radius': '16px', 'background-color': '$page', color: '$ink', cursor: 'pointer' },
-      hover: { 'background-color': '$lavender-soft' }, focus: { outline: 'auto', 'box-shadow': ring }, ...active({ scale: '0.97' }), children: [
+      hover: { 'background-color': '$lavender-soft' }, focus: { outline: 'auto', 'box-shadow': ring }, active: { scale: '0.97' }, children: [
         { type: 'box', style: { ...col, gap: '2px', flex: '1', 'min-width': '0px', 'text-align': 'left' }, children: [
           { type: 'text', text: '{s:appearance}', style: { ...Label, 'font-size': '10px', color: '$ink-soft' } },
           { type: 'text', text: '{s:name}', style: { 'font-size': '16px', 'font-weight': '600', color: '$ink' } },
@@ -266,12 +256,16 @@ const shell: Node = { type: 'box', escape: 'menu', returnFocus: 'profile-menu-tr
 // A poster sticker (slots.contract TitleCard): white-edged with a hard pastel shadow; on
 // hover or focus it bounces up, tilts toward the viewer and a sparkle pops in.
 const SHADOW: Record<Accent, string> = { pink: '$shadow-pink', lavender: '$shadow', mint: '$mint' };
-const sticker = (accent: Accent, tilt: number): Node => {
-  const base: Style = { ...col, position: 'relative', width: '100%', 'aspect-ratio': '2 / 3', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '20px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': `$${accent}`, color: '$ink', 'text-align': 'left',
-    translate: '0px 0px', rotate: '0', scale: '1', 'box-shadow': `4px 5px 0px ${SHADOW[accent]}`, transition: lift };
+// One element whose accent (pink, lavender, mint) and lean (left, right) follow the name, as
+// states, so a card stays a handful of nodes.
+const stickerLook = (accent: Accent, still: boolean): Style => ({ ...col, position: 'relative', width: '100%', 'aspect-ratio': '2 / 3', 'box-sizing': 'content-box', border: '3px solid $ink', 'border-radius': '20px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': `$${accent}`, color: '$ink', 'text-align': 'left',
+  translate: '0px 0px', rotate: '0', scale: '1', 'box-shadow': `4px 5px 0px ${SHADOW[accent]}`, transition: still ? liftStill : lift });
+const stickerStates = [true, false].flatMap(still => ACCENTS.flatMap((accent, i) => [-2.2, 2.2].map((tilt, j) => {
   const up: Style = { translate: '0px -8px', rotate: `${tilt}`, scale: '1.03', 'box-shadow': `7px 10px 0px ${SHADOW[accent]}` };
-  return { type: 'box', style: base, small: { 'border-radius': '16px' }, states: [{ when: [stillC], style: { ...base, transition: liftStill } }],
-    groupHover: up, groupFocus: { ...up, 'box-shadow': '0px 0px 0px 3px $card, 0px 0px 0px 7px $focus' }, children: [
+  return { when: [...(still ? [stillC] : []), mod('card', 3, i), mod('card', 2, j)], style: stickerLook(accent, still), groupHover: up, groupFocus: { ...up, 'box-shadow': '0px 0px 0px 3px $card, 0px 0px 0px 7px $focus' } };
+})));
+const sticker = (): Node => {
+  return { type: 'box', style: stickerLook('pink', false), small: { 'border-radius': '16px' }, states: stickerStates, children: [
       { type: 'image', when: [set('card.poster')], src: '{card.poster}', alt: '', fade: true, style: fadeIn },
       // No poster: the name on a soft wash under a pixel star.
       { type: 'box', when: [not('card.poster')], style: { ...col, ...inset0, padding: '14px', gap: '10px', 'justify-content': 'flex-end', 'background-image': 'linear-gradient(160deg, $card 0%, $page-clear 70%)' }, children: [
@@ -288,17 +282,13 @@ const sticker = (accent: Accent, tilt: number): Node => {
     ] } as Node;
 };
 
-// The card is a group only so its burst hears the press; the sticker answers to the nearer
-// group, the wiggle wrapper, so only the sticker itself lifts it (as compiled).
-const card: Node = { type: 'box', group: true, motion: 'hop0', stagger: { step: 45, cap: 8 }, style: { ...col, position: 'relative', width: 'clamp(146px, 11.6vw, 208px)', 'flex-shrink': '0', gap: '10px' }, small: { width: '132px' }, children: [
+const card: Node = { type: 'box', motion: 'hop0', stagger: { step: 45, cap: 8 }, style: { ...col, position: 'relative', width: 'clamp(146px, 11.6vw, 208px)', 'flex-shrink': '0', gap: '10px' }, small: { width: '132px' }, children: [
   { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
-  // The wiggle wraps the sticker, which carries the lift (as compiled: two elements).
+  // The press wraps the sticker, which carries the lift and tilt.
   { type: 'box', group: true, press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'title-{card.id}',
-    style: { ...col, position: 'relative' }, hover: { animation: 'doc:wiggle 520ms ease-in-out both' }, focus: { animation: 'doc:wiggle 520ms ease-in-out both' }, children: [
-      ...byAccent('card', a => ({ ...sticker(a, -2.2), when: [mod('card', 2, 0)] } as Node)),
-      ...byAccent('card', a => ({ ...sticker(a, 2.2), when: [mod('card', 2, 1)] } as Node)),
+    style: { ...col, position: 'relative' }, children: [
+      sticker(),
     ] },
-  burst,
   { type: 'box', style: { ...col, gap: '3px', padding: '0px 4px' }, children: [
     { type: 'text', text: '{card.name}', style: { 'font-size': '15px', 'font-weight': '600', 'line-clamp': '1', color: '$ink' }, small: { 'font-size': '14px' } },
     { type: 'text', text: '{card.facts}', style: { 'font-size': '12.5px', color: '$ink-soft', 'line-clamp': '1', 'font-variant-numeric': 'tabular-nums' } },
@@ -373,7 +363,6 @@ const banner: Node = { type: 'box', motion: 'pop0', style: { ...col, position: '
     small: { height: '440px', 'border-radius': '26px', 'box-shadow': '6px 7px 0px $lavender' }, children: [
       { type: 'image', when: [set('hero.backdrop')], src: '{hero.backdrop}', alt: '', fade: true, style: fadeIn },
       { type: 'image', when: [not('hero.backdrop'), set('hero.poster')], src: '{hero.poster}', alt: '', style: { position: 'absolute', top: '-20%', left: '-20%', width: '140%', height: '140%', 'object-fit': 'cover', filter: 'blur(60px) saturate(1.4)', opacity: '0.9' } },
-      { type: 'widget', widget: 'heroPreview', when: [moving], style: fill },
       { type: 'box', style: { ...inset0, 'pointer-events': 'none', 'background-image': 'linear-gradient(90deg, $scrim 0%, $scrim-soft 48%, $scrim-clear 72%), linear-gradient(0deg, $scrim 0%, $scrim-clear 50%)' },
         small: { 'background-image': 'linear-gradient(0deg, $scrim 0%, $scrim 30%, $scrim-clear 75%)' } },
       { type: 'box', motion: 'hop160', style: { ...col, position: 'absolute', left: '0px', right: '0px', bottom: '0px', 'box-sizing': 'border-box', padding: '0px 44px 40px', 'max-width': '46rem', gap: '14px', color: '$night-ink' },
@@ -523,7 +512,7 @@ const toolbar: Node = { type: 'box', motion: 'hop90', style: { ...row, position:
       { type: 'widget', widget: 'select', params: { options: 'library.sorts', action: 'librarySort', label: '{s:sortBy}' }, style: Picker },
       // The flip turns its arrow over with a bounce; its name says the current direction.
       { type: 'box', when: [set('library.canFlip')], press: { action: 'librarySortFlip' as Action }, label: '{s:descending}', style: { ...Bubble, ...sz(44) }, ...bubble,
-        states: [{ when: [is('library.direction', 'asc')], style: { ...Bubble, ...sz(44) }, ...pending({ label: '{s:ascending}' }) } as { when: Condition[]; style: Style }], children: [
+        states: [{ when: [is('library.direction', 'asc')], style: { ...Bubble, ...sz(44) }, label: '{s:ascending}' }], children: [
           { type: 'box', style: { ...col, rotate: '0', transition: `rotate 320ms ${boing}` }, states: [
             { when: [stillC, is('library.direction', 'asc')], style: { ...col, rotate: '180', transition: 'none' } },
             { when: [stillC], style: { ...col, rotate: '0', transition: 'none' } },
@@ -533,7 +522,7 @@ const toolbar: Node = { type: 'box', motion: 'hop90', style: { ...row, position:
     ] },
   ] };
 
-const libraryGrid: Node = { type: 'box', style: { ...col, transition: 'opacity 200ms linear' }, states: [{ when: [set('env.libraryLoading')], style: { ...col, transition: 'opacity 200ms linear', opacity: '0.6' } }], ...pending({ a11y: { busy: [set('env.libraryLoading')] } }), children: [
+const libraryGrid: Node = { type: 'box', style: { ...col, transition: 'opacity 200ms linear' }, states: [{ when: [set('env.libraryLoading')], style: { ...col, transition: 'opacity 200ms linear', opacity: '0.6' } }], children: [
   { type: 'box', style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(176px, 1fr))', 'column-gap': '24px', 'row-gap': '34px', ...gutter, 'padding-top': '8px' },
     small: { 'grid-template-columns': 'repeat(auto-fill, minmax(136px, 1fr))', 'column-gap': '14px', 'row-gap': '24px', ...gutterSmall }, children: [
       { type: 'repeat', over: 'library.items', item: { type: 'use', template: 'gridCard' } },
@@ -712,13 +701,13 @@ const sectionHeading = (label: string, english: string, iconName: string): Node 
   { type: 'text', text: label, role: 'heading', level: 2, style: { ...Pixel, 'font-size': '26px' }, small: { 'font-size': '22px' } },
 ] });
 
-// The big candy play button; it throws sparkles as it starts playback.
-const playButton = (label: string, aria: string, arg: string, small: boolean, when: Condition[] = []): Node => ({ type: 'box', group: true, when, style: { ...col, position: 'relative', 'flex-shrink': '0' }, children: [{ type: 'box', press: { action: 'play', arg }, label: aria, testId: 'detail-play',
+// The big candy play button.
+const playButton = (label: string, aria: string, arg: string, small: boolean, when: Condition[] = []): Node => ({ type: 'box', when, press: { action: 'play', arg }, label: aria, testId: 'detail-play',
   style: { ...Candy, 'flex-shrink': '0', gap: '10px', height: small ? '50px' : '58px', 'padding-left': small ? '22px' : '30px', 'padding-right': small ? '26px' : '34px' },
   small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px' }, ...candy, children: [
     icon('play', small ? 15 : 17, undefined, { small: sz(15) }),
     { type: 'text', text: label, style: { 'font-size': small ? '16px' : '18px' }, small: { 'font-size': '16px' } },
-  ] }, burst] } as Node);
+  ] });
 // Watched progress as a striped candy bar.
 const candyBar = (pct: string, label: string, style: Style, small?: Style): Node => ({ type: 'box', role: 'progressbar', label, style: { ...col, height: '14px', 'border-radius': '7px', border: '2.5px solid $ink', 'box-sizing': 'border-box', 'background-color': '$card', 'overflow-x': 'hidden', 'overflow-y': 'hidden', ...style }, small, children: [
   { type: 'box', style: { height: '100%', width: `${pct}%`, 'background-image': 'repeating-linear-gradient(135deg, $pink 0px, $pink 5px, $pink-hover 5px, $pink-hover 10px)' } },
@@ -785,8 +774,8 @@ const thumbBase = (a: Accent): Style => ({ ...col, position: 'relative', width: 
 const episodeCard: Node = { type: 'box', group: true, motion: 'hop0', stagger: { step: 40, cap: 8 },
   style: episodeBase, states: [{ when: [stillC], style: { ...episodeBase, transition: liftStill } }], small: { gap: '12px', 'align-items': 'flex-start', padding: '10px' },
   hover: episodeUp, groupFocus: episodeUp, children: [
-    ...byAccent('card', a => ({ type: 'box', press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'episode-{card.id}',
-      style: thumbBase(a), states: [{ when: [stillC], style: { ...thumbBase(a), transition: liftStill } }], small: { width: '124px' }, groupHover: { rotate: '-1.5' }, groupFocus: { rotate: '-1.5' }, focus: { outline: 'auto', 'box-shadow': ring }, children: [
+    { type: 'box', press: { action: 'select', arg: '{card.kindId}' }, label: '{card.label}', testId: 'episode-{card.id}',
+      style: thumbBase('pink'), states: [true, false].flatMap(still => ACCENTS.map((a, i) => ({ when: [...(still ? [stillC] : []), mod('card', 3, i)], style: still ? { ...thumbBase(a), transition: liftStill } : thumbBase(a) }))), small: { width: '124px' }, groupHover: { rotate: '-1.5' }, groupFocus: { rotate: '-1.5' }, focus: { outline: 'auto', 'box-shadow': ring }, children: [
         { type: 'image', when: [set('card.backdrop')], src: '{card.backdrop}', alt: '', fade: true, style: fadeIn },
         { type: 'box', when: [not('card.backdrop')], style: { ...col, ...inset0, 'align-items': 'center', 'justify-content': 'center' }, children: [
           { type: 'text', when: [set('card.episodeNumberLabel')], text: '{card.episodeNumberLabel}', style: { ...Pixel, 'font-size': '30px' }, small: { 'font-size': '24px' } },
@@ -799,7 +788,7 @@ const episodeCard: Node = { type: 'box', group: true, motion: 'hop0', stagger: {
         ] },
         { type: 'box', when: [set('card.played')], style: { ...row, position: 'absolute', top: '6px', right: '6px', ...sz(22), 'border-radius': '11px', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$mint', border: '2px solid $ink', 'box-sizing': 'border-box' }, children: [icon('check', 10)] },
         { type: 'box', when: [set('card.hasProgress')], style: { ...col, position: 'absolute', left: '8px', right: '8px', bottom: '8px' }, children: [candyBar('{card.progressPct}', '{s:watchProgressOf} {card.name}', { width: '100%' })] },
-      ] } as Node)),
+      ] },
     { type: 'box', style: { ...col, flex: '1', 'min-width': '0px', gap: '5px' }, children: [
       { type: 'box', style: { ...row, gap: '8px', 'align-items': 'center', 'min-width': '0px' }, children: [
         { type: 'text', when: [set('card.episodeNumberLabel')], text: '{card.episodeNumberLabel}', style: { ...Pixel, 'font-size': '13px', padding: '1px 8px', 'border-radius': '8px', 'background-color': '$lavender-soft', 'flex-shrink': '0' } },
@@ -835,13 +824,13 @@ const episodesBody: Node[] = [
     { type: 'box', role: 'group', label: '{s:season}', testId: 'season-picker', style: { ...row, gap: '10px', padding: '4px 16px 8px' }, children: [
       { type: 'repeat', over: 'detail.seasons', item: { type: 'box', press: { action: 'select', arg: '{season.pick}' }, label: '{card.name}', a11y: { pressed: [set('season.on')] },
         style: seasonPill, states: [{ when: [set('season.on')], style: { ...seasonPill, 'background-color': '$pink', 'box-shadow': '0px 4px 0px $ink' } }],
-        hover: { scale: '1.05' }, focus: { outline: 'auto', 'box-shadow': ring }, ...active(press94), children: [
+        hover: { scale: '1.05' }, focus: { outline: 'auto', 'box-shadow': ring }, active: press94, children: [
           { type: 'text', text: '{card.name}', style: { 'font-size': '15px' } },
         ] } },
     ] },
   ] },
   upNext,
-  { type: 'box', style: episodeList, small: { gap: '12px' }, states: [{ when: [set('detail.seasonPending')], style: { ...episodeList, opacity: '0.5' } }], ...pending({ a11y: { busy: [set('detail.seasonPending')] } }), children: [
+  { type: 'box', style: episodeList, small: { gap: '12px' }, states: [{ when: [set('detail.seasonPending')], style: { ...episodeList, opacity: '0.5' } }], children: [
     { type: 'repeat', over: 'detail.episodes', item: episodeCard },
   ] },
 ];
@@ -931,7 +920,7 @@ function keepOverlays(n: Node): Node {
 const each = <T extends Record<string, Node>>(o: T): T => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, keepOverlays(v)])) as T;
 
 export default {
-  schema: 1, renderer: 15, id, name: 'Mochi', version,
+  schema: 1, renderer: 13, id, name: 'Mochi', version,
   tagline: 'Pastel pink, pixel sparkles and a bouncy friend for anime nights.',
   preview: asset('preview.jpg'), swatches: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff', '#8fe8c9'],
   traits: { page: '$page', ink: '$ink', barMask: false, splashOnPaper: true },
@@ -981,7 +970,6 @@ export default {
     bounce: { '0%': { translate: '0px 0px', scale: 0.96, rotate: 0 }, '14%': { translate: '0px -4px', scale: 1.02, rotate: 0 }, '45%': { translate: '0px -22px', scale: 1.04, rotate: -6 }, '72%': { translate: '0px 0px', scale: 1, rotate: 0 }, '86%': { translate: '0px 1px', scale: 0.95, rotate: 0 }, '100%': { translate: '0px 0px', scale: 0.96, rotate: 0 } },
     shadow: { '0%': { scale: 1, opacity: 0.5 }, '45%': { scale: 0.6, opacity: 0.25 }, '72%': { scale: 1, opacity: 0.5 }, '100%': { scale: 1, opacity: 0.5 } },
     petal: { '0%': { opacity: 0, translate: '0px -40px', rotate: 0 }, '10%': { opacity: 0.9 }, '90%': { opacity: 0.9 }, '100%': { opacity: 0, translate: '90px 1400px', rotate: 300 } },
-    burst: { '0%': { opacity: 1, translate: '0px 0px', scale: 0.3 }, '60%': { opacity: 1 }, '100%': { opacity: 0, translate: '0px -54px', scale: 1.1 } },
   },
   motion: {
     navIn: { keyframes: 'doc:hop', duration: 600, easing: boing, fill: 'both', still: fade(200) },
@@ -991,7 +979,6 @@ export default {
     twinkle: { keyframes: 'doc:twinkle', duration: 2400, easing: 'ease-in-out', iterations: 'infinite', fill: 'none' },
     sparklePop: { keyframes: 'doc:pop', duration: 300, easing: 'ease-out', fill: 'both' },
     bubble: { keyframes: 'doc:bubble', duration: 300, easing: boing, fill: 'both', still: { keyframes: 'dissolve', duration: 120 } },
-    burst: { keyframes: 'doc:burst', duration: 620, easing: settle, fill: 'both' },
     hopBounce: { keyframes: 'doc:bounce', duration: 900, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     hopShadow: { keyframes: 'doc:shadow', duration: 900, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', iterations: 'infinite', fill: 'none' },
     blink: { keyframes: 'tick', duration: 1000, easing: 'steps(1)', iterations: 'infinite', fill: 'none' },
