@@ -1,6 +1,17 @@
 /** Source-complete build adaptation; the pinned MPL library stays pristine. */
 export function transformCoreDemux(path: string, source: string): string | null {
   const normalized = path.replaceAll('\\', '/');
+  if (normalized.endsWith('/mediabunny/src/cursors.ts')) {
+    // These narrow the base cursor's track type only. A runtime field would
+    // overwrite the track assigned by super() when Bun builds the workers.
+    let result = source;
+    for (const type of ['InputVideoTrack', 'InputAudioTrack']) {
+      const field = `override track!: ${type};`;
+      if (result.split(field).length !== 2) throw new Error('Pinned cursor track declaration changed');
+      result = result.replace(field, `declare track: ${type};`);
+    }
+    return result;
+  }
   if (normalized.endsWith('/src/matroska/matroska-demuxer.ts')) {
     const anchor = 'segment.lastReadCluster = cluster;';
     const cues = 'segment.deferredCuesPosition !== null && searchTimestamp > this.internalTrack.codecDelay';
