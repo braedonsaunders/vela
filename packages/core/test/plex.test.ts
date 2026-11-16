@@ -1,7 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { PlexAdapter, discoverPlexServers, plexHeaders } from '../src/adapter/plex';
 import { VelaError } from '../src/adapter/errors';
-import { FakeCredentials, routeFetch } from './helpers';
+import { FakeCredentials, restoreFetch, routeFetch } from './helpers';
+
+afterEach(restoreFetch);
 
 const ORIGIN = 'https://plex.example:32400';
 const plex = (credentials = new FakeCredentials()) => new PlexAdapter({ origin: ORIGIN, credentials, clientIdentifier: 'client-1' });
@@ -163,7 +165,7 @@ describe('PlexAdapter requests', () => {
     const adapter = plex();
     const described = await adapter.describe();
     expect(described.server).toEqual({ id: ORIGIN, name: 'Plex Media Server', version: '' });
-    expect(described.features.liveTV.available).toBe(false);
+    expect(described.features.liveTV?.available).toBe(false);
     await expect(adapter.channels()).rejects.toThrow('No accessible Plex DVR');
   });
 });

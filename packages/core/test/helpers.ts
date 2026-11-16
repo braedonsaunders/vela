@@ -1,6 +1,5 @@
 // Small fakes shared by the core tests: an in-memory secret store, credentials holding one
 // session, and a fetch stand-in that answers by method and path.
-import { afterEach } from 'bun:test';
 import type { Credentials } from '../src/adapter';
 import type { SecretStore } from '../src/session';
 import type * as V from '../src/wire';
@@ -34,13 +33,18 @@ export class FakeCredentials implements Credentials {
 export interface Seen { method: string; url: URL; headers: Headers; body?: unknown }
 type Answer = unknown | ((request: Seen) => unknown);
 
+const realFetch = globalThis.fetch;
+/** Put the real fetch back; files using routeFetch call this in afterEach. */
+export function restoreFetch(): void {
+  globalThis.fetch = realFetch;
+}
+
 /**
- * Replace global fetch for one test. Routes are `METHOD /path` (query ignored) mapped to a JSON
- * body, a Response, or a function of the request returning either. Unrouted requests are 404s.
+ * Replace global fetch until restoreFetch. Routes are `METHOD /path` (query ignored) mapped to a
+ * JSON body, a Response, or a function of the request returning either. Unrouted requests are 404s.
  */
 export function routeFetch(routes: Record<string, Answer>): Seen[] {
   const seen: Seen[] = [];
-  const original = globalThis.fetch;
   const fake = async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     const method = init?.method ?? 'GET';
@@ -52,11 +56,5 @@ export function routeFetch(routes: Record<string, Answer>): Seen[] {
     return answer instanceof Response ? answer : Response.json(answer);
   };
   globalThis.fetch = Object.assign(fake, { preconnect: () => {} }) as typeof fetch;
-  restore.push(() => { globalThis.fetch = original; });
   return seen;
 }
-
-const restore: (() => void)[] = [];
-afterEach(() => {
-  while (restore.length) restore.pop()!();
-});

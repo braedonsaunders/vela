@@ -1,7 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { EtherAdapter } from '../src/adapter/ether';
 import { VelaError } from '../src/adapter/errors';
-import { FakeCredentials, routeFetch, tokens } from './helpers';
+import { FakeCredentials, restoreFetch, routeFetch, tokens } from './helpers';
+
+afterEach(restoreFetch);
 
 const ORIGIN = 'https://ether.example';
 const ether = (credentials = new FakeCredentials(), onRejected?: () => void) => new EtherAdapter(ORIGIN, credentials, 'web-1', onRejected);

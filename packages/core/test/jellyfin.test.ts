@@ -1,7 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { JellyfinAdapter } from '../src/adapter/jellyfin';
 import { VelaError } from '../src/adapter/errors';
-import { FakeCredentials, routeFetch, tokens } from './helpers';
+import { FakeCredentials, restoreFetch, routeFetch, tokens } from './helpers';
+
+afterEach(restoreFetch);
 
 const BASE = 'https://media.example/jf';
 const movie = {
@@ -146,8 +148,8 @@ describe('JellyfinAdapter requests', () => {
       'GET /jf/LiveTv/Channels': { Items: [] },
     });
     const none = await adapter.describe();
-    expect(none.features.liveTV.available).toBe(false);
-    expect(none.features.quickConnect.available).toBe(false);
+    expect(none.features.liveTV?.available).toBe(false);
+    expect(none.features.quickConnect?.available).toBe(false);
   });
 
   test('guide maps programmes and drops entries without times or a channel', async () => {
