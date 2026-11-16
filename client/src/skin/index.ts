@@ -265,8 +265,12 @@ function convert(node: Node, depth: number, r: Resolve, weight = 400, root = fal
   const overlays = { hover: node.hover, focus: node.focus, groupHover: node.groupHover, groupFocus: n.groupFocus, active: n.active };
   level.base = { ...stateRef(variant, overlays, []), s: intern(base, r), pos: base.position === 'absolute' ? 1 : base.position === 'sticky' ? 2 : 0 };
   // Each document state, then the plain node, at each width interval (first match wins).
-  const userStates = (n.states ?? []).slice(0, 8);
-  if (userStates.length * Math.max(1, intervals.length) + intervals.length > 48) throw new Error('Too many states x breakpoints on one node');
+  // Every state counts (a state cut off silently would leave its cards in the plain look).
+  const userStates = n.states ?? [];
+  if (userStates.length > 16) throw new Error(`A node has ${userStates.length} states; the limit is 16`);
+  if (userStates.length * Math.max(1, intervals.length) + intervals.length > 48) {
+    throw new Error('Too many states x breakpoints on one node');
+  }
   const within = intervals.length ? intervals : [{ applied: [] as Style[], when: [] as { k: number; f: string; is: string; v: string; not: boolean }[] }];
   level.sts = [
     ...userStates.flatMap(x => within.map(w => ({ ...stateRef([...variant, x.style, ...w.applied], { hover: x.hover ?? node.hover, focus: x.focus ?? node.focus, groupHover: x.groupHover ?? node.groupHover, groupFocus: x.groupFocus ?? n.groupFocus, active: n.active }, x.when), cond: [...conds(x.when), ...w.when], lbl: parts(x.label, r) }))),
