@@ -7,6 +7,7 @@ import type { detailModel, entry, GuideChannel, homeModel } from '@vela/core';
 import type { Hit, SearchView } from './widgets/search/model';
 import type { AuthView } from './widgets/auth/model';
 import { AUTH_VOCABULARY, quickChars } from './widgets/auth/vocabulary';
+import { PREVIEW_VOCABULARY, type PreviewView } from './widgets/common/preview-vocabulary';
 import { SEARCH_VOCABULARY, searchCollection } from './widgets/search/vocabulary';
 import type { LiveView } from './widgets/guide/controller';
 import { LIVE_VOCABULARY, liveCollection } from './widgets/guide/vocabulary';
@@ -51,6 +52,8 @@ export interface Env {
   search?: SearchView;
   /** The signed-out page (routes.auth); none while signed in. */
   auth?: AuthView;
+  /** The card and hero whose trailer previews play now. */
+  preview?: PreviewView;
   /** Live TV (the guide, a live home's monitor and listings); none where the server has no live TV. */
   live?: LiveView;
 }
@@ -250,6 +253,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.selectedSeason': (_, e) => e.season,
   ...SEARCH_VOCABULARY,
   ...AUTH_VOCABULARY,
+  ...PREVIEW_VOCABULARY,
   ...LIVE_VOCABULARY,
 };
 

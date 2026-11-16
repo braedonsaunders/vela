@@ -1,0 +1,77 @@
+// The view state documents read beside the data: open flags (menus, panels), the chosen season,
+// each row pager's ends, the hero on show (rotating every 9 seconds unless motion is reduced or a
+// query is open), and the system's reduced-motion setting.
+import { useCallback, useEffect, useState } from 'react';
+import { AccessibilityInfo } from 'react-native';
+import type { Env } from '@vela/skin';
+
+const HERO_SECONDS = 9;
+
+export interface ViewState {
+  flags: string[];
+  setFlag(flag: string, on: boolean): void;
+  toggleFlag(flag: string): void;
+  /** Open this flag alone (keep- flags stay); pressed again it closes. */
+  onlyFlag(flag: string): void;
+  resetFlags(): void;
+  season: string;
+  setSeason(id: string): void;
+  pagers: Env['pagers'];
+  setPager(rowId: string, state: { atStart: boolean; atEnd: boolean }): void;
+  heroIndex: number;
+  setHeroIndex(index: number): void;
+  still: boolean;
+}
+
+export function useViewState(heroCount: number, query: string): ViewState {
+  const [flags, setFlags] = useState<string[]>([]);
+  const [season, setSeason] = useState('');
+  const [pagers, setPagers] = useState<Env['pagers']>({});
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [still, setStill] = useState(false);
+
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setStill);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setStill);
+    return () => subscription.remove();
+  }, []);
+
+  const rotating = heroCount > 1 && !still && query === '';
+  useEffect(() => {
+    if (!rotating) return;
+    const timer = setInterval(() => setHeroIndex(i => (i + 1) % heroCount), HERO_SECONDS * 1000);
+    return () => clearInterval(timer);
+  }, [rotating, heroCount, heroIndex]);
+
+  const setFlag = useCallback((flag: string, on: boolean) => {
+    setFlags(list => {
+      if (on) return list.includes(flag) ? list : [...list, flag];
+      return list.filter(f => f !== flag);
+    });
+  }, []);
+  const toggleFlag = useCallback((flag: string) => {
+    setFlags(list => (list.includes(flag) ? list.filter(f => f !== flag) : [...list, flag]));
+  }, []);
+  const onlyFlag = useCallback((flag: string) => {
+    setFlags(list => (list.includes(flag) ? list.filter(f => f !== flag) : [...list.filter(f => f.startsWith('keep-')), flag]));
+  }, []);
+  const resetFlags = useCallback(() => setFlags(list => list.filter(f => f.startsWith('keep-'))), []);
+  const setPager = useCallback((rowId: string, state: { atStart: boolean; atEnd: boolean }) => {
+    setPagers(p => (p[rowId]?.atStart === state.atStart && p[rowId]?.atEnd === state.atEnd ? p : { ...p, [rowId]: state }));
+  }, []);
+
+  return {
+    flags,
+    setFlag,
+    toggleFlag,
+    onlyFlag,
+    resetFlags,
+    season,
+    setSeason,
+    pagers,
+    setPager,
+    heroIndex: heroCount ? heroIndex % heroCount : 0,
+    setHeroIndex,
+    still,
+  };
+}

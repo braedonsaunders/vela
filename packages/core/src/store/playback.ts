@@ -29,6 +29,8 @@ export interface PlaybackState {
   sessionId: string;
   error: string;
   errorCode: string;
+  /** The v0 error class (`capacity` when every stream is in use, `auth`, `transient`, …), or ''. */
+  errorClass: string;
   /** While an extra is prepared, or after a failure the server allows retrying: when to ask again. */
   retryAfterSeconds: number;
   live: ReturnType<typeof liveStatus>;
@@ -41,6 +43,7 @@ export const initialPlayback: PlaybackState = {
   sessionId: '',
   error: '',
   errorCode: '',
+  errorClass: '',
   retryAfterSeconds: 0,
   live: null,
 };
@@ -118,7 +121,7 @@ export class Playback {
     if ('state' in reply && reply.state === 'preparing') {
       const seconds = Math.ceil(reply.retryAfterSeconds);
       if (target.kind !== 'extra' || !Number.isFinite(seconds) || seconds < 1 || preparation >= MAX_PREPARATIONS) {
-        this.patch({ phase: 'failed', error: 'Invalid playback preparation response', errorCode: '' });
+        this.patch({ phase: 'failed', error: 'Invalid playback preparation response', errorCode: '', errorClass: '' });
         return;
       }
       this.patch({ phase: 'preparing', retryAfterSeconds: seconds });
@@ -126,14 +129,14 @@ export class Playback {
       return;
     }
     const plan = connection.plan(reply as V.PlaybackPlan);
-    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', retryAfterSeconds: 0 });
+    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0 });
     this.followSession(run, connection, plan.sessionId);
   }
 
   /** A failure the server allows retrying is retried on its terms (at most twice, within a minute). */
   private failed(intent: Intent, error: unknown, attempt: number, preparation: number): void {
     if (!(error instanceof VelaError)) {
-      this.patch({ phase: 'failed', error: message(error, 'Playback failed'), errorCode: '' });
+      this.patch({ phase: 'failed', error: message(error, 'Playback failed'), errorCode: '', errorClass: '' });
       return;
     }
     const retry = error.detail.retry;
@@ -146,6 +149,7 @@ export class Playback {
       phase: 'failed',
       error: error.message,
       errorCode: error.detail.code,
+      errorClass: error.detail.class,
       retryAfterSeconds: again ? seconds : 0,
     });
     if (again) this.timer = setTimeout(() => void this.request(intent, attempt + 1, preparation), seconds * 1000);
@@ -186,33 +190,71 @@ export class Playback {
     void loop();
   }
 
+  /**
+   * The selected server's playback operations, for a player that drives its own session (the
+   * watch route's controller). Negotiated first; every plan comes back validated for its server.
+   */
+  readonly server = {
+    startPlayback: async (request: V.PlaybackRequest): Promise<V.PlaybackPlan | V.PlaybackPreparing> => {
+      const connection = await this.session.ready();
+      await this.session.negotiate(connection.adapter);
+      const reply = await connection.adapter.startPlayback(request);
+      return 'sessionId' in reply ? connection.plan(reply) : reply;
+    },
+    command: async (sessionId: string, command: V.SessionCommand): Promise<V.PlaybackPlan> => {
+      const connection = await this.session.ready();
+      return connection.plan(await this.send(connection, sessionId, command));
+    },
+    sessionSnapshot: async (sessionId: string): Promise<V.SessionSnapshot> => {
+      const connection = await this.session.ready();
+      const snapshot = await connection.adapter.sessionSnapshot(sessionId);
+      return { ...snapshot, plan: connection.plan(snapshot.plan) };
+    },
+    reportObservation: (sessionId: string, observation: V.PlayerObservation) => this.observe(sessionId, observation),
+  };
+
   /** A player's session command (seek, pause, track change, path switch, fallback, stop). */
   async command(sessionId: string, command: V.SessionCommand): Promise<void> {
     try {
       const connection = await this.session.ready();
-      const api = connection.adapter;
-      let plan: V.PlaybackPlan;
-      try {
-        plan = await sendCommand(api, sessionId, command);
-      } catch (error) {
-        // A stop can race an authorized seek or switch. Retry once only when the server supplies
-        // authoritative generations, with a new key because the rejected precondition is itself
-        // idempotently recorded.
-        const stale = error instanceof VelaError && error.detail.code === 'stale_generation';
-        const generations = stale ? error.detail.currentGenerations : undefined;
-        if (command.kind !== 'stop' || !generations) throw error;
-        plan = await api.command(sessionId, { kind: 'stop', ...generations, idempotencyKey: this.session.key() });
-      }
+      const plan = await this.send(connection, sessionId, command);
       if (this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(plan) });
     } catch (error) {
       if (this.box.get().playback.sessionId === sessionId) this.patch({ error: message(error, 'Playback command failed') });
     }
   }
 
+  private async send(connection: Connection, sessionId: string, command: V.SessionCommand): Promise<V.PlaybackPlan> {
+    const api = connection.adapter;
+    try {
+      return await sendCommand(api, sessionId, command);
+    } catch (error) {
+      // A stop can race an authorized seek or switch. Retry once only when the server supplies
+      // authoritative generations, with a new key because the rejected precondition is itself
+      // idempotently recorded.
+      const stale = error instanceof VelaError && error.detail.code === 'stale_generation';
+      const generations = stale ? error.detail.currentGenerations : undefined;
+      if (command.kind !== 'stop' || !generations) throw error;
+      return api.command(sessionId, { kind: 'stop', ...generations, idempotencyKey: this.session.key() });
+    }
+  }
+
+  /** Read the session's authoritative plan again (the player found its grant expired or a reply stale). */
+  async refresh(sessionId: string): Promise<void> {
+    try {
+      const connection = await this.session.ready();
+      const snapshot = await connection.adapter.sessionSnapshot(sessionId);
+      if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
+      if (this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(snapshot.plan) });
+    } catch (error) {
+      if (this.box.get().playback.sessionId === sessionId) this.patch({ error: message(error, 'Playback refresh failed') });
+    }
+  }
+
   /** The player's progress report. */
-  async observe(sessionId: string, observation: V.PlayerObservation): Promise<void> {
+  async observe(sessionId: string, observation: V.PlayerObservation): Promise<V.Ack> {
     const connection = await this.session.ready();
-    await connection.adapter.reportObservation(sessionId, observation);
+    return connection.adapter.reportObservation(sessionId, observation);
   }
 
   /** A player snapshot: live status (reconnecting, delivery, drift) when the engine observes it. */

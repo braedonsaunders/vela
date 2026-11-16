@@ -1,15 +1,15 @@
 /**
- * Check a skin document (docs/skin-schema.md): resolve it as the client does at a phone, a
- * desktop and a TV width, and print its performance report (client/src/skin/budget.ts) with
- * pass/fail against the budgets. The resolver refuses an over-limit document at load, so a
- * document that fails here fails in the app too.
+ * Check a skin document (docs/skin-schema.md): resolve it as the React renderer does
+ * (packages/skin/src/resolve.ts) at a phone, a desktop and a TV width, and print its performance
+ * report (tools/skin-budget.ts) with pass/fail against the budgets and the style matrix.
  *
  *   bun tools/skin.ts check <document.ts | document.json>
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { skinDoc } from '../client/src/skin/index';
-import { BUDGETS, perfReport } from '../client/src/skin/budget';
+import { resolveDocument } from '../packages/skin/src/resolve';
+import { BUDGETS } from '../client/src/skin/budget';
+import { perfReport } from './skin-budget';
 import { portabilityReport, type PortabilityFinding } from '../client/src/skin/portability';
 import type { SkinDocument } from '../protocol/v0/skin';
 
@@ -46,7 +46,7 @@ export async function checkDocument(path: string): Promise<boolean> {
   console.log(`${doc.id}: renderer ${doc.renderer}`);
   for (const width of WIDTHS) {
     let model;
-    try { model = skinDoc(doc, width, ''); } catch (e) { console.log(`  ${width}px: refused: ${(e as Error).message}`); ok = false; continue; }
+    try { model = resolveDocument(doc, width, 'en'); } catch (e) { console.log(`  ${width}px: refused: ${(e as Error).message}`); ok = false; continue; }
     const report = perfReport(model);
     // A phone or TV width is shown only where its report differs from the desktop's.
     if (JSON.stringify(report) === shown) continue;

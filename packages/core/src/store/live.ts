@@ -1,8 +1,12 @@
 // Live TV: a day of the channel guide, and what a channel is airing now (the player's title).
 // Offered only by a server with the LiveTv capability; elsewhere every read fails honestly.
+import type * as V from '../wire';
 import { hasLiveTv } from '../adapter/capabilities';
 import type { Connection } from '../adapter/connection';
-import { guideFocus, liveIdentity, loadGuide, type GuideModel } from '../live/guide';
+import type { TransportCommand } from '../adapter';
+import type { Images } from '../discovery/artwork';
+import { guideFocus, liveIdentity, loadGuide, type GuideApi, type GuideModel } from '../live/guide';
+import type { Playback } from './playback';
 import type { Session } from './session';
 import { failed, loading, ready, type Loadable, type StateBox } from './state';
 import type { VelaState } from './index';
@@ -14,10 +18,23 @@ export interface LiveState {
 
 export const initialLive: LiveState = { guide: {} };
 
+/** The selected server's live TV, for a live controller: listings, and tuning that returns validated plans. */
+export interface LiveTvAccess {
+  api: GuideApi & {
+    startPlayback(request: V.PlaybackRequest): Promise<V.PlaybackPlan | V.PlaybackPreparing>;
+    command(sessionId: string, command: TransportCommand): Promise<V.PlaybackPlan>;
+  };
+  client: V.ClientCapabilities;
+  /** The server and viewer: what listings are cached under and the remembered channel is kept by. */
+  scope: string;
+  images: Images;
+}
+
 export class Live {
   constructor(
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
+    private readonly playback: Playback,
   ) {
     session.onReset(() => this.box.update('live', () => initialLive));
   }
@@ -27,6 +44,26 @@ export class Live {
     const api = connection.adapter;
     if (!hasLiveTv(api)) throw new Error('Live TV is not offered by this server');
     return { connection, api };
+  }
+
+  /** The selected server's live TV, or null when it offers none. Read again after a session change. */
+  async access(): Promise<LiveTvAccess | null> {
+    const connection = await this.session.ready();
+    const adapter = connection.adapter;
+    if (!hasLiveTv(adapter)) return null;
+    const tokens = await this.session.tokens(connection);
+    const server = this.playback.server;
+    return {
+      api: {
+        channels: (cursor, limit) => adapter.channels(cursor, limit),
+        guide: query => adapter.guide(query),
+        startPlayback: request => server.startPlayback(request),
+        command: (sessionId, command) => server.command(sessionId, command),
+      },
+      client: await this.session.declared(),
+      scope: `${connection.record.id}|${tokens?.viewer.id ?? ''}`,
+      images: await connection.images(),
+    };
   }
 
   /** One day of listings, read again when asked (airing state is projected at the read). */
