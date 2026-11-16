@@ -340,7 +340,33 @@ the page colour (draw your own back: press `back`). `collection.name`, `collecti
 Also: a fully transparent ground (`transparent`, `#rrggbb00`, `rgba(…, 0)`) counts as no ground,
 so a pressed control dims its content as a compiled button does.
 
-## Next (renderer 14, names final)
+## Renderer 15: the Vela base
+
+Every skin is a document (build plan, decision 7), and every document draws on top of the **Vela
+base** (client/src/skin/base.ts): built-in slots and routes for every surface, styled from the
+document's `ui` block. A document draws what it wants to own and inherits the rest.
+
+- **Inheritance**: a slot or route the document defines replaces the base's (home counts whether it
+  is `slots.home` or `routes.home`). Templates, motion, keyframes, fonts, tokens and strings merge by
+  name, the document's winning; the base's names start with `vela` (`velaCard`, `velaRow`), so a
+  document that defines `velaCard` restyles the base's lanes on purpose. Home's `status` belongs to
+  whoever draws home, `detail` to whoever draws the title page.
+- **`ui`**: the base's look, as values: `page`, `raised`, `ink`, `inkSecondary`, `inkQuiet`,
+  `inkInverse`, `accent`, `onAccent`, `control`, `controlHover`, `glass`, `glassEdge`,
+  `glassEdgeStrong`, `popover`, `scrim`, `track`, `trackStrong`, `focusHalo`, `shadow`, `skeleton`,
+  `skeletonLight`, `alert`, `live` (colours), `font`, `fontDisplay` (font stacks), `radiusControl`,
+  `radiusCard`, `radiusPanel` (px numbers). A key left out takes Cinematic's value
+  (client/src/skin/ui-defaults.ts). Any style may read one as `$ui.<name>` (a radius reads as px).
+- **Client strings**: `{t:ui.signIn}` in any template is the app's own string in the viewer's
+  locale. A string's placeholders bind to the vocabulary: `{t:secure.body|origin=signin.secureOrigin}`.
+  A document's own text stays `{s:key}`.
+- `env.skinName`: the document's name.
+
+These are resolver features: whatever renderer draws the resolved document gets them. Renderer 14
+(arrow-key focus and `routes.search`, built for the Exact renderer) is held on a branch, so main
+has no renderer 14 features.
+
+## Next (renderer 16, names final)
 
 - Per-document `traits`: `page`, `ink`, `splashOnPaper`. `env.clock12`, `rotate-axis`, `press.hold: ms` (press and hold).
 
