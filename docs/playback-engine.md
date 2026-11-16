@@ -1,5 +1,14 @@
 # Playback engine
 
+## Current platform decision
+
+Vela is moving to React Native and Expo. Web keeps this framework-independent
+WebCodecs/WebGPU core, imported into the Expo JavaScript graph. Native platforms
+use the shared player-view contract with libmpv. The Exact native-view registration
+below is transitional and is deleted with the Exact app; it is not part of the
+final web host. Qualification, direct dependencies and old-player excision remain
+required before launch.
+
 ## Core-only launch plan (owner directive, pending qualification)
 
 Ship one Vela player and one source-complete build. First finish delivery-aware
@@ -12,8 +21,8 @@ the orchestrator before deleting. Production remains unchanged during the work.
 | Frozen wrapper runtime | Descriptor/payload `3c579f70de6e1cfe`, its release reuse instructions and wrapper qualification gates. No wrapper bytes enter the new release. |
 | Upstream orchestration | `client/player/universal/runtime.ts` (`upstream-controller`), controller/frame-loop/decode-session integration and wrapper-only audio/control/transport/audit adapters under `universal/`. Check imports before removing each shared helper. |
 | Old player dependency | `vendor/webgpu-player` gitlink, `.gitmodules` entry, upstream revision pin/checks, inherited tsconfig/npm tooling and imports into its `src/` or `tools/`. The core currently uses some of these: removing only the controller would be incomplete. |
-| Two runtime build modes | Replace `tools/player/prepare-upstream.ts` and its `--core` branch with one core asset builder. Remove wrapper build transforms and wrapper audit payload generation. |
-| Frozen-release reuse | Remove `--universal-from-release`, `stageUniversalFromRelease` and `tools/release/universal-from-release.py` with the packager. Release tooling accepts/verifies the freshly built core input and emits its one immutable descriptor. |
+| Two runtime build modes | Replace `tools/player/prepare-upstream.ts` and its `--core` branch with one static-asset builder. Metro bundles the core JavaScript; the immutable payload contains decoder/worklet/subtitle assets, sources and notices. Remove wrapper build transforms and wrapper audit payload generation. |
+| Frozen-release reuse | Remove `--universal-from-release`, `stageUniversalFromRelease` and `tools/release/universal-from-release.py` with the packager. Release tooling verifies the fresh static asset inventory and digest alongside the Expo export; it does not reuse a wrapper or load a separate core JavaScript entry. |
 | Migration switches | Remove `upstream-controller` unions, wrapper-compatible optional methods, core-vs-wrapper host checks, migration manifest flags (`core.vodHls/liveHls`) and descriptor overrides used for paired qualification. Hardware capability and installed-decoder checks remain. |
 | Obsolete documentation/proofs | Replace this historical wrapper integration narrative and wrapper build instructions with the current core contract. Remove wrapper-only fixture/proof scripts and stale generated references; retain a concise dated evidence record rather than instructions for reviving the old player. |
 
@@ -96,7 +105,9 @@ or explicitly unsupported format determines fallback. Native-element/MSE
 compatibility remains available for browsers without the core's GPU/decoder
 facilities. Report the selected path and reason in the real-app evidence.
 
-Decision: use Exact's **app web native-view module**, with a `vela-player`
+## Historical Exact host integration (superseded by Expo)
+
+The original integration used Exact's **app web native-view module**, with a `vela-player`
 custom view owning one HTMLVideoElement. Contract owns all chrome. No iframe,
 DOM escape in the data module, or change to pinned Exact is required.
 
