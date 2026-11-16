@@ -36,6 +36,10 @@ const COLOUR_KEYS = Object.keys(uiDefaults).filter(
   k => typeof uiDefaults[k as keyof typeof uiDefaults] === 'string' && k !== 'font' && k !== 'fontDisplay',
 ) as (keyof Colours)[];
 
+/** Design sizes on a 1080-line TV, against the 1440 px desktop they are written for. */
+const TV_SCALE = 1.4;
+const TV_HEIGHT = 1080;
+
 export function usePlayerLook(): PlayerLook {
   const { doc, env, viewport } = useHost();
   const tv = Platform.isTV || env.tv;
@@ -44,7 +48,9 @@ export function usePlayerLook(): PlayerLook {
     const ui = resolveUi(doc.document.ui);
     const colours = {} as Colours;
     for (const name of COLOUR_KEYS) colours[name] = colour(String(ui[name])) ?? uiDefaults[name];
-    const scale = tv ? 1.4 : 1;
+    // A television is a fixed canvas seen from across the room: the chrome takes the same share
+    // of it at any resolution (tvOS lays out 1080 points; Android TV 540 dp at 1080p).
+    const scale = tv ? TV_SCALE * Math.min(1, viewport.height / TV_HEIGHT) : 1;
     const size = (px: number) => Math.round(px * scale);
     const text = (px: number, weight = 400, color = colours.ink): TextStyle => ({
       ...fontFace(ui.font, String(weight), false),
@@ -68,5 +74,5 @@ export function usePlayerLook(): PlayerLook {
       text,
       display,
     };
-  }, [doc, tv, small, env.still]);
+  }, [doc, tv, small, env.still, viewport.height]);
 }

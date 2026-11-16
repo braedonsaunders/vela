@@ -76,11 +76,19 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const togglePlay = () => {
     if (!view.ended && state.plan) send({ type: view.playing ? 'pause' : 'play' });
   };
+  const play = () => {
+    if (!view.ended && state.plan && !view.playing) send({ type: 'play' });
+  };
+  const pause = () => {
+    if (state.plan && view.playing) send({ type: 'pause' });
+  };
 
   useShortcuts({
     visible: idle.visible,
     menuOpen: opened !== null,
     togglePlay,
+    play,
+    pause,
     seekBy,
     volumeBy: delta => send({ type: 'volume', value: Math.max(0, Math.min(1, view.volume + delta)) }),
     toggleMute: () => send({ type: 'mute', muted: !view.muted }),
@@ -108,8 +116,12 @@ function Chrome({ state }: { state: PlayerChromeState }) {
         focusable={Platform.isTV && !idle.visible}
         hasTVPreferredFocus={Platform.isTV && !idle.visible}
       />
-      <View style={[StyleSheet.absoluteFill, { justifyContent: 'space-between' }]} pointerEvents="box-none">
+      {/* Each bar holds its own edge: on a short screen they overlap at the middle rather than
+          push the controls off the bottom. */}
+      <View style={styles.top} pointerEvents="box-none">
         <TopBar look={look} title={state.title} visible={idle.visible || !!failed} onClose={state.close} />
+      </View>
+      <View style={styles.bottom} pointerEvents="box-none">
         <BottomBar
           look={look}
           state={state}
@@ -145,3 +157,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  top: { position: 'absolute', top: 0, left: 0, right: 0 },
+  bottom: { position: 'absolute', bottom: 0, left: 0, right: 0 },
+});

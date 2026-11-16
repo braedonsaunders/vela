@@ -3,7 +3,7 @@
 // key or remote press brings it back.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import { useRemote } from './remote';
+import { fromViewer, useRemote } from './remote';
 
 const IDLE_MS = 3500;
 
@@ -55,8 +55,11 @@ export function useIdle(hold: boolean): Idle {
     };
   }, [wake]);
 
-  // TV: any remote press or swipe.
-  useRemote(wake);
+  // TV: any remote press or swipe. Focus changes are not the viewer's: hiding the chrome moves
+  // focus to the stage, which would otherwise wake it again at once.
+  useRemote(event => {
+    if (fromViewer(event)) wake();
+  });
 
   return { visible, wake, hide };
 }

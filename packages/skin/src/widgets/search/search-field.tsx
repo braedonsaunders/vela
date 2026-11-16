@@ -56,7 +56,9 @@ export function SearchField({ ctx }: WidgetProps) {
   useEffect(() => focusTarget('vela-search')({ focus: () => input.current?.focus() }), []);
 
   // On a TV the field is a focus destination of its own (the focus engine skips a bare text input
-  // here): the remote moves onto it, and selecting it opens the keyboard.
+  // here): the remote moves onto it, and selecting it opens the keyboard. The clear button sits
+  // beside that destination, not inside it: the focus engine never focuses a focusable view's
+  // subviews, so a clear button inside could not be reached.
   const [tvFocused, setTvFocused] = useState(false);
   const Frame = Platform.isTV ? Pressable : View;
   const tvProps = Platform.isTV
@@ -73,25 +75,27 @@ export function SearchField({ ctx }: WidgetProps) {
     : null;
 
   return (
-    <Frame style={[styles.field, field, ring]} {...tvProps}>
+    <View style={[styles.field, field, ring]}>
       <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />
-      <Glyph symbol="search" size={20} color={focused ? ui.ink : ui.inkSecondary} />
-      <TextInput
-        ref={input}
-        value={host.env.query}
-        onChangeText={host.setQuery}
-        placeholder={msg('ui.aTitleAFeelingAWorldToGetLostIn')}
-        placeholderTextColor={ui.inkQuiet}
-        accessibilityLabel={msg('ui.searchYourLibrary')}
-        autoCorrect={false}
-        autoCapitalize="none"
-        returnKeyType="search"
-        testID={`search-${ctx.index}`}
-        nativeID="vela-search"
-        onFocus={() => focus(true)}
-        onBlur={() => focus(false)}
-        style={[text, styles.input] as TextStyle[]}
-      />
+      <Frame style={styles.entry} {...tvProps}>
+        <Glyph symbol="search" size={20} color={focused ? ui.ink : ui.inkSecondary} />
+        <TextInput
+          ref={input}
+          value={host.env.query}
+          onChangeText={host.setQuery}
+          placeholder={msg('ui.aTitleAFeelingAWorldToGetLostIn')}
+          placeholderTextColor={ui.inkQuiet}
+          accessibilityLabel={msg('ui.searchYourLibrary')}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+          testID={`search-${ctx.index}`}
+          nativeID="vela-search"
+          onFocus={() => focus(true)}
+          onBlur={() => focus(false)}
+          style={[text, styles.input] as TextStyle[]}
+        />
+      </Frame>
       {host.env.query !== '' ? (
         <Pressable
           onPress={() => host.setQuery('')}
@@ -99,6 +103,8 @@ export function SearchField({ ctx }: WidgetProps) {
           accessibilityLabel={msg('ui.clearSearch')}
           onHoverIn={() => setClearHover(true)}
           onHoverOut={() => setClearHover(false)}
+          onFocus={() => setClearHover(true)}
+          onBlur={() => setClearHover(false)}
           style={[
             styles.clear,
             {
@@ -111,7 +117,7 @@ export function SearchField({ ctx }: WidgetProps) {
           <Glyph symbol="close" size={16} color={ui.ink} />
         </Pressable>
       ) : null}
-    </Frame>
+    </View>
   );
 }
 
@@ -128,6 +134,15 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     borderWidth: 1,
     overflow: 'hidden',
+  },
+  // The search destination: the glyph and the text, before the clear button.
+  entry: {
+    flex: 1,
+    minWidth: 0,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
   },
   // Positioned, so the text paints over the blur layer.
   input: {

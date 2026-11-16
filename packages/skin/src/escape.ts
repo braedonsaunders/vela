@@ -1,11 +1,13 @@
 // Escape on a document's menus (docs/skin-schema.md, `escape`): Escape anywhere on the page, or
-// Back on a TV remote or Android, clears the open flags of the innermost node that names them and
-// returns focus to its `returnFocus` element, else to the press button that opened the flag.
+// Back on a TV remote or Android (Menu on tvOS), clears the open flags of the innermost node that
+// names them and returns focus to its `returnFocus` element, else to the press button that opened
+// the flag. On TV an open scope takes focus when it opens and keeps it until it closes.
 // Press buttons register here by element id, so focus can be moved to one by id (Escape's
 // returnFocus, and a press's `focus`).
 import { createContext, createElement, useContext, useEffect, useRef, type ReactNode } from 'react';
-import { BackHandler, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { useHost } from './host';
+import { holdBack } from './menu-key';
 
 /** A press button that can take focus: a DOM element on the web, a native view on TV. */
 export interface Focusable {
@@ -61,12 +63,35 @@ export function noteOpener(action: string, flag: string, button: Focusable | nul
   if (action === 'toggle' || action === 'open' || action === 'only') openers.set(flag, button);
 }
 
+/** Whether any of a scope's flags is open. */
+export function scopeOpen(flags: string[], open: string[]): boolean {
+  return flags.some(flag => open.includes(flag));
+}
+
+interface ScopeProps {
+  flags: string[];
+  returnFocus?: string;
+  /** The scope's own view on TV (a focus guide): it takes focus when the scope opens. */
+  guide?: { current: Focusable | null };
+  children: ReactNode;
+}
+
 /** Wraps a node that names `escape` flags: registers its scope and counts it for its descendants. */
-export function EscapeScope({ flags, returnFocus, children }: { flags: string[]; returnFocus?: string; children: ReactNode }) {
+export function EscapeScope({ flags, returnFocus, guide, children }: ScopeProps) {
   const host = useHost();
   const level = useContext(Level) + 1;
   const latest = useRef({ host, flags, returnFocus });
   latest.current = { host, flags, returnFocus };
+  const open = scopeOpen(flags, host.env.flags);
+
+  // Open: Back closes it, and on TV focus moves into it once it is drawn (the guide hands focus
+  // to its first item), so a menu over the page is never skipped for what lies behind it.
+  useEffect(() => {
+    if (!open) return;
+    if (Platform.isTV && guide) requestAnimationFrame(() => guide.current && focusOn(guide.current));
+    if (Platform.OS === 'web') return;
+    return holdBack(escapeInnermost);
+  }, [open, guide]);
 
   useEffect(() => {
     const openFlags = () => latest.current.flags.filter(flag => latest.current.host.env.flags.includes(flag));
@@ -111,21 +136,15 @@ function escapeInnermost(): boolean {
   return innermost ? innermost.escape() : false;
 }
 
+/** Escape on the web's keyboard; natively each open scope holds Back while it is open (EscapeScope). */
 function listen(): void {
-  if (unlisten) return;
-  if (Platform.OS === 'web') {
-    if (typeof document === 'undefined') return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
-      if (escapeInnermost()) event.preventDefault();
-    };
-    document.addEventListener('keydown', onKey);
-    unlisten = () => document.removeEventListener('keydown', onKey);
-    return;
-  }
-  // Back on Android and Android TV, and Menu on tvOS once the app enables the menu key.
-  const subscription = BackHandler.addEventListener('hardwareBackPress', escapeInnermost);
-  unlisten = () => subscription.remove();
+  if (unlisten || Platform.OS !== 'web' || typeof document === 'undefined') return;
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+    if (escapeInnermost()) event.preventDefault();
+  };
+  document.addEventListener('keydown', onKey);
+  unlisten = () => document.removeEventListener('keydown', onKey);
 }
 
 function stopListening(): void {

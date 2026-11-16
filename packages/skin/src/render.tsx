@@ -8,17 +8,18 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, TVFocusGuideView, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
 import { GroupContext, HostContext, InheritedContext, WidgetInteractionContext, measure, useHost, type GroupState, type SkinHost } from './host';
-import { EscapeScope, focusElement, focusTarget, noteOpener, type Focusable } from './escape';
+import { EscapeScope, focusElement, focusTarget, noteOpener, scopeOpen, type Focusable } from './escape';
 import { SYMBOLS } from './icons';
 import { WIDGETS } from './widgets';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
+import { resolveUi } from '../../../client/src/skin/ui';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
 import { collection, itemKey, type Ctx, type Env } from './vocabulary';
@@ -38,6 +39,8 @@ const AView = Animated.View;
 const AText = Animated.Text;
 const AScroll = Animated.ScrollView;
 const web = Platform.OS === 'web';
+/** A box that is also a TV focus guide (react-native-web has no focus guide, so only on TV). */
+const AGuide = Platform.isTV ? Animated.createAnimatedComponent(TVFocusGuideView) : AView;
 
 
 export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
@@ -194,6 +197,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   const [groupUi, setGroupUi] = useState({ hover: false, focus: false });
   const scrollRef = useRef<Scroller>(null);
   const buttonRef = useRef<Focusable | null>(null);
+  const guideRef = useRef<Focusable | null>(null);
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
   const rows = rowsFor(node, ctx, env, ui, parentGroup, disabled);
@@ -237,9 +241,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
   }
   const layers = (
     <>
-      {fx.backdropBlur ? (
-        <BlurView intensity={Math.min(100, Math.round(fx.backdropBlur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} />
-      ) : null}
+      {fx.backdropBlur ? <Backdrop blur={fx.backdropBlur} /> : null}
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}
     </>
   );
@@ -280,6 +282,7 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
         {content}
       </AScroll>
     );
+    if (horizontal && Platform.isTV) element = <RowGuide>{element as ReactElement<{ style: unknown }>}</RowGuide>;
   } else {
     // A press box is the schema's full-size transparent button over its content: the button takes
     // focus (keyboard, tvOS focus engine, D-pad) and carries the label; the box keeps its motion.
@@ -307,18 +310,25 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
         accessibilityRole={a11y.accessibilityRole ?? 'button'} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={a11y.accessibilityState}
         testID={a11y.testID} />
     ) : null;
+    const guide = tvGuide(node, env.flags);
+    const Frame = (guide ? AGuide : AView) as typeof AView;
     element = (
-      <AView style={boxStyleFinal as ViewStyle} {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)}>
+      <Frame ref={guide ? (guideRef as never) : undefined} style={boxStyleFinal as ViewStyle} {...(guide as object)}
+        {...hoverProps} {...(press ? { nativeID: a11y.nativeID } : a11y)}>
         {layers}
         {content}
         {button}
-      </AView>
+      </Frame>
     );
   }
   if (masked) element = <Mask linear={fx.mask} radial={fx.radialMask} style={geometry}>{element}</Mask>;
   if (node.escape?.length) {
     const returnFocus = node.returnFocus ? fill(node.returnFocus, ctx, env) : undefined;
-    element = <EscapeScope flags={node.escape} returnFocus={returnFocus || undefined}>{element}</EscapeScope>;
+    element = (
+      <EscapeScope flags={node.escape} returnFocus={returnFocus || undefined} guide={Platform.isTV ? guideRef : undefined}>
+        {element}
+      </EscapeScope>
+    );
   }
   const direction = fx.grid || (fx.scrollX && !fx.scrollY) || String(style.flexDirection ?? 'column').startsWith('row') ? 'row' : 'column';
   return (
@@ -329,6 +339,42 @@ function Box({ node, ctx, route, after }: { node: Extract<RNode, { kind: 'box' }
     </Inherited.Provider>
   );
 }
+
+/** On TV, the boxes the focus engine must treat as one region. A navigation bar or rail is one
+ * destination: focus moving onto it from anywhere in line with the bar (a centred search field
+ * under a bar whose items sit at its edges) lands on the item last focused there, else the first.
+ * An escape scope (a menu, a drawer) is one too, and while open it keeps focus inside: moving
+ * off its edges stays on its items rather than reaching the page behind it. */
+function tvGuide(node: Extract<RNode, { kind: 'box' }>, flags: string[]) {
+  if (!Platform.isTV) return undefined;
+  const scope = !!node.escape?.length;
+  if (!scope && node.role !== 'navigation') return undefined;
+  const trap = scope && scopeOpen(node.escape!, flags);
+  return { autoFocus: true, trapFocusUp: trap, trapFocusDown: trap, trapFocusLeft: trap, trapFocusRight: trap };
+}
+
+/** A horizontal row on TV is one focus destination: moving up or down onto it from any card in
+ * the next row lands on the card last focused in it, else its first. The guide takes the row's
+ * place in the layout, and the row fills it. */
+function RowGuide({ children }: { children: ReactElement<{ style: unknown }> }) {
+  const flat = StyleSheet.flatten(children.props.style as ViewStyle) as Record<string, unknown>;
+  const [geometry, rest] = partition(flat, GEOMETRY);
+  return (
+    <TVFocusGuideView autoFocus style={geometry as ViewStyle}>
+      {cloneElement(children, { style: { ...rest, flexGrow: 1 } })}
+    </TVFocusGuideView>
+  );
+}
+
+/** A backdrop blur. Android draws no blur without a blur target, so there the box is veiled in
+ * the document's page colour instead, enough to keep what scrolls beneath it from showing through. */
+function Backdrop({ blur }: { blur: number }) {
+  const { doc } = useHost();
+  const page = useMemo(() => (Platform.OS === 'android' ? resolveUi(doc.document.ui).page : undefined), [doc]);
+  if (page) return <View style={[StyleSheet.absoluteFill, { backgroundColor: page, opacity: ANDROID_VEIL }]} />;
+  return <BlurView intensity={Math.min(100, Math.round(blur * 2.5))} tint="dark" style={StyleSheet.absoluteFill} />;
+}
+const ANDROID_VEIL = 0.7;
 
 /** A route's scroll fills the route. A box that scrolls is sized as CSS sizes it: React Native's
  * ScrollView grows by default, which would stretch a 232 px sidebar across its row. */

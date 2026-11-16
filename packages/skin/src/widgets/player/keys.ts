@@ -1,11 +1,13 @@
 // Shortcuts. On a keyboard: Space or K plays and pauses, J/L and the side arrows step ten
 // seconds, the vertical arrows set the volume, M mutes, I shows the info card, F goes
-// fullscreen, Escape closes a menu. On a TV remote: play/pause always toggles, and while the
-// chrome is hidden the side presses step ten seconds. In live watch, up and down (and the
-// channel keys) dial channels instead.
+// fullscreen, Escape closes a menu. On a TV remote: play/pause always toggles (Android's
+// separate play, pause, rewind and fast-forward keys do what they say), Back (Menu on tvOS)
+// closes an open menu, and while the chrome is hidden the side presses step ten seconds. In
+// live watch, up and down (and the channel keys) dial channels instead.
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
-import { pressed, useRemote } from './remote';
+import { holdBack } from '../../menu-key';
+import { pressed, useRemote, type RemoteEvent } from './remote';
 
 export interface Shortcuts {
   /** The chrome stands (a hidden chrome's first press only wakes it). */
@@ -13,6 +15,8 @@ export interface Shortcuts {
   /** A menu or the chapter strip is open: arrows belong to it. */
   menuOpen: boolean;
   togglePlay(): void;
+  play(): void;
+  pause(): void;
   seekBy(seconds: number): void;
   volumeBy(delta: number): void;
   toggleMute(): void;
@@ -98,14 +102,53 @@ export function useShortcuts(shortcuts: Shortcuts): void {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Back closes the open menu rather than leaving the player.
+  const menuOpen = shortcuts.menuOpen;
+  useEffect(() => {
+    if (!menuOpen) return;
+    return holdBack(() => {
+      latest.current.closeMenu();
+      return true;
+    });
+  }, [menuOpen]);
+
   useRemote(event => {
-    const s = latest.current;
-    if (!pressed(event)) return;
-    if (event.eventType === 'playPause') s.togglePlay();
-    else if (event.eventType === 'menu' && s.menuOpen) s.closeMenu();
-    else if (!s.visible && event.eventType === 'up') s.liveKey?.('ArrowUp');
-    else if (!s.visible && event.eventType === 'down') s.liveKey?.('ArrowDown');
-    else if (!s.visible && event.eventType === 'left') s.seekBy(-10);
-    else if (!s.visible && event.eventType === 'right') s.seekBy(10);
+    if (pressed(event)) remotePress(event, latest.current);
   });
+}
+
+function remotePress(event: RemoteEvent, s: Shortcuts): void {
+  switch (event.eventType) {
+    case 'playPause':
+      s.togglePlay();
+      return;
+    case 'play':
+      s.play();
+      return;
+    case 'pause':
+      s.pause();
+      return;
+    case 'rewind':
+      s.seekBy(-10);
+      return;
+    case 'fastForward':
+      s.seekBy(10);
+      return;
+  }
+  // The arrows move focus while the chrome stands; hidden, they act on playback.
+  if (s.visible) return;
+  switch (event.eventType) {
+    case 'up':
+      s.liveKey?.('ArrowUp');
+      return;
+    case 'down':
+      s.liveKey?.('ArrowDown');
+      return;
+    case 'left':
+      s.seekBy(-10);
+      return;
+    case 'right':
+      s.seekBy(10);
+      return;
+  }
 }
