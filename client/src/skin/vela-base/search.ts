@@ -3,7 +3,7 @@
 // (or the honest empty or failed state), live hits on now and coming up, the descriptive lane
 // with its partial and failed answers, and discovery with its running, failed and empty states.
 import type { Condition, Node, Style } from '../../../wire/v0/skin';
-import { display, emptyState, enter, gutter, gutterSmall, is, pill, pulse, rowSkeleton } from './look';
+import { display, emptyState, enter, gutter, gutterSmall, is, pill, placeholder, pulse, rowSkeleton } from './look';
 
 const some = (test: string): Condition => ({ test, is: 'gt', value: '0' });
 const none = (test: string): Condition => ({ test, is: 'gt', value: '0', not: true });
@@ -268,7 +268,7 @@ const liveTile: Node = {
         'border-radius': '12px',
         'overflow-x': 'hidden',
         'overflow-y': 'hidden',
-        'background-image': 'linear-gradient(160deg, #2a2622 0%, #121418 100%)',
+        'background-image': placeholder(160),
         'box-shadow': '0px 10px 24px -12px $ui.shadow, 0px 0px 0px 1px $ui.glassEdge',
       },
       children: [...picture, ...airing],

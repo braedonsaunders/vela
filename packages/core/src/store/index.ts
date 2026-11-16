@@ -6,6 +6,7 @@ import type { AppearanceModel } from '../appearance';
 import type { GuideModel } from '../live/guide';
 import type { CollectionModel, Destination, DetailModel, LibraryModel, Row } from '../models';
 import { setLocale, type LocaleContext } from '../i18n';
+import type { ClientCapabilities } from '../wire';
 import { Appearance } from './appearance';
 import { Auth, initialAuth, type AuthState } from './auth';
 import { Catalogue } from './catalogue';
@@ -53,6 +54,8 @@ export interface Vela {
   setLocale(context: LocaleContext): void;
   /** The player's capabilities changed (a new engine, an output change): servers are told again. */
   setMedia(media: MediaCapabilities): void;
+  /** What this client declares it can play (as negotiated with servers), once the player has said. */
+  client(): Promise<ClientCapabilities>;
   /** The width artwork is sized for; reads after this use it. */
   setArtWidth(width: number): void;
   auth: Auth;
@@ -94,6 +97,7 @@ export function createVela(options: VelaOptions): Vela {
   const auth = new Auth(box, session, options);
   const servers = new Servers(box, session, options);
   const previews = new Previews(session);
+  const playback = new Playback(box, session);
   return {
     getState: box.get,
     subscribe: box.subscribe,
@@ -108,6 +112,7 @@ export function createVela(options: VelaOptions): Vela {
       session.setMedia(media);
       previews.setClient(session.client);
     },
+    client: () => session.declared(),
     setArtWidth(next) {
       artWidth = bucket(next);
     },
@@ -116,8 +121,8 @@ export function createVela(options: VelaOptions): Vela {
     home: new Home(box, session, width),
     catalogue: new Catalogue(box, session, width),
     search: new Search(box, session, width),
-    playback: new Playback(box, session),
-    live: new Live(box, session),
+    playback,
+    live: new Live(box, session, playback),
     appearance: new Appearance(box, session, options.rendererVersion),
     receipts: new Receipts(session),
     previews,

@@ -11,7 +11,7 @@ import { msg } from '../i18n';
 import { randomId } from '../protocol/id';
 import { SessionCredentials } from '../session';
 import { ServerCredentials, ServerRegistry } from '../session/servers';
-import type { VelaPlatform } from './platform';
+import type { MediaCapabilities, VelaPlatform } from './platform';
 
 /** `session`: the viewer signed in or out. `server`: another server was selected. */
 export type ResetKind = 'session' | 'server';
@@ -30,7 +30,9 @@ export class Session {
   private readonly resetListeners = new Set<(kind: ResetKind) => void>();
   private activeId = '';
   private deviceValue: V.Device | undefined;
-  private clientValue: V.ClientCapabilities;
+  private clientValue: V.ClientCapabilities | undefined;
+  /** Settles once the player has said what it plays; negotiation and playback wait for it. */
+  private readonly media: Promise<void>;
   private signingIn: Promise<void> | undefined;
   private validation: { token: string; pending: Promise<V.Tokens | null> } | undefined;
   private negotiation: { epoch: number; context: string; pending: Promise<void> } | undefined;
@@ -38,7 +40,7 @@ export class Session {
   constructor(platform: VelaPlatform) {
     this.platform = platform;
     this.registry = new ServerRegistry(platform.secrets, validOrigin(platform.etherOrigin));
-    this.clientValue = { device: this.device, protocolVersions: [0], ...platform.media };
+    this.media = Promise.resolve(platform.media).then(media => this.setMedia(media));
   }
 
   /** This install's stable device: its ID is kept with the secrets. */
@@ -55,9 +57,16 @@ export class Session {
     return this.deviceValue;
   }
 
-  /** What this client declares it can play. */
+  /** What this client declares it can play; unavailable until the player has said. */
   get client(): V.ClientCapabilities {
+    if (!this.clientValue) throw new Error('Media capabilities are unavailable');
     return this.clientValue;
+  }
+
+  /** The client declaration, once the player has said what it plays. */
+  async declared(): Promise<V.ClientCapabilities> {
+    await this.media;
+    return this.client;
   }
 
   get servers(): ServerRegistry {
@@ -102,7 +111,8 @@ export class Session {
     let made: Connection;
     if (record.kind === 'ether') {
       const credentials = new SessionCredentials(this.platform.secrets, this.device, () => this.key());
-      const adapter = new EtherAdapter(record.origin, credentials, JSON.stringify(this.client), rejected);
+      const context = this.clientValue ? JSON.stringify(this.clientValue) : '';
+      const adapter = new EtherAdapter(record.origin, credentials, context, rejected);
       made = etherConnection(record, adapter, credentials);
     } else {
       const credentials = new ServerCredentials(this.platform.secrets, this.device, () => this.key(), id);
@@ -139,10 +149,10 @@ export class Session {
   }
 
   /** The player declares new media capabilities: servers that tailor plans to them are told again. */
-  setMedia(media: VelaPlatform['media']): void {
+  setMedia(media: MediaCapabilities): void {
     const updated = { device: this.device, protocolVersions: [0], ...media };
     const context = JSON.stringify(updated);
-    if (context === JSON.stringify(this.clientValue)) return;
+    if (this.clientValue && context === JSON.stringify(this.clientValue)) return;
     this.clientValue = updated;
     for (const known of this.connections.values()) known.setCapabilityContext?.(context);
   }
@@ -214,6 +224,7 @@ export class Session {
 
   /** Declare the client to a server that tailors plans to it, once per session and declaration. */
   async negotiate(api: ServerAdapter): Promise<void> {
+    await this.media;
     if (!hasClientDeclaration(api)) return;
     for (;;) {
       const epoch = this.epoch;

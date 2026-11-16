@@ -17,7 +17,8 @@ export interface VelaPlatform {
   /** This device as servers list it ("Apple TV", "tvos"). */
   device: { name: string; platform: string };
   appVersion: string;
-  media: MediaCapabilities;
+  /** What the player plays (`VelaPlayer.capabilities()`); sign-in does not wait for it. */
+  media: MediaCapabilities | Promise<MediaCapabilities>;
   /** The web page the app is served from. Absent natively, where there is no page to hand a session to. */
   page?: {
     origin: string;
