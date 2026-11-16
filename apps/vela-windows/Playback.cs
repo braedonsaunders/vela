@@ -55,7 +55,15 @@ internal sealed class Playback : IDisposable
             if (seek != seekKey) { pendingSeek = Math.Max(0,Num(plan,"positionSeconds")-offset); seek = seekKey; }
             
             var cmd = Get(props,"command"); string raw = cmd.ValueKind == JsonValueKind.Object ? cmd.GetRawText() : "";
-            if (raw != command) { command = raw; if ((Str(cmd,"kind") ?? Str(cmd,"type")) is string type) ApplyCommand(type,cmd); }
+            if (raw != command) { command = raw; if (Str(cmd,"type") is string type)
+                {
+                    object? value = type switch {
+                        "seek" or "seekBy" => Get(cmd,"seconds"),
+                        "audio" or "subtitle" => Get(cmd,"trackId"),
+                        "mute" => Get(cmd,"muted"), _ => Get(cmd,"value")
+                    };
+                    LocalCommand(type, value);
+                } }
         }
         catch { Fail(); }
     }
@@ -79,9 +87,10 @@ internal sealed class Playback : IDisposable
         {
             case "play": case "resume": mpv.Command("set", "pause", "no"); break;
             case "pause": mpv.Command("set", "pause", "yes"); break;
-            case "seek": pendingSeek = Math.Max(0, Num(command, "seconds") - offset); break;
+            case "seek": pendingSeek = Math.Max(0, Num(command, "positionSeconds") - offset); break;
             case "volume": mpv.Command("set", "volume", Format(Math.Clamp(Num(command, "volume"), 0, 1) * 100)); break;
             case "mute": mpv.Command("set", "mute", Get(command, "muted").ValueKind == JsonValueKind.True ? "yes" : "no"); break;
+            case "stop": Stop(); break;
             case "speed": mpv.Command("set", "speed", Format(Math.Clamp(Num(command, "speed"), .25, 4))); break;
         }
     }
@@ -89,15 +98,20 @@ internal sealed class Playback : IDisposable
     {
         try
         {
-            var payload = new Dictionary<string, object?> { ["kind"] = kind == "play" ? "resume" : kind };
+            var payload = new Dictionary<string, object?> { ["kind"] = kind is "audio" or "subtitle" ? "tracks" : kind == "play" ? "resume" : kind };
             string? field = kind switch
             {
-                "seek" => "seconds", "audio" => "audioTrackId", "subtitle" => "subtitleTrackId",
+                "seek" => "positionSeconds", "audio" => "audioTrackId", "subtitle" => "subtitleTrackId",
                 "volume" => "volume", "mute" => "muted", "speed" => "speed", _ => null
             };
             if (field != null) payload[field] = value;
+            if (kind == "seekBy") {
+                payload["kind"] = "seek";
+                payload["positionSeconds"] = Read("time-pos") + offset +
+                    (value is JsonElement delta ? delta.TryGetDoubleSafe() : Convert.ToDouble(value));
+            }
             var serialized = JsonSerializer.SerializeToElement(payload);
-            ApplyCommand(kind, serialized);
+            ApplyCommand(kind == "seekBy" ? "seek" : kind, serialized);
             if (kind is "volume" or "mute" or "speed") return;
             payload["sourceGeneration"] = Num(plan, "sourceGeneration");
             payload["seekGeneration"] = Num(plan, "seekGeneration");
