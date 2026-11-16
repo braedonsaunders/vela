@@ -41,7 +41,7 @@ const libraryGridSmall = (rowGap: string): Style => ({
   'row-gap': rowGap,
   padding: '16px 14px',
 });
-// A dropdown: the platform's select drawn as a flat label, Marquee's chevron over its right edge.
+// A dropdown: the platform's select drawn as a flat label; the select draws its own chevron.
 const pick = (params: Record<string, string>, when: Condition[]): Node => ({
   type: 'box',
   when,
@@ -61,7 +61,7 @@ const pick = (params: Record<string, string>, when: Condition[]): Node => ({
       style: {
         'box-sizing': 'border-box',
         height: '34px',
-        padding: '0px 30px 0px 12px',
+        padding: '0px 12px',
         border: 'none',
         'border-radius': '4px',
         'background-color': 'transparent',
@@ -72,20 +72,6 @@ const pick = (params: Record<string, string>, when: Condition[]): Node => ({
         'font-family': sans,
         cursor: 'pointer',
       },
-    },
-    {
-      type: 'box',
-      style: {
-        position: 'absolute',
-        right: '8px',
-        top: '0px',
-        bottom: '0px',
-        display: 'flex',
-        'justify-content': 'center',
-        'pointer-events': 'none',
-        color: '$ink-dim',
-      },
-      children: [glyph('down', 14)],
     },
   ],
 });

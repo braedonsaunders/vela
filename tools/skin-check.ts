@@ -10,6 +10,8 @@ import { resolve } from 'node:path';
 import { resolveDocument } from '../packages/skin/src/resolve';
 import { BUDGETS } from '../client/src/skin/budget';
 import { perfReport } from './skin-budget';
+import { SYMBOLS } from '../packages/skin/src/icons';
+import type { ResolvedDocument, RNode } from '../packages/skin/src/resolve';
 import { portabilityReport, type PortabilityFinding } from '../client/src/skin/portability';
 import type { SkinDocument } from '../protocol/v0/skin';
 
@@ -39,6 +41,19 @@ function printPortability(findings: PortabilityFinding[]): boolean {
   return !findings.some(f => f.level === 'error');
 }
 
+/** Icon symbols the document names that the renderer has no geometry for: they would draw nothing. */
+function unknownSymbols(resolved: ResolvedDocument): string[] {
+  const missing = new Set<string>();
+  const walk = (node: RNode) => {
+    if (node.kind === 'icon' && node.symbol && !node.paths && !SYMBOLS[node.symbol]) missing.add(node.symbol);
+    if (node.kind === 'box') node.children.forEach(walk);
+    if (node.kind === 'repeat') walk(node.item);
+  };
+  if (resolved.shell) walk(resolved.shell);
+  for (const tree of Object.values(resolved.routes)) if (tree) walk(tree);
+  return [...missing].sort();
+}
+
 /** Prints the report; returns false when the document fails (unresolvable, over a limit, or unportable). */
 export async function checkDocument(path: string): Promise<boolean> {
   const doc = await load(path);
@@ -57,6 +72,15 @@ export async function checkDocument(path: string): Promise<boolean> {
     for (const f of report.findings) { console.log(`    ${f.level === 'error' ? 'FAIL' : 'warn'} ${f.route}: ${f.message}`); if (f.level === 'error') ok = false; }
   }
   if (!printPortability(portabilityReport(doc))) ok = false;
+  try {
+    const symbols = unknownSymbols(resolveDocument(doc, WIDTHS[0]!, 'en'));
+    if (symbols.length) {
+      console.log(`  FAIL icon symbols the renderer cannot draw: ${symbols.join(', ')}`);
+      ok = false;
+    }
+  } catch {
+    // Already reported as refused above.
+  }
   console.log(`  budgets (warn/limit): ${Object.entries(BUDGETS).map(([k, b]) => `${k} ${b.warn}/${b.fail}`).join(', ')}`);
   console.log(ok ? 'pass' : 'FAIL');
   return ok;

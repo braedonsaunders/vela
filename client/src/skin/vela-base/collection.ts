@@ -17,9 +17,17 @@ import {
 // A collection page (compiled cinematic's Collection: BrowsePage under a Collection
 // eyebrow): a way back and the name over a faint aura, the titles in a grid, and more as
 // the end comes near.
+// The route paints its own page: a document whose shell leaves the ground to its home (Kids)
+// still reads its ink on its paper here.
 export const collection: Node = {
   type: 'box',
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'column' },
+  style: {
+    position: 'relative',
+    display: 'flex',
+    'flex-direction': 'column',
+    'min-height': '100vh',
+    'background-color': '$ui.page',
+  },
   children: [
     {
       type: 'box',
