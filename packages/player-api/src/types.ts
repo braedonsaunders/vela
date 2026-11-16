@@ -12,6 +12,17 @@ import type {
 
 export type { Command, Failure, PlaybackSession, Snapshot, PlaybackPlan, PlayerObservation, SessionCommand };
 
+/** A short muted preview (a card or hero trailer) from the server's preview grant. */
+export interface PreviewSource {
+  /** Absolute, or relative to the media access origin. */
+  url: string;
+  mimeType: string;
+  /** The grant's expiry (ISO 8601). The view stops then; the host asks for a new grant. */
+  expiresAt: string;
+  /** Start again from the beginning at the end. */
+  loop?: boolean;
+}
+
 export interface VelaPlayerProps {
   /** The session to play. A newer revision or generation of the same session replaces it. */
   session?: PlaybackSession;
@@ -21,6 +32,11 @@ export interface VelaPlayerProps {
   command?: Command;
   /** A muted preview (hero or live tile): no observations, no fullscreen or picture-in-picture. */
   ambient?: boolean;
+  /** A trailer preview instead of a session or plan. Implies ambient; commands are limited to play and
+   * pause; onSnapshot reports only its state (loading, playing, ended, failed); no observations. */
+  preview?: PreviewSource;
+  /** False stops the preview and releases its decoder without unmounting (a card losing hover or focus). */
+  active?: boolean;
   /** A failure the server reported for this session; the view stops and reports it as its own state. */
   serverError?: Failure | null;
   onSnapshot?: (snapshot: Snapshot) => void;

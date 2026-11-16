@@ -1,7 +1,7 @@
 /** Separately served decoder modules with corresponding release source/licences. */
 import { copyFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import pins from '../../../../vendor/webgpu-player/tools/pinned-releases.json';
+import pins from 'webgpu-player/tools/pinned-releases.json';
 const output = Bun.argv[2];
 if (!output) throw new Error('Supply a separately served video decoder directory');
 const target = resolve(output);

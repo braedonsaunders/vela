@@ -87,7 +87,8 @@ export class Catalogue {
       let result = await api.library(id, browse);
       const items = [...result.items];
       const seen = new Set<string>();
-      for (let n = 1; n < Math.max(1, Math.floor(pages)) && result.continuation === 'more'; n++) {
+      let read = 1;
+      for (; read < Math.max(1, Math.floor(pages)) && result.continuation === 'more'; read++) {
         const cursor = result.nextCursor;
         if (!cursor || seen.has(cursor)) throw new Error('Invalid library continuation');
         seen.add(cursor);
@@ -96,7 +97,7 @@ export class Catalogue {
       }
       if (result.continuation === 'more' && !result.nextCursor) throw new Error('Invalid library continuation');
       const images = await connection.images();
-      return libraryModel(result, items, query, images, this.artWidth());
+      return libraryModel(result, items, read, query, images, this.artWidth());
     });
   }
 
@@ -159,6 +160,7 @@ type SliceValue<K extends 'titles' | 'related' | 'library' | 'collections'> = {
 function libraryModel(
   result: V.LibraryContents,
   items: V.RowEntry[],
+  pages: number,
   query: LibraryQuery,
   images: Images,
   artWidth: number,
@@ -187,5 +189,6 @@ function libraryModel(
     canFavorite: !!filters.favorite,
     items: cards,
     more: result.continuation === 'more',
+    pages,
   };
 }

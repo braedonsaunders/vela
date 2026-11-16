@@ -1,79 +1,96 @@
 // VelaPlayerView and VelaPlayer on the web: Vela's WebCodecs/WebGPU core (client/player), mounted
 // into the DOM node react-native-web draws for a View. The contract is packages/player-api; the
-// browser host (createWebPlayerHost) owns the engine, and this file only binds it to React.
-// Media credentials reach the host through VelaPlayer.setMediaAccess, never through props.
+// browser host (createWebPlayerHost) owns the engine, and a trailer preview is a plain muted video
+// (web/preview.ts). This file only binds them to React. Media credentials reach them through
+// VelaPlayer.setMediaAccess, never through props.
 import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
-import type { MediaAccess, VelaPlayerModule, VelaPlayerProps, VelaPlayerViewProps } from '@vela/player-api';
+import type { Failure, MediaAccess, VelaPlayerModule, VelaPlayerProps, VelaPlayerViewProps } from '@vela/player-api';
 import { createWebPlayerHost } from '../../../client/player/host';
 import { playerAssetBase } from '../web/asset-base';
 import { playerCapabilities } from '../web/capabilities';
 import { currentMediaAccess, onMediaAccessChange, setMediaAccess } from '../web/media-access';
+import { createWebPreview } from '../web/preview';
 
 export const VelaPlayer: VelaPlayerModule = { setMediaAccess, capabilities: playerCapabilities };
+
+/** What a view mounts into its DOM node: the playback host or a preview. */
+interface Mounted {
+  update(props: VelaPlayerProps): void;
+  dispose(): void;
+}
+
+type Mount = (node: HTMLElement, props: VelaPlayerProps) => Mounted;
 
 /** Drops the React Native style; the host sees only the contract's props. */
 function contractProps({ style: _style, ...props }: VelaPlayerViewProps): VelaPlayerProps {
   return props;
 }
 
-function useWebPlayerHost(element: React.RefObject<HTMLElement | null>, props: VelaPlayerViewProps) {
+function unsupported(message: string): Failure {
+  return { kind: 'unsupported', message, recoverable: false };
+}
+
+const mountPlayback: Mount = (node, props) => {
+  const assetBaseURL = playerAssetBase();
+  if (!assetBaseURL) throw new Error('This build has no player assets');
+  return createWebPlayerHost(node, props, { assetBaseURL, access: currentMediaAccess });
+};
+
+const mountPreview: Mount = (node, props) => {
+  const preview = createWebPreview(node, { ...props, preview: props.preview! }, currentMediaAccess);
+  return {
+    update: (next) => {
+      if (next.preview) preview.update({ ...next, preview: next.preview });
+    },
+    dispose: () => preview.dispose(),
+  };
+};
+
+/** Mounts once per view, re-applies changed props, and re-applies them when the media access changes. */
+function useMounted(element: React.RefObject<HTMLElement | null>, props: VelaPlayerViewProps, mount: Mount) {
   const latest = useRef(props);
   latest.current = props;
-  const host = useRef<ReturnType<typeof createWebPlayerHost> | null>(null);
+  const mounted = useRef<Mounted | null>(null);
   const applied = useRef<VelaPlayerViewProps | null>(null);
 
   useEffect(() => {
     const node = element.current;
-    const assetBaseURL = playerAssetBase();
     if (!node) return;
-    if (!assetBaseURL) {
-      latest.current.onError?.({
-        kind: 'unsupported',
-        message: 'This build has no player assets',
-        recoverable: false,
-      });
-      return;
-    }
     try {
       applied.current = latest.current;
-      host.current = createWebPlayerHost(node, contractProps(latest.current), {
-        assetBaseURL,
-        access: currentMediaAccess,
-      });
+      mounted.current = mount(node, contractProps(latest.current));
     } catch (error) {
-      latest.current.onError?.({
-        kind: 'unsupported',
-        message: error instanceof Error ? error.message : 'The player could not start',
-        recoverable: false,
-      });
+      latest.current.onError?.(unsupported(error instanceof Error ? error.message : 'The player could not start'));
       return;
     }
     // A new access object retires the old request scope; re-applying the props lets the host see it.
-    const unsubscribe = onMediaAccessChange(() => host.current?.update(contractProps(latest.current)));
+    const unsubscribe = onMediaAccessChange(() => mounted.current?.update(contractProps(latest.current)));
     return () => {
       unsubscribe();
-      host.current?.dispose();
-      host.current = null;
+      mounted.current?.dispose();
+      mounted.current = null;
     };
-  }, [element]);
+  }, [element, mount]);
 
   useEffect(() => {
-    if (!host.current || applied.current === props) return;
+    if (!mounted.current || applied.current === props) return;
     applied.current = props;
-    host.current.update(contractProps(props));
+    mounted.current.update(contractProps(props));
   }, [props]);
 }
 
-function WebPlayerSurface(props: VelaPlayerViewProps) {
+function WebSurface({ mount, ...props }: VelaPlayerViewProps & { mount: Mount }) {
   const element = useRef<HTMLElement | null>(null);
-  useWebPlayerHost(element, props);
+  useMounted(element, props, mount);
   return <View ref={element as never} style={[{ backgroundColor: '#000', overflow: 'hidden' }, props.style]} />;
 }
 
-/** The player view. Switching between a preview (`ambient`) and full playback mounts a new engine. */
+/** The player view. Switching between a trailer preview, an ambient preview and full playback
+ * mounts a new engine. */
 export function VelaPlayerView(props: VelaPlayerViewProps) {
-  return <WebPlayerSurface key={props.ambient ? 'ambient' : 'playback'} {...props} />;
+  if (props.preview) return <WebSurface key="preview" mount={mountPreview} {...props} />;
+  return <WebSurface key={props.ambient ? 'ambient' : 'playback'} mount={mountPlayback} {...props} />;
 }
 
 export type { VelaPlayerViewProps, MediaAccess };

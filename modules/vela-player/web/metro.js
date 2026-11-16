@@ -1,28 +1,16 @@
 // Metro settings the web player needs, applied by apps/vela/metro.config.js.
 //
-// Metro bundles the player core (client/player) and the parts of the pinned upstream player and
-// its Mediabunny fork the core imports. Everything else under vendor/ stays out of the graph.
+// Metro bundles the player core (client/player) and the modules of the pinned upstream player
+// (`webgpu-player`) and its Mediabunny fork that the core imports, from their TypeScript sources.
 // The decoder workers, WASM and subtitle assets are not Metro's: they are the payload that
-// export-assets.ts writes to player/<digest>/, which the dev server serves from
+// assets/export-assets.ts writes to player/<digest>/, which the dev server serves from
 // VELA_PLAYER_ASSETS_DIR so `expo start --web` plays like the export.
 const { createReadStream, statSync } = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '../../..');
-const mediabunny = path.join(root, 'vendor/webgpu-player/vendor/mediabunny/src/index.ts');
-
-const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** Blocks vendor/ except the upstream sources the core imports (src/, tools/, Mediabunny src/ and shared/). */
-function vendorBlockList() {
-  const vendor = escape(path.join(root, 'vendor'));
-  return [
-    new RegExp(`^${vendor}/(?!webgpu-player(/|$)).*$`),
-    new RegExp(`^${vendor}/webgpu-player/(?!(src|tools|vendor)(/|$)).*$`),
-    new RegExp(`^${vendor}/webgpu-player/vendor/(?!mediabunny(/|$)).*$`),
-    new RegExp(`^${vendor}/webgpu-player/vendor/mediabunny/(?!(src|shared)(/|$)).*$`),
-  ];
-}
+/** Mediabunny's package entry is its unbuilt dist; Vela compiles the pinned sources. */
+const mediabunny = path.join(root, 'node_modules/mediabunny/src/index.ts');
 
 const contentTypes = {
   '.js': 'text/javascript',
@@ -74,4 +62,4 @@ function withVelaPlayer(config) {
   return config;
 }
 
-module.exports = { vendorBlockList, withVelaPlayer };
+module.exports = { withVelaPlayer };

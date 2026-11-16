@@ -71,7 +71,7 @@ const content = new Uint8Array([...leb(sectionName.length), ...sectionName, ...t
 const raw = new Uint8Array(await Bun.file(modulePath).arrayBuffer());
 const section = new Uint8Array([0, ...leb(content.length), ...content]);
 const bytes = new Uint8Array(raw.length + section.length); bytes.set(raw); bytes.set(section, raw.length);
-const { loadDecoderPackage } = await import('../../../../../vendor/webgpu-player/src/decode/packages/DecoderPackage');
+const { loadDecoderPackage } = await import('webgpu-player/src/decode/packages/DecoderPackage');
 const loaded = await loadDecoderPackage(bytes.buffer);
 if (loaded.kind !== 'audio' || loaded.id !== 'vela-audio' || loaded.manifest.codecs.length !== codecs.length) throw new Error('Audio package validation failed');
 await Bun.write(join(output, 'vela-audio.wasm'), bytes);

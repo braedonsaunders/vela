@@ -4,7 +4,7 @@
 // copies the set. The four worker bundles are never taken from the input: workers.ts builds them.
 import { copyFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import decoderPins from '../../../../vendor/webgpu-player/tools/pinned-releases.json';
+import decoderPins from 'webgpu-player/tools/pinned-releases.json';
 import { audioPackages } from '../../../../client/player/universal/audio/packages';
 import subtitleManifest from '../../../../client/player/universal/subtitles/assets.json';
 import { hashFile, listFiles } from './inventory';

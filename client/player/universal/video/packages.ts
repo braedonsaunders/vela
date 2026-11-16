@@ -1,8 +1,8 @@
 import {
   loadDecoderPackage,
   type VideoDecoderPackage,
-} from '../../../../vendor/webgpu-player/src/decode/packages/DecoderPackage';
-import pins from '../../../../vendor/webgpu-player/tools/pinned-releases.json';
+} from 'webgpu-player/src/decode/packages/DecoderPackage';
+import pins from 'webgpu-player/tools/pinned-releases.json';
 const packages = {
   hevc: ['hevc'],
   av1: ['av1'],

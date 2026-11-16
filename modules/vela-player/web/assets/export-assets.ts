@@ -12,10 +12,10 @@ import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { inventory, MANIFEST_NAME, payloadDigest } from './inventory';
 import { copyLibraries, payloadCapabilities } from './libraries';
-import { assertPinnedCheckouts, MEDIABUNNY_REVISION, sourceRevision, UPSTREAM_REVISION, writeSources } from './sources';
+import { assertPinnedPackages, MEDIABUNNY, sourceRevision, UPSTREAM, writeSources } from './sources';
 import { buildWorkers } from './workers';
 import { audioPackageRelease } from '../../../../client/player/universal/audio/packages';
-import decoderPins from '../../../../vendor/webgpu-player/tools/pinned-releases.json';
+import decoderPins from 'webgpu-player/tools/pinned-releases.json';
 import subtitleManifest from '../../../../client/player/universal/subtitles/assets.json';
 
 const root = resolve(import.meta.dir, '../../../..');
@@ -34,7 +34,7 @@ const source = await sourceRevision(root);
 if (source.dirty && !Bun.argv.includes('--allow-dirty')) {
   throw new Error('The Vela tree has uncommitted changes; commit them or pass --allow-dirty');
 }
-await assertPinnedCheckouts(root);
+await assertPinnedPackages(root);
 
 const players = join(resolve(out), 'player');
 const staging = join(players, `.staging-${process.pid}`);
@@ -56,8 +56,8 @@ const manifest = {
   sourceRevision: source.revision,
   sourceDirty: source.dirty,
   dependencies: [
-    { name: 'webgpu-player', revision: UPSTREAM_REVISION, licence: 'MIT', use: 'decoder workers, adapted' },
-    { name: 'mediabunny', revision: MEDIABUNNY_REVISION, licence: 'MPL-2.0', source: 'sources/mediabunny.tar.gz' },
+    { ...UPSTREAM, licence: 'MIT', use: 'decoder workers, adapted' },
+    { ...MEDIABUNNY, licence: 'MPL-2.0', source: 'sources/mediabunny.tar.gz' },
     {
       name: 'webgpu-player-decoders',
       release: decoderPins.decoders.tag,

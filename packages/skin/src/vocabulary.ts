@@ -11,6 +11,8 @@ import { PREVIEW_VOCABULARY, type PreviewView } from './widgets/common/preview-v
 import { SEARCH_VOCABULARY, searchCollection } from './widgets/search/vocabulary';
 import type { LiveView } from './widgets/guide/controller';
 import { LIVE_VOCABULARY, liveCollection } from './widgets/guide/vocabulary';
+import type { CollectionPage, LibraryOption, LibraryPage } from './widgets/library/model';
+import { LIBRARY_VOCABULARY, libraryCollection } from './widgets/library/vocabulary';
 
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
 export type Card = ReturnType<typeof entry>;
@@ -56,6 +58,10 @@ export interface Env {
   preview?: PreviewView;
   /** Live TV (the guide, a live home's monitor and listings); none where the server has no live TV. */
   live?: LiveView;
+  /** The library page on show (routes.library); none on other routes. */
+  library?: LibraryPage;
+  /** The collection page on show (routes.collection); none on other routes. */
+  collection?: CollectionPage;
 }
 
 /** The binding context: the item a node is repeated over, and its position. */
@@ -71,6 +77,8 @@ export interface Ctx {
   hit?: Hit;
   /** A channel of live.channels or live.favorites. */
   ch?: GuideChannel;
+  /** A kind, genre or sort of library.kinds, library.genres or library.sorts. */
+  opt?: LibraryOption;
   index: number;
 }
 
@@ -108,7 +116,6 @@ function detail(read: (d: DetailModel, e: Env) => string, none = ''): Accessor {
 
 const CARD_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rating', 'progressLabel', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
 const DETAIL_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
-const NO_MODEL = ['library.', 'opt.', 'collection.', 'env.library', 'env.collection', 'env.hasLiveLibrary'];
 
 export const VOCABULARY: Record<string, Accessor> = {
   ...Object.fromEntries(CARD_FIELDS.flatMap(f => [[`card.${f}`, from('card', x => String(x[f]))], [`hero.${f}`, from('hero', x => String(x[f]))]])),
@@ -255,13 +262,12 @@ export const VOCABULARY: Record<string, Accessor> = {
   ...AUTH_VOCABULARY,
   ...PREVIEW_VOCABULARY,
   ...LIVE_VOCABULARY,
+  ...LIBRARY_VOCABULARY,
 };
 
 /** A key's accessor, or undefined for a key no document may name. */
 export function accessor(key: string): Accessor | undefined {
-  const known = VOCABULARY[key];
-  if (known) return known;
-  return NO_MODEL.some(prefix => key.startsWith(prefix)) ? () => '' : undefined;
+  return VOCABULARY[key];
 }
 
 /** The items a `repeat` draws, each with the context it extends. */
@@ -275,6 +281,8 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
   if (over === 'quick.chars') return quickChars(c, e, limit);
   const channels = liveCollection(over, c, e, limit);
   if (channels) return channels;
+  const browsed = libraryCollection(over, c, e, limit);
+  if (browsed) return browsed;
   switch (over) {
     case 'home.rows': return at(e.home?.rows ?? [], row => ({ row }));
     case 'row.items': return at(c.row?.items ?? [], card => ({ card }));

@@ -1,12 +1,15 @@
 // Licences and corresponding sources shipped beside the workers. The workers contain the MPL
-// Mediabunny fork, so its exact source goes with them; Vela's adaptations and every Vela file
-// compiled into a worker go too, so the adapted build can be reproduced and replaced.
-import { copyFile, mkdir } from 'node:fs/promises';
+// Mediabunny fork, so its source goes with them; Vela's adaptations and every Vela file compiled
+// into a worker go too, so the adapted build can be reproduced and replaced.
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { transformSources } from '../source-transform';
+import { listFiles } from './inventory';
+import { reproducibleTarGz } from './tar';
 
-export const UPSTREAM_REVISION = 'a7a95ef26bd0a71f5ee12f863b8ffb2cfbc3c9d2';
-export const MEDIABUNNY_REVISION = 'e9303e8dbf1e77140328a417ac07306defc42cf6';
+/** The pinned upstream packages, as bun.lock resolves them (modules/vela-player/package.json). */
+export const UPSTREAM = { name: 'webgpu-player', repository: 'alchemyyy/WebGPU-Player', revision: 'a7a95ef' };
+export const MEDIABUNNY = { name: 'mediabunny', repository: 'alchemyyy/mediabunny', revision: 'e9303e8' };
 
 async function git(cwd: string, args: string[]): Promise<string> {
   const child = Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'inherit' });
@@ -15,25 +18,19 @@ async function git(cwd: string, args: string[]): Promise<string> {
   return output.trim();
 }
 
-/** The pinned checkouts must be exactly at their reviewed revisions and unmodified. */
-export async function assertPinnedCheckouts(root: string) {
-  const upstream = join(root, 'vendor/webgpu-player');
-  const mediabunny = join(upstream, 'vendor/mediabunny');
-  for (const [path, revision] of [
-    [upstream, UPSTREAM_REVISION],
-    [mediabunny, MEDIABUNNY_REVISION],
-  ]) {
-    if ((await git(path, ['rev-parse', 'HEAD'])) !== revision) throw new Error(`${path} is not at ${revision}`);
-    if ((await git(path, ['status', '--porcelain', '--untracked-files=no'])) !== '') {
-      throw new Error(`${path} has local changes`);
-    }
+/** bun.lock must resolve both packages to their reviewed commits; install with --frozen-lockfile. */
+export async function assertPinnedPackages(root: string) {
+  const lock = await readFile(join(root, 'bun.lock'), 'utf8');
+  for (const pin of [UPSTREAM, MEDIABUNNY]) {
+    const resolved = `"${pin.name}@github:${pin.repository}#${pin.revision}"`;
+    if (!lock.includes(resolved)) throw new Error(`bun.lock does not pin ${pin.name} at ${pin.revision}`);
   }
 }
 
 /** The Vela revision and whether the working tree differs from it. */
 export async function sourceRevision(root: string): Promise<{ revision: string; dirty: boolean }> {
   const revision = await git(root, ['rev-parse', 'HEAD']);
-  const dirty = (await git(root, ['status', '--porcelain', '--untracked-files=no', '--ignore-submodules=none'])) !== '';
+  const dirty = (await git(root, ['status', '--porcelain', '--untracked-files=no'])) !== '';
   return { revision, dirty };
 }
 
@@ -44,16 +41,18 @@ async function copyInto(from: string, to: string) {
 
 export async function writeSources(root: string, payload: string, velaSources: string[]) {
   const sources = join(payload, 'sources');
-  const upstream = join(root, 'vendor/webgpu-player');
-  const mediabunny = join(upstream, 'vendor/mediabunny');
+  const upstream = join(root, 'node_modules', UPSTREAM.name);
+  const mediabunny = join(root, 'node_modules', MEDIABUNNY.name);
   await mkdir(sources, { recursive: true });
-  await git(mediabunny, [
-    'archive',
-    '--format=tar.gz',
-    '--prefix=mediabunny/',
-    `--output=${join(sources, 'mediabunny.tar.gz')}`,
-    MEDIABUNNY_REVISION,
-  ]);
+  // Mediabunny's compiled sources (src/, shared/) and its package and licence files.
+  const compiled = [
+    ...(await listFiles(mediabunny, 'src')),
+    ...(await listFiles(mediabunny, 'shared')),
+    'LICENSE',
+    'package.json',
+  ];
+  const archive = await reproducibleTarGz(mediabunny, compiled, `mediabunny-${MEDIABUNNY.revision}`);
+  await writeFile(join(sources, 'mediabunny.tar.gz'), archive);
   await copyInto(join(mediabunny, 'LICENSE'), join(sources, 'Mediabunny-LICENSE'));
   await copyInto(join(upstream, 'LICENSE'), join(sources, 'WebGPU-Player-LICENSE'));
   const vela = new Set([...velaSources, ...transformSources, 'modules/vela-player/web/source-transform.ts']);
