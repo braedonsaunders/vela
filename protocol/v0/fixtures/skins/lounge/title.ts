@@ -147,8 +147,8 @@ export const episode: Node = {
             display: 'flex',
             'align-items': 'center',
             'justify-content': 'center',
-            'background-color': 'rgba(10, 12, 16, 0.6)',
-            'backdrop-filter': 'blur(14px)',
+            // A solid badge, no blur: a filter per card is costly on a TV's GPU.
+            'background-color': 'rgba(10, 12, 16, 0.82)',
           },
           children: [{ type: 'icon', symbol: 'checkmark', style: { width: '50%', height: '50%' } }],
         },
