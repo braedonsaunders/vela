@@ -45,7 +45,7 @@ const plain = (text: string, press: { action: 'home' | 'search' | 'live' | 'sign
   press,
   label: text,
   when,
-  style: { display: 'block', padding: '4px', 'text-align': 'center' },
+  style: { display: 'flex', 'flex-direction': 'column', padding: '4px', 'text-align': 'center' },
   children: [{ type: 'text', text }],
 });
 
@@ -84,7 +84,8 @@ const nav: Node = {
       testId: 'skin-picker',
       when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
       style: {
-        display: 'block',
+        display: 'flex',
+        'flex-direction': 'column',
         padding: '6px 12px',
         'text-align': 'center',
         'background-color': '$field',
@@ -187,7 +188,7 @@ const card: Node = {
       press: { action: 'select', arg: '{card.kindId}' },
       label: '{card.label}',
       testId: 'title-{card.id}',
-      style: { display: 'block', flex: '1', 'min-width': '0px', padding: '4px', 'text-align': 'left' },
+      style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-width': '0px', padding: '4px', 'text-align': 'left' },
       children: [{ type: 'text', text: '{card.name}', style: { 'font-size': '16px', 'font-weight': '600' } }],
     },
     ...kinds.map(([k, s]) => column(`{s:${s}}`, '80px', [wide, { test: 'card.kind', is: 'eq', value: k }])),
@@ -250,7 +251,8 @@ const borderedStates = {
   controlStates: false,
 };
 const bordered: Style = {
-  display: 'grid',
+  display: 'flex',
+  'flex-direction': 'column',
   'justify-content': 'center',
   'align-items': 'center',
   padding: '16px',
@@ -298,7 +300,7 @@ const home: Node = {
     {
       type: 'box',
       when: [ready],
-      style: { display: 'block', padding: '24px 4% 0px' },
+      style: { display: 'flex', 'flex-direction': 'column', padding: '24px 4% 0px' },
       children: [
         {
           type: 'text',
@@ -346,7 +348,7 @@ const home: Node = {
           when: [{ test: 'env.query' }],
           press: { action: 'clearSearch' },
           label: '{s:clearSearch}',
-          style: { display: 'block', 'text-align': 'center' },
+          style: { display: 'flex', 'flex-direction': 'column', 'text-align': 'center' },
           children: [{ type: 'text', text: '{s:clear}' }],
         },
       ],
@@ -375,7 +377,7 @@ const home: Node = {
                 type: 'box',
                 press: { action: 'select', arg: '{hero.kindId}' },
                 label: '{hero.label}',
-                style: { display: 'block', 'text-align': 'left' },
+                style: { display: 'flex', 'flex-direction': 'column', 'text-align': 'left' },
                 children: [{ type: 'text', text: '{hero.name}', style: { 'font-size': '26px', 'font-weight': '700' } }],
               },
               { type: 'text', text: '{hero.facts}', style: { 'font-size': '12px' } },
@@ -472,7 +474,6 @@ const eyebrow: Style = {
   color: '$stage-quiet',
 };
 const ring = { 'box-shadow': '0px 0px 0px 2px $stage, 0px 0px 0px 4px $warm' } as Style;
-// As compiled: the height is the content's (a ghost pill's 1 px border draws outside it).
 const pill = (primary: boolean): Style =>
   ({
     display: 'flex',
@@ -480,8 +481,9 @@ const pill = (primary: boolean): Style =>
     gap: '10px',
     'align-items': 'center',
     'justify-content': 'center',
-    height: '52px',
-    'box-sizing': 'content-box',
+    // Compiled drew 52 px of content inside a ghost pill's 1 px border: 54 px border-box.
+    height: primary ? '52px' : '54px',
+    'box-sizing': 'border-box',
     'border-radius': '999px',
     ...(primary
       ? { border: 'none', 'background-color': '$stage-ink', color: '$stage-inverse', 'font-weight': '650' }
@@ -620,7 +622,7 @@ const signIn: Node[] = [
         controlStates: false,
         style: {
           ...pill(false),
-          height: '42px',
+          height: '44px',
           'padding-left': '18px',
           'padding-right': '18px',
           'align-self': 'flex-start',
@@ -861,7 +863,7 @@ const quick: Node[] = [
     style: {
       ...pill(false),
       ...centred('26px'),
-      height: '46px',
+      height: '48px',
       padding: '0px 28px',
       transition: 'background-color 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)',
     } as Style,
@@ -1043,7 +1045,8 @@ const playButton = (text: string, when: Condition[]): Node => ({
   testId: 'detail-play',
   label: text,
   style: {
-    display: 'block',
+    display: 'flex',
+    'flex-direction': 'column',
     'align-self': 'start',
     padding: '12px 20px',
     'text-align': 'center',
@@ -1061,7 +1064,7 @@ const extraButton = (text: string, ready: boolean): Node => ({
   press: { action: 'playExtra', arg: '{extra.id}' },
   label: text,
   ...(ready ? {} : { disabled: [{ test: 'extra.ready', not: true }], disabledStyle: { opacity: '0.5' } }),
-  style: { display: 'block', padding: '16px', 'text-align': 'left', 'background-color': '$rail' },
+  style: { display: 'flex', 'flex-direction': 'column', padding: '16px', 'text-align': 'left', 'background-color': '$rail' },
   ...inkWash,
   children: [{ type: 'text', text }],
 });
@@ -1189,7 +1192,7 @@ const title: Node = {
           id: '{env.route}-scroll-{env.entry}',
           role: 'region',
           label: '{s:titleDetails}',
-          style: { display: 'block', flex: '1', 'min-height': '0px', 'overflow-x': 'auto', 'overflow-y': 'auto' },
+          style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px', 'overflow-x': 'auto', 'overflow-y': 'auto' },
           children: [
             status('{s:failed}', [{ test: 'env.load', is: 'eq', value: 'failed' }], true),
             status('{s:opening}', [{ test: 'env.load', is: 'eq', value: 'loading' }]),
