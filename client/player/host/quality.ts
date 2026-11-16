@@ -38,7 +38,10 @@ export function usesPacketRuntime(context: HostContext, source: Source) {
   return (
     !context.recovery.browserFallbacks.has(routeKey(context, source)) &&
     ((source.original && canAttemptOriginal()) ||
-      (source.delivery === 'hls' && (context.session.current?.live ? hasCoreLive() : hasCoreHls())))
+      (source.delivery === 'hls' &&
+        (context.session.current?.live
+          ? (context.runtimes?.live ?? hasCoreLive())
+          : (context.runtimes?.hls ?? hasCoreHls()))))
   );
 }
 export function supportsSource(context: HostContext, source: Source) {
@@ -46,7 +49,9 @@ export function supportsSource(context: HostContext, source: Source) {
   if (source.delivery === 'file')
     return (source.original && canAttemptOriginal()) || !!context.surface.video.canPlayType(source.mime);
   return (
-    (context.session.current?.live ? hasCoreLive() : hasCoreHls()) ||
+    (context.session.current?.live
+      ? (context.runtimes?.live ?? hasCoreLive())
+      : (context.runtimes?.hls ?? hasCoreHls())) ||
     !!context.surface.video.canPlayType('application/vnd.apple.mpegurl') ||
     !!source.renditions?.some(
       (r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass()!.isTypeSupported(r.mime)),

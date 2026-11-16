@@ -1,3 +1,4 @@
+import type { BrowserRuntimeServices } from './services';
 import { CoreQuality } from '../core/quality';
 import { type OriginalBackend } from '../universal/loader';
 import type { SubtitleSession } from '../universal/subtitles/session';
@@ -6,7 +7,7 @@ import type { EngineEvent, Failure, PlaybackSession, Snapshot, Source } from '..
 import { SessionController, type Generation } from '../session';
 import { SegmentPipeline } from '../pipeline';
 import { LiveLatency } from '../live-latency';
-import type { MediaAccess } from '../media-auth';
+import type { BrowserMediaAccess } from '../media-auth';
 import { RecoveryHistory } from '../recovery-history';
 export interface NativeAudioTrack {
   id: string;
@@ -124,12 +125,13 @@ export interface HostSurfaceState {
   video: ExtendedVideo;
   fullscreenContainer: HTMLElement;
   ambient: boolean;
-  mediaAccess?: MediaAccess;
+  mediaAccess?: BrowserMediaAccess;
 }
 export interface HostEventsState {
   deliver: (event: EngineEvent) => void;
 }
 export interface HostContext {
+  readonly runtimes?: BrowserRuntimeServices;
   readonly session: HostSessionState;
   readonly media: HostMediaState;
   readonly watchdog: HostWatchdogState;

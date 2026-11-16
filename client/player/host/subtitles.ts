@@ -26,7 +26,8 @@ export async function ensureOverlay(context: HostContext): Promise<SubtitleSessi
   const current = () =>
     context.tracks.overlayJob === job && !job.signal.aborted && !context.lifecycle.disposed;
   const loading = (async () => {
-    const overlay = await loadSubtitleSession({
+    const create = context.runtimes?.createSubtitles ?? loadSubtitleSession;
+    const overlay = await create({
       surface,
       reader: original?.supportsSubtitles ? original.byteReader : undefined,
       clusterStream: original?.subtitleClusters,

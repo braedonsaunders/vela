@@ -1,5 +1,6 @@
+import type { BrowserRuntimeServices } from './host/services';
 import type { Command, EngineEvent, PlaybackSession, Snapshot } from './model';
-import type { MediaAccess } from './media-auth';
+import type { BrowserMediaAccess } from './media-auth';
 import type { HostContext, ExtendedVideo } from './host/state';
 import { retireMediaAuthorization, loadSession, updateSession } from './host/session';
 import { observationAllowed, snapshotHost } from './host/telemetry';
@@ -15,9 +16,10 @@ export class PlaybackEngine {
     deliver: (event: EngineEvent) => void,
     fullscreenContainer: HTMLElement = video,
     ambient = false,
-    mediaAccess?: MediaAccess,
+    mediaAccess?: BrowserMediaAccess,
+    runtimes?: BrowserRuntimeServices,
   ) {
-    this.context = createHostContext(video, deliver, fullscreenContainer, ambient, mediaAccess);
+    this.context = createHostContext(video, deliver, fullscreenContainer, ambient, mediaAccess, runtimes);
   }
   get video() {
     return this.context.surface.video;

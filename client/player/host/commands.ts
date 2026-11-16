@@ -2,7 +2,7 @@ import { seekFromCommand } from './command-seek';
 import { selectAudioFromCommand, selectSubtitleFromCommand } from './command-tracks';
 import { selectQualityFromCommand, switchPathFromCommand } from './command-selection';
 import { updateSubtitlePreference } from '../universal/subtitles/preferences';
-import type { Command } from '../model';
+import type { Command, Failure } from '../model';
 import type { HostContext } from './state';
 import { playMedia } from './transport';
 import { loadSession } from './session';
@@ -11,7 +11,10 @@ import { publishHostState, emitHostEvent } from './events';
 import { catchUpTarget } from './live';
 import { saveVolume, pipAvailable, fullscreenAvailable } from './platform';
 export async function executeCommand(context: HostContext, command: Command) {
-  if (context.lifecycle.disposed) return;
+  if (context.lifecycle.disposed) {
+    return { kind: 'action', message: 'Player is disposed', recoverable: false } satisfies Failure;
+  }
+  let failure: Failure | undefined;
   try {
     switch (command.type) {
       case 'play':
@@ -33,12 +36,14 @@ export async function executeCommand(context: HostContext, command: Command) {
           });
         break;
       case 'switchPath':
-        if (!(await switchPathFromCommand(context, command))) return;
+        if (!(await switchPathFromCommand(context, command))) {
+          return { kind: 'action', message: 'Command superseded', recoverable: true } satisfies Failure;
+        }
         break;
       case 'seekBy': {
         if (!Number.isFinite(command.seconds)) throw new Error('Invalid relative seek');
         const upper = readDuration(context) ?? Infinity;
-        await executeCommand(context, {
+        failure = await executeCommand(context, {
           id: command.id,
           type: 'seek',
           seconds: Math.max(
@@ -52,12 +57,14 @@ export async function executeCommand(context: HostContext, command: Command) {
         break;
       }
       case 'seek':
-        if (!(await seekFromCommand(context, command))) return;
+        if (!(await seekFromCommand(context, command))) {
+          return { kind: 'action', message: 'Command superseded', recoverable: true } satisfies Failure;
+        }
         break;
       case 'catchUp': {
         const target = catchUpTarget(context);
         if (target === null) throw new Error('No newer usable live buffer or seekable range');
-        await executeCommand(context, { id: command.id, type: 'seek', seconds: target });
+        failure = await executeCommand(context, { id: command.id, type: 'seek', seconds: target });
         break;
       }
       case 'mute':
@@ -91,13 +98,19 @@ export async function executeCommand(context: HostContext, command: Command) {
         context.tracks.overlay?.setPreferences(context.tracks.subtitleStyle);
         break;
       case 'quality':
-        if (!(await selectQualityFromCommand(context, command))) return;
+        if (!(await selectQualityFromCommand(context, command))) {
+          return { kind: 'action', message: 'Command superseded', recoverable: true } satisfies Failure;
+        }
         break;
       case 'audio':
-        if (!(await selectAudioFromCommand(context, command))) return;
+        if (!(await selectAudioFromCommand(context, command))) {
+          return { kind: 'action', message: 'Command superseded', recoverable: true } satisfies Failure;
+        }
         break;
       case 'subtitle':
-        if (!(await selectSubtitleFromCommand(context, command))) return;
+        if (!(await selectSubtitleFromCommand(context, command))) {
+          return { kind: 'action', message: 'Command superseded', recoverable: true } satisfies Failure;
+        }
         break;
       // Older shells may still send this. Latency now follows source policy
       // and sustained buffer evidence, never a viewer mode override.
@@ -123,11 +136,15 @@ export async function executeCommand(context: HostContext, command: Command) {
         break;
     }
   } catch (e) {
-    if (e instanceof DOMException && e.name === 'AbortError') return;
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      return { kind: 'action', message: 'Command superseded', recoverable: true } satisfies Failure;
+    }
+    failure = { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true };
     emitHostEvent(context, {
       type: 'error',
-      failure: { kind: 'action', message: e instanceof Error ? e.message : String(e), recoverable: true },
+      failure,
     });
   }
   publishHostState(context);
+  return failure;
 }

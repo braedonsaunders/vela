@@ -1,3 +1,23 @@
+// client/player/host/surface.ts
+function createBrowserSurface(element) {
+  const root = element.shadowRoot ?? element.attachShadow({ mode: "open" });
+  const video = document.createElement("video");
+  video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:none";
+  const surface = document.createElement("div");
+  surface.style.cssText = "position:relative;width:100%;height:100%;isolation:isolate;z-index:0;pointer-events:none";
+  const style = document.createElement("style");
+  style.textContent = ".webgpuPlayerCanvas{position:absolute;display:block;z-index:1;opacity:0;pointer-events:none}" + ".webgpuPlayerCanvas-visible{opacity:1}";
+  surface.append(video);
+  root.replaceChildren(style, surface);
+  return {
+    root,
+    video,
+    dispose() {
+      root.replaceChildren();
+    }
+  };
+}
+
 // client/player/hls.ts
 function parsePlaylist(text, base) {
   if (!text.trimStart().startsWith("#EXTM3U"))
@@ -1563,7 +1583,8 @@ async function ensureOverlay(context) {
   const original = context.media.runtime;
   const current = () => context.tracks.overlayJob === job && !job.signal.aborted && !context.lifecycle.disposed;
   const loading = (async () => {
-    const overlay = await loadSubtitleSession({
+    const create = context.runtimes?.createSubtitles ?? loadSubtitleSession;
+    const overlay = await create({
       surface,
       reader: original?.supportsSubtitles ? original.byteReader : undefined,
       clusterStream: original?.subtitleClusters,
@@ -1740,7 +1761,8 @@ async function activatePacketRuntime(context, source, position, token, retry) {
   const job = context.media.runtimeJob = new AbortController;
   context.media.runtimeGeneration = token;
   const current = () => context.media.runtimeJob === job && !job.signal.aborted && !!context.media.runtimeGeneration && context.session.controller.current(context.media.runtimeGeneration);
-  const original = await loadOriginalRuntime({
+  const create = context.runtimes?.create ?? loadOriginalRuntime;
+  const original = await create({
     surface: { container: parent, video: context.surface.video },
     signal: job.signal,
     retry,
@@ -1954,14 +1976,14 @@ function routeKey(context, source) {
   ].join(":");
 }
 function usesPacketRuntime(context, source) {
-  return !context.recovery.browserFallbacks.has(routeKey(context, source)) && (source.original && canAttemptOriginal() || source.delivery === "hls" && (context.session.current?.live ? hasCoreLive() : hasCoreHls()));
+  return !context.recovery.browserFallbacks.has(routeKey(context, source)) && (source.original && canAttemptOriginal() || source.delivery === "hls" && (context.session.current?.live ? context.runtimes?.live ?? hasCoreLive() : context.runtimes?.hls ?? hasCoreHls()));
 }
 function supportsSource(context, source) {
   if (source.edition !== context.session.current?.edition)
     return false;
   if (source.delivery === "file")
     return source.original && canAttemptOriginal() || !!context.surface.video.canPlayType(source.mime);
-  return (context.session.current?.live ? hasCoreLive() : hasCoreHls()) || !!context.surface.video.canPlayType("application/vnd.apple.mpegurl") || !!source.renditions?.some((r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass().isTypeSupported(r.mime)));
+  return (context.session.current?.live ? context.runtimes?.live ?? hasCoreLive() : context.runtimes?.hls ?? hasCoreHls()) || !!context.surface.video.canPlayType("application/vnd.apple.mpegurl") || !!source.renditions?.some((r) => mediaSourceClass() && (!codecKnown(r) || mediaSourceClass().isTypeSupported(r.mime)));
 }
 function useNativeHls(context, source) {
   const native = !!context.surface.video.canPlayType("application/vnd.apple.mpegurl");
@@ -2780,11 +2802,13 @@ async function switchPathFromCommand(context, command) {
 }
 async function selectQualityFromCommand(context, command) {
   if (command.renditionId?.startsWith("path:")) {
-    await executeCommand(context, {
+    const failure = await executeCommand(context, {
       id: command.id,
       type: "switchPath",
       pathId: command.renditionId.slice(5)
     });
+    if (failure)
+      throw new Error(failure.message);
     return true;
   }
   const chosen = context.media.source?.renditions?.find((r) => r.id === command.renditionId);
@@ -2849,8 +2873,10 @@ function updateSubtitlePreference(current, command) {
 
 // client/player/host/commands.ts
 async function executeCommand(context, command) {
-  if (context.lifecycle.disposed)
-    return;
+  if (context.lifecycle.disposed) {
+    return { kind: "action", message: "Player is disposed", recoverable: false };
+  }
+  let failure;
   try {
     switch (command.type) {
       case "play":
@@ -2872,14 +2898,15 @@ async function executeCommand(context, command) {
           });
         break;
       case "switchPath":
-        if (!await switchPathFromCommand(context, command))
-          return;
+        if (!await switchPathFromCommand(context, command)) {
+          return { kind: "action", message: "Command superseded", recoverable: true };
+        }
         break;
       case "seekBy": {
         if (!Number.isFinite(command.seconds))
           throw new Error("Invalid relative seek");
         const upper = readDuration(context) ?? Infinity;
-        await executeCommand(context, {
+        failure = await executeCommand(context, {
           id: command.id,
           type: "seek",
           seconds: Math.max(0, Math.min(upper, (context.session.pendingSeek?.position ?? readPosition(context)) + command.seconds))
@@ -2887,14 +2914,15 @@ async function executeCommand(context, command) {
         break;
       }
       case "seek":
-        if (!await seekFromCommand(context, command))
-          return;
+        if (!await seekFromCommand(context, command)) {
+          return { kind: "action", message: "Command superseded", recoverable: true };
+        }
         break;
       case "catchUp": {
         const target = catchUpTarget(context);
         if (target === null)
           throw new Error("No newer usable live buffer or seekable range");
-        await executeCommand(context, { id: command.id, type: "seek", seconds: target });
+        failure = await executeCommand(context, { id: command.id, type: "seek", seconds: target });
         break;
       }
       case "mute":
@@ -2932,16 +2960,19 @@ async function executeCommand(context, command) {
         context.tracks.overlay?.setPreferences(context.tracks.subtitleStyle);
         break;
       case "quality":
-        if (!await selectQualityFromCommand(context, command))
-          return;
+        if (!await selectQualityFromCommand(context, command)) {
+          return { kind: "action", message: "Command superseded", recoverable: true };
+        }
         break;
       case "audio":
-        if (!await selectAudioFromCommand(context, command))
-          return;
+        if (!await selectAudioFromCommand(context, command)) {
+          return { kind: "action", message: "Command superseded", recoverable: true };
+        }
         break;
       case "subtitle":
-        if (!await selectSubtitleFromCommand(context, command))
-          return;
+        if (!await selectSubtitleFromCommand(context, command)) {
+          return { kind: "action", message: "Command superseded", recoverable: true };
+        }
         break;
       case "lowDelay":
         break;
@@ -2971,14 +3002,17 @@ async function executeCommand(context, command) {
         break;
     }
   } catch (e) {
-    if (e instanceof DOMException && e.name === "AbortError")
-      return;
+    if (e instanceof DOMException && e.name === "AbortError") {
+      return { kind: "action", message: "Command superseded", recoverable: true };
+    }
+    failure = { kind: "action", message: e instanceof Error ? e.message : String(e), recoverable: true };
     emitHostEvent(context, {
       type: "error",
-      failure: { kind: "action", message: e instanceof Error ? e.message : String(e), recoverable: true }
+      failure
     });
   }
   publishHostState(context);
+  return failure;
 }
 
 // client/player/host/lifecycle.ts
@@ -3350,7 +3384,7 @@ class RecoveryHistory {
 }
 
 // client/player/host/context.ts
-function createHostContext(video, deliver, fullscreenContainer = video, ambient = false, mediaAccess) {
+function createHostContext(video, deliver, fullscreenContainer = video, ambient = false, mediaAccess, runtimes) {
   const controller = new SessionController;
   const coreQuality = new CoreQuality;
   const browserFallbacks = new Set;
@@ -3362,6 +3396,7 @@ function createHostContext(video, deliver, fullscreenContainer = video, ambient 
   const attempted = new Set;
   const liveLatency = new LiveLatency;
   const context = {
+    runtimes,
     session: {
       controller,
       current: undefined,
@@ -3474,8 +3509,8 @@ function createHostContext(video, deliver, fullscreenContainer = video, ambient 
 // client/player/engine.ts
 class PlaybackEngine {
   context;
-  constructor(video, deliver, fullscreenContainer = video, ambient = false, mediaAccess) {
-    this.context = createHostContext(video, deliver, fullscreenContainer, ambient, mediaAccess);
+  constructor(video, deliver, fullscreenContainer = video, ambient = false, mediaAccess, runtimes) {
+    this.context = createHostContext(video, deliver, fullscreenContainer, ambient, mediaAccess, runtimes);
   }
   get video() {
     return this.context.surface.video;
@@ -3619,15 +3654,7 @@ function observation(snapshot, sequence) {
 // client/player/browser-view.ts
 function createBrowserPlayerView(element, json, event) {
   const ambient = JSON.parse(json).ambient === "true";
-  const root = element.shadowRoot ?? element.attachShadow({ mode: "open" });
-  const video = document.createElement("video");
-  video.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:none";
-  const surface = document.createElement("div");
-  surface.style.cssText = "position:relative;width:100%;height:100%;isolation:isolate;z-index:0;pointer-events:none";
-  const style = document.createElement("style");
-  style.textContent = ".webgpuPlayerCanvas{position:absolute;display:block;z-index:1;opacity:0;pointer-events:none}" + ".webgpuPlayerCanvas-visible{opacity:1}";
-  surface.append(video);
-  root.replaceChildren(style, surface);
+  const { video } = createBrowserSurface(element);
   const media = new MediaAccess((request) => event(8, JSON.stringify(request)));
   const handle = {
     media,

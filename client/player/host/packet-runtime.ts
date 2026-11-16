@@ -27,7 +27,8 @@ export async function activatePacketRuntime(
     !job.signal.aborted &&
     !!context.media.runtimeGeneration &&
     context.session.controller.current(context.media.runtimeGeneration);
-  const original = await loadOriginalRuntime({
+  const create = context.runtimes?.create ?? loadOriginalRuntime;
+  const original = await create({
     surface: { container: parent, video: context.surface.video },
     signal: job.signal,
     retry,

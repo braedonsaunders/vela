@@ -49,11 +49,12 @@ export async function selectQualityFromCommand(
   >,
 ) {
   if (command.renditionId?.startsWith('path:')) {
-    await executeCommand(context, {
+    const failure = await executeCommand(context, {
       id: command.id,
       type: 'switchPath',
       pathId: command.renditionId.slice(5),
     });
+    if (failure) throw new Error(failure.message);
     return true;
   }
   const chosen = context.media.source?.renditions?.find((r) => r.id === command.renditionId);

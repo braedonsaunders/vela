@@ -1,9 +1,10 @@
+import type { BrowserRuntimeServices } from './services';
 import { CoreQuality } from '../core/quality';
 import { readSubtitlePreferences } from '../universal/subtitles/preferences';
 import type { EngineEvent } from '../model';
 import { SessionController } from '../session';
 import { LiveLatency } from '../live-latency';
-import type { MediaAccess } from '../media-auth';
+import type { BrowserMediaAccess } from '../media-auth';
 import { RecoveryHistory } from '../recovery-history';
 import type { HostContext, ExtendedVideo } from './state';
 import { checkWaiting } from './watchdog';
@@ -15,7 +16,8 @@ export function createHostContext(
   deliver: (event: EngineEvent) => void,
   fullscreenContainer: HTMLElement = video,
   ambient = false,
-  mediaAccess?: MediaAccess,
+  mediaAccess?: BrowserMediaAccess,
+  runtimes?: BrowserRuntimeServices,
 ): HostContext {
   const controller = new SessionController();
   const coreQuality = new CoreQuality();
@@ -28,6 +30,7 @@ export function createHostContext(
   const attempted = new Set<string>();
   const liveLatency = new LiveLatency();
   const context: HostContext = {
+    runtimes,
     session: {
       controller: controller,
       current: undefined,
