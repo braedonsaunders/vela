@@ -341,3 +341,21 @@ test('every skin has one full-row play target per episode and no separate up-nex
     expect(episodes).toBeGreaterThan(0);
   }
 });
+
+test('library genre view appears only when actual genre choices are available', async () => {
+  const { holds } = await import('../src/resolve');
+  type Env = import('../src/vocabulary').Env;
+  const find = (node: RNode): RNode | undefined => {
+    if (node.id === 'vela-library-view-genres') return node;
+    if (node.kind === 'box') for (const child of node.children) { const found = find(child); if (found) return found; }
+    if (node.kind === 'repeat') return find(node.item);
+    return undefined;
+  };
+  for (const [, doc] of documents) {
+    const tab = find(resolveDocument(doc, 1920).routes.library!);
+    expect(tab).toBeDefined();
+    const env = (genres: { id: string; label: string }[]) => ({ library: { extras: { genres } } }) as unknown as Env;
+    expect(holds(tab!.when, { index: 0 }, env([]))).toBe(false);
+    expect(holds(tab!.when, { index: 0 }, env([{ id: 'Drama', label: 'Drama' }]))).toBe(true);
+  }
+});

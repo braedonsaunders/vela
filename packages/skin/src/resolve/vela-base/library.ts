@@ -179,9 +179,10 @@ export const sortControls: Node[] = [
 const viewTab = (id: string, label: string): Node => {
   const on: Condition[] = [{ test: 'library.view', is: 'eq', value: id }];
   const style: Style = { position: 'relative', padding: '10px 14px', 'flex-shrink': '0', color: '$ui.inkSecondary', 'font-size': '14px', 'border-radius': '$ui.radiusControl' };
-  const available = id === 'recommended' ? 'library.canRecommend' : id === 'collections' ? 'library.canCollections' : id === 'genres' ? 'library.genresCount' : '';
-  const unavailable: Condition[] = available ? [{ test: available, ...(id === 'genres' ? { is: 'eq' as const, value: '0' } : { not: true }) }] : [];
-  return { type: 'box', id: `vela-library-view-${id}`, ...(available ? { disabled: unavailable, disabledStyle: { opacity: '0.45' } } : {}), role: 'tab', press: { action: 'libraryView', arg: id }, label, a11y: { selected: on }, style,
+  const available = id === 'recommended' ? 'library.canRecommend' : id === 'collections' ? 'library.canCollections' : '';
+  const unavailable: Condition[] = available ? [{ test: available, not: true }] : [];
+  // Filtering support alone does not provide the choices needed to browse genres.
+  return { type: 'box', id: `vela-library-view-${id}`, ...(id === 'genres' ? { when: [{ test: 'library.genresCount', is: 'gt' as const, value: '0' }] } : available ? { disabled: unavailable, disabledStyle: { opacity: '0.45' } } : {}), role: 'tab', press: { action: 'libraryView', arg: id }, label, a11y: { selected: on }, style,
     states: [{ when: on, style: { ...style, color: '$ui.ink', 'background-color': '$ui.control' } }],
     focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: label }] };
 };

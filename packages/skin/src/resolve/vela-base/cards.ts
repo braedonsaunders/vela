@@ -310,6 +310,8 @@ export const numeral = (ten: boolean): Node => ({
     'font-family': '"Arial Black", "Helvetica Neue", Arial, sans-serif',
     'font-weight': '900',
     'font-size': '348px',
+    // The two-digit rank must not wrap and double the native shelf's height.
+    'white-space': 'nowrap',
     'line-height': '0.74',
     'letter-spacing': ten ? '-0.2em' : '-0.09em',
     color: '$ui.page',
