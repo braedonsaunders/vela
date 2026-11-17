@@ -1,3 +1,4 @@
+import { episodePage } from '../../../episode-page';
 // Lounge: the living-room skin, a skin document (protocol/v0/skin.ts). Ten-foot type,
 // TV overscan margins and a remote-first focus language: the focused poster lifts,
 // grows and glows, and the full-screen backdrop behind the rows belongs to the title
@@ -31,7 +32,7 @@ const lounge: SkinDocument = {
   renderer: 16,
   id: 'lounge',
   name: 'Lounge',
-  version: '1.0.8',
+  version: '1.0.9',
   tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.3/preview.jpg',
   swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],
@@ -176,7 +177,7 @@ const lounge: SkinDocument = {
   },
   templates: { poster, gridPoster, wide, ranked, row, relatedRow },
   slots: { shell, home },
-  routes: { title, library, collection, auth },
+  routes: { title: episodePage(title), library, collection, auth },
   // Lounge's ground and ink behind every screen, the launch splash included.
   traits: { page: '#05060a', ink: '#f5f1e9' },
   // The title page is a full screen of its own: no frame drawn over home behind it.

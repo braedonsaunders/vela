@@ -312,3 +312,30 @@ test('legacy summary bindings expand too, and shared parts retain caller typogra
     expect(tree.children[1]!.states[0]!.layer.style['line-clamp']).toBe('4');
   }
 });
+
+test('every skin has one full-row play target per episode and no separate up-next panel', () => {
+  for (const [, doc] of documents) {
+    const title = resolveDocument(doc, 1920, 'en').routes.title;
+    let episodes = 0;
+    const presses = (n: RNode): number => (n.kind === 'box' ? (n.press ? 1 : 0) + n.children.reduce((sum, c) => sum + presses(c), 0) : n.kind === 'repeat' ? presses(n.item) : 0);
+    const walk = (n: RNode) => {
+      if (n.kind === 'repeat') {
+        expect(n.over).not.toBe('detail.upNext');
+        if (n.over === 'detail.episodes') {
+          episodes++;
+          expect(n.item.kind).toBe('box');
+          if (n.item.kind === 'box') {
+            expect(n.item.press?.action).toBe('play');
+            expect(n.item.motion).toBeUndefined();
+            expect(presses(n.item), doc.id).toBe(1);
+            expect(n.item.base.style.width).toBe('100%');
+            expect(n.item.base.focus).toBeDefined();
+          }
+        }
+        walk(n.item);
+      } else if (n.kind === 'box') n.children.forEach(walk);
+    };
+    if (title) walk(title);
+    expect(episodes).toBeGreaterThan(0);
+  }
+});

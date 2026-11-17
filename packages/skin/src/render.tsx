@@ -1,3 +1,4 @@
+import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritRows } from './inherit-rows';
 import { hasFlowHeader } from './resolve/inherit';
 // The skin document renderer: one recursive component per node kind over a resolved document
@@ -82,6 +83,7 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
 function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: SkinHost; node: RNode; after?: RNode; hideLibraryViews?: boolean }) {
   useFocusStyles();
   const focus = useRouteFocus();
+  const episodeNav = useMemo(episodeNavigation, []);
   const loading = useRef<SkinHost | null>(null);
   const gridWaiting = useRef(false);
   const [, reveal] = useState(0);
@@ -124,7 +126,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
   return (
     <View style={{ flex: 1 }}>
       <Host.Provider value={host}>
-        <RouteFocusContext.Provider value={focus}>
+        <EpisodeNavigation.Provider value={episodeNav}><RouteFocusContext.Provider value={focus}>
           <RouteLayout.Provider value={layout}>
             <InstantContent.Provider value={section && host.env.load === 'ready'}>
               <HiddenLibraryNav.Provider value={hideLibraryViews || loadingLibraryNav}>
@@ -134,7 +136,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
               </HiddenLibraryNav.Provider>
             </InstantContent.Provider>
           </RouteLayout.Provider>
-        </RouteFocusContext.Provider>
+        </RouteFocusContext.Provider></EpisodeNavigation.Provider>
       </Host.Provider>
       {cover || leaving ? (
         <SkeletonCover key={cover ? 'held' : 'leaving'} host={(cover ?? leaving)!} node={node} ground={ground}
@@ -329,9 +331,11 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const scrollRef = useRef<Scroller>(null);
   const buttonRef = useRef<Focusable | null>(null);
   const guideRef = useRef<Focusable | null>(null);
+  const episodeUnregister = useRef<(() => void) | undefined>(undefined);
   const band = useContext(Band);
   const stop = useContext(ReadingStop);
   const routeFocus = useRouteFocusContext();
+  const episodeNav = useContext(EpisodeNavigation);
   const reveal = useContext(RevealContext);
   const offsetY = useRef(0);
   const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY) : null), [route]);
@@ -449,13 +453,19 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     const press = node.press;
     const registerButton = focusTarget(a11y.nativeID);
     const bindButton = (target: Focusable | null) => {
+      episodeUnregister.current?.();
       buttonRef.current = target;
       const unregister = registerButton(target);
       const untrack = press ? trackButton(target, `${press.action}:${fill(press.arg, ctx, env)}`) : undefined;
+      const arg = press ? fill(press.arg, ctx, env) : '';
+      const kind = (node.id && fill(node.id, ctx, env).startsWith('episode-')) ? 'episode' : press?.action === 'select' && arg.includes('|season|') ? 'season' : press?.action === 'playExtra' ? 'extra' : undefined;
+      const unepisode = target && kind && !disabled ? episodeNav?.register(target, kind, ctx.index) : undefined;
+      episodeUnregister.current = unepisode;
       if (target && press) routeFocus?.offer(target, press.action);
       return () => {
         unregister?.();
         untrack?.();
+        unepisode?.();
       };
     };
     const onPress = press && (() => {
@@ -470,12 +480,13 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     const button = press ? (
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} disabled={disabled}
         focusable={selectable(node)}
-        {...(web ? { dataSet: { velaFocus: 'frame' } } : {})}
+        {...(web ? { dataSet: { velaFocus: 'frame' }, onKeyDown: (event) => { if (buttonRef.current) episodeNav?.key(buttonRef.current, { key: (event as unknown as { key: string }).key ?? (event.nativeEvent as unknown as { key: string }).key, preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation() }); } } : {})}
         {...(web && a11y.accessibilityState?.selected !== undefined ? { 'aria-selected': a11y.accessibilityState.selected } : {})}
         onPress={onPress}
         onFocus={event => {
           set('focus', isFocusVisible(event.currentTarget));
           routeFocus?.focused();
+          if (buttonRef.current) episodeNav?.focused(buttonRef.current);
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
         onBlur={() => set('focus', false)}
@@ -485,7 +496,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
         accessibilityRole={a11y.accessibilityRole ?? 'button'} accessibilityLabel={a11y.accessibilityLabel} accessibilityState={a11y.accessibilityState}
         testID={a11y.testID} />
     ) : null;
-    const guide = tvGuide(node, env.flags, band);
+    const guide = node.press ? undefined : tvGuide(node, env.flags, band);
     // A reading stop takes focus without doing anything, so the remote can scroll to it.
     const stopProps = stop ? {
       focusable: true,
@@ -899,6 +910,7 @@ function Widget({ node, ctx }: { node: Extract<RNode, { kind: 'widget' }>; ctx: 
   const [ui, setUi] = useState<Interaction>({ hover: false, focus: false, active: false });
   const group = useContext(Group);
   const routeFocus = useRouteFocusContext();
+  const episodeNav = useContext(EpisodeNavigation);
   const interaction = useMemo(() => ({
     report(kind: 'hover' | 'focus', on: boolean) {
       setUi(u => (u[kind] === on ? u : { ...u, [kind]: on }));

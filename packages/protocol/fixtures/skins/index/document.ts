@@ -1,3 +1,4 @@
+import { episodePage } from '../../../episode-page';
 // Index: a quiet printed catalogue (light paper, serif type, plain lists), as a skin
 // document (protocol/v0/skin.ts). It reproduces the compiled Index element for element:
 // a reading rail beside the page on wide screens and a wrapped bar above it on phones,
@@ -10,7 +11,7 @@
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.6';
+const version = '1.0.7';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -1446,7 +1447,7 @@ export default {
   },
   templates: { card, row },
   slots: { shell, home },
-  routes: { title, library, collection, auth },
+  routes: { title: episodePage(title, { card }), library, collection, auth },
   // Below 900 px the title page covers home; from 900 it stacks beside a 360 px home pane.
   detail: { from: 900, small: 'fullscreen', wide: 'stack', split: '360', frame: { flat: true } },
 } satisfies SkinDocument;

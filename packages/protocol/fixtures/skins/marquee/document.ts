@@ -1,3 +1,4 @@
+import { episodePage } from '../../../episode-page';
 // Marquee as a skin document (protocol/v0/skin.ts): the parts from the modules beside this
 // file, with the palette, copy and motion they share.
 import type { SkinDocument } from '../../../skin';
@@ -222,7 +223,7 @@ export default {
   },
   templates: { card, gridCard, wideCard, rankedCard, row, homeRow },
   slots: { shell, home },
-  routes: { title, library: libraryRoute, auth: authRoute, collection: collectionRoute },
+  routes: { title: episodePage(title), library: libraryRoute, auth: authRoute, collection: collectionRoute },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },
   // Sections switch in place (no sideways pan), and pages run under an opaque bar, as compiled.
   traits: { barMask: false, panSections: false, page: '#1f2023', ink: '#eeeeee', splashOnPaper: false },

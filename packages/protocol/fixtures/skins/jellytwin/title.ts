@@ -544,7 +544,7 @@ const extraFace = (ready: boolean): Node =>
     when: [{ test: 'extra.ready', not: !ready }],
     press: { action: 'playExtra', arg: '{extra.id}' },
     label: ready ? '{s:playExtra}' : '{s:extraNotAvailable}',
-    disabled: ready ? [] : [{ test: 'extra.ready', not: true }],
+    disabled: ready ? undefined : [{ test: 'extra.ready', not: true }],
     style: {
       position: 'relative',
       width: '60px',

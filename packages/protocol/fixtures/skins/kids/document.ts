@@ -1,3 +1,4 @@
+import { episodePage } from '../../../episode-page';
 // Kids, a skin document (protocol/v0/skin.ts, docs/skin-schema.md): a bright, friendly
 // family skin. Big rounded sticker tiles over a daylight sky, three-way navigation
 // (Watch, Shows, Movies), very little text, gentle bouncy motion that goes calm under
@@ -6,7 +7,7 @@
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.6';
+const version = '1.2.7';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -468,7 +469,7 @@ const kids: SkinDocument = {
   },
   templates: { card, row },
   slots: { shell, home },
-  routes: { title },
+  routes: { title: episodePage(title) },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
 };
 export default kids;

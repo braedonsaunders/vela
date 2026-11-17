@@ -1,3 +1,4 @@
+import { episodePage } from '../../../protocol/episode-page';
 // The Vela base: the built-in document every skin document inherits route by route (decision 7).
 // Its look is compiled Cinematic's, written on the document's ui tokens ($ui.*), so each skin
 // wears it in its own colours until it draws a route of its own. Its parts live in vela-base/.
@@ -175,7 +176,7 @@ export const velaBase: SkinDocument = {
   },
   templates: { velaSummary: summary, velaCastPerson: castPerson, velaPersonCard: gridCard, velaPersonClose: (((title as BoxNode).children![0] as BoxNode).children![0] as BoxNode).children![0]!, velaEpisodeContext: episodeContext, velaCardContext: cardContext, velaCard: card, velaRow: row, velaRelatedRow: relatedRow, velaLibraryViews: libraryViews, velaLibraryFilters: libraryFilters, velaLibraryAlternative: libraryAlternative },
   slots: { shell, home },
-  routes: { title, person: personRoute, library, auth, collection, search },
+  routes: { title: episodePage(title), person: personRoute, library, auth, collection, search },
   // Home and the title page draw their own loading and failure; home fades under the floating bar.
   status: true,
   traits: { barMask: true },

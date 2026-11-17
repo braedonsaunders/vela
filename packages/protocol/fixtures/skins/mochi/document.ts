@@ -1,3 +1,4 @@
+import { episodePage } from '../../../episode-page';
 // Mochi, as a skin document (protocol/v0/skin.ts, docs/skin-schema.md): the anime skin.
 // Pastel pink paper with a dot pattern, sticker cards with hard pastel shadows that hop
 // in and tilt toward the viewer, pixel-art icons and type, and Mochi, a round rice-cake
@@ -415,6 +416,6 @@ export default {
   status: true,
   templates: each({ card, gridCard, shelf: shelf(true), relatedShelf: shelf(false) }),
   slots: each({ shell, home }),
-  routes: each({ title, library, collection, auth }),
+  routes: each({ title: episodePage(title), library, collection, auth }),
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { scrim: '$scrim' } },
 } as unknown as SkinDocument;

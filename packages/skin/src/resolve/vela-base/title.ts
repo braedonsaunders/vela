@@ -603,110 +603,6 @@ export const episodeRow: Node = {
   ],
 };
 
-// The next episode to watch, as a glass card above the list.
-export const upNext: Node = {
-  type: 'repeat',
-  over: 'detail.upNext',
-  item: {
-    type: 'box',
-    style: {
-      display: 'flex',
-      'flex-direction': 'row',
-      'align-items': 'center',
-      gap: '24px',
-      padding: '20px',
-      'border-radius': '20px',
-      'background-color': '$ui.glass',
-      border: '1px solid $ui.glassEdge',
-      'box-shadow': 'inset 0px 1px 0px $ui.glassEdgeStrong, 0px 24px 60px -20px $ui.shadow',
-    },
-    small: { 'flex-direction': 'column', 'align-items': 'stretch', gap: '16px', padding: '16px' },
-    children: [
-      {
-        type: 'image',
-        when: [{ test: 'card.backdrop' }],
-        src: '{card.backdrop}',
-        alt: '',
-        style: {
-          width: '220px',
-          'aspect-ratio': '16 / 9',
-          'object-fit': 'cover',
-          'border-radius': cardRadius(2),
-          'flex-shrink': '0',
-        },
-        small: { width: '100%' },
-      },
-      {
-        type: 'box',
-        style: { display: 'flex', 'flex-direction': 'column', gap: '8px', flex: '1', 'min-width': '0px' },
-        children: [
-          {
-            type: 'text',
-            text: '{episode.upNextLabel}',
-            style: { ...eyebrow, 'font-size': '10px', color: '$ui.accent' },
-          },
-          {
-            type: 'text',
-            text: '{episode.numberTitle}',
-            role: 'heading',
-            level: 3,
-            style: { ...display, 'font-size': '30px' },
-            small: { 'font-size': '24px' },
-          },
-          {
-            type: 'text',
-            when: [{ test: 'card.facts' }],
-            text: '{card.facts}',
-            style: { 'font-size': '13px', color: '$ui.inkSecondary' },
-          },
-        ],
-      },
-      {
-        type: 'box',
-        press: { action: 'play', arg: '{card.id}' },
-        label: '{episode.playLabel}',
-        style: {
-          position: 'relative',
-          display: 'flex',
-          'flex-direction': 'row',
-          'align-items': 'center',
-          'justify-content': 'center',
-          'align-self': 'center',
-          height: '50px',
-          'box-sizing': 'border-box',
-          'padding-left': '22px',
-          'padding-right': '26px',
-          'flex-shrink': '0',
-          'border-radius': '$ui.radiusControl',
-          'background-color': '$ui.ink',
-          color: '$ui.inkInverse',
-          'font-weight': '650',
-          transition: 'background-color 180ms linear',
-        },
-        small: { 'align-self': 'stretch' },
-        hover: { 'background-color': '$ui.inkHover' },
-        focus: { 'box-shadow': focusRing },
-        children: [
-          {
-            type: 'box',
-            style: {
-              display: 'flex',
-              'flex-direction': 'row',
-              gap: '10px',
-              'align-items': 'center',
-              'justify-content': 'center',
-            },
-            children: [
-              { type: 'icon', symbol: 'play-fill', style: { width: '16px', height: '16px' } },
-              { type: 'text', text: '{episode.playLabel}', style: { 'font-size': '15px' } },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-};
-
 export const seasonTab = (on: boolean): Node => ({
   type: 'box',
   when: [{ test: 'season.on', not: !on }],
@@ -807,7 +703,6 @@ export const episodes: Node = {
         },
       ],
     },
-    upNext,
     // The episodes sit flush (each row draws its own padding and rule).
     {
       type: 'box',

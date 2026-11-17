@@ -1,3 +1,4 @@
+import { episodePage } from '../../../episode-page';
 // Jelly Twin as a skin document (protocol/v0/skin.ts): a familiar home-media client,
 // near-black with cyan accents and card rows. It reproduces the compiled skin it replaces
 // node for node: the header with section tabs and a slide-in drawer, the featured banner,
@@ -133,6 +134,6 @@ export default {
   status: true,
   traits: { barMask: false, panSections: true, page: '#101010', ink: '#ffffffde' },
   slots: { shell, home },
-  routes: { title, library, auth, collection },
+  routes: { title: episodePage(title), library, auth, collection },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },
 } satisfies SkinDocument;
