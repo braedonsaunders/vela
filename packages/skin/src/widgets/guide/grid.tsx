@@ -44,14 +44,16 @@ const MARGIN = 150;
 export function GuideGrid(props: GridProps) {
   const { look, model, rows, small, zoom, still, selected, landing } = props;
   const scale = minuteWidth(small, zoom);
-  const row = rowHeight(small);
-  const rail = railWidth(small);
+  const row = rowHeight(small, Platform.isTV);
+  const rail = railWidth(small, Platform.isTV);
   const width = model.minutes * scale;
   const [body, setBody] = useState({ width: 0, height: 0 });
   const visibleMinutes = Math.max(30, (body.width - rail) / scale);
 
   const scrollX = useSharedValue(0);
   const scrollY = useSharedValue(0);
+  const lastColumn = useSharedValue(-1);
+  const lastRowBucket = useSharedValue(-1);
   const [column, setColumn] = useState(-1);
   const focusRow = landing.channelId ? rows.findIndex(c => c.id === landing.channelId) : -1;
   const [rowBase, setRowBase] = useState(() => Math.max(0, focusRow - 1));
@@ -65,7 +67,8 @@ export function GuideGrid(props: GridProps) {
     {
       onScroll: e => {
         scrollX.value = e.contentOffset.x;
-        runOnJS(setColumn)(Math.floor(e.contentOffset.x / scale / 30));
+        const next = Math.floor(e.contentOffset.x / scale / 30);
+        if (next !== lastColumn.value) { lastColumn.value = next; runOnJS(setColumn)(next); }
       },
     },
     [scale],
@@ -74,7 +77,8 @@ export function GuideGrid(props: GridProps) {
     {
       onScroll: e => {
         scrollY.value = e.contentOffset.y;
-        runOnJS(setRowBase)(Math.floor(e.contentOffset.y / row / 4) * 4);
+        const next = Math.floor(e.contentOffset.y / row / 4) * 4;
+        if (next !== lastRowBucket.value) { lastRowBucket.value = next; runOnJS(setRowBase)(next); }
       },
     },
     [row],

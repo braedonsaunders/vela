@@ -15,7 +15,7 @@ export function Glyph({ name, size, color }: { name: string; size: number; color
   const symbol = SYMBOLS[name];
   if (!symbol) return null;
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" pointerEvents="none">
+    <Svg width={Platform.isTV ? size * 1.3 : size} height={Platform.isTV ? size * 1.3 : size} viewBox="0 0 24 24" pointerEvents="none">
       {symbol.paths.map((d, i) =>
         symbol.stroke ? (
           <Path key={i} d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
@@ -46,7 +46,7 @@ export function Line({ look, size, weight = 400, color, lines = 1, tabular, styl
   return (
     <Text
       numberOfLines={lines || undefined}
-      style={[face, { fontSize: size, color: color ?? look.ink }, variant, style]}
+      style={[face, { fontSize: Platform.isTV ? size * 1.3 : size, color: color ?? look.ink }, variant, style]}
     >
       {children}
     </Text>

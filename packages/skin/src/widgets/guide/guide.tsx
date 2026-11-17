@@ -4,7 +4,7 @@ import { hasFlowHeader } from '../../resolve/inherit';
 // owner's named Guides, then the EPG grid scrolling inside its panel. Phones open on the On now
 // list and switch to the grid. Its look comes from the document's `ui` block.
 import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
-import { View, type ViewStyle } from 'react-native';
+import { Platform, View, type ViewStyle } from 'react-native';
 import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@vela/core';
 import { useHost, type WidgetProps } from '../../host';
 import type { LiveController, LiveView } from './controller';
@@ -111,8 +111,8 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     if (runOff !== 0) pickDay(model.day + runOff);
   };
 
-  const headerHeight = small ? 196 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
-  const tileHeight = small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
+  const tileHeight = Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
+  const headerHeight = Platform.isTV ? tileHeight + 32 : small ? 196 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
   const landing = {
     minute: handOff && handOff.minute >= 0 ? handOff.minute : model.landing,
     channelId: handOff?.channelId ?? '',

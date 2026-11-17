@@ -11,12 +11,12 @@ export function minuteWidth(small: boolean, zoom: Zoom): number {
   return zoom === 0 ? 4 : zoom === 2 ? 9 : 6;
 }
 
-export function rowHeight(small: boolean): number {
-  return small ? 68 : 72;
+export function rowHeight(small: boolean, tv = false): number {
+  return tv ? 96 : small ? 68 : 72;
 }
 
-export function railWidth(small: boolean): number {
-  return small ? 84 : 264;
+export function railWidth(small: boolean, tv = false): number {
+  return tv ? 320 : small ? 84 : 264;
 }
 
 /** The page gutter: 16 on phones, else 4% of the width, at least 28. */
