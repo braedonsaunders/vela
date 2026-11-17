@@ -1,6 +1,6 @@
-// tvOS gives a text field a rounded platter of its own (a dark capsule, white while focused) inside
-// whatever box the skin draws around it: a box in a box. React Native's fields go without it; the
-// skin draws the field and its focus ring. Installed once, as the module loads.
+// tvOS draws a text field on a material platter of its own (a blurred, tinted capsule, white while
+// focused) inside whatever box the skin draws around it: a box in a box. React Native's fields go
+// without it; the skin draws the field and its focus ring. Installed once, as the module loads.
 import ObjectiveC
 import UIKit
 
@@ -13,18 +13,30 @@ enum TVTextFields {
             return
         }
         installed = true
-        // The border style alone leaves tvOS's platter, which UIKit lays out as a private background
-        // subview; it is hidden after every layout, which is when UIKit brings it back.
-        hook(field, #selector(UIView.didMoveToWindow)) { ($0 as? UITextField)?.borderStyle = .none }
+        // The platter is a UIVisualEffectView inside the field's floating content view, holding the
+        // text in its content view: its effect is cleared (the text stays) after every layout, which
+        // is when UIKit sets it up again.
         hook(field, #selector(UIView.layoutSubviews)) { object in
-            guard let text = object as? UITextField else {
-                return
-            }
-            for view in text.subviews where NSStringFromClass(type(of: view)).contains("Background") {
-                view.isHidden = true
+            if let view = object as? UIView {
+                clearPlatter(in: view)
             }
         }
         #endif
+    }
+
+    private static func clearPlatter(in view: UIView) {
+        for child in view.subviews {
+            if let effect = child as? UIVisualEffectView {
+                if effect.effect != nil {
+                    effect.effect = nil
+                }
+                for layer in effect.subviews where layer !== effect.contentView {
+                    layer.isHidden = true
+                }
+            } else {
+                clearPlatter(in: child)
+            }
+        }
     }
 
     /// Runs `after` once the class's own (or inherited) implementation of `selector` has run.
