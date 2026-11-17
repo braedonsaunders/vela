@@ -51,12 +51,12 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     progressSeconds: position,
     played: title.watch?.played ?? false,
     showName: title.showName ?? '',
-    episodeContext: title.kind === 'episode' ? [
+    episodeContext: [
       title.showName,
       title.seasonNumber !== undefined && title.episodeNumber !== undefined
         ? msg('detail.seasonEpisode', { season: year(title.seasonNumber), episode: year(title.episodeNumber) })
         : title.episodeNumber !== undefined ? msg('marquee.episodeNumber', { episode: year(title.episodeNumber) }) : '',
-    ].filter(Boolean).join(' · ') : '',
+    ].filter(Boolean).join(' · '),
     seasonId: title.seasonId ?? '',
     seasonNumber: title.seasonNumber ?? 0,
     episodeNumber: title.episodeNumber ?? 0,
@@ -68,7 +68,6 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     episodeNumberLabel: title.episodeNumber ? number(title.episodeNumber) : '',
     facts: [title.kind === 'episode' ? airDateLabel(title.airDate) || yearLabel : yearLabel, title.rating ?? '', durationLabel].filter(Boolean).join(' · '),
     ...pictures(title.artwork, images, artWidth, backdropWidth, title.kind === 'episode'),
-    ...(title.kind === 'episode' ? { logo: '' } : {}),
     receipt,
   };
 }

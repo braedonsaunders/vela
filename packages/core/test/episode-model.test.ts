@@ -15,7 +15,7 @@ test('episode details show series context including specials, with separate port
   expect(model.backdrop).toContain('/backdrop');
   expect(card(title).backdrop).toContain('/still');
   expect(card({ ...title, showName: undefined, seasonNumber: undefined }).episodeContext).toBe('Episode 3');
-  expect(card({ ...title, kind: 'movie' }).episodeContext).toBe('');
+  expect(card({ ...title, kind: 'movie' }).episodeContext).toBe('Meridian Station · Season 0, Episode 3');
   expect(card({ ...title, kind: 'movie' }).backdrop).toContain('/backdrop');
 });
 

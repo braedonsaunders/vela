@@ -140,3 +140,15 @@ test('a missing Ether parent leaves the episode detail available', async () => {
   });
   expect((await ether().detail('episode')).title.id).toBe('episode');
 });
+
+test('Ether passes plugin title names, logos and context through without kind-based substitution', async () => {
+  const { detailModel } = await import('../src/discovery/models');
+  const title = { id: 'plugin', kind: 'plugin-audiobook', name: 'A plugin title', showName: 'A series', seasonNumber: 2, episodeNumber: 3, genres: [], summary: '', artwork: [
+    { id: 'logo', kind: 'logo', tag: '', sizes: [{ width: 500, height: 120, url: 'https://ether.example/logo.png' }] },
+  ] };
+  routeFetch({ 'GET /vela/v0/titles/plugin': { title, extras: [], chapters: [], cast: [] } });
+  const model = detailModel(await ether().detail('plugin')).title[0]!;
+  expect(model.name).toBe('A plugin title');
+  expect(model.logo).toBe('https://ether.example/logo.png');
+  expect(model.episodeContext).toBe('A series · Season 2, Episode 3');
+});

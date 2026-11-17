@@ -6,7 +6,7 @@
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.1';
+const version = '1.2.2';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -343,7 +343,7 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
         { type: 'image', when: [{ test: 'detail.backdrop', not: true }, { test: 'detail.poster' }], src: '{detail.poster}', alt: '', style: { position: 'absolute', top: '-20%', left: '-20%', width: '140%', height: '140%', 'object-fit': 'cover', filter: 'blur(60px) saturate(1.5)' } },
         { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'background-image': 'linear-gradient(0deg, rgba(12, 20, 52, 0.72) 0%, rgba(12, 20, 52, 0) 52%)' } },
         { type: 'box', style: { position: 'absolute', left: '40px', right: '40px', bottom: '34px', display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-start' }, small: { left: '20px', right: '20px', bottom: '20px' }, children: [
-          { type: 'image', when: [{ test: 'detail.logo' }], src: '{detail.logo}', alt: '{detail.name}', role: 'heading', level: 1, motion: 'zoomIn', style: { height: '128px', width: 'auto', 'max-width': 'min(460px, 80%)', 'object-fit': 'contain' }, small: { height: '76px' } },
+          { type: 'image', when: [{ test: 'detail.logo' }], src: '{detail.logo}', alt: '{detail.name}', role: 'heading', level: 1, motion: 'zoomIn', style: { height: '128px', width: '80%', 'max-width': 'min(460px, 80%)', 'object-fit': 'contain' }, small: { height: '76px' } },
           { type: 'text', when: [{ test: 'detail.logo', not: true }], text: '{detail.name}', role: 'heading', level: 1, motion: 'zoomIn', style: { 'font-size': '60px', 'font-weight': '800', 'line-height': '1', color: '#FFFFFF', 'text-shadow': '0px 4px 0px rgba(12, 20, 52, 0.35)', 'line-clamp': '2' }, small: { 'font-size': '34px' } },
         { type: 'use', template: 'velaEpisodeContext' },
         ] },

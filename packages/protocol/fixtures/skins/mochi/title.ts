@@ -401,7 +401,7 @@ export const titleHead: Node = {
               level: 1,
               style: {
                 height: '80px',
-                width: 'auto',
+                width: '80%',
                 'max-width': '85%',
                 'object-fit': 'contain',
                 'align-self': 'flex-start',

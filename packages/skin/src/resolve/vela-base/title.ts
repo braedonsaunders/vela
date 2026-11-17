@@ -220,7 +220,7 @@ export const band: Node = {
           motion: enter(200),
           style: {
             height: '150px',
-            width: 'auto',
+            width: '80%',
             'max-width': 'min(560px, 80%)',
             'object-fit': 'contain',
             'align-self': 'flex-start',

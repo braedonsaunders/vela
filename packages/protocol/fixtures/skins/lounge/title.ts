@@ -390,7 +390,7 @@ export const titleCopy: Node = {
       motion: 'copy1',
       style: {
         height: 'clamp(120px, 11vw, 210px)',
-        width: 'auto',
+        width: '80%',
         'max-width': 'min(640px, 80%)',
         'object-fit': 'contain',
         'align-self': 'flex-start',

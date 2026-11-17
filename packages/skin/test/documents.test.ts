@@ -118,3 +118,45 @@ test('inherited library reserves header space only for overlay navigation', asyn
   expect(topPadding(broadcast)).toEqual(['0px', '0px']);
   expect(topPadding(lateNight)).toEqual(['84px', '104px']);
 });
+
+test('every detail header is field-driven for movies, episodes and plugin media, with or without logos', async () => {
+  const { detailModel } = await import('../../core/src/discovery/models');
+  const { fill, holds } = await import('../src/resolve');
+  type Env = import('../src/vocabulary').Env;
+  type Title = import('../../core/src/wire').Title;
+  for (const kind of ['movie', 'episode', 'plugin-audiobook']) {
+    for (const logo of [false, true]) {
+      for (const context of [false, true]) {
+        const name = `${kind} title`;
+        const data: Title = { id: 'probe', kind: kind as Title['kind'], name, summary: '', genres: [],
+          ...(context ? { showName: 'A series', seasonNumber: 2, episodeNumber: 3 } : {}),
+          artwork: logo ? [{ id: 'logo', kind: 'logo', tag: '', sizes: [{ width: 500, height: 120, url: 'https://media.example/logo.svg' }] }] : [],
+        };
+        const model = detailModel({ title: data, extras: [], chapters: [], cast: [] });
+        expect(model.title[0]?.name).toBe(name);
+        expect(model.title[0]?.logo).toBe(logo ? 'https://media.example/logo.svg' : '');
+        expect(model.title[0]?.episodeContext).toBe(context ? 'A series · Season 2, Episode 3' : '');
+        for (const [, doc] of documents) for (const width of [390, 1440]) {
+          const resolved = resolveDocument(doc, width, 'en');
+          const env = { detail: model, load: 'ready', route: 'title', entry: 'probe', small: width < 640, tv: false, still: true, flags: [], season: '' } as unknown as Env;
+          const headings: RNode[] = [], contexts: string[] = [];
+          const walk = (n: RNode) => {
+            if (!holds(n.when, { index: 0 }, env)) return;
+            if (n.role === 'heading' && n.level === 1 && ((n.kind === 'text' && fill(n.text, { index: 0 }, env) === name) || (n.kind === 'image' && fill(n.alt, { index: 0 }, env) === name))) headings.push(n);
+            if (n.kind === 'text' && fill(n.text, { index: 0 }, env) === 'A series · Season 2, Episode 3') contexts.push('context');
+            if (n.kind === 'box') n.children.forEach(walk);
+          };
+          walk(resolved.routes.title!);
+          expect(headings.length).toBeGreaterThan(0);
+          expect(contexts.length > 0).toBe(context);
+          for (const heading of headings) if (heading.kind === 'image') {
+            const css = Object.fromEntries(Object.entries(heading.base.style).map(([k, v]) => [k, fill(v, { index: 0 }, env)]));
+            expect(css.width).toBeDefined();
+            expect(css.width).not.toBe('auto');
+            expect(css.width).not.toBe('0px');
+          }
+        }
+      }
+    }
+  }
+});

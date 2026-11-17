@@ -5,7 +5,7 @@
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.2';
+const id = 'latenight', version = '1.0.3';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -381,7 +381,7 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
           { type: 'box', motion: 'osd1', style: { display: 'flex', 'flex-direction': 'row', gap: '10px 10px' }, children: [
             { type: 'text', text: '▶ {detail.kindLabel}', style: { ...osdText('22px'), padding: '3px 8px 1px', 'background-color': '$osd-plate', 'text-shadow': 'none', 'white-space': 'nowrap' }, small: { 'font-size': '18px' } },
           ] },
-          { type: 'image', when: [{ test: 'detail.logo' }], src: '{detail.logo}', alt: '{detail.name}', role: 'heading', level: 1, motion: 'osd2', style: { height: '130px', width: 'auto', 'max-width': 'min(500px, 90%)', 'object-fit': 'contain', 'align-self': 'flex-start', filter: 'drop-shadow(-2px 0px 0px $chroma-red) drop-shadow(2px 0px 0px $chroma-cyan)' }, small: { height: '84px' } },
+          { type: 'image', when: [{ test: 'detail.logo' }], src: '{detail.logo}', alt: '{detail.name}', role: 'heading', level: 1, motion: 'osd2', style: { height: '130px', width: '80%', 'max-width': 'min(500px, 90%)', 'object-fit': 'contain', 'align-self': 'flex-start', filter: 'drop-shadow(-2px 0px 0px $chroma-red) drop-shadow(2px 0px 0px $chroma-cyan)' }, small: { height: '84px' } },
           { type: 'text', when: [{ test: 'detail.logo', not: true }], text: '{detail.name}', role: 'heading', level: 1, motion: 'osd2', style: { 'font-family': print, 'font-size': '52px', 'line-height': '1.06', 'text-transform': 'uppercase', 'line-clamp': '3', 'text-shadow': '2px 0px 0px $chroma-cyan' }, small: { 'font-size': '30px' } },
           { type: 'use', template: 'velaEpisodeContext' },
           { type: 'text', text: '{detail.factsLine}', motion: 'osd3', style: { ...osdText('24px', '$ink-dim'), 'text-transform': 'none', 'letter-spacing': '0.02em' }, small: { 'font-size': '20px' } },

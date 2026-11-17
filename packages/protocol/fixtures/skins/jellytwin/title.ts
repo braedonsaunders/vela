@@ -186,7 +186,7 @@ const titleTop: Node = {
               level: 1,
               style: {
                 height: '110px',
-                width: 'auto',
+                width: '80%',
                 'max-width': 'min(480px, 90%)',
                 'object-fit': 'contain',
               },
