@@ -18,6 +18,7 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
     switch (action) {
       case 'select': {
         const [target, kind] = arg.split('|');
+        if (kind === 'collection' && target && model?.canCollectionId) return router.setParams({ collectionId: target, view: 'library' });
         if (kind === 'directory' && target?.startsWith('vela-library-genre:')) {
           const genre = decodeURIComponent(target.slice('vela-library-genre:'.length));
           return router.setParams({ ...paramsOf(filteredBy(query, `genre|${genre}`)), view: 'library' });
@@ -32,7 +33,7 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
         if (library.page.view === 'genres') return router.setParams({ ...paramsOf(filteredBy(query, arg)), view: 'library' });
         return view(filteredBy(query, arg));
       case 'libraryView':
-        if (['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ view: arg });
+        if (['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ view: arg, collectionId: undefined });
         return;
       case 'libraryMore':
         return library.more();

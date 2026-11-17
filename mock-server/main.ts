@@ -3,7 +3,7 @@ import { previewSessions, stopPreview, trailerPreview } from './previews';
 import { libraries, libraryEntries } from '../packages/protocol/fixtures/libraries';
 import { createHmac } from 'node:crypto';
 import type * as V from '../packages/protocol/types';
-import { allTitles, channels, detail, extras, featuredSources, featuredTitles, guide, rows, titles } from '../packages/protocol/fixtures/catalogue';
+import { allTitles, artwork, channels, detail, extras, featuredSources, featuredTitles, guide, rows, titles } from '../packages/protocol/fixtures/catalogue';
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia } from './media';
 import { serveLive, liveFaults } from './live';
 import { applyCommand, createSession, events, observe, requestedInit, sessions, snapshot, type Session } from './sessions';
@@ -14,6 +14,10 @@ const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
 const capabilities: V.ServerCapabilities = { protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+const visibleLibraries = process.env.VELA_MOCK_OLD === '1' ? libraries.map(library => {
+  const { collectionId: _collectionId, ...filters } = library.browse.filters;
+  return { ...library, browse: { ...library.browse, filters } };
+}) : libraries;
 interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean; client?: V.ClientCapabilities }
 const grants = new Map<string, Grant>(), access = new Map<string, Grant>(), refresh = new Map<string, Grant>();
 function issue(device: V.Device): V.Tokens {
@@ -34,6 +38,12 @@ function fail(cls: V.ProtocolError['class'], code: string, message: string, extr
   throw Response.json({ error: { class: cls, code, message, retry: { allowed: ['capacity', 'transient'].includes(cls), ...(cls === 'capacity' ? { afterSeconds: 3, maxAttempts: 3 } : {}) }, ...extra } } satisfies V.ErrorResponse, { status, headers: { 'Cache-Control': 'no-store', ...(cls === 'capacity' ? { 'Retry-After': '3' } : {}) } });
 }
 const mac = (value: string) => createHmac('sha256', secret).update(value).digest('base64url');
+function signedArtwork(g: Grant, id: string, kind: V.ArtworkRef['kind']): V.ArtworkRef {
+  const ref = artwork(id, kind);
+  const token = `${g.id}.${mac(`${g.id}|${kind}|${id}`)}`;
+  return { ...ref, sizes: ref.sizes.map(size => ({ ...size, url: `${size.url}&grant=${token}` })) };
+}
+const personArtwork = (g: Grant) => signedArtwork(g, 'mara-vale', 'person');
 function receipt(g: Grant, value: string) { const p = Buffer.from(`${g.id}|${value}`).toString('base64url'); return `${p}.${mac(p)}`; }
 function validReceipt(g: Grant, value: string) { if (typeof value !== 'string') return false; const [p, s] = value.split('.'); try { return s === mac(p) && Buffer.from(p, 'base64url').toString().startsWith(`${g.id}|`); } catch { return false; } }
 function boundRow(g: Grant, row: V.Row): V.Row { return { ...row, receiptToken: receipt(g, row.id), items: row.items.map(i => ({ ...i, receiptToken: receipt(g, i.id) })) }; }
@@ -116,14 +126,34 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return json({ capabilities, client: body.client });
   }
   const g = authenticate(req);
-  if (method === 'GET' && path === '/libraries') return cached(req, page(libraries, url, g, `libraries:${viewer.policyRevision}:${mac(JSON.stringify(libraries))}`), g.id);
+  if (method === 'GET' && path === '/libraries') return cached(req, page(visibleLibraries, url, g, `libraries:${viewer.policyRevision}:${mac(JSON.stringify(visibleLibraries))}`), g.id);
+  const collectionsMatch = /^\/libraries\/([^/]+)\/collections$/.exec(path);
+  if (method === 'GET' && collectionsMatch && process.env.VELA_MOCK_OLD !== '1') {
+    const library = libraries.find(l => l.id === collectionsMatch[1]);
+    if (!library) fail('not-found', 'not_found', 'Library not found');
+    const members = libraryEntries(library.id).filter(e => e.kind === 'title' && e.title.id === titles[0]!.id);
+    const entries: V.LibraryCollectionEntry[] = members.length ? [{ id: 'fixture-collection', kind: 'collection', receiptToken: '', collection: { id: 'fixture-collection', name: 'Observatory Collection', summary: 'Fixture collection', itemCount: members.length, artwork: [signedArtwork(g, titles[0]!.id, 'poster')] } }] : [];
+    return cached(req, page(entries, url, g, `library-collections:${library.id}`), g.id);
+  }
+  const personMatch = /^\/people\/([^/]+)(\/titles)?$/.exec(path);
+  if (method === 'GET' && personMatch && process.env.VELA_MOCK_OLD !== '1') {
+    if (personMatch[1] !== 'person-mara-vale') fail('not-found', 'not_found', 'Person not found');
+    if (!personMatch[2]) return cached(req, { id: personMatch[1], name: 'Mara Vale', photo: personArtwork(g), roles: ['Acting'], knownFor: 'Acting', biography: 'A fictional performer.', birthday: '1985-04-12' } satisfies V.PersonDetail, g.id);
+    const libraryId = url.searchParams.get('libraryId');
+    if (libraryId && !libraries.some(l => l.id === libraryId)) fail('not-found', 'not_found', 'Library not found');
+    const visible = libraryId ? libraryEntries(libraryId) : libraryEntries('all');
+    const items: V.RowEntry[] = visible.filter(e => e.kind === 'title' && e.title.id === titles[0]!.id).map(e => ({ ...e, id: titles[0]!.id, receiptToken: '', role: 'Commander' }));
+    return cached(req, page(items, url, g, `person:${personMatch[1]}:${libraryId ?? ''}`), g.id);
+  }
   const libraryMatch = /^\/libraries\/([^/]+)\/items$/.exec(path);
   if (method === 'GET' && libraryMatch) {
-    const library = libraries.find(l => l.id === libraryMatch[1]);
+    const library = visibleLibraries.find(l => l.id === libraryMatch[1]);
     if (!library) fail('not-found', 'library_not_found', 'Library not found');
     const q = url.searchParams, options = library.browse;
     const invalid = () => fail('request', 'invalid_library_query', 'Unsupported or malformed library query');
-    for (const key of q.keys()) if (!['cursor','limit','sort','direction','kind','genre','year','played','favorite'].includes(key) || q.getAll(key).length !== 1) invalid();
+    for (const key of q.keys()) if (!['cursor','limit','sort','direction','kind','genre','year','played','favorite','collectionId'].includes(key) || q.getAll(key).length !== 1) invalid();
+    const collectionId = q.get('collectionId');
+    if (collectionId && (process.env.VELA_MOCK_OLD === '1' || !options.filters.collectionId || collectionId !== 'fixture-collection')) invalid();
     const sort = q.get('sort') ?? options.defaultSort, direction = q.get('direction') ?? options.defaultDirection;
     if (!options.sorts.some(s => s.id === sort && s.directions.includes(direction as V.SortDirection))) invalid();
     const kind = q.get('kind'), genre = q.get('genre'), year = q.get('year');
@@ -134,7 +164,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     let items = libraryEntries(library.id).filter(e => {
       if (e.kind !== 'title') return true;
       const t = e.title;
-      return (!kind || kind === t.kind) && (!genre || t.genres.some(g => g.toLowerCase() === genre.trim().toLowerCase()))
+      return (!collectionId || t.id === titles[0]!.id) && (!kind || kind === t.kind) && (!genre || t.genres.some(g => g.toLowerCase() === genre.trim().toLowerCase()))
         && (!year || t.year === Number(year)) && (!q.has('played') || !!t.watch?.played === (q.get('played') === 'true'))
         && (!q.has('favorite') || !!t.watch?.favorite === (q.get('favorite') === 'true'));
     });
@@ -143,7 +173,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       const cmp = sort === 'title' ? a.title.name.localeCompare(b.title.name, 'en') : (a.title.year ?? 0) - (b.title.year ?? 0);
       return (cmp || a.id.localeCompare(b.id)) * (direction === 'desc' ? -1 : 1);
     });
-    const query = [sort, direction, kind, genre?.trim().toLowerCase(), year, q.get('played'), q.get('favorite'), q.get('limit') ?? '50'];
+    const query = [sort, direction, kind, genre?.trim().toLowerCase(), year, q.get('played'), q.get('favorite'), q.get('limit') ?? '50', collectionId];
     const scope = `library:${library.id}:${viewer.policyRevision}:${mac(JSON.stringify([query, items]))}`;
     items = items.map(i => ({ ...i, receiptToken: receipt(g, `library:${scope}:${i.id}`) }));
     return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, url, g, scope) } satisfies V.LibraryContents, g.id);
@@ -159,6 +189,14 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';
+    const libraryId = url.searchParams.get('libraryId');
+    if (url.searchParams.getAll('libraryId').length > 1 || libraryId && placement !== 'library') fail('request', 'invalid_request', 'Invalid library placement');
+    if (libraryId && !libraries.some(l => l.id === libraryId)) fail('not-found', 'not_found', 'Library not found');
+    if (libraryId && process.env.VELA_MOCK_OLD !== '1') {
+      const ids = new Set(libraryEntries(libraryId).filter(e => e.kind === 'title').map(e => e.kind === 'title' ? e.title.id : ''));
+      const matches = rows.map(row => ({ ...row, items: row.items.filter(e => e.kind === 'title' && ids.has(e.title.id)) })).filter(row => row.items.length);
+      return cached(req, page(matches.map(row => boundRow(g, row)), url, g, `library-rows:${libraryId}`), g.id);
+    }
     if (!['home','detail','library'].includes(placement)) fail('request', 'invalid_placement', 'Unknown row placement');
     if (placement === 'detail') {
       if (!detail(url.searchParams.get('titleId') ?? '')) fail('not-found', 'title_not_found', 'Detail title not found');
@@ -187,7 +225,8 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return response;
   }
   if (titleMatch) {
-    const d = detail(titleMatch[1]); if (!d) fail('not-found', 'title_not_found', 'Title not found');
+    const raw = detail(titleMatch[1]); if (!raw) fail('not-found', 'title_not_found', 'Title not found');
+    const d = { ...raw, cast: raw.cast.map(person => person.artwork ? { ...person, artwork: personArtwork(g) } : person) };
     if (method === 'POST' && titleMatch[2] === 'watch') { const t = allTitles.find(t => t.id === titleMatch[1])!; t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false }; for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key]; return json({ accepted: true }); }
     if (method === 'GET' && !titleMatch[2] && coldTitle(d.title.id)) return partial({ ...d, extras: [], pending: ['extras'], refreshAfterMs: 2000 });
     if (method === 'GET') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: d.extras } : d, g.id);
@@ -300,9 +339,14 @@ async function dispatch(req: Request): Promise<Response> {
   }
   const art = /^\/vela\/v0\/artwork\/([a-z0-9-]+)$/.exec(url.pathname);
   if (art && req.method === 'GET') {
+    if (url.searchParams.get('kind') === 'person' || url.searchParams.has('grant')) {
+      const [id, signature] = (url.searchParams.get('grant') ?? '').split('.');
+      const g = grants.get(id ?? '');
+      if (!g || g.revoked || g.expires <= Date.now() || signature !== mac(`${g.id}|${url.searchParams.get('kind')}|${art[1]}`)) fail('auth', 'invalid_image_grant', 'Invalid image grant');
+    }
     // Only synthetic assets: no private or remotely fetched imagery.
     const width = Math.max(120, Math.min(1920, Number(url.searchParams.get('width')) || 480));
-    return new Response(renderArtwork(art[1], url.searchParams.get('kind') ?? 'poster', width), { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
+    return new Response(renderArtwork(art[1], url.searchParams.get('kind') ?? 'poster', width), { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': url.searchParams.has('grant') ? 'private, no-store' : 'public, max-age=86400' } });
   }
   const packFile = req.method === 'GET' ? await packAsset(url.pathname) : undefined;
   if (packFile) return packFile;

@@ -36,6 +36,59 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, EventStream, Appearance {
   private readonly http: EtherTransport;
   private readonly credentials: Credentials;
+  supportsPersonFilmography = false;
+  supportsLibraryRecommendations = false;
+  private personSupport: 'unknown' | 'yes' | 'no' = 'unknown';
+  private librarySupport: 'unknown' | 'yes' | 'no' = 'unknown';
+  private readonly missingPeople = new Set<string>();
+
+  resetOptionalCapabilities(): void {
+    this.personSupport = this.librarySupport = 'unknown';
+    this.missingPeople.clear();
+    this.supportsPersonFilmography = this.supportsLibraryRecommendations = false;
+  }
+
+  /** Probe with a visible library: a 404 here identifies an older collections route. */
+  async probeLibraryViews(id: string): Promise<void> {
+    if (this.librarySupport !== 'unknown') return;
+    try {
+      await this.http.request('GET', `/libraries/${segment(id)}/collections?limit=1`);
+      await this.http.request('GET', `/rows${query({ placement: 'library', libraryId: id, limit: 1 })}`);
+      this.librarySupport = 'yes'; this.supportsLibraryRecommendations = true;
+    } catch (error) {
+      if (error instanceof VelaError && (error.status === 404 || error.status === 405)) { this.librarySupport = 'no'; return; }
+      throw error;
+    }
+  }
+
+  async personDetails(id: string): Promise<V.PersonDetail> {
+    return this.http.request<V.PersonDetail>('GET', `/people/${segment(id)}`);
+  }
+  async personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
+    return this.http.request<V.Page<V.RowEntry>>('GET', `/people/${segment(id)}/titles${query({ libraryId, cursor })}`, undefined, CACHED);
+  }
+  async libraryRows(id: string, _kind: V.Library['kind']): Promise<V.Row[]> {
+    const result: V.Row[] = [];
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    for (let n = 0; n < 100; n++) {
+      const page = await this.rows({ placement: 'library', libraryId: id, cursor, limit: 100 });
+      result.push(...page.items);
+      if (page.continuation !== 'more') return result;
+      if (!page.nextCursor || seen.has(page.nextCursor)) throw new Error('Invalid library row continuation');
+      cursor = page.nextCursor;
+      seen.add(cursor);
+    }
+    throw new Error('Library rows exceed page limit');
+  }
+  async libraryCollections(id: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
+    const response = await this.http.request<V.Page<V.LibraryCollectionEntry>>('GET', `/libraries/${segment(id)}/collections${query({ cursor })}`, undefined, CACHED);
+    return { ...response, items: response.items.map(({ id: entryId, receiptToken, collection }) => ({ id: entryId, receiptToken, kind: 'collection' as const, targetId: collection.id, name: collection.name, artwork: collection.artwork })) };
+  }
+  async libraryGenres(id: string): Promise<{ id: string; label: string }[]> {
+    const { library } = await this.library(id, { limit: 1 });
+    return (library.browse.filters.genres ?? []).map(name => ({ id: name, label: name }));
+  }
 
   constructor(origin: string, credentials: Credentials, capabilityContext: string, onSessionRejected?: () => void) {
     this.credentials = credentials;
@@ -156,6 +209,22 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   async detail(id: string) {
     const data = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(id)}`, undefined, CACHED);
+    if (this.personSupport === 'unknown') {
+      const ids = [...new Set([...(data.cast ?? []), ...(data.crew ?? [])].flatMap(person => person.id && !this.missingPeople.has(person.id) ? [person.id] : []))];
+      for (const personId of ids) {
+        try {
+          await this.personDetails(personId);
+          await this.http.request('GET', `/people/${segment(personId)}/titles?limit=1`);
+          this.personSupport = 'yes'; this.supportsPersonFilmography = true;
+          break;
+        }
+        catch (error) {
+          if (error instanceof VelaError && (error.status === 405 || error.status === 404 && ['endpoint_not_found', 'http_error'].includes(error.detail.code))) { this.personSupport = 'no'; break; }
+          if (error instanceof VelaError && error.status === 404) this.missingPeople.add(personId);
+          else throw error;
+        }
+      }
+    }
     // Older Ether servers supply the show's id but omit its display name.
     if (data.title?.showId && data.title.showId !== id && !data.title.showName) {
       try {

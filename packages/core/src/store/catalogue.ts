@@ -17,6 +17,7 @@ import type { VelaState } from './index';
 
 /** A library view: sort, direction and filters; absent fields are the server's defaults. */
 export interface LibraryQuery {
+  collectionId?: string;
   sort?: V.LibrarySort;
   direction?: V.SortDirection;
   kind?: V.TitleKind;
@@ -28,8 +29,8 @@ export interface LibraryQuery {
 
 /** The key a library view is kept under in state (`state.library`). */
 export function libraryKey(id: string, query: LibraryQuery): string {
-  const { sort, direction, kind, genre, year, played, favorite } = query;
-  return JSON.stringify([id, sort, direction, kind, genre, year, played, favorite]);
+  const { sort, direction, kind, genre, year, played, favorite, collectionId } = query;
+  return JSON.stringify([id, sort, direction, kind, genre, year, played, favorite, collectionId]);
 }
 
 const PAGE = 100;
@@ -37,6 +38,14 @@ const PAGE = 100;
 const RECONCILE_ATTEMPTS = 3;
 
 export class Catalogue {
+  async personDetails(id: string): Promise<{ name: string; portrait: string; knownFor: string; biography: string; birthday: string } | undefined> {
+    const connection = await this.session.ready();
+    const adapter = connection.adapter;
+    if (!('personDetails' in adapter) || typeof adapter.personDetails !== 'function') return undefined;
+    const person = await adapter.personDetails(id) as V.PersonDetail;
+    const images = await connection.images();
+    return { name: person.name, portrait: person.photo ? artworkURL(person.photo, 480, 480, images) ?? '' : '', knownFor: person.knownFor || person.roles?.[0] || '', biography: person.biography ?? '', birthday: person.birthday ?? '' };
+  }
   async personTitles(id: string | undefined, libraryId?: string, cursor?: string): Promise<{ items: Card[]; cursor?: string }> {
     const connection = await this.session.ready();
     const adapter = connection.adapter;
@@ -330,6 +339,7 @@ function libraryModel(
     favoriteFilter: query.favorite === true,
     yearFilter: query.year ?? 0,
     canYear: !!filters.year,
+    canCollectionId: !!filters.collectionId,
     canPlayed: !!filters.played,
     canFavorite: !!filters.favorite,
     items: cards,

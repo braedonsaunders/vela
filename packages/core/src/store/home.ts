@@ -194,6 +194,10 @@ export class Home {
           items.push({ id, name, kind, backdrop: image ? artworkURL(image, 960, 540, images) ?? '' : '' });
         }
         if (page.continuation === 'exhausted') {
+          const first = items.find(item => item.kind !== 'live');
+          if (first && 'probeLibraryViews' in connection.adapter && typeof connection.adapter.probeLibraryViews === 'function') {
+            try { await connection.adapter.probeLibraryViews(first.id); } catch { /* Library browsing remains usable if probing fails. */ }
+          }
           this.session.check(epoch, 'libraries');
           this.box.update('libraries', () => ready(items));
           return;

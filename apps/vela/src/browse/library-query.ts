@@ -14,6 +14,7 @@ export type LibraryParams = {
   year?: string;
   played?: string;
   fav?: string;
+  collectionId?: string;
 };
 
 type Sort = NonNullable<LibraryQuery['sort']>;
@@ -57,6 +58,7 @@ export function queryOf(params: LibraryParams): LibraryQuery {
     year: year(params.year),
     played: played(params.played),
     favorite: params.fav === 'true' ? true : undefined,
+    collectionId: params.collectionId || undefined,
   };
 }
 
@@ -70,6 +72,7 @@ export function paramsOf(query: LibraryQuery): Record<Exclude<keyof LibraryParam
     year: query.year === undefined ? undefined : String(query.year),
     played: query.played === undefined ? undefined : String(query.played),
     fav: query.favorite ? 'true' : undefined,
+    collectionId: query.collectionId,
   };
 }
 

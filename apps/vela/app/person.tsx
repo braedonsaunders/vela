@@ -16,6 +16,7 @@ export default function PersonPage() {
   const [cursor, setCursor] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [profile, setProfile] = useState<{ name: string; portrait: string; knownFor: string; biography: string; birthday: string }>();
   const load = useCallback(async (next?: string) => {
     if (!person?.canOpen) { setLoading(false); setFailed(true); return; }
     setLoading(true); setFailed(false);
@@ -28,6 +29,12 @@ export default function PersonPage() {
   }, [store, person?.id, person?.canOpen, name, library]);
   useEffect(() => { if (title && !detail) void store.catalogue.title(title); }, [store, title, detail]);
   useEffect(() => { if (detail?.value || detail?.load === 'failed' || !title) void load(); }, [load, detail?.value, detail?.load, title]);
+  useEffect(() => {
+    if (!person?.canOpen || !person.id) return;
+    let active = true;
+    void store.catalogue.personDetails(person.id).then(value => { if (active) setProfile(value); }).catch(() => {});
+    return () => { active = false; };
+  }, [store, person?.id, person?.canOpen]);
   useFocusEffect(useCallback(() => {
     const back = () => { if (router.canGoBack()) router.back(); else router.replace('/'); };
     if (Platform.OS !== 'web') {
@@ -43,12 +50,12 @@ export default function PersonPage() {
   const page = useCallback((host: SkinHost): SkinHost => ({
     ...host,
     env: { ...host.env, load: failed ? 'failed' : loading && !items.length ? 'loading' : 'ready',
-      personPage: { name, portrait: person?.portrait ?? '', role: person?.role ?? '', items, more: !!cursor, loading } },
+      personPage: { name: profile?.name ?? name, portrait: profile?.portrait || person?.portrait || '', role: profile?.knownFor || person?.role || '', biography: profile?.biography ?? '', birthday: profile?.birthday ?? '', items, more: !!cursor, loading } },
     dispatch: (action, arg) => {
       if (action === 'personMore') { if (cursor && !loading) void load(cursor); }
       else if (action === 'retry') void load();
       else host.dispatch(action, arg);
     },
-  }), [name, person?.portrait, person?.role, items, cursor, loading, failed, load]);
+  }), [name, person?.portrait, person?.role, profile, items, cursor, loading, failed, load]);
   return <DocumentScreen route="person" entry={title} library={library} page={page} />;
 }

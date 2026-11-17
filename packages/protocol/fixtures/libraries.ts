@@ -16,7 +16,7 @@ export const libraries: Library[] = [
     { id: 'server', directions: ['asc'] }, { id: 'title', directions: ['asc', 'desc'] }, { id: 'year', directions: ['asc', 'desc'] }],
     defaultSort: 'server', defaultDirection: 'asc', filters: kind === 'live' ? {} : {
       kind: kind === 'shows' ? ['show'] : kind === 'mixed' ? ['movie', 'show'] : ['movie'],
-      genre: true, genres: [...new Set(members.flatMap(t => t.genres))], year: true, played: true, favorite: true } } } as Library;
+      genre: true, genres: [...new Set(members.flatMap(t => t.genres))], year: true, played: true, favorite: true, collectionId: true } } } as Library;
 });
 
 export function libraryEntries(id: string): RowEntry[] {

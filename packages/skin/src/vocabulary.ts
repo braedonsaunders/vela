@@ -62,7 +62,7 @@ export interface Env {
   library?: LibraryPage;
   /** The collection page on show (routes.collection); none on other routes. */
   collection?: CollectionPage;
-  personPage?: { name: string; portrait: string; role: string; items: Card[]; more: boolean; loading: boolean };
+  personPage?: { name: string; portrait: string; role: string; biography?: string; birthday?: string; items: Card[]; more: boolean; loading: boolean };
 }
 
 /** The binding context: the item a node is repeated over, and its position. */
@@ -131,6 +131,8 @@ export const VOCABULARY: Record<string, Accessor> = {
   'personPage.name': (_, e) => e.personPage?.name ?? '',
   'personPage.portrait': (_, e) => e.personPage?.portrait ?? '',
   'personPage.role': (_, e) => e.personPage?.role ?? '',
+  'personPage.biography': (_, e) => e.personPage?.biography ?? '',
+  'personPage.birthday': (_, e) => e.personPage?.birthday ?? '',
   'personPage.initials': (_, e) => (e.personPage?.name ?? '').split(' ').slice(0, 2).map(w => w.slice(0, 1)).join('').toUpperCase(),
   'personPage.empty': (_, e) => yes(!e.personPage?.items.length && !e.personPage?.loading),
   'personPage.emptyText': (_, e) => t('person.empty', { name: e.personPage?.name ?? '' }),

@@ -10,6 +10,36 @@ const ether = (credentials = new FakeCredentials(), onRejected?: () => void) => 
 const searchAnswer = { query: 'heat', generation: 1, items: [], continuation: 'exhausted' };
 
 describe('EtherAdapter', () => {
+  test('unsupported routes are probed only once per session', async () => {
+    const seen = routeFetch({
+      'GET /vela/v0/libraries/l1/collections': new Response('', { status: 405 }),
+      'GET /vela/v0/titles/first': { title: { id: 'first' }, cast: [{ id: 'p1', name: 'Person' }] },
+      'GET /vela/v0/titles/second': { title: { id: 'second' }, cast: [{ id: 'p1', name: 'Person' }] },
+      'GET /vela/v0/people/p1': new Response('', { status: 405 }),
+    });
+    const adapter = ether();
+    await adapter.probeLibraryViews('l1'); await adapter.probeLibraryViews('l1');
+    await adapter.detail('first'); await adapter.detail('second');
+    expect(seen.filter(call => call.url.pathname.endsWith('/collections'))).toHaveLength(1);
+    expect(seen.filter(call => call.url.pathname.endsWith('/people/p1'))).toHaveLength(1);
+    expect(adapter.supportsPersonFilmography).toBe(false);
+    expect(adapter.supportsLibraryRecommendations).toBe(false);
+  });
+  test('an unknown person does not disable person support for later credits', async () => {
+    const notFound = Response.json({ error: { class: 'not-found', code: 'not_found', message: 'Unknown person', retry: { allowed: false } } }, { status: 404 });
+    routeFetch({
+      'GET /vela/v0/titles/first': { title: { id: 'first' }, cast: [{ id: 'missing', name: 'Missing' }, { id: 'known', name: 'Known' }] },
+      'GET /vela/v0/people/missing': notFound,
+      'GET /vela/v0/titles/second': { title: { id: 'second' }, cast: [{ id: 'known', name: 'Known' }] },
+      'GET /vela/v0/people/known': { id: 'known', name: 'Known', photo: null, roles: [], knownFor: '' },
+      'GET /vela/v0/people/known/titles': { items: [], continuation: 'exhausted' },
+    });
+    const adapter = ether();
+    await adapter.detail('first');
+    expect(adapter.supportsPersonFilmography).toBe(true);
+    await adapter.detail('second');
+    expect(adapter.supportsPersonFilmography).toBe(true);
+  });
   test('search posts the fast and descriptive modes under /vela/v0 with bearer and device', async () => {
     const seen = routeFetch({ 'POST /vela/v0/search': searchAnswer });
     const adapter = ether();

@@ -44,7 +44,7 @@ export function detail(id: string): TitleDetail | undefined {
   const title = allTitles.find(t => t.id === id);
   return title && { title, canPlay: title.kind === 'movie' || title.kind === 'episode',
     ...(title.kind === 'show' ? { seasons, episodes: episodes.filter(e => e.seasonNumber === seasons[0]?.seasonNumber) } : title.kind === 'season' ? { episodes: episodes.filter(e => e.seasonNumber === title.seasonNumber) } : {}),
-    extras: extras.filter(e => e.parentId === id), chapters: [], cast: id === titles[0]!.id ? [{ name: 'Mara Vale', role: 'Commander', artwork: artwork('mara-vale', 'person') }] : [] };
+    extras: extras.filter(e => e.parentId === id), chapters: [], cast: id === titles[0]!.id ? [{ id: 'person-mara-vale', name: 'Mara Vale', role: 'Commander', artwork: artwork('mara-vale', 'person') }] : [] };
 }
 // Unbound fixtures are bound to a grant by the HTTP layer before delivery.
 export const featuredSources: (Pick<Hero, 'title' | 'reason' | 'action' | 'label'> & { rowId: string })[] = [

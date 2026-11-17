@@ -102,6 +102,10 @@ export class Session {
   /** The viewer signed in or out: everything read for the previous viewer is dropped. */
   resetSession(): void {
     this.epoch++;
+    for (const connection of this.connections.values()) {
+      const adapter = connection.adapter;
+      if ('resetOptionalCapabilities' in adapter && typeof adapter.resetOptionalCapabilities === 'function') adapter.resetOptionalCapabilities();
+    }
     this.signingIn = undefined;
     this.negotiation = undefined;
     for (const listener of [...this.resetListeners]) listener('session');

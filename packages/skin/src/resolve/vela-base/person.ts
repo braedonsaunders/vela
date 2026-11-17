@@ -22,10 +22,12 @@ const hero: Node = {
     { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '12px', 'min-width': '0px', 'flex-shrink': '1' }, children: [
       { type: 'text', text: '{personPage.name}', role: 'heading', level: 1, style: { ...display, 'font-size': '52px', color: '$ui.ink' }, small: { 'font-size': '30px' } },
       { type: 'text', when: [{ test: 'personPage.role' }], text: '{personPage.role}', style: { 'font-size': '18px', color: '$ui.inkSecondary' } },
+      { type: 'text', when: [{ test: 'personPage.birthday' }], text: '{personPage.birthday}', style: { 'font-size': '16px', color: '$ui.inkSecondary' } },
     ] },
   ],
 };
 const content: Node[] = [hero,
+  { type: 'text', when: [{ test: 'personPage.biography' }], text: '{personPage.biography}', style: { ...gutter, 'font-size': '17px', 'line-height': '1.55', color: '$ui.inkSecondary' }, small: { ...gutterSmall, 'font-size': '15px' } },
   { type: 'box', when: [{ test: 'personPage.loading' }], style: { ...gutter }, children: [pulse] },
   { type: 'text', when: [{ test: 'personPage.empty' }, { test: 'env.load', is: 'eq', value: 'ready' }], text: '{personPage.emptyText}', style: { ...gutter, color: '$ui.inkSecondary', 'font-size': '18px' } },
   section('{t:person.movies}', 'personPage.moviesCount', 'personPage.movies'),

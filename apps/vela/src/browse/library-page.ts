@@ -22,6 +22,7 @@ export interface LibraryState {
 
 export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: string): LibraryState {
   const store = useVela();
+  useVelaState(state => state.libraries.load);
   const canRecommend = store.catalogue.libraryRecommendationsAvailable;
   const revision = useVelaState(state => state.auth.revision);
   const focused = useSectionFocus() ?? true;
@@ -45,7 +46,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       if (active) setExtraState({ id, revision, loading: false, failed: true });
     });
     return () => { active = false; };
-  }, [store, id, kind, revision, focused, extraAttempt]);
+  }, [store, id, kind, revision, focused, extraAttempt, canRecommend]);
   const nativeExtras = extraState.id === id && extraState.revision === revision ? extraState.value : undefined;
   const extras = useMemo<LibraryExtras | undefined>(() => nativeExtras ?? (current?.value?.genres.length ? {
     recommendationsAvailable: false, collectionsAvailable: false, rows: [], collections: [], collectionCursor: '', genres: current.value.genres, failed: false,

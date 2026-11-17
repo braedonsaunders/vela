@@ -53,13 +53,15 @@ export interface PersonFilmography {
 }
 
 export function hasPersonFilmography(adapter: ServerAdapter): adapter is ServerAdapter & PersonFilmography {
-  return 'personTitles' in adapter && typeof adapter.personTitles === 'function';
+  return 'personTitles' in adapter && typeof adapter.personTitles === 'function'
+    && (!('supportsPersonFilmography' in adapter) || adapter.supportsPersonFilmography === true);
 }
 
 export function hasLibraryRecommendations(adapter: ServerAdapter): adapter is ServerAdapter & LibraryRecommendations {
   return 'libraryRows' in adapter && typeof adapter.libraryRows === 'function'
     && 'libraryCollections' in adapter && typeof adapter.libraryCollections === 'function'
-    && 'libraryGenres' in adapter && typeof adapter.libraryGenres === 'function';
+    && 'libraryGenres' in adapter && typeof adapter.libraryGenres === 'function'
+    && (!('supportsLibraryRecommendations' in adapter) || adapter.supportsLibraryRecommendations === true);
 }
 
 export interface AiSearch {
