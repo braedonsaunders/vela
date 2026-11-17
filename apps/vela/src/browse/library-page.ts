@@ -22,6 +22,7 @@ export interface LibraryState {
 
 export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: string): LibraryState {
   const store = useVela();
+  const canRecommend = store.catalogue.libraryRecommendationsAvailable;
   const revision = useVelaState(state => state.auth.revision);
   const focused = useSectionFocus() ?? true;
   const key = libraryKey(id, query);
@@ -50,8 +51,8 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     recommendationsAvailable: false, collectionsAvailable: false, rows: [], collections: [], collectionCursor: '', genres: current.value.genres, failed: false,
   } : undefined), [nativeExtras, current?.value]);
   const view = requestedView === 'library' || requestedView === 'recommended' || requestedView === 'collections' || requestedView === 'genres'
-    ? requestedView : extras?.recommendationsAvailable ? 'recommended' : 'library';
-  const usableView = view === 'recommended' && !extras?.recommendationsAvailable || view === 'collections' && !extras?.collectionsAvailable || view === 'genres' && !extras?.genres.length ? 'library' : view;
+    ? requestedView : canRecommend ? 'recommended' : 'library';
+  const usableView = view === 'recommended' && !canRecommend || view === 'collections' && !extras?.collectionsAvailable || view === 'genres' && !extras?.genres.length ? 'library' : view;
 
   useEffect(() => {
     if (focused && !current?.value && current?.load !== 'loading' && current?.load !== 'failed') void store.catalogue.library(id, query, current?.value?.pages ?? 1, !!current?.value);
@@ -69,12 +70,13 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       loading: !held && current?.load !== 'failed',
       moreLoading: usableView === 'collections' ? !!extraState.moreLoading : !!held && current?.load === 'loading',
       view: usableView,
+      canRecommend,
       viewRequest: requestedView ?? '',
       extras,
-      extrasLoading: extraState.id === id && extraState.loading,
+      extrasLoading: canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.failed) || extraState.id === id && extraState.loading),
       extrasFailed: extraState.id === id && (extraState.failed || !!extras?.failed),
     };
-  }, [current, earlier, query, usableView, requestedView, extras, extraState]);
+  }, [current, earlier, query, usableView, requestedView, extras, extraState, canRecommend, nativeExtras, id, revision]);
 
   const failed = current?.load === 'failed' && !current.value;
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';

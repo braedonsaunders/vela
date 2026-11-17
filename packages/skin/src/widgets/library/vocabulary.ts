@@ -51,7 +51,7 @@ function chosen(o: LibraryOption, l: LibraryModel | undefined): boolean {
 export const LIBRARY_VOCABULARY: Record<string, LibraryAccessor> = {
   'library.view': (_, e) => e.library?.view ?? 'library',
   'library.hasViews': (_, e) => yes(!!e.library?.extras),
-  'library.canRecommend': (_, e) => yes(!!e.library?.extras?.recommendationsAvailable),
+  'library.canRecommend': (_, e) => yes(e.library?.canRecommend ?? !!e.library?.extras?.recommendationsAvailable),
   'library.canCollections': (_, e) => yes(!!e.library?.extras?.collectionsAvailable),
   'library.recommendationCount': (_, e) => String(e.library?.extras?.rows.length ?? 0),
   'library.collectionCount': (_, e) => String(e.library?.extras?.collections.length ?? 0),

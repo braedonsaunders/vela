@@ -189,7 +189,7 @@ const viewTab = (id: string, label: string): Node => {
 /** Shared tabs and content for skins which provide their own library header. */
 export const libraryViews: Node = {
   type: 'box', id: 'vela-library-views', role: 'tablist', label: '{t:ui.library}',
-  style: { display: 'flex', 'flex-direction': 'row', 'overflow-x': 'auto', 'padding-bottom': '12px', gap: '4px', ...gutter }, small: { ...gutterSmall },
+  style: { display: 'flex', 'flex-direction': 'row', 'overflow-x': 'auto', 'padding-top': '6px', 'padding-bottom': '12px', gap: '4px', ...gutter }, small: { ...gutterSmall },
   children: [viewTab('recommended', '{t:library.view.recommended}'), viewTab('library', '{t:ui.library}'), viewTab('collections', '{t:library.view.collections}'), viewTab('genres', '{t:library.view.genres}'),
     { type: 'box', when: [{ test: 'env.libraryExtrasFailed' }], press: { action: 'retry' }, label: '{t:library.view.failed}',
       style: { padding: '8px', color: '$ui.inkSecondary', 'flex-shrink': '0' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.view.failed}' }] }],
@@ -216,7 +216,7 @@ export const libraryAlternative: Node = {
   style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '24px', 'padding-bottom': '60px', gap: '16px' },
   children: [
     { type: 'repeat', over: 'library.rows', when: [is('library.view', 'recommended')], item: { type: 'use', template: 'velaRow' } },
-    { type: 'text', when: [is('library.view', 'recommended'), is('library.recommendationCount', '0')], text: '{t:ui.yourLibraryHasNoRowsYet}', style: { ...gutter, color: '$ui.inkSecondary' } },
+    { type: 'text', when: [is('library.view', 'recommended'), is('library.recommendationCount', '0'), { test: 'env.libraryExtrasLoading', not: true }], text: '{t:ui.yourLibraryHasNoRowsYet}', style: { ...gutter, color: '$ui.inkSecondary' } },
     { ...titleGrid, when: [is('library.view', 'collections')], children: [{ type: 'repeat', over: 'library.collections', item: gridCard }] } as Node,
     { type: 'text', when: [is('library.view', 'collections'), is('library.collectionCount', '0')], text: '{t:library.view.emptyCollections}', style: { ...gutter, color: '$ui.inkSecondary' } },
     { type: 'box', when: [is('library.view', 'collections'), { test: 'library.collectionsMore' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{t:library.loadMore}', style: { ...pill(false, 48), 'align-self': 'center' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.loadMore}' }] },

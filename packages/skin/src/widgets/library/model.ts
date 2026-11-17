@@ -6,6 +6,7 @@ import type { Choice, CollectionModel, LibraryExtras, LibraryModel } from '@vela
 export type LibraryView = 'recommended' | 'library' | 'collections' | 'genres';
 
 export interface LibraryPage {
+  canRecommend?: boolean;
   view?: LibraryView;
   /** Explicit URL selection; an initially arriving server view is not a tab transition. */
   viewRequest?: string;
