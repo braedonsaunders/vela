@@ -69,6 +69,10 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
   const [zoom, setZoom] = useState<Zoom>(1);
   const [expanded, setExpanded] = useState(false);
   const grid = useRef<GridHandle>(null);
+  const pendingDay = useRef<number | null>(null);
+  useEffect(() => {
+    if (pendingDay.current !== null && grid.current?.jumpDay(pendingDay.current)) pendingDay.current = null;
+  }, [model.dayStarts]);
 
   const tabOn = model.guides.some(g => g.id === tab) ? tab : '';
   // A hand-off shows its channel whatever the filter, on its own day.
@@ -99,7 +103,9 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
   const onVisible = useCallback((ids: string[]) => controller.setGuideChannels(ids), [controller]);
   const pickDay = (day: number) => {
     setSelected({ channel: '', programme: '' });
+    pendingDay.current = day;
     controller.chooseDay(day);
+    if (grid.current?.jumpDay(day)) pendingDay.current = null;
   };
   const jumpNow = () => {
     setSelected({ channel: '', programme: '' });
@@ -263,7 +269,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
         still={still}
         selected={highlighted}
         landing={landing}
-        gridKey={`${model.day}|${handOff?.channelId ?? ''}|${handOff?.minute ?? ''}`}
+        gridKey={`${handOff?.channelId ?? ''}|${handOff?.minute ?? ''}`}
         grid={grid}
         onSelect={select}
         onPress={press}

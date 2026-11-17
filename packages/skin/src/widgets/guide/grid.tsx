@@ -9,6 +9,7 @@ import Animated, { runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useShare
 import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@vela/core';
 import { cellId, leftFor, minuteWidth, programmeAt, railId, railWidth, rowHeight, RULER, type Zoom } from './geometry';
 import type { GuideLook } from './look';
+import { prependOffset } from './timeline';
 import { RailCell } from './rail';
 import { Ruler } from './ruler';
 import { TimelineRow } from './timeline-row';
@@ -18,6 +19,7 @@ export interface GridHandle {
   jumpNow(): boolean;
   /** Step the time by hours; the day before or after when that runs off this one. */
   shift(hours: number): -1 | 0 | 1;
+  jumpDay(day: number): boolean;
 }
 
 export interface GridProps {
@@ -62,6 +64,7 @@ export function GuideGrid(props: GridProps) {
   const landed = useRef(false);
   const lastScale = useRef(scale);
   const focusMinute = useRef(-1);
+  const previousStarts = useRef(model.dayStarts ?? {});
 
   const onTimeline = useAnimatedScrollHandler(
     {
@@ -111,9 +114,22 @@ export function GuideGrid(props: GridProps) {
     scrollTo(minute, false);
   }, [scale, scrollTo, scrollX]);
 
+  useLayoutEffect(() => {
+    const next = model.dayStarts ?? {};
+    const added = prependOffset(previousStarts.current, next);
+    previousStarts.current = next;
+    if (added) scrollTo(scrollX.value / scale + added, false);
+  }, [model.dayStarts, scale, scrollTo, scrollX]);
+
   useImperativeHandle(
     props.handle,
     () => ({
+      jumpDay(day) {
+        const minute = model.dayStarts?.[day];
+        if (minute === undefined) return false;
+        scrollTo(minute, true);
+        return true;
+      },
       jumpNow() {
         if (model.nowMinute < 0) return false;
         scrollTo(leftFor(model.nowMinute, visibleMinutes, model.minutes), true);
@@ -121,8 +137,6 @@ export function GuideGrid(props: GridProps) {
       },
       shift(hours) {
         const target = Math.floor(scrollX.value / scale / 30) * 30 + hours * 60;
-        if (target < 0 && model.day > 0) return -1;
-        if (target > model.minutes - 60 && model.day < model.days.length - 1) return 1;
         scrollTo(Math.max(0, Math.min(model.minutes - 30, target)), true);
         return 0;
       },

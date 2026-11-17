@@ -7,6 +7,7 @@ import { loadGuide, time, type Images, type GuideChannel, type GuideModel } from
 import type { LiveSource } from './source';
 import { Tile, type TileView } from './tile';
 import { Zap } from './zap';
+import { requestedDays, timeline } from './timeline';
 
 export type Surface = 'guide' | 'home' | 'watch';
 
@@ -53,6 +54,9 @@ export class LiveController {
   private day = 0;
   private load: LiveView['load'] = 'idle';
   private guide: GuideModel | null = null;
+  private readonly blocks = new Map<number, GuideModel>();
+  private firstDay = 0;
+  private lastDay = 0;
   private loadGeneration = 0;
   private guideIds: string[] = [];
   private guideIdsKey = "";
@@ -126,10 +130,10 @@ export class LiveController {
 
   chooseDay(day: number): void {
     const next = Math.max(0, Math.min(DAYS - 1, Math.round(day)));
-    if (next === this.day) return;
     this.day = next;
-    this.load = 'loading';
-    this.guide = null;
+    this.firstDay = Math.min(this.firstDay, next);
+    this.lastDay = Math.max(this.lastDay, next);
+    if (this.blocks.has(next)) this.guide = timeline(this.blocks, this.day);
     this.fetch();
     this.emit();
   }
@@ -144,10 +148,15 @@ export class LiveController {
   }
 
   setGuideRange(from: number, to: number): void {
-    const next = { from: Math.max(0, Math.floor(from / 30) * 30), to: Math.ceil(to / 30) * 30 };
-    if (this.guideRange?.from === next.from && this.guideRange.to === next.to) return;
-    this.guideRange = next;
-    this.scheduleFetch();
+    this.guideRange = { from, to };
+    if (!this.guide || !this.blocks.size) return;
+    const loaded = [...this.blocks.keys()].sort((a, b) => a - b);
+    let changed = false;
+    for (const day of requestedDays(loaded[0]!, loaded[loaded.length - 1]!, from, to, this.guide.minutes)) {
+      if (day < this.firstDay) { this.firstDay = day; changed = true; }
+      if (day > this.lastDay) { this.lastDay = day; changed = true; }
+    }
+    if (changed) this.scheduleFetch();
   }
 
   setRetainedChannels(ids: string[]): void {
@@ -279,7 +288,6 @@ export class LiveController {
   private fetch(): void {
     if (!this.now) return;
     const generation = ++this.loadGeneration;
-    const day = this.day;
     const channels = this.guide?.channels ?? [];
     const retained = [this.tile.target, this.options.memory.get(this.rememberKey) ?? '', this.homeZap.target, this.watchZap.target, ...this.retainedIds];
     for (const id of [this.homeZap.target, this.watchZap.target]) {
@@ -288,20 +296,21 @@ export class LiveController {
     }
     const base = this.surfaces.has('guide') && this.guideIds.length ? this.guideIds : channels.slice(0, 48).map(c => c.id);
     const ids = [...new Set([...base, ...retained].filter(Boolean))].sort();
-    loadGuide(this.options.source, day, this.now, this.options.scope, this.options.images, undefined, ids, this.guideRange ?? { from: -1, to: 240 }).then(
-      model => {
+    const days = Array.from({ length: this.lastDay - this.firstDay + 1 }, (_, i) => this.firstDay + i);
+    Promise.all(days.map(offset => loadGuide(this.options.source, offset, this.now, this.options.scope, this.options.images, undefined, ids))).then(
+      models => {
         if (generation !== this.loadGeneration) return;
-        this.guide = model;
+        for (const model of models) this.blocks.set(model.day, model);
+        this.guide = timeline(this.blocks, this.day);
         this.load = 'ready';
         this.updateTile();
-        if (!base.length && model.channels.length) this.scheduleFetch();
+        if (!base.length && models[0]?.channels.length) this.scheduleFetch();
         this.emit();
       },
       error => {
         if (generation !== this.loadGeneration) return;
         console.warn('Vela could not load the guide', error);
-        // The minute's re-projection keeps the day already shown; only a first load fails.
-        if (this.guide?.day !== day) this.load = 'failed';
+        if (!this.guide) this.load = 'failed';
         this.emit();
       },
     );

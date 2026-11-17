@@ -30,6 +30,8 @@ export interface GuideChannel {
   programmes: GuideProgramme[];
 }
 export interface GuideModel {
+  /** Minutes from the start of the loaded timeline to each day. */
+  dayStarts?: Record<number, number>;
   day: number; dayLabel: string; fromLabel: string; untilLabel: string; minutes: number; nowMinute: number; nowLabel: string; landing: number;
   ticks: { id: string; label: string; minute: number; hour: boolean }[];
   days: { offset: number; label: string; date: string }[];
