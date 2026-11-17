@@ -621,7 +621,7 @@ const BOX_SCROLL: ViewStyle = { flexGrow: 0 };
 function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>; rowGap: unknown; items: ReactElement[] }) {
   const [width, setWidth] = useState(0);
   const layout = useContext(RouteLayout);
-  useLayoutEffect(() => { layout?.grid(); }, [layout]);
+  useLayoutEffect(() => { if (items.length) layout?.grid(); }, [layout, items.length]);
   const gap = grid.gap;
   const count = grid.count ?? Math.max(1, Math.floor((width + gap) / ((grid.min ?? 160) + gap)));
   // A pixel of slack, then rounded down to the hundredth, so a row's cells and gaps never sum past
@@ -634,6 +634,9 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
       // extent mounted until a visible layout supplies the new usable width.
       const next = e.nativeEvent.layout.width;
       if (next > 0) setWidth(next);
+      // An empty library has no first cell to release the skeleton. Its track's
+      // committed layout is enough, including after a populated grid becomes empty.
+      if (next > 0 && !items.length) layout?.drawn();
     }}>
       {width > 0 ? items.map((item, index) => <View key={item.key} style={{ width: cell }} onLayout={index === 0 ? () => layout?.drawn() : undefined}>{item}</View>) : null}
     </View>
