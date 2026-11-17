@@ -20,7 +20,7 @@ const rise = {
 
 export default {
   schema: 1,
-  renderer: 15,
+  renderer: 16,
   id,
   name: 'Marquee',
   version,

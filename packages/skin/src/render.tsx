@@ -24,6 +24,7 @@ import { isFocusVisible } from './focus-visible';
 import { RouteFocusContext, useRouteFocus, useRouteFocusContext } from './route-focus';
 import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
+import { ExpandableSummary } from './summary';
 import { SearchField } from './widgets/search/search-field';
 import { animation } from './motion';
 import { useHeroSwipe } from './hero-swipe';
@@ -776,6 +777,10 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
   if (fx.hidden) return null;
   const value = fill(node.text, ctx, env);
   const lines = { numberOfLines: drawn.numberOfLines, ellipsizeMode: drawn.ellipsize ? ('tail' as const) : undefined };
+  if (node.summary && env.route === 'title') {
+    return <ExpandableSummary key={env.entry} value={value} lines={drawn.numberOfLines ?? 3}
+      style={style as ViewStyle} textStyle={drawn.style} />;
+  }
 
   // Natively a text view does not paint a gradient or a shadow (Android's never does): a text that
   // paints its box (an initial in a gradient disc) draws as that box with the text centred inside.

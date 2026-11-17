@@ -28,10 +28,10 @@ const rise = (delay: number) => ({
 
 const lounge: SkinDocument = {
   schema: 1,
-  renderer: 15,
+  renderer: 16,
   id: 'lounge',
   name: 'Lounge',
-  version: '1.0.7',
+  version: '1.0.8',
   tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.3/preview.jpg',
   swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],

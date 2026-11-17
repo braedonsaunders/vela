@@ -10,14 +10,14 @@ import { library, libraryViews, libraryFilters, libraryAlternative } from './vel
 import { enterPresets, small } from './vela-base/look';
 import { search, searchMotion } from './vela-base/search';
 import { shell } from './vela-base/shell';
-import { title, episodeContext, cardContext } from './vela-base/title';
+import { title, summary, episodeContext, cardContext } from './vela-base/title';
 import { personRoute } from './vela-base/person';
 import { castPerson } from './vela-base/person-tile';
 import { compiledControl } from './vela-base/controls';
 
 export const velaBase: SkinDocument = {
   schema: 1,
-  renderer: 15,
+  renderer: 16,
   id: 'vela-base',
   name: 'Vela',
   version: '1.0.0',
@@ -173,7 +173,7 @@ export const velaBase: SkinDocument = {
       still: { keyframes: 'dissolve', duration: 240 },
     },
   },
-  templates: { velaCastPerson: castPerson, velaPersonCard: gridCard, velaPersonClose: (((title as BoxNode).children![0] as BoxNode).children![0] as BoxNode).children![0]!, velaEpisodeContext: episodeContext, velaCardContext: cardContext, velaCard: card, velaRow: row, velaRelatedRow: relatedRow, velaLibraryViews: libraryViews, velaLibraryFilters: libraryFilters, velaLibraryAlternative: libraryAlternative },
+  templates: { velaSummary: summary, velaCastPerson: castPerson, velaPersonCard: gridCard, velaPersonClose: (((title as BoxNode).children![0] as BoxNode).children![0] as BoxNode).children![0]!, velaEpisodeContext: episodeContext, velaCardContext: cardContext, velaCard: card, velaRow: row, velaRelatedRow: relatedRow, velaLibraryViews: libraryViews, velaLibraryFilters: libraryFilters, velaLibraryAlternative: libraryAlternative },
   slots: { shell, home },
   routes: { title, person: personRoute, library, auth, collection, search },
   // Home and the title page draw their own loading and failure; home fades under the floating bar.

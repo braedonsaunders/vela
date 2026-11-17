@@ -76,7 +76,7 @@ const each = <T extends Record<string, Node>>(o: T): T =>
 
 export default {
   schema: 1,
-  renderer: 15,
+  renderer: 16,
   id,
   name: 'Mochi',
   version,

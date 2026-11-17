@@ -51,6 +51,12 @@ const pendingSection = (binding: string, label: string): Node => ({
   small: { ...sideSmall },
 });
 
+/** A synopsis is measured by the renderer: only truncated copy becomes a focus stop. */
+export const summary: Node = {
+  type: 'text', text: '{detail.summary}', when: [{ test: 'detail.summary' }],
+  style: { 'line-clamp': '3' },
+};
+
 export const contextLinks = (over: string): Node => ({
   type: 'box',
   style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px' },
@@ -288,9 +294,7 @@ export const band: Node = {
           ],
         },
         {
-          type: 'text',
-          when: [{ test: 'detail.summary' }],
-          text: '{detail.summary}',
+          type: 'use', template: 'velaSummary',
           motion: enter(340),
           style: {
             color: '$ui.ink',
@@ -299,8 +303,6 @@ export const band: Node = {
             'line-height': '1.6',
             'max-width': '42rem',
           },
-          // On a TV the synopsis keeps three lines, so the actions stay above the fold.
-          states: [{ when: [{ test: 'env.tv' }], style: { 'line-clamp': '3' } }],
           small: { 'font-size': '15px' },
         },
         {

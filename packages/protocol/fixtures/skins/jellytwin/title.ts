@@ -322,9 +322,8 @@ const titleTop: Node = {
               ],
             },
             {
-              type: 'text',
+              type: 'use', template: 'velaSummary',
               when: [{ test: 'detail.summary' }],
-              text: '{detail.summary}',
               style: {
                 'font-size': '16px',
                 'line-height': '1.6',

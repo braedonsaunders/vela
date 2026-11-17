@@ -5,7 +5,7 @@
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.7';
+const id = 'latenight', version = '1.0.8';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -389,7 +389,7 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
           { type: 'text', when: [{ test: 'detail.logo', not: true }], text: '{detail.name}', role: 'heading', level: 1, motion: 'osd2', style: { 'font-family': print, 'font-size': '52px', 'line-height': '1.06', 'text-transform': 'uppercase', 'line-clamp': '3', 'text-shadow': '2px 0px 0px $chroma-cyan' }, small: { 'font-size': '30px' } },
           { type: 'use', template: 'velaEpisodeContext' },
           { type: 'text', text: '{detail.factsLine}', motion: 'osd3', style: { ...osdText('24px', '$ink-dim'), 'text-transform': 'none', 'letter-spacing': '0.02em' }, small: { 'font-size': '20px' } },
-          { type: 'text', when: [{ test: 'detail.summary' }], text: '{detail.summary}', motion: 'osd3', style: { 'font-size': '16px', 'line-height': '1.6', color: '$ink-dim', 'max-width': '40rem', 'text-shadow': '0px 1px 14px $shadow' }, small: { 'font-size': '14.5px' } },
+          { type: 'use', template: 'velaSummary', when: [{ test: 'detail.summary' }], motion: 'osd3', style: { 'font-size': '16px', 'line-height': '1.6', color: '$ink-dim', 'max-width': '40rem', 'text-shadow': '0px 1px 14px $shadow' }, small: { 'font-size': '14.5px' } },
           { type: 'text', when: [{ test: 'detail.crewLine' }], text: '{detail.crewLine}', motion: 'osd3', style: { 'font-family': print, 'font-size': '10.5px', 'letter-spacing': '0.12em', 'text-transform': 'uppercase', 'line-height': '1.7', color: '$ink-quiet' } },
           { type: 'box', motion: 'osd4', style: { display: 'flex', 'flex-direction': 'row', gap: '14px 14px', 'flex-wrap': 'wrap', 'margin-top': '8px' } as Style, children: [titlePlay] },
         ] },
@@ -455,7 +455,7 @@ const fadeStill = { keyframes: 'dissolve', duration: 200 };
 const osdIn = (delay: number) => ({ keyframes: 'dissolve', duration: 240, delay, easing: 'steps(3, jump-end)', fill: 'both' as const, still: fadeStill });
 
 export default {
-  schema: 1, renderer: 15, id, name: 'Late Night', version,
+  schema: 1, renderer: 16, id, name: 'Late Night', version,
   tagline: 'Your library on an old TV set: channel flips, tape labels and a glowing on-screen display.',
   preview: asset('preview.svg'), swatches: ['#07080b', '#f3eee0', '#7dffa1', '#e8452c', '#f4cf3a'],
   // Late Night's dark set, OSD green and the VCR's blue menus, for the routes it inherits (search, library, collection, sign-in).

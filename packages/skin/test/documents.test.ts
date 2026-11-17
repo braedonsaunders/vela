@@ -127,7 +127,9 @@ describe.each(documents)('built-in skin %s', (_folder, doc) => {
   });
 
   test('a copy that needs a newer renderer is refused on its version', () => {
-    expect(() => resolveDocument({ ...doc, renderer: RENDERER_VERSION + 1 }, 1440)).toThrow(`needs renderer ${RENDERER_VERSION + 1}`);
+    expect(() => resolveDocument({ ...doc, renderer: RENDERER_VERSION + 1,
+      routes: { title: { type: 'use', template: 'unbuilt-future-part' } },
+    }, 1440)).toThrow(`needs renderer ${RENDERER_VERSION + 1}`);
   });
 });
 
@@ -276,4 +278,37 @@ describe('the brand mark', () => {
     const hasLogo = doc.slots?.shell ? /velaHome\}/.test(JSON.stringify(doc.slots.shell)) : true;
     expect(brands(shell) > 0).toBe(hasLogo);
   });
+});
+
+test('every built-in title synopsis uses the shared expandable part at every width', () => {
+  for (const [, doc] of documents) for (const width of WIDTHS) {
+    const summaries: Extract<RNode, { kind: 'text' }>[] = [];
+    const walk = (node: RNode) => {
+      if (node.kind === 'text' && node.summary) summaries.push(node);
+      if (node.kind === 'box') node.children.forEach(walk);
+      if (node.kind === 'repeat') walk(node.item);
+    };
+    walk(resolveDocument(doc, width, 'en').routes.title!);
+    expect(summaries.length).toBeGreaterThan(0);
+    for (const summary of summaries) expect(Number(summary.base.style['line-clamp'])).toBeGreaterThan(0);
+  }
+});
+
+test('legacy summary bindings expand too, and shared parts retain caller typography and states', () => {
+  const doc: SkinDocument = { schema: 1, renderer: 16, id: 'synopsis', name: 'Synopsis', version: '1', routes: {
+    title: { type: 'box', children: [
+      { type: 'text', text: '{detail.summary}' },
+      { type: 'use', template: 'velaSummary', style: { 'font-size': '20px' }, small: { 'font-size': '14px' },
+        above: { '1800': { 'font-size': '28px' } }, states: [{ when: [{ test: 'env.tv' }], style: { 'line-clamp': '4' } }] },
+    ] },
+  } };
+  expect(resolveDocument({ ...doc, renderer: 15, routes: { title: { type: 'text', text: '{detail.summary}' } } }, 1440).routes.title)
+    .toMatchObject({ kind: 'text', summary: true });
+  for (const [width, font] of [[390, '14px'], [1440, '20px'], [1920, '28px']] as const) {
+    const tree = resolveDocument(doc, width, 'en').routes.title!;
+    if (tree.kind !== 'box') throw new Error('Expected synopsis container');
+    expect(tree.children[0]).toMatchObject({ kind: 'text', summary: true });
+    expect(tree.children[1]).toMatchObject({ kind: 'text', summary: true, base: { style: { 'font-size': font, 'line-clamp': '3' } } });
+    expect(tree.children[1]!.states[0]!.layer.style['line-clamp']).toBe('4');
+  }
 });

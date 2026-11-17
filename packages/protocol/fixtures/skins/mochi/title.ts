@@ -196,9 +196,8 @@ export const titleActions: Node = {
   small: { gap: '16px', ...sideSmall(20), 'padding-top': '16px' },
   children: [
     {
-      type: 'text',
+      type: 'use', template: 'velaSummary',
       when: [set('detail.summary')],
-      text: '{detail.summary}',
       style: { 'font-size': '17px', 'line-height': '1.6', color: '$ink-soft' },
       small: { 'font-size': '15px' },
     },

@@ -6,7 +6,7 @@
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.5';
+const version = '1.2.6';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -138,7 +138,7 @@ const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:g
 // (sign-in, title, libraries) keep their built-in look, and Home draws the daylight.
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'font-family': rounded }, children: [
   bar, dock,
-  { type: 'slot', slot: 'children', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px' }, 
+  { type: 'slot', slot: 'children', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px' },
     inner: { display: 'flex', 'flex-direction': 'column', 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } as Style },
   gate,
 ] };
@@ -375,7 +375,7 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
       ] },
     ] },
     { type: 'box', when: [{ test: 'detail.summary' }], style: { display: 'flex', 'flex-direction': 'column', gap: '12px' }, children: [
-      sectionTitle('{s:behindStory}'), { type: 'text', text: '{detail.summary}', style: { 'font-size': '17px', 'font-weight': '700', 'line-height': '1.5', color: '$ink-soft' } },
+      sectionTitle('{s:behindStory}'), { type: 'use', template: 'velaSummary', style: { 'font-size': '17px', 'font-weight': '700', 'line-height': '1.5', color: '$ink-soft' } },
       { type: 'text', when: [{ test: 'detail.crewLine' }], text: '{detail.crewLine}', style: { 'font-size': '15px', 'font-weight': '700', color: '$ink-soft' } },
     ] },
     { type: 'box', when: [{ test: 'detail.hasCast' }], style: { display: 'flex', 'flex-direction': 'column', gap: '16px' }, children: [
@@ -422,7 +422,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
 
 const calm = { keyframes: 'dissolve', duration: 220 };
 const kids: SkinDocument = {
-  schema: 1, renderer: 15, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
+  schema: 1, renderer: 16, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
   preview: art('preview.jpg'), swatches: ['#FFF8EE', '#1B2550', '#FFC93C', '#3FA9F5', '#FF6B57'],
   // Kids' cream, navy ink and a deep sky accent (readable as text on cream; the sun stays a fill),
   // for the routes it inherits (search, library, collection, sign-in).

@@ -319,9 +319,8 @@ const facts: Node = {
       ],
     },
     {
-      type: 'text',
+      type: 'use', template: 'velaSummary',
       when: [set('detail.summary')],
-      text: '{detail.summary}',
       style: { 'font-size': '16px', 'line-height': '1.6', color: '$ink', 'max-width': '52rem' },
       small: { 'font-size': '15px' },
     },

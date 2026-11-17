@@ -429,9 +429,8 @@ export const titleCopy: Node = {
       small: { 'font-size': '14px' },
     },
     {
-      type: 'text',
+      type: 'use', template: 'velaSummary',
       when: [{ test: 'detail.summary' }],
-      text: '{detail.summary}',
       motion: 'copy2',
       style: {
         'font-size': 'clamp(17px, 1.3vw, 25px)',

@@ -103,7 +103,8 @@ export interface ImageNode extends NodeBase { type: 'image'; src: Template; alt?
 export interface IconNode extends NodeBase { type: 'icon'; /** A platform symbol, */ symbol?: string; /** or the document's own glyph: SVG path data (up to 8) painted in currentColor. */ paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
 /** Repeat a template over a collection from the vocabulary (`home.rows`, `row.items`, `home.heroes`, `nav.destinations`). */
 export interface RepeatNode extends NodeBase { type: 'repeat'; over: string; limit?: number; item: Node }
-/** A template from the document's `templates`, inlined where it is used. */
+/** A template from the document's `templates`, inlined where it is used.
+ * Renderer 16 supplies velaSummary: an overflow-measured, expandable title synopsis. */
 export interface UseNode extends NodeBase { type: 'use'; template: string }
 /** A foundation slot: `children` (the route content the shell wraps), `searchField`. */
 export interface SlotNode extends NodeBase { type: 'slot'; slot: 'children' | 'searchField'; /** The inner box around the content (`style` is the outer). */ inner?: Style }

@@ -15,7 +15,7 @@ import { strings } from './strings';
 
 export default {
   schema: 1,
-  renderer: 15,
+  renderer: 16,
   id,
   name: 'Jelly Twin',
   version,
