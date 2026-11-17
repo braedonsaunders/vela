@@ -595,11 +595,14 @@ const extraCard: Node = {
   type: 'box',
   press: { action: 'playExtra', arg: '{extra.id}' },
   label: '{extra.name}',
+  disabled: [unset('extra.ready')],
   style: {
     position: 'relative',
     outline: 'auto',
     display: 'flex',
-    'flex-direction': 'column',
+    'flex-direction': 'row',
+    'align-items': 'center',
+    gap: '12px',
     'flex-shrink': '0',
     width: '260px',
     color: '$ink',
@@ -613,8 +616,9 @@ const extraCard: Node = {
       style: {
         position: 'relative',
         display: 'flex',
-        width: '100%',
-        'aspect-ratio': '16 / 9',
+        width: '60px',
+        height: '60px',
+        'flex-shrink': '0',
         'border-radius': '4px',
         'align-items': 'center',
         'justify-content': 'center',
@@ -643,7 +647,7 @@ const extraCard: Node = {
     },
     {
       type: 'box',
-      style: { display: 'flex', 'flex-direction': 'column', gap: '2px', 'padding-top': '8px' },
+      style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-width': '0px', gap: '2px' },
       children: [
         {
           type: 'text',

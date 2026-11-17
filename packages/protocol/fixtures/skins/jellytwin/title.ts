@@ -548,8 +548,9 @@ const extraFace = (ready: boolean): Node =>
     disabled: ready ? [] : [{ test: 'extra.ready', not: true }],
     style: {
       position: 'relative',
-      width: '100%',
-      'aspect-ratio': '16 / 9',
+      width: '60px',
+      height: '60px',
+      'flex-shrink': '0',
       'border-radius': '6px',
       'overflow-x': 'hidden',
       'overflow-y': 'hidden',
@@ -582,7 +583,7 @@ const extraFace = (ready: boolean): Node =>
   }) as Node;
 const extraCard: Node = {
   type: 'box',
-  style: col({ width: 'clamp(220px, 18vw, 320px)', 'flex-shrink': '0', gap: '6px' }),
+  style: row({ width: 'clamp(220px, 18vw, 320px)', 'flex-shrink': '0', gap: '10px', 'align-items': 'center' }),
   small: { width: '52vw' },
   children: [
     extraFace(true),

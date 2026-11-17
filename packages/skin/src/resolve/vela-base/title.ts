@@ -828,13 +828,13 @@ export const extraTile = (ready: boolean): Node =>
       position: 'relative',
       'border-radius': '16px',
       width: '318px',
-      height: '148px',
-      padding: '18px',
+      height: '76px',
+      padding: '12px',
       'box-sizing': 'border-box',
       'flex-shrink': '0',
       ...(ready ? {} : { opacity: '0.42' }),
     },
-    small: { width: '258px', height: '134px' },
+    small: { width: '258px', height: '72px' },
     ...(ready
       ? {
           hover: { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },

@@ -840,13 +840,13 @@ export const extraTile = (readyTile: boolean): Node =>
       'justify-content': 'flex-start',
       'border-radius': '22px',
       width: '308px',
-      height: '142px',
-      padding: '16px',
+      height: '76px',
+      padding: '12px',
       'flex-shrink': '0',
       gap: '14px',
       ...(readyTile ? {} : { opacity: '0.5', 'box-shadow': 'none', cursor: 'default' }),
     },
-    small: { width: '258px', height: '130px' },
+    small: { width: '258px', height: '72px' },
     children: [
       {
         type: 'box',
