@@ -5,7 +5,7 @@ import { JellyfinAdapter } from '../../core/src/adapter/jellyfin';
 import { nativeConnection } from '../../core/src/adapter/connection';
 import { detailModel } from '../../core/src/discovery/models';
 import { FakeCredentials, restoreFetch, routeFetch } from '../../core/test/helpers';
-import { detailSeason } from '../../../apps/vela/src/detail-season';
+import { detailSeason, selectedDetailSeason } from '../../../apps/vela/src/detail-season';
 import { accessor, collection, type Env } from '../src/vocabulary';
 
 afterEach(restoreFetch);
@@ -71,4 +71,45 @@ for (const kind of ['ether', 'plex', 'jellyfin', 'emby'] as const) test(`${kind}
     expect(collection('detail.episodes', { index: 0 }, env, 100).map(ctx => ctx.card!.id)).toEqual([two ? e2 : e1]);
     expect(accessor('detail.seasonPending')!({ index: 0 }, env)).toBe('false');
   }
+});
+
+test('the first list uses next-up season before lazy episode data, never the show response\'s first season', () => {
+  const model = detailModel({ title: { ...base, id: show, kind: 'show' }, seasons: [1,4].map(n => ({ ...base, id: `season-${n}`, kind: 'season', seasonNumber: n })),
+    episodes: [{ ...base, id: e1, kind: 'episode', seasonNumber: 1, episodeNumber: 1 }],
+    nextUp: { ...base, id: 's4e2', kind: 'episode', seasonNumber: 4, episodeNumber: 2, watch: { positionSeconds: 80, played: false } }, extras: [], cast: [], chapters: [] });
+  const first = detailSeason(model, '', () => undefined);
+  expect(first.season).toBe('season-4');
+  expect(first.detail!.episodes).toEqual([]);
+  expect(first.detail!.pending).toContain('episodes');
+  expect(accessor('detail.hasEpisodes')!({ index: 0 }, { detail: first.detail, season: first.season } as Env)).toBe('true');
+  expect(accessor('detail.episodesPending')!({ index: 0 }, { detail: first.detail, season: first.season } as Env)).toBe('true');
+  const scoped = detailModel({ title: { ...base, id: 'season-4', kind: 'season', seasonNumber: 4 }, episodes: [{ ...base, id: 's4e2', kind: 'episode', seasonNumber: 4, episodeNumber: 2 }], extras: [], cast: [], chapters: [] });
+  const loaded = detailSeason(model, first.season, () => scoped);
+  expect(loaded.season).toBe(first.season);
+  expect(loaded.detail!.episodes.map(e => e.id)).toEqual(['s4e2']);
+  expect(loaded.detail!.pending).not.toContain('episodes');
+});
+
+test('partial metadata does not expose season one while the progress season is undecided', () => {
+  const model = detailModel({ title: { ...base, id: show, kind: 'show' }, seasons: [1,4].map(n => ({ ...base, id: `season-${n}`, kind: 'season', seasonNumber: n })),
+    episodes: [{ ...base, id: e1, kind: 'episode', seasonNumber: 1, episodeNumber: 1 }], pending: ['episodes'], extras: [], cast: [], chapters: [] });
+  const partial = detailSeason(model, '', () => undefined);
+  expect(partial.season).toBe('');
+  expect(partial.detail!.episodes).toEqual([]);
+  const ready = { ...model, pending: [], episodes: [{ ...model.episodes[0]!, id: 's4e2', seasonId: 'season-4', seasonNumber: 4, progressSeconds: 100, played: false }] };
+  expect(detailSeason(ready, '', () => undefined).season).toBe('season-4');
+});
+
+test('episode identity survives reordering and differs across seasons at the same position', async () => {
+  const { itemKey } = await import('../src/vocabulary');
+  const card = detailModel({ title: { ...base, id: show, kind: 'show' }, episodes: [{ ...base, id: e1, kind: 'episode' }], extras: [], cast: [], chapters: [] }).episodes[0]!;
+  expect(itemKey({ index: 0, card }, 'detail.episodes')).toBe(itemKey({ index: 20, card }, 'detail.episodes'));
+  expect(itemKey({ index: 0, card }, 'detail.episodes')).not.toBe(itemKey({ index: 0, card: { ...card, id: e2 } }, 'detail.episodes'));
+});
+
+test('an already available Continue Watching cue chooses the progress season on older servers', () => {
+  const model = detailModel({ title: { ...base, id: show, kind: 'show' }, seasons: [1,4].map(n => ({ ...base, id: `season-${n}`, kind: 'season', seasonNumber: n })), episodes: [{ ...base, id: e1, kind: 'episode', seasonNumber: 1, episodeNumber: 1 }], extras: [], cast: [], chapters: [] });
+  const resume = { ...model.episodes[0]!, id: 's4e2', seasonId: '', seasonNumber: 4, progressSeconds: 80 };
+  expect(selectedDetailSeason(model, '', resume)).toBe('season-4');
+  expect(selectedDetailSeason(model, 'season-1', resume)).toBe('season-1');
 });

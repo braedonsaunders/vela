@@ -189,7 +189,7 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
     return (
       <>
         {collection(node.over, ctx, env, node.limit).map(c =>
-          holds(node.when, c, env) ? <SkinNode key={itemKey(c)} node={node.item} ctx={c} hero={node.over === 'home.hero'} /> : null)}
+          holds(node.when, c, env) ? <SkinNode key={itemKey(c, node.over)} node={node.item} ctx={c} hero={node.over === 'home.hero'} /> : null)}
       </>
     );
   }
@@ -391,7 +391,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     // A grid's cells are its drawn items: a repeat contributes one cell per item, as CSS grid
     // places each element a repeat draws.
     const items = node.children.flatMap((child, i) => child.kind === 'repeat'
-      ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(c)}`} node={child.item} ctx={c} />)
+      ? collection(child.over, ctx, env, child.limit).filter(c => holds(child.when, c, env)).map(c => <SkinNode key={`${i}:${itemKey(c, child.over)}`} node={child.item} ctx={c} />)
       : holds(child.when, ctx, env) ? [<SkinNode key={i} node={child} ctx={ctx} />] : []);
     content = <GridTrack grid={fx.grid} rowGap={style.rowGap} items={items} />;
   }

@@ -99,6 +99,7 @@ const factsLine = (x: Card) => [x.facts, ...x.genres.slice(0, 3)].filter(f => f 
 const kindId = (x: Card) => `${x.id}|${x.kind}|${x.receipt}`;
 /** All skins read the same season scope; a stale selection from another title falls back. */
 function selectedSeason(d: DetailModel | undefined, season: string): string {
+  if (!season && d?.pending.includes('episodes')) return '';
   return d?.seasons.some(s => s.id === season) ? season : d?.seasons[0]?.id ?? '';
 }
 function seasonEpisodes(d: DetailModel | undefined, season: string): Card[] {
@@ -285,7 +286,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.playLabel': detail(d => (d.resumeSeconds > 0 ? t('ui.resumePositionIn', { position: d.resumePosition }) : t('ui.play'))),
   'detail.hasResume': detail(d => yes(d.canPlay && d.resumeSeconds > 0), 'false'),
   'detail.hasSeasons': detail(d => yes(d.seasons.length > 1), 'false'),
-  'detail.hasEpisodes': detail(d => yes(d.episodes.length > 0), 'false'),
+  'detail.hasEpisodes': detail(d => yes(d.episodes.length > 0 || d.seasons.length > 0), 'false'),
   'detail.hasCast': detail(d => yes(d.castPeople.length > 0), 'false'),
   'detail.hasExtras': detail(d => yes(d.extras.length > 0), 'false'),
   'detail.hasMediaFacts': detail(d => yes(d.mediaFacts.length > 0), 'false'),
@@ -346,7 +347,8 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
 }
 
 /** A stable key for a repeated item: its position and the id of the item it binds. */
-export function itemKey(c: Ctx): string {
+export function itemKey(c: Ctx, over?: string): string {
+  if (over === 'detail.episodes' && c.card) return c.card.id;
   const item = Object.values(c).find((v): v is { id: string } => typeof v === 'object' && v !== null && typeof (v as { id?: unknown }).id === 'string');
   return `${c.index}:${item?.id ?? (typeof c.fact === 'string' ? c.fact : '')}`;
 }

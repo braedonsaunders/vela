@@ -329,6 +329,8 @@ test('every skin has one full-row play target per episode and no separate up-nex
             expect(n.item.motion).toBeUndefined();
             expect(presses(n.item), doc.id).toBe(1);
             expect(n.item.base.style.width).toBe('100%');
+            expect(n.item.base.style['padding-left']).toBe('16px');
+            expect(n.item.base.style['padding-right']).toBe('16px');
             expect(n.item.base.focus).toBeDefined();
           }
         }

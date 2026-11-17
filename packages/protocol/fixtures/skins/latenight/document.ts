@@ -6,7 +6,7 @@ import { episodePage } from '../../../episode-page';
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.9';
+const id = 'latenight', version = '1.0.10';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the

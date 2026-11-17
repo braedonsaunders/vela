@@ -11,7 +11,7 @@ import { episodePage } from '../../../episode-page';
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.7';
+const version = '1.0.8';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
