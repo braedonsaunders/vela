@@ -8,6 +8,7 @@ export type { LocaleContext } from './i18n';
 export { VelaError } from './adapter/errors';
 export { guideFocus, liveIdentity, loadGuide } from './live/guide';
 export { liveSearch } from './live/search';
+export { consoleURL, parseWebHandoff } from './session/web-handoff';
 export { randomId } from './protocol/id';
 export * from './models';
 export { createVela, type Vela, type VelaOptions, type VelaState } from './store';

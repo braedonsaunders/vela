@@ -8,6 +8,8 @@ export interface ServerSwitch {
   actions: ServerActions;
   /** Open Connect a server, to add one. */
   openConnect(): void;
+  /** Validated same-host HTTP(S) return address supplied by the web host. */
+  consoleUrl?: string;
 }
 
 const ServersContext = createContext<ServerSwitch | null>(null);

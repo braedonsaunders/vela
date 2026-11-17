@@ -5,21 +5,46 @@ import { Dimensions, PixelRatio } from 'react-native';
 import type { VelaPlatform } from '@vela/core';
 import { VelaPlayer } from '@vela/player';
 import { config, DEVELOPMENT_SERVER } from './config';
+import { consoleURL, parseWebHandoff } from '@vela/core';
 import { secrets } from './secrets';
 
-/** What the web engine declares until it reports its own probe of the browser. */
+let handoff: { code?: string; consoleUrl?: string } | undefined;
+function webHandoff(desktop: boolean): NonNullable<typeof handoff> {
+  if (handoff) return handoff;
+  const boot = globalThis as { __VELA_WEB_HANDOFF__?: string };
+  const fragment = boot.__VELA_WEB_HANDOFF__ ?? location.hash;
+  delete boot.__VELA_WEB_HANDOFF__;
+  if (desktop) return handoff = {};
+  handoff = readFragment(fragment);
+  return handoff;
+}
 
-/** A sign-in link's code (`#code=` or `?code=`), taken out of the address so it is used once. */
-function takeWebCode(): string | undefined {
-  const url = new URL(location.href);
-  const hash = new URLSearchParams(url.hash.slice(1));
-  const code = hash.get('code') ?? url.searchParams.get('code') ?? undefined;
-  if (!code) return undefined;
-  hash.delete('code');
-  url.searchParams.delete('code');
-  url.hash = hash.toString();
-  history.replaceState(history.state, '', url.href);
-  return code;
+function readFragment(fragment: string) {
+  const current = parseWebHandoff(fragment, location.origin);
+  // A fallback for hosts without the HTML bootstrap; production strips in <head>.
+  const live = new URLSearchParams(location.hash.slice(1));
+  if (live.has('code') || live.has('console')) history.replaceState(history.state, '', location.pathname + location.search);
+  try {
+    if (new URLSearchParams(fragment.replace(/^#/, '')).has('console')) {
+      if (current.consoleUrl) sessionStorage.setItem('vela.console', current.consoleUrl);
+      else sessionStorage.removeItem('vela.console');
+    } else current.consoleUrl = consoleURL(sessionStorage.getItem('vela.console'), location.origin);
+  } catch { /* A private browser may disallow storage; the current link still works. */ }
+  return current;
+}
+
+/** Ether can reuse an existing tab: fragment-only navigation never reruns the bundle. */
+export function listenWebHandoff(receive: (value: { code?: string; consoleUrl?: string }) => void): () => void {
+  const consume = () => {
+    const boot = globalThis as { __VELA_WEB_HANDOFF__?: string };
+    const fragment = boot.__VELA_WEB_HANDOFF__;
+    delete boot.__VELA_WEB_HANDOFF__;
+    if (fragment === undefined || desktopShell()) return;
+    receive(readFragment(fragment));
+  };
+  window.addEventListener('vela:web-handoff', consume);
+  consume(); // Also take a link that arrived between platform creation and this subscription.
+  return () => window.removeEventListener('vela:web-handoff', consume);
 }
 
 export function screenArtWidth(): number {
@@ -39,6 +64,7 @@ export function desktopShell(): DesktopShell | undefined {
 export function platform(): VelaPlatform {
   const development = __DEV__ ? config.server || DEVELOPMENT_SERVER : '';
   const desktop = desktopShell();
+  const link = webHandoff(!!desktop);
   return {
     etherOrigin: development || (desktop ? undefined : location.origin),
     secrets,
@@ -47,7 +73,7 @@ export function platform(): VelaPlatform {
       : { name: 'Vela browser', platform: 'web' },
     appVersion: config.appVersion,
     media: VelaPlayer.capabilities(),
-    page: { origin: location.origin, webCode: takeWebCode() },
+    page: { origin: location.origin, webCode: link.code, consoleUrl: link.consoleUrl },
     mock: config.mock,
     artWidth: screenArtWidth(),
   };

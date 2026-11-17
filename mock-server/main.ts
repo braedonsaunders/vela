@@ -88,7 +88,14 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const g = refresh.get(body.refreshToken); if (!g || g.revoked || g.device.id !== body.device?.id) fail('auth', 'invalid_refresh', 'Refresh invalid');
     access.delete(g.access); refresh.delete(g.refresh); g.access = crypto.randomUUID(); g.refresh = crypto.randomUUID(); g.expires = Date.now() + 3600000; access.set(g.access, g); refresh.set(g.refresh, g); return json(tokens(g));
   }
-  if (method === 'POST' && path === '/auth/web-code/redeem') { const expiry = webCodes.get(body.code); if (!expiry || expiry < Date.now()) fail('auth', 'invalid_web_code', 'Code expired or consumed'); webCodes.delete(body.code); return json(issue(body.device)); }
+  if (method === 'POST' && path === '/auth/web-code/redeem') {
+    const id = body.device?.id;
+    if (typeof id !== 'string' || id.length < 16 || id.length > 128) fail('auth', 'invalid_device', 'Device id must be 16–128 characters');
+    const expiry = webCodes.get(body.code);
+    if (!expiry || expiry <= Date.now()) fail('auth', 'invalid_web_code', 'Code expired or consumed');
+    webCodes.delete(body.code);
+    return json(issue(body.device));
+  }
   if (method === 'POST' && ['/auth/device', '/auth/quick-connect'].includes(path)) {
     if (!body.device?.id) fail('request', 'device_required', 'Device required');
     const id = crypto.randomUUID(), code = crypto.randomUUID().slice(0, 8).toUpperCase(), expires = Date.now() + 600000;
@@ -274,7 +281,7 @@ async function dispatch(req: Request): Promise<Response> {
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } return json(faults); }
     if (req.method === 'POST' && url.pathname === '/__admin/appearance') return json(setAppearance(await req.json()));
-    if (req.method === 'POST' && url.pathname === '/__admin/web-code') { const code = crypto.randomUUID(); webCodes.set(code, Date.now() + 60000); return json({ code, expiresAt: new Date(Date.now() + 60000).toISOString() }); }
+    if (req.method === 'POST' && url.pathname === '/__admin/web-code') { const code = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url'); const expires = Date.now() + (url.searchParams.has('expired') ? -1 : 60000); webCodes.set(code, expires); return json({ code, expiresAt: new Date(expires).toISOString() }); }
     fail('not-found', 'endpoint_not_found', 'Admin endpoint not found');
   }
   const media = /^\/sessions\/media\/([^/]+)\/([^/]+)\/(.+)$/.exec(url.pathname);

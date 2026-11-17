@@ -42,3 +42,8 @@ export function platform(): VelaPlatform {
     artWidth: screenArtWidth(),
   };
 }
+
+/** Native applications do not consume web console handoffs. */
+export function listenWebHandoff(_receive: (value: { code?: string; consoleUrl?: string }) => void): () => void {
+  return () => {};
+}

@@ -65,6 +65,9 @@ export const initialAuth: AuthState = {
 const SNAPSHOT_POLL_SECONDS = 5;
 
 export class Auth {
+  private starting: Promise<void> | undefined;
+  private linkError = '';
+  private linkGeneration = 0;
   private quick: { secret: string; serverId: string; timer?: ReturnType<typeof setTimeout> } | undefined;
   private redemption: { code: string; idempotencyKey: string; consumed: boolean } | undefined;
   /** Asking a server that did not answer for its sign-in options again, while signed out. */
@@ -75,22 +78,35 @@ export class Auth {
     private readonly session: Session,
     private readonly platform: VelaPlatform,
   ) {
-    session.onReset(() => this.refresh().catch(() => {}));
+    session.onReset(() => {
+      if (this.box.get().auth.phase !== 'redeeming') void this.refresh().catch(() => {});
+    });
   }
 
   /** Settle the selected server's session: redeem a sign-in link, validate what is stored. */
-  async start(): Promise<void> {
+  start(): Promise<void> {
+    return this.starting ??= this.startSession();
+  }
+
+  private async startSession(): Promise<void> {
     this.patch({ phase: 'starting', error: '' });
     if (!this.session.hasServer()) return this.noServer();
+    const code = !this.session.servers.standalone ? this.platform.page?.webCode : undefined;
+    if (this.platform.page) delete this.platform.page.webCode;
+    if (code !== undefined) {
+      await this.signInWithWebCode(code);
+      return;
+    }
     const connection = this.session.selected();
-    const code = this.platform.page?.webCode;
+    const generation = this.linkGeneration;
     try {
-      if (code && !this.platform.secrets.get('vela.session')) await this.redeem(code);
-      else if (this.session.demoSignIn(connection)) await this.session.ready();
+      if (this.session.demoSignIn(connection)) await this.session.ready();
       const stored = await this.session.tokens(connection);
       if (stored) await this.session.validate(connection, stored);
+      if (generation !== this.linkGeneration) return;
       await this.refresh();
     } catch (error) {
+      if (generation !== this.linkGeneration) return;
       const stillSignedIn = !!(await this.session.tokens(connection));
       // A transient failure is not sign-out: the stored session stays and the app says it is offline.
       // A session the server no longer accepts was dropped: the viewer is asked to sign in again
@@ -101,11 +117,38 @@ export class Auth {
     }
   }
 
+  /** A new console link wins over the current viewer, including in an already-open tab. */
+  async signInWithWebCode(code: string): Promise<boolean> {
+    if (this.session.servers.standalone) return false;
+    const generation = ++this.linkGeneration;
+    this.linkError = '';
+    this.patch({ phase: 'redeeming', viewer: '', error: '' });
+    this.session.servers.select('ether');
+    const connection = this.session.selected();
+    try {
+      const redeemed = await this.redeem(code, generation);
+      if (!redeemed || generation !== this.linkGeneration) return false;
+      // The 200 redemption proves this fresh session; option discovery cannot undo it.
+      await this.refresh('', 'signed-in');
+      return generation === this.linkGeneration;
+    } catch {
+      if (generation !== this.linkGeneration) return false;
+      await connection.credentials.set(null);
+      this.linkError = msg('server.webLinkExpired');
+      this.session.resetSession();
+      await this.refresh(this.linkError, 'signed-out');
+      return false;
+    }
+  }
+
   /** A web sign-in link always signs in to the Ether server this page came from. */
-  private async redeem(code: string): Promise<void> {
-    this.patch({ phase: 'redeeming' });
+  private async redeem(code: string, generation: number): Promise<boolean> {
     const ether = this.session.connection('ether');
     const adapter = ether.adapter;
+    // An explicit handoff replaces any old viewer, including a stored signed-out marker.
+    await ether.credentials.set(null);
+    if (generation !== this.linkGeneration) return false;
+    this.session.resetSession();
     if (!hasWebCodeSignIn(adapter)) throw new Error('Sign-in links are not offered by this server');
     if (!this.redemption || this.redemption.code !== code) {
       this.redemption = { code, idempotencyKey: this.session.key(), consumed: false };
@@ -114,11 +157,11 @@ export class Auth {
     if (current.consumed) throw new Error('The sign-in link has already been used');
     const epoch = this.session.epoch;
     const tokens = await adapter.redeemWebCode({ code, device: this.session.device, idempotencyKey: current.idempotencyKey });
-    if (this.redemption !== current || epoch !== this.session.epoch) return;
-    if (this.platform.secrets.get('vela.session')) return;
+    if (this.redemption !== current || epoch !== this.session.epoch) return false;
     await ether.credentials.set(tokens);
     current.consumed = true;
-    if (this.session.selected() === ether) this.session.resetSession();
+    current.code = '';
+    return true;
   }
 
   /** A standalone app with no server yet: signed out, and the app offers Connect. */
@@ -132,8 +175,10 @@ export class Auth {
 
   /** Re-read the selected server's sign-in options and session into state. */
   async refresh(error = '', phase?: AuthPhase): Promise<void> {
+    error ||= this.linkError;
     if (!this.session.hasServer()) return this.noServer();
     const connection = this.session.selected();
+    const epoch = this.session.epoch;
     const tokens = await this.session.tokens(connection);
     let options = { passwordAvailable: false, quickAvailable: false, secureOrigin: '' };
     let reachable = true;
@@ -142,6 +187,8 @@ export class Auth {
     } catch {
       reachable = false;
     }
+    // An older option/session read must never repaint a viewer after a new handoff.
+    if (epoch !== this.session.epoch) return;
     let settled: AuthPhase = tokens ? 'signed-in' : 'signed-out';
     if (phase) settled = phase;
     else if (!reachable && tokens) settled = 'offline';
@@ -186,6 +233,7 @@ export class Auth {
   }
 
   async signIn(username: string, password: string): Promise<boolean> {
+    this.linkError = '';
     const connection = this.session.selected();
     const adapter = connection.adapter;
     try {
@@ -208,6 +256,7 @@ export class Auth {
 
   /** Show a Quick Connect code; core polls until it is approved, denied, expired or cancelled. */
   async startQuick(): Promise<void> {
+    this.linkError = '';
     this.cancelQuick();
     const connection = this.session.selected();
     const adapter = connection.adapter;

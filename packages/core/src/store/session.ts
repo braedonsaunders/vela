@@ -63,7 +63,7 @@ export class Session {
   get device(): V.Device {
     if (!this.deviceValue) {
       let id = this.platform.secrets.get('vela.device');
-      if (!id) {
+      if (!id || id.length < 16 || id.length > 128) {
         id = randomId();
         this.platform.secrets.set('vela.device', id);
       }

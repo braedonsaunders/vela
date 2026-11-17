@@ -24,8 +24,10 @@ export interface VelaPlatform {
   /** The web page the app is served from. Absent natively, where there is no page to hand a session to. */
   page?: {
     origin: string;
-    /** A sign-in link's one-time code (`#code=` or `?code=`), redeemed once at start. */
+    /** A sign-in link's captured #code, redeemed once at start. */
     webCode?: string;
+    /** A validated same-host HTTP(S) console URL, when the page was opened by Ether. */
+    consoleUrl?: string;
   };
   /** Development against mock-server: the Ether server signs in as its demo viewer. */
   mock?: boolean;

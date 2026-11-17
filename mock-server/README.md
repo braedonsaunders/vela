@@ -13,7 +13,8 @@ Optional `VELA_MOCK_COLD=1` makes each title's first detail read partial (`pendi
 `refreshAfterMs: 2000`, `Cache-Control: private, no-store`), as Ether answers a title it is still filling.
 For device/quick-connect pairing, approve the displayed code using an already
 signed-in grant. Poll every three seconds; pairing expires after ten minutes.
-POST `/__admin/web-code` issues a single-use three-minute console handoff code.
+POST `/__admin/web-code` issues a single-use 43-character console handoff code, valid for sixty seconds.
+Use `/__admin/web-code?expired=1` to exercise the expired-link page without waiting.
 
 API and caching follow [v0](../packages/protocol/README.md). All state is in memory;
 restarts invalidate credentials, cursors, receipts and sessions. The fixtures are

@@ -23,7 +23,7 @@ import { LiveProvider, useLiveView } from '@vela/skin/src/widgets/guide';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useDispatcher } from './actions';
 import { config } from './data/config';
-import { platform } from './data/platform';
+import { listenWebHandoff, platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
 import { preferences } from './data/preferences';
 import { AppearancePicker } from './picker';
@@ -61,13 +61,21 @@ export function useVela(): Vela {
 const SIGNED_OUT_ROUTES = ['/sign-in', '/connect'];
 
 export function VelaProvider({ children }: { children: ReactNode }) {
-  const [store] = useState(() => createVela({ ...platform(), rendererVersion: RENDERER_VERSION }));
+  const [boot] = useState(platform);
+  const [store] = useState(() => createVela({ ...boot, rendererVersion: RENDERER_VERSION }));
+  const [consoleUrl, setConsoleUrl] = useState(boot.page?.consoleUrl);
   useEffect(() => {
     void start(store);
+    return listenWebHandoff(link => {
+      setConsoleUrl(link.consoleUrl);
+      if (link.code !== undefined) void store.auth.signInWithWebCode(link.code).then(signedIn => {
+        if (signedIn) router.replace('/');
+      });
+    });
   }, [store]);
   return (
     <StoreProvider vela={store}>
-      <AppProvider store={store}>{children}</AppProvider>
+      <AppProvider store={store} consoleUrl={consoleUrl}>{children}</AppProvider>
     </StoreProvider>
   );
 }
@@ -81,7 +89,7 @@ async function start(store: Store): Promise<void> {
   }
 }
 
-function AppProvider({ store, children }: { store: Store; children: ReactNode }) {
+function AppProvider({ store, children, consoleUrl }: { store: Store; children: ReactNode; consoleUrl?: string }) {
   // Library/collection pages subscribe to their own keyed values. Their loading and
   // paging must not invalidate every host, the shell and all retained sections.
   const selectHostState = useMemo(() => {
@@ -105,8 +113,8 @@ function AppProvider({ store, children }: { store: Store; children: ReactNode })
   }, [store, signedIn, state.home.load, state.libraries.load]);
 
   const serverSwitch = useMemo(
-    () => ({ servers, actions: store.servers, openConnect: () => router.push('/connect') }),
-    [servers, store],
+    () => ({ servers, actions: store.servers, consoleUrl, openConnect: () => router.push('/connect') }),
+    [servers, store, consoleUrl],
   );
 
   // The providers wrap the app whether or not they have a value: wrapping on sign-in would remount

@@ -2,7 +2,7 @@
 // its kind and state; choosing another switches to it, and "Add a server" opens Connect. Its text
 // takes the node's inherited rows; the quiet lines and the check take the document's `ui` inks.
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { msg } from '@vela/core';
 import { eyebrow } from '../../resolve/vela-base/look';
 import { useInheritedText, type WidgetProps } from '../../host';
@@ -58,6 +58,9 @@ export function ServerSwitcher({ params }: WidgetProps) {
         />
       ))}
       <Row label={params.addLabel || msg('connect.add')} onPress={switcher.openConnect} testID="server-add" />
+      {switcher.consoleUrl && Platform.OS === 'web' ? (
+        <Row label={msg('server.backToEther')} href={switcher.consoleUrl} testID="back-to-ether" />
+      ) : null}
       {error ? <Alert>{error}</Alert> : null}
     </View>
   );
@@ -70,6 +73,7 @@ function Row({
   selected = false,
   disabled = false,
   onPress,
+  href,
   testID,
 }: {
   label: string;
@@ -77,7 +81,8 @@ function Row({
   ready?: boolean;
   selected?: boolean;
   disabled?: boolean;
-  onPress(): void;
+  onPress?(): void;
+  href?: string;
   testID: string;
 }) {
   const look = useLook();
@@ -88,7 +93,8 @@ function Row({
     <APressable
       onPress={onPress}
       disabled={disabled}
-      accessibilityRole="menuitem"
+      accessibilityRole={href ? 'link' : 'menuitem'}
+      {...(href && Platform.OS === 'web' ? { href } : {})}
       accessibilityState={{ selected, disabled }}
       testID={testID}
       style={[look.box(overlaid(ROW, state, LOOKS, disabled)), NO_RING]}
