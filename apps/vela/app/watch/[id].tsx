@@ -8,7 +8,7 @@ import { StyleSheet, View } from 'react-native';
 import { msg, type PlaybackTarget } from '@vela/core';
 import { VelaPlayer, VelaPlayerView } from '@vela/player';
 import type { DetailModel } from '@vela/skin';
-import { useLiveView, useLiveWatch } from '@vela/skin/src/widgets/guide';
+import { useLiveContext, useLiveView, useLiveWatch } from '@vela/skin/src/widgets/guide';
 import { backFromNavigation, useBackHeld, usePlaybackSession, WatchSurface } from '@vela/skin/src/widgets/player';
 import { useVela } from '../../src/vela';
 
@@ -33,12 +33,25 @@ export default function Watch() {
   const { id = '', kind } = useLocalSearchParams<{ id: string; kind?: string }>();
   const { host, openTitle, store } = useVela();
   const target = useMemo(() => targetOf(kind, id), [kind, id]);
-  const session = usePlaybackSession(target);
+  const live = useLiveContext();
+  const liveView = useLiveView();
+  const owned = target.kind === 'channel' && live ? {
+    plan: liveView.tile.channelId === id ? liveView.tile.plan : null,
+    snapshot: (value: Parameters<typeof live.controller.tileSnapshot>[0]) => live.controller.tileSnapshot(value),
+    failed: () => live.controller.tileFailed(),
+    updatePlan: (plan: Parameters<typeof live.controller.updateWatchPlan>[0]) => live.controller.updateWatchPlan(plan),
+  } : undefined;
+  const session = usePlaybackSession(target, owned);
   const skin = host('watch', id);
   const sessionId = session.view.plan?.sessionId ?? '';
-  const channels = useLiveView().guide?.channels;
+  const channels = liveView.guide?.channels;
   const focused = useIsFocused();
   useLiveWatch(focused && target.kind === 'channel');
+  useEffect(() => {
+    if (!live || target.kind !== 'channel' || !focused || !id) return;
+    live.controller.enterWatch(id);
+    return () => { setTimeout(() => live.controller.leaveWatch(id), 0); };
+  }, [live, focused, target.kind, id]);
   // Back with a player menu open closes the menu. tvOS's Menu also reaches the native stack,
   // which would pop the player: its removal waits while a menu holds Back.
   usePreventRemove(useBackHeld(), backFromNavigation);
@@ -47,7 +60,7 @@ export default function Watch() {
 
   // Each session's media authorization goes straight to the player, never through props or state.
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || owned) return;
     let live = true;
     store.playback.mediaAccess().then(
       grant => {
@@ -59,7 +72,7 @@ export default function Watch() {
       live = false;
       VelaPlayer.setMediaAccess(null);
     };
-  }, [store, sessionId]);
+  }, [store, sessionId, !!owned]);
 
   const { stop } = session;
   const close = useCallback(() => {

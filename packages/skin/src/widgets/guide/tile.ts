@@ -13,6 +13,7 @@ export interface TileView {
   state: TileState;
   channelId: string;
   muted: boolean;
+  fullscreen: boolean;
   /** The session to draw, while connecting or playing. */
   plan: PlaybackPlan | null;
   /** The latest mute command for the player view. */
@@ -56,7 +57,7 @@ export class Tile {
   private muted = true;
   private commandId = 0;
   private command: Command | null = null;
-  private pendingWatch = '';
+  private fullscreen = false;
   private readonly stopping = new Map<string, Stopping>();
 
   constructor(
@@ -80,7 +81,7 @@ export class Tile {
 
   private get wanted(): boolean {
     const { open, canPreview } = this.inputs;
-    return open && canPreview && this.allowed && this.target !== '' && this.pendingWatch === '' && !this.givenUp;
+    return open && canPreview && this.allowed && this.target !== '' && !this.givenUp;
   }
 
   view(): TileView {
@@ -88,6 +89,7 @@ export class Tile {
       state: this.state(),
       channelId: this.target,
       muted: this.muted,
+      fullscreen: this.fullscreen,
       plan: this.wanted ? this.held : null,
       command: this.command,
     };
@@ -103,8 +105,8 @@ export class Tile {
 
   /** Re-decide after the controller's inputs changed: tune when wanted, release when not. */
   update(inputs: TileInputs): void {
-    this.inputs = inputs;
-    if (!inputs.open && (this.givenUp || this.attempt > 0 || this.chosen || this.manual)) this.forget();
+    this.inputs = { ...inputs, open: inputs.open || this.fullscreen };
+    if (!inputs.open && !this.fullscreen && (this.givenUp || this.attempt > 0 || this.chosen || this.manual)) this.forget();
     this.settle();
   }
 
@@ -179,15 +181,27 @@ export class Tile {
     this.changed();
   }
 
-  /** Full watch: at once when the tile holds nothing, else after the server confirmed its stop. */
+  /** The same owned session is displayed full screen, without stopping or starting it again. */
   watch(channelId: string): void {
-    if (!this.held && this.stopping.size === 0) {
-      this.openWatch(channelId);
-      return;
-    }
-    this.pendingWatch = channelId;
-    this.drop();
+    this.enterWatch(channelId);
+    this.openWatch(channelId);
+  }
+
+  enterWatch(channelId: string): void {
+    this.fullscreen = true;
+    this.inputs = { ...this.inputs, open: true };
+    this.retune(channelId);
+    this.settle();
     this.changed();
+  }
+
+  leaveWatch(): void {
+    this.fullscreen = false;
+    this.changed();
+  }
+
+  updatePlan(plan: PlaybackPlan): void {
+    if (this.held?.sessionId === plan.sessionId) this.held = plan;
   }
 
   /** The tile says its stop did not take; the viewer asks again. */
@@ -203,7 +217,7 @@ export class Tile {
   /** Leaving: stop everything, forget the run. A pending stop still completes in the background. */
   dispose(): void {
     this.inputs = { ...this.inputs, open: false };
-    this.pendingWatch = '';
+    this.fullscreen = false;
     this.drop();
   }
 
@@ -245,11 +259,6 @@ export class Tile {
   private stopped(entry: Stopping): void {
     clearTimeout(entry.timer);
     this.stopping.delete(entry.plan.sessionId);
-    if (this.stopping.size === 0 && !this.held && this.pendingWatch) {
-      const channelId = this.pendingWatch;
-      this.pendingWatch = '';
-      this.openWatch(channelId);
-    }
     this.settle();
     this.changed();
   }

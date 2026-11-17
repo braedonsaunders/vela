@@ -83,7 +83,7 @@ export class LiveController {
     this.watchZap = new Zap(
       WATCH_ZAP_WAIT,
       () => this.channels(),
-      id => this.watchNow(id, true),
+      id => { this.tile.enterWatch(id); this.watchNow(id, true); },
       () => { this.scheduleFetch(); this.emit(); },
     );
     this.current = this.compose();
@@ -187,10 +187,24 @@ export class LiveController {
     if (this.surfaces.has('home')) this.remember(channelId);
   }
 
-  /** Full-screen watch, after the tile's confirmed stop. */
+  /** Show the owned live session full screen. */
   watch(channelId: string): void {
     if (!channelId) return;
     this.tile.watch(channelId);
+  }
+
+  enterWatch(channelId: string): void {
+    this.tile.enterWatch(channelId);
+  }
+
+  leaveWatch(channelId: string): void {
+    if (this.tile.target !== channelId) return;
+    this.tile.leaveWatch();
+    this.sync();
+  }
+
+  updateWatchPlan(plan: import('../../../../protocol/types').PlaybackPlan): void {
+    this.tile.updatePlan(plan);
   }
 
   tuneIn(): void {

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { msg, VelaError, type PlaybackState, type PlaybackTarget } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
+import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { CommandInput, PlayerChromeState, StartFailure } from './context';
 import { belongs } from './present';
@@ -27,7 +28,14 @@ function startFailure(playback: PlaybackState): StartFailure | null {
   };
 }
 
-export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
+export interface LiveSessionOwner {
+  plan: PlaybackPlan | null;
+  snapshot(snapshot: Snapshot): void;
+  failed(): void;
+  updatePlan(plan: PlaybackPlan): void;
+}
+
+export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner): PlaybackSession {
   const vela = useVela();
   const playback = useVelaState(state => state.playback);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -38,6 +46,21 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
   const position = useRef(0);
   const paused = useRef(false);
   const { kind, id } = target;
+  const ownerRef = useRef(owner);
+  ownerRef.current = owner;
+  const external = owner !== undefined;
+  const ownedPlan = owner?.plan;
+  const ownedId = ownedPlan?.sessionId ?? '';
+
+  useEffect(() => {
+    if (!external || !ownedPlan) return;
+    void vela.playback.attach({ kind, id }, ownedPlan).catch(error => console.warn('Live session attach failed', error));
+    return () => vela.playback.detach(ownedPlan.sessionId);
+  }, [vela, external, ownedId, kind, id]);
+
+  useEffect(() => {
+    if (external && playback.plan && playback.sessionId === ownedId) ownerRef.current?.updatePlan(playback.plan);
+  }, [external, playback.plan, playback.sessionId, ownedId]);
 
   const begin = useCallback(
     (positionSeconds?: number) => {
@@ -51,10 +74,10 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
   );
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || external) return;
     begin();
     return () => void vela.playback.stop();
-  }, [vela, id, begin]);
+  }, [vela, id, begin, external]);
 
   // A backgrounded app may be suspended and ended there without running JavaScript (the Apple TV's TV
   // button): the session is stopped as the app leaves the foreground, and started again where it was when
@@ -62,7 +85,7 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
   // in the background keeps playing, so the web keeps its session.
   const away = useRef(false);
   useEffect(() => {
-    if (!id || Platform.OS === 'web') return;
+    if (!id || external || Platform.OS === 'web') return;
     const subscription = AppState.addEventListener('change', state => {
       if (state === 'background' && !away.current) {
         away.current = true;
@@ -73,7 +96,7 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
       }
     });
     return () => subscription.remove();
-  }, [vela, id, begin]);
+  }, [vela, id, begin, external]);
 
   // The server ended the session under the player (it heard nothing from it for two minutes, or it restarted):
   // a new session starts where this one was, once per session, and stays paused if it was paused.
@@ -84,12 +107,13 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
       if (restarted.current === gone) return;
       restarted.current = gone;
       resumePaused.current = paused.current;
-      begin(position.current > 0 ? position.current : undefined);
+      if (external) ownerRef.current?.failed();
+      else begin(position.current > 0 ? position.current : undefined);
     },
-    [begin],
+    [begin, external],
   );
 
-  const stop = useCallback(() => void vela.playback.stop(), [vela]);
+  const stop = useCallback(() => { if (!external) void vela.playback.stop(); }, [vela, external]);
 
   const send = useCallback((input: CommandInput) => {
     nextId.current += 1;
@@ -104,10 +128,11 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
       send({ type: 'retry' });
       return;
     }
-    begin(position.current > 0 ? position.current : undefined);
-  }, [failure, playback.plan, send, begin]);
+    if (external) ownerRef.current?.failed();
+    else begin(position.current > 0 ? position.current : undefined);
+  }, [failure, playback.plan, send, begin, external]);
 
-  const plan = playback.plan;
+  const plan = external && playback.sessionId !== ownedId ? null : playback.plan;
   const sessionId = plan?.sessionId ?? '';
 
   useEffect(() => {
@@ -126,9 +151,10 @@ export function usePlaybackSession(target: PlaybackTarget): PlaybackSession {
         paused.current = next.state === 'paused';
       }
       if (next.failure === null) setFailure(null);
+      ownerRef.current?.snapshot(next);
       vela.playback.snapshot(next);
     },
-    onError: setFailure,
+    onError: error => { setFailure(error); if (external) ownerRef.current?.failed(); },
     onCommand: event => {
       if (!event.ok && event.failure) setRefused(event.failure.message);
     },

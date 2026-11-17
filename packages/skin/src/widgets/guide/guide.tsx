@@ -91,7 +91,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
   const press = (channel: GuideChannel, programme: GuideProgramme) => {
     select(channel, programme);
     if (!programme.airing) return;
-    if (view.tile.channelId === channel.id && view.tile.state === 'playing') controller.watch(channel.id);
+    if (view.tile.channelId === channel.id && view.tile.plan !== null) controller.watch(channel.id);
     else controller.preview(channel.id);
   };
   const watch = (channelId: string) => controller.watch(channelId);
@@ -109,8 +109,8 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
   };
   const jumpNow = () => {
     setSelected({ channel: '', programme: '' });
-    if (model.day !== 0) pickDay(0);
-    else grid.current?.jumpNow();
+    controller.chooseDay(0);
+    grid.current?.jumpNow();
   };
   const shift = (hours: number) => {
     const runOff = grid.current?.shift(hours) ?? 0;

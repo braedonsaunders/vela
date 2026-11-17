@@ -9,7 +9,7 @@ export function TilePicture() {
   const live = useLiveContext();
   const { tile } = useLiveView();
   const Player = live?.Player;
-  const showing = tile.plan !== null && (tile.state === 'connecting' || tile.state === 'playing');
+  const showing = !tile.fullscreen && tile.plan !== null && (tile.state === 'connecting' || tile.state === 'playing');
   if (!live || !Player || !showing || !tile.plan) return null;
   const controller = live.controller;
   return (

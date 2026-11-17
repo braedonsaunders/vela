@@ -72,6 +72,7 @@ const POLL_SECONDS = 5;
 export class Playback {
   /** The current playback's own token: work for an older one stops when this changes. */
   private run: object | undefined;
+  private externalId: string | undefined;
   private follow: AbortController | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private media: { identity: string; handle: string } | undefined;
@@ -107,6 +108,26 @@ export class Playback {
     this.run = run;
     this.patch({ ...initialPlayback, phase: 'starting', target });
     await this.request({ run, target, key: `play-${target.kind}-${target.id}-${randomId()}` }, 0, 0);
+  }
+
+  /** Follow a live owner's existing plan without taking responsibility for stopping it. */
+  async attach(target: PlaybackTarget, existing: V.PlaybackPlan): Promise<void> {
+    this.end();
+    const run = {};
+    this.run = run;
+    this.externalId = existing.sessionId;
+    const connection = await this.session.ready();
+    if (this.run !== run) return;
+    const plan = connection.plan(existing);
+    this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
+    this.followSession(run, connection, plan.sessionId);
+  }
+
+  /** Stop following an externally owned live session without ending the server session. */
+  detach(sessionId: string): void {
+    if (this.externalId !== sessionId) return;
+    this.end();
+    this.box.update('playback', () => initialPlayback);
   }
 
   /** One playback intent: every attempt and preparation re-request carries its idempotency key. */
@@ -327,6 +348,7 @@ export class Playback {
   }
 
   private end(): void {
+    this.externalId = undefined;
     this.run = undefined;
     this.follow?.abort();
     this.follow = undefined;
