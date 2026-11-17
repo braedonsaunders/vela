@@ -26,6 +26,21 @@ function homeOf(doc: SkinDocument): Node | undefined {
   return doc.slots?.home ?? doc.routes?.home;
 }
 
+/** Older or third-party library routes still receive the shared view switch. */
+function hasLibraryViews(node: Node): boolean {
+  if (node.type === 'use' && node.template === 'velaLibraryViews') return true;
+  if (node.type === 'box') return (node.children ?? []).some(hasLibraryViews);
+  if (node.type === 'repeat') return hasLibraryViews(node.item);
+  return false;
+}
+
+function withLibraryViews(node: Node): Node {
+  if (hasLibraryViews(node)) return node;
+  const switcher: Node = { type: 'use', template: 'velaLibraryViews' };
+  const libraryOnly: Node = { ...node, when: [...(node.when ?? []), { test: 'library.view', is: 'eq', value: 'library' }] };
+  return { type: 'box', style: { display: 'flex', 'flex-direction': 'column' }, children: [switcher, { type: 'use', template: 'velaLibraryAlternative' }, libraryOnly] };
+}
+
 /** Whether a shell reserves space for navigation before its route content. */
 export function hasFlowHeader(shell: Node | undefined): boolean {
   let navigation = false;
@@ -47,6 +62,7 @@ export function withBase(doc: SkinDocument, base: SkinDocument): InheritedDocume
   const routes = { ...base.routes, ...doc.routes };
   delete routes.home;
   if (!doc.routes?.library && hasFlowHeader(doc.slots?.shell)) routes.library = libraryBelowHeader;
+  if (routes.library) routes.library = withLibraryViews(routes.library);
   const slots = { ...base.slots, ...doc.slots };
   delete slots.home;
   // Home's bar mask is its drawer's: a document that draws its own home does not take the base's.

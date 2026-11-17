@@ -9,11 +9,7 @@ import Home from './index';
 import { LibrarySection } from './library/[id]';
 import type { LibraryParams } from '../../src/browse/library-query';
 import { SectionFocusContext } from '../../src/section-focus';
-
-const slideInForward = { from: { transform: [{ translateX: '100%' }] }, to: { transform: [{ translateX: '0%' }] } };
-const slideInBackward = { from: { transform: [{ translateX: '-100%' }] }, to: { transform: [{ translateX: '0%' }] } };
-const slideOutForward = { from: { transform: [{ translateX: '0%' }] }, to: { transform: [{ translateX: '-100%' }] } };
-const slideOutBackward = { from: { transform: [{ translateX: '0%' }] }, to: { transform: [{ translateX: '100%' }] } };
+import { SECTION_SLIDE_MS, slideInForward, slideInBackward, slideOutForward, slideOutBackward } from '../../src/section-motion';
 
 type Section = { route: 'home' | 'library' | 'live'; entry: string };
 
@@ -70,8 +66,8 @@ export default function SectionsLayout() {
       offset.setValue(direction * width);
       outgoingOffset.setValue(0);
       Animated.parallel([
-        Animated.timing(offset, { toValue: 0, duration: 260, useNativeDriver: true }),
-        Animated.timing(outgoingOffset, { toValue: -direction * width, duration: 260, useNativeDriver: true }),
+        Animated.timing(offset, { toValue: 0, duration: SECTION_SLIDE_MS, useNativeDriver: true }),
+        Animated.timing(outgoingOffset, { toValue: -direction * width, duration: SECTION_SLIDE_MS, useNativeDriver: true }),
       ]).start();
     } else {
       offset.setValue(0);
@@ -125,7 +121,7 @@ function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMot
     const timer = setTimeout(() => {
       outgoing.current = null;
       refresh(value => value + 1);
-    }, 260);
+    }, SECTION_SLIDE_MS);
     return () => clearTimeout(timer);
   }, [sectionKey, reducedMotion]);
   if (last.current) retained.current.set(sectionKey, last.current);
@@ -140,7 +136,7 @@ function SectionScenes({ focused, sectionKey, offset, outgoingOffset, reducedMot
             animationName: isCurrent
               ? transition.direction > 0 ? slideInForward : slideInBackward
               : transition.direction > 0 ? slideOutForward : slideOutBackward,
-            animationDuration: 260,
+            animationDuration: SECTION_SLIDE_MS,
             animationTimingFunction: 'ease-in-out' as const,
             animationFillMode: 'both' as const,
           }

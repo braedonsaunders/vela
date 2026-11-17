@@ -69,11 +69,12 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       loading: !held && current?.load !== 'failed',
       moreLoading: usableView === 'collections' ? !!extraState.moreLoading : !!held && current?.load === 'loading',
       view: usableView,
+      viewRequest: requestedView ?? '',
       extras,
       extrasLoading: extraState.id === id && extraState.loading,
       extrasFailed: extraState.id === id && (extraState.failed || !!extras?.failed),
     };
-  }, [current, earlier, query, usableView, extras, extraState]);
+  }, [current, earlier, query, usableView, requestedView, extras, extraState]);
 
   const failed = current?.load === 'failed' && !current.value;
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';

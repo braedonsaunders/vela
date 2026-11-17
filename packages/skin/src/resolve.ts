@@ -69,6 +69,8 @@ export interface ResolvedDocument {
   name: string;
   document: SkinDocument;
   shell?: RNode;
+  /** The shared library switch, also available while a route is still loading. */
+  libraryViews?: RNode;
   /** Every route the document draws (home from slots.home or routes.home), resolved. */
   routes: Partial<Record<RouteName, RNode>>;
   motion: Record<string, Motion>;
@@ -274,6 +276,7 @@ export function resolveDocument(own: SkinDocument, width: number, locale = 'en')
     name: doc.name,
     document: doc,
     shell: doc.slots?.shell && convert(doc.slots.shell, 1, r),
+    libraryViews: doc.templates?.velaLibraryViews && convert({ type: 'use', template: 'velaLibraryViews' }, 1, r),
     routes: Object.fromEntries([
       ...(home ? [['home', convert(home, 1, r)]] : []),
       ...Object.entries(doc.routes ?? {}).filter(([name, tree]) => name !== 'home' && tree).map(([name, tree]) => [name, convert(tree as Node, 1, r)]),

@@ -180,15 +180,16 @@ const viewTab = (id: string, label: string): Node => {
   const on: Condition[] = [{ test: 'library.view', is: 'eq', value: id }];
   const style: Style = { position: 'relative', padding: '10px 14px', 'flex-shrink': '0', color: '$ui.inkSecondary', 'font-size': '14px', 'border-radius': '$ui.radiusControl' };
   const available = id === 'recommended' ? 'library.canRecommend' : id === 'collections' ? 'library.canCollections' : id === 'genres' ? 'library.genresCount' : '';
-  return { type: 'box', ...(available ? { when: [{ test: available, ...(id === 'genres' ? { is: 'gt' as const, value: '0' } : {}) }] } : {}), role: 'tab', press: { action: 'libraryView', arg: id }, label, a11y: { selected: on }, style,
+  const unavailable: Condition[] = available ? [{ test: available, ...(id === 'genres' ? { is: 'eq' as const, value: '0' } : { not: true }) }] : [];
+  return { type: 'box', id: `vela-library-view-${id}`, ...(available ? { disabled: unavailable, disabledStyle: { opacity: '0.45' } } : {}), role: 'tab', press: { action: 'libraryView', arg: id }, label, a11y: { selected: on }, style,
     states: [{ when: on, style: { ...style, color: '$ui.ink', 'background-color': '$ui.control' } }],
     focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: label }] };
 };
 
 /** Shared tabs and content for skins which provide their own library header. */
 export const libraryViews: Node = {
-  type: 'box', role: 'tablist', label: '{t:ui.library}',
-  style: { display: 'flex', 'flex-direction': 'row', 'overflow-x': 'auto', gap: '4px', ...gutter }, small: { ...gutterSmall },
+  type: 'box', id: 'vela-library-views', role: 'tablist', label: '{t:ui.library}',
+  style: { display: 'flex', 'flex-direction': 'row', 'overflow-x': 'auto', 'padding-bottom': '12px', gap: '4px', ...gutter }, small: { ...gutterSmall },
   children: [viewTab('recommended', '{t:library.view.recommended}'), viewTab('library', '{t:ui.library}'), viewTab('collections', '{t:library.view.collections}'), viewTab('genres', '{t:library.view.genres}'),
     { type: 'box', when: [{ test: 'env.libraryExtrasFailed' }], press: { action: 'retry' }, label: '{t:library.view.failed}',
       style: { padding: '8px', color: '$ui.inkSecondary', 'flex-shrink': '0' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.view.failed}' }] }],

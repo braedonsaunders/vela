@@ -119,6 +119,21 @@ test('inherited library reserves header space only for overlay navigation', asyn
   expect(topPadding(lateNight)).toEqual(['84px', '104px']);
 });
 
+test('a custom library route inherits the shared view switch and alternative views', async () => {
+  const { withBase } = await import('../src/resolve/inherit');
+  const { velaBase } = await import('../src/resolve/base');
+  const own = documents.find(([name]) => name === 'index')![1];
+  const custom = { ...own, routes: { ...own.routes, library: { type: 'box' as const, children: [] } } };
+  const route = withBase(custom, velaBase).routes!.library!;
+  expect(route.type).toBe('box');
+  if (route.type !== 'box') throw new Error('expected library frame');
+  expect(route.children?.slice(0, 2)).toEqual([
+    { type: 'use', template: 'velaLibraryViews' },
+    { type: 'use', template: 'velaLibraryAlternative' },
+  ]);
+  expect(route.children?.[2]?.when).toEqual([{ test: 'library.view', is: 'eq', value: 'library' }]);
+});
+
 test('every detail header is field-driven for movies, episodes and plugin media, with or without logos', async () => {
   const { detailModel } = await import('../../core/src/discovery/models');
   const { fill, holds } = await import('../src/resolve');

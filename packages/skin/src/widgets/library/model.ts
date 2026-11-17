@@ -7,6 +7,8 @@ export type LibraryView = 'recommended' | 'library' | 'collections' | 'genres';
 
 export interface LibraryPage {
   view?: LibraryView;
+  /** Explicit URL selection; an initially arriving server view is not a tab transition. */
+  viewRequest?: string;
   extras?: LibraryExtras;
   extrasLoading?: boolean;
   extrasFailed?: boolean;

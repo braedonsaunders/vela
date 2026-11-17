@@ -1,5 +1,5 @@
 export { RENDERER_VERSION, resolveDocument, type ResolvedDocument, type RNode, type RouteName } from './resolve';
-export { ScreenActive, SkinRoot, SkinRoute, page } from './render';
+export { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, page } from './render';
 export { useHost, useInheritedText, useWidgetInteraction, type SkinHost, type WidgetProps } from './host';
 export { fill, holds } from './resolve';
 export { loadFonts, type DocumentFont } from './fonts';

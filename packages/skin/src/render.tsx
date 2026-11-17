@@ -1,4 +1,5 @@
 import { inheritRows } from './inherit-rows';
+import { hasFlowHeader } from './resolve/inherit';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
 // overlays in force, translated per the style matrix (translate.ts); text rows inherit down the
@@ -46,6 +47,8 @@ export const ScreenActive = createContext(true);
 /** First content layout releases the skeleton covering a newly loaded route. */
 const InstantContent = createContext(false);
 const RouteLayout = createContext<{ grid(): void; drawn(): void } | null>(null);
+const LoadingLibraryNav = createContext(false);
+const HiddenLibraryNav = createContext(false);
 /** Scroll views of row pagers, by row id, so pageNext/pagePrev can move them. */
 interface Scroller { scrollTo(options: { x?: number; y?: number; animated: boolean }): void }
 const pagers = new Map<string, { view: Scroller; x: number; width: number }>();
@@ -74,7 +77,7 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
 
 /** A route tree: its root's children scroll in the route's own vertical ScrollView. `after` is a
  * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is open). */
-export function SkinRoute({ host, node, after }: { host: SkinHost; node: RNode; after?: RNode }) {
+export function SkinRoute({ host, node, after, hideLibraryViews = false }: { host: SkinHost; node: RNode; after?: RNode; hideLibraryViews?: boolean }) {
   useFocusStyles();
   const focus = useRouteFocus();
   const loading = useRef<SkinHost | null>(null);
@@ -114,13 +117,19 @@ export function SkinRoute({ host, node, after }: { host: SkinHost; node: RNode; 
   }, [cover]);
   const ground = uiOf(host.doc).page;
   const clearLeaving = useCallback(() => setLeaving(null), []);
+  const loadingLibraryNav = host.env.route === 'library' && (host.env.load !== 'ready' || !!cover || !!leaving);
+  const navTop = hasFlowHeader(host.doc.document.slots?.shell) ? 0 : host.env.small ? 104 : 84;
   return (
     <View style={{ flex: 1 }}>
       <Host.Provider value={host}>
         <RouteFocusContext.Provider value={focus}>
           <RouteLayout.Provider value={layout}>
             <InstantContent.Provider value={section && host.env.load === 'ready'}>
-              <SkinNode node={node} ctx={{ index: 0 }} route after={after} />
+              <HiddenLibraryNav.Provider value={hideLibraryViews || loadingLibraryNav}>
+                {loadingLibraryNav && host.env.load !== 'ready' ? (
+                  <View style={{ flex: 1, paddingTop: navTop === 0 ? 48 : 16 }}><SkinNode node={node} ctx={{ index: 0 }} route after={after} /></View>
+                ) : <SkinNode node={node} ctx={{ index: 0 }} route after={after} />}
+              </HiddenLibraryNav.Provider>
             </InstantContent.Provider>
           </RouteLayout.Provider>
         </RouteFocusContext.Provider>
@@ -129,8 +138,18 @@ export function SkinRoute({ host, node, after }: { host: SkinHost; node: RNode; 
         <SkeletonCover key={cover ? 'held' : 'leaving'} host={(cover ?? leaving)!} node={node} ground={ground}
           leaving={!cover} onGone={clearLeaving} />
       ) : null}
+      {loadingLibraryNav && host.doc.libraryViews && !hideLibraryViews ? (
+        <View style={{ position: 'absolute', top: navTop, left: 0, right: 0, zIndex: 20 }}>
+          <Host.Provider value={host}><LoadingLibraryNav.Provider value><SkinNode node={host.doc.libraryViews} ctx={{ index: 0 }} /></LoadingLibraryNav.Provider></Host.Provider>
+        </View>
+      ) : null}
     </View>
   );
+}
+
+/** The shared switch outside an animated library scene. */
+export function SkinLibraryViews({ host }: { host: SkinHost }) {
+  return host.doc.libraryViews ? <Host.Provider value={host}><LoadingLibraryNav.Provider value><SkinNode node={host.doc.libraryViews} ctx={{ index: 0 }} /></LoadingLibraryNav.Provider></Host.Provider> : null;
 }
 
 /** The skeleton over a route that is still laying out: opaque, then a short fade once released. */
@@ -154,6 +173,12 @@ function SkeletonCover({ host, node, ground, leaving, onGone }: {
 
 function SkinNode({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
   const { env } = useHost();
+  const loadingLibraryNav = useContext(LoadingLibraryNav);
+  const hiddenLibraryNav = useContext(HiddenLibraryNav);
+  if (!loadingLibraryNav && env.route === 'library' && env.load !== 'ready' && node.id === 'vela-library-views') return null;
+  if (hiddenLibraryNav && node.id === 'vela-library-views' && node.kind === 'box') {
+    return <View style={{ opacity: 0, width: '100%' }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Box node={node} ctx={ctx} /></View>;
+  }
   if (node.kind === 'repeat') {
     return (
       <>
