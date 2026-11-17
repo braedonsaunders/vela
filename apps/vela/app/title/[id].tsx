@@ -5,7 +5,7 @@ import { DocumentScreen } from '../../src/screen';
 import { useVela } from '../../src/vela';
 
 export default function Title() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, library } = useLocalSearchParams<{ id: string; library?: string }>();
   const { openTitle } = useVela();
   useEffect(() => (id ? openTitle(id) : undefined), [id, openTitle]);
   useFocusEffect(useCallback(() => {
@@ -20,5 +20,5 @@ export default function Title() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []));
-  return <DocumentScreen route="title" entry={id ?? ''} />;
+  return <DocumentScreen route="title" entry={id ?? ''} library={library} />;
 }

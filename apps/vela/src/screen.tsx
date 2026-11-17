@@ -14,13 +14,14 @@ import { SECTION_SLIDE_MS, slideInForward, slideInBackward, slideOutForward, sli
 interface Props {
   route: RouteName;
   entry: string;
+  library?: string;
   page?: (host: SkinHost) => SkinHost;
   sharedShell?: boolean;
 }
 
-export function DocumentScreen({ route, entry, page, sharedShell = false }: Props) {
+export function DocumentScreen({ route, entry, library, page, sharedShell = false }: Props) {
   const vela = useVela();
-  const app = vela.host(route, entry);
+  const app = vela.host(route, entry, library);
   const host = useMemo(() => app && page ? page(app) : app, [app, page]);
   const season = route === 'title' ? host?.env.season : '';
   useEffect(() => {

@@ -36,6 +36,13 @@ describe('PlexAdapter addresses', () => {
 });
 
 describe('PlexAdapter requests', () => {
+  test('filmography filters the selected section by actor and pages', async () => {
+    const seen = routeFetch({ 'GET /library/sections/7/all': { MediaContainer: { Metadata: [movie], totalSize: 6 } } });
+    const result = await plex().personTitles('42', '7', '4');
+    expect(seen[0]!.url.searchParams.get('actor')).toBe('42');
+    expect(seen[0]!.url.searchParams.get('X-Plex-Container-Start')).toBe('4');
+    expect(result).toMatchObject({ items: [{ id: '10' }], nextCursor: '5' });
+  });
   test('search merges hubs, keeps playable kinds once and maps titles', async () => {
     const seen = routeFetch({ 'GET /hubs/search': { MediaContainer: { Hub: [
       { type: 'movie', Metadata: [movie, { ...movie }] },
@@ -121,14 +128,14 @@ describe('PlexAdapter requests', () => {
 
   test('detail maps people, chapters, extras and streams', async () => {
     routeFetch({ 'GET /library/metadata/10': { MediaContainer: { Metadata: [{ ...movie,
-      Role: [{ tag: 'Al Pacino', role: 'Hanna', thumb: '/library/people/1' }], Director: [{ tag: 'Michael Mann' }],
+      Role: [{ id: 42, tag: 'Al Pacino', role: 'Hanna', thumb: '/library/people/1' }], Director: [{ tag: 'Michael Mann' }],
       Chapter: [{ id: 1, tag: 'Opening', startTimeOffset: 0, endTimeOffset: 60_000 }, { id: 2, index: 1, startTimeOffset: 60_000 }],
       Extras: { Metadata: [{ ratingKey: 11, extraType: 1, title: 'Trailer', duration: 120_000, Media: [{}] }, { ratingKey: 12, extraType: 5, title: 'Making of' }] },
       Media: [{ Part: [{ Stream: [{ streamType: 1, codec: 'hevc', width: 3840, height: 2160, bitDepth: 10, colorTrc: 'smpte2084' }, { streamType: 2, codec: 'eac3', channels: 6, languageCode: 'eng', selected: 1 }, { streamType: 3, codec: 'srt' }] }] }, { Part: [{ Stream: [{ streamType: 2, codec: 'aac' }, { streamType: 3, codec: 'srt' }] }] }],
     }] } } });
     const detail = await plex().detail('10');
     expect(detail.canPlay).toBe(true);
-    expect(detail.cast).toEqual([{ name: 'Al Pacino', role: 'Hanna', artwork: expect.objectContaining({ kind: 'person' }) }]);
+    expect(detail.cast).toEqual([{ id: '42', name: 'Al Pacino', role: 'Hanna', artwork: expect.objectContaining({ kind: 'person' }) }]);
     expect(detail.crew).toEqual([{ name: 'Michael Mann', role: 'Director', artwork: undefined }]);
     expect(detail.chapters).toEqual([
       { id: '1', name: 'Opening', startSeconds: 0, endSeconds: 60 },

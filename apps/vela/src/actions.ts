@@ -16,6 +16,7 @@ const TITLE_KINDS = ['', 'movie', 'show', 'season', 'episode'];
 export interface Place {
   route: string;
   entry: string;
+  library?: string;
 }
 
 export interface Dispatcher {
@@ -45,16 +46,16 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
     // A library page reads its own next page (browse/page-host.ts); elsewhere there is none.
   }, [store]);
 
-  const select = useCallback((arg: string) => {
+  const select = useCallback((place: Place, arg: string) => {
     const [id = '', kind = '', receipt = '', showId = ''] = arg.split('|');
     if (receipt) void store.receipts.record(receipt, 'selected');
     if (kind === 'season') {
       actions.setSeason(id);
-      if (showId) router.push({ pathname: '/title/[id]', params: { id: showId } });
+      if (showId) router.push({ pathname: '/title/[id]', params: { id: showId, library: place.route === 'library' ? place.entry : place.library ?? '' } });
     }
     else if (kind === 'channel') router.push({ pathname: '/live', params: { ch: id } });
     else if (id && COLLECTION_KINDS.includes(kind)) openCollection(id);
-    else if (id && TITLE_KINDS.includes(kind)) router.push({ pathname: '/title/[id]', params: { id } });
+    else if (id && TITLE_KINDS.includes(kind)) router.push({ pathname: '/title/[id]', params: { id, library: place.route === 'library' ? place.entry : place.library ?? '' } });
     else notYet('select', arg);
   }, [store, actions]);
 
@@ -67,7 +68,10 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
     if (liveAction(live, action, arg, () => router.push('/live'))) return;
     switch (action) {
       case 'select':
-        return select(arg);
+        return select(place, arg);
+      case 'person':
+        if (place.entry && arg) return router.push({ pathname: '/person', params: { title: place.entry, name: arg, library: place.library ?? '' } });
+        return;
       case 'play':
         if (arg) router.push({ pathname: '/watch/[id]', params: { id: arg } });
         return;

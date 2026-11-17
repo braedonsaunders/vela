@@ -5,7 +5,7 @@
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.6';
+const id = 'latenight', version = '1.0.7';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -420,8 +420,8 @@ const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       ] },
       { type: 'box', when: [{ test: 'detail.hasCast' }], style: block, small: gutterSmall, children: [
         sectionHead('{s:cast}'),
-        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '18px 18px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'padding-bottom': '6px' }, children: [
-          { type: 'repeat', over: 'detail.cast', limit: 24, item: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px 8px', width: '112px', 'flex-shrink': '0', padding: '6px 6px 10px', 'background-color': '$label', 'border-radius': '2px', rotate: '-1', 'box-shadow': '3px 4px 0px $shadow' }, children: [
+        { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '18px 18px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', padding: '8px 6px' }, children: [
+          { type: 'repeat', over: 'detail.cast', limit: 24, item: { type: 'box', press: { action: 'person', arg: '{person.name}' }, label: '{person.name}', focus: { 'box-shadow': '0px 0px 0px 4px $ui.accent' },  style: { display: 'flex', 'flex-direction': 'column', gap: '8px 8px', width: '112px', 'flex-shrink': '0', padding: '6px 6px 10px', 'background-color': '$label', 'border-radius': '2px', rotate: '-1', 'box-shadow': '3px 4px 0px $shadow' }, children: [
             { type: 'box', style: { position: 'relative', width: '100%', 'aspect-ratio': '1 / 1', 'background-color': '$tape-shell', 'overflow-x': 'hidden', 'overflow-y': 'hidden' }, children: [
               { type: 'image', when: [{ test: 'person.portrait' }], src: '{person.portrait}', alt: '', fade: true, style: { position: 'absolute', ...inset('0px'), width: '100%', height: '100%', 'object-fit': 'cover' } },
               { type: 'text', when: [{ test: 'person.portrait', not: true }], text: '{person.initials}', style: { position: 'absolute', ...inset('0px'), display: 'flex', 'align-items': 'center', 'justify-content': 'center', ...osdText('34px', '$ink-dim'), 'text-shadow': 'none' } },

@@ -270,6 +270,7 @@ export const season: Node = {
 
 export const person: Node = {
   type: 'box',
+  press: { action: 'person', arg: '{person.name}' }, label: '{person.name}', focus: { 'box-shadow': '0px 0px 0px 4px $ui.accent' },
   style: {
     display: 'flex',
     'flex-direction': 'column',

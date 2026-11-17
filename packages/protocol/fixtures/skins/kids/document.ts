@@ -6,7 +6,7 @@
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.4';
+const version = '1.2.5';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -380,8 +380,8 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
     ] },
     { type: 'box', when: [{ test: 'detail.hasCast' }], style: { display: 'flex', 'flex-direction': 'column', gap: '16px' }, children: [
       sectionTitle('{s:cast}'),
-      { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'overflow-x': 'auto', 'overflow-y': 'hidden' }, children: [
-        { type: 'repeat', over: 'detail.cast', item: { type: 'box', style: { width: '120px', 'flex-shrink': '0', display: 'flex', 'flex-direction': 'column', gap: '8px' }, children: [
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'overflow-x': 'auto', 'overflow-y': 'hidden', padding: '6px' }, children: [
+        { type: 'repeat', over: 'detail.cast', item: { type: 'box', press: { action: 'person', arg: '{person.name}' }, label: '{person.name}', focus: { 'box-shadow': '0px 0px 0px 4px $ui.accent' },  style: { width: '120px', 'flex-shrink': '0', display: 'flex', 'flex-direction': 'column', gap: '8px' }, children: [
           { type: 'box', style: { position: 'relative', width: '96px', height: '96px', 'border-radius': '48px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky-soft', display: 'flex', 'align-items': 'center', 'justify-content': 'center' }, children: [
             { type: 'image', when: [{ test: 'person.portrait' }], src: '{person.portrait}', alt: '', style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
             { type: 'text', when: [{ test: 'person.portrait', not: true }], text: '{person.initials}', style: { 'font-size': '26px', 'font-weight': '800' } },

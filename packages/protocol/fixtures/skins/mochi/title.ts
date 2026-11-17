@@ -935,6 +935,7 @@ export const cast: Node = {
           over: 'detail.cast',
           item: {
             type: 'box',
+            press: { action: 'person', arg: '{person.name}' }, label: '{person.name}', focus: { 'box-shadow': '0px 0px 0px 4px $ui.accent' },
             style: {
               ...row,
               gap: '10px',

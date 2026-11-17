@@ -39,7 +39,7 @@ export interface Vela {
   /** The core store, for its actions (`vela.store.auth.signIn`, …). */
   store: Store;
   /** The host a route draws with; null until the document and its fonts are ready. */
-  host(route: RouteName, entry: string): SkinHost | null;
+  host(route: RouteName, entry: string, library?: string): SkinHost | null;
   doc: ResolvedDocument | null;
   docError: string | null;
   /** A title's page is on screen (a title or watch route): its details are read and kept current
@@ -229,7 +229,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
 
   const readEnvironment = useMemo(createEnvironmentReader, [state.auth.revision]);
   const hosts = useRef(new Map<string, { inputs: unknown[]; host: SkinHost }>());
-  const host = useCallback((route: RouteName, entry: string): SkinHost | null => {
+  const host = useCallback((route: RouteName, entry: string, library?: string): SkinHost | null => {
     if (!resolved.doc || !fontsReady) return null;
     const env = readEnvironment({
       state,
@@ -241,7 +241,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       skinCount: DOCUMENTS.length,
       skinName: resolved.doc.name,
     });
-    const key = `${route}:${entry}`;
+    const key = `${route}:${entry}:${library ?? ''}`;
     const inputs = [resolved.doc, env, viewport, dispatch, image, setQuery, view.setFlag, view.setPager, loadMore];
     const previous = hosts.current.get(key);
     if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.host;
@@ -249,7 +249,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       doc: resolved.doc,
       env,
       viewport,
-      dispatch: (action, arg) => dispatch({ route, entry }, action, arg),
+      dispatch: (action, arg) => dispatch({ route, entry, library }, action, arg),
       image,
       setQuery,
       setFlag: view.setFlag,

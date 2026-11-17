@@ -379,6 +379,13 @@ export class JellyfinAdapter
             }, ...this.page(result.Items.map(i => this.entry(i)), result, p.StartIndex)
         };
     }
+    async personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
+        const p = this.paging(cursor, 100);
+        const result = await this.request<Result>('GET', `${await this.userPath()}/Items${query({
+            ...p, ParentId: libraryId, PersonIds: id, Recursive: true, Fields: fields, IncludeItemTypes: 'Movie,Series'
+        })}`);
+        return this.page(result.Items.map(i => this.entry(i)), result, p.StartIndex);
+    }
     private chapters(i: Item): V.Chapter[] {
         return (i.Chapters ?? []).map((c, n) => ({
             id: String(n), name: c.Name ?? `Chapter ${n + 1}`, startSeconds: seconds(c.StartPositionTicks)!, ...(i.Chapters?.[n + 1] ? {
@@ -394,7 +401,7 @@ export class JellyfinAdapter
             throw error;
         })));
         const people = (item.People ?? []).map(p => ({
-            name: p.Name, role: p.Role ?? p.Type, ...(p.PrimaryImageTag ? {
+            ...(p.Id ? { id: p.Id } : {}), name: p.Name, role: p.Role ?? p.Type, ...(p.PrimaryImageTag ? {
                 artwork: this.image(p.Id, 'Primary', p.PrimaryImageTag, 'person')
             } : {})
         }));

@@ -242,6 +242,28 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       'X-Plex-Container-Start': offset(q.cursor), 'X-Plex-Container-Size': q.limit || 100 });
     return { library, sort, direction, ...page(this.nodes(c).map(n => this.entry(n)), offset(q.cursor), c.totalSize ?? c.size) };
   }
+  async personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
+    const libraries = libraryId ? [libraryId] : (await this.libraries({})).items.map(l => l.id);
+    const start = offset(cursor);
+    if (libraryId) {
+      const c = await this.request(`/library/sections/${enc(libraryId)}/all`, { actor: id, 'X-Plex-Container-Start': start, 'X-Plex-Container-Size': 100 });
+      return page(this.nodes(c).map(n => this.entry(n)), start, c.totalSize);
+    }
+    const results = await Promise.all(libraries.map(async library => {
+      const entries: V.RowEntry[] = [];
+      let next = 0;
+      for (;;) {
+        const c = await this.request(`/library/sections/${enc(library)}/all`, { actor: id, 'X-Plex-Container-Start': next, 'X-Plex-Container-Size': 100 });
+        const items = this.nodes(c);
+        entries.push(...items.map(n => this.entry(n)));
+        next += items.length;
+        if (!items.length || next >= (c.totalSize ?? next)) break;
+      }
+      return entries;
+    }));
+    const all = results.flat();
+    return page(all.slice(start, start + 100), start, all.length);
+  }
   async collection(id: string, cursor?: string, limit = 100): Promise<V.CollectionContents> {
     const [kind, key] = id.includes(':') ? id.split(':') : ['collection', id];
     const base = kind === 'playlist' ? `/playlists/${enc(key)}` : `/library/collections/${enc(key)}`;
@@ -271,7 +293,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const streams: Node[] = part?.Stream ?? [];
     const audio = streams.filter(s => Number(s.streamType) === 2);
     const mainAudio = audio.find(s => Number(s.selected) === 1) ?? audio.find(s => Number(s.default) === 1);
-    const person = (p: Node, role?: string) => ({ name: p.tag, role: role || p.role, artwork: p.thumb ? { ...this.artwork({ thumb: p.thumb })[0], kind: 'person' as const } : undefined });
+    const person = (p: Node, role?: string) => ({ ...(p.id != null ? { id: String(p.id) } : {}), name: p.tag, role: role || p.role, artwork: p.thumb ? { ...this.artwork({ thumb: p.thumb })[0], kind: 'person' as const } : undefined });
     return { title: this.title(n), canPlay: ['movie','episode'].includes(n.type) && !!n.Media?.length, seasons: n.type === 'show' ? seriesOrder(children) : undefined, episodes: episodes ? seriesOrder(episodes) : undefined, nextUp,
       cast: (n.Role || []).map((p: Node) => person(p)), crew: [...(n.Director || []).map((p: Node) => person(p, 'Director')), ...(n.Writer || []).map((p: Node) => person(p, 'Writer'))],
       chapters: this.chapters(n), extras: (n.Extras?.Metadata || []).map((e: Node) => ({ id: String(e.ratingKey), parentId: id, kind: Number(e.extraType) === 1 ? 'trailer' : 'other', name: e.title, durationSeconds: seconds(e.duration), artwork: this.artwork(e)[0], availability: e.Media?.length ? 'ready' : 'unresolved' })),

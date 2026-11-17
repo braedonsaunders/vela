@@ -681,6 +681,7 @@ const extraCard: Node = {
 
 const person: Node = {
   type: 'box',
+  press: { action: 'person', arg: '{person.name}' }, label: '{person.name}', focus: { 'box-shadow': '0px 0px 0px 4px $ui.accent' },
   role: 'listitem',
   style: {
     display: 'flex',
@@ -1021,7 +1022,7 @@ export const title: Node = {
             section(
               [set('detail.hasCast')],
               '{s:cast}',
-              shelf(22, 14, person, 'detail.cast', { role: 'list' }),
+              shelf(22, 14, person, 'detail.cast', { role: 'list' }, '6px'),
             ),
             {
               type: 'box',

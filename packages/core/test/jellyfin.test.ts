@@ -35,6 +35,13 @@ describe('JellyfinAdapter addresses', () => {
 });
 
 describe('JellyfinAdapter requests', () => {
+  test('filmography is scoped to person and library', async () => {
+    const seen = routeFetch({ 'GET /jf/Users/viewer-1/Items': { Items: [movie], TotalRecordCount: 2 } });
+    const result = await new JellyfinAdapter(BASE, new FakeCredentials()).personTitles('p1', 'l1');
+    expect(seen[0]!.url.searchParams.get('PersonIds')).toBe('p1');
+    expect(seen[0]!.url.searchParams.get('ParentId')).toBe('l1');
+    expect(result).toMatchObject({ items: [{ id: 'm1' }], nextCursor: '1' });
+  });
   test('library recommendations and latest are scoped to the chosen library', async () => {
     const seen = routeFetch({
       'GET /jf/Users/viewer-1/Items/Latest': [movie],
@@ -102,7 +109,7 @@ describe('JellyfinAdapter requests', () => {
 
   test('detail summarises the played source and preserves its preferred audio and subtitle count', async () => {
     routeFetch({
-      'GET /jf/Users/viewer-1/Items/m1': { ...movie, MediaSources: [{ Id: 'main', DefaultAudioStreamIndex: 2, MediaStreams: [
+      'GET /jf/Users/viewer-1/Items/m1': { ...movie, People: [{ Id: 'person-1', Name: 'Mara Vale', Type: 'Actor', Role: 'Commander' }], MediaSources: [{ Id: 'main', DefaultAudioStreamIndex: 2, MediaStreams: [
         { Index: 0, Type: 'Video', Width: 3840, Height: 2160, ColorTransfer: 'smpte2084', DvProfile: 8 },
         { Index: 1, Type: 'Audio', Codec: 'aac', Channels: 2, IsDefault: true },
         { Index: 2, Type: 'Audio', Codec: 'truehd', Channels: 8 },
@@ -110,6 +117,7 @@ describe('JellyfinAdapter requests', () => {
       ] }, { Id: 'alternate', MediaStreams: [{ Index: 0, Type: 'Subtitle' }] }] },
     });
     const result = await new JellyfinAdapter(BASE, new FakeCredentials()).detail('m1');
+    expect(result.cast[0]).toMatchObject({ id: 'person-1', name: 'Mara Vale', role: 'Commander' });
     expect(result.mediaSummary).toMatchObject({
       video: [{ width: 3840, height: 2160, dolbyVisionProfile: 8 }],
       audio: [{ codec: 'aac' }, { codec: 'truehd', channels: 8, default: true }], subtitleCount: 2,

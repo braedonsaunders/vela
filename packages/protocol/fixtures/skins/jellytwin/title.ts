@@ -610,6 +610,7 @@ const extraCard: Node = {
 
 const person: Node = {
   type: 'box',
+  press: { action: 'person', arg: '{person.name}' }, label: '{person.name}', focus: { 'box-shadow': '0px 0px 0px 4px $ui.accent' },
   role: 'listitem',
   style: col({
     width: 'clamp(110px, 8.6vw, 160px)',
@@ -685,7 +686,7 @@ const hscroll = (children: Node[], role?: string): Node => ({
     {
       type: 'box',
       role,
-      style: row({ gap: '16px', ...side, 'padding-bottom': '6px' }),
+      style: row({ gap: '16px', ...side, 'padding-top': '6px', 'padding-bottom': '6px' }),
       small: { gap: '10px', ...sideSmall },
       children,
     },

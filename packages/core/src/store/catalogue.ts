@@ -3,7 +3,7 @@
 // and dropped when the session or server changes.
 import type * as V from '../wire';
 import { capabilitiesOf } from '../adapter/advertise';
-import { hasLibraryRecommendations } from '../adapter/capabilities';
+import { hasLibraryRecommendations, hasPersonFilmography } from '../adapter/capabilities';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { detailModel, entry, feedRow } from '../discovery/models';
 import { detailCard, detailWatched, recorded, type Watched } from '../discovery/progress';
@@ -37,6 +37,23 @@ const PAGE = 100;
 const RECONCILE_ATTEMPTS = 3;
 
 export class Catalogue {
+  async personTitles(id: string | undefined, name: string, libraryId?: string, cursor?: string): Promise<{ items: Card[]; cursor?: string; fallback: boolean }> {
+    const connection = await this.session.ready();
+    const adapter = connection.adapter;
+    const fallback = !id || !hasPersonFilmography(adapter);
+    const result = !fallback && id && hasPersonFilmography(adapter)
+      ? await adapter.personTitles(id, libraryId, cursor)
+      : await adapter.search({ query: name, generation: 0, idempotencyKey: this.session.key(), cursor, limit: PAGE });
+    const images = await connection.images();
+    const items = fallback ? (result.items as V.Title[]).map(title => entry({ id: title.id, receiptToken: '', kind: 'title', title }, images, this.artWidth()))
+      : (result.items as V.RowEntry[]).map(item => entry(item, images, this.artWidth()));
+    return { items, cursor: result.nextCursor, fallback };
+  }
+  /** Available before a library's asynchronous rows arrive. */
+  get libraryRecommendationsAvailable(): boolean {
+    try { return hasLibraryRecommendations(this.session.selected().adapter); }
+    catch { return false; }
+  }
   private readonly libraryReads = new Map<string, { pages: number; promise: Promise<void> }>();
   /** What each collection has read so far, and where the server said to continue. */
   private readonly collectionReads = new Map<string, { items: V.RowEntry[]; cursor?: string; continuation: string }>();

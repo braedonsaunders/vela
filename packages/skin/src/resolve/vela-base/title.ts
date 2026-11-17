@@ -983,6 +983,8 @@ export const cast: Node = {
           over: 'detail.cast',
           item: {
             type: 'box',
+            press: { action: 'person', arg: '{person.name}' }, label: '{person.name}',
+            focus: { 'box-shadow': focusRing },
             style: {
               display: 'flex',
               'flex-direction': 'column',

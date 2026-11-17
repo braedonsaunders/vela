@@ -10,7 +10,7 @@
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.4';
+const version = '1.0.5';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -1155,7 +1155,7 @@ const detail: Node = {
     section(
       '{s:featuring}',
       [{ test: 'detail.castLine' }],
-      [{ type: 'text', text: '{detail.castLine}', style: { color: '$secondary', 'line-height': '1.6' } }],
+      [{ type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '12px' }, children: [{ type: 'repeat', over: 'detail.cast', item: { type: 'box', press: { action: 'person', arg: '{person.name}' }, label: '{person.name}', focus: { 'box-shadow': '0px 0px 0px 4px $ui.accent' }, style: { padding: '4px', color: '$secondary' }, children: [{ type: 'text', text: '{person.name}' }] } }] }],
       '12px',
     ),
     section(

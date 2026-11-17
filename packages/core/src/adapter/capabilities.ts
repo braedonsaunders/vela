@@ -47,6 +47,15 @@ export interface LibraryRecommendations {
   libraryGenres(id: string): Promise<{ id: string; label: string }[]>;
 }
 
+/** Filmography by server person identifier, optionally within one library. */
+export interface PersonFilmography {
+  personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>>;
+}
+
+export function hasPersonFilmography(adapter: ServerAdapter): adapter is ServerAdapter & PersonFilmography {
+  return 'personTitles' in adapter && typeof adapter.personTitles === 'function';
+}
+
 export function hasLibraryRecommendations(adapter: ServerAdapter): adapter is ServerAdapter & LibraryRecommendations {
   return 'libraryRows' in adapter && typeof adapter.libraryRows === 'function'
     && 'libraryCollections' in adapter && typeof adapter.libraryCollections === 'function'

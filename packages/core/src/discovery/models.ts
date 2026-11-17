@@ -300,7 +300,7 @@ export function detailModel(
   extraPlayback = false,
   themeAvailable = false,
 ): DetailModel {
-  const person = (value: { name: string; role?: string; artwork?: ArtworkRef }): Person => {
+  const person = (value: { id?: string; name: string; role?: string; artwork?: ArtworkRef }): Person => {
     let portrait = '';
     if (value.artwork) {
       try {
@@ -309,7 +309,7 @@ export function detailModel(
         // Malformed optional artwork is unavailable.
       }
     }
-    return { name: value.name, role: value.role ?? '', portrait };
+    return { ...(value.id ? { id: value.id } : {}), name: value.name, role: value.role ?? '', portrait };
   };
   const credit = (c: { name: string; role?: string }) => (c.role ? `${c.name} · ${c.role}` : c.name);
   const theme = themeMusic(data, images, themeAvailable);
