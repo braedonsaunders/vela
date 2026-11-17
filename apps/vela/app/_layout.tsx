@@ -18,6 +18,9 @@ export default function Layout() {
             contentStyle: { backgroundColor: 'transparent' },
           }}
         />
+        {/* Over a title page (contained, above) the player is contained too on a TV: pushed as a
+            card it went under the title page's container, which kept the remote's focus and input. */}
+        <Stack.Screen name="watch/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : 'card' }} />
       </Stack>
     </VelaProvider>
   );

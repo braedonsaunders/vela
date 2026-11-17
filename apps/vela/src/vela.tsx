@@ -215,8 +215,10 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   }, [origin]);
   const setQuery = useCallback((query: string) => store.search.setQuery(query), [store]);
   // On TV, Back (Menu) with a search open clears the search, as it closes a menu, rather than
-  // leaving the app; anything opened over the results (a menu, the player) holds Back after it.
-  const searching = state.search.query !== '';
+  // leaving the app. Only while home (where the results are) is the screen showing: held over a
+  // title page or the player, it kept Menu from closing them (the player blocked its own removal
+  // while tvOS hid it, and Play then went nowhere).
+  const searching = state.search.query !== '' && pathname === '/';
   useEffect(() => {
     if (!Platform.isTV || !searching) return;
     return holdBack(() => {

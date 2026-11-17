@@ -60,7 +60,11 @@ export function DocumentScreen({ route, entry, page, sharedShell = false }: Prop
   // Keep the scrim outside the skin's scrolling/frame geometry on web and native hosts alike.
   if (route === 'title') return (
     <ScreenActive.Provider value={isCurrent}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)' }} accessibilityViewIsModal>
+      {/* On TV the title page is presented in the app's root view, so it stays in the tree under
+          the player: while covered it must take no focus (no interaction, which the focus engine
+          honours), or the remote's arrows move focus into it and never reach the player. */}
+      <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)' }} accessibilityViewIsModal
+        pointerEvents={isCurrent ? 'auto' : 'none'}>
         {content}
       </View>
     </ScreenActive.Provider>
