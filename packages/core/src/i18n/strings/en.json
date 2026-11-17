@@ -401,6 +401,7 @@
   "search.live.until": "{channel} · until {time}",
   "search.live.channel": "Channel {number}",
   "player.audioDefault": "Default track",
+  "player.qualityUnavailable": "Start playback to change quality.",
   "player.auto": "Auto",
   "player.speed": "Speed",
   "player.normal": "Normal",

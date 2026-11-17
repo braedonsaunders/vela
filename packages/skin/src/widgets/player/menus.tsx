@@ -1,7 +1,6 @@
 // The four player menus: subtitles (with their appearance where the engine draws the text),
 // audio, quality (grouped by resolution, each by its bitrate and what it needs, with the info
 // card's switch) and speed. Items the engine cannot switch to right now stay listed, dimmed.
-import { Fragment } from 'react';
 import { msg, number } from '@vela/core';
 import type { CommandInput } from './context';
 import type { PlayerLook } from './look';
@@ -127,60 +126,40 @@ export function AudioMenu({ look, view, blocked, send }: Props) {
   );
 }
 
-/** The resolutions that more than one quality shares: those list under a heading, by bitrate. */
-function sharedResolutions(options: QualityOption[]): Set<string> {
-  const counts = new Map<string, number>();
-  for (const o of options) counts.set(o.resolution, (counts.get(o.resolution) ?? 0) + 1);
-  return new Set([...counts].filter(([, n]) => n > 1).map(([name]) => name));
-}
-
 interface QualityProps extends Props {
+  pendingQualityId?: string;
   info: boolean;
   onInfo(): void;
 }
 
-export function QualityMenu({ look, view, blocked, send, info, onInfo }: QualityProps) {
-  const shared = sharedResolutions(view.qualities);
-  // Codec and range are worth a word only where the choices differ in them.
-  const distinct = new Set(view.qualities.filter(o => !o.original).map(o => o.traits)).size > 1;
-  const traits = (option: QualityOption) => (option.original || distinct ? option.traits : '');
+export function QualityMenu({ look, view, blocked, send, info, onInfo, pendingQualityId }: QualityProps) {
   const chosen = (option: QualityOption) =>
-    view.lockedQuality === option.id || (!view.lockedQuality && !view.qualityAuto && view.qualityId === option.id);
+    option.aliases.includes(view.lockedQuality) || (!view.lockedQuality && !view.qualityAuto && option.aliases.includes(view.qualityId));
   return (
     <>
       {view.qualityAuto ? (
         <ChoiceRow
           look={look}
           name={msg('player.auto')}
-          detail={view.lockedQuality ? '' : view.quality}
+          detail={blocked ? msg('player.qualityUnavailable') : view.lockedQuality ? '' : view.quality}
           selected={!view.lockedQuality}
+          pending={pendingQualityId === 'auto'}
           enabled={!blocked}
           onChoose={() => send({ type: 'quality', renditionId: null })}
         />
       ) : null}
-      {view.qualities.map((option, i) => {
-        const grouped = shared.has(option.resolution);
-        const heading = grouped && view.qualities[i - 1]?.resolution !== option.resolution;
-        const name = grouped
-          ? [traits(option), option.rate].filter(Boolean).join(' · ') || option.resolution
-          : option.resolution;
-        const facts = [traits(option), option.rate, option.needs].filter(Boolean).join(' · ');
-        const detail = grouped ? option.needs : facts;
-        return (
-          <Fragment key={option.id}>
-            {heading ? <MenuHeading look={look} text={option.resolution} /> : null}
-            <ChoiceRow
-              look={look}
-              name={name}
-              detail={detail}
-              selected={chosen(option)}
-              pending={option.pending}
-              enabled={!blocked && !option.pending}
-              onChoose={() => send({ type: 'quality', renditionId: option.id })}
-            />
-          </Fragment>
-        );
-      })}
+      {view.qualities.map(option => (
+        <ChoiceRow
+          key={option.id}
+          look={look}
+          name={option.original ? [option.resolution, option.traits].filter(Boolean).join(' · ') : option.resolution}
+          detail={option.disabledReason || (blocked ? msg('player.qualityUnavailable') : '') || [option.original ? '' : option.traits, option.rate, option.needs].filter(Boolean).join(' · ')}
+          selected={chosen(option)}
+          pending={!!pendingQualityId && option.aliases.includes(pendingQualityId)}
+          enabled={!blocked && !option.disabledReason}
+          onChoose={() => send({ type: 'quality', renditionId: option.id })}
+        />
+      ))}
       {!view.qualities.length && !view.qualityAuto ? (
         <ChoiceRow look={look} name={view.quality || view.path} selected enabled={false} onChoose={() => undefined} />
       ) : null}

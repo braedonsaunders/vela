@@ -19,11 +19,14 @@ export interface TrackOption {
 /** A quality: its resolution (or "Original"), what sets it apart, its rate and what it needs. */
 export interface QualityOption {
   id: string;
+  /** Equivalent server path/rendition identities, for current and pending checks. */
+  aliases: string[];
   resolution: string;
   traits: string;
   rate: string;
   needs: string;
-  pending: boolean;
+  /** An actionable choice; missing codec metadata is not a switch in progress. */
+  disabledReason: string;
   /** The source file itself, not a conversion of it. */
   original: boolean;
 }
@@ -143,7 +146,8 @@ const CODECS: Record<string, string> = { h264: 'H.264', hevc: 'HEVC', av1: 'AV1'
 
 function codecName(codec: string | undefined): string {
   if (!codec) return '';
-  return CODECS[codec] ?? codec.toUpperCase();
+  const family = /^(avc1|avc3)/i.test(codec) ? 'h264' : /^(hvc1|hev1)/i.test(codec) ? 'hevc' : /^av01/i.test(codec) ? 'av1' : /^vp09/i.test(codec) ? 'vp9' : codec;
+  return CODECS[family] ?? codec.toUpperCase();
 }
 
 /** A track from the plan (named) or the engine (labelled). */
@@ -219,50 +223,91 @@ function siblings(plan: PlaybackPlan, current: Path | undefined): Path[] {
   );
 }
 
-function qualities(plan: PlaybackPlan | null, current: Path | undefined): QualityOption[] {
+function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapshot: Snapshot | null): QualityOption[] {
   if (!plan) return [];
   const originals = plan.paths
-    .filter(p => p.original || p.id === 'primary')
+    .filter(p => p.original || p.id === 'primary' || p.kind === 'direct' && p.transport === 'file')
+    .filter(p => p.readiness === 'ready' || p.readiness === 'on-demand')
+    .filter(p => !current || ((!p.sourceId || !current.sourceId || p.sourceId === current.sourceId)
+      && (!p.timelineId || !current.timelineId || p.timelineId === current.timelineId)
+      && (p.edition ?? '') === (current.edition ?? '')))
+    .sort((a, b) => Number(b.id === current?.id) - Number(a.id === current?.id))
+    .slice(0, 1)
     .map((p): QualityOption => {
       const facts = p.quality ?? videoInfo(p.originalVideo ?? {});
       const range = p.quality?.dynamicRange ?? videoInfo(p.originalVideo ?? {})?.dynamicRange ?? undefined;
       return {
         id: `path:${p.id}`,
+        aliases: [],
         resolution: msg('data.original'),
-        traits: [resolutionOf(facts), rangeName(range)].filter(Boolean).join(' · '),
+        traits: [resolutionOf(facts), codecName(facts?.codec), rangeName(range)].filter(Boolean).join(' · '),
         rate: rate(p.quality?.bitrate),
         needs: '',
-        pending: false,
+        disabledReason: '',
         original: true,
       };
     });
-  const renditions = (current?.qualities ?? []).map(
+  // Plex/Jellyfin may publish a fixed HLS URL; its ladder arrives from the
+  // engine's manifest probe rather than the server plan.
+  const ladder = [...(current?.qualities ?? [])];
+  for (const q of snapshot?.renditions ?? []) {
+    if (!q.height || !q.width) continue;
+    const entry = { id: q.id, width: q.width, height: q.height, bitrate: q.bitrateBps || q.bandwidth,
+      videoCodec: q.codec ?? '', dynamicRange: q.dynamicRange, codecStatus: q.codecStatus, url: '' };
+    const index = ladder.findIndex(value => value.id === q.id);
+    if (index >= 0) ladder[index] = { ...ladder[index]!, ...entry };
+    else ladder.push(entry);
+  }
+  const renditions = ladder.map(
     (q): QualityOption => ({
       id: q.id,
+      aliases: [],
       resolution: resolutionOf(q),
       traits: [q.videoCodec ? codecName(q.videoCodec) : '', rangeName(q.dynamicRange)].filter(Boolean).join(' · '),
       rate: rate(q.bitrate),
       needs: needs(q.bitrate),
-      pending: q.codecStatus === 'pending',
+      disabledReason: '',
       original: false,
     }),
   );
   const switchable = siblings(plan, current)
-    .filter(p => !p.original && p.id !== 'primary')
-    .filter(p => p.id !== current?.id || !p.qualities.length)
+    .filter(p => !p.original && p.id !== 'primary' && !(p.kind === 'direct' && p.transport === 'file'))
     .filter(p => (p.readiness === 'on-demand' || p.readiness === 'ready') && p.quality)
     .map(
       (p): QualityOption => ({
         id: `path:${p.id}`,
+        aliases: [],
         resolution: resolutionOf(p.quality!),
         traits: [codecName(p.quality!.codec), rangeName(p.quality!.dynamicRange)].filter(Boolean).join(' · '),
         rate: rate(p.quality!.bitrate),
         needs: needs(p.quality!.bitrate),
-        pending: false,
+        disabledReason: '',
         original: false,
       }),
     );
-  return [...originals, ...renditions, ...switchable];
+  // A server path and its HLS rendition can describe the same viewer choice.
+  // Prefer a usable server switch to an unverified rendition; otherwise keep
+  // the current HLS ladder so pinning remains local to that source.
+  const byResolution = new Map<string, QualityOption>();
+  for (const option of [...switchable, ...renditions]) {
+    const existing = byResolution.get(option.resolution);
+    const rendition = ladder.find(q => q.id === option.id);
+    if (!existing || (rendition && rendition.codecStatus !== 'pending')) byResolution.set(option.resolution, option);
+  }
+  for (const option of [...originals, ...renditions, ...switchable]) option.aliases = [option.id];
+  for (const option of [...renditions, ...switchable]) {
+    const chosen = byResolution.get(option.resolution)!;
+    if (!chosen.aliases.includes(option.id)) chosen.aliases.push(option.id);
+  }
+  for (const limitation of plan.qualityLimitations ?? []) {
+    const resolution = limitation.height >= 2160 ? '4K' : `${limitation.height}p`;
+    if (!byResolution.has(resolution)) byResolution.set(resolution, {
+      id: `unavailable:${limitation.height}`, aliases: [], resolution, traits: '', rate: '', needs: '',
+      disabledReason: limitation.reason || msg('player.qualityUnavailable'), original: false,
+    });
+  }
+  const order = (option: QualityOption) => option.resolution === '4K' ? 2160 : Number.parseInt(option.resolution) || 0;
+  return [...originals, ...[...byResolution.values()].sort((a, b) => order(b) - order(a))];
 }
 
 function playingQuality(snapshot: Snapshot | null, s: PlayerStats, path: Path | undefined): string {
@@ -288,6 +333,13 @@ export function belongs(snapshot: Snapshot | null, plan: PlaybackPlan | null): s
     snapshot.sourceGeneration === plan.sourceGeneration &&
     snapshot.seekGeneration === plan.seekGeneration
   );
+}
+
+/** Server acceptance can precede the engine switching; only its fresh, ready snapshot settles the choice. */
+export function qualityReached(id: string, snapshot: Snapshot | null, plan: PlaybackPlan | null): boolean {
+  if (!belongs(snapshot, plan) || snapshot.waiting || snapshot.state === 'failed') return false;
+  if (id === 'auto') return !snapshot.lockedQuality;
+  return id.startsWith('path:') ? snapshot.sourceId === id.slice(5) : snapshot.renditionId === id;
 }
 
 export function present(plan: PlaybackPlan | null, own: Snapshot | null): PlayerView {
@@ -338,10 +390,10 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
             position: style.subtitlePosition,
           }
         : null,
-    qualities: qualities(plan, path),
-    qualityAuto: rendition && (path?.qualities.length ?? 0) > 1,
+    qualities: qualities(plan, path, snapshot),
+    qualityAuto: rendition && Math.max(path?.qualities.length ?? 0, snapshot?.renditions?.length ?? 0) > 1,
     lockedQuality: lockedQuality(snapshot, path),
-    qualityId: path?.qualities.some(q => q.id === snapshot?.renditionId)
+    qualityId: snapshot?.renditions?.some(q => q.id === snapshot.renditionId) || path?.qualities.some(q => q.id === snapshot?.renditionId)
       ? snapshot!.renditionId!
       : path
         ? `path:${path.id}`

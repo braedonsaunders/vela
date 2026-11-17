@@ -191,6 +191,7 @@ function Timeline({ look, state, view, blocked, seek, onActive }: BottomProps) {
 }
 
 function Controls({
+  state,
   look,
   view,
   blocked,
@@ -222,7 +223,7 @@ function Controls({
       case 'audio':
         return <AudioMenu look={look} view={view} blocked={blocked} send={send} />;
       case 'quality':
-        return <QualityMenu look={look} view={view} blocked={blocked} send={send} info={info} onInfo={toggleInfo} />;
+        return <QualityMenu look={look} view={view} blocked={blocked} send={send} pendingQualityId={state.pendingQualityId} info={info} onInfo={toggleInfo} />;
       case 'speed':
         return <SpeedMenu look={look} view={view} blocked={blocked} send={send} />;
     }

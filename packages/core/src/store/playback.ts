@@ -252,6 +252,8 @@ export class Playback {
 
   /** A player's session command (seek, pause, track change, path switch, fallback, stop). */
   async command(sessionId: string, command: V.SessionCommand): Promise<void> {
+    const current = this.box.get().playback;
+    if (current.sessionId === sessionId && current.error) this.patch({ error: '' });
     try {
       const connection = await this.session.ready();
       const plan = await this.send(connection, sessionId, command);

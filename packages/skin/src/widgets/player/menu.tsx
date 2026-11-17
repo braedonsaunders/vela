@@ -96,7 +96,8 @@ export function ChoiceRow({ look, name, detail, selected, pending, enabled, onCh
   return (
     <Pressable
       accessibilityRole="radio"
-      accessibilityState={{ checked: selected, disabled: !enabled }}
+      accessibilityState={{ checked: selected, disabled: !enabled, busy: !!pending }}
+      {...(Platform.OS === 'web' ? { 'aria-checked': selected, 'aria-busy': !!pending } : {})}
       accessibilityLabel={detail ? `${name}, ${detail}` : name}
       disabled={!enabled}
       hasTVPreferredFocus={claim}
@@ -133,7 +134,7 @@ export function ChoiceRow({ look, name, detail, selected, pending, enabled, onCh
       </Text>
       {detail ? (
         <Text
-          numberOfLines={1}
+          numberOfLines={enabled ? 1 : undefined}
           style={[
             look.text(12, 400, lit ? look.inkInverse : look.inkQuiet),
             { flexShrink: 0, maxWidth: '55%', fontVariant: ['tabular-nums'] },

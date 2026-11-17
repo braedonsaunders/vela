@@ -9,7 +9,7 @@ import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { CommandInput, PlayerChromeState, StartFailure } from './context';
-import { belongs } from './present';
+import { belongs, qualityReached } from './present';
 
 export interface PlaybackSession {
   chrome: Omit<PlayerChromeState, 'title' | 'close'>;
@@ -43,6 +43,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const [refused, setRefused] = useState('');
   const [command, setCommand] = useState<Command | undefined>();
   const nextId = useRef(0);
+  const pendingQuality = useRef(0);
+  const [pendingQualityId, setPendingQualityId] = useState<string>();
   const position = useRef(0);
   const paused = useRef(false);
   const { kind, id } = target;
@@ -67,6 +69,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       setSnapshot(null);
       setFailure(null);
       setRefused('');
+      pendingQuality.current = 0;
+      setPendingQualityId(undefined);
       const from = kind === 'title' && positionSeconds !== undefined ? { positionSeconds } : {};
       void vela.playback.start({ kind, id, ...from } as PlaybackTarget);
     },
@@ -118,6 +122,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const send = useCallback((input: CommandInput) => {
     nextId.current += 1;
     setRefused('');
+    if (input.type === 'quality') { pendingQuality.current = nextId.current; setPendingQualityId(input.renditionId ?? 'auto'); }
     setCommand({ ...input, id: nextId.current } as Command);
   }, []);
 
@@ -134,6 +139,10 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
 
   const plan = external && playback.sessionId !== ownedId ? null : playback.plan;
   const sessionId = plan?.sessionId ?? '';
+  useEffect(() => {
+    if (pendingQualityId && qualityReached(pendingQualityId, snapshot, plan)) setPendingQualityId(undefined);
+  }, [pendingQualityId, snapshot, plan]);
+  useEffect(() => { if (playback.error) setPendingQualityId(undefined); }, [playback.error]);
 
   useEffect(() => {
     if (!sessionId || !resumePaused.current) return;
@@ -154,8 +163,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       ownerRef.current?.snapshot(next);
       vela.playback.snapshot(next);
     },
-    onError: error => { setFailure(error); if (external) ownerRef.current?.failed(); },
+    onError: error => { setFailure(error); setPendingQualityId(undefined); if (external) ownerRef.current?.failed(); },
     onCommand: event => {
+      if (!event.ok && event.id === pendingQuality.current) setPendingQualityId(undefined);
       if (!event.ok && event.failure) setRefused(event.failure.message);
     },
     onObservation: event => {
@@ -185,6 +195,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       startFailure: startFailure(playback),
       failure,
       actionError: refused || (playback.phase === 'playing' ? playback.error : ''),
+      pendingQualityId,
       send,
       retry,
     },
