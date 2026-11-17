@@ -273,7 +273,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   );
   return (
     <VelaContext.Provider value={value}>
-      <LaunchGate signedIn={state.auth.phase === 'signed-in'} ready={launchReady(state.auth.phase, state.home.load, fontsReady, SIGNED_OUT_ROUTES.includes(pathname), !!resolved.error)}>
+      <LaunchGate ready={launchReady(state.auth.phase, state.home.load, fontsReady, SIGNED_OUT_ROUTES.includes(pathname), !!resolved.error)}>
         <Previews store={store} state={state} onHome={pathname === '/'} heroIndex={view.heroIndex} still={view.still}>
           {children}
         </Previews>

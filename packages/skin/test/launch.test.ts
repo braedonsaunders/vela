@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { launchReady, launchSession, type LaunchState } from '../../../apps/vela/src/launch-state';
+import { launchReady, launchDelay, searchlightGeometry } from '../../../apps/vela/src/launch-state';
 
 test('launch waits for the first rendered answer, including failures and signed-out routing', () => {
   expect(launchReady('starting', 'idle', true, false, false)).toBe(false);
@@ -11,13 +11,18 @@ test('launch waits for the first rendered answer, including failures and signed-
   expect(launchReady('signed-out', 'idle', true, true, false)).toBe(true);
   expect(launchReady('starting', 'idle', true, false, true)).toBe(true);
 });
-test('launch survives session restoration and never replays for navigation or refresh', () => {
-  const boot: LaunchState = { signedIn: false, stage: 'intro', run: 0 };
-  const restored = launchSession(boot, true);
-  expect(restored).toEqual({ signedIn: true, stage: 'intro', run: 0 });
-  const done: LaunchState = { ...restored, stage: 'done' };
-  expect(launchSession(done, true)).toBe(done);
-  const signedOut = launchSession(done, false);
-  expect(signedOut.stage).toBe('done');
-  expect(launchSession(signedOut, true)).toEqual({ signedIn: true, stage: 'intro', run: 1 });
+test('the full lock and final bulb finish before hand-off, even on a fast response', () => {
+  expect(launchDelay(0, false)).toBe(2520);
+  expect(launchDelay(1930, false)).toBe(590);
+  expect(launchDelay(2500, false)).toBe(20);
+  expect(launchDelay(6000, false)).toBe(0);
+  expect(launchDelay(0, true)).toBe(0);
+});
+test('searchlight viewport and wordmark keep the approved phone and TV proportions', () => {
+  const phone = searchlightGeometry(390, 844);
+  expect(phone.markWidth).toBeCloseTo(163.8);
+  expect(phone.markHeight).toBeCloseTo(103.74);
+  expect(phone.wordWidth).toBeCloseTo(63.96);
+  expect(searchlightGeometry(1920, 1080)).toEqual(searchlightGeometry(3840, 2160));
+  expect(searchlightGeometry(1920, 1080).markWidth).toBe(300);
 });
