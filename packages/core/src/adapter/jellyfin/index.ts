@@ -1,3 +1,4 @@
+import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
 import type { ClientDeclaration, LiveTv, PasswordSignIn, QuickConnectSignIn, TrackChanges, TrackCommand } from '../capabilities';
@@ -213,17 +214,19 @@ export class JellyfinAdapter
     private artwork(i: Item): V.ArtworkRef[] {
         const art: V.ArtworkRef[] = [];
         const episode = i.Type === 'Episode';
+        const backdropId = i.ParentBackdropItemId || (episode ? i.SeriesId : undefined);
+        const logoId = i.ParentLogoItemId || (episode ? i.SeriesId : undefined);
         const seriesPoster = (episode || i.Type === 'Season') && i.SeriesId && i.SeriesPrimaryImageTag;
         if (seriesPoster) art.push(this.image(i.SeriesId!, 'Primary', i.SeriesPrimaryImageTag!, 'poster'));
         for (const [type, kind] of [['Primary', 'poster'], ['Thumb', 'still'], ['Logo', 'logo']] as const)
-            if (i.ImageTags?.[type])
+            if (i.ImageTags?.[type] && !(episode && type === 'Logo' && logoId && i.ParentLogoImageTag))
                 if (!(seriesPoster && type === 'Primary' && !episode))
                     art.push(this.image(i.Id, type, i.ImageTags[type], episode && type === 'Primary' ? 'still' : kind));
-        if (!i.ImageTags?.Logo && i.ParentLogoItemId && i.ParentLogoImageTag)
-            art.push(this.image(i.ParentLogoItemId, 'Logo', i.ParentLogoImageTag, 'logo'));
-        if (!i.BackdropImageTags?.[0] && i.ParentBackdropItemId && i.ParentBackdropImageTags?.[0])
-            art.push(this.image(i.ParentBackdropItemId, 'Backdrop/0', i.ParentBackdropImageTags[0], 'backdrop'));
-        if (i.BackdropImageTags?.[0])
+        if ((!i.ImageTags?.Logo || episode) && logoId && i.ParentLogoImageTag)
+            art.push(this.image(logoId, 'Logo', i.ParentLogoImageTag, 'logo'));
+        if ((!i.BackdropImageTags?.[0] || episode) && backdropId && i.ParentBackdropImageTags?.[0])
+            art.push(this.image(backdropId, 'Backdrop/0', i.ParentBackdropImageTags[0], 'backdrop'));
+        if (i.BackdropImageTags?.[0] && !(episode && backdropId && i.ParentBackdropImageTags?.[0]))
             art.push(this.image(i.Id, 'Backdrop/0', i.BackdropImageTags[0], 'backdrop'));
         return art;
     }
@@ -269,9 +272,11 @@ export class JellyfinAdapter
         const token = await this.credentials.get();
         if (!token)
             throw this.error('auth', 'sign_in_required', 'Sign in required', 401);
-        return {
-            viewer: token.viewer, capabilities: await this.describe(), defaultSkinId: 'cinematic', heroes: [], rows: (await this.rows({})).items
-        };
+        const [capabilities, rows] = await Promise.all([this.describe(), this.rows({})]);
+        const featured = homeHeroes(rows.items, 'jellyfin', (path, width, height) => {
+            const url = new URL(path); url.searchParams.set('maxWidth', String(width)); url.searchParams.set('maxHeight', String(height)); url.searchParams.set('quality', '90'); return url.href;
+        });
+        return { viewer: token.viewer, capabilities, defaultSkinId: 'cinematic', ...featured };
     }
     async rows(q: V.RowsQuery): Promise<V.Page<V.Row>> {
         if (q.placement === 'detail' && q.titleId) {

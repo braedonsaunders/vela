@@ -142,7 +142,7 @@ export const banner: Node = {
               level: 1,
               style: {
                 height: '130px',
-                width: 'auto',
+                width: 'min(480px, 72%)',
                 'max-width': 'min(480px, 72%)',
                 'object-fit': 'contain',
                 'align-self': 'flex-start',

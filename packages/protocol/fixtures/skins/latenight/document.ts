@@ -6,7 +6,7 @@ import { episodePage } from '../../../episode-page';
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.10';
+const id = 'latenight', version = '1.0.11';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -212,7 +212,7 @@ const heroCopy: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.
     { type: 'text', text: '▶ {s:play}', style: { ...osdText('22px'), padding: '3px 8px 1px', 'background-color': '$osd-plate', 'text-shadow': 'none', 'white-space': 'nowrap', 'flex-shrink': '0' }, small: { 'font-size': '18px' } },
     { type: 'text', text: '{heroAct.reasonLabel}', style: { ...osdText('22px', '$ink'), padding: '3px 8px 1px', 'background-color': '$osd-plate', 'text-shadow': 'none', 'white-space': 'nowrap', 'line-clamp': '1', 'min-width': '0px' }, small: { 'font-size': '18px' } },
   ] },
-  { type: 'image', when: [{ test: 'hero.logo' }], src: '{hero.logo}', alt: '{hero.name}', role: 'heading', level: 1, motion: 'osd2', style: { height: '140px', width: 'auto', 'max-width': 'min(520px, 72%)', 'object-fit': 'contain', 'align-self': 'flex-start', filter: 'drop-shadow(-2px 0px 0px $chroma-red) drop-shadow(2px 0px 0px $chroma-cyan)' }, small: { height: '92px', 'max-width': '80%' } },
+  { type: 'image', when: [{ test: 'hero.logo' }], src: '{hero.logo}', alt: '{hero.name}', role: 'heading', level: 1, motion: 'osd2', style: { height: '140px', width: 'min(520px, 72%)', 'max-width': 'min(520px, 72%)', 'object-fit': 'contain', 'align-self': 'flex-start', filter: 'drop-shadow(-2px 0px 0px $chroma-red) drop-shadow(2px 0px 0px $chroma-cyan)' }, small: { height: '92px', 'max-width': '80%' } },
   { type: 'text', when: [{ test: 'hero.logo', not: true }], text: '{hero.name}', role: 'heading', level: 1, motion: 'osd2', style: { 'font-family': print, 'font-size': '58px', 'line-height': '1.04', 'letter-spacing': '0.01em', 'text-transform': 'uppercase', 'line-clamp': '3', 'text-shadow': '2px 0px 0px $chroma-cyan' }, wide: { 'font-size': '66px' }, small: { 'font-size': '32px' } },
   { type: 'text', text: '{hero.factsLine}', motion: 'osd3', style: { ...osdText('24px', '$ink-dim'), 'text-transform': 'none', 'letter-spacing': '0.02em', 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '20px' } },
   { type: 'text', when: [{ test: 'hero.summary' }], text: '{hero.summary}', motion: 'osd3', style: { 'font-size': '16px', color: '$ink-dim', 'line-height': '1.55', 'line-clamp': '3', 'max-width': '36rem', 'text-shadow': '0px 1px 14px $shadow' }, small: { 'font-size': '14px', 'line-clamp': '2' } },

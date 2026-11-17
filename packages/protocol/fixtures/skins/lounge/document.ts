@@ -32,7 +32,7 @@ const lounge: SkinDocument = {
   renderer: 16,
   id: 'lounge',
   name: 'Lounge',
-  version: '1.0.10',
+  version: '1.0.11',
   tagline: 'Made for the couch: big type, a remote and the backdrop behind it all.',
   preview: '/vela/v0/appearance/skins/lounge/1.0.3/preview.jpg',
   swatches: ['#05060a', '#f5f1e9', '#dcb998', '#f2c27e', '#262b34'],

@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.8';
+const version = '1.2.9';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -183,7 +183,7 @@ const hero: Node = { type: 'repeat', over: 'home.hero', when: [{ test: 'env.sear
     { type: 'image', when: [{ test: 'env.small', not: true }, { test: 'hero.backdrop', not: true }, { test: 'hero.poster' }], src: '{hero.poster}', alt: '', style: { position: 'absolute', top: '-20%', left: '-20%', width: '140%', height: '140%', 'object-fit': 'cover', filter: 'blur(60px) saturate(1.5)' } },
     { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'background-image': 'linear-gradient(0deg, rgba(12, 20, 52, 0.78) 0%, rgba(12, 20, 52, 0.34) 30%, rgba(12, 20, 52, 0) 58%), linear-gradient(90deg, rgba(12, 20, 52, 0.42) 0%, rgba(12, 20, 52, 0) 50%)' } },
     { type: 'box', style: { position: 'absolute', left: '40px', right: '40px', bottom: '36px', display: 'flex', 'flex-direction': 'column', gap: '22px', 'align-items': 'flex-start' }, small: { left: '20px', right: '20px', bottom: '22px', gap: '16px' }, children: [
-      { type: 'image', when: [{ test: 'hero.logo' }], src: '{hero.logo}', alt: '{hero.name}', role: 'heading', level: 1, motion: 'zoomIn', style: { height: '132px', width: 'auto', 'max-width': 'min(460px, 80%)', 'object-fit': 'contain' }, small: { height: '84px' } },
+      { type: 'image', when: [{ test: 'hero.logo' }], src: '{hero.logo}', alt: '{hero.name}', role: 'heading', level: 1, motion: 'zoomIn', style: { height: '132px', width: 'min(460px, 80%)', 'max-width': 'min(460px, 80%)', 'object-fit': 'contain' }, small: { height: '84px' } },
       { type: 'text', when: [{ test: 'hero.logo', not: true }], text: '{hero.name}', role: 'heading', level: 1, motion: 'zoomIn', style: { 'font-size': '60px', 'font-weight': '800', 'line-height': '1', 'letter-spacing': '-0.01em', color: '#FFFFFF', 'text-shadow': '0px 4px 0px rgba(12, 20, 52, 0.35)', 'line-clamp': '2', 'max-width': '40rem' }, small: { 'font-size': '38px' } },
       { type: 'box', motion: 'zoomLate', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'align-items': 'center' }, children: [playButton, infoButton(false), infoButton(true)] },
     ] },

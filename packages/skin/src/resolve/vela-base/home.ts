@@ -335,7 +335,7 @@ export const heroCopy: Node = {
         motion: enter(300),
         style: {
           height: '150px',
-          width: 'auto',
+          width: 'min(520px, 70%)',
           'max-width': 'min(520px, 70%)',
           'object-fit': 'contain',
           'align-self': 'flex-start',

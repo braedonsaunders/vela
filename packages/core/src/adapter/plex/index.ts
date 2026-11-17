@@ -1,3 +1,4 @@
+import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
 import type { LiveTv, PathSwitching, SwitchCommand, TrackChanges, TrackCommand } from '../capabilities';
@@ -136,8 +137,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const refs: [string | undefined, V.ArtworkRef['kind']][] = [
       [poster, 'poster'],
       [n.type === 'episode' ? n.thumb : undefined, 'still'],
-      [n.art || n.parentArt || n.grandparentArt || image('background'), 'backdrop'],
-      [n.clearLogo || n.parentClearLogo || n.grandparentClearLogo || image('clearLogo'), 'logo'],
+      [(n.type === 'episode' ? n.grandparentArt : undefined) || n.art || n.parentArt || n.grandparentArt || image('background') || (Number(n.thumbAspectRatio) >= 1.5 ? n.thumb : undefined), 'backdrop'],
+      [(n.type === 'episode' ? n.grandparentClearLogo : undefined) || n.clearLogo || n.parentClearLogo || n.grandparentClearLogo || image('clearLogo'), 'logo'],
     ];
     return refs.flatMap(([path, kind]) => {
       if (!path) return [];
@@ -177,7 +178,13 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   async home(): Promise<Home> {
     this.rotateTransientToken();
     const tokens = await this.config.credentials.get(); if (!tokens) fail('Sign in required', 'auth');
-    return { viewer: tokens.viewer, capabilities: await this.describe(), defaultSkinId: 'cinematic', rows: (await this.rows({})).items, heroes: [] };
+    const [capabilities, rows] = await Promise.all([this.describe(), this.rows({})]);
+    const featured = homeHeroes(rows.items, 'plex', (path, width, height) => {
+      const url = new URL('/photo/:/transcode', this.origin);
+      for (const [key, value] of Object.entries({ url: path, width, height, minSize: 1, upscale: 0 })) url.searchParams.set(key, String(value));
+      return url.href;
+    });
+    return { viewer: tokens.viewer, capabilities, defaultSkinId: 'cinematic', ...featured };
   }
   async rows(q: V.RowsQuery): Promise<V.Page<V.Row>> {
     const path = q.placement === 'detail' && q.titleId ? `/library/metadata/${enc(q.titleId)}/related` : '/hubs';
