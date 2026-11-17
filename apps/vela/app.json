@@ -20,7 +20,8 @@
       }
     },
     "android": {
-      "package": "app.ether.vela"
+      "package": "app.ether.vela",
+      "versionCode": 2011
     },
     "web": {
       "output": "single",
@@ -54,7 +55,8 @@
           }
         }
       ],
-      "./plugins/android-cleartext"
+      "./plugins/android-cleartext",
+      "./plugins/android-signing"
     ]
   }
 }

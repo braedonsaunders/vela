@@ -3,7 +3,7 @@
 # optionally open a route. Release by default: the JS bundle is embedded, no Metro. --debug builds the
 # variant that loads JavaScript from Metro (start it yourself with `bun x expo start --clear`).
 #
-#   tools/android-tv.sh [--prebuild] [--phone] [--debug] [--device <serial>] [--open <vela://route>]
+#   tools/android-tv.sh [--prebuild] [--phone] [--debug] [--no-install] [--device <serial>] [--open <vela://route>]
 #
 # --prebuild regenerates apps/vela/android (expo prebuild --clean; EXPO_TV=1 unless --phone).
 # libmpv must be built first (modules/vela-player/android/libmpv/build.sh). Gradle's home and the app's
@@ -13,16 +13,18 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 prebuild=0
 phone=0
 variant=Release
+install=1
 device=""
 open=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --prebuild) prebuild=1 ;;
     --phone) phone=1 ;;
+    --no-install) install=0 ;;
     --debug) variant=Debug ;;
     --device) device=$2; shift ;;
     --open) open=$2; shift ;;
-    *) echo "usage: tools/android-tv.sh [--prebuild] [--phone] [--debug] [--device <serial>]" \
+    *) echo "usage: tools/android-tv.sh [--prebuild] [--phone] [--debug] [--no-install] [--device <serial>]" \
          "[--open <vela://route>]" >&2
        exit 2 ;;
   esac
@@ -65,6 +67,10 @@ fi
 
 lower=$(echo "$variant" | tr '[:upper:]' '[:lower:]')
 apk="$scratch/gradle-build/android/Vela/app/outputs/apk/$lower/app-$lower.apk"
+if [ "$install" = 0 ]; then
+  echo "android-tv: built $apk"
+  exit 0
+fi
 target=()
 [ -n "$device" ] && target=(-s "$device")
 adb ${target[@]+"${target[@]}"} install -r "$apk" >/dev/null
