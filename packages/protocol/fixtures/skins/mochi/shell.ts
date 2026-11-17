@@ -129,14 +129,6 @@ export const libIcon = (on: Condition[]): Node[] => [
 ];
 // Home, the server's libraries in order (a live library opens the guide), and Live when
 // the server offers it without a live library.
-// Hidden on a compact bar (a repeat's own fields do not reach its item, so its item is hidden).
-export const hideCompact = (n: Node): Node =>
-  n.type === 'repeat'
-    ? { ...n, item: hideCompact(n.item) }
-    : ({
-        ...n,
-        below: { ...(n.below ?? {}), [COMPACT]: { ...(n.below?.[COMPACT] ?? {}), display: 'none' } },
-      } as Node);
 export const destinations = (): Node[] => [
   navItem('{s:home}', navIcon('home'), [is('env.section', 'home')], { action: 'home' }),
   // One entry per library in server order: a live library opens Live TV.
@@ -313,9 +305,10 @@ export const nav: Node = {
             gap: '4px',
             'align-items': 'center',
           },
-          below: { [COMPACT]: { 'overflow-x': 'hidden' } },
-          children: [...destinations().map(hideCompact)],
+          below: { [COMPACT]: { display: 'none' } },
+          children: destinations(),
         },
+        { type: 'box', style: { display: 'none' }, below: { [COMPACT]: { display: 'flex', flex: '1' } } },
         {
           type: 'box',
           group: true,

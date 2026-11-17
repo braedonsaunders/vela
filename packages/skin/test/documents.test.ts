@@ -40,6 +40,31 @@ test('the built-in documents are found', () => {
   expect(new Set(ids).size).toBe(ids.length);
 });
 
+test('Mochi has one navigation set across the compact breakpoint and selected states', async () => {
+  const { fill, holds } = await import('../src/resolve');
+  const { collection } = await import('../src/vocabulary');
+  type Env = import('../src/vocabulary').Env;
+  type Ctx = import('../src/vocabulary').Ctx;
+  const doc = documents.find(([name]) => name === 'mochi')![1];
+  for (const width of [390, 719, 720, 1280]) for (const section of ['home', 'live', 'movies']) {
+    const env = { width, small: width < 640, section, viewer: 'Demo', canLive: true, still: true, flags: [],
+      libraries: [{ id: 'movies', name: 'Movies', kind: 'movies', backdrop: '' }, { id: 'live', name: 'Live TV', kind: 'live', backdrop: '' }],
+    } as unknown as Env;
+    const names: string[] = [];
+    const walk = (node: RNode, ctx: Ctx) => {
+      if (!holds(node.when, ctx, env)) return;
+      const layer = node.states.find(state => holds(state.when, ctx, env))?.layer ?? node.base;
+      if (fill(layer.style.display, ctx, env) === 'none') return;
+      if (node.kind === 'box') {
+        if (node.press && node.label) names.push(fill(node.label, ctx, env));
+        node.children.forEach(child => walk(child, ctx));
+      } else if (node.kind === 'repeat') collection(node.over, ctx, env, node.limit).forEach(item => walk(node.item, item));
+    };
+    walk(resolveDocument(doc, width, 'en').shell!, { index: 0 });
+    for (const name of ['Home', 'Movies', 'Live TV']) expect(names.filter(item => item === name)).toHaveLength(1);
+  }
+});
+
 describe.each(documents)('built-in skin %s', (_folder, doc) => {
   test('is a schema-1 document with a valid id and version', () => {
     expect(doc.schema).toBe(1);
