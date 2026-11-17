@@ -32,6 +32,8 @@ const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
 import { useLiveController } from './live';
+import { LaunchGate } from './launch';
+import { launchReady } from './launch-state';
 import { Previews } from './previews';
 import { useViewState } from './view-state';
 
@@ -271,10 +273,12 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   );
   return (
     <VelaContext.Provider value={value}>
-      <Previews store={store} state={state} onHome={pathname === '/'} heroIndex={view.heroIndex} still={view.still}>
-        {children}
-      </Previews>
-      {pickerOpen ? <AppearancePicker documents={DOCUMENTS} current={docIndex % DOCUMENTS.length} image={image} onPick={pickDocument} onClose={closePicker} /> : null}
+      <LaunchGate signedIn={state.auth.phase === 'signed-in'} ready={launchReady(state.auth.phase, state.home.load, fontsReady, SIGNED_OUT_ROUTES.includes(pathname), !!resolved.error)}>
+        <Previews store={store} state={state} onHome={pathname === '/'} heroIndex={view.heroIndex} still={view.still}>
+          {children}
+        </Previews>
+        {pickerOpen ? <AppearancePicker documents={DOCUMENTS} current={docIndex % DOCUMENTS.length} image={image} onPick={pickDocument} onClose={closePicker} /> : null}
+      </LaunchGate>
     </VelaContext.Provider>
   );
 }
