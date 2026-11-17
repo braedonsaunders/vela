@@ -73,7 +73,7 @@ test('lab-shaped library rows retain row continuations and ranked shelves', asyn
     ]);
     expect(result.items[1]!.presentation).toBe('ranked');
     const first = result.items[0]!;
-    expect((await adapter.row(first.id, first.nextCursor)).items).toHaveLength(10);
-    expect((await adapter.home()).capabilities.features.liveTV.available).toBe(true);
+    expect((await adapter.row!(first.id, first.nextCursor)).items).toHaveLength(10);
+    expect((await adapter.home()).capabilities.features.liveTV?.available).toBe(true);
   } finally { await mock.stop(); }
 });
