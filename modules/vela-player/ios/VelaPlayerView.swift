@@ -87,6 +87,19 @@ final class VelaPlayerView: ExpoView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         updatePreview()
+        guard previewSource == nil else {
+            return
+        }
+        if window == nil, mpv != nil {
+            // Off screen (its screen popped or replaced): playback stops here, whatever else still
+            // holds the view. A film never plays on, unseen, behind the page the viewer went to.
+            print("[vela-player] left the window: stopping")
+            stop()
+            activeSource = ""
+        } else if window != nil, mpv == nil, let plan, plan.selectedPath?.readiness == "ready" {
+            // Back on screen with the same plan: start it again.
+            setPlanObject(plan)
+        }
     }
 
     override func layoutSubviews() {
