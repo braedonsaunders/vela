@@ -171,9 +171,10 @@ export const library: Node = {
             'font-variant-numeric': 'tabular-nums',
           },
         },
+        { type: 'use', template: 'velaLibraryViews', when: [{ test: 'env.load', is: 'eq', value: 'ready' }] },
         {
           type: 'box',
-          when: [{ test: 'env.load', is: 'eq', value: 'ready' }],
+          when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'library.view', is: 'eq', value: 'library' }],
           motion: 'copy2',
           style: { display: 'flex', 'flex-direction': 'column', gap: '4px' },
           children: [
@@ -232,11 +233,12 @@ export const library: Node = {
         },
       ],
     },
+    { type: 'use', template: 'velaLibraryAlternative' },
     // The shelf: a grid of posters that fills the width, with room for a focused one to grow.
     {
       type: 'box',
       testId: 'library-grid',
-      when: [{ test: 'env.load', is: 'eq', value: 'ready' }],
+      when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'library.view', is: 'eq', value: 'library' }],
       style: {
         position: 'relative',
         display: 'grid',
@@ -259,7 +261,7 @@ export const library: Node = {
     // After the grid, across its width: the next page's sentinel, its loading line, the empty state.
     {
       type: 'box',
-      when: [{ test: 'env.load', is: 'eq', value: 'ready' }],
+      when: [{ test: 'env.load', is: 'eq', value: 'ready' }, { test: 'library.view', is: 'eq', value: 'library' }],
       style: {
         display: 'flex',
         'flex-direction': 'column',

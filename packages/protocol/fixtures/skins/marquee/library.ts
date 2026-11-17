@@ -155,9 +155,11 @@ const libraryToolbar: Node = {
         },
       ],
     },
+    { type: 'use', template: 'velaLibraryViews' },
     {
       type: 'box',
       style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' },
+      when: [is('library.view', 'library')],
       children: [
         {
           type: 'box',
@@ -439,10 +441,11 @@ export const libraryRoute: Node = {
   },
   children: [
     libraryToolbar,
+    { type: 'use', template: 'velaLibraryAlternative' },
     // Waiting for the first titles: the grid in outline.
     {
       type: 'box',
-      when: [set('env.libraryLoading'), is('library.itemCount', '0')],
+      when: [is('library.view', 'library'), set('env.libraryLoading'), is('library.itemCount', '0')],
       role: 'status',
       label: '{s:findingTitles}',
       style: { ...libraryGrid('20px', '12px'), gap: '20px' },
@@ -455,10 +458,10 @@ export const libraryRoute: Node = {
     },
     {
       type: 'box',
-      when: [unset('env.libraryLoading'), is('library.itemCount', '0')],
+      when: [is('library.view', 'library'), unset('env.libraryLoading'), is('library.itemCount', '0')],
       style: { display: 'flex', 'flex-direction': 'column', gap: '14px', 'align-items': 'center' },
       children: [empty('filter', '{s:libraryEmpty}', '{s:libraryEmptyHint}')],
     },
-    libraryItems,
+    { ...libraryItems, when: [is('library.view', 'library'), ...(libraryItems.when ?? [])] } as Node,
   ],
 };

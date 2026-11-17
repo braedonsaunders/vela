@@ -324,6 +324,15 @@ export class JellyfinAdapter
         }
         return rows.filter(row => row.items.length > 0);
     }
+    async libraryCollections(id: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
+        const p = this.paging(cursor, 100);
+        const result = await this.request<Result>('GET', `${await this.userPath()}/Items${query({ ...p, ParentId: id, Recursive: true, IncludeItemTypes: 'BoxSet', Fields: fields, SortBy: 'SortName', SortOrder: 'Ascending' })}`);
+        return this.page(result.Items.map(i => this.entry(i)), result, p.StartIndex);
+    }
+    async libraryGenres(id: string): Promise<{ id: string; label: string }[]> {
+        const result = await this.request<Result>('GET', `Genres${query({ ParentId: id, UserId: (await this.credentials.get())?.viewer.id, Recursive: true })}`);
+        return result.Items.filter(i => i.Name).map(i => ({ id: i.Name, label: i.Name }));
+    }
     private libraryModel(i: Item): V.Library {
         return {
             id: i.Id, name: i.Name, kind: i.CollectionType === 'movies' ? 'movies' : i.CollectionType === 'tvshows' ? 'shows' : i.CollectionType === 'livetv' ? 'live' : 'mixed', artwork: this.artwork(i), browse: {
@@ -351,7 +360,7 @@ export class JellyfinAdapter
         const user = await this.userPath();
         const item = await this.request<Item>('GET', `${user}/Items/${e(id)}`);
         const result = await this.request<Result>('GET', `${user}/Items${query({
-            ...p, ParentId: id, Recursive: true, Fields: fields, SortBy: sortKeys[sort], SortOrder: q.direction === 'desc' ? 'Descending' : 'Ascending', IncludeItemTypes: q.kind ? Object.keys(kinds).find(k => kinds[k] === q.kind) : 'Movie,Series,BoxSet', Genres: q.genre, Years: q.year, IsPlayed: q.played, IsFavorite: q.favorite
+            ...p, ParentId: id, Recursive: true, Fields: fields, SortBy: sortKeys[sort], SortOrder: q.direction === 'desc' ? 'Descending' : 'Ascending', IncludeItemTypes: q.kind ? Object.keys(kinds).find(k => kinds[k] === q.kind) : 'Movie,Series', Genres: q.genre, Years: q.year, IsPlayed: q.played, IsFavorite: q.favorite
         })}`);
         return {
             library: this.libraryModel(item), sort, direction: q.direction ?? 'asc', ...this.page(result.Items.map(i => this.entry(i)), result, p.StartIndex)

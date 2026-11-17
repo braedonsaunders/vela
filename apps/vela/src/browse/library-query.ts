@@ -6,6 +6,7 @@ import type { LibraryModel, LibraryQuery } from '@vela/core';
 
 /** The route's search parameters, as expo-router hands them over. */
 export type LibraryParams = {
+  view?: string;
   sort?: string;
   dir?: string;
   kind?: string;
@@ -60,7 +61,7 @@ export function queryOf(params: LibraryParams): LibraryQuery {
 }
 
 /** Every parameter, an absent part as undefined so setting them clears it from the URL. */
-export function paramsOf(query: LibraryQuery): Record<keyof LibraryParams, string | undefined> {
+export function paramsOf(query: LibraryQuery): Record<Exclude<keyof LibraryParams, 'view'>, string | undefined> {
   return {
     sort: query.sort,
     dir: query.direction,

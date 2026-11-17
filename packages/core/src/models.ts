@@ -161,7 +161,7 @@ export interface SortChoice extends Choice {
 export interface LibraryModel {
   id: string;
   name: string;
-  kind: string;
+  kind: V.Library['kind'];
   backdrop: string;
   sorts: SortChoice[];
   sort: V.LibrarySort;
@@ -181,6 +181,17 @@ export interface LibraryModel {
   more: boolean;
   /** How many pages the items fill (the next read asks for one more). */
   pages: number;
+}
+
+/** Server-specific library sections, absent when the server has no scoped operations. */
+export interface LibraryExtras {
+  recommendationsAvailable: boolean;
+  collectionsAvailable: boolean;
+  rows: Row[];
+  collections: Card[];
+  collectionCursor: string;
+  genres: Choice[];
+  failed: boolean;
 }
 
 export interface CollectionModel {

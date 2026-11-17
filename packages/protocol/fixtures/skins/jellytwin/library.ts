@@ -143,6 +143,7 @@ const libraryHeader: Node = {
   type: 'box',
   style: col({ position: 'sticky', top: '0px', 'z-index': '5', 'background-color': '$page', ...hairline }),
   children: [
+    { type: 'use', template: 'velaLibraryViews' },
     {
       type: 'text',
       text: '{library.name}',
@@ -161,6 +162,7 @@ const libraryHeader: Node = {
     {
       type: 'box',
       role: 'tablist',
+      when: [{ test: 'library.view', is: 'eq', value: 'library' }],
       label: '{library.name}',
       style: row({
         'overflow-x': 'auto',
@@ -184,6 +186,7 @@ const libraryHeader: Node = {
     {
       type: 'box',
       role: 'toolbar',
+      when: [{ test: 'library.view', is: 'eq', value: 'library' }],
       label: '{s:libraryTools}',
       style: row({
         'align-items': 'center',
@@ -425,8 +428,10 @@ export const library: Node = {
     ...(
       [
         libraryHeader,
+        { type: 'use', template: 'velaLibraryAlternative' },
         {
           type: 'box',
+          when: [{ test: 'library.view', is: 'eq', value: 'library' }],
           style: col({ 'padding-top': '22px' }),
           small: { 'padding-top': '14px' },
           children: [

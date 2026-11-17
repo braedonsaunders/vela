@@ -1,9 +1,15 @@
 // What a library page and a collection page show (routes.library, routes.collection): the model
 // on show and whether a read is under way. The app builds these from core's store; documents
 // read them through the library vocabulary.
-import type { Choice, CollectionModel, LibraryModel } from '@vela/core';
+import type { Choice, CollectionModel, LibraryExtras, LibraryModel } from '@vela/core';
+
+export type LibraryView = 'recommended' | 'library' | 'collections' | 'genres';
 
 export interface LibraryPage {
+  view?: LibraryView;
+  extras?: LibraryExtras;
+  extrasLoading?: boolean;
+  extrasFailed?: boolean;
   /** The view on show: the current sort and filters' answer, or while it is read, the last one. */
   model?: LibraryModel;
   /** The first page of the current sort and filters is being read. */

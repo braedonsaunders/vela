@@ -175,6 +175,54 @@ export const sortControls: Node[] = [
   },
   flip,
 ];
+
+const viewTab = (id: string, label: string): Node => {
+  const on: Condition[] = [{ test: 'library.view', is: 'eq', value: id }];
+  const style: Style = { position: 'relative', padding: '10px 14px', 'flex-shrink': '0', color: '$ui.inkSecondary', 'font-size': '14px', 'border-radius': '$ui.radiusControl' };
+  const available = id === 'recommended' ? 'library.canRecommend' : id === 'collections' ? 'library.canCollections' : id === 'genres' ? 'library.genresCount' : '';
+  return { type: 'box', ...(available ? { when: [{ test: available, ...(id === 'genres' ? { is: 'gt' as const, value: '0' } : {}) }] } : {}), role: 'tab', press: { action: 'libraryView', arg: id }, label, a11y: { selected: on }, style,
+    states: [{ when: on, style: { ...style, color: '$ui.ink', 'background-color': '$ui.control' } }],
+    focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: label }] };
+};
+
+/** Shared tabs and content for skins which provide their own library header. */
+export const libraryViews: Node = {
+  type: 'box', role: 'tablist', label: '{t:ui.library}',
+  style: { display: 'flex', 'flex-direction': 'row', 'overflow-x': 'auto', gap: '4px', ...gutter }, small: { ...gutterSmall },
+  children: [viewTab('recommended', '{t:library.view.recommended}'), viewTab('library', '{t:ui.library}'), viewTab('collections', '{t:library.view.collections}'), viewTab('genres', '{t:library.view.genres}'),
+    { type: 'box', when: [{ test: 'env.libraryExtrasFailed' }], press: { action: 'retry' }, label: '{t:library.view.failed}',
+      style: { padding: '8px', color: '$ui.inkSecondary', 'flex-shrink': '0' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.view.failed}' }] }],
+};
+
+export const libraryFilters: Node = {
+  type: 'box', when: [is('library.view', 'library')],
+  style: { display: 'flex', 'flex-direction': 'row', 'overflow-x': 'auto', 'align-items': 'center', gap: '8px', ...gutter }, small: { ...gutterSmall },
+  children: [
+    chipGroup('{t:library.filter.all}', [
+      libChip([is('library.playedFilter', '')], 'played|', '{t:library.filter.all}'),
+      libChip([is('library.playedFilter', 'false')], 'played|false', '{t:library.filter.unwatched}'),
+      libChip([is('library.playedFilter', 'true')], 'played|true', '{t:library.filter.watched}'),
+    ], [{ test: 'library.canPlayed' }]),
+    favouritesOff, favouritesOn,
+    { type: 'widget', widget: 'select', when: [{ test: 'library.genreCount', is: 'gt', value: '0' }],
+      params: { options: 'library.genres', action: 'libraryFilter', arg: 'genre|{value}', none: '{t:library.anyGenre}', label: '{t:library.genre}' }, style: glassSelect },
+    ...sortControls,
+  ],
+};
+
+export const libraryAlternative: Node = {
+  type: 'box', when: [ready, { test: 'library.view', is: 'ne', value: 'library' }],
+  style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '24px', 'padding-bottom': '60px', gap: '16px' },
+  children: [
+    { type: 'repeat', over: 'library.rows', when: [is('library.view', 'recommended')], item: { type: 'use', template: 'velaRow' } },
+    { type: 'text', when: [is('library.view', 'recommended'), is('library.recommendationCount', '0')], text: '{t:ui.yourLibraryHasNoRowsYet}', style: { ...gutter, color: '$ui.inkSecondary' } },
+    { ...titleGrid, when: [is('library.view', 'collections')], children: [{ type: 'repeat', over: 'library.collections', item: gridCard }] } as Node,
+    { type: 'text', when: [is('library.view', 'collections'), is('library.collectionCount', '0')], text: '{t:library.view.emptyCollections}', style: { ...gutter, color: '$ui.inkSecondary' } },
+    { type: 'box', when: [is('library.view', 'collections'), { test: 'library.collectionsMore' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{t:library.loadMore}', style: { ...pill(false, 48), 'align-self': 'center' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.loadMore}' }] },
+    { type: 'box', when: [is('library.view', 'genres')], style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px', ...gutter }, small: { ...gutterSmall }, children: [{ type: 'repeat', over: 'library.genreViews', item: libChip([{ test: 'opt.on' }], 'genre|{opt.id}', '{opt.label}') }] },
+    { type: 'text', when: [is('library.view', 'genres'), is('library.genresCount', '0')], text: '{t:library.view.emptyGenres}', style: { ...gutter, color: '$ui.inkSecondary' } },
+  ],
+};
 export const toolbar: Node = {
   type: 'box',
   style: {
@@ -208,8 +256,10 @@ export const toolbar: Node = {
         'pointer-events': 'none',
       },
     },
+    { type: 'use', template: 'velaLibraryViews' },
     {
       type: 'box',
+      when: [is('library.view', 'library')],
       style: {
         display: 'flex',
         'flex-direction': 'row',
@@ -370,9 +420,10 @@ const makeLibrary = (flowHeader: boolean): Node => ({
     },
     // The toolbar is a direct child of the route root, where native draws sticky.
     { ...toolbar, when: [ready], ...(flowHeader ? { style: { ...toolbar.style, 'padding-top': '0px' }, small: { ...toolbar.small, 'padding-top': '0px' } } : {}) },
+    { type: 'use', template: 'velaLibraryAlternative' },
     {
       type: 'box',
-      when: [ready],
+      when: [ready, is('library.view', 'library')],
       style: {
         position: 'relative',
         display: 'flex',

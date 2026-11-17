@@ -49,6 +49,16 @@ function chosen(o: LibraryOption, l: LibraryModel | undefined): boolean {
 }
 
 export const LIBRARY_VOCABULARY: Record<string, LibraryAccessor> = {
+  'library.view': (_, e) => e.library?.view ?? 'library',
+  'library.hasViews': (_, e) => yes(!!e.library?.extras),
+  'library.canRecommend': (_, e) => yes(!!e.library?.extras?.recommendationsAvailable),
+  'library.canCollections': (_, e) => yes(!!e.library?.extras?.collectionsAvailable),
+  'library.recommendationCount': (_, e) => String(e.library?.extras?.rows.length ?? 0),
+  'library.collectionCount': (_, e) => String(e.library?.extras?.collections.length ?? 0),
+  'library.collectionsMore': (_, e) => yes(!!e.library?.extras?.collectionCursor),
+  'library.genresCount': (_, e) => String(e.library?.extras?.genres.length ?? 0),
+  'env.libraryExtrasLoading': (_, e) => yes(e.library?.extrasLoading ?? false),
+  'env.libraryExtrasFailed': (_, e) => yes(e.library?.extrasFailed ?? false),
   'library.id': library(l => l.id),
   'library.name': library(l => l.name),
   'library.kind': library(l => l.kind),
@@ -98,6 +108,9 @@ export function libraryCollection<C extends LibraryCtx & { card?: LibraryModel['
     list.slice(0, limit).map(({ id, label }, index) => ({ ...c, opt: { id, label, of }, index }));
   const cards = (list: LibraryModel['items']) => list.slice(0, limit).map((card, index) => ({ ...c, card, index }));
   switch (over) {
+    case 'library.rows': return (e.library?.extras?.rows ?? []).slice(0, limit).map((row, index) => ({ ...c, row, index }));
+    case 'library.collections': return cards(e.library?.extras?.collections ?? []);
+    case 'library.genreViews': return options('genre', e.library?.extras?.genres ?? []);
     case 'library.items': return cards(model?.items ?? []);
     case 'library.kinds': return options('kind', model?.kinds ?? []);
     case 'library.genres': return options('genre', model?.genres ?? []);

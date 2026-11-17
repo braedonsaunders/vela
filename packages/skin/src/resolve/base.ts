@@ -6,7 +6,7 @@ import { auth } from './vela-base/auth';
 import { card, relatedRow, row } from './vela-base/cards';
 import { collection } from './vela-base/collection';
 import { home } from './vela-base/home';
-import { library } from './vela-base/library';
+import { library, libraryViews, libraryFilters, libraryAlternative } from './vela-base/library';
 import { enterPresets, small } from './vela-base/look';
 import { search, searchMotion } from './vela-base/search';
 import { shell } from './vela-base/shell';
@@ -171,7 +171,7 @@ export const velaBase: SkinDocument = {
       still: { keyframes: 'dissolve', duration: 240 },
     },
   },
-  templates: { velaEpisodeContext: episodeContext, velaCardContext: cardContext, velaCard: card, velaRow: row, velaRelatedRow: relatedRow },
+  templates: { velaEpisodeContext: episodeContext, velaCardContext: cardContext, velaCard: card, velaRow: row, velaRelatedRow: relatedRow, velaLibraryViews: libraryViews, velaLibraryFilters: libraryFilters, velaLibraryAlternative: libraryAlternative },
   slots: { shell, home },
   routes: { title, library, auth, collection, search },
   // Home and the title page draw their own loading and failure; home fades under the floating bar.

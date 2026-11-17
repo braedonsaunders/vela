@@ -16,14 +16,28 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
   const model = library.page.model;
   const dispatch: SkinHost['dispatch'] = (action, arg) => {
     switch (action) {
+      case 'select': {
+        const [target, kind] = arg.split('|');
+        if (kind === 'directory' && target?.startsWith('vela-library-genre:')) {
+          const genre = decodeURIComponent(target.slice('vela-library-genre:'.length));
+          return router.setParams({ ...paramsOf(filteredBy(query, `genre|${genre}`)), view: 'library' });
+        }
+        return host.dispatch(action, arg);
+      }
       case 'librarySort':
         return view(sortedBy(query, model, arg));
       case 'librarySortFlip':
         return view(flipped(query, model));
       case 'libraryFilter':
+        if (library.page.view === 'genres') return router.setParams({ ...paramsOf(filteredBy(query, arg)), view: 'library' });
         return view(filteredBy(query, arg));
+      case 'libraryView':
+        if (['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ view: arg });
+        return;
       case 'libraryMore':
         return library.more();
+      case 'moreRow':
+        return library.moreRow(arg);
       case 'retry':
         return library.retry();
       default:
@@ -33,9 +47,9 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
   return {
     ...host,
     // The shell marks this library's destination as the section on show.
-    env: { ...host.env, section: id, load: library.load, library: library.page },
+    env: { ...host.env, section: id, load: library.load, library: library.page, rowLoading: library.rowLoading },
     dispatch,
-    loadMore: (on, entry) => (on === 'library' ? library.more() : host.loadMore(on, entry)),
+    loadMore: (on, entry) => (on === 'library' ? library.more() : on === 'row' ? library.moreRow(entry) : host.loadMore(on, entry)),
   };
 }
 

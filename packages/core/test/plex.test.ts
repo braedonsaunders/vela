@@ -78,11 +78,26 @@ describe('PlexAdapter requests', () => {
   test('library recommendations read the selected Plex section hubs', async () => {
     const seen = routeFetch({ 'GET /hubs/sections/7': { MediaContainer: { Hub: [
       { key: '/hubs/sections/7/recentlyAdded', title: 'Recently Added', Metadata: [movie], size: 1 },
+      { key: '/hubs/sections/7/genres', title: 'By Genre', Directory: [{ type: 'genre', key: '8', title: 'Crime' }], size: 1 },
       { key: '/hubs/sections/7/empty', title: 'Empty', Metadata: [], size: 0 },
     ] } } });
     const rows = await plex().libraryRows('7', 'movies');
     expect(seen[0]!.url.pathname).toBe('/hubs/sections/7');
-    expect(rows.map(row => [row.name, row.purpose, row.items[0]?.id])).toEqual([['Recently Added', 'recentlyAdded', '10']]);
+    expect(rows.map(row => [row.name, row.purpose, row.items[0]?.id])).toEqual([['Recently Added', 'recentlyAdded', '10'], ['By Genre', 'recommendation', 'genre:8']]);
+    expect(rows[1]!.items[0]).toMatchObject({ kind: 'directory', targetId: 'vela-library-genre:8' });
+  });
+
+  test('library collections and genres stay scoped to the selected section', async () => {
+    const seen = routeFetch({
+      'GET /library/sections/7/collections': { MediaContainer: { Metadata: [{ type: 'collection', ratingKey: 9, title: 'Noir' }], totalSize: 2 } },
+      'GET /library/sections/7/genre': { MediaContainer: { Directory: [{ key: '8', title: 'Crime' }, { key: '/unrelated/path', fastKey: '/library/sections/7/all?genre=12', title: 'Drama' }] } },
+    });
+    const adapter = plex();
+    const collections = await adapter.libraryCollections('7');
+    expect(collections.items[0]).toMatchObject({ kind: 'collection', targetId: 'collection:9' });
+    expect(collections.nextCursor).toBe('1');
+    expect(await adapter.libraryGenres('7')).toEqual([{ id: '8', label: 'Crime' }, { id: '12', label: 'Drama' }]);
+    expect(seen.map(call => call.url.pathname)).toEqual(['/library/sections/7/collections', '/library/sections/7/genre']);
   });
 
   test('libraries keep movie and show sections and refuse unsupported filters', async () => {

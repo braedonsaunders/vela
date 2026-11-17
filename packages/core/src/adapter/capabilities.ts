@@ -43,10 +43,14 @@ export interface DescriptiveSearch {
 /** Server-provided recommendation rows scoped to a single library. */
 export interface LibraryRecommendations {
   libraryRows(id: string, kind: V.Library['kind']): Promise<V.Row[]>;
+  libraryCollections(id: string, cursor?: string): Promise<V.Page<V.RowEntry>>;
+  libraryGenres(id: string): Promise<{ id: string; label: string }[]>;
 }
 
 export function hasLibraryRecommendations(adapter: ServerAdapter): adapter is ServerAdapter & LibraryRecommendations {
-  return 'libraryRows' in adapter && typeof adapter.libraryRows === 'function';
+  return 'libraryRows' in adapter && typeof adapter.libraryRows === 'function'
+    && 'libraryCollections' in adapter && typeof adapter.libraryCollections === 'function'
+    && 'libraryGenres' in adapter && typeof adapter.libraryGenres === 'function';
 }
 
 export interface AiSearch {

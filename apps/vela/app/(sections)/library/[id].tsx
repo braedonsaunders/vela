@@ -20,7 +20,7 @@ export function LibrarySection({ id, params }: { id: string; params: LibraryPara
     () => queryOf({ sort, dir, kind, genre, year, played, fav }),
     [sort, dir, kind, genre, year, played, fav],
   );
-  const library = useLibraryPage(id, query);
+  const library = useLibraryPage(id, query, params.view);
   const page = (host: SkinHost) => libraryHost(host, id, query, library);
   return <DocumentScreen route="library" entry={id} page={page} sharedShell />;
 }

@@ -10,7 +10,7 @@
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.3';
+const version = '1.0.4';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -435,15 +435,18 @@ const library: Node = {
       ...borderedStates,
       children: [{ type: 'text', text: '{s:back}' }],
     },
-    catalogue('{library.name}', 'library.items', [ready]),
-    { type: 'box', role: 'status', when: [ready, { test: 'library.itemCount', is: 'eq', value: '0' }],
+    { type: 'use', template: 'velaLibraryViews', when: [ready] },
+    { type: 'use', template: 'velaLibraryFilters', when: [ready] },
+    { type: 'use', template: 'velaLibraryAlternative' },
+    catalogue('{library.name}', 'library.items', [ready, { test: 'library.view', is: 'eq', value: 'library' }]),
+    { type: 'box', role: 'status', when: [ready, { test: 'library.view', is: 'eq', value: 'library' }, { test: 'library.itemCount', is: 'eq', value: '0' }],
       style: { padding: '24px 4%', display: 'flex', 'flex-direction': 'column', gap: '8px' }, children: [
         { type: 'text', text: '{t:library.empty}', style: { 'font-size': '20px' } },
         { type: 'text', text: '{t:library.emptyHint}', style: { 'font-size': '14px' } },
       ] },
     {
       type: 'box',
-      when: [ready, { test: 'library.more' }],
+      when: [ready, { test: 'library.view', is: 'eq', value: 'library' }, { test: 'library.more' }],
       press: { action: 'libraryMore' },
       disabled: [{ test: 'env.libraryMoreLoading' }],
       label: '{s:showMore}',

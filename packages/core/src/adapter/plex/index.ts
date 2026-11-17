@@ -188,12 +188,41 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   }
   async libraryRows(id: string, _kind: V.Library['kind']): Promise<V.Row[]> {
     const c = await this.request(`/hubs/sections/${enc(id)}`, { count: 20 });
-    return (c.Hub || []).map((h: Node) => this.hub(h)).filter((row: V.Row) => row.items.length > 0 || row.continuation === 'more');
+    return (c.Hub || []).map((h: Node) => this.libraryHub(h)).filter((row: V.Row) => row.items.length > 0 || row.continuation === 'more');
+  }
+  private libraryHub(h: Node): V.Row {
+      const row = this.hub(h);
+      const genres: V.RowEntry[] = this.nodes(h).flatMap(n => {
+        if (n.type !== 'genre') return [];
+        const genre = this.genreId(n);
+        return genre && n.title ? [{ id: `genre:${genre}`, kind: 'directory' as const, targetId: `vela-library-genre:${encodeURIComponent(genre)}`, name: n.title, artwork: [], receiptToken: '' }] : [];
+      });
+      return genres.length ? { ...row, ...page([...row.items, ...genres], Number(h.offset || 0), h.totalSize ?? (h.more ? undefined : h.size)) } : row;
+  }
+  async libraryCollections(id: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
+    const start = offset(cursor);
+    const c = await this.request(`/library/sections/${enc(id)}/collections`, { 'X-Plex-Container-Start': start, 'X-Plex-Container-Size': 100 });
+    return page(this.nodes(c).filter(n => n.type === 'collection').map(n => this.entry(n)), start, c.totalSize ?? c.size);
+  }
+  async libraryGenres(id: string): Promise<{ id: string; label: string }[]> {
+    const c = await this.request(`/library/sections/${enc(id)}/genre`);
+    return (c.Directory || []).flatMap((n: Node) => {
+      if (!n.title) return [];
+      const genre = this.genreId(n);
+      return genre ? [{ id: genre, label: n.title }] : [];
+    });
+  }
+  private genreId(n: Node): string {
+    // PMS may return a relative key or a fastKey URL; /all's genre filter needs the tag ID.
+    const key = String(n.fastKey ?? n.key ?? '');
+    const parsed = new URL(key, this.origin);
+    return parsed.searchParams.get('genre') ?? (/^\d+$/.test(key) ? key : '');
   }
   async row(id: string, cursor?: string, limit = 20): Promise<V.Row> {
     if (!id.startsWith('/hubs/') && !id.startsWith('/library/')) fail('Invalid Plex hub');
     const c = await this.request(id, { 'X-Plex-Container-Start': offset(cursor), 'X-Plex-Container-Size': limit });
-    return this.hub({ ...c, key: id, title: c.title || c.title2 });
+    const hub = { ...c, key: id, title: c.title || c.title2 };
+    return id.startsWith('/hubs/sections/') ? this.libraryHub(hub) : this.hub(hub);
   }
   private libraryNode(n: Node): V.Library {
     const sorts: V.LibrarySort[] = ['title', 'added', 'released', 'year', 'rating', 'duration'];

@@ -48,7 +48,7 @@ export type Action =
   /** Page a row's pager by one page (arg: the row id). */
   | 'pageNext' | 'pagePrev'
   /** A library page: sort by an option, flip the direction, filter name|value, load more titles. */
-  | 'librarySort' | 'librarySortFlip' | 'libraryFilter' | 'libraryMore'
+  | 'librarySort' | 'librarySortFlip' | 'libraryFilter' | 'libraryMore' | 'libraryView'
   /** Signed out (route auth): sign in with the fields; start or cancel a quick-connect code. */
   | 'signIn' | 'startQuick' | 'cancelQuick' | 'goSecure'
   /** A collection page: load its next titles. */

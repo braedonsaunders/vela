@@ -3,10 +3,11 @@
 // and dropped when the session or server changes.
 import type * as V from '../wire';
 import { capabilitiesOf } from '../adapter/advertise';
+import { hasLibraryRecommendations } from '../adapter/capabilities';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { detailModel, entry, feedRow } from '../discovery/models';
 import { detailCard, detailWatched, recorded, type Watched } from '../discovery/progress';
-import type { Card, CollectionModel, DetailModel, LibraryModel, Row } from '../models';
+import type { Card, CollectionModel, DetailModel, LibraryExtras, LibraryModel, Row } from '../models';
 import type { Connection } from '../adapter/connection';
 import { msg } from '../i18n';
 import { PendingTitles } from './pending';
@@ -158,6 +159,39 @@ export class Catalogue {
       const images = await connection.images();
       return data.items.map(row => feedRow(row, images, this.artWidth()));
     });
+  }
+
+  /** Library-specific native server views. Ether v0 does not identify a library in RowsQuery. */
+  async libraryExtras(id: string, kind: V.Library['kind']): Promise<LibraryExtras | undefined> {
+    const connection = await this.session.ready();
+    const adapter = connection.adapter;
+    if (!hasLibraryRecommendations(adapter)) return undefined;
+    const [rows, collections, genres] = await Promise.allSettled([
+      adapter.libraryRows(id, kind), adapter.libraryCollections(id), adapter.libraryGenres(id),
+    ]);
+    const images = await connection.images();
+    return {
+      recommendationsAvailable: true,
+      collectionsAvailable: true,
+      rows: rows.status === 'fulfilled' ? rows.value.map(row => feedRow(row, images, this.artWidth())) : [],
+      collections: collections.status === 'fulfilled' ? collections.value.items.map(item => entry(item, images, this.artWidth())) : [],
+      collectionCursor: collections.status === 'fulfilled' ? collections.value.nextCursor ?? '' : '',
+      genres: genres.status === 'fulfilled' ? genres.value : [],
+      failed: [rows, collections, genres].some(result => result.status === 'rejected'),
+    };
+  }
+
+  async moreLibraryCollections(id: string, cursor: string): Promise<{ items: Card[]; cursor: string }> {
+    const connection = await this.session.ready();
+    if (!hasLibraryRecommendations(connection.adapter)) return { items: [], cursor: '' };
+    const [page, images] = await Promise.all([connection.adapter.libraryCollections(id, cursor), connection.images()]);
+    return { items: page.items.map(item => entry(item, images, this.artWidth())), cursor: page.nextCursor ?? '' };
+  }
+
+  async moreLibraryRow(id: string, cursor: string): Promise<Row> {
+    const connection = await this.session.ready();
+    const data = await connection.adapter.row(id, cursor);
+    return feedRow(data, await connection.images(), this.artWidth());
   }
 
   /** One library view, `pages` pages deep (100 items a page). A background revisit

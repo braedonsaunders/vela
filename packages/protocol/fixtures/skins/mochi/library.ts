@@ -374,21 +374,23 @@ export const library: Node = {
       small: { gap: '14px' },
       children: [
         pageHeading('{s:library}', '{library.name}', '{library.backdrop}'),
-        toolbar,
+        { type: 'use', template: 'velaLibraryViews' },
+        { type: 'use', template: 'velaLibraryAlternative' },
+        { ...toolbar, when: [is('library.view', 'library')] } as Node,
         {
           type: 'box',
-          when: [set('env.libraryLoading'), is('library.itemCount', '0')],
+          when: [is('library.view', 'library'), set('env.libraryLoading'), is('library.itemCount', '0')],
           style: { ...col, 'align-items': 'center', padding: '48px 0px' },
           children: [loader('{s:findingTitles}', 64)],
         },
         {
           ...emptyState('sleepy', '{s:libraryEmpty}', '{s:libraryEmptyHint}'),
-          when: [not('env.libraryLoading'), is('library.itemCount', '0')],
+          when: [is('library.view', 'library'), not('env.libraryLoading'), is('library.itemCount', '0')],
         } as Node,
-        { ...libraryGrid, when: [{ test: 'library.itemCount', is: 'gt', value: '0' }] } as Node,
+        { ...libraryGrid, when: [is('library.view', 'library'), { test: 'library.itemCount', is: 'gt', value: '0' }] } as Node,
         {
           type: 'box',
-          when: [{ test: 'library.itemCount', is: 'gt', value: '0' }, set('library.more')],
+          when: [is('library.view', 'library'), { test: 'library.itemCount', is: 'gt', value: '0' }, set('library.more')],
           style: { ...row, 'justify-content': 'center', 'padding-top': '18px' },
           children: [
             { ...loader('{s:loadingMore}', 44), when: [set('env.libraryMoreLoading')] } as Node,

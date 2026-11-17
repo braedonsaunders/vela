@@ -53,6 +53,17 @@ describe('JellyfinAdapter requests', () => {
     expect(rows.map(row => row.purpose)).toEqual(['nextUp', 'recentlyAdded']);
     expect(seen.every(call => call.url.searchParams.get('ParentId') === 'l2')).toBe(true);
   });
+
+  test('collections and genres use the selected library as parent', async () => {
+    const seen = routeFetch({
+      'GET /jf/Users/viewer-1/Items': { Items: [{ Id: 'set', Name: 'Noir', Type: 'BoxSet' }], TotalRecordCount: 1 },
+      'GET /jf/Genres': { Items: [{ Id: 'g', Name: 'Crime' }] },
+    });
+    const adapter = new JellyfinAdapter(BASE, new FakeCredentials());
+    expect((await adapter.libraryCollections('l1')).items[0]).toMatchObject({ kind: 'collection', targetId: 'set' });
+    expect(await adapter.libraryGenres('l1')).toEqual([{ id: 'Crime', label: 'Crime' }]);
+    expect(seen.every(call => call.url.searchParams.get('ParentId') === 'l1')).toBe(true);
+  });
   test('signs in by name without a token and maps the user', async () => {
     const seen = routeFetch({ 'POST /jf/Users/AuthenticateByName': { AccessToken: 'tok', User: { Id: 'u1', Name: 'Ana', PrimaryImageTag: 'av' } } });
     const credentials = new FakeCredentials(null);
