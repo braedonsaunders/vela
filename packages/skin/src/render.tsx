@@ -431,6 +431,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     });
     const button = press ? (
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} disabled={disabled}
+        focusable={selectable(press)}
         {...(web ? { dataSet: { velaFocus: 'frame' } } : {})}
         {...(web && a11y.accessibilityState?.selected !== undefined ? { 'aria-selected': a11y.accessibilityState.selected } : {})}
         onPress={onPress}
@@ -517,12 +518,19 @@ function tvGuide(node: Extract<RNode, { kind: 'box' }>, flags: string[], band: b
 /** Whether a subtree draws anything that takes focus. An empty guide must not exist: on Android
  * it would still be a destination, and focus moved onto it would go nowhere. */
 const focusables = new WeakMap<RNode, boolean>();
+/** Whether a press takes keyboard and TV focus. The logo's `home` press is a pointer shortcut
+ * only: Home is in the navigation beside it, and a focusable logo is a stop that does nothing new
+ * (on TV the engine's first pick on a page). It still answers a click or tap. */
+function selectable(press: { action: string }): boolean {
+  return press.action !== 'home';
+}
+
 function focusableWithin(node: RNode): boolean {
   const known = focusables.get(node);
   if (known !== undefined) return known;
   let found: boolean;
   switch (node.kind) {
-    case 'box': found = !!node.press || node.children.some(focusableWithin); break;
+    case 'box': found = (!!node.press && selectable(node.press)) || node.children.some(focusableWithin); break;
     case 'repeat': found = focusableWithin(node.item); break;
     case 'slot': found = node.slot === 'searchField'; break;
     case 'widget': found = FOCUSABLE_WIDGETS.has(node.widget); break;
