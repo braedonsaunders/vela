@@ -1134,16 +1134,35 @@ export const title: Node = {
       },
       small: { 'border-radius': '0px', margin: '0px', 'margin-top': '0px', height: '100dvh' },
       children: [
+        // The close button stands in a strip across the frame's top. On a TV the strip is a focus
+        // region: up from anything at the top of the page lands on the button, which tvOS's focus
+        // engine (moving only to what lies in line) otherwise never reaches from the left-hand
+        // actions. The strip takes no pointer itself.
+        {
+          type: 'box',
+          role: 'navigation',
+          label: '{t:ui.close}',
+          style: {
+            position: 'absolute',
+            top: '0px',
+            left: '0px',
+            right: '0px',
+            'z-index': '10',
+            display: 'flex',
+            'flex-direction': 'row',
+            'justify-content': 'flex-end',
+            padding: '20px',
+            'pointer-events': 'box-none',
+          },
+          // On a phone the page is full-bleed under the shell's bar and tabs: the button sits below them.
+          small: { 'padding-top': 'calc(104px + env(safe-area-inset-top))', 'padding-right': '16px' },
+          children: [
         {
           type: 'box',
           press: { action: 'back' },
           label: '{t:ui.close}',
           testId: 'detail-close',
           style: {
-            position: 'absolute',
-            top: '20px',
-            right: '20px',
-            'z-index': '10',
             width: '44px',
             height: '44px',
             'box-sizing': 'border-box',
@@ -1153,9 +1172,9 @@ export const title: Node = {
             'background-color': '$ui.glass',
             'backdrop-filter': 'blur(20px) saturate(1.3)',
           },
-          // On a phone the page is full-bleed under the shell's bar and tabs: the button sits below them.
-          small: { top: 'calc(104px + env(safe-area-inset-top))', right: '16px' },
           children: [{ type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } }],
+        },
+          ],
         },
         {
           type: 'box',

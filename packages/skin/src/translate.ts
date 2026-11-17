@@ -230,7 +230,9 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
       case 'rotate': transform.push({ rotate: /deg|turn|rad/.test(v) ? v : `${Number(v)}deg` }); break;
       case 'perspective': transform.unshift({ perspective: points(v, { ...m, axis: 'x' }) ?? 0 }); break;
       case 'transition': Object.assign(s, transitions(v)); break;
-      case 'pointer-events': s.pointerEvents = v === 'none' ? 'none' : 'auto'; break;
+      // box-none (React Native's, a box that takes no pointer while its children do): a strip
+      // laid over content that holds a button.
+      case 'pointer-events': s.pointerEvents = v === 'none' ? 'none' : v === 'box-none' ? 'box-none' : 'auto'; break;
       case 'animation': break; // Motion presets are applied by the renderer (motion.ts).
       case 'scroll-snap-type': case 'scroll-snap-align': case 'scrollbar-width': case 'scroll-behavior':
       case 'scroll-padding-left': case 'color-scheme': case 'text-overflow': case 'line-clamp':
