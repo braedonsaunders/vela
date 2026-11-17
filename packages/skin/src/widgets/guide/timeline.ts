@@ -17,6 +17,7 @@ export function timeline(blocks: ReadonlyMap<number, GuideModel>, selected: numb
     ticks: indexed.flatMap(({ offset, block }) => block.ticks.map(t => ({ ...t, minute: t.minute + offset }))),
     channels: base.channels.map(channel => ({
       ...channel,
+      listed: indexed.some(({ channels }) => channels.get(channel.id)?.listed),
       programmes: indexed.flatMap(({ offset, channels }) => (channels.get(channel.id)?.programmes ?? []).map(p => ({ ...p, at: p.at + offset }))).reduce<GuideProgramme[]>((merged, p) => {
         const last = merged[merged.length - 1];
         if (last?.id === p.id && Math.abs(last.at + last.span - p.at) < 0.01) last.span += p.span;
