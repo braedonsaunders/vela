@@ -1,7 +1,6 @@
-import { forwardRef, useEffect, useState, type ComponentRef } from 'react';
-import { Platform, Pressable, StyleSheet, type PressableProps, type ViewStyle } from 'react-native';
-import { isFocusVisible } from './focus-visible';
-import { FOCUS_CSS, focusStyle } from './focus-style';
+import { forwardRef, useEffect, type ComponentRef } from 'react';
+import { Platform, Pressable, type PressableProps } from 'react-native';
+import { FOCUS_CSS } from './focus-style';
 
 /** Install once per document; keyboard focus is independent of any skin's authored look. */
 export function useFocusStyles() {
@@ -14,21 +13,9 @@ export function useFocusStyles() {
   }, []);
 }
 
-/** The native counterpart to :focus-visible, shared by widget press targets. */
+/** A widget's press target. Widgets draw their own focus looks (a filled button, a lit row); on
+ * the web the shared :focus-visible ring backs them up, natively nothing is laid over them. */
 export const FocusPressable = forwardRef<ComponentRef<typeof Pressable>, PressableProps>(function FocusPressable(props, ref) {
   useFocusStyles();
-  const [focused, setFocused] = useState(false);
-  const { style, onFocus, onBlur, ...rest } = props;
-  return <Pressable {...rest} ref={ref}
-    onFocus={event => {
-      if (props.focusable !== false) setFocused(isFocusVisible(event.currentTarget));
-      onFocus?.(event);
-    }}
-    onBlur={event => { setFocused(false); onBlur?.(event); }}
-    style={state => {
-      const own = typeof style === 'function' ? style(state) : style;
-      const flat = StyleSheet.flatten(own);
-      return [own, focused && Platform.OS !== 'web' ? focusStyle(flat?.transform) as ViewStyle : null];
-    }}
-  />;
+  return <Pressable {...props} ref={ref} />;
 });

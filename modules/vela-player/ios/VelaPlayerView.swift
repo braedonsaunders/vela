@@ -44,7 +44,17 @@ final class VelaPlayerView: ExpoView {
     private var awaitedSeekLimit: Timer?
 
     // A trailer preview (`preview`): it excludes the plan and plays while active and on screen.
-    private lazy var preview = makePreview()
+    // Made on first use; `madePreview` is what exists, for teardown, which must never make one
+    // (the new preview's weak reference to a deallocating view aborts the app).
+    private var madePreview: PreviewPlayback?
+    private var preview: PreviewPlayback {
+        if let madePreview {
+            return madePreview
+        }
+        let made = makePreview()
+        madePreview = made
+        return made
+    }
     private var previewSource: PreviewPlayback.Source?
     private var previewActive = true
 
@@ -71,7 +81,7 @@ final class VelaPlayerView: ExpoView {
 
     deinit {
         stop()
-        preview.stop()
+        madePreview?.stop()
     }
 
     override func didMoveToWindow() {
@@ -107,7 +117,7 @@ final class VelaPlayerView: ExpoView {
             stop()
             backgroundColor = .clear
         } else if hadPreview {
-            preview.stop()
+            madePreview?.stop()
         }
         updatePreview()
     }

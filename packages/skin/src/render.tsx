@@ -335,7 +335,9 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
 
   if (fx.hidden) return null;
 
-  const focusRing = ui.focus && (!!node.press || stop) ? focusStyle(style.transform, env.still) : undefined;
+  // A focused control always shows it, but in its document's own focus look where it has one (a
+  // card's lift, a button's fill): the shared ring is only for controls the document left without.
+  const focusRing = ui.focus && (!!node.press || stop) && !focusLook(node) ? focusStyle(style.transform, env.still) : undefined;
   const vertical = !!route || (!!fx.scrollY && !fx.scrollX);
   const stops = Platform.isTV && vertical ? readingStops(node) : undefined;
   const children = node.children.map((child, i) => stops?.has(i)
@@ -562,6 +564,13 @@ function sectionText(node: RNode, ctx: Ctx, env: Env): string {
   return parts.filter(Boolean).join(', ').slice(0, SECTION_TEXT_MAX);
 }
 const SECTION_TEXT_MAX = 600;
+
+/** Whether the document gives a press box a look for focus: its focus look, else its hover look
+ * (on TV focus shows the hover look), or a group whose members show its focus. */
+function focusLook(node: RNode): boolean {
+  if (node.group) return true;
+  return [node.base, ...node.states.map(s => s.layer)].some(layer => layer.focus || layer.hover || layer.style.outline === 'auto');
+}
 
 /** The document's ui block, resolved once per document. */
 const uis = new WeakMap<ResolvedDocument, ReturnType<typeof resolveUi>>();
