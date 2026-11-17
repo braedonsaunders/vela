@@ -14,7 +14,7 @@ async function code(expired = false): Promise<string> {
 }
 function app(secrets: MemoryStore, webCode: string) {
   return createVela({ etherOrigin: mock.url, secrets, device, appVersion: '0.2.9', rendererVersion: 17,
-    media: { containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hls: { native: false, fmp4: false, mpegTs: false } },
+    media: { containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hls: { native: false, fmp4: false, mpegTs: false }, mse: false } as never,
     page: { origin: mock.url, webCode }, artWidth: 640 } as VelaPlatform & { rendererVersion: number });
 }
 
