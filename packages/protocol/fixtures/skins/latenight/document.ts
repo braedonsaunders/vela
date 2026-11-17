@@ -5,7 +5,7 @@
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.5';
+const id = 'latenight', version = '1.0.6';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -129,7 +129,7 @@ const glass: Node = { type: 'box', style: { position: 'absolute', ...inset('0px'
       { type: 'box', style: { position: 'absolute', ...inset('0px'), 'background-image': 'radial-gradient(ellipse 85% 75% at 50% 45%, $scrim-clear 55%, $corner-shade 100%)' } },
       { type: 'box', style: { position: 'absolute', top: '-30%', left: '-10%', width: '70%', height: '70%', 'background-image': 'radial-gradient(closest-side, $sheen 0%, $scrim-clear 100%)', opacity: '0.7' }, small: { display: 'none' } },
       // Power on: a flash opens from the middle of the tube, then clears (once, when the set comes on).
-      { type: 'box', when: [{ test: 'env.still', not: true }], motion: 'warmUp', style: { position: 'absolute', ...inset('0px') }, children: [
+      { type: 'box', when: [{ test: 'env.still', not: true }, { test: 'env.route', is: 'ne', value: 'library' }], motion: 'warmUp', style: { position: 'absolute', ...inset('0px') }, children: [
         { type: 'box', motion: 'tvOn', style: { position: 'absolute', ...inset('0px'), 'background-image': 'radial-gradient(ellipse 60% 50% at 50% 50%, $flash 0%, $flash-edge 60%, $scrim-clear 100%)' } },
       ] },
       // A tracking band, now and then (the easing holds it off screen most of the cycle).
@@ -143,8 +143,8 @@ const glass: Node = { type: 'box', style: { position: 'absolute', ...inset('0px'
 
 // Changing channel: snow across the screen, then the bug says where you are. One per
 // section, so each mounts (and plays) when that section comes on.
-const flipLayer = (when: Node['when'], extra: Node[] = []): Node => ({ type: 'box', when, style: { position: 'absolute', ...inset(bezel.normal), 'z-index': '35', 'pointer-events': 'none', 'border-radius': radius.normal, 'overflow-x': 'hidden', 'overflow-y': 'hidden' },
-  wide: { ...inset(bezel.wide), 'border-radius': radius.wide }, small: { ...inset(bezel.small), 'border-radius': radius.small }, children: [snow('flip'), ...extra] });
+const flipLayer = (when: Node['when'], extra: Node[] = [], withSnow = true): Node => ({ type: 'box', when, style: { position: 'absolute', ...inset(bezel.normal), 'z-index': '35', 'pointer-events': 'none', 'border-radius': radius.normal, 'overflow-x': 'hidden', 'overflow-y': 'hidden' },
+  wide: { ...inset(bezel.wide), 'border-radius': radius.wide }, small: { ...inset(bezel.small), 'border-radius': radius.small }, children: [...(withSnow ? [snow('flip')] : []), ...extra] });
 const bigBug = (text: string, name: string): Node => ({ type: 'box', when: [{ test: 'env.still', not: true }], motion: 'bugOut',
   style: { position: 'absolute', top: '108px', right: 'max(34px, 4vw)', display: 'flex', 'flex-direction': 'column', 'align-items': 'flex-end', gap: '4px 4px' }, small: { top: '112px', right: '18px' }, children: [
     { type: 'text', text, style: { ...osdText('84px'), 'font-variant-numeric': 'tabular-nums' }, small: { 'font-size': '60px' } },
@@ -154,7 +154,8 @@ const flips: Node[] = [
   flipLayer([{ test: 'env.viewer' }, { test: 'env.section', is: 'eq', value: 'home' }], [bigBug('CH 03', '{s:home}')]),
   flipLayer([{ test: 'env.viewer' }, { test: 'env.section', is: 'eq', value: 'live' }], [bigBug('{s:live}', '{s:liveTv}')]),
   // A live library is the live section (its own layer above), not a numbered channel.
-  { type: 'repeat', over: 'nav.destinations', item: flipLayer([{ test: 'dest.on' }, { test: 'dest.kind', is: 'ne', value: 'live' }], [bigBug('CH 1{index.label}', '{dest.name}')]) },
+  // Keep library controls visible while the channel identifier appears.
+  { type: 'repeat', over: 'nav.destinations', item: flipLayer([{ test: 'dest.on' }, { test: 'dest.kind', is: 'ne', value: 'live' }], [bigBug('CH 1{index.label}', '{dest.name}')], false) },
 ];
 
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$page', color: '$ink', 'font-family': sans }, children: [
