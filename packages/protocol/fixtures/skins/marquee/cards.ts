@@ -200,10 +200,9 @@ const caption: Node = {
       groupHover: { color: '$amber' },
       groupFocus: { color: '$amber' },
     } as Node,
-    ...subLine(
-      { 'font-size': '13px', color: '$ink-faint', 'font-variant-numeric': 'tabular-nums', ...oneLine },
-      { 'font-size': '12px' },
-    ),
+    { type: 'use', template: 'velaCardContext', when: [set('card.hasContext')] },
+    { type: 'text', when: [unset('card.hasContext'), set('card.yearLabel')], text: '{card.yearLabel}',
+      style: { 'font-size': '13px', color: '$ink-faint', 'font-variant-numeric': 'tabular-nums', ...oneLine }, small: { 'font-size': '12px' } },
   ],
 };
 const cardShell = (w: number, wSmall: number, ratio: string, artwork: Node[]): Node => ({

@@ -530,15 +530,17 @@ const noSubLine: Condition[][] = [
   ],
 ];
 const episodeMeta: Node[] = [
-  ...subLine(metaStyle, {}, ' · {card.durationLabel}').map(
-    (n) => ({ ...n, when: [...(n.when ?? []), set('card.durationLabel')] }) as Node,
+  { type: 'use', template: 'velaCardContext', when: [set('card.hasContext')] },
+  { type: 'text', text: '{card.durationLabel}', style: metaStyle, when: [set('card.hasContext'), set('card.durationLabel')] },
+  ...subLine(metaStyle, {}, ' · {card.durationLabel}').slice(2).map(
+    (n) => ({ ...n, when: [...(n.when ?? []), unset('card.hasContext'), set('card.durationLabel')] }) as Node,
   ),
-  ...subLine(metaStyle, {}).map(
-    (n) => ({ ...n, when: [...(n.when ?? []), unset('card.durationLabel')] }) as Node,
+  ...subLine(metaStyle, {}).slice(2).map(
+    (n) => ({ ...n, when: [...(n.when ?? []), unset('card.hasContext'), unset('card.durationLabel')] }) as Node,
   ),
   ...noSubLine.map((w): Node => ({
     type: 'text',
-    when: [...w, set('card.durationLabel')],
+    when: [...w, unset('card.hasContext'), set('card.durationLabel')],
     text: '{card.durationLabel}',
     style: metaStyle,
   })),
@@ -794,26 +796,6 @@ const titleHead: Node = {
               when: [{ test: 'detail.year', is: 'gt', value: '0' }],
               text: '{detail.yearLabel}',
               style: { 'font-size': '20px', color: '$ink-dim', 'font-variant-numeric': 'tabular-nums' },
-            },
-            {
-              type: 'text',
-              when: [
-                is('detail.kind', 'episode'),
-                { test: 'detail.episodeNumber', is: 'gt', value: '0' },
-                set('detail.seasonNumberLabel'),
-              ],
-              text: '{s:detailSeasonEpisode}',
-              style: { 'font-size': '16px', color: '$ink-dim', 'font-variant-numeric': 'tabular-nums' },
-            },
-            {
-              type: 'text',
-              when: [
-                is('detail.kind', 'episode'),
-                { test: 'detail.episodeNumber', is: 'gt', value: '0' },
-                unset('detail.seasonNumberLabel'),
-              ],
-              text: '{s:detailEpisodeNumber}',
-              style: { 'font-size': '16px', color: '$ink-dim', 'font-variant-numeric': 'tabular-nums' },
             },
           ],
         },

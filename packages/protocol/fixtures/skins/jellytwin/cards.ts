@@ -30,11 +30,6 @@ const subline: Style = {
   'font-variant-numeric': 'tabular-nums',
 };
 const isEpisode: Condition = { test: 'card.kind', is: 'eq', value: 'episode' };
-const hasSE: Condition[] = [
-  isEpisode,
-  { test: 'card.seasonNumberLabel' },
-  { test: 'card.episodeNumberLabel' },
-];
 // "Not an episode with both numbers", written as the three ways it can hold.
 const noSE: Condition[][] = [
   [not(isEpisode)],
@@ -157,12 +152,12 @@ export const card = (wide: boolean, width = wide ? wideW : posterW): Node => {
         },
       },
       // S1:E3 for an episode, else the year, else the facts.
-      { type: 'text', when: hasSE, text: '{s:seasonEpisode}', style: subline },
+      { type: 'use', template: 'velaCardContext', when: [{ test: 'card.hasContext' }] },
       ...noSE.map(
         w =>
           ({
             type: 'text',
-            when: [...w, { test: 'card.yearLabel' }],
+            when: [...w, { test: 'card.hasContext', not: true }, { test: 'card.yearLabel' }],
             text: '{card.yearLabel}',
             style: subline,
           }) as Node,
@@ -171,7 +166,7 @@ export const card = (wide: boolean, width = wide ? wideW : posterW): Node => {
         w =>
           ({
             type: 'text',
-            when: [...w, { test: 'card.yearLabel', not: true }],
+            when: [...w, { test: 'card.hasContext', not: true }, { test: 'card.yearLabel', not: true }],
             text: '{card.facts}',
             style: subline,
           }) as Node,

@@ -19,6 +19,10 @@ export function DocumentScreen({ route, entry, page, sharedShell = false }: Prop
   const vela = useVela();
   const app = vela.host(route, entry);
   const host = app && page ? page(app) : app;
+  const season = route === 'title' ? host?.env.season : '';
+  useEffect(() => {
+    if (season) void vela.store.catalogue.title(season);
+  }, [season, vela.store]);
   // On TV, focus returns to the card or button that opened the route above when it closes.
   const navigationFocused = useIsFocused();
   const sectionFocused = useSectionFocus();

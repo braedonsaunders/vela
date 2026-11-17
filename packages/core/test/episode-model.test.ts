@@ -33,3 +33,13 @@ test('parent identifiers survive card and detail projection for any kind', () =>
   expect(card(source)).toMatchObject({ id: 'episode', showId: 'show', seasonId: 'season' });
   expect(detailModel({ title: source, extras: [], chapters: [], cast: [] }).title[0]).toMatchObject({ showId: 'show', seasonId: 'season' });
 });
+
+test('context parts carry independently selectable destinations without depending on kind', () => {
+  expect(card({ ...title, kind: 'plugin-item' }).contextParts).toEqual([
+    { label: 'Meridian Station', select: 'show|' },
+    { label: 'Season 0', select: 'season|season||show' },
+    { label: 'Episode 3', select: 'episode|' },
+  ]);
+  expect(card({ ...title, showId: undefined, seasonId: undefined }).contextParts[0]?.select).toBe('');
+  expect(card({ ...title, seasonId: undefined }).contextParts[1]?.select).toBe('@number:0|season||show');
+});

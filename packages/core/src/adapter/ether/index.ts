@@ -157,7 +157,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   async detail(id: string) {
     const data = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(id)}`, undefined, CACHED);
     // Older Ether servers supply the show's id but omit its display name.
-    if (data.title?.kind === 'episode' && data.title.showId && data.title.showId !== id && !data.title.showName) {
+    if (data.title?.showId && data.title.showId !== id && !data.title.showName) {
       try {
         const show = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(data.title.showId)}`, undefined, CACHED);
         return { ...data, title: { ...data.title, showName: show.title.name } };

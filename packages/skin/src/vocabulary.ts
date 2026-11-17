@@ -66,6 +66,7 @@ export interface Env {
 
 /** The binding context: the item a node is repeated over, and its position. */
 export interface Ctx {
+  contextPart?: Card['contextParts'][number];
   card?: Card;
   hero?: Card;
   heroAct?: HeroAction;
@@ -126,6 +127,9 @@ const CARD_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rat
 const DETAIL_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
 
 export const VOCABULARY: Record<string, Accessor> = {
+  'context.label': c => c.contextPart?.label ?? '',
+  'context.select': c => c.contextPart?.select ?? '',
+  'card.hasContext': from('card', x => yes(x.contextParts.length > 0)),
   ...Object.fromEntries(CARD_FIELDS.flatMap(f => [[`card.${f}`, from('card', x => String(x[f]))], [`hero.${f}`, from('hero', x => String(x[f]))]])),
   'card.played': from('card', x => yes(x.played)),
   'card.episodeNumberLabel': from('card', x => x.episodeNumberLabel),
@@ -299,6 +303,8 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
   const browsed = libraryCollection(over, c, e, limit);
   if (browsed) return browsed;
   switch (over) {
+    case 'detail.contextParts': return at(d?.title[0]?.contextParts ?? [], contextPart => ({ contextPart }));
+    case 'card.contextParts': return at(c.card?.contextParts ?? [], contextPart => ({ contextPart }));
     case 'home.rows': return at(e.home?.rows ?? [], row => ({ row }));
     case 'row.items': return at(c.row?.items ?? [], card => ({ card }));
     case 'home.heroes': return at(e.home?.hero ?? [], hero => ({ hero, heroAct: heroAct(hero.id) }));

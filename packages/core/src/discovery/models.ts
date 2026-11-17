@@ -58,6 +58,11 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
         ? msg('detail.seasonEpisode', { season: year(title.seasonNumber), episode: year(title.episodeNumber) })
         : title.episodeNumber !== undefined ? msg('marquee.episodeNumber', { episode: year(title.episodeNumber) }) : '',
     ].filter(Boolean).join(' · '),
+    contextParts: [
+      ...(title.showName ? [{ label: title.showName, select: title.showId ? `${title.showId}|` : '' }] : []),
+      ...(title.seasonNumber !== undefined ? [{ label: `${msg('ui.season')} ${year(title.seasonNumber)}`, select: title.showId ? `${title.seasonId || `@number:${title.seasonNumber}`}|season||${title.showId}` : '' }] : []),
+      ...(title.episodeNumber !== undefined ? [{ label: msg('marquee.episodeNumber', { episode: year(title.episodeNumber) }), select: title.id ? `${title.id}|` : '' }] : []),
+    ],
     seasonId: title.seasonId ?? '',
     seasonNumber: title.seasonNumber ?? 0,
     episodeNumber: title.episodeNumber ?? 0,
@@ -112,6 +117,7 @@ function plainCard(id: string, kind: string, name: string, rating: string, art: 
     showId: '',
     showName: '',
     episodeContext: '',
+    contextParts: [],
     seasonId: '',
     seasonNumber: 0,
     episodeNumber: 0,

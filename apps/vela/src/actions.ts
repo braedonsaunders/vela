@@ -44,9 +44,12 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
   }, [store]);
 
   const select = useCallback((arg: string) => {
-    const [id = '', kind = '', receipt = ''] = arg.split('|');
+    const [id = '', kind = '', receipt = '', showId = ''] = arg.split('|');
     if (receipt) void store.receipts.record(receipt, 'selected');
-    if (kind === 'season') view.setSeason(id);
+    if (kind === 'season') {
+      view.setSeason(id);
+      if (showId) router.push({ pathname: '/title/[id]', params: { id: showId } });
+    }
     else if (kind === 'channel') router.push({ pathname: '/live', params: { ch: id } });
     else if (id && COLLECTION_KINDS.includes(kind)) openCollection(id);
     else if (id && TITLE_KINDS.includes(kind)) router.push({ pathname: '/title/[id]', params: { id } });

@@ -125,12 +125,17 @@ describe('EtherAdapter', () => {
   });
 });
 
-test('older Ether episode details resolve the series name through showId', async () => {
+test('older Ether child details resolve the series name through showId for any kind', async () => {
   routeFetch({
     'GET /vela/v0/titles/episode': { title: { id: 'episode', kind: 'episode', showId: 'show', seasonNumber: 0, episodeNumber: 3 } },
     'GET /vela/v0/titles/show': { title: { id: 'show', name: 'Severance' } },
   });
   expect((await ether().detail('episode')).title).toMatchObject({ showName: 'Severance', seasonNumber: 0, episodeNumber: 3 });
+  routeFetch({
+    'GET /vela/v0/titles/plugin': { title: { id: 'plugin', kind: 'plugin-item', showId: 'show' } },
+    'GET /vela/v0/titles/show': { title: { id: 'show', name: 'Severance' } },
+  });
+  expect((await ether().detail('plugin')).title.showName).toBe('Severance');
 });
 
 test('a missing Ether parent leaves the episode detail available', async () => {

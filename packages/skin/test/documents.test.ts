@@ -122,14 +122,16 @@ test('inherited library reserves header space only for overlay navigation', asyn
 test('every detail header is field-driven for movies, episodes and plugin media, with or without logos', async () => {
   const { detailModel } = await import('../../core/src/discovery/models');
   const { fill, holds } = await import('../src/resolve');
+  const { collection } = await import('../src/vocabulary');
   type Env = import('../src/vocabulary').Env;
+  type Ctx = import('../src/vocabulary').Ctx;
   type Title = import('../../core/src/wire').Title;
   for (const kind of ['movie', 'episode', 'plugin-audiobook']) {
     for (const logo of [false, true]) {
       for (const context of [false, true]) {
         const name = `${kind} title`;
         const data: Title = { id: 'probe', kind: kind as Title['kind'], name, summary: '', genres: [],
-          ...(context ? { showName: 'A series', seasonNumber: 2, episodeNumber: 3 } : {}),
+          ...(context ? { showId: 'show', seasonId: 'season', showName: 'A series', seasonNumber: 2, episodeNumber: 3 } : {}),
           artwork: logo ? [{ id: 'logo', kind: 'logo', tag: '', sizes: [{ width: 500, height: 120, url: 'https://media.example/logo.svg' }] }] : [],
         };
         const model = detailModel({ title: data, extras: [], chapters: [], cast: [] });
@@ -140,15 +142,17 @@ test('every detail header is field-driven for movies, episodes and plugin media,
           const resolved = resolveDocument(doc, width, 'en');
           const env = { detail: model, load: 'ready', route: 'title', entry: 'probe', small: width < 640, tv: false, still: true, flags: [], season: '' } as unknown as Env;
           const headings: RNode[] = [], contexts: string[] = [];
-          const walk = (n: RNode) => {
-            if (!holds(n.when, { index: 0 }, env)) return;
-            if (n.role === 'heading' && n.level === 1 && ((n.kind === 'text' && fill(n.text, { index: 0 }, env) === name) || (n.kind === 'image' && fill(n.alt, { index: 0 }, env) === name))) headings.push(n);
-            if (n.kind === 'text' && fill(n.text, { index: 0 }, env) === 'A series · Season 2, Episode 3') contexts.push('context');
-            if (n.kind === 'box') n.children.forEach(walk);
+          const walk = (n: RNode, c: Ctx) => {
+            if (!holds(n.when, c, env)) return;
+            if (n.role === 'heading' && n.level === 1 && ((n.kind === 'text' && fill(n.text, c, env) === name) || (n.kind === 'image' && fill(n.alt, c, env) === name))) headings.push(n);
+            if (n.kind === 'box' && n.role === 'link' && n.press) contexts.push(fill(n.press.arg, c, env));
+            if (n.kind === 'box') n.children.forEach(child => walk(child, c));
+            if (n.kind === 'repeat') collection(n.over, c, env, n.limit).forEach(item => walk(n.item, item));
           };
-          walk(resolved.routes.title!);
+          walk(resolved.routes.title!, { index: 0 });
           expect(headings.length).toBeGreaterThan(0);
           expect(contexts.length > 0).toBe(context);
+          if (context) expect(contexts).toEqual(expect.arrayContaining(['show|', 'season|season||show', 'probe|']));
           for (const heading of headings) if (heading.kind === 'image') {
             const css = Object.fromEntries(Object.entries(heading.base.style).map(([k, v]) => [k, fill(v, { index: 0 }, env)]));
             expect(css.width).toBeDefined();

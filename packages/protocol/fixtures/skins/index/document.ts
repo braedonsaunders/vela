@@ -10,7 +10,7 @@
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.2';
+const version = '1.0.3';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -1117,7 +1117,16 @@ const detail: Node = {
         },
       ],
     },
-    catalogue('{s:seasons}', 'detail.seasons', [{ test: 'detail.seasonCount', is: 'gt', value: '0' }]),
+    section('{s:seasons}', [{ test: 'detail.seasonCount', is: 'gt', value: '0' }], [{
+      type: 'repeat', over: 'detail.seasons', item: {
+        type: 'box', role: 'tab', label: '{card.name}', press: { action: 'select', arg: '{season.pick}' },
+        a11y: { selected: [{ test: 'season.on' }] },
+        style: { padding: '12px 16px', 'border-radius': '3px' },
+        states: [{ when: [{ test: 'season.on' }], style: { padding: '12px 16px', 'border-radius': '3px', 'background-color': '$ink', color: '$page' } }],
+        focus: { 'box-shadow': '0px 0px 0px 3px $ink' },
+        children: [{ type: 'text', text: '{card.name}' }],
+      },
+    }], '4px'),
     catalogue('{s:episodes}', 'detail.episodes', [{ test: 'detail.hasEpisodes' }]),
     section(
       '{s:extras}',

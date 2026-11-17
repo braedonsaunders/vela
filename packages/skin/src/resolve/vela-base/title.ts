@@ -51,12 +51,28 @@ const pendingSection = (binding: string, label: string): Node => ({
   small: { ...sideSmall },
 });
 
+export const contextLinks = (over: string): Node => ({
+  type: 'box',
+  style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px' },
+  children: [{ type: 'repeat', over, item: {
+    type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '10px' }, children: [
+      { type: 'text', when: [{ test: 'index', is: 'gt', value: '0' }], text: '·' },
+      { type: 'box', when: [{ test: 'context.select' }], press: { action: 'select', arg: '{context.select}' }, role: 'link', label: '{context.label}',
+        style: { 'border-radius': '3px' }, hover: { opacity: '0.75' }, focus: { 'box-shadow': '0px 0px 0px 3px $ui.ink' },
+        children: [{ type: 'text', text: '{context.label}' }] },
+      { type: 'text', when: [{ test: 'context.select', not: true }], text: '{context.label}' },
+    ],
+  } }],
+});
+
 export const episodeContext: Node = {
-  type: 'text',
-  when: [{ test: 'detail.episodeContext' }],
-  text: '{detail.episodeContext}',
-  style: { 'font-size': '20px', 'font-weight': '600' },
-  small: { 'font-size': '17px' },
+  type: 'box', style: { 'font-size': '20px', 'font-weight': '600' }, small: { 'font-size': '17px' },
+  children: [contextLinks('detail.contextParts')],
+};
+
+export const cardContext: Node = {
+  type: 'box', style: { position: 'relative', 'z-index': '1', 'font-size': '12px', color: '$ui.inkSecondary' },
+  children: [contextLinks('card.contextParts')],
 };
 
 export const band: Node = {

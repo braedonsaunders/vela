@@ -4,6 +4,9 @@
 // field for field, so the projections in discovery/, live/ and appearance/ did not change.
 import type * as V from './wire';
 
+/** A labelled piece of a title's parent context and its select action, when known. */
+export interface ContextPart { label: string; select: string }
+
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
 export interface Card {
   id: string;
@@ -20,6 +23,7 @@ export interface Card {
   showId: string;
   showName: string;
   episodeContext: string;
+  contextParts: ContextPart[];
   seasonId: string;
   seasonNumber: number;
   episodeNumber: number;

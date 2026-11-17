@@ -242,7 +242,7 @@ function inheritFrom(parent: { rows: Css; fontSize: number }, inherited: Css, vi
 }
 
 function a11yProps(node: RNode, c: Ctx, e: Env) {
-  const role = node.role === 'heading' ? 'header' : node.role === 'button' ? 'button' : node.role === 'link' ? 'link' : node.role === 'img' ? 'image' : undefined;
+  const role = node.role === 'heading' ? 'header' : node.role === 'button' ? 'button' : node.role === 'link' ? 'link' : node.role === 'tab' ? 'tab' : node.role === 'img' ? 'image' : undefined;
   const label = node.label ? fill(node.label, c, e) : undefined;
   const state = node.a11y && {
     selected: node.a11y.selected ? holds(node.a11y.selected, c, e) : undefined,
@@ -432,6 +432,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     const button = press ? (
       <Pressable ref={bindButton as never} style={[StyleSheet.absoluteFill, NO_RING]} disabled={disabled}
         {...(web ? { dataSet: { velaFocus: 'frame' } } : {})}
+        {...(web && a11y.accessibilityState?.selected !== undefined ? { 'aria-selected': a11y.accessibilityState.selected } : {})}
         onPress={onPress}
         onFocus={event => {
           set('focus', isFocusVisible(event.currentTarget));

@@ -26,6 +26,17 @@ function load(value: { load: string; value?: unknown } | undefined): Env['load']
 export function environment({ state, view, live, route, entry, width, skinCount, skinName }: EnvInput): Env {
   const home = state.home;
   const title = route === 'title' || route === 'watch' ? state.titles[entry] : undefined;
+  const detail = title?.value;
+  const selected = view.season.startsWith('@number:')
+    ? detail?.seasons.find(item => String(item.seasonNumber) === view.season.slice(8))
+    : detail?.seasons.find(item => item.id === view.season);
+  const season = selected?.id ?? detail?.seasons[0]?.id ?? '';
+  const seasonDetail = state.titles[season]?.value;
+  const selectedDetail = detail && season ? {
+    ...detail,
+    episodes: seasonDetail?.episodes ?? detail.episodes.filter(item => !item.seasonId || item.seasonId === season),
+    nextUp: seasonDetail?.nextUp ?? detail.nextUp?.filter(item => !item.seasonId || item.seasonId === season),
+  } : detail;
   return {
     viewer: state.auth.viewer,
     section: route === 'library' ? entry : route === 'live' ? 'live' : 'home',
@@ -41,8 +52,8 @@ export function environment({ state, view, live, route, entry, width, skinCount,
     skinCount,
     skinName,
     homeLoading: !home.value && home.load === 'loading',
-    detail: title?.value,
-    season: view.season,
+    detail: selectedDetail,
+    season,
     route,
     load: route === 'title' || route === 'watch' ? load(title) : load(home),
     entry,

@@ -280,6 +280,7 @@ export const card: Node = {
           style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1', color: '$ui.ink' },
           small: { 'font-size': '13px' },
         },
+        { type: 'use', template: 'velaCardContext' },
         {
           type: 'text',
           text: '{card.facts}',
