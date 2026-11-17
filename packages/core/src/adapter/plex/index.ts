@@ -182,11 +182,9 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     this.rotateTransientToken();
     const tokens = await this.config.credentials.get(); if (!tokens) fail('Sign in required', 'auth');
     const [capabilities, rows] = await Promise.all([this.describe(), this.rows({})]);
-    const featured = homeHeroes(rows.items, 'plex', (path, width, height) => {
-      const url = new URL('/photo/:/transcode', this.origin);
-      for (const [key, value] of Object.entries({ url: path, width, height, minSize: 1, upscale: 0 })) url.searchParams.set(key, String(value));
-      return url.href;
-    });
+    // The artwork stays the server's own path: the connection's image service sizes it through
+    // /photo/:/transcode with the transient token, and refuses a URL that is already a transcode.
+    const featured = homeHeroes(rows.items, 'plex', url => url);
     return { viewer: tokens.viewer, capabilities, defaultSkinId: 'cinematic', ...featured };
   }
   async rows(q: V.RowsQuery): Promise<V.Page<V.Row>> {

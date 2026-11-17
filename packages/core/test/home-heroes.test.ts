@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from 'bun:test';
 import { featuredFixture } from './home-hero-fixtures';
-import { restoreFetch } from './helpers';
+import { FakeCredentials, restoreFetch, routeFetch } from './helpers';
 import { homeHeroes } from '../src/adapter/home-heroes';
+import { nativeConnection } from '../src/adapter/connection';
 afterEach(restoreFetch);
 for (const provider of ['plex','jellyfin'] as const) test(`${provider} features real resume, next-up and recent titles with series art and a six-title cap`, async () => {
   const { home, ids } = await featuredFixture(provider);
@@ -30,4 +31,16 @@ test('promoted items fill the remaining hero slots without mutating server rows'
   expect(result.heroes.map(h => h.reason)).toEqual(['featured']);
   expect(row.items.length).toBe(1);
   expect(result.rows[0]!.items.length).toBe(1);
+});
+test('Plex hero art reaches the image service as the server\'s own artwork, which it sizes', async () => {
+  const { home } = await featuredFixture('plex');
+  routeFetch({ 'GET /security/token': { token: 'transient-art' } });
+  const connection = nativeConnection({ id: 'p', kind: 'plex', name: 'Plex', origin: 'https://media.example', basePath: '/' }, new FakeCredentials(), () => {});
+  const images = await connection.images();
+  for (const kind of ['backdrop', 'logo', 'poster'] as const) {
+    const url = home.heroes![1]!.title.artwork.find(a => a.kind === kind)!.sizes[0]!.url;
+    const sized = images.sized?.(new URL(url), 1920, 1080);
+    expect(sized).toBeDefined();
+    expect(new URL(sized!).searchParams.get('url')).toStartWith('/library/metadata/series/');
+  }
 });
