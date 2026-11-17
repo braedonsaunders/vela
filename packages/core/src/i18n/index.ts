@@ -1,7 +1,20 @@
 import { catalogs } from './catalogs';
 
 export interface LocaleContext { locale: string; formatLocale: string; resolvedLocale: string; timeZone: string; utcOffset: number }
-let current: LocaleContext = { locale: 'en', formatLocale: 'en', resolvedLocale: 'en', timeZone: 'UTC', utcOffset: 0 };
+/** The device's own locale and time zone: the context until a host or server sets another. Times
+ * (a clock, a guide, air dates) read in the viewer's zone, never UTC by default. */
+export function deviceLocale(): LocaleContext {
+  try {
+    const options = new Intl.DateTimeFormat().resolvedOptions();
+    const locale = options.locale || 'en';
+    const timeZone = options.timeZone || 'UTC';
+    new Intl.DateTimeFormat(locale, { timeZone });
+    return { locale, formatLocale: locale, resolvedLocale: locale, timeZone, utcOffset: -new Date().getTimezoneOffset() };
+  } catch {
+    return { locale: 'en', formatLocale: 'en', resolvedLocale: 'en', timeZone: 'UTC', utcOffset: 0 };
+  }
+}
+let current: LocaleContext = deviceLocale();
 export function setLocale(json: string): void {
   const value = JSON.parse(json) as LocaleContext;
   if (!value || typeof value.locale !== 'string' || typeof value.formatLocale !== 'string' || typeof value.resolvedLocale !== 'string' || typeof value.timeZone !== 'string' || typeof value.utcOffset !== 'number') throw new Error('Invalid locale context');

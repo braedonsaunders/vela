@@ -1,10 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import { setLocale } from '../src/i18n';
 import { VelaError } from '../src/adapter/errors';
 import { guideFocus, liveIdentity, loadGuide, type GuideApi } from '../src/live/guide';
 import type * as V from '../src/wire';
 
 const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
-// 14:10 UTC on a Tuesday. The guide's default zone is UTC.
+// 14:10 UTC on a Tuesday, read in UTC (the guide's zone is the locale context's; the device's otherwise).
+beforeAll(() => setLocale(JSON.stringify({ locale: 'en', formatLocale: 'en', resolvedLocale: 'en', timeZone: 'UTC', utcOffset: 0 })));
 const NOW = Date.parse('2026-03-10T14:10:00Z');
 const MIDNIGHT = Date.parse('2026-03-10T00:00:00Z');
 const iso = (ms: number) => new Date(ms).toISOString();
