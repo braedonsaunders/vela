@@ -75,6 +75,9 @@ if [ "$simulator" = 0 ] && [ -z "$team" ]; then
   echo "apple-tv: device builds need your team ID; pass --team or set VELA_APPLE_TEAM" >&2; exit 2
 fi
 
+project="$root/apps/vela/ios/Vela.xcodeproj/project.pbxproj"
+# A project generated for iPhone (tools/ios.sh) builds nothing for Apple TV: regenerate it.
+if [ -f "$project" ] && ! grep -q 'SDKROOT = appletvos' "$project"; then prebuild=1; fi
 if [ "$prebuild" = 1 ] || [ ! -d "$root/apps/vela/ios" ]; then
   (cd "$root/apps/vela" && EXPO_TV=1 locked bun x expo prebuild -p ios --clean)
 fi
