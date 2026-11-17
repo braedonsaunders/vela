@@ -6,6 +6,7 @@
 export interface ServerOption {
   id: string;
   name: string;
+  etherOrigin?: string;
   kind: string;
   kindLabel: string;
   selected: boolean;

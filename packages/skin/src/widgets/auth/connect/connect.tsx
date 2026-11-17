@@ -5,9 +5,10 @@
 // A Plex account needs no address: Sign in with Plex links it and offers the account's servers.
 // A signed-out Plex server's sign-in is this page too, and so is a standalone app's first start.
 import { useState } from 'react';
+import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { msg } from '@vela/core';
-import { Alert, Heading, Pill } from '../../common/controls';
+import { Alert, Heading, Pill, Words } from '../../common/controls';
 import { useLook } from '../../common/look';
 import { AddressStep, foundName } from './address';
 import { JellyfinStep } from './jellyfin';
@@ -31,6 +32,7 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
   // Only a server added on this visit moves the page on to its sign-in.
   const [added, setAdded] = useState<{ id: string; kind: string; name: string } | null>(null);
   const [errors, setErrors] = useState({ add: '', server: '', plex: '', jellyfin: '' });
+  const [dismissedEther, setDismissedEther] = useState('');
   const [plexAsked, setPlexAsked] = useState(false);
   // Signing in with a Plex account rather than a typed address (Plex servers are found through it).
   const [plexAccount, setPlexAccount] = useState(false);
@@ -81,6 +83,7 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
     fail('plex', '');
     const outcome = await run(actions.plexChoose(id));
     if (outcome?.error) fail('plex', outcome.error);
+    else if (outcome?.id) setAdded({ id: outcome.id, kind: 'plex', name: '' });
   };
   const signIn = async (username: string, password: string) => {
     fail('jellyfin', '');
@@ -91,7 +94,12 @@ export function Connect({ servers, actions, serverId = '', onClose }: ConnectPro
 
   return (
     <Animated.View style={[{ gap: 26 }, look.motion('velaEnter60')]}>
-      {target === '' && !plexAccount ? (
+      {record?.etherOrigin && dismissedEther !== record.id ? (
+        <View style={{ gap: 12 }}><Words rows={{ 'font-size': '14px' }}>This server is Ether. Connect with Ether for hero, people and library views</Words>
+          <Pill label="Connect with Ether" testID="connect-with-ether" onPress={() => void (async () => { const result = await run(actions.add('ether', record.name, record.etherOrigin!)); if (result?.error) fail('add', result.error); else if (result) await switchTo(result.id); })()} />
+          <Pill label="Not now" onPress={() => { setDismissedEther(record.id); if (record.kind === 'plex') void switchTo(record.id); }} />
+        </View>
+      ) : target === '' && !plexAccount ? (
         <AddressStep
           servers={servers.list}
           busy={busy}

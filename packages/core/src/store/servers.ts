@@ -5,7 +5,7 @@
 import type { Connection } from '../adapter/connection';
 import { hasPasswordSignIn, hasQuickConnectSignIn } from '../adapter/capabilities';
 import { PlexLink, type PlexLinkState } from '../adapter/plex/link';
-import { probeServer } from '../adapter/probe';
+import { probeEther, probeServer } from '../adapter/probe';
 import type * as V from '../wire';
 import type { ServerKind, ServerRecord } from '../session/servers';
 import { msg, time } from '../i18n';
@@ -26,6 +26,7 @@ export interface ServerOption {
   status: 'ready' | 'signed-out' | 'unreachable';
   viewer: string;
   message: string;
+  etherOrigin?: string;
 }
 
 export interface ProbeResult {
@@ -89,6 +90,14 @@ function bounded<T>(work: Promise<T>, ms = 6000): Promise<T> {
 }
 
 export class Servers {
+  private readonly etherProbes = new Map<string, Promise<string>>();
+  private etherOrigin(record: ServerRecord): Promise<string> {
+    if (record.kind === 'ether' || !this.session.servers.standalone) return Promise.resolve('');
+    const key = record.origin;
+    let result = this.etherProbes.get(key);
+    if (!result) { result = probeEther(key).then(value => value?.origin ?? ''); this.etherProbes.set(key, result); }
+    return result;
+  }
   private plexLink: PlexLink | undefined;
   private plexTimer: ReturnType<typeof setTimeout> | undefined;
   private jellyfin: { serverId: string; secret: string; expiresAt: number; timer?: ReturnType<typeof setTimeout> } | undefined;
@@ -142,6 +151,7 @@ export class Servers {
       status,
       viewer: tokens?.viewer.name ?? '',
       message: note,
+      etherOrigin: await this.etherOrigin(record),
     };
   }
 
@@ -296,8 +306,10 @@ export class Servers {
       if (!record && typed) record = registry.relocate(typed.id, chosen.name, chosen.origin);
       if (!record) record = registry.add('plex', chosen.name, chosen.origin);
       await this.session.connection(record.id).credentials.set(chosen.tokens);
+      const ether = await this.etherOrigin(record);
       this.plexCancel();
-      this.session.select(record.id);
+      if (ether) await this.refresh();
+      else this.session.select(record.id);
       return { id: record.id, error: '' };
     } catch (error) {
       return { id: '', error: signInFailure(error, msg('server.plex.again')) };

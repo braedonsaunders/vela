@@ -46,8 +46,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
         {title}
       </Words>
       {switcher.servers.list.map(server => (
-        <Row
-          key={server.id}
+        <View key={server.id}><Row
           label={server.name}
           detail={serverDetail(server)}
           ready={server.status === 'ready'}
@@ -55,7 +54,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
           disabled={busy && !server.selected}
           onPress={() => pick(server)}
           testID={`server-${server.id}`}
-        />
+        />{server.etherOrigin ? <Row label="Ether available" testID={`server-ether-${server.id}`} onPress={() => void (async () => { const result = await switcher.actions.add('ether', server.name, server.etherOrigin!); if (result.error) setError(result.error); else { const selected = await switcher.actions.select(result.id); if (selected.error) setError(selected.error); } })()} /> : null}</View>
       ))}
       <Row label={params.addLabel || msg('connect.add')} onPress={switcher.openConnect} testID="server-add" />
       {switcher.consoleUrl && Platform.OS === 'web' ? (

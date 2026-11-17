@@ -69,3 +69,18 @@ export async function probeServer(input: string, clientIdentifier: string, pageS
   if (blocked) return { state: 'insecure', kind: '', name: '', version: '', url: blocked };
   return { state: parsed ? 'unreachable' : 'invalid', kind: '', name: '', version: '', url: '' };
 }
+
+/** Detect a Vela endpoint without sending this server's credentials. */
+export async function probeEther(origin: string, timeoutMs = 3000): Promise<{ origin: string; name: string } | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const url = new URL(origin);
+    if (!['http:', 'https:'].includes(url.protocol)) return null;
+    const response = await fetch(`${url.origin}/vela/v0/capabilities`, { headers: { Accept: 'application/json' }, credentials: 'omit', redirect: 'error', signal: controller.signal });
+    if (response.status !== 200 || !/^application\/json(?:\s*;|\s*$)/i.test(response.headers.get('content-type') ?? '')) return null;
+    const value = await response.json();
+    if (!value || typeof value !== 'object' || typeof value.protocolVersion !== 'number' || !value.server || typeof value.server.id !== 'string' || !value.server.id || typeof value.server.name !== 'string' || !value.server.name || !value.features || typeof value.features !== 'object' || Array.isArray(value.features)) return null;
+    return { origin: url.origin, name: value.server.name };
+  } catch { return null; } finally { clearTimeout(timer); }
+}
