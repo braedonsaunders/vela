@@ -76,7 +76,7 @@ for (const kind of ['ether', 'plex', 'jellyfin', 'emby'] as const) test(`${kind}
 test('the first list uses next-up season before lazy episode data, never the show response\'s first season', () => {
   const model = detailModel({ title: { ...base, id: show, kind: 'show' }, seasons: [1,4].map(n => ({ ...base, id: `season-${n}`, kind: 'season', seasonNumber: n })),
     episodes: [{ ...base, id: e1, kind: 'episode', seasonNumber: 1, episodeNumber: 1 }],
-    nextUp: { ...base, id: 's4e2', kind: 'episode', seasonNumber: 4, episodeNumber: 2, watch: { positionSeconds: 80, played: false } }, extras: [], cast: [], chapters: [] });
+    nextUp: { ...base, id: 's4e2', kind: 'episode', seasonNumber: 4, episodeNumber: 2, watch: { positionSeconds: 80, played: false, favorite: false, watchlisted: false } }, extras: [], cast: [], chapters: [] });
   const first = detailSeason(model, '', () => undefined);
   expect(first.season).toBe('season-4');
   expect(first.detail!.episodes).toEqual([]);
