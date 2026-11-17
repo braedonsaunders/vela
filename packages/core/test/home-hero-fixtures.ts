@@ -18,7 +18,7 @@ export async function featuredFixture(provider: 'plex' | 'jellyfin') {
     const items = source.map(x => ({ ratingKey: x.id, title: x.name, type: 'episode' in x ? 'episode' : 'show' in x ? 'show' : 'movie',
       thumb: `/library/metadata/${x.id}/thumb`, ...(!('missing' in x) ? { art: `/library/metadata/${x.id}/art`, clearLogo: `/library/metadata/${x.id}/logo` } : {}),
       ...('episode' in x ? { grandparentRatingKey: 'series', grandparentTitle: 'Meridian Station', grandparentArt: '/library/metadata/series/art', grandparentClearLogo: '/library/metadata/series/logo', grandparentThumb: '/library/metadata/series/thumb', parentIndex: 1, index: 2 } : {}),
-      duration: 3600000, viewOffset: 'progress' in x ? x.progress * 1000 : 0,
+      duration: 3600000, viewOffset: (x.progress ?? 0) * 1000,
     }));
     routeFetch({ 'GET /identity': { MediaContainer: { machineIdentifier: 'plex', friendlyName: 'Plex fixture', version: '1' } },
       'GET /livetv/dvrs': { MediaContainer: {} }, 'GET /media/providers': { MediaContainer: {} },
@@ -33,7 +33,7 @@ export async function featuredFixture(provider: 'plex' | 'jellyfin') {
   const items = source.map(x => ({ Id: x.id, Name: x.name, Type: 'episode' in x ? 'Episode' : 'show' in x ? 'Series' : 'Movie',
     ImageTags: { Primary: `poster-${x.id}`, Logo: `logo-${x.id}` }, ...(!('missing' in x) ? { BackdropImageTags: [`backdrop-${x.id}`] } : {}),
     ...('episode' in x ? { SeriesId: 'series', SeriesName: 'Meridian Station', SeriesPrimaryImageTag: 'series-poster', ParentBackdropImageTags: ['series-backdrop'], ParentLogoImageTag: 'series-logo', ParentIndexNumber: 1, IndexNumber: 2 } : {}),
-    RunTimeTicks: 36000000000, UserData: { PlaybackPositionTicks: 'progress' in x ? x.progress * 10000000 : 0 },
+    RunTimeTicks: 36000000000, UserData: { PlaybackPositionTicks: (x.progress ?? 0) * 10000000 },
   }));
   routeFetch({ 'GET /jf/System/Info/Public': { Id: 'jellyfin', ServerName: 'Jellyfin fixture', Version: '1' },
     'GET /jf/QuickConnect/Enabled': false, 'GET /jf/LiveTv/Info': {},
