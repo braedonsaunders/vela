@@ -357,7 +357,7 @@ export function streamingMatroskaTrack(
     scope = track?.demuxer && scopes.get(track.demuxer.input._rootSource);
   if (
     !scope ||
-    track.demuxer.segments.length !== 1 ||
+    (!Array.isArray(track.demuxer.segments) || track.demuxer.segments.length !== 1) ||
     !track.info ||
     !['video', 'audio'].includes(track.info.type)
   )
@@ -904,7 +904,7 @@ export function streamingMatroskaOffset(value: unknown, packet: EncodedPacket) {
 export function primeMatroskaIndex(backing: unknown) {
   const track = rawTrack(backing);
   const scope = track?.demuxer && scopes.get(track.demuxer.input._rootSource);
-  if (!scope || track.demuxer.segments.length !== 1) return;
+  if (!scope || (!Array.isArray(track.demuxer.segments) || track.demuxer.segments.length !== 1)) return;
   const work = (async () => {
     if (scope.startSeconds > 0) await loadCues(scope, track);
     if (track.info?.type !== 'video') return;
