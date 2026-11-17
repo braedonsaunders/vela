@@ -5,6 +5,7 @@
 import type { PlayerCapabilities } from '@vela/player-api';
 import type { OriginalPlaybackCapabilities } from '../../../packages/protocol/types';
 import { canAttemptOriginal } from './engine/original-support';
+import { abortable } from './engine/core/async';
 import { QUALIFIED_ORIGINAL_AUDIO, QUALIFIED_ORIGINAL_VIDEO } from './engine/universal/qualified';
 import { playerAssetBase } from './asset-base';
 
@@ -71,7 +72,8 @@ async function originalPlayback(
   if (typeof VideoDecoder !== 'function' || typeof AudioContext !== 'function') return null;
   if (typeof AudioWorkletNode !== 'function') return null;
   const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
-  const adapter = await gpu?.requestAdapter().catch(() => null);
+  // A stalled GPU process must not hold playback negotiation indefinitely.
+  const adapter = await abortable(gpu?.requestAdapter(), AbortSignal.timeout(2000)).catch(() => null);
   signal.throwIfAborted();
   if (!adapter) return null;
   const videoDecoders = declaration.videoDecoders.filter((codec) => QUALIFIED_ORIGINAL_VIDEO.includes(codec));
