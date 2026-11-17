@@ -307,7 +307,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const fx = translated.fx;
   const style = shrinkFor(translated.style, own, parentDirection) as typeof translated.style;
   const instant = useContext(InstantContent);
-  const motion = animation(instant && node.motion?.iterations !== 'infinite' ? undefined : node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger);
+  const motion = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant);
   const rowId = ctx.row?.id ?? '';
 
   const report = useCallback((kind: 'hover' | 'focus', on: boolean) => {
@@ -715,7 +715,7 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const parentDirection = useContext(Direction);
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
   const instant = useContext(InstantContent);
-  const motion = animation(instant && node.motion?.iterations !== 'infinite' ? undefined : node.motion, doc.keyframes, env.still, ctx.index, node.stagger);
+  const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger, instant);
   return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion } as Record<string, unknown>, fx };
 }
 

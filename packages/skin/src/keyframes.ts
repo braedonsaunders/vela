@@ -63,3 +63,11 @@ export function documentKeyframes(own: Record<string, Record<string, { opacity?:
   ]));
 }
 
+
+/** The final explicit keyframe for content mounted after its entrance has settled. */
+export function settledFrame(preset: Motion, own: Record<string, Keyframes>, still: boolean): Frame | undefined {
+  if (preset.iterations === 'infinite') return undefined;
+  const name = still ? preset.still?.keyframes : preset.keyframes;
+  const frames = name && name !== 'none' ? library[name] ?? own[name] : undefined;
+  return frames?.to ?? frames?.['100%'];
+}

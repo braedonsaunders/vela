@@ -5,7 +5,7 @@
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.3';
+const id = 'latenight', version = '1.0.4';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -352,9 +352,9 @@ const episode: Node = { type: 'box', group: true, press: { action: 'play', arg: 
   ] };
 
 // The route's root box fills the view (its padding adds to the height: the root is content-box).
-const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: `calc(100% - 2 * ${bezel.normal})`, padding: bezel.normal, 'background-color': '$page', color: '$ink', 'font-family': sans, 'overflow-x': 'hidden', 'overflow-y': 'hidden' },
-  wide: { height: `calc(100% - 2 * ${bezel.wide})`, padding: bezel.wide }, small: { height: '100%', padding: bezel.small }, children: [
-  { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{detail.name}', style: { position: 'relative', flex: '1', 'min-height': '0px', 'overflow-y': 'auto', 'overflow-x': 'hidden' }, children: [
+const title: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'min-height': '100%', padding: bezel.normal, 'box-sizing': 'border-box', 'background-color': '$page', color: '$ink', 'font-family': sans },
+  wide: { padding: bezel.wide }, small: { padding: bezel.small }, children: [
+  { type: 'box', id: '{env.route}-scroll-{env.entry}', role: 'region', label: '{detail.name}', style: { position: 'relative', display: 'flex', 'flex-direction': 'column' }, children: [
     // Seeking, and the blue screen when nothing comes in.
     { type: 'box', when: [{ test: 'env.load', is: 'eq', value: 'loading' }], style: { display: 'flex', 'flex-direction': 'row', gap: '12px 12px', padding: '140px max(30px, 3.6vw)' }, children: [
       { type: 'text', text: '▶▶', motion: 'blink', style: osdText('34px') },

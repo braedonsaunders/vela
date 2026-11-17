@@ -572,26 +572,7 @@ export const titleCopy: Node = {
             ],
           },
         },
-        {
-          type: 'box',
-          press: { action: 'back' },
-          controlStates: false,
-          label: '{s:back}',
-          testId: 'detail-back',
-          style: capsule('clamp(58px, 4.4vw, 84px)'),
-          focus: capsuleFocus,
-          active: { scale: '0.97' },
-          hover: { 'background-color': 'rgba(255, 255, 255, 0.24)' },
-          small: { height: '54px' },
-          children: [
-            {
-              type: 'icon',
-              symbol: 'back',
-              style: { width: 'clamp(16px, 1.2vw, 24px)', height: 'clamp(16px, 1.2vw, 24px)' },
-            },
-            { type: 'text', text: '{s:back}' },
-          ],
-        },
+
       ],
     },
     {
@@ -635,6 +616,26 @@ export const title: Node = {
     'font-family': sans,
   },
   children: [
+        {
+          type: 'box',
+          press: { action: 'back' },
+          controlStates: false,
+          label: '{s:back}',
+          testId: 'detail-back',
+          style: { ...capsule('clamp(58px, 4.4vw, 84px)'), position: 'absolute', top: '24px', right: 'max(24px, 4vw)', 'z-index': '30' },
+          focus: capsuleFocus,
+          active: { scale: '0.97' },
+          hover: { 'background-color': 'rgba(255, 255, 255, 0.24)' },
+          small: { height: '54px' },
+          children: [
+            {
+              type: 'icon',
+              symbol: 'back',
+              style: { width: 'clamp(16px, 1.2vw, 24px)', height: 'clamp(16px, 1.2vw, 24px)' },
+            },
+            { type: 'text', text: '{s:back}' },
+          ],
+        },
     // The title's backdrop fills the screen and stays while the page scrolls over it.
     {
       type: 'box',

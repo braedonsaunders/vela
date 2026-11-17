@@ -6,7 +6,7 @@
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.2';
+const version = '1.2.3';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -355,7 +355,7 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
       titlePlay, upNext,
       { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', flex: '1', 'min-width': '16rem', 'max-width': '44rem' }, small: { 'min-width': '0px' }, children: [
         { type: 'text', text: '{detail.factsLine}', style: { 'font-size': '15px', 'font-weight': '700', color: '$ink-soft' } },
-        { type: 'text', when: [{ test: 'detail.summary' }], text: '{detail.summary}', style: { 'font-size': '17px', 'font-weight': '600', 'line-height': '1.45', color: '$ink-soft', 'line-clamp': '2' } },
+
       ] },
     ] },
     { type: 'box', when: [{ test: 'detail.hasEpisodes' }], style: { display: 'flex', 'flex-direction': 'column', gap: '22px' }, children: [
@@ -363,6 +363,36 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
       { type: 'box', when: [{ test: 'detail.hasSeasons' }], role: 'group', label: '{s:seasons}', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '14px' }, children: [seasonChip] },
       { type: 'box', style: { display: 'grid', 'grid-template-columns': 'repeat(auto-fill, minmax(300px, 1fr))', gap: '30px' }, small: { 'grid-template-columns': '1fr', gap: '22px' }, children: [
         { type: 'repeat', over: 'detail.episodes', item: { ...episode, motion: 'tileIn', stagger: { step: 45, cap: 10 } } },
+      ] },
+    ] },
+    { type: 'box', when: [{ test: 'detail.hasMediaFacts' }], style: { display: 'flex', 'flex-direction': 'column', gap: '14px' }, children: [
+      sectionTitle('{s:details}'),
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px' }, children: [
+        { type: 'repeat', over: 'detail.mediaFacts', item: { type: 'text', text: '{fact.text}', style: { padding: '8px 14px', 'border-radius': '999px', 'background-color': '$card', 'font-weight': '800' } } },
+      ] },
+    ] },
+    { type: 'box', when: [{ test: 'detail.summary' }], style: { display: 'flex', 'flex-direction': 'column', gap: '12px' }, children: [
+      sectionTitle('{s:behindStory}'), { type: 'text', text: '{detail.summary}', style: { 'font-size': '17px', 'font-weight': '700', 'line-height': '1.5', color: '$ink-soft' } },
+      { type: 'text', when: [{ test: 'detail.crewLine' }], text: '{detail.crewLine}', style: { 'font-size': '15px', 'font-weight': '700', color: '$ink-soft' } },
+    ] },
+    { type: 'box', when: [{ test: 'detail.hasCast' }], style: { display: 'flex', 'flex-direction': 'column', gap: '16px' }, children: [
+      sectionTitle('{s:cast}'),
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'overflow-x': 'auto', 'overflow-y': 'hidden' }, children: [
+        { type: 'repeat', over: 'detail.cast', item: { type: 'box', style: { width: '120px', 'flex-shrink': '0', display: 'flex', 'flex-direction': 'column', gap: '8px' }, children: [
+          { type: 'box', style: { position: 'relative', width: '96px', height: '96px', 'border-radius': '48px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', 'background-color': '$sky-soft', display: 'flex', 'align-items': 'center', 'justify-content': 'center' }, children: [
+            { type: 'image', when: [{ test: 'person.portrait' }], src: '{person.portrait}', alt: '', style: { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' } },
+            { type: 'text', when: [{ test: 'person.portrait', not: true }], text: '{person.initials}', style: { 'font-size': '26px', 'font-weight': '800' } },
+          ] },
+          { type: 'text', text: '{person.name}', style: { 'font-weight': '800' } }, { type: 'text', when: [{ test: 'person.role' }], text: '{person.role}', style: { color: '$ink-soft' } },
+        ] } },
+      ] },
+    ] },
+    { type: 'box', when: [{ test: 'detail.hasExtras' }], style: { display: 'flex', 'flex-direction': 'column', gap: '16px' }, children: [
+      sectionTitle('{s:extras}'), { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '14px', 'overflow-x': 'auto', 'overflow-y': 'hidden' }, children: [
+        { type: 'repeat', over: 'detail.extras', item: { type: 'box', style: { 'flex-shrink': '0' }, children: [
+          { type: 'box', press: { action: 'playExtra', arg: '{extra.id}' }, when: [{ test: 'extra.ready' }], label: '{extra.name}', style: { padding: '18px 24px', 'border-radius': '24px', 'background-color': '$sun' }, children: [{ type: 'text', text: '{extra.name}', style: { 'font-weight': '800' } }] },
+          { type: 'text', when: [{ test: 'extra.ready', not: true }], text: '{extra.name}', style: { padding: '18px 24px', 'border-radius': '24px', 'background-color': '$card', color: '$ink-soft', 'font-weight': '800' } },
+        ] } },
       ] },
     ] },
     { type: 'box', when: [{ test: 'detail.hasRelated' }], style: { display: 'flex', 'flex-direction': 'column', gap: '4px', margin: '0px calc(-1 * max(24px, 4vw))' }, small: { margin: '0px -16px' }, children: [
@@ -414,7 +444,7 @@ const kids: SkinDocument = {
     gateOne: 'What is 6 × 3?', gateTwo: 'And 14 − 8?', signedInAs: 'Watching as', changeLook: 'Change the look',
     install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', backToWatching: 'Back to watching',
     moreInfo: 'More info', featured: 'Featured', back: 'Back', opening: 'Getting it ready…', failed: 'Oops, this one won’t open right now.',
-    episodes: 'Episodes', seasons: 'Seasons', moreLikeThis: 'More like this',
+    episodes: 'Episodes', seasons: 'Seasons', details: 'Details', behindStory: 'Behind the story', cast: 'Cast', extras: 'Extras', moreLikeThis: 'More like this',
   } },
   motion: {
     rise: { keyframes: 'rise', duration: 700, easing: soft, fill: 'both', still: calm },

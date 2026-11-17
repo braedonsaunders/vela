@@ -2,7 +2,7 @@
 // a document's own, duration, delay with stagger, easing, iterations, direction and fill. Under
 // reduced motion a preset's `still` alternative runs, or nothing.
 import { cubicBezier, type CSSAnimationKeyframes } from 'react-native-reanimated';
-import { library, type Keyframes, type Motion } from './keyframes';
+import { library, settledFrame, type Keyframes, type Motion } from './keyframes';
 export { documentKeyframes, type Motion } from './keyframes';
 
 /** A CSS easing as Reanimated takes it. */
@@ -16,11 +16,12 @@ export function easing(text: string | undefined): string | ReturnType<typeof cub
 }
 
 /** A node's animation style for its preset, or none. `index` staggers the delay. */
-export function animation(preset: Motion | undefined, own: Record<string, Keyframes>, still: boolean, index: number, stagger?: { step: number; cap: number }): Record<string, unknown> | undefined {
+export function animation(preset: Motion | undefined, own: Record<string, Keyframes>, still: boolean, index: number, stagger?: { step: number; cap: number }, instant = false): Record<string, unknown> | undefined {
   if (!preset) return undefined;
   const name = still ? preset.still?.keyframes : preset.keyframes;
   const keyframes = name && name !== 'none' ? library[name] ?? own[name] : undefined;
   if (!keyframes) return undefined;
+  if (instant && preset.iterations !== 'infinite') return settledFrame(preset, own, still);
   const delay = (still ? 0 : preset.delay ?? 0) + (stagger && !still ? Math.min(index, stagger.cap) * stagger.step : 0);
   return {
     animationName: keyframes as CSSAnimationKeyframes,
