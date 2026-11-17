@@ -12,24 +12,34 @@ if (platform === 'mac') {
     style.textContent = `
       [data-vela-mac-topbar] { -webkit-app-region: drag; }
       body:not(.vela-fullscreen) [data-vela-mac-topbar] { padding-left: 80px !important; }
-      [data-vela-mac-topbar] button, [data-vela-mac-topbar] input,
-      [data-vela-mac-topbar] select, [data-vela-mac-topbar] a { -webkit-app-region: no-drag; }
-      body:not(.vela-fullscreen)::before { content: ''; position: fixed; top: 0; left: 0;
+      [data-vela-mac-topbar] :is(button, input, select, a, [role], [tabindex]) { -webkit-app-region: no-drag; }
+      body:not(.vela-fullscreen):not(.vela-nodrag)::before { content: ''; position: fixed; top: 0; left: 0;
         width: 80px; height: 32px; z-index: 2147483647; -webkit-app-region: drag; }
     `;
     document.head.appendChild(style);
     let scheduled = false;
+    // macOS takes every mouse event inside a drag region, whatever the page draws over it: no drag
+    // region while the player is open (its controls sit where the bar was) or the window or page is
+    // full screen (where moving the mouse must bring the player's controls up).
     const update = () => {
       scheduled = false;
+      const off = document.body.classList.contains('vela-fullscreen') || !!document.fullscreenElement
+        || /\/watch(\/|$)/.test(location.pathname);
+      document.body.classList.toggle('vela-nodrag', off);
       const bars = [...document.querySelectorAll('[role="navigation"]')];
-      const top = bars.find(el => { const r = el.getBoundingClientRect(); return r.top < 32 && r.bottom > 0 && r.width > 0; });
+      const top = off ? undefined : bars.find(el => { const r = el.getBoundingClientRect(); return r.top < 32 && r.bottom > 0 && r.width > 0; });
       for (const bar of bars) bar.toggleAttribute('data-vela-mac-topbar', bar === top);
     };
     const schedule = () => { if (!scheduled) { scheduled = true; requestAnimationFrame(update); } };
     new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
     window.addEventListener('resize', schedule);
+    document.addEventListener('fullscreenchange', schedule);
+    window.addEventListener('popstate', schedule);
     schedule();
   });
-  ipcRenderer.on('vela:fullscreen', (_event, full) => document.body?.classList.toggle('vela-fullscreen', full));
+  ipcRenderer.on('vela:fullscreen', (_event, full) => {
+    document.body?.classList.toggle('vela-fullscreen', full);
+    window.dispatchEvent(new Event('resize'));
+  });
 }
 ipcRenderer.on('vela:find', () => window.dispatchEvent(new Event('vela:find')));
