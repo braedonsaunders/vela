@@ -10,7 +10,7 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TVFocusGuideView, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated as RNAnimated, Platform, Pressable, StyleSheet, Text, TVFocusGuideView, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -97,6 +97,20 @@ export function SkinRoute({ host, node, after }: { host: SkinHost; node: RNode; 
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [host.env.load, layout]);
   const cover = host.env.load === 'ready' ? loading.current : null;
+  // The cover is the skeleton held over the content until it has laid out. It is opaque (the page's
+  // own ground): a see-through cover showed the skeleton and the content over each other. Once the
+  // content is drawn the cover leaves with a short fade.
+  const [leaving, setLeaving] = useState<SkinHost | null>(null);
+  const shown = useRef<SkinHost | null>(null);
+  useLayoutEffect(() => {
+    if (cover) shown.current = cover;
+    else if (shown.current) {
+      setLeaving(shown.current);
+      shown.current = null;
+    }
+  }, [cover]);
+  const ground = uiOf(host.doc).page;
+  const clearLeaving = useCallback(() => setLeaving(null), []);
   return (
     <View style={{ flex: 1 }}>
       <Host.Provider value={host}>
@@ -108,12 +122,30 @@ export function SkinRoute({ host, node, after }: { host: SkinHost; node: RNode; 
           </RouteLayout.Provider>
         </RouteFocusContext.Provider>
       </Host.Provider>
-      {cover ? (
-        <View style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Host.Provider value={cover}><InstantContent.Provider value><SkinNode node={node} ctx={{ index: 0 }} route /></InstantContent.Provider></Host.Provider>
-        </View>
+      {cover || leaving ? (
+        <SkeletonCover key={cover ? 'held' : 'leaving'} host={(cover ?? leaving)!} node={node} ground={ground}
+          leaving={!cover} onGone={clearLeaving} />
       ) : null}
     </View>
+  );
+}
+
+/** The skeleton over a route that is still laying out: opaque, then a short fade once released. */
+function SkeletonCover({ host, node, ground, leaving, onGone }: {
+  host: SkinHost; node: RNode; ground: string; leaving: boolean; onGone(): void;
+}) {
+  const opacity = useRef(new RNAnimated.Value(1)).current;
+  useEffect(() => {
+    if (!leaving) return;
+    const fade = RNAnimated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: Platform.OS !== 'web' });
+    fade.start(() => onGone());
+    return () => fade.stop();
+  }, [leaving, opacity, onGone]);
+  return (
+    <RNAnimated.View style={[StyleSheet.absoluteFill, { backgroundColor: ground, opacity }]} pointerEvents="none"
+      accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Host.Provider value={host}><InstantContent.Provider value><SkinNode node={node} ctx={{ index: 0 }} route /></InstantContent.Provider></Host.Provider>
+    </RNAnimated.View>
   );
 }
 
