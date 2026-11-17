@@ -122,6 +122,8 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
   const ground = uiOf(host.doc).page;
   const clearLeaving = useCallback(() => setLeaving(null), []);
   const loadingLibraryNav = host.env.route === 'library' && (host.env.load !== 'ready' || !!cover || !!leaving);
+  // Once TV content is ready, keep its switch in the focus tree even while the cover fades.
+  const floatingLibraryNav = loadingLibraryNav && !(Platform.isTV && host.env.load === 'ready');
   const navTop = hasFlowHeader(host.doc.document.slots?.shell) ? 0 : host.env.small ? 104 : 84;
   return (
     <View style={{ flex: 1 }}>
@@ -129,8 +131,8 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
         <EpisodeNavigation.Provider value={episodeNav}><RouteFocusContext.Provider value={focus}>
           <RouteLayout.Provider value={layout}>
             <InstantContent.Provider value={section && host.env.load === 'ready'}>
-              <HiddenLibraryNav.Provider value={hideLibraryViews || loadingLibraryNav}>
-                {loadingLibraryNav && host.env.load !== 'ready' ? (
+              <HiddenLibraryNav.Provider value={hideLibraryViews || floatingLibraryNav}>
+                {floatingLibraryNav && host.env.load !== 'ready' ? (
                   <View style={{ flex: 1, paddingTop: navTop === 0 ? 48 : 16 }}><SkinNode node={node} ctx={ROOT_CONTEXT} route after={after} /></View>
                 ) : <SkinNode node={node} ctx={ROOT_CONTEXT} route after={after} />}
               </HiddenLibraryNav.Provider>
@@ -142,7 +144,7 @@ function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: 
         <SkeletonCover key={cover ? 'held' : 'leaving'} host={(cover ?? leaving)!} node={node} ground={ground}
           leaving={!cover} onGone={clearLeaving} />
       ) : null}
-      {loadingLibraryNav && host.doc.libraryViews && !hideLibraryViews ? (
+      {floatingLibraryNav && host.doc.libraryViews && !hideLibraryViews ? (
         <View style={{ position: 'absolute', top: navTop, left: 0, right: 0, zIndex: 20 }}>
           <Host.Provider value={host}><LoadingLibraryNav.Provider value><SkinNode node={host.doc.libraryViews} ctx={ROOT_CONTEXT} /></LoadingLibraryNav.Provider></Host.Provider>
         </View>
