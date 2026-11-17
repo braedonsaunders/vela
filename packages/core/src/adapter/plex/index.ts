@@ -186,6 +186,10 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const hubs = (c.Hub || []).map((h: Node) => this.hub(h)).filter((row: V.Row) => row.items.length > 0 || row.continuation === 'more');
     return page(hubs, 0, hubs.length);
   }
+  async libraryRows(id: string, _kind: V.Library['kind']): Promise<V.Row[]> {
+    const c = await this.request(`/hubs/sections/${enc(id)}`, { count: 20 });
+    return (c.Hub || []).map((h: Node) => this.hub(h)).filter((row: V.Row) => row.items.length > 0 || row.continuation === 'more');
+  }
   async row(id: string, cursor?: string, limit = 20): Promise<V.Row> {
     if (!id.startsWith('/hubs/') && !id.startsWith('/library/')) fail('Invalid Plex hub');
     const c = await this.request(id, { 'X-Plex-Container-Start': offset(cursor), 'X-Plex-Container-Size': limit });

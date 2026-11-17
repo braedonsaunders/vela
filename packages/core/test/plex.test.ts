@@ -75,6 +75,16 @@ describe('PlexAdapter requests', () => {
     expect(rows.items[2]!.items[0]).toMatchObject({ kind: 'collection', targetId: 'collection:5', name: 'Noir' });
   });
 
+  test('library recommendations read the selected Plex section hubs', async () => {
+    const seen = routeFetch({ 'GET /hubs/sections/7': { MediaContainer: { Hub: [
+      { key: '/hubs/sections/7/recentlyAdded', title: 'Recently Added', Metadata: [movie], size: 1 },
+      { key: '/hubs/sections/7/empty', title: 'Empty', Metadata: [], size: 0 },
+    ] } } });
+    const rows = await plex().libraryRows('7', 'movies');
+    expect(seen[0]!.url.pathname).toBe('/hubs/sections/7');
+    expect(rows.map(row => [row.name, row.purpose, row.items[0]?.id])).toEqual([['Recently Added', 'recentlyAdded', '10']]);
+  });
+
   test('libraries keep movie and show sections and refuse unsupported filters', async () => {
     const seen = routeFetch({
       'GET /library/sections': { MediaContainer: { Directory: [{ key: 1, title: 'Films', type: 'movie' }, { key: 2, title: 'Music', type: 'artist' }, { key: 3, title: 'TV', type: 'show' }] } },

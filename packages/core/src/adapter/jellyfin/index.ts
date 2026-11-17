@@ -310,6 +310,20 @@ export class JellyfinAdapter
             id, name: id === 'resume' ? 'Continue Watching' : id === 'nextup' ? 'Next Up' : 'Recently Added', purpose: id === 'resume' ? 'continue' : id === 'nextup' ? 'nextUp' : 'recentlyAdded', receiptToken: '', ...this.page(result.Items.filter(i => kinds[i.Type ?? '']).map(i => this.entry(i)), result, p.StartIndex)
         };
     }
+    async libraryRows(id: string, kind: V.Library['kind']): Promise<V.Row[]> {
+        const user = await this.userPath();
+        const userId = (await this.credentials.get())?.viewer.id;
+        const latest = await this.request<Item[]>('GET', `${user}/Items/Latest${query({ ParentId: id, Limit: 20, Fields: fields, IncludeItemTypes: kind === 'movies' ? 'Movie' : kind === 'shows' ? 'Series,Episode' : 'Movie,Series,Episode' })}`);
+        const rows: V.Row[] = [{ id: `library:${id}:latest`, name: 'Recently Added', purpose: 'recentlyAdded', receiptToken: '', items: latest.filter(i => kinds[i.Type ?? '']).map(i => this.entry(i)), continuation: 'exhausted' }];
+        if (kind === 'movies') {
+            const suggestions = await this.request<{ BaselineItemName?: string; CategoryId?: string; RecommendationType?: string; Items: Item[] }[]>('GET', `Movies/Recommendations${query({ ParentId: id, UserId: userId, Fields: fields, CategoryLimit: 5, ItemLimit: 20 })}`);
+            rows.push(...suggestions.map((group, index): V.Row => ({ id: `library:${id}:suggestion:${group.CategoryId ?? index}`, name: group.BaselineItemName || 'Suggested for you', purpose: 'recommendation', receiptToken: '', items: (group.Items ?? []).filter(i => kinds[i.Type ?? '']).map(i => this.entry(i)), continuation: 'exhausted' })));
+        } else if (kind === 'shows') {
+            const next = await this.request<Result>('GET', `Shows/NextUp${query({ ParentId: id, UserId: userId, Limit: 20, Fields: fields })}`);
+            rows.unshift({ id: `library:${id}:nextup`, name: 'Next Up', purpose: 'nextUp', receiptToken: '', items: next.Items.filter(i => kinds[i.Type ?? '']).map(i => this.entry(i)), continuation: 'exhausted' });
+        }
+        return rows.filter(row => row.items.length > 0);
+    }
     private libraryModel(i: Item): V.Library {
         return {
             id: i.Id, name: i.Name, kind: i.CollectionType === 'movies' ? 'movies' : i.CollectionType === 'tvshows' ? 'shows' : i.CollectionType === 'livetv' ? 'live' : 'mixed', artwork: this.artwork(i), browse: {

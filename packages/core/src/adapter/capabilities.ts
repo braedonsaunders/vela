@@ -40,6 +40,15 @@ export interface DescriptiveSearch {
   searchByDescription(request: Omit<V.SearchRequest, 'mode'>): Promise<V.SearchResponse>;
 }
 
+/** Server-provided recommendation rows scoped to a single library. */
+export interface LibraryRecommendations {
+  libraryRows(id: string, kind: V.Library['kind']): Promise<V.Row[]>;
+}
+
+export function hasLibraryRecommendations(adapter: ServerAdapter): adapter is ServerAdapter & LibraryRecommendations {
+  return 'libraryRows' in adapter && typeof adapter.libraryRows === 'function';
+}
+
 export interface AiSearch {
   startAiSearch(request: V.AISearchRequest): Promise<V.AISearchJob>;
   aiSearchJob(id: string): Promise<V.AISearchJob>;

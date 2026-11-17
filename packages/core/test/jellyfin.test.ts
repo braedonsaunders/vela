@@ -35,6 +35,24 @@ describe('JellyfinAdapter addresses', () => {
 });
 
 describe('JellyfinAdapter requests', () => {
+  test('library recommendations and latest are scoped to the chosen library', async () => {
+    const seen = routeFetch({
+      'GET /jf/Users/viewer-1/Items/Latest': [movie],
+      'GET /jf/Movies/Recommendations': [{ CategoryId: 'c1', BaselineItemName: 'Crime', Items: [movie] }],
+    });
+    const rows = await new JellyfinAdapter(BASE, new FakeCredentials()).libraryRows('l1', 'movies');
+    expect(rows.map(row => [row.name, row.purpose, row.items[0]?.id])).toEqual([
+      ['Recently Added', 'recentlyAdded', 'm1'], ['Crime', 'recommendation', 'm1'],
+    ]);
+    expect(seen.every(call => call.url.searchParams.get('ParentId') === 'l1')).toBe(true);
+  });
+
+  test('show recommendations use library-scoped next up and latest', async () => {
+    const seen = routeFetch({ 'GET /jf/Users/viewer-1/Items/Latest': [episode], 'GET /jf/Shows/NextUp': { Items: [episode] } });
+    const rows = await new JellyfinAdapter(BASE, new FakeCredentials()).libraryRows('l2', 'shows');
+    expect(rows.map(row => row.purpose)).toEqual(['nextUp', 'recentlyAdded']);
+    expect(seen.every(call => call.url.searchParams.get('ParentId') === 'l2')).toBe(true);
+  });
   test('signs in by name without a token and maps the user', async () => {
     const seen = routeFetch({ 'POST /jf/Users/AuthenticateByName': { AccessToken: 'tok', User: { Id: 'u1', Name: 'Ana', PrimaryImageTag: 'av' } } });
     const credentials = new FakeCredentials(null);
