@@ -191,6 +191,10 @@ final class VelaPlayerView: ExpoView {
             report.publish(state, seekTarget: pendingSeek, force: true)
             return
         }
+        // Not on screen (not yet attached, or already left): keep the plan; it starts on attaching.
+        guard window != nil else {
+            return
+        }
         start(next, path: path, url: url, source: source)
     }
 
@@ -644,6 +648,9 @@ final class VelaPlayerView: ExpoView {
             return
         }
         self.plan = plan
+        guard window != nil else {
+            return
+        }
         start(plan, path: path, url: url, source: "\(plan.sessionId):\(path.id):\(plan.sourceGeneration)")
     }
 
