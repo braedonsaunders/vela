@@ -295,7 +295,7 @@ test('every built-in title synopsis uses the shared expandable part at every wid
 });
 
 test('legacy summary bindings expand too, and shared parts retain caller typography and states', () => {
-  const doc: SkinDocument = { schema: 1, renderer: 16, id: 'synopsis', name: 'Synopsis', version: '1', routes: {
+  const doc: SkinDocument = { schema: 1, renderer: 16, id: 'synopsis', name: 'Synopsis', version: '1', swatches: [], routes: {
     title: { type: 'box', children: [
       { type: 'text', text: '{detail.summary}' },
       { type: 'use', template: 'velaSummary', style: { 'font-size': '20px' }, small: { 'font-size': '14px' },
