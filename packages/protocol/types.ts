@@ -66,8 +66,12 @@ export interface PartialAnswer { pending?: PendingPart[]; refreshAfterMs?: numbe
 export interface TitleDetail extends PartialAnswer { title: Title; canPlay?: boolean; seasons?: Title[]; episodes?: Title[];
   /** Server-selected next episode; null means none. Omitted by older servers. */ nextUp?: Title | null;
   extras: Extra[]; chapters: Chapter[]; crew?: { id?: ID; name: string; role?: string; artwork?: ArtworkRef }[]; mediaSummary?: MediaSummary; cast: { id?: ID; name: string; role?: string; artwork?: ArtworkRef }[] }
+/** A visible person facet, including metadata already cached by the server. */
+export interface PersonDetail { id: ID; name: string; photo: ArtworkRef | null; roles: string[]; knownFor: string; biography?: string; birthday?: string }
+/** Ether's library collection endpoint nests its collection metadata in the row entry. */
+export interface LibraryCollectionEntry { id: ID; kind: 'collection'; receiptToken: string; collection: { id: ID; name: string; summary: string; itemCount: number; artwork: ArtworkRef[] } }
 export type RowEntry = { id: ID; receiptToken: string } & (
-  { kind: 'title'; title: Title } | { kind: 'channel'; channel: Channel } |
+  { kind: 'title'; title: Title; role?: string } | { kind: 'channel'; channel: Channel } |
   { kind: 'collection' | 'playlist' | 'directory'; name: string; artwork: ArtworkRef[]; targetId: ID });
 export interface Row { id: ID; name: string; purpose: 'continue' | 'nextUp' | 'recentlyReleased' | 'recentlyAdded' | 'collection' | 'recommendation' | 'live' | 'watchlist';
   receiptToken: string; style?: string; presentation?: 'ranked'; previewOnFocus?: boolean; items: RowEntry[]; nextCursor?: Cursor; continuation: 'more' | 'exhausted' | 'unknown' }
@@ -77,7 +81,7 @@ export interface Hero { title: Title; receiptToken: string; reason: HeroReason; 
   /** Short supporting/reason text, not the primary action button label. */
   label?: string; previewOnFocus?: boolean; trailer?: Extra }
 export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor }
-export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID }
+export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID; libraryId?: ID }
 export interface SearchRequest extends Mutation { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
 export interface LiveSearchResults { channels: Channel[]; programmes: Programme[]; programmeChannels?: Channel[] }
 export interface DescriptiveSearchState { state: 'ready' | 'pending' | 'partial' | 'busy' | 'failed'; retry?: { allowed: boolean; afterSeconds?: number } }
@@ -201,12 +205,12 @@ export interface LibraryBrowseOptions {
   sorts: { id: LibrarySort; directions: SortDirection[] }[];
   defaultSort: LibrarySort; defaultDirection: SortDirection;
   /** Boolean fields declare support; kind lists supported values. */
-  filters: { kind?: TitleKind[]; genre?: boolean; genres?: string[]; year?: boolean; played?: boolean; favorite?: boolean };
+  filters: { kind?: TitleKind[]; genre?: boolean; genres?: string[]; year?: boolean; played?: boolean; favorite?: boolean; collectionId?: boolean };
 }
 export interface Library { id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
 export interface LibrariesQuery { cursor?: Cursor; limit?: number }
 export interface LibraryBrowseQuery extends LibrariesQuery {
-  sort?: LibrarySort; direction?: SortDirection; kind?: TitleKind; genre?: string; year?: number; played?: boolean; favorite?: boolean;
+  sort?: LibrarySort; direction?: SortDirection; kind?: TitleKind; genre?: string; year?: number; played?: boolean; favorite?: boolean; collectionId?: ID;
 }
 export interface LibraryContents extends Page<RowEntry> { library: Library; sort: LibrarySort; direction: SortDirection }
 
