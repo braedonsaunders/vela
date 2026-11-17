@@ -56,8 +56,9 @@ export interface Title {
 export interface Extra { id: ID; parentId: ID; kind: 'trailer' | 'clip' | 'featurette' | 'other'; name: string;
   durationSeconds?: number; artwork?: ArtworkRef; cachedPlayback?: { status: 'ready'; url: string; expiresAt: Timestamp }; availability: 'ready' | 'unresolved' | 'unavailable' }
 export interface Chapter { id: ID; name: string; startSeconds: number; endSeconds?: number }
-/** Verified source stream facts only; omitted when streams are estimated or unknown. */
-export interface MediaSummary { video: { codec?: string; width?: number; height?: number; bitDepth?: number; colorTransfer?: string; dolbyVisionProfile?: number }[]; audio: { codec?: string; channels?: number; language?: string }[] }
+/** Verified source stream facts only; omitted when streams are estimated or unknown.
+ * audio.default marks the preferred track; an absent subtitleCount means the count is unknown. */
+export interface MediaSummary { video: { codec?: string; width?: number; height?: number; bitDepth?: number; colorTransfer?: string; dolbyVisionProfile?: number }[]; audio: { codec?: string; channels?: number; language?: string; default?: boolean }[]; subtitleCount?: number }
 /** Parts of a title answer the server is still producing (confirmed queued or running work only). */
 export type PendingPart = 'seasons' | 'episodes' | 'extras' | 'trailer';
 /** A partial answer: `pending` names the parts still in flight; ask again after `refreshAfterMs`. */

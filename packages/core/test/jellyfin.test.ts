@@ -100,6 +100,23 @@ describe('JellyfinAdapter requests', () => {
     expect(result.items[1]).toMatchObject({ kind: 'episode', showId: 's1', seasonId: 'se1', seasonNumber: 1, episodeNumber: 2, summary: '', genres: [] });
   });
 
+  test('detail summarises the played source and preserves its preferred audio and subtitle count', async () => {
+    routeFetch({
+      'GET /jf/Users/viewer-1/Items/m1': { ...movie, MediaSources: [{ Id: 'main', DefaultAudioStreamIndex: 2, MediaStreams: [
+        { Index: 0, Type: 'Video', Width: 3840, Height: 2160, ColorTransfer: 'smpte2084', DvProfile: 8 },
+        { Index: 1, Type: 'Audio', Codec: 'aac', Channels: 2, IsDefault: true },
+        { Index: 2, Type: 'Audio', Codec: 'truehd', Channels: 8 },
+        { Index: 3, Type: 'Subtitle' }, { Index: 4, Type: 'Subtitle' },
+      ] }, { Id: 'alternate', MediaStreams: [{ Index: 0, Type: 'Subtitle' }] }] },
+    });
+    const result = await new JellyfinAdapter(BASE, new FakeCredentials()).detail('m1');
+    expect(result.mediaSummary).toMatchObject({
+      video: [{ width: 3840, height: 2160, dolbyVisionProfile: 8 }],
+      audio: [{ codec: 'aac' }, { codec: 'truehd', channels: 8, default: true }], subtitleCount: 2,
+    });
+    expect(result.mediaSummary!.audio[0]!.default).toBeUndefined();
+  });
+
   test('continuation follows the record count', async () => {
     routeFetch({ 'GET /jf/Users/viewer-1/Items': { Items: [movie], TotalRecordCount: 4 } });
     const adapter = new JellyfinAdapter(BASE, new FakeCredentials());

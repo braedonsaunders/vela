@@ -60,6 +60,7 @@ export interface Stream {
     Height?: number;
     BitDepth?: number;
     ColorTransfer?: string;
+    DvProfile?: number;
     IsDefault?: boolean;
     IsForced?: boolean;
     IsHearingImpaired?: boolean;

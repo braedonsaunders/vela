@@ -266,12 +266,21 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       const next = this.nodes(deck)[0];
       nextUp = next ? this.title(next) : null;
     }
-    const streams: Node[] = (n.Media || []).flatMap((m: Node) => (m.Part || []).flatMap((p: Node) => p.Stream || []));
+    // Match the release/part initial playback uses, rather than counting every alternate release.
+    const part = n.Media?.[0]?.Part?.[0];
+    const streams: Node[] = part?.Stream ?? [];
+    const audio = streams.filter(s => Number(s.streamType) === 2);
+    const mainAudio = audio.find(s => Number(s.selected) === 1) ?? audio.find(s => Number(s.default) === 1);
     const person = (p: Node, role?: string) => ({ name: p.tag, role: role || p.role, artwork: p.thumb ? { ...this.artwork({ thumb: p.thumb })[0], kind: 'person' as const } : undefined });
     return { title: this.title(n), canPlay: ['movie','episode'].includes(n.type) && !!n.Media?.length, seasons: n.type === 'show' ? seriesOrder(children) : undefined, episodes: episodes ? seriesOrder(episodes) : undefined, nextUp,
       cast: (n.Role || []).map((p: Node) => person(p)), crew: [...(n.Director || []).map((p: Node) => person(p, 'Director')), ...(n.Writer || []).map((p: Node) => person(p, 'Writer'))],
       chapters: this.chapters(n), extras: (n.Extras?.Metadata || []).map((e: Node) => ({ id: String(e.ratingKey), parentId: id, kind: Number(e.extraType) === 1 ? 'trailer' : 'other', name: e.title, durationSeconds: seconds(e.duration), artwork: this.artwork(e)[0], availability: e.Media?.length ? 'ready' : 'unresolved' })),
-      mediaSummary: { video: streams.filter(s => Number(s.streamType) === 1).map(s => ({ codec: s.codec, width: s.width, height: s.height, bitDepth: s.bitDepth, colorTransfer: s.colorTrc })), audio: streams.filter(s => Number(s.streamType) === 2).map(s => ({ codec: s.codec, channels: s.channels, language: s.languageCode })) } };
+      mediaSummary: {
+        video: streams.filter(s => Number(s.streamType) === 1).map(s => ({ codec: s.codec, width: s.width, height: s.height, bitDepth: s.bitDepth, colorTransfer: s.colorTrc,
+          ...(s.DOVIProfile !== undefined ? { dolbyVisionProfile: Number(s.DOVIProfile) } : {}) })),
+        audio: audio.map(s => ({ codec: s.codec, channels: s.channels, language: s.languageCode, ...(s === mainAudio ? { default: true } : {}) })),
+        ...(part?.Stream ? { subtitleCount: streams.filter(s => Number(s.streamType) === 3).length } : {}),
+      } };
   }
   private async children(id: string, kind: 'children' | 'allLeaves'): Promise<V.Title[]> {
     const items: V.Title[] = [];

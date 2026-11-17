@@ -398,7 +398,8 @@ export class JellyfinAdapter
                 artwork: this.image(p.Id, 'Primary', p.PrimaryImageTag, 'person')
             } : {})
         }));
-        const streams = item.MediaSources?.[0]?.MediaStreams ?? [];
+        const source = item.MediaSources?.[0];
+        const streams = source?.MediaStreams ?? [];
         const userId = (await this.credentials.get())?.viewer.id;
         const seriesId = item.Type === 'Series' ? id : item.Type === 'Season' ? item.SeriesId : undefined;
         const seasons = item.Type === 'Series' ? await this.children(`Shows/${e(id)}/Seasons`, { UserId: userId }) : undefined;
@@ -415,10 +416,13 @@ export class JellyfinAdapter
             nextUp: next ? nextItem && (item.Type !== 'Season' || nextItem.SeasonId === id) ? this.title(nextItem) : null : undefined,
             cast: people.filter((_p, n) => item.People![n].Type === 'Actor'), crew: people.filter((_p, n) => item.People![n].Type !== 'Actor'), extras: [...trailers.map(i => this.extra(i, id, 'trailer')), ...extras.map(i => this.extra(i, id, 'other'))], chapters: this.chapters(item), mediaSummary: {
                 video: streams.filter(s => s.Type === 'Video').map(s => ({
-                    codec: s.Codec, width: s.Width, height: s.Height, bitDepth: s.BitDepth, colorTransfer: s.ColorTransfer
+                    codec: s.Codec, width: s.Width, height: s.Height, bitDepth: s.BitDepth, colorTransfer: s.ColorTransfer,
+                    ...(s.DvProfile !== undefined ? { dolbyVisionProfile: s.DvProfile } : {})
                 })), audio: streams.filter(s => s.Type === 'Audio').map(s => ({
-                    codec: s.Codec, channels: s.Channels, language: s.Language
-                }))
+                    codec: s.Codec, channels: s.Channels, language: s.Language,
+                    ...((source?.DefaultAudioStreamIndex !== undefined ? s.Index === source.DefaultAudioStreamIndex : s.IsDefault) ? { default: true } : {})
+                })),
+                ...(source?.MediaStreams ? { subtitleCount: streams.filter(s => s.Type === 'Subtitle').length } : {})
             }
         };
     }

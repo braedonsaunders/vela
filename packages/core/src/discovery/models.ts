@@ -195,27 +195,56 @@ export function homeModel(data: Bootstrap, images?: Images, artWidth = 2560): Ho
   };
 }
 
-/** Resolution, dynamic range and each distinct audio track, as display facts. */
+/** A title's technical summary stays compact; individual tracks belong in the player menus. */
 function mediaFacts(data: TitleDetail): string[] {
+  const summary = data.mediaSummary;
+  if (!summary) return [];
   const facts: string[] = [];
   const area = (v: { width?: number; height?: number }) => (v.width ?? 0) * (v.height ?? 0);
-  const sized = (data.mediaSummary?.video ?? []).filter(v => (v.width ?? 0) > 0 && (v.height ?? 0) > 0);
-  const video = sized.sort((a, b) => area(b) - area(a))[0] ?? data.mediaSummary?.video[0];
-  if (video?.width && video.height) facts.push(`${year(video.width)} × ${year(video.height)}`);
-  if (video?.dolbyVisionProfile !== undefined) {
-    facts.push(msg('data.dolbyProfile', { profile: number(video.dolbyVisionProfile) }));
-  } else if (video?.colorTransfer) {
-    facts.push(msg('data.transfer', { transfer: video.colorTransfer }));
+  const sized = summary.video.filter(v => (v.width ?? 0) > 0 && (v.height ?? 0) > 0);
+  const video = sized.sort((a, b) => area(b) - area(a))[0] ?? summary.video[0];
+  const width = video?.width ?? 0, height = video?.height ?? 0;
+  // Cinema crops keep the encoded width's resolution class (3840 × 1600 is still 4K).
+  const resolution = width >= 7680 || height >= 4320 ? '8K'
+    : width >= 3840 || height >= 2160 ? '4K'
+    : width >= 2560 || height >= 1440 ? '1440p'
+    : width >= 1920 || height >= 1080 ? '1080p'
+    : width >= 1280 || height >= 720 ? '720p' : height > 0 ? `${year(height)}p` : '';
+  const transfer = video?.colorTransfer?.toLowerCase().replace(/[^a-z0-9+]/g, '');
+  const range = video?.dolbyVisionProfile !== undefined || transfer === 'dolbyvision' ? 'Dolby Vision'
+    : transfer === 'hdr10+' || transfer === 'hdr10plus' ? 'HDR10+'
+    : transfer === 'smpte2084' || transfer === 'pq' || transfer === 'hdr10' ? 'HDR10'
+    : transfer === 'aribstdb67' || transfer === 'hlg' ? 'HLG' : '';
+  const picture = [resolution, range].filter(Boolean).join(' · ');
+  if (picture) facts.push(picture);
+
+  const audio = summary.audio.find(track => track.default) ?? summary.audio.find(track => track.codec || track.channels);
+  if (audio) {
+    const codec = audio.codec ? AUDIO_FORMATS[audio.codec.toLowerCase().replace(/[^a-z0-9]/g, '')] ?? audio.codec.toUpperCase() : '';
+    const channels = audio.channels ? ({ 1: '1.0', 2: '2.0', 6: '5.1', 8: '7.1' } as Record<number, string>)[audio.channels]
+      ?? msg(`data.audioChannels.${plural(audio.channels)}`, { count: number(audio.channels) }) : '';
+    const sound = [codec, channels].filter(Boolean).join(' · ');
+    if (sound) facts.push(sound);
   }
-  for (const audio of data.mediaSummary?.audio ?? []) {
-    const channels = audio.channels
-      ? msg(`data.audioChannels.${plural(audio.channels)}`, { count: number(audio.channels) })
-      : '';
-    const value = [audio.codec, channels, audio.language].filter(Boolean).join(' · ');
-    if (value && !facts.includes(value)) facts.push(value);
+
+  // Older Ether summaries have no subtitle count: never infer zero from a missing field.
+  const subtitles = summary.subtitleCount;
+  const knownSubtitles = subtitles !== undefined && Number.isInteger(subtitles) && subtitles >= 0;
+  if (summary.audio.length > 1 || (knownSubtitles && subtitles > 0)) {
+    const counts = [
+      summary.audio.length ? msg(`data.audioTracks.${plural(summary.audio.length)}`, { count: number(summary.audio.length) }) : '',
+      knownSubtitles ? msg(`data.subtitleTracks.${plural(subtitles)}`, { count: number(subtitles) }) : '',
+    ].filter(Boolean).join(' · ');
+    if (counts) facts.push(counts);
   }
   return facts;
 }
+
+const AUDIO_FORMATS: Record<string, string> = {
+  aac: 'AAC', ac3: 'Dolby Digital', eac3: 'Dolby Digital Plus', truehd: 'TrueHD',
+  dca: 'DTS', dts: 'DTS', dtshd: 'DTS-HD', dtshdma: 'DTS-HD MA',
+  flac: 'FLAC', alac: 'ALAC', opus: 'Opus', mp3: 'MP3', pcm: 'PCM',
+};
 
 const RATING_LABELS: Record<string, string> = {
   tomatoes: 'ratings.tomatoes',

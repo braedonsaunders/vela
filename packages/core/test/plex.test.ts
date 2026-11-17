@@ -124,7 +124,7 @@ describe('PlexAdapter requests', () => {
       Role: [{ tag: 'Al Pacino', role: 'Hanna', thumb: '/library/people/1' }], Director: [{ tag: 'Michael Mann' }],
       Chapter: [{ id: 1, tag: 'Opening', startTimeOffset: 0, endTimeOffset: 60_000 }, { id: 2, index: 1, startTimeOffset: 60_000 }],
       Extras: { Metadata: [{ ratingKey: 11, extraType: 1, title: 'Trailer', duration: 120_000, Media: [{}] }, { ratingKey: 12, extraType: 5, title: 'Making of' }] },
-      Media: [{ Part: [{ Stream: [{ streamType: 1, codec: 'hevc', width: 3840, height: 2160, bitDepth: 10, colorTrc: 'smpte2084' }, { streamType: 2, codec: 'eac3', channels: 6, languageCode: 'eng' }, { streamType: 3, codec: 'srt' }] }] }],
+      Media: [{ Part: [{ Stream: [{ streamType: 1, codec: 'hevc', width: 3840, height: 2160, bitDepth: 10, colorTrc: 'smpte2084' }, { streamType: 2, codec: 'eac3', channels: 6, languageCode: 'eng', selected: 1 }, { streamType: 3, codec: 'srt' }] }] }, { Part: [{ Stream: [{ streamType: 2, codec: 'aac' }, { streamType: 3, codec: 'srt' }] }] }],
     }] } } });
     const detail = await plex().detail('10');
     expect(detail.canPlay).toBe(true);
@@ -137,7 +137,8 @@ describe('PlexAdapter requests', () => {
     expect(detail.extras?.map(e => [e.id, e.kind, e.availability, e.durationSeconds])).toEqual([['11', 'trailer', 'ready', 120], ['12', 'other', 'unresolved', 0]]);
     expect(detail.mediaSummary).toEqual({
       video: [{ codec: 'hevc', width: 3840, height: 2160, bitDepth: 10, colorTransfer: 'smpte2084' }],
-      audio: [{ codec: 'eac3', channels: 6, language: 'eng' }],
+      audio: [{ codec: 'eac3', channels: 6, language: 'eng', default: true }],
+      subtitleCount: 1,
     });
   });
 
