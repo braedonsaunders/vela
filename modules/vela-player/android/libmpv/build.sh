@@ -67,7 +67,7 @@ IN_CI=1 ./include/download-sdk.sh
 suffix_of() { case "$1" in arm64) echo -arm64 ;; x86_64) echo -x64 ;; esac; }
 abi_of() { case "$1" in arm64) echo arm64-v8a ;; x86_64) echo x86_64 ;; esac; }
 
-rm -rf "$out"
+mkdir -p "$out"
 for arch in "${archs[@]}"; do
   abi="$(abi_of "$arch")"
   if [ -z "$abi" ]; then
