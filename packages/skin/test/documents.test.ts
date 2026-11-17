@@ -40,6 +40,42 @@ test('the built-in documents are found', () => {
   expect(new Set(ids).size).toBe(ids.length);
 });
 
+test('every built-in person route reuses its title close and library card', () => {
+  const walk = (node: RNode, predicate: (node: RNode) => boolean): boolean => predicate(node)
+    || node.kind === 'box' && node.children.some(child => walk(child, predicate))
+    || node.kind === 'repeat' && walk(node.item, predicate);
+  for (const [, doc] of documents) {
+    const resolved = resolveDocument(doc, 1920, 'en');
+    const person = resolved.routes.person!;
+    expect(person).toBeDefined();
+    expect(walk(person, n => n.kind === 'box' && n.press?.action === 'back')).toBe(true);
+    expect(walk(person, n => n.kind === 'repeat' && n.over === 'personPage.movies')).toBe(true);
+    expect(walk(person, n => n.kind === 'box' && n.press?.action === 'select')).toBe(true);
+  }
+});
+
+test('cast has a focus target only when its adapter can open the person', async () => {
+  const { holds } = await import('../src/resolve');
+  const findCast = (node: RNode): RNode | undefined => {
+    if (node.kind === 'repeat' && node.over === 'detail.cast') return node.item;
+    if (node.kind === 'repeat') return findCast(node.item);
+    if (node.kind === 'box') for (const child of node.children) { const found = findCast(child); if (found) return found; }
+    return undefined;
+  };
+  for (const [, doc] of documents) {
+    const tile = findCast(resolveDocument(doc, 1920).routes.title!);
+    expect(tile).toBeDefined();
+    const count = (node: RNode, canOpen: boolean): number => {
+      const context = { index: 0, person: { name: 'Mara', role: '', portrait: '', canOpen } };
+      if (!holds(node.when, context, {} as never)) return 0;
+      return (node.kind === 'box' && node.press?.action === 'person' ? 1 : 0)
+        + (node.kind === 'box' ? node.children.reduce((sum, child) => sum + count(child, canOpen), 0) : 0);
+    };
+    expect(count(tile!, false)).toBe(0);
+    expect(count(tile!, true)).toBe(1);
+  }
+});
+
 test('Mochi has one navigation set across the compact breakpoint and selected states', async () => {
   const { fill, holds } = await import('../src/resolve');
   const { collection } = await import('../src/vocabulary');

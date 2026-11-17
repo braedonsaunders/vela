@@ -62,6 +62,7 @@ export interface Env {
   library?: LibraryPage;
   /** The collection page on show (routes.collection); none on other routes. */
   collection?: CollectionPage;
+  personPage?: { name: string; portrait: string; role: string; items: Card[]; more: boolean; loading: boolean };
 }
 
 /** The binding context: the item a node is repeated over, and its position. */
@@ -127,6 +128,16 @@ const CARD_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rat
 const DETAIL_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
 
 export const VOCABULARY: Record<string, Accessor> = {
+  'personPage.name': (_, e) => e.personPage?.name ?? '',
+  'personPage.portrait': (_, e) => e.personPage?.portrait ?? '',
+  'personPage.role': (_, e) => e.personPage?.role ?? '',
+  'personPage.initials': (_, e) => (e.personPage?.name ?? '').split(' ').slice(0, 2).map(w => w.slice(0, 1)).join('').toUpperCase(),
+  'personPage.empty': (_, e) => yes(!e.personPage?.items.length && !e.personPage?.loading),
+  'personPage.emptyText': (_, e) => t('person.empty', { name: e.personPage?.name ?? '' }),
+  'personPage.moviesCount': (_, e) => String(e.personPage?.items.filter(c => c.kind === 'movie').length ?? 0),
+  'personPage.tvCount': (_, e) => String(e.personPage?.items.filter(c => c.kind !== 'movie').length ?? 0),
+  'personPage.more': (_, e) => yes(!!e.personPage?.more),
+  'personPage.loading': (_, e) => yes(!!e.personPage?.loading),
   'context.label': c => c.contextPart?.label ?? '',
   'context.select': c => c.contextPart?.select ?? '',
   'card.hasContext': from('card', x => yes(x.contextParts.length > 0)),
@@ -190,6 +201,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'extra.ready': c => (c.extra ? yes(c.extra.ready) : ''),
   'extra.seed': c => (c.extra ? String(c.extra.id.length) : ''),
   'person.name': c => c.person?.name ?? '',
+  'person.canOpen': c => yes(!!c.person?.canOpen),
   'person.role': c => c.person?.role ?? '',
   'person.portrait': c => c.person?.portrait ?? '',
   'person.initials': c => (c.person ? c.person.name.split(' ').slice(0, 2).map(w => w.slice(0, 1)).join('').toUpperCase() : ''),
@@ -303,6 +315,8 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
   const browsed = libraryCollection(over, c, e, limit);
   if (browsed) return browsed;
   switch (over) {
+    case 'personPage.movies': return at((e.personPage?.items ?? []).filter(card => card.kind === 'movie'), card => ({ card }));
+    case 'personPage.tv': return at((e.personPage?.items ?? []).filter(card => card.kind !== 'movie'), card => ({ card }));
     case 'detail.contextParts': return at(d?.title[0]?.contextParts ?? [], contextPart => ({ contextPart }));
     case 'card.contextParts': return at(c.card?.contextParts ?? [], contextPart => ({ contextPart }));
     case 'home.rows': return at(e.home?.rows ?? [], row => ({ row }));

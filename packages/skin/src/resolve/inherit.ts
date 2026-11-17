@@ -2,8 +2,9 @@
 // Vela base (base.ts), the built-in routes and slots in the document's own `ui` look. A slot or
 // route the document defines replaces the base's; templates, motion, keyframes, fonts, tokens and
 // strings merge by name, the document's winning.
-import type { Node, SkinDocument } from '../../../protocol/skin';
+import type { BoxNode, Node, SkinDocument } from '../../../protocol/skin';
 import { libraryBelowHeader } from './vela-base/library';
+import { personContent } from './vela-base/person';
 
 /** A document with the base under it: every table filled, slots always present. */
 export type InheritedDocument = SkinDocument & Required<Pick<SkinDocument, 'slots'>>;
@@ -55,14 +56,71 @@ export function hasFlowHeader(shell: Node | undefined): boolean {
   return !!shell && walk(shell, true) && navigation;
 }
 
+/** All documents share the same accessible cast control and capability rule. */
+function sharedCast(node: Node): Node {
+  if (node.type === 'repeat') return node.over === 'detail.cast'
+    ? { ...node, item: { type: 'use', template: 'velaCastPerson' } }
+    : { ...node, item: sharedCast(node.item) };
+  if (node.type === 'box') return { ...node, children: (node.children ?? []).map(sharedCast) };
+  return node;
+}
+
+function titleClose(node: Node | undefined): Node | undefined {
+  if (!node) return undefined;
+  if (node.type === 'box' && (node.testId === 'detail-close' || node.testId === 'detail-back')) return node;
+  if (node.type === 'box') for (const child of node.children ?? []) { const found = titleClose(child); if (found) return found; }
+  if (node.type === 'repeat') return titleClose(node.item);
+  return undefined;
+}
+
+/** Reuse the title's own modal frame and close button, replacing only its scroll contents. */
+function personFrame(node: Node, content: Node): Node {
+  if (node.type !== 'box') return node;
+  const children = node.children ?? [];
+  const direct = children.find(child => child.type === 'box' && (child.testId === 'detail-close' || child.testId === 'detail-back'));
+  const strip = children.find(child => child.type === 'box' && child.role === 'navigation' && titleClose(child));
+  if (direct || strip) {
+    const close = direct?.type === 'box' && direct.style?.left && !direct.style.right
+      ? { ...direct, style: { ...direct.style, right: direct.style.left, left: 'auto' } } as Node : direct ?? strip!;
+    return { ...node, children: [close, content] };
+  }
+  const containing = children.find(child => titleClose(child));
+  return containing ? { ...node, children: [personFrame(containing, content)] } : node;
+}
+
+/** Take the library's actual grid/list and card, including its breakpoint geometry. */
+function libraryLayout(node: Node | undefined): { box: BoxNode; item: Node } | undefined {
+  if (!node || node.type !== 'box') return undefined;
+  const layouts: { box: BoxNode; item: Node }[] = [];
+  const walk = (box: BoxNode) => {
+    for (const child of box.children ?? []) {
+      if (child.type === 'repeat' && child.over === 'library.items') layouts.push({ box, item: child.item });
+      else if (child.type === 'box') walk(child);
+    }
+  };
+  walk(node);
+  return layouts.find(layout => layout.box.style?.display === 'grid') ?? layouts[0];
+}
+
+function fillPersonFrame(node: Node): Node {
+  if (node.type !== 'box' || node.style?.position !== 'absolute') return node;
+  return { ...node, children: (node.children ?? []).map(child => child.type === 'box' && child.style?.flex && !child.style.height
+    ? { ...child, style: { ...child.style, 'min-height': '100vh' } } : child) };
+}
+
 /** The document over the base: what the document defines wins, the base fills the rest. */
 export function withBase(doc: SkinDocument, base: SkinDocument): InheritedDocument {
   const ownHome = homeOf(doc);
   const home = ownHome ?? homeOf(base);
   const routes = { ...base.routes, ...doc.routes };
   delete routes.home;
+  if (routes.title) routes.title = sharedCast(routes.title);
   if (!doc.routes?.library && hasFlowHeader(doc.slots?.shell)) routes.library = libraryBelowHeader;
   if (routes.library) routes.library = withLibraryViews(routes.library);
+  const layout = libraryLayout(doc.routes?.library ?? base.routes?.library);
+  const personCard = layout?.item ?? doc.templates?.gridCard ?? doc.templates?.gridPoster ?? doc.templates?.poster ?? doc.templates?.card ?? base.templates!.velaCard!;
+  const title = doc.routes?.title ?? base.routes?.title;
+  if (title && titleClose(title)) routes.person = fillPersonFrame(personFrame(title, personContent(layout?.box)));
   const slots = { ...base.slots, ...doc.slots };
   delete slots.home;
   // Home's bar mask is its drawer's: a document that draws its own home does not take the base's.
@@ -71,7 +129,9 @@ export function withBase(doc: SkinDocument, base: SkinDocument): InheritedDocume
     ...doc,
     slots: home ? { ...slots, home } : slots,
     routes,
-    templates: merged(base.templates, doc.templates),
+    templates: { ...merged(base.templates, doc.templates),
+      velaPersonCard: personCard,
+    },
     motion: merged(base.motion, doc.motion),
     keyframes: merged(base.keyframes, doc.keyframes),
     fonts: merged(base.fonts, doc.fonts),

@@ -8,6 +8,12 @@ const title: Title = { id: 'episode', kind: 'episode', name: 'Arrival', showId: 
   { id: 'still', kind: 'still', tag: '', sizes: [{ width: 0, height: 0, url: 'https://media.example/still' }] },
 ] };
 
+test('cast links require both a person ID and filmography capability', () => {
+  const detail: TitleDetail = { title, extras: [], chapters: [], cast: [{ id: 'p1', name: 'Mara Vale' }, { name: 'No ID' }] };
+  expect(detailModel(detail).castPeople.map(person => !!person.canOpen)).toEqual([false, false]);
+  expect(detailModel(detail, undefined, 2560, false, false, true).castPeople.map(person => !!person.canOpen)).toEqual([true, false]);
+});
+
 test('episode details show series context including specials, with separate portrait and landscape art', () => {
   const model = detailModel({ title, extras: [], chapters: [], cast: [] } satisfies TitleDetail).title[0]!;
   expect(model.episodeContext).toBe('Meridian Station · Season 0, Episode 3');

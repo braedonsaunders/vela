@@ -57,3 +57,12 @@ test('a session reset drops cached libraries and ignores an old background respo
   f.reset(); pending.resolve(answer()); await refresh;
   expect(f.box.get().library).toEqual({});
 });
+
+test('person titles require a real adapter capability and never fall back to name search', async () => {
+  let searches = 0;
+  const session = { onReset() {}, async ready() { return { adapter: { search() { searches++; } } }; } };
+  const box = new StateBox({} as VelaState);
+  const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
+  await expect(catalogue.personTitles('person-id', 'library-id')).rejects.toThrow('Person filmography is unavailable');
+  expect(searches).toBe(0);
+});

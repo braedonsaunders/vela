@@ -104,6 +104,7 @@ export interface Rating {
 
 export interface Person {
   id?: string;
+  canOpen?: boolean;
   name: string;
   role: string;
   portrait: string;

@@ -56,10 +56,10 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md).
   const search = route === 'home' && host.env.query !== '' ? vela.doc?.routes.search : undefined;
   const content = route === 'library' ? <LibraryScenes host={host} node={tree} /> : <SkinRoute host={host} node={tree} after={search} />;
-  const shell = route === 'title' || sharedShell ? undefined : vela.doc?.shell;
+  const shell = route === 'title' || route === 'person' || sharedShell ? undefined : vela.doc?.shell;
   // The transparent navigator modal fills the viewport, including the section shell's header.
   // Keep the scrim outside the skin's scrolling/frame geometry on web and native hosts alike.
-  if (route === 'title') return (
+  if (route === 'title' || route === 'person') return (
     <ScreenActive.Provider value={isCurrent}>
       {/* On TV the title page is presented in the app's root view, so it stays in the tree under
           the player: while covered it must take no focus (no interaction, which the focus engine

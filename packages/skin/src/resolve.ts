@@ -62,7 +62,7 @@ export type RNode = Common & (
   | { kind: 'widget'; widget: string; params: Record<string, string> }
 );
 
-export type RouteName = 'home' | 'title' | 'search' | 'collection' | 'library' | 'live' | 'watch' | 'auth';
+export type RouteName = 'home' | 'title' | 'person' | 'search' | 'collection' | 'library' | 'live' | 'watch' | 'auth';
 
 export interface ResolvedDocument {
   id: string;
@@ -80,7 +80,7 @@ export interface ResolvedDocument {
 }
 
 /** Image URLs (Plex puts a short-lived token in them) may be read only by an image source or a background image. */
-const URL_KEYS = /^(card|hero|detail|dest|person|ch|tile|hit)\.(poster|backdrop|logo|portrait|nowArt|artwork)$/;
+const URL_KEYS = /^(card|hero|detail|dest|person|personPage|ch|tile|hit)\.(poster|backdrop|logo|portrait|nowArt|artwork)$/;
 const UNSAFE = /expression\(|javascript:|@import|[;{}<>\\]/i;
 
 interface Context {

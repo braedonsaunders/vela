@@ -1,9 +1,9 @@
 // The Vela base: the built-in document every skin document inherits route by route (decision 7).
 // Its look is compiled Cinematic's, written on the document's ui tokens ($ui.*), so each skin
 // wears it in its own colours until it draws a route of its own. Its parts live in vela-base/.
-import type { Node, SkinDocument } from '../../../protocol/skin';
+import type { BoxNode, Node, SkinDocument } from '../../../protocol/skin';
 import { auth } from './vela-base/auth';
-import { card, relatedRow, row } from './vela-base/cards';
+import { card, gridCard, relatedRow, row } from './vela-base/cards';
 import { collection } from './vela-base/collection';
 import { home } from './vela-base/home';
 import { library, libraryViews, libraryFilters, libraryAlternative } from './vela-base/library';
@@ -11,6 +11,8 @@ import { enterPresets, small } from './vela-base/look';
 import { search, searchMotion } from './vela-base/search';
 import { shell } from './vela-base/shell';
 import { title, episodeContext, cardContext } from './vela-base/title';
+import { personRoute } from './vela-base/person';
+import { castPerson } from './vela-base/person-tile';
 import { compiledControl } from './vela-base/controls';
 
 export const velaBase: SkinDocument = {
@@ -171,9 +173,9 @@ export const velaBase: SkinDocument = {
       still: { keyframes: 'dissolve', duration: 240 },
     },
   },
-  templates: { velaEpisodeContext: episodeContext, velaCardContext: cardContext, velaCard: card, velaRow: row, velaRelatedRow: relatedRow, velaLibraryViews: libraryViews, velaLibraryFilters: libraryFilters, velaLibraryAlternative: libraryAlternative },
+  templates: { velaCastPerson: castPerson, velaPersonCard: gridCard, velaPersonClose: (((title as BoxNode).children![0] as BoxNode).children![0] as BoxNode).children![0]!, velaEpisodeContext: episodeContext, velaCardContext: cardContext, velaCard: card, velaRow: row, velaRelatedRow: relatedRow, velaLibraryViews: libraryViews, velaLibraryFilters: libraryFilters, velaLibraryAlternative: libraryAlternative },
   slots: { shell, home },
-  routes: { title, library, auth, collection, search },
+  routes: { title, person: personRoute, library, auth, collection, search },
   // Home and the title page draw their own loading and failure; home fades under the floating bar.
   status: true,
   traits: { barMask: true },

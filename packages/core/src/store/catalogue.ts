@@ -37,17 +37,14 @@ const PAGE = 100;
 const RECONCILE_ATTEMPTS = 3;
 
 export class Catalogue {
-  async personTitles(id: string | undefined, name: string, libraryId?: string, cursor?: string): Promise<{ items: Card[]; cursor?: string; fallback: boolean }> {
+  async personTitles(id: string | undefined, libraryId?: string, cursor?: string): Promise<{ items: Card[]; cursor?: string }> {
     const connection = await this.session.ready();
     const adapter = connection.adapter;
-    const fallback = !id || !hasPersonFilmography(adapter);
-    const result = !fallback && id && hasPersonFilmography(adapter)
-      ? await adapter.personTitles(id, libraryId, cursor)
-      : await adapter.search({ query: name, generation: 0, idempotencyKey: this.session.key(), cursor, limit: PAGE });
+    if (!id || !hasPersonFilmography(adapter)) throw new Error('Person filmography is unavailable');
+    const result = await adapter.personTitles(id, libraryId, cursor);
     const images = await connection.images();
-    const items = fallback ? (result.items as V.Title[]).map(title => entry({ id: title.id, receiptToken: '', kind: 'title', title }, images, this.artWidth()))
-      : (result.items as V.RowEntry[]).map(item => entry(item, images, this.artWidth()));
-    return { items, cursor: result.nextCursor, fallback };
+    const items = result.items.map(item => entry(item, images, this.artWidth()));
+    return { items, cursor: result.nextCursor };
   }
   /** Available before a library's asynchronous rows arrive. */
   get libraryRecommendationsAvailable(): boolean {
@@ -118,6 +115,7 @@ export class Catalogue {
       this.artWidth(),
       features.extraPlayback?.available === true,
       features.themeMusic?.available === true,
+      hasPersonFilmography(connection.adapter),
     );
     this.pending.answered(id, answer);
     return { model, answer };

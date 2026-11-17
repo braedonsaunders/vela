@@ -52,7 +52,7 @@ export type Action =
   /** Signed out (route auth): sign in with the fields; start or cancel a quick-connect code. */
   | 'signIn' | 'startQuick' | 'cancelQuick' | 'goSecure'
   /** A collection page: load its next titles. */
-  | 'collectionMore'
+  | 'collectionMore' | 'personMore'
   /** A live home's monitor and channels (`live.home`): full watch, put on the monitor, flick ±1, tune in, sound, the guide. */
   | 'watch' | 'preview' | 'zap' | 'tuneIn' | 'unmute' | 'guide'
   /** Search (`routes.search`): open a live hit by its `hit.ref`; ask the descriptive lane again. */
@@ -155,7 +155,7 @@ export interface SkinDocument {
   slots?: Partial<Record<'shell' | 'home' | 'row' | 'card' | 'status', Node>>;
   /** A tree per route the document draws whole (the route view); a route left out is the Vela base's.
    *  `search` is drawn in home's view, after home's nodes, while a query is open. */
-  routes?: Partial<Record<'home' | 'search' | 'title' | 'collection' | 'library' | 'live' | 'watch' | 'auth', Node>>;
+  routes?: Partial<Record<'home' | 'search' | 'title' | 'person' | 'collection' | 'library' | 'live' | 'watch' | 'auth', Node>>;
   /** `home: true` makes home a live surface: the guide's listings, clock and one preview tile run there (docs/skin-schema.md). */
   live?: { home?: boolean };
   /** Detail route presentation per viewport class. */

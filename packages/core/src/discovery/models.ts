@@ -299,6 +299,7 @@ export function detailModel(
   artWidth = 2560,
   extraPlayback = false,
   themeAvailable = false,
+  personFilmography = false,
 ): DetailModel {
   const person = (value: { id?: string; name: string; role?: string; artwork?: ArtworkRef }): Person => {
     let portrait = '';
@@ -309,7 +310,7 @@ export function detailModel(
         // Malformed optional artwork is unavailable.
       }
     }
-    return { ...(value.id ? { id: value.id } : {}), name: value.name, role: value.role ?? '', portrait };
+    return { ...(value.id ? { id: value.id } : {}), ...(value.id && personFilmography ? { canOpen: true } : {}), name: value.name, role: value.role ?? '', portrait };
   };
   const credit = (c: { name: string; role?: string }) => (c.role ? `${c.name} · ${c.role}` : c.name);
   const theme = themeMusic(data, images, themeAvailable);
