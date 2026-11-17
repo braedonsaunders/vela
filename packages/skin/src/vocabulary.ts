@@ -95,6 +95,14 @@ function cardName(x: Card): string {
 }
 const factsLine = (x: Card) => [x.facts, ...x.genres.slice(0, 3)].filter(f => f !== '').join(' · ');
 const kindId = (x: Card) => `${x.id}|${x.kind}|${x.receipt}`;
+/** All skins read the same season scope; a stale selection from another title falls back. */
+function selectedSeason(d: DetailModel | undefined, season: string): string {
+  return d?.seasons.some(s => s.id === season) ? season : d?.seasons[0]?.id ?? '';
+}
+function seasonEpisodes(d: DetailModel | undefined, season: string): Card[] {
+  const selected = selectedSeason(d, season);
+  return (d?.episodes ?? []).filter(card => !selected || card.seasonId === selected);
+}
 const hasProgress = (x: Card) => x.progressSeconds > 0 && x.durationSeconds > 0 && !x.played;
 
 /** A card or hero field, read from whichever the context holds. */
@@ -190,7 +198,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'index.label': c => String(c.index + 1),
   'index.current': (c, e) => yes(c.index === e.heroIndex),
 
-  'season.on': (c, e) => (c.card ? yes(c.card.id === e.season) : ''),
+  'season.on': (c, e) => (c.card ? yes(c.card.id === selectedSeason(e.detail, e.season)) : ''),
   'season.pick': c => (c.card ? `${c.card.id}|season|` : ''),
   'episode.numberTitle': c => (c.card ? (c.card.episodeNumber > 0 ? t('ui.numberTitle', { number: c.card.episodeNumberLabel, title: c.card.name }) : c.card.name) : ''),
   'episode.upNextLabel': c => (c.card ? t(c.card.progressSeconds > 0 ? 'ui.continueWatching' : 'ui.upNext') : ''),
@@ -243,8 +251,8 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.resumePct': title((x, d) => pct(d.resumeSeconds, x.durationSeconds), '0'),
   'detail.resumePosition': detail(d => d.resumePosition),
   'detail.seasonCount': detail(d => String(d.seasons.length), '0'),
-  'detail.seasonName': detail((d, e) => d.seasons.filter(x => x.id === e.season).map(x => x.name).join('')),
-  'detail.seasonPending': detail((d, e) => yes(e.season !== '' && d.episodes.length > 0 && !d.episodes.some(x => x.seasonId === e.season)), 'false'),
+  'detail.seasonName': detail((d, e) => d.seasons.filter(x => x.id === selectedSeason(d, e.season)).map(x => x.name).join('')),
+  'detail.seasonPending': detail((d, e) => yes(selectedSeason(d, e.season) !== '' && d.episodes.length > 0 && !d.episodes.some(x => x.seasonId === selectedSeason(d, e.season))), 'false'),
   // A queued section only waits while absent; a partial refresh keeps available content visible.
   'detail.seasonsPending': detail(d => yes(d.pending.includes('seasons') && d.seasons.length === 0), 'false'),
   'detail.episodesPending': detail(d => yes(d.pending.includes('episodes') && d.episodes.length === 0), 'false'),
@@ -264,7 +272,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.hasExtras': detail(d => yes(d.extras.length > 0), 'false'),
   'detail.hasMediaFacts': detail(d => yes(d.mediaFacts.length > 0), 'false'),
   'detail.hasRelated': detail(d => yes(d.related.length > 0), 'false'),
-  'detail.selectedSeason': (_, e) => e.season,
+  'detail.selectedSeason': (_, e) => selectedSeason(e.detail, e.season),
   ...SEARCH_VOCABULARY,
   ...AUTH_VOCABULARY,
   ...PREVIEW_VOCABULARY,
@@ -301,8 +309,8 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
     case 'nav.destinations': return at(e.libraries, dest => ({ dest }));
     case 'hero.genres': return at(c.hero?.genres ?? [], fact => ({ fact }));
     case 'detail.seasons': return at(d?.seasons ?? [], card => ({ card }));
-    case 'detail.episodes': return at(d?.episodes ?? [], card => ({ card }));
-    case 'detail.upNext': return at(d?.nextUp ?? (d?.episodes ?? []).filter(x => !x.played).slice(0, 1), card => ({ card }));
+    case 'detail.episodes': return at(seasonEpisodes(d, e.season), card => ({ card }));
+    case 'detail.upNext': return at(d?.nextUp ?? seasonEpisodes(d, e.season).filter(x => !x.played).slice(0, 1), card => ({ card }));
     case 'detail.extras': return at(d?.extras ?? [], extra => ({ extra }));
     case 'detail.trailers': return at((d?.extras ?? []).filter(x => x.kind === 'trailer' && x.ready), extra => ({ extra }));
     case 'detail.cast': return at(d?.castPeople ?? [], person => ({ person }));

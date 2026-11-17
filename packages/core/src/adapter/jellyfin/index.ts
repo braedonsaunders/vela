@@ -1,6 +1,6 @@
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { ClientDeclaration, LiveTv, PasswordSignIn, QuickConnectSignIn } from '../capabilities';
+import type { ClientDeclaration, LiveTv, PasswordSignIn, QuickConnectSignIn, TrackChanges, TrackCommand } from '../capabilities';
 import { VelaError } from '../errors';
 import { seriesOrder } from '../series';
 import type { Item, Result, User, Auth, Info, MediaSource } from './types';
@@ -18,6 +18,8 @@ const sortKeys: Partial<Record<V.LibrarySort, string>> = {
 interface Session {
     plan: V.PlaybackPlan;
     itemId: string;
+    client: V.ClientCapabilities;
+    playSessionId: string;
     source: MediaSource;
     sequence: number;
     started: boolean;
@@ -30,7 +32,7 @@ interface Session {
  * Jellyfin has no refresh tokens: the token is validated, never fictitiously rotated.
  */
 export class JellyfinAdapter
-    implements ServerAdapter, PasswordSignIn, QuickConnectSignIn, ClientDeclaration, LiveTv {
+    implements ServerAdapter, PasswordSignIn, QuickConnectSignIn, ClientDeclaration, LiveTv, TrackChanges {
     private base: URL;
     private sessions = new Map<string, Session>();
     private starts = new Map<string, Promise<V.PlaybackPlan>>();
@@ -187,6 +189,7 @@ export class JellyfinAdapter
                 extras: offered,
                 extraPlayback: offered,
                 initialTrackSelection: offered,
+                sessionTrackChanges: offered,
             }, skins: [{
                     id: 'cinematic', name: 'Cinematic'
                 }], defaultSkinId: 'cinematic'
@@ -539,7 +542,7 @@ export class JellyfinAdapter
             }
         };
         this.sessions.set(sessionId, {
-            plan, itemId: id, source, sequence: -1, started: false, stopped: false, pending: Promise.resolve(), mutations: new Map()
+            plan, itemId: id, client: r.client, playSessionId: sessionId, source, sequence: -1, started: false, stopped: false, pending: Promise.resolve(), mutations: new Map()
         });
         return plan;
     }
@@ -567,7 +570,7 @@ export class JellyfinAdapter
     private async report(s: Session, stopped = false) {
         const path = s.plan.paths.find(p => p.id === s.plan.selectedPathId);
         const body = {
-            ItemId: s.itemId, MediaSourceId: s.source.Id, PlaySessionId: s.plan.sessionId, PositionTicks: ticks(s.plan.positionSeconds), IsPaused: s.plan.state === 'paused', CanSeek: !s.plan.channelId, PlayMethod: path?.kind === 'direct' ? 'DirectPlay' : path?.kind === 'remux' ? 'DirectStream' : 'Transcode', AudioStreamIndex: s.plan.selectedAudioTrackId === undefined ? undefined : Number(s.plan.selectedAudioTrackId), SubtitleStreamIndex: s.plan.selectedSubtitleTrackId === undefined ? undefined : s.plan.selectedSubtitleTrackId === null ? -1 : Number(s.plan.selectedSubtitleTrackId), LiveStreamId: s.source.LiveStreamId
+            ItemId: s.itemId, MediaSourceId: s.source.Id, PlaySessionId: s.playSessionId, PositionTicks: ticks(s.plan.positionSeconds), IsPaused: s.plan.state === 'paused', CanSeek: !s.plan.channelId, PlayMethod: path?.kind === 'direct' ? 'DirectPlay' : path?.kind === 'remux' ? 'DirectStream' : 'Transcode', AudioStreamIndex: s.plan.selectedAudioTrackId === undefined ? undefined : Number(s.plan.selectedAudioTrackId), SubtitleStreamIndex: s.plan.selectedSubtitleTrackId === undefined ? undefined : s.plan.selectedSubtitleTrackId === null ? -1 : Number(s.plan.selectedSubtitleTrackId), LiveStreamId: s.source.LiveStreamId
         };
         if (!s.started) {
             await this.request('POST', 'Sessions/Playing', body);
@@ -581,7 +584,7 @@ export class JellyfinAdapter
                     LiveStreamId: s.source.LiveStreamId
                 })}`);
             if (path?.kind !== 'direct') await this.request('DELETE', `Videos/ActiveEncodings${query({
-                DeviceId: this.credentials.device.id, PlaySessionId: s.plan.sessionId
+                DeviceId: this.credentials.device.id, PlaySessionId: s.playSessionId
             })}`);
         }
     }
@@ -643,6 +646,42 @@ export class JellyfinAdapter
             };
             if (!s.stopped)
                 await this.report(s, r.kind === 'stop');
+            const result = structuredClone(s.plan);
+            s.mutations.set(r.idempotencyKey, result);
+            return result;
+        });
+    }
+    async changeTracks(id: string, r: TrackCommand): Promise<V.PlaybackPlan> {
+        const s = this.session(id);
+        return this.serialize(s, async () => {
+            const saved = s.mutations.get(r.idempotencyKey);
+            if (saved) return saved;
+            this.generation(s, r);
+            if (s.stopped) throw this.error('conflict', 'session_ended', 'Playback has ended');
+            const audio = r.audioTrackId ?? s.plan.selectedAudioTrackId;
+            const subtitle = r.subtitleTrackId === undefined ? s.plan.selectedSubtitleTrackId : r.subtitleTrackId;
+            if (audio !== undefined && !s.plan.audioTracks.some(t => t.id === audio)) throw this.error('request', 'invalid_track', 'Unknown audio track');
+            if (subtitle != null && !s.plan.subtitleTracks.some(t => t.id === subtitle)) throw this.error('request', 'invalid_track', 'Unknown subtitle track');
+            const path = s.plan.paths.find(p => p.id === s.plan.selectedPathId);
+            if (path?.kind !== 'direct') {
+                const info = await this.request<{ PlaySessionId?: string; MediaSources: MediaSource[] }>('POST', `Items/${e(s.itemId)}/PlaybackInfo`, {
+                    UserId: (await this.credentials.get())?.viewer.id, MediaSourceId: s.source.Id,
+                    DeviceProfile: this.profile(s.client), StartTimeTicks: ticks(s.plan.positionSeconds),
+                    AudioStreamIndex: audio === undefined ? undefined : this.trackIndex(audio),
+                    SubtitleStreamIndex: subtitle == null ? -1 : this.trackIndex(subtitle),
+                    IsPlayback: true, EnableDirectPlay: false, EnableDirectStream: true, EnableTranscoding: true,
+                });
+                const source = info.MediaSources?.find(m => m.Id === s.source.Id) ?? info.MediaSources?.[0];
+                const raw = source?.TranscodingUrl ?? source?.DirectStreamUrl;
+                if (!source || !raw) throw this.error('playback', 'no_playable_source', 'Server did not provide the selected tracks');
+                const url = this.mediaURL(raw);
+                await this.request('DELETE', `Videos/ActiveEncodings${query({ DeviceId: this.credentials.device.id, PlaySessionId: s.playSessionId })}`);
+                s.source = source;
+                s.playSessionId = info.PlaySessionId ?? s.playSessionId;
+                s.plan = { ...s.plan, paths: [{ ...path!, readiness: 'ready', url, mimeType: source.TranscodingUrl ? 'application/vnd.apple.mpegurl' : 'video/mp4', sourceId: source.Id, transport: source.TranscodingUrl ? 'hls' : 'file', kind: source.SupportsDirectStream ? 'remux' : 'transcode', timelineOriginSeconds: s.plan.positionSeconds }], sourceGeneration: s.plan.sourceGeneration + 1 };
+            }
+            s.plan = { ...s.plan, selectedAudioTrackId: audio, selectedSubtitleTrackId: subtitle, revision: s.plan.revision + 1 };
+            await this.report(s);
             const result = structuredClone(s.plan);
             s.mutations.set(r.idempotencyKey, result);
             return result;

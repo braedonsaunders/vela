@@ -229,3 +229,75 @@ test('live channel logos reach channel artwork for both native-server families',
   expect((await plex().channels()).items[0]?.artwork[0]?.sizes[0]?.url).toBe('https://images.example/channel.png');
   expect((await jellyfin().channels()).items[0]?.artwork[0]?.sizes[0]?.url).toBe(`${origin}/Items/channel/Images/Logo?tag=logo`);
 });
+
+test('Plex changes direct tracks through the capability and exposes SRT sidecars as WebVTT', async () => {
+  const { sendCommand } = await import('../src/adapter/commands');
+  const tracked = { ...movie, Media: [{ ...movie.Media[0], Part: [{ ...movie.Media[0]!.Part[0], Stream: [
+    { id: 1, index: 1, streamType: 2, codec: 'aac', selected: true },
+    { id: 2, index: 2, streamType: 2, codec: 'aac' },
+    { id: 3, streamType: 3, codec: 'srt', key: '/library/streams/3.srt' },
+  ] }] }] };
+  const seen = routeFetch({ ...plexRoutes(), 'GET /library/metadata/10': { MediaContainer: { Metadata: [tracked] } }, 'PUT /library/parts/part': noContent,
+    'GET /library/streams/3.srt': () => new Response('WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nA subtitle\n', { headers: { 'Content-Type': 'text/vtt' } }),
+  });
+  const adapter = plex();
+  const plan = await adapter.startPlayback({ titleId: '10', client, idempotencyKey: 'start' });
+  expect(plan.subtitleTracks[0]!.delivery).toMatchObject({ kind: 'external', format: 'webvtt', url: `${origin}/library/streams/3.srt?format=vtt` });
+  const subtitle = await fetch(plan.subtitleTracks[0]!.url!, { headers: await adapter.mediaHeaders() });
+  expect(await subtitle.text()).toContain('WEBVTT');
+  const change = { kind: 'tracks' as const, audioTrackId: '2', subtitleTrackId: '3', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'tracks' };
+  const next = await sendCommand(adapter, plan.sessionId, change);
+  expect(next).toMatchObject({ selectedAudioTrackId: '2', selectedSubtitleTrackId: '3', selectedPathId: 'original', sourceGeneration: 0 });
+  expect(Object.fromEntries(seen.find(r => r.method === 'PUT')!.url.searchParams)).toEqual({ audioStreamID: '2', subtitleStreamID: '3', allParts: '1' });
+  await sendCommand(adapter, plan.sessionId, change);
+  expect(seen.filter(r => r.method === 'PUT')).toHaveLength(1);
+  await sendCommand(adapter, plan.sessionId, { ...change, idempotencyKey: 'off', audioTrackId: undefined, subtitleTrackId: null });
+  expect(seen.at(-1)!.url.searchParams.get('subtitleStreamID')).toBe('0');
+  await expect(sendCommand(adapter, plan.sessionId, { ...change, idempotencyKey: 'invalid', audioTrackId: '99' })).rejects.toThrow('Unknown Plex audio track');
+});
+
+test('Plex transcode track changes restart at the observed offset with a new source generation', async () => {
+  const tracked = { ...movie, Media: [{ ...movie.Media[0], Part: [{ ...movie.Media[0]!.Part[0], Stream: [
+    { id: 1, index: 1, streamType: 2, codec: 'aac' }, { id: 2, index: 2, streamType: 2, codec: 'aac' }, { id: 3, index: 3, streamType: 3, codec: 'pgs' },
+  ] }] }] };
+  const seen = routeFetch({ ...plexRoutes(), 'GET /library/metadata/10': { MediaContainer: { Metadata: [tracked] } }, 'PUT /library/parts/part': noContent });
+  const adapter = plex();
+  const plan = await adapter.startPlayback({ titleId: '10', client: { ...client, containers: [] }, idempotencyKey: 'start' });
+  await adapter.reportObservation(plan.sessionId, observation(1, 42, 'paused'));
+  const next = await adapter.changeTracks(plan.sessionId, { kind: 'tracks', audioTrackId: '2', subtitleTrackId: '3', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'tracks' });
+  expect(next).toMatchObject({ sourceGeneration: 1, positionSeconds: 42, state: 'paused', selectedSubtitleTrackId: '3' });
+  const path = next.paths.find(p => p.id === next.selectedPathId)!;
+  const url = new URL(path.url!);
+  expect(Object.fromEntries(url.searchParams)).toMatchObject({ offset: '42', audioStreamID: '2', subtitleStreamID: '3' });
+  expect(url.searchParams.get('session')).not.toBe(plan.sessionId);
+  expect(path.timelineOriginSeconds).toBe(42);
+  expect(seen.some(r => r.url.pathname.endsWith('/stop'))).toBe(true);
+});
+
+for (const direct of [true, false]) test(`Jellyfin/Emby mid-play track changes (${direct ? 'direct' : 'transcode'})`, async () => {
+  const { sendCommand } = await import('../src/adapter/commands');
+  let decisions = 0;
+  const source = { Id: 'source', Container: 'mp4', SupportsDirectPlay: direct, SupportsDirectStream: false, MediaStreams: [
+    { Index: 1, Type: 'Audio', Codec: 'aac' }, { Index: 2, Type: 'Audio', Codec: 'aac' }, { Index: 3, Type: 'Subtitle', Codec: 'srt', IsTextSubtitleStream: true },
+  ], ...(!direct ? { TranscodingUrl: '/Videos/10/master.m3u8?AudioStreamIndex=1' } : {}) };
+  const seen = routeFetch({ ...jfRoutes(), 'POST /Items/10/PlaybackInfo': (r: Seen) => {
+    decisions++;
+    return { PlaySessionId: decisions === 1 ? 'jf-session' : 'jf-restart', MediaSources: [{ ...source,
+      ...(!direct && decisions > 1 ? { TranscodingUrl: '/Videos/10/master.m3u8?AudioStreamIndex=2&SubtitleStreamIndex=3&StartTimeTicks=420000000' } : {}) }] };
+  } });
+  const adapter = jellyfin();
+  const plan = await adapter.startPlayback({ titleId: '10', client, idempotencyKey: 'start' });
+  await adapter.reportObservation(plan.sessionId, observation(1, 42, 'paused'));
+  const change = { kind: 'tracks' as const, audioTrackId: '2', subtitleTrackId: '3', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'tracks' };
+  const next = await sendCommand(adapter, plan.sessionId, change);
+  expect(next).toMatchObject({ selectedAudioTrackId: '2', selectedSubtitleTrackId: '3', positionSeconds: 42, state: 'paused', sourceGeneration: direct ? 0 : 1 });
+  expect(decisions).toBe(direct ? 1 : 2);
+  if (!direct) {
+    expect(seen.filter(r => r.url.pathname.endsWith('/PlaybackInfo')).at(-1)!.body).toMatchObject({ AudioStreamIndex: 2, SubtitleStreamIndex: 3, StartTimeTicks: 420000000 });
+    expect(next.paths[0]!.timelineOriginSeconds).toBe(42);
+    expect(seen.find(r => r.method === 'DELETE')!.url.searchParams.get('PlaySessionId')).toBe('jf-session');
+  }
+  expect(seen.filter(r => r.url.pathname.endsWith('/Progress')).at(-1)!.body).toMatchObject({ AudioStreamIndex: 2, SubtitleStreamIndex: 3, IsPaused: true });
+  await sendCommand(adapter, plan.sessionId, change);
+  expect(decisions).toBe(direct ? 1 : 2);
+});

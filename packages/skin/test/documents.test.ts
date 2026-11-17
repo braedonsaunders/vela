@@ -160,3 +160,26 @@ test('every detail header is field-driven for movies, episodes and plugin media,
     }
   }
 });
+
+test('every skin receives only the selected season episodes from the shared collection', async () => {
+  const { collection, accessor } = await import('../src/vocabulary');
+  const { detailModel } = await import('../../core/src/discovery/models');
+  type Env = import('../src/vocabulary').Env;
+  const base = { name: 'Show', summary: '', genres: [], artwork: [] };
+  const detail = detailModel({ title: { ...base, id: 'show', kind: 'show' },
+    seasons: ['s1','s2'].map(id => ({ ...base, id, kind: 'season' })),
+    episodes: ['s1','s2'].flatMap(seasonId => [1,2].map(n => ({ ...base, id: `${seasonId}-${n}`, kind: 'episode', seasonId }))), extras: [], chapters: [], cast: [],
+  });
+  for (const [, doc] of documents) {
+    // All built-in detail lists use the same resolved collection contract.
+    const readsEpisodes = (node: RNode): boolean => node.kind === 'repeat'
+      ? node.over === 'detail.episodes' || readsEpisodes(node.item)
+      : node.kind === 'box' && node.children.some(readsEpisodes);
+    expect(readsEpisodes(resolveDocument(doc, 1440).routes.title!)).toBe(true);
+    for (const season of ['', 's1', 's2', 'another-show-season']) {
+      const env = { detail, season } as Env;
+      expect(collection('detail.episodes', { index: 0 }, env, 100).map(c => c.card!.id)).toEqual(season === 's2' ? ['s2-1','s2-2'] : ['s1-1','s1-2']);
+      expect(accessor('season.on')!({ index: 0, card: detail.seasons[season === 's2' ? 1 : 0] }, env)).toBe('true');
+    }
+  }
+});

@@ -1,6 +1,6 @@
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { LiveTv, PathSwitching, SwitchCommand } from '../capabilities';
+import type { LiveTv, PathSwitching, SwitchCommand, TrackChanges, TrackCommand } from '../capabilities';
 import { VelaError } from '../errors';
 import { plexHeaders } from './auth';
 import { seriesOrder } from '../series';
@@ -15,6 +15,7 @@ interface PlexSession {
   metadata: Node;
   sequence: number;
   pending: Promise<unknown>;
+  transcodeId?: string;
   scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
@@ -37,7 +38,7 @@ function page<T>(items: T[], start = 0, total?: number): V.Page<T> {
   return { items, continuation: more ? 'more' : total === undefined ? 'unknown' : 'exhausted', ...(more && items.length ? { nextCursor: String(start + items.length) } : {}) };
 }
 /** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
-export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
+export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges {
   readonly origin: string;
   private sessions = new Map<string, PlexSession>();
   private liveConfig?: { dvr: string; grid: string };
@@ -121,7 +122,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
       } catch (error) { if (!(error instanceof VelaError) || ![403, 404].includes(error.status)) throw error; }
     }
     return { protocolVersion: 0, server: { id: root.machineIdentifier || this.origin, name: root.friendlyName || 'Plex Media Server', version: root.version || '' },
-      features: { liveTV: live, extras: yes, extraPlayback: yes, themeMusic: yes, initialTrackSelection: yes },
+      features: { liveTV: live, extras: yes, extraPlayback: yes, themeMusic: yes, initialTrackSelection: yes, sessionTrackChanges: yes },
       skins: [{ id: 'cinematic', name: 'Cinematic' }], defaultSkinId: 'cinematic' };
   }
   async revokeSession(_r: V.RevokeRequest): Promise<V.Ack> {
@@ -262,13 +263,17 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
     if (!part || media.Part.length !== 1) fail('Plex title has no supported single-part media', 'playback');
     const sessionId = `vela-${randomId()}`;
     const streams: Node[] = part.Stream || [];
-    const tracks = (type: number): V.Track[] => streams.filter(s => Number(s.streamType) === type).map(s => ({ id: String(s.id), streamIndex: s.index,
-      kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
-      default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
-      ...(type === 3 ? { delivery: s.key ? s.codec === 'webvtt'
-        ? { kind: 'external' as const, format: 'webvtt' as const, url: this.mediaURL(s.key) }
-        : { kind: 'burn-in' as const }
-        : { kind: 'embedded' as const }, ...(s.key && s.codec === 'webvtt' ? { url: this.mediaURL(s.key) } : {}) } : {}) }));
+    const tracks = (type: number): V.Track[] => streams.filter(s => Number(s.streamType) === type).map(s => {
+      const textSidecar = !!s.key && ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'text'].includes(s.codec);
+      const external = textSidecar ? new URL(this.mediaURL(s.key)) : undefined;
+      if (external) external.searchParams.set('format', 'vtt');
+      return { id: String(s.id), streamIndex: s.index,
+        kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
+        default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
+        ...(type === 3 ? external
+          ? { url: external.href, delivery: { kind: 'external' as const, format: 'webvtt' as const, url: external.href } }
+          : { delivery: s.key ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) };
+    });
     const audioTracks = tracks(2), subtitleTracks = tracks(3);
     const audio = r.audioTrackId || audioTracks.find(t => t.default)?.id;
     const subtitle = r.subtitleTrackId === undefined ? subtitleTracks.find(t => t.default)?.id || null : r.subtitleTrackId;
@@ -336,7 +341,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
         s.scrobbled = true;
       }
       s.sequence = r.sequence; s.plan.state = r.state === 'ended' ? 'ended' : r.state === 'paused' ? 'paused' : 'playing'; s.plan.revision++;
-      if (r.state === 'ended') await this.stopTranscode(id);
+      if (r.state === 'ended') await this.stopTranscode(s.transcodeId ?? id);
       return ack;
     });
   }
@@ -351,7 +356,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
           break;
         case 'stop':
           await this.timeline(s, 'stopped');
-          await this.stopTranscode(id);
+          await this.stopTranscode(s.transcodeId ?? id);
           if (s.plan.channelId) await this.request(`/media/subscriptions/${enc(s.metadata.subscriptionId)}`, {}, 'DELETE');
           s.plan.state = 'ended';
           break;
@@ -364,6 +369,39 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv {
           s.plan.state = 'playing';
           break;
       }
+    });
+  }
+
+  changeTracks(id: string, r: TrackCommand): Promise<V.PlaybackPlan> {
+    return this.mutate(id, r, async s => {
+      const audio = r.audioTrackId ?? s.plan.selectedAudioTrackId;
+      const subtitle = r.subtitleTrackId === undefined ? s.plan.selectedSubtitleTrackId : r.subtitleTrackId;
+      if (audio !== undefined && !s.plan.audioTracks.some(t => t.id === audio)) fail('Unknown Plex audio track');
+      if (subtitle != null && !s.plan.subtitleTracks.some(t => t.id === subtitle)) fail('Unknown Plex subtitle track');
+      const burn = s.plan.subtitleTracks.find(t => t.id === subtitle)?.delivery?.kind === 'burn-in';
+      const path = s.plan.paths.find(p => p.id === s.plan.selectedPathId);
+      const restart = path?.kind !== 'direct' || burn;
+      const hls = s.plan.paths.find(p => p.id === 'plex-hls');
+      if (restart && (!hls || !hls.url)) fail('Selected Plex tracks require an unavailable transcode');
+      await this.request(`/library/parts/${enc(String(s.part.id))}`, {
+        audioStreamID: r.audioTrackId, subtitleStreamID: r.subtitleTrackId === null ? 0 : r.subtitleTrackId, allParts: 1,
+      }, 'PUT');
+      if (restart && hls) {
+        await this.stopTranscode(s.transcodeId ?? id);
+        const url = new URL(hls.url!);
+        const transcodeId = `${id}-${s.plan.sourceGeneration + 1}`;
+        url.searchParams.set('session', transcodeId);
+        url.searchParams.set('offset', String(s.plan.positionSeconds));
+        url.searchParams.set('subtitleStreamID', subtitle ?? '0');
+        url.searchParams.set('subtitles', burn ? 'burn' : 'auto');
+        if (audio !== undefined) url.searchParams.set('audioStreamID', audio);
+        s.plan.paths = s.plan.paths.map(p => p.id === hls.id ? { ...p, readiness: 'ready' as const, url: url.href, timelineOriginSeconds: s.plan.positionSeconds } : p);
+        s.plan.selectedPathId = hls.id;
+        s.plan.sourceGeneration++;
+        s.transcodeId = transcodeId;
+      }
+      s.plan.selectedAudioTrackId = audio;
+      s.plan.selectedSubtitleTrackId = subtitle;
     });
   }
 
