@@ -359,3 +359,24 @@ test('library genre view appears only when actual genre choices are available', 
     expect(holds(tab!.when, { index: 0 }, env([{ id: 'Drama', label: 'Drama' }]))).toBe(true);
   }
 });
+
+test('the shared shell offers Live TV on a library page without a live library', async () => {
+  const { holds } = await import('../src/resolve');
+  type Env = import('../src/vocabulary').Env;
+  const shell = resolveDocument(cinematicDoc, 1920).shell!;
+  const live: RNode[] = [];
+  const walk = (node: RNode) => {
+    if (node.kind === 'box') {
+      if (node.press?.action === 'live') live.push(node);
+      node.children.forEach(walk);
+    } else if (node.kind === 'repeat') walk(node.item);
+  };
+  walk(shell);
+  expect(live.length).toBeGreaterThan(0);
+  const env = (canLive: boolean, libraries: { kind: string }[]) => ({ canLive, libraries }) as unknown as Env;
+  for (const node of live) {
+    expect(holds(node.when, { index: 0 }, env(true, [{ kind: 'movies' }, { kind: 'shows' }]))).toBe(true);
+    expect(holds(node.when, { index: 0 }, env(false, []))).toBe(false);
+    expect(holds(node.when, { index: 0 }, env(true, [{ kind: 'live' }]))).toBe(false);
+  }
+});

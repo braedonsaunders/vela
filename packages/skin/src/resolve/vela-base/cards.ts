@@ -352,7 +352,9 @@ export const rowEnd: Node = {
     position: 'relative',
     display: 'flex',
     width: '96px',
-    'align-self': 'stretch',
+    // Give the pager a definite height: native stretch with an auto height inflates the shelf.
+    'align-self': 'center',
+    height: '48px',
     'flex-shrink': '0',
     'align-items': 'center',
     'justify-content': 'center',

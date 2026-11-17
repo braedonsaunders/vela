@@ -1,6 +1,6 @@
 import { renderArtwork } from './artwork';
 import { previewSessions, stopPreview, trailerPreview } from './previews';
-import { libraries, libraryEntries } from '../packages/protocol/fixtures/libraries';
+import { libraries as fixtureLibraries, libraryEntries as fixtureLibraryEntries } from '../packages/protocol/fixtures/libraries';
 import { createHmac } from 'node:crypto';
 import type * as V from '../packages/protocol/types';
 import { allTitles, artwork, channels, detail, extras, featuredSources, featuredTitles, guide, rows, titles } from '../packages/protocol/fixtures/catalogue';
@@ -14,6 +14,13 @@ const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
 const capabilities: V.ServerCapabilities = { protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+const labPreset = process.env.VELA_MOCK_LAB === '1';
+const libraries: V.Library[] = labPreset ? [
+  { ...fixtureLibraries[0]!, id: '1', browse: { ...fixtureLibraries[0]!.browse, filters: { ...fixtureLibraries[0]!.browse.filters, genres: undefined } } },
+  { ...fixtureLibraries[1]!, id: '2', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
+  { ...fixtureLibraries[1]!, id: '4', name: 'Anime Shows', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
+] : fixtureLibraries;
+const libraryEntries = (id: string) => fixtureLibraryEntries(labPreset ? id === '1' ? 'movies' : id === '2' || id === '4' ? 'shows' : id : id);
 const visibleLibraries: V.Library[] = process.env.VELA_MOCK_OLD === '1' ? libraries.map(library => {
   const { collectionId: _collectionId, ...filters } = library.browse.filters;
   return { ...library, browse: { ...library.browse, filters } };
@@ -63,8 +70,24 @@ function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
   const bound = boundRow(g, row);
   return { ...bound, ...page(bound.items, url, g, `home-items:${row.id}:${homeScope()}`, 20) };
 }
+const labRows: V.Row[] = [
+  ['Trending Now', 30], ['Top 10 on Ether On Air Lab Today', 10], ['New & Noteworthy', 17],
+  ['Acclaimed Thrillers', 30], ['Acclaimed Romances', 30], ['Acclaimed History', 30],
+  ['Under 100 Minutes', 30], ['Top Rated', 19],
+].map(([name, count], i) => ({ ...rows[i % rows.length]!, id: `lab-row-${i}`, name: name as string,
+  presentation: i === 1 ? 'ranked' : undefined, items: Array.from({ length: count as number }, (_, n) => {
+    const title = titles.filter(t => t.kind === 'movie')[(i * 17 + n) % titles.filter(t => t.kind === 'movie').length]!;
+    return { id: `lab-${i}-${n}`, kind: 'title' as const, title, receiptToken: '' };
+  }), continuation: 'exhausted' as const }));
+const labHomeRows: V.Row[] = [
+  { ...labRows[0]!, id: 'lab-home-continue', name: 'Continue Watching', items: labRows[0]!.items.slice(0, 1) },
+  { ...labRows[1]!, id: 'lab-home-top10', name: 'Top 10', items: labRows[1]!.items.slice(0, 8) },
+  { ...labRows[2]!, id: 'lab-home-new', items: labRows[0]!.items.slice(0, 20) },
+  { ...labRows[3]!, id: 'lab-home-because', name: 'Because You Watched…', items: labRows[3]!.items.slice(0, 12) },
+  { ...labRows[0]!, id: 'lab-home-trending', items: labRows[0]!.items.slice(0, 20) },
+];
 function homeRows(g: Grant, url: URL): V.Page<V.Row> {
-  const result = page(rows, url, g, `home-rows:${homeScope()}`, 2);
+  const result = page(labPreset ? labHomeRows : rows, url, g, `home-rows:${homeScope()}`, labPreset ? 5 : 2);
   const firstItems = new URL(url); firstItems.search = '';
   return { ...result, items: result.items.map(row => homeRow(g, row, firstItems)) };
 }
@@ -193,6 +216,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (url.searchParams.getAll('libraryId').length > 1 || libraryId && placement !== 'library') fail('request', 'invalid_request', 'Invalid library placement');
     if (libraryId && !libraries.some(l => l.id === libraryId)) fail('not-found', 'not_found', 'Library not found');
     if (libraryId && process.env.VELA_MOCK_OLD !== '1') {
+      if (labPreset) { const first = new URL(url); first.search = ''; return cached(req, page(labRows.map(row => homeRow(g, row, first)), url, g, `library-rows:${libraryId}`), g.id); }
       const ids = new Set(libraryEntries(libraryId).filter(e => e.kind === 'title').map(e => e.kind === 'title' ? e.title.id : ''));
       const matches = rows.map(row => ({ ...row, items: row.items.filter(e => e.kind === 'title' && ids.has(e.title.id)) })).filter(row => row.items.length);
       const paging = new URL(url);
@@ -213,7 +237,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, { collection: { id: row.id, kind: 'collection', name: row.name, artwork: [] }, ...page(boundRow(g, row).items, url, g, `collection:${row.id}`) } satisfies V.CollectionContents, g.id);
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
-  if (method === 'GET' && rowMatch) { const r = rows.find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
+  if (method === 'GET' && rowMatch) { const r = [...rows, ...(labPreset ? [...labRows, ...labHomeRows] : [])].find(r => r.id === rowMatch[1]); if (!r) fail('not-found', 'row_not_found', 'Row not found'); return cached(req, homeRow(g, r, url), g.id); }
   const titleMatch = /^\/titles\/([^/]+)(?:\/(children|extras|watch))?$/.exec(path);
   const previewMatch = /^\/titles\/([^/]+)\/trailer-preview$/.exec(path);
   if (method === 'POST' && previewMatch) {

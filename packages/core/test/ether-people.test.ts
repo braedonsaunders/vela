@@ -54,3 +54,26 @@ test('older Ether remembers unavailable capabilities', async () => {
     await adapter.probeLibraryViews('movies');
   } finally { await mock.stop(); }
 });
+
+test('lab-shaped library rows retain row continuations and ranked shelves', async () => {
+  const mock = await launchMock({ VELA_MOCK_LAB: '1' });
+  try {
+    const credentials = new FakeCredentials(null);
+    const adapter = new EtherAdapter(mock.url, credentials, 'test-client');
+    credentials.current = await adapter.signInWithPassword({ username: 'demo', password: 'vela', device: credentials.device, idempotencyKey: 'lab' });
+    const libraries = await adapter.libraries({});
+    expect(libraries.items.map(library => [library.id, library.kind])).toEqual([['1', 'movies'], ['2', 'shows'], ['4', 'shows']]);
+    const result = await adapter.rows({ placement: 'library', libraryId: '1' });
+    expect(result.continuation).toBe('exhausted');
+    expect(result.items.map(row => [row.name, row.items.length, row.continuation])).toEqual([
+      ['Trending Now', 20, 'more'], ['Top 10 on Ether On Air Lab Today', 10, 'exhausted'],
+      ['New & Noteworthy', 17, 'exhausted'], ['Acclaimed Thrillers', 20, 'more'],
+      ['Acclaimed Romances', 20, 'more'], ['Acclaimed History', 20, 'more'],
+      ['Under 100 Minutes', 20, 'more'], ['Top Rated', 19, 'exhausted'],
+    ]);
+    expect(result.items[1]!.presentation).toBe('ranked');
+    const first = result.items[0]!;
+    expect((await adapter.row(first.id, first.nextCursor)).items).toHaveLength(10);
+    expect((await adapter.home()).capabilities.features.liveTV.available).toBe(true);
+  } finally { await mock.stop(); }
+});
