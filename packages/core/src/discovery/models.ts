@@ -287,6 +287,16 @@ export function detailModel(
   const trailers = data.extras.filter(extra => extra.kind === 'trailer');
   const trailer = trailers.find(extra => extra.availability !== 'unavailable') ?? trailers[0];
   const position = data.title.watch?.positionSeconds ?? 0;
+  // Ether supplies seasonNumber without seasonId. Resolve the relationship while the wire's
+  // optional number is still distinguishable from the display model's default zero.
+  const seasons = data.seasons ?? [];
+  const episodeCard = (episode: Title): Card => {
+    const exact = seasons.find(season => season.id === episode.seasonId);
+    const numbered = episode.seasonNumber === undefined ? [] : seasons.filter(season => season.seasonNumber === episode.seasonNumber);
+    const parent = exact ?? (numbered.length === 1 ? numbered[0] : undefined);
+    const seasonId = episode.seasonId || parent?.id || (data.title.kind === 'season' ? data.title.id : undefined);
+    return card({ ...episode, seasonId }, '', images, artWidth);
+  };
   const titleCard = card(data.title, '', images, artWidth);
   // Title pages use the background; shelves and episode rows keep their landscape still.
   const backdrop = art(data.title.artwork, 'backdrop', artWidth, Math.ceil(artWidth * 9 / 16), images) || titleCard.backdrop;
@@ -305,8 +315,8 @@ export function detailModel(
     canPlay: data.canPlay ?? false,
     resumeSeconds: position,
     seasons: (data.seasons ?? []).map(t => card(t, '', images, artWidth)),
-    nextUp: data.nextUp === undefined ? undefined : data.nextUp ? [card(data.nextUp, '', images, artWidth)] : [],
-    episodes: (data.episodes ?? []).map(t => card(t, '', images, artWidth)),
+    nextUp: data.nextUp === undefined ? undefined : data.nextUp ? [episodeCard(data.nextUp)] : [],
+    episodes: (data.episodes ?? []).map(episodeCard),
     extras: data.extras.map(e => ({
       id: e.id,
       name: e.name,

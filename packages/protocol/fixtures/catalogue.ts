@@ -28,7 +28,8 @@ export const titles: Title[] = collections.flatMap(([_, ...names], row) => names
 })));
 const show: Title = { id: 'show-meridian', kind: 'show', name: 'Meridian Station', summary: 'At a remote coastal weather station, a new team maps the strange rhythms of an isolated island.', year: 2025, genres: ['Drama', 'Mystery'], rating: 'TV-14', artwork: [artwork('show-meridian'), artwork('show-meridian', 'backdrop')] };
 export const seasons: Title[] = [1, 2].map(n => ({ ...show, id: `season-meridian-${n}`, kind: 'season', name: `Season ${n}`, showId: show.id, showName: show.name, seasonNumber: n }));
-export const episodes: Title[] = seasons.flatMap(s => ['Arrival', 'The Night Watch', 'Pressure Drop', 'A Distant Light', 'The Sounding', 'Home Waters'].map((name, i) => ({ ...show, id: `episode-${s.seasonNumber}-${i + 1}`, kind: 'episode', name, showId: show.id, showName: show.name, seasonId: s.id, seasonNumber: s.seasonNumber, episodeNumber: i + 1, airDate: `2025-0${s.seasonNumber}-${String(i + 1).padStart(2, '0')}`, durationSeconds: 180, watch: { positionSeconds: i === 1 ? 68 : 0, played: i === 0, favorite: false, watchlisted: false } })));
+// Match Ether: episodes identify their season by number; the show includes only its first season.
+export const episodes: Title[] = seasons.flatMap(s => ['Arrival', 'The Night Watch', 'Pressure Drop', 'A Distant Light', 'The Sounding', 'Home Waters'].map((name, i) => ({ ...show, id: `episode-${s.seasonNumber}-${i + 1}`, kind: 'episode', name, showId: show.id, showName: show.name, seasonNumber: s.seasonNumber, episodeNumber: i + 1, airDate: `2025-0${s.seasonNumber}-${String(i + 1).padStart(2, '0')}`, durationSeconds: 180, watch: { positionSeconds: i === 1 ? 68 : 0, played: i === 0, favorite: false, watchlisted: false } })));
 titles.splice(14, 1, show);
 // Fictional follow-up titles keep the twenty-card first pages genuinely pageable.
 const additionalTitles: Title[] = collections.flatMap((_, row) => Array.from({ length: 12 }, (_, n) => {
@@ -42,7 +43,7 @@ export const extras: Extra[] = [{ id: 'extra-observatory-preview', parentId: tit
 export function detail(id: string): TitleDetail | undefined {
   const title = allTitles.find(t => t.id === id);
   return title && { title, canPlay: title.kind === 'movie' || title.kind === 'episode',
-    ...(title.kind === 'show' ? { seasons, episodes } : title.kind === 'season' ? { seasons, episodes: episodes.filter(e => e.seasonId === id) } : {}),
+    ...(title.kind === 'show' ? { seasons, episodes: episodes.filter(e => e.seasonNumber === seasons[0]?.seasonNumber) } : title.kind === 'season' ? { episodes: episodes.filter(e => e.seasonNumber === title.seasonNumber) } : {}),
     extras: extras.filter(e => e.parentId === id), chapters: [], cast: [] };
 }
 // Unbound fixtures are bound to a grant by the HTTP layer before delivery.

@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import type { VelaState } from '@vela/core';
 import { searchView, type Env, type RouteName } from '@vela/skin';
 import type { LiveView } from '@vela/skin/src/widgets/guide';
+import { detailSeason } from './detail-season';
 import type { ViewState } from './view-state';
 
 export interface EnvInput {
@@ -27,16 +28,7 @@ export function environment({ state, view, live, route, entry, width, skinCount,
   const home = state.home;
   const title = route === 'title' || route === 'watch' ? state.titles[entry] : undefined;
   const detail = title?.value;
-  const selected = view.season.startsWith('@number:')
-    ? detail?.seasons.find(item => String(item.seasonNumber) === view.season.slice(8))
-    : detail?.seasons.find(item => item.id === view.season);
-  const season = selected?.id ?? detail?.seasons[0]?.id ?? '';
-  const seasonDetail = state.titles[season]?.value;
-  const selectedDetail = detail && season ? {
-    ...detail,
-    episodes: seasonDetail?.episodes ?? detail.episodes.filter(item => !item.seasonId || item.seasonId === season),
-    nextUp: seasonDetail?.nextUp ?? detail.nextUp?.filter(item => !item.seasonId || item.seasonId === season),
-  } : detail;
+  const { season, detail: selectedDetail } = detailSeason(detail, view.season, id => state.titles[id]?.value);
   return {
     viewer: state.auth.viewer,
     section: route === 'library' ? entry : route === 'live' ? 'live' : 'home',
