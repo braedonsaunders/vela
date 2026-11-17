@@ -117,7 +117,7 @@ export function SearchField({ ctx }: WidgetProps) {
           ref={input}
           value={query.text}
           onChangeText={query.change}
-          placeholder={msg('ui.aTitleAFeelingAWorldToGetLostIn')}
+          placeholder={msg('ui.searchPlaceholder')}
           placeholderTextColor={ui.inkQuiet}
           accessibilityLabel={msg('ui.searchYourLibrary')}
           autoCorrect={false}
