@@ -10,7 +10,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
+import { memo, cloneElement, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
 import { Animated as RNAnimated, Platform, Pressable, StyleSheet, Text, TVFocusGuideView, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -32,6 +32,7 @@ import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument }
 import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
 import { collection, itemKey, type Ctx, type Env } from './vocabulary';
 
+const ROOT_CONTEXT: Ctx = { index: 0 };
 const Host = HostContext;
 const Inherited = InheritedContext;
 const Group = GroupContext;
@@ -70,14 +71,14 @@ export function SkinRoot({ host, node }: { host: SkinHost; node: RNode }) {
   }, [host.doc]);
   return (
     <Host.Provider value={host}>
-      <SkinNode node={node} ctx={{ index: 0 }} />
+      <SkinNode node={node} ctx={ROOT_CONTEXT} />
     </Host.Provider>
   );
 }
 
 /** A route tree: its root's children scroll in the route's own vertical ScrollView. `after` is a
  * tree drawn in the same view after the route's own nodes (search, in home's view, while a query is open). */
-export function SkinRoute({ host, node, after, hideLibraryViews = false }: { host: SkinHost; node: RNode; after?: RNode; hideLibraryViews?: boolean }) {
+function SkinRouteView({ host, node, after, hideLibraryViews = false }: { host: SkinHost; node: RNode; after?: RNode; hideLibraryViews?: boolean }) {
   useFocusStyles();
   const focus = useRouteFocus();
   const loading = useRef<SkinHost | null>(null);
@@ -127,8 +128,8 @@ export function SkinRoute({ host, node, after, hideLibraryViews = false }: { hos
             <InstantContent.Provider value={section && host.env.load === 'ready'}>
               <HiddenLibraryNav.Provider value={hideLibraryViews || loadingLibraryNav}>
                 {loadingLibraryNav && host.env.load !== 'ready' ? (
-                  <View style={{ flex: 1, paddingTop: navTop === 0 ? 48 : 16 }}><SkinNode node={node} ctx={{ index: 0 }} route after={after} /></View>
-                ) : <SkinNode node={node} ctx={{ index: 0 }} route after={after} />}
+                  <View style={{ flex: 1, paddingTop: navTop === 0 ? 48 : 16 }}><SkinNode node={node} ctx={ROOT_CONTEXT} route after={after} /></View>
+                ) : <SkinNode node={node} ctx={ROOT_CONTEXT} route after={after} />}
               </HiddenLibraryNav.Provider>
             </InstantContent.Provider>
           </RouteLayout.Provider>
@@ -140,16 +141,18 @@ export function SkinRoute({ host, node, after, hideLibraryViews = false }: { hos
       ) : null}
       {loadingLibraryNav && host.doc.libraryViews && !hideLibraryViews ? (
         <View style={{ position: 'absolute', top: navTop, left: 0, right: 0, zIndex: 20 }}>
-          <Host.Provider value={host}><LoadingLibraryNav.Provider value><SkinNode node={host.doc.libraryViews} ctx={{ index: 0 }} /></LoadingLibraryNav.Provider></Host.Provider>
+          <Host.Provider value={host}><LoadingLibraryNav.Provider value><SkinNode node={host.doc.libraryViews} ctx={ROOT_CONTEXT} /></LoadingLibraryNav.Provider></Host.Provider>
         </View>
       ) : null}
     </View>
   );
 }
 
+export const SkinRoute = memo(SkinRouteView);
+
 /** The shared switch outside an animated library scene. */
 export function SkinLibraryViews({ host }: { host: SkinHost }) {
-  return host.doc.libraryViews ? <Host.Provider value={host}><LoadingLibraryNav.Provider value><SkinNode node={host.doc.libraryViews} ctx={{ index: 0 }} /></LoadingLibraryNav.Provider></Host.Provider> : null;
+  return host.doc.libraryViews ? <Host.Provider value={host}><LoadingLibraryNav.Provider value><SkinNode node={host.doc.libraryViews} ctx={ROOT_CONTEXT} /></LoadingLibraryNav.Provider></Host.Provider> : null;
 }
 
 /** The skeleton over a route that is still laying out: opaque, then a short fade once released. */
@@ -166,12 +169,12 @@ function SkeletonCover({ host, node, ground, leaving, onGone }: {
   return (
     <RNAnimated.View style={[StyleSheet.absoluteFill, { backgroundColor: ground, opacity }]} pointerEvents="none"
       accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Host.Provider value={host}><InstantContent.Provider value><SkinNode node={node} ctx={{ index: 0 }} route /></InstantContent.Provider></Host.Provider>
+      <Host.Provider value={host}><InstantContent.Provider value><SkinNode node={node} ctx={ROOT_CONTEXT} route /></InstantContent.Provider></Host.Provider>
     </RNAnimated.View>
   );
 }
 
-function SkinNode({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
+function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean }) {
   const { env } = useHost();
   const loadingLibraryNav = useContext(LoadingLibraryNav);
   const hiddenLibraryNav = useContext(HiddenLibraryNav);
@@ -197,6 +200,12 @@ function SkinNode({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx; ro
     case 'widget': return <Widget node={node} ctx={ctx} />;
   }
 }
+
+// Local focus changes redraw that control/group, not every sibling in its row.
+const SkinNode = memo(SkinNodeView, (a, b) => a.node === b.node && a.route === b.route
+  && a.after === b.after && a.hero === b.hero
+  && (a.ctx === b.ctx || Object.keys(a.ctx).length === Object.keys(b.ctx).length
+    && (Object.keys(a.ctx) as (keyof Ctx)[]).every(key => a.ctx[key] === b.ctx[key])));
 
 // ---- Style: layers, overlays, translation ----
 

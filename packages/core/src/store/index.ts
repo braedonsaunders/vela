@@ -103,7 +103,8 @@ export function createVela(options: VelaOptions): Vela {
   const home = new Home(box, session, width);
   const catalogue = new Catalogue(box, session, width);
   // What the viewer watched changes their resume positions, Continue Watching and the hero:
-  // shown at once from the player's last report, then read again from the server.
+  // applied locally from the player's last report. Only detail is reconciled with
+  // the server; navigation and playback never repeat the full bootstrap.
   const playback = new Playback(
     box,
     session,
@@ -113,7 +114,6 @@ export function createVela(options: VelaOptions): Vela {
     },
     watched => {
       catalogue.reconcile(watched);
-      void home.reconcile(watched);
     },
   );
   const appearance = new Appearance(box, session, options.rendererVersion, options.page?.origin);

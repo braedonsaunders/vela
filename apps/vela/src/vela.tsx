@@ -3,7 +3,7 @@
 // with (the active document, the view state documents read, and what presses do). A signed-out
 // server sends the viewer to /sign-in.
 import { router, usePathname } from 'expo-router';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createVela, type Vela as Store, type VelaState } from '@vela/core';
@@ -30,7 +30,7 @@ import { AppearancePicker } from './picker';
 
 const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
-import { environment } from './env';
+import { createEnvironmentReader } from './env';
 import { useLiveController } from './live';
 import { Previews } from './previews';
 import { useViewState } from './view-state';
@@ -227,9 +227,11 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     });
   }, [searching, store]);
 
+  const readEnvironment = useMemo(createEnvironmentReader, [state.auth.revision]);
+  const hosts = useRef(new Map<string, { inputs: unknown[]; host: SkinHost }>());
   const host = useCallback((route: RouteName, entry: string): SkinHost | null => {
     if (!resolved.doc || !fontsReady) return null;
-    const env = environment({
+    const env = readEnvironment({
       state,
       view,
       live: live ? liveView : undefined,
@@ -239,7 +241,11 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       skinCount: DOCUMENTS.length,
       skinName: resolved.doc.name,
     });
-    return {
+    const key = `${route}:${entry}`;
+    const inputs = [resolved.doc, env, viewport, dispatch, image, setQuery, view.setFlag, view.setPager, loadMore];
+    const previous = hosts.current.get(key);
+    if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.host;
+    const result: SkinHost = {
       doc: resolved.doc,
       env,
       viewport,
@@ -250,7 +256,9 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       setPager: view.setPager,
       loadMore,
     };
-  }, [resolved.doc, fontsReady, state, view, live, liveView, width, viewport, dispatch, image, setQuery, loadMore]);
+    hosts.current.set(key, { inputs, host: result });
+    return result;
+  }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, dispatch, image, setQuery, loadMore]);
 
   const openTitle = useCallback((id: string) => store.catalogue.view(id), [store]);
   const art = useMemo(

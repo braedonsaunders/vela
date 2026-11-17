@@ -2,7 +2,7 @@
 // store; view state through the view-state hook. An action this app does not carry out yet is
 // logged, never silently swallowed.
 import { router } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { Vela as Store } from '@vela/core';
 import { focusElement, page, type SkinHost } from '@vela/skin';
 import { liveAction, type LiveController } from '@vela/skin/src/widgets/guide';
@@ -36,6 +36,8 @@ function notYet(action: string, arg: string): void {
 }
 
 export function useDispatcher({ store, view, live, openPicker }: Context): Dispatcher {
+  const { setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags } = view;
+  const actions = useMemo(() => ({ setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags }), [setSeason, setHeroIndex, setFlag, toggleFlag, onlyFlag, resetFlags]);
   const loadMore = useCallback<SkinHost['loadMore']>((on, id) => {
     if (on === 'row') void store.home.rowItems(id);
     else if (on === 'home') void store.home.moreRows();
@@ -47,14 +49,14 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
     const [id = '', kind = '', receipt = '', showId = ''] = arg.split('|');
     if (receipt) void store.receipts.record(receipt, 'selected');
     if (kind === 'season') {
-      view.setSeason(id);
+      actions.setSeason(id);
       if (showId) router.push({ pathname: '/title/[id]', params: { id: showId } });
     }
     else if (kind === 'channel') router.push({ pathname: '/live', params: { ch: id } });
     else if (id && COLLECTION_KINDS.includes(kind)) openCollection(id);
     else if (id && TITLE_KINDS.includes(kind)) router.push({ pathname: '/title/[id]', params: { id } });
     else notYet('select', arg);
-  }, [store, view]);
+  }, [store, actions]);
 
   const retry = useCallback((place: Place) => {
     if (place.route === 'title') void store.catalogue.title(place.entry, true);
@@ -70,36 +72,36 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
         if (arg) router.push({ pathname: '/watch/[id]', params: { id: arg } });
         return;
       case 'pickHero':
-        return view.setHeroIndex(Number(arg) || 0);
+        return actions.setHeroIndex(Number(arg) || 0);
       case 'home':
         store.search.clear();
         return router.dismissTo('/');
       case 'back':
       case 'close':
-        if (action === 'close' && arg) return view.setFlag(arg, false);
+        if (action === 'close' && arg) return actions.setFlag(arg, false);
         if (router.canGoBack()) router.back();
         else router.replace('/');
         return;
       case 'toggle':
-        return view.toggleFlag(arg);
+        return actions.toggleFlag(arg);
       case 'open':
-        return view.setFlag(arg, true);
+        return actions.setFlag(arg, true);
       case 'only':
-        return view.onlyFlag(arg);
+        return actions.onlyFlag(arg);
       case 'reset':
-        return view.resetFlags();
+        return actions.resetFlags();
       case 'clearSearch':
         return store.search.clear();
       case 'search':
       case 'focusSearch':
         // The search field belongs to home; a library or guide has no field to focus.
         if (place.route !== 'home') {
-          view.setFlag('focus-search-on-home', true);
+          actions.setFlag('focus-search-on-home', true);
           return router.dismissTo('/');
         }
         // The field's own focus sets search-focused; on a TV it opens the keyboard.
         if (focusElement('vela-search')) return;
-        return view.setFlag('search-focused', true);
+        return actions.setFlag('search-focused', true);
       case 'retryDescriptive':
         return store.search.retryDescriptive();
       case 'pageNext':
@@ -130,7 +132,7 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
       default:
         notYet(action, arg);
     }
-  }, [store, view, live, select, retry, loadMore, openPicker]);
+  }, [store, actions, live, select, retry, loadMore, openPicker]);
 
   return { dispatch, loadMore };
 }

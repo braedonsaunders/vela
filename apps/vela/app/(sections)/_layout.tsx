@@ -29,9 +29,7 @@ export default function SectionsLayout() {
   section.current = sectionForPath(pathname) ?? section.current;
   const vela = useVela();
   const routeHost = vela.host(section.current.route, section.current.entry);
-  const host = routeHost && section.current.route === 'library'
-    ? { ...routeHost, env: { ...routeHost.env, section: section.current.entry } }
-    : routeHost;
+  const host = routeHost;
   const shell = vela.doc?.shell;
   const { width } = useWindowDimensions();
   // A TV switches sections at once, as with Reduce Motion: the remote moves focus along the nav

@@ -2,7 +2,7 @@
 // that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
 // library, a collection) adds it to the host with `page`.
 import { useIsFocused } from 'expo-router';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
@@ -21,7 +21,7 @@ interface Props {
 export function DocumentScreen({ route, entry, page, sharedShell = false }: Props) {
   const vela = useVela();
   const app = vela.host(route, entry);
-  const host = app && page ? page(app) : app;
+  const host = useMemo(() => app && page ? page(app) : app, [app, page]);
   const season = route === 'title' ? host?.env.season : '';
   useEffect(() => {
     if (season) void vela.store.catalogue.title(season);

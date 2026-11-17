@@ -54,7 +54,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const usableView = view === 'recommended' && !extras?.recommendationsAvailable || view === 'collections' && !extras?.collectionsAvailable || view === 'genres' && !extras?.genres.length ? 'library' : view;
 
   useEffect(() => {
-    if (focused && current?.load !== 'loading') void store.catalogue.library(id, query, current?.value?.pages ?? 1, !!current?.value);
+    if (focused && !current?.value && current?.load !== 'loading' && current?.load !== 'failed') void store.catalogue.library(id, query, current?.value?.pages ?? 1, !!current?.value);
     // The key names the query; a session change empties the store, which reads it again.
   }, [store, id, key, missing, focused]);
 
@@ -112,5 +112,5 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       .finally(() => setRowLoading(ids => ids.filter(value => value !== rowId)));
   }, [store, id, revision, extras, rowLoading]);
 
-  return { page, load, more, rowLoading, moreRow, retry };
+  return useMemo(() => ({ page, load, more, rowLoading, moreRow, retry }), [page, load, more, rowLoading, moreRow, retry]);
 }

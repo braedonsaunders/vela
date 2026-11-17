@@ -1,7 +1,7 @@
 // A library page: the active document's routes.library (the Vela base's when it draws none) over
 // one library, its sort and filters held in the URL (`?sort=&dir=&kind=&genre=&year=&played=&fav=`).
 import { useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { SkinHost } from '@vela/skin';
 import { useLibraryPage } from '../../../src/browse/library-page';
 import { queryOf, type LibraryParams } from '../../../src/browse/library-query';
@@ -21,6 +21,6 @@ export function LibrarySection({ id, params }: { id: string; params: LibraryPara
     [sort, dir, kind, genre, year, played, fav],
   );
   const library = useLibraryPage(id, query, params.view);
-  const page = (host: SkinHost) => libraryHost(host, id, query, library);
+  const page = useCallback((host: SkinHost) => libraryHost(host, id, query, library), [id, query, library]);
   return <DocumentScreen route="library" entry={id} page={page} sharedShell />;
 }

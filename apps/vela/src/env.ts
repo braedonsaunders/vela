@@ -57,3 +57,26 @@ export function environment({ state, view, live, route, entry, width, skinCount,
     preview: { cardId: state.previews.cardId, heroId: state.previews.heroId },
   };
 }
+
+/** Keep a route's environment stable while unrelated store slices change. */
+export function createEnvironmentReader() {
+  const routes = new Map<string, { inputs: unknown[]; env: Env; title: unknown; seasonTitle: unknown }>();
+  return (input: EnvInput): Env => {
+    const { state, view, route, entry } = input;
+    const title = route === 'title' || route === 'watch' ? state.titles[entry] : undefined;
+    const season = title?.value?.seasons.find(s => s.id === view.season || `@number:${s.seasonNumber}` === view.season)?.id
+      ?? title?.value?.seasons[0]?.id ?? '';
+    const inputs = [state.auth.viewer, state.home, state.libraries.value, state.search.query,
+      route === 'home' ? state.search : undefined, title, state.titles[season],
+      view.season, view.flags, view.pagers, view.heroIndex, view.still,
+      input.live, input.width, input.skinCount, input.skinName, state.previews.cardId, state.previews.heroId];
+    const key = `${route}:${entry}`, previous = routes.get(key);
+    if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.env;
+    const env = environment(input);
+    // Season scoping need not replace the detail model for menu/pager changes.
+    if (previous && title?.value && previous.title === title && previous.seasonTitle === state.titles[season]
+      && previous.env.season === env.season) env.detail = previous.env.detail;
+    routes.set(key, { inputs, env, title, seasonTitle: state.titles[season] });
+    return env;
+  };
+}
