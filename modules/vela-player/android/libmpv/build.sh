@@ -1,12 +1,14 @@
 #!/bin/bash -e
 # Builds libmpv for Android under the LGPL, from mpv-android's build scripts as packaged by
-# libmpv-android (pinned below), for arm64-v8a. The published AAR (dev.jdtech.mpv:libmpv) is GPLv3:
+# libmpv-android (pinned below), for arm64-v8a and/or x86_64. The published AAR (dev.jdtech.mpv:libmpv) is GPLv3:
 # its FFmpeg is configured with --enable-gpl and its mpv keeps the GPL default. This build drops
 # --enable-gpl (FFmpeg stays --enable-version3 for mbedTLS, so it is LGPLv3) and sets -Dgpl=false.
 #
 # Output: ~/.scratch/vela-build/libmpv/<revision>-lgpl/{include,jniLibs/<abi>}, which the module's
 # Gradle build links against. Sources and intermediate prefixes stay beside it on the scratch drive.
 #
+# Linux host tools: autoconf, automake, libtool, pkg-config, ninja, nasm, gperf, Python venv.
+# Successful dependency builds are reused when retrying an interrupted build.
 # Usage: source tools/android-env.sh; modules/vela-player/android/libmpv/build.sh [arm64 [x86_64]]
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,7 +76,7 @@ for arch in "${archs[@]}"; do
     echo >&2 "Unsupported arch $arch (arm64 or x86_64)"
     exit 1
   fi
-  ./build.sh --clean --arch "$arch" mpv
+  ./build.sh --arch "$arch" mpv
 
   # Refuse anything but an LGPL result.
   suffix="$(suffix_of "$arch")"
