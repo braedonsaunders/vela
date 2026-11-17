@@ -160,9 +160,9 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return { id: String(n.ratingKey), kind: n.type, name: n.title || '', summary: n.summary || '', year: n.year, airDate: n.originallyAvailableAt,
       genres: (n.Genre || []).map((g: Node) => g.tag), durationSeconds: seconds(n.duration), rating: n.contentRating, ratings,
       artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: Number(n.viewCount || 0) > 0, favorite: false, watchlisted: false },
-      ...(themeMusic ? { themeMusic } : {}), showId: n.grandparentRatingKey ? String(n.grandparentRatingKey) : n.type === 'season' ? String(n.parentRatingKey) : undefined,
+      ...(themeMusic ? { themeMusic } : {}), showId: n.grandparentRatingKey ? String(n.grandparentRatingKey) : n.type === 'season' && n.parentRatingKey != null ? String(n.parentRatingKey) : undefined,
       showName: n.type === 'episode' ? n.grandparentTitle : n.type === 'season' ? n.parentTitle : undefined,
-      seasonId: n.type === 'episode' ? String(n.parentRatingKey) : undefined, seasonNumber: n.type === 'season' ? n.index : n.parentIndex, episodeNumber: n.type === 'episode' ? n.index : undefined };
+      seasonId: n.type === 'episode' && n.parentRatingKey != null ? String(n.parentRatingKey) : undefined, seasonNumber: n.type === 'season' ? n.index : n.parentIndex, episodeNumber: n.type === 'episode' ? n.index : undefined };
   }
   private entry(n: Node): V.RowEntry {
     if (['collection', 'playlist'].includes(n.type)) return { id: String(n.ratingKey), kind: n.type, targetId: `${n.type}:${n.ratingKey}`, name: n.title, artwork: this.artwork(n), receiptToken: '' };

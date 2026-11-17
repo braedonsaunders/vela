@@ -50,6 +50,7 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     durationSeconds: duration ?? 0,
     progressSeconds: position,
     played: title.watch?.played ?? false,
+    showId: title.showId ?? '',
     showName: title.showName ?? '',
     episodeContext: [
       title.showName,
@@ -108,6 +109,7 @@ function plainCard(id: string, kind: string, name: string, rating: string, art: 
     durationSeconds: 0,
     progressSeconds: 0,
     played: false,
+    showId: '',
     showName: '',
     episodeContext: '',
     seasonId: '',

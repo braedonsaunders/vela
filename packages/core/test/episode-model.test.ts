@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { card, detailModel } from '../src/discovery/models';
 import type { Title, TitleDetail } from '../src/wire';
 
-const title: Title = { id: 'episode', kind: 'episode', name: 'Arrival', showName: 'Meridian Station', seasonNumber: 0, episodeNumber: 3, summary: '', genres: [], artwork: [
+const title: Title = { id: 'episode', kind: 'episode', name: 'Arrival', showId: 'show', seasonId: 'season', showName: 'Meridian Station', seasonNumber: 0, episodeNumber: 3, summary: '', genres: [], artwork: [
   { id: 'poster', kind: 'poster', tag: '', sizes: [{ width: 0, height: 0, url: 'https://media.example/poster' }] },
   { id: 'backdrop', kind: 'backdrop', tag: '', sizes: [{ width: 0, height: 0, url: 'https://media.example/backdrop' }] },
   { id: 'still', kind: 'still', tag: '', sizes: [{ width: 0, height: 0, url: 'https://media.example/still' }] },
@@ -26,4 +26,10 @@ test('episode air dates and the server-selected next item reach the display mode
   expect(model.nextUp?.[0]?.id).toBe('server-next');
   expect(model.episodes[1]?.facts).toContain('Feb 3, 2025');
   expect(detailModel({ title, nextUp: null, extras: [], chapters: [], cast: [] }).nextUp).toEqual([]);
+});
+
+test('parent identifiers survive card and detail projection for any kind', () => {
+  const source = { ...title, kind: 'plugin-item' };
+  expect(card(source)).toMatchObject({ id: 'episode', showId: 'show', seasonId: 'season' });
+  expect(detailModel({ title: source, extras: [], chapters: [], cast: [] }).title[0]).toMatchObject({ showId: 'show', seasonId: 'season' });
 });
