@@ -36,6 +36,9 @@ interface Common {
   stagger?: { step: number; cap: number };
   role?: string;
   label?: Template;
+  /** The brand mark's home press (labelled with the Vela home string): a pointer shortcut that
+   * takes no keyboard or TV focus. */
+  brand?: boolean;
   level?: number;
   testId?: Template;
   id?: Template;
@@ -221,6 +224,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
     stagger: node.stagger,
     role: node.role ?? node.a11y?.role,
     label: compile(node.label, r),
+    brand: 'press' in node && node.press?.action === 'home' && typeof node.label === 'string' && /\{[st]:(ui\.)?velaHome\}/.test(node.label),
     level: node.level,
     testId: compile(node.testId, r),
     id: compile(node.id, r),

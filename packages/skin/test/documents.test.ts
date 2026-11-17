@@ -187,3 +187,17 @@ test('every skin receives only the selected season episodes from the shared coll
     }
   }
 });
+
+describe('the brand mark', () => {
+  const brands = (node: RNode | undefined): number => !node ? 0
+    : node.kind === 'box' ? (node.brand ? 1 : 0) + node.children.reduce((n, child) => n + brands(child), 0)
+    : node.kind === 'repeat' ? brands(node.item) : 0;
+  // A logo that presses home is a pointer shortcut, never a keyboard or TV focus stop.
+  test.each(documents)('%s marks a logo that presses home as the brand', (_name, doc) => {
+    const shell = resolveDocument(doc, 1920, 'en').shell;
+    // A skin's own shell labels a pressable logo Vela home (Index's masthead is text and presses
+    // nothing); a skin without its own shell inherits the base's, which has one.
+    const hasLogo = doc.slots?.shell ? /velaHome\}/.test(JSON.stringify(doc.slots.shell)) : true;
+    expect(brands(shell) > 0).toBe(hasLogo);
+  });
+});
