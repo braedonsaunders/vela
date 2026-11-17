@@ -1,4 +1,4 @@
-import type { GuideModel } from '@vela/core';
+import type { GuideModel, GuideProgramme } from '@vela/core';
 
 /** Contiguous local-day blocks, each expressed in its own minutes. */
 export function timeline(blocks: ReadonlyMap<number, GuideModel>, selected: number): GuideModel & { dayStarts: Record<number, number> } {
@@ -17,7 +17,12 @@ export function timeline(blocks: ReadonlyMap<number, GuideModel>, selected: numb
     ticks: indexed.flatMap(({ offset, block }) => block.ticks.map(t => ({ ...t, minute: t.minute + offset }))),
     channels: base.channels.map(channel => ({
       ...channel,
-      programmes: indexed.flatMap(({ offset, channels }) => (channels.get(channel.id)?.programmes ?? []).map(p => ({ ...p, at: p.at + offset }))),
+      programmes: indexed.flatMap(({ offset, channels }) => (channels.get(channel.id)?.programmes ?? []).map(p => ({ ...p, at: p.at + offset }))).reduce<GuideProgramme[]>((merged, p) => {
+        const last = merged[merged.length - 1];
+        if (last?.id === p.id && Math.abs(last.at + last.span - p.at) < 0.01) last.span += p.span;
+        else merged.push(p);
+        return merged;
+      }, []),
     })),
   };
 }
