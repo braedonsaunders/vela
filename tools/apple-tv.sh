@@ -80,6 +80,9 @@ if [ "$prebuild" = 1 ] || [ ! -d "$root/apps/vela/ios" ]; then
 fi
 
 cd "$root/apps/vela/ios"
+# The generated project keeps the version it was generated with: the app's version is app.json's.
+version=$(sed -n 's/^ *"version": "\([0-9.]*\)".*/\1/p' "$root/apps/vela/app.json" | head -1)
+[ -n "$version" ] && /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" Vela/Info.plist
 # A native module's new or removed files join the Pods project only through pod install.
 if [ -n "$(find "$root/modules" -path '*/ios/*' -newer Pods/Manifest.lock -print -quit 2>/dev/null)" ]; then
   pod install >/dev/null
