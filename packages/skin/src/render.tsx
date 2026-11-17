@@ -40,6 +40,9 @@ const Direction = createContext<'row' | 'column'>('column');
 const Band = createContext(false);
 /** On TV, a section of a scroll with nothing focusable from it on: a reading stop (readingStops). */
 const ReadingStop = createContext(false);
+/** Whether this screen is the one showing (the app says: a page under the player or a title page
+ * is not). Looping animations stop while it is not (motion.ts). */
+export const ScreenActive = createContext(true);
 /** First content layout releases the skeleton covering a newly loaded route. */
 const InstantContent = createContext(false);
 const RouteLayout = createContext<{ grid(): void; drawn(): void } | null>(null);
@@ -307,7 +310,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
   const fx = translated.fx;
   const style = shrinkFor(translated.style, own, parentDirection) as typeof translated.style;
   const instant = useContext(InstantContent);
-  const motion = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant);
+  const motion = animation(node.motion, host.doc.keyframes, env.still, ctx.index, node.stagger, instant, useContext(ScreenActive));
   const rowId = ctx.row?.id ?? '';
 
   const report = useCallback((kind: 'hover' | 'focus', on: boolean) => {
@@ -726,7 +729,7 @@ function useLeafStyle(node: RNode, ctx: Ctx, ui: Interaction = IDLE) {
   const parentDirection = useContext(Direction);
   const { style, fx } = translatedBox(own, viewport, text.fontSize);
   const instant = useContext(InstantContent);
-  const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger, instant);
+  const motion = animation(node.motion, doc.keyframes, env.still, ctx.index, node.stagger, instant, useContext(ScreenActive));
   return { own, text, style: { ...shrinkFor(style, own, parentDirection), ...motion } as Record<string, unknown>, fx };
 }
 

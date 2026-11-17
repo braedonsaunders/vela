@@ -1,8 +1,9 @@
+import { Platform } from 'react-native';
 // Motion presets (docs/skin-schema.md) as Reanimated 4 CSS animations: the library's keyframes,
 // a document's own, duration, delay with stagger, easing, iterations, direction and fill. Under
 // reduced motion a preset's `still` alternative runs, or nothing.
 import { cubicBezier, type CSSAnimationKeyframes } from 'react-native-reanimated';
-import { library, settledFrame, type Keyframes, type Motion } from './keyframes';
+import { library, runs, settledFrame, type Keyframes, type Motion } from './keyframes';
 export { documentKeyframes, type Motion } from './keyframes';
 
 /** A CSS easing as Reanimated takes it. */
@@ -15,9 +16,11 @@ export function easing(text: string | undefined): string | ReturnType<typeof cub
   return text && /^(ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end)$/.test(text) ? text : 'ease';
 }
 
-/** A node's animation style for its preset, or none. `index` staggers the delay. */
-export function animation(preset: Motion | undefined, own: Record<string, Keyframes>, still: boolean, index: number, stagger?: { step: number; cap: number }, instant = false): Record<string, unknown> | undefined {
+/** A node's animation style for its preset, or none. `index` staggers the delay; `active` is
+ * whether its screen is the one showing (see `runs`). */
+export function animation(preset: Motion | undefined, own: Record<string, Keyframes>, still: boolean, index: number, stagger?: { step: number; cap: number }, instant = false, active = true): Record<string, unknown> | undefined {
   if (!preset) return undefined;
+  if (!runs(preset, active, Platform.isTV)) return undefined;
   const name = still ? preset.still?.keyframes : preset.keyframes;
   const keyframes = name && name !== 'none' ? library[name] ?? own[name] : undefined;
   if (!keyframes) return undefined;

@@ -71,3 +71,15 @@ export function settledFrame(preset: Motion, own: Record<string, Keyframes>, sti
   const frames = name && name !== 'none' ? library[name] ?? own[name] : undefined;
   return frames?.to ?? frames?.['100%'];
 }
+
+/** A looping animation this long or longer is ambient (a backdrop's slow drift, an aurora). */
+const AMBIENT_MS = 10_000;
+
+/** Whether a preset runs now. A looping animation runs only while its screen is the one showing
+ * (`active`): every frame of one commits the whole page natively, so one left running behind the
+ * player or a title page takes the UI thread from the viewer. On a TV the long ambient loops never
+ * run, for the same reason. */
+export function runs(preset: Motion, active: boolean, tv: boolean): boolean {
+  if (preset.iterations !== 'infinite') return true;
+  return active && !(tv && preset.duration >= AMBIENT_MS);
+}

@@ -4,7 +4,7 @@
 import { useIsFocused } from 'expo-router';
 import { useEffect } from 'react';
 import { Text, View } from 'react-native';
-import { SkinRoot, SkinRoute, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
+import { ScreenActive, SkinRoot, SkinRoute, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import { useVela } from './vela';
 import { useSectionFocus } from './section-focus';
 
@@ -56,9 +56,15 @@ export function DocumentScreen({ route, entry, page, sharedShell = false }: Prop
   // The transparent navigator modal fills the viewport, including the section shell's header.
   // Keep the scrim outside the skin's scrolling/frame geometry on web and native hosts alike.
   if (route === 'title') return (
-    <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)' }} accessibilityViewIsModal>
-      {content}
-    </View>
+    <ScreenActive.Provider value={isCurrent}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)' }} accessibilityViewIsModal>
+        {content}
+      </View>
+    </ScreenActive.Provider>
   );
-  return shell ? <SkinRoot host={{ ...host, children: content }} node={shell} /> : content;
+  return (
+    <ScreenActive.Provider value={isCurrent}>
+      {shell ? <SkinRoot host={{ ...host, children: content }} node={shell} /> : content}
+    </ScreenActive.Provider>
+  );
 }
