@@ -436,6 +436,11 @@ const library: Node = {
       children: [{ type: 'text', text: '{s:back}' }],
     },
     catalogue('{library.name}', 'library.items', [ready]),
+    { type: 'box', role: 'status', when: [ready, { test: 'library.itemCount', is: 'eq', value: '0' }],
+      style: { padding: '24px 4%', display: 'flex', 'flex-direction': 'column', gap: '8px' }, children: [
+        { type: 'text', text: '{t:library.empty}', style: { 'font-size': '20px' } },
+        { type: 'text', text: '{t:library.emptyHint}', style: { 'font-size': '14px' } },
+      ] },
     {
       type: 'box',
       when: [ready, { test: 'library.more' }],

@@ -61,8 +61,8 @@ export function TopBar({ look, title, visible, onClose }: TopProps) {
   return (
     <Animated.View pointerEvents={visible ? 'box-none' : 'none'} style={shownStyle(look, visible, -14)}>
       <LinearGradient
-        colors={[look.scrim, clear(look.scrim)]}
-        locations={[0, 1]}
+        colors={[look.scrim, look.scrim, clear(look.scrim)]}
+        locations={[0, 0.55, 1]}
         style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
         pointerEvents="none"
       />
@@ -133,8 +133,8 @@ export function BottomBar(props: BottomProps) {
   return (
     <Animated.View pointerEvents={visible ? 'box-none' : 'none'} style={shownStyle(look, visible, 18)}>
       <LinearGradient
-        colors={[clear(look.scrim), look.scrim]}
-        locations={[0, 1]}
+        colors={[clear(look.scrim), look.scrim, look.scrim]}
+        locations={[0, 0.45, 1]}
         style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
         pointerEvents="none"
       />

@@ -1,6 +1,6 @@
-// The chrome's look, from the document's `ui` block (docs/skin-schema.md): the colours, the two
-// font stacks and the radii the Vela base styles itself with. A document that leaves a key out
-// reads Cinematic's value, so every document gets a coherent chrome in its own colours.
+// Player typography and geometry follow the document; the video overlay uses
+// a contrasting palette independent of the page behind other routes.
+import { playerPalette } from './palette';
 import { useMemo } from 'react';
 import { Platform, type TextStyle } from 'react-native';
 import { resolveUi } from '../../resolve/ui';
@@ -49,6 +49,10 @@ export function usePlayerLook(): PlayerLook {
     const ui = resolveUi(doc.document.ui);
     const colours = {} as Colours;
     for (const name of COLOUR_KEYS) colours[name] = colour(String(ui[name])) ?? uiDefaults[name];
+    // Video has no page background: light-page inks disappear over black, and
+    // translucent page surfaces disappear over bright footage. Keep the chrome
+    // on a shared dark surface with opaque light inks, independently of the page.
+    Object.assign(colours, playerPalette(colours));
     // A television is a fixed canvas seen from across the room: the chrome takes the same share
     // of it at any resolution (tvOS lays out 1080 points; Android TV 540 dp at 1080p).
     const scale = tv ? TV_SCALE * Math.min(1, viewport.height / TV_HEIGHT) : 1;

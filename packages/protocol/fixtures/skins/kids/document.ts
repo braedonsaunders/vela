@@ -253,7 +253,10 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
   sky,
   hero,
   dots,
-  { type: 'slot', slot: 'searchField', style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-top': '30px', 'padding-bottom': '10px', 'padding-left': 'max(24px, 4vw)', 'padding-right': 'max(24px, 4vw)' } as Style,
+  { type: 'slot', slot: 'searchField', states: [
+    { when: [{ test: 'env.heroCount', is: 'eq', value: '0' }], style: { 'padding-top': '112px' } },
+    { when: [{ test: 'env.searching' }], style: { 'padding-top': '112px' } },
+  ], style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'center', 'padding-top': '30px', 'padding-bottom': '10px', 'padding-left': 'max(24px, 4vw)', 'padding-right': 'max(24px, 4vw)' } as Style,
     small: { 'padding-top': '22px', 'padding-left': '16px', 'padding-right': '16px' } as Style, inner: { width: '100%', 'max-width': '640px' } },
   { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-top': '22px' }, children: [
     { type: 'repeat', over: 'home.rows', item: { type: 'use', template: 'row', motion: 'rowIn', stagger: { step: 90, cap: 4 } } },

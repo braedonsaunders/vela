@@ -164,7 +164,7 @@ export const heroMore = (primary: boolean): Node => ({
 // The top shelf: the featured title's name, facts and two large actions, low on the screen.
 export const shelf: Node = {
   type: 'box',
-  when: [{ test: 'env.searching', not: true }],
+  when: [{ test: 'env.searching', not: true }, { test: 'env.heroCount', is: 'gt', value: '0' }],
   style: {
     position: 'relative',
     'z-index': '1',
@@ -501,6 +501,19 @@ export const home: Node = {
       } as Style,
       small: { ...gutterSmall, 'padding-top': '8px' } as Style,
       states: [
+        {
+          when: [{ test: 'env.heroCount', is: 'eq', value: '0' }],
+          style: {
+            position: 'relative',
+            'z-index': '1',
+            display: 'flex',
+            'flex-direction': 'column',
+            'align-items': 'center',
+            'padding-top': 'clamp(120px, 10.5vw, 200px)',
+            'padding-bottom': 'clamp(10px, 1vw, 20px)',
+            ...gutter,
+          } as Style,
+        },
         {
           when: [{ test: 'env.searching' }],
           style: {

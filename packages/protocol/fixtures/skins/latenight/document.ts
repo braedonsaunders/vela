@@ -235,7 +235,7 @@ const presets: Node = { type: 'box', role: 'group', label: '{s:featured}', motio
     { type: 'repeat', over: 'home.heroes', item: { type: 'box', style: { display: 'flex' }, children: [preset(true), preset(false)] } },
   ] };
 
-const copyColumn: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'box-sizing': 'border-box', 'min-height': 'calc(clamp(500px, 62vh, 700px) - 90px)', 'padding-top': 'calc(78px + 40px)' },
+const copyColumn: Node = { type: 'box', when: [{ test: 'env.heroCount', is: 'gt', value: '0' }, { test: 'env.searching', not: true }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'justify-content': 'flex-end', 'box-sizing': 'border-box', 'min-height': 'calc(clamp(500px, 62vh, 700px) - 90px)', 'padding-top': 'calc(78px + 40px)' },
   small: { 'min-height': '420px', 'padding-top': 'calc(98px + 30px + env(safe-area-inset-top))' }, children: [heroCopy, presets] };
 
 // A title on the shelf: the poster, crisp. Hover or focus lights an OSD frame with a hint
@@ -297,7 +297,10 @@ const row: Node = { type: 'box', style: { position: 'relative', display: 'flex',
 const home: Node = { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'background-color': '$page', 'min-height': '100%' }, children: [
   stage,
   copyColumn,
-  { type: 'slot', slot: 'searchField', style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '34px', 'padding-bottom': '14px', 'padding-left': 'max(30px, 3.6vw)', 'padding-right': 'max(30px, 3.6vw)', 'align-items': 'center' } as Style,
+  { type: 'slot', slot: 'searchField', states: [
+    { when: [{ test: 'env.heroCount', is: 'eq', value: '0' }], style: { 'padding-top': '112px' } },
+    { when: [{ test: 'env.searching' }], style: { 'padding-top': '112px' } },
+  ], style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '34px', 'padding-bottom': '14px', 'padding-left': 'max(30px, 3.6vw)', 'padding-right': 'max(30px, 3.6vw)', 'align-items': 'center' } as Style,
     small: { 'padding-top': '24px', 'padding-bottom': '8px', 'padding-left': '16px', 'padding-right': '16px' } as Style, inner: { width: '100%', 'max-width': '720px', animation: 'vr-dissolve 300ms steps(3) 360ms both' } },
   // Rows sit in one container: a repeat's own style (and so its flex order) belongs to its item.
   { type: 'box', when: [{ test: 'env.searching', not: true }], style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'padding-top': '26px', 'padding-bottom': '40px' }, small: { 'padding-top': '16px' }, children: [
