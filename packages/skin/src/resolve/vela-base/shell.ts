@@ -171,10 +171,10 @@ export const shell: Node = {
             right: '0px',
             bottom: '0px',
             'pointer-events': 'none',
-            'background-image': `linear-gradient(180deg, ${veil(70)} 0%, ${veil(0)} 100%)`,
+            // One even band behind both control rows; fading inside it visually shifts its centre.
+            'background-color': veil(70),
             'backdrop-filter': 'blur(16px) saturate(1.2)',
           },
-          small: { bottom: '-18px' },
         },
         {
           type: 'box',

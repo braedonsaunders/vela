@@ -6,7 +6,7 @@
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.3';
+const version = '1.2.4';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -72,8 +72,8 @@ const roundButton = (size: number): Style => ({ position: 'relative', display: '
 const bar: Node = { type: 'box', role: 'navigation', label: '{s:mainNav}', when: [{ test: 'env.viewer' }], style: { color: '$ink', position: 'absolute', top: '0px', left: '0px', right: '0px', 'z-index': '20', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '14px', height: '100px', 'box-sizing': 'border-box', ...gutter },
   small: { height: '68px', ...gutterSmall, gap: '10px' }, children: [
   // A soft frosted band, so rows scrolling under the bar stay quiet behind it.
-  { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '-28px', 'pointer-events': 'none', 'background-image': 'linear-gradient(180deg, rgba(255, 248, 238, 0.86) 0%, rgba(255, 248, 238, 0.6) 55%, rgba(255, 248, 238, 0) 100%)', 'backdrop-filter': 'blur(14px)', 'mask-image': 'linear-gradient(180deg, black 0%, black 60%, transparent 100%)' } },
-  { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', display: 'flex', 'align-items': 'center', height: '60px', padding: '0px 10px', 'margin-right': '8px', 'flex-shrink': '0' },
+  { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'pointer-events': 'none', 'background-color': 'rgba(255, 248, 238, 0.86)', 'backdrop-filter': 'blur(14px)' } },
+  { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', display: 'flex', 'align-items': 'center', height: '60px', 'justify-content': 'center', padding: '0px 10px', 'margin-right': '8px', 'flex-shrink': '0' },
     small: { height: '44px', padding: '0px 4px', 'margin-right': '0px' }, children: [
     { type: 'image', src: 'assets/brand/vela-lockup-paper.svg', alt: '', style: { width: '74px', height: '28px' }, small: { width: '63px', height: '24px' } },
   ] },

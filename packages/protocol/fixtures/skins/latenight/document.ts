@@ -5,7 +5,7 @@
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.4';
+const id = 'latenight', version = '1.0.5';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -51,10 +51,10 @@ const channel = (num: string, name: string, on: Node['when'], press: { action: '
 const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], motion: 'navIn', escape: 'menu', returnFocus: 'latenight-profile',
   style: { position: 'absolute', ...inset(bezel.normal), bottom: 'auto', 'z-index': '20', 'pointer-events': 'none' },
   wide: { ...inset(bezel.wide), bottom: 'auto' }, small: { ...inset(bezel.small), bottom: 'auto' }, children: [
-    { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', height: '150px', 'pointer-events': 'none', 'border-radius': `${radius.normal} ${radius.normal} 0px 0px`, 'background-image': 'linear-gradient(180deg, $scrim-solid 0%, $scrim-top 52%, $scrim-clear 100%)', 'backdrop-filter': 'blur(6px)', 'mask-image': 'linear-gradient(180deg, black 0%, black 55%, transparent 100%)' },
-      wide: { 'border-radius': `${radius.wide} ${radius.wide} 0px 0px` }, small: { height: '120px', 'border-radius': '0px' } },
+    { type: 'box', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'pointer-events': 'none', 'border-radius': `${radius.normal} ${radius.normal} 0px 0px`, 'background-color': '$scrim-top', 'backdrop-filter': 'blur(6px)' },
+      wide: { 'border-radius': `${radius.wide} ${radius.wide} 0px 0px` }, small: { 'border-radius': '0px' } },
     { type: 'box', style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '8px 8px', height: '78px', 'box-sizing': 'border-box', ...gutter, 'pointer-events': 'auto' },
-      small: { height: '58px', ...gutterSmall, gap: '6px 6px', 'padding-top': 'env(safe-area-inset-top)' } as Style, children: [
+      small: { height: '58px', ...gutterSmall, gap: '6px 6px', 'padding-top': '0px' } as Style, children: [
         { type: 'box', press: { action: 'home' }, label: '{s:velaHome}', style: { position: 'relative', 'margin-right': '18px', 'flex-shrink': '0' }, small: { 'margin-right': '6px' }, children: [wordmark(26)] },
         { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '2px 2px', flex: '1', 'min-width': '0px', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'mask-image': 'linear-gradient(90deg, black 0%, black 92%, transparent 100%)' },
           small: { display: 'none' }, children: [

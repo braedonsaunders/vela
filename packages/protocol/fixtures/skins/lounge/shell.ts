@@ -88,12 +88,10 @@ export const shell: Node = {
             top: '0px',
             left: '0px',
             right: '0px',
-            height: '150%',
+            height: '100%',
             'pointer-events': 'none',
-            'background-image':
-              'linear-gradient(180deg, rgba(5, 6, 9, 0.9) 0%, rgba(5, 6, 9, 0.72) 55%, rgba(5, 6, 9, 0) 100%)',
+            'background-color': 'rgba(5, 6, 9, 0.72)',
             'backdrop-filter': 'blur(22px) saturate(1.2)',
-            'mask-image': 'linear-gradient(180deg, black 0%, black 58%, transparent 100%)',
           },
         },
         {
@@ -106,7 +104,7 @@ export const shell: Node = {
             gap: '18px',
             'box-sizing': 'border-box',
             height: 'calc(clamp(84px, 7vw, 132px) + max(0px, env(safe-area-inset-top)))',
-            'padding-top': 'max(14px, 2.4vh)',
+            'padding-top': '0px',
             ...gutter,
           },
           small: { height: '64px', 'padding-top': '0px', gap: '10px', ...gutterSmall },
