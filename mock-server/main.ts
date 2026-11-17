@@ -138,7 +138,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   const personMatch = /^\/people\/([^/]+)(\/titles)?$/.exec(path);
   if (method === 'GET' && personMatch && process.env.VELA_MOCK_OLD !== '1') {
     if (personMatch[1] !== 'person-mara-vale') fail('not-found', 'not_found', 'Person not found');
-    if (!personMatch[2]) return cached(req, { id: personMatch[1], name: 'Mara Vale', photo: personArtwork(g), roles: ['Acting'], knownFor: 'Acting', biography: 'A fictional performer.', birthday: '1985-04-12' } satisfies V.PersonDetail, g.id);
+    if (!personMatch[2]) return cached(req, { id: personMatch[1], name: 'Mara Vale', photo: personArtwork(g), roles: ['Acting'], knownFor: 'Acting', biography: 'Mara Vale is a fictional performer whose work spans film, television, and the stage. '.repeat(16), birthday: '1985-04-12' } satisfies V.PersonDetail, g.id);
     const libraryId = url.searchParams.get('libraryId');
     if (libraryId && !libraries.some(l => l.id === libraryId)) fail('not-found', 'not_found', 'Library not found');
     const visible = libraryId ? libraryEntries(libraryId) : libraryEntries('all');
@@ -195,7 +195,9 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (libraryId && process.env.VELA_MOCK_OLD !== '1') {
       const ids = new Set(libraryEntries(libraryId).filter(e => e.kind === 'title').map(e => e.kind === 'title' ? e.title.id : ''));
       const matches = rows.map(row => ({ ...row, items: row.items.filter(e => e.kind === 'title' && ids.has(e.title.id)) })).filter(row => row.items.length);
-      return cached(req, page(matches.map(row => boundRow(g, row)), url, g, `library-rows:${libraryId}`), g.id);
+      const paging = new URL(url);
+      if (process.env.VELA_MOCK_LIBRARY_ROW_PAGE) paging.searchParams.set('limit', process.env.VELA_MOCK_LIBRARY_ROW_PAGE);
+      return cached(req, page(matches.map(row => boundRow(g, row)), paging, g, `library-rows:${libraryId}`), g.id);
     }
     if (!['home','detail','library'].includes(placement)) fail('request', 'invalid_placement', 'Unknown row placement');
     if (placement === 'detail') {

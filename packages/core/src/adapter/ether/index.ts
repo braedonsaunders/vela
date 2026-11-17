@@ -86,8 +86,17 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return { ...response, items: response.items.map(({ id: entryId, receiptToken, collection }) => ({ id: entryId, receiptToken, kind: 'collection' as const, targetId: collection.id, name: collection.name, artwork: collection.artwork })) };
   }
   async libraryGenres(id: string): Promise<{ id: string; label: string }[]> {
-    const { library } = await this.library(id, { limit: 1 });
-    return (library.browse.filters.genres ?? []).map(name => ({ id: name, label: name }));
+    let cursor: string | undefined;
+    const seen = new Set<string>();
+    for (let n = 0; n < 100; n++) {
+      const page = await this.libraries({ cursor, limit: 100 });
+      const library = page.items.find(item => item.id === id);
+      if (library) return (library.browse.filters.genres ?? []).map(name => ({ id: name, label: name }));
+      if (page.continuation !== 'more') break;
+      if (!page.nextCursor || seen.has(page.nextCursor)) throw new Error('Invalid library continuation');
+      cursor = page.nextCursor; seen.add(cursor);
+    }
+    return [];
   }
 
   constructor(origin: string, credentials: Credentials, capabilityContext: string, onSessionRejected?: () => void) {

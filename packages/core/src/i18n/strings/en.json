@@ -275,6 +275,8 @@
   "library.year": "Year",
   "library.anyYear": "Any year",
   "library.loadMore": "Show more",
+  "person.born": "Born {date}",
+  "person.died": "Died {date}",
   "person.movies": "Movies",
   "person.tvShows": "TV Shows",
   "person.empty": "No titles with {name} in this library",

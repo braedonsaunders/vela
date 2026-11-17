@@ -4,6 +4,7 @@
 import type * as V from '../wire';
 import { capabilitiesOf } from '../adapter/advertise';
 import { hasLibraryRecommendations, hasPersonFilmography } from '../adapter/capabilities';
+import { personDates } from '../discovery/person-date';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { detailModel, entry, feedRow } from '../discovery/models';
 import { detailCard, detailWatched, recorded, type Watched } from '../discovery/progress';
@@ -44,7 +45,7 @@ export class Catalogue {
     if (!('personDetails' in adapter) || typeof adapter.personDetails !== 'function') return undefined;
     const person = await adapter.personDetails(id) as V.PersonDetail;
     const images = await connection.images();
-    return { name: person.name, portrait: person.photo ? artworkURL(person.photo, 480, 480, images) ?? '' : '', knownFor: person.knownFor || person.roles?.[0] || '', biography: person.biography ?? '', birthday: person.birthday ?? '' };
+    return { name: person.name, portrait: person.photo ? artworkURL(person.photo, 480, 480, images) ?? '' : '', knownFor: person.knownFor || person.roles?.[0] || '', biography: person.biography ?? '', birthday: personDates(person.birthday, person.deathday ?? person.deathDate) };
   }
   async personTitles(id: string | undefined, libraryId?: string, cursor?: string): Promise<{ items: Card[]; cursor?: string }> {
     const connection = await this.session.ready();

@@ -27,7 +27,7 @@ const hero: Node = {
   ],
 };
 const content: Node[] = [hero,
-  { type: 'text', when: [{ test: 'personPage.biography' }], text: '{personPage.biography}', style: { ...gutter, 'font-size': '17px', 'line-height': '1.55', color: '$ui.inkSecondary' }, small: { ...gutterSmall, 'font-size': '15px' } },
+  { type: 'text', when: [{ test: 'personPage.biography' }], text: '{personPage.biography}', style: { ...gutter, 'font-size': '17px', 'line-height': '1.55', 'line-clamp': '3', color: '$ui.inkSecondary' }, small: { ...gutterSmall, 'font-size': '15px' } },
   { type: 'box', when: [{ test: 'personPage.loading' }], style: { ...gutter }, children: [pulse] },
   { type: 'text', when: [{ test: 'personPage.empty' }, { test: 'env.load', is: 'eq', value: 'ready' }], text: '{personPage.emptyText}', style: { ...gutter, color: '$ui.inkSecondary', 'font-size': '18px' } },
   section('{t:person.movies}', 'personPage.moviesCount', 'personPage.movies'),

@@ -534,7 +534,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
     <Inherited.Provider value={text}>
       <Group.Provider value={groupValue}>
         <Direction.Provider value={direction}>
-          <Band.Provider value={Platform.isTV && vertical}>
+          <Band.Provider value={Platform.isTV && (vertical || node.id === 'vela-library-alternative')}>
             <ReadingStop.Provider value={false}>
               {routeReveal ? <RevealContext.Provider value={routeReveal}>{element}</RevealContext.Provider> : element}
             </ReadingStop.Provider>
@@ -788,7 +788,7 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
   if (fx.hidden) return null;
   const value = fill(node.text, ctx, env);
   const lines = { numberOfLines: drawn.numberOfLines, ellipsizeMode: drawn.ellipsize ? ('tail' as const) : undefined };
-  if (node.summary && env.route === 'title') {
+  if (node.summary && (env.route === 'title' || env.route === 'person')) {
     return <ExpandableSummary key={env.entry} value={value} lines={drawn.numberOfLines ?? 3}
       style={style as ViewStyle} textStyle={drawn.style} />;
   }

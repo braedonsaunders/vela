@@ -100,8 +100,8 @@ function DescriptionSheet({ value, close, restore }: { value: string; close(): v
         })} testID="description-sheet">
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 20 }}>
             <View style={{ flex: 1, gap: 8 }}>
-              <Text accessibilityRole="header" style={look.text({ 'font-size': env.tv ? '36px' : '28px', 'font-weight': '700' })}>{title?.name}</Text>
-              {title?.yearLabel ? <Text style={look.text({ 'font-size': '18px', color: '$ui.inkSecondary' })}>{title.yearLabel}</Text> : null}
+              <Text accessibilityRole="header" style={look.text({ 'font-size': env.tv ? '36px' : '28px', 'font-weight': '700' })}>{env.route === 'person' ? env.personPage?.name : title?.name}</Text>
+              {env.route !== 'person' && title?.yearLabel ? <Text style={look.text({ 'font-size': '18px', color: '$ui.inkSecondary' })}>{title.yearLabel}</Text> : null}
             </View>
             <FocusPressable accessibilityRole="button" accessibilityLabel={msg('detail.closeDescription')}
               testID="description-close" hasTVPreferredFocus={preferred} onPress={close}

@@ -48,7 +48,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     return () => { active = false; };
   }, [store, id, kind, revision, focused, extraAttempt, canRecommend]);
   const nativeExtras = extraState.id === id && extraState.revision === revision ? extraState.value : undefined;
-  const extras = useMemo<LibraryExtras | undefined>(() => nativeExtras ?? (current?.value?.genres.length ? {
+  const extras = useMemo<LibraryExtras | undefined>(() => nativeExtras ? { ...nativeExtras, genres: nativeExtras.genres.length ? nativeExtras.genres : current?.value?.genres ?? [] } : (current?.value?.genres.length ? {
     recommendationsAvailable: false, collectionsAvailable: false, rows: [], collections: [], collectionCursor: '', genres: current.value.genres, failed: false,
   } : undefined), [nativeExtras, current?.value]);
   const view = requestedView === 'library' || requestedView === 'recommended' || requestedView === 'collections' || requestedView === 'genres'

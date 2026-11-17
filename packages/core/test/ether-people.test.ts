@@ -5,7 +5,7 @@ import { FakeCredentials } from './helpers';
 import { launchMock } from '../../../mock-server/test/launch';
 
 async function connect(old = false) {
-  const mock = await launchMock(old ? { VELA_MOCK_OLD: '1' } : {});
+  const mock = await launchMock(old ? { VELA_MOCK_OLD: '1' } : { VELA_MOCK_LIBRARY_ROW_PAGE: '2' });
   const credentials = new FakeCredentials(null);
   const adapter = new EtherAdapter(mock.url, credentials, 'test');
   credentials.current = await adapter.signInWithPassword({ username: 'demo', password: 'vela', device: credentials.device, idempotencyKey: 'sign-in' });
@@ -28,7 +28,8 @@ test('Ether person and library capabilities use the scoped endpoints', async () 
     image.searchParams.set('grant', 'invalid');
     expect((await fetch(image)).status).toBe(401);
     expect((await adapter.personTitles('person-mara-vale', 'movies')).items[0]).toMatchObject({ kind: 'title', role: 'Commander' });
-    expect((await adapter.libraryRows('movies', 'movies')).length).toBeGreaterThan(0);
+    expect((await adapter.libraryRows('movies', 'movies')).length).toBeGreaterThan(2);
+    expect((await adapter.libraryGenres('movies')).length).toBeGreaterThan(0);
     const collections = await adapter.libraryCollections('movies');
     expect(collections.items[0]).toMatchObject({ kind: 'collection', targetId: 'fixture-collection' });
     expect((await adapter.library('movies', { collectionId: 'fixture-collection' })).items).toHaveLength(1);

@@ -212,7 +212,7 @@ export const libraryFilters: Node = {
 };
 
 export const libraryAlternative: Node = {
-  type: 'box', when: [ready, { test: 'library.view', is: 'ne', value: 'library' }],
+  type: 'box', id: 'vela-library-alternative', when: [ready, { test: 'library.view', is: 'ne', value: 'library' }],
   style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '24px', 'padding-bottom': '60px', gap: '16px' },
   children: [
     { type: 'repeat', over: 'library.rows', when: [is('library.view', 'recommended')], item: { type: 'use', template: 'velaRow' } },

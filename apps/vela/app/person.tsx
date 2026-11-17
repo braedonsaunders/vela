@@ -43,6 +43,14 @@ export default function PersonPage() {
     }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing) { event.preventDefault(); back(); }
+      if (event.key === 'ArrowDown' && !event.defaultPrevented) {
+        const current = document.activeElement as HTMLElement | null;
+        const id = current?.getAttribute('data-testid');
+        if (id !== 'detail-close' && id !== 'detail-summary-more') return;
+        const visible = (selector: string) => Array.from(document.querySelectorAll<HTMLElement>(selector)).find(element => !element.closest('[aria-hidden="true"]') && element.getBoundingClientRect().height > 0);
+        const next = id === 'detail-close' ? visible('[data-testid="detail-summary-more"]') ?? visible('[data-testid^="title-"]') : visible('[data-testid^="title-"]');
+        if (next) { event.preventDefault(); next.focus(); }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

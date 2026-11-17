@@ -67,7 +67,7 @@ export interface TitleDetail extends PartialAnswer { title: Title; canPlay?: boo
   /** Server-selected next episode; null means none. Omitted by older servers. */ nextUp?: Title | null;
   extras: Extra[]; chapters: Chapter[]; crew?: { id?: ID; name: string; role?: string; artwork?: ArtworkRef }[]; mediaSummary?: MediaSummary; cast: { id?: ID; name: string; role?: string; artwork?: ArtworkRef }[] }
 /** A visible person facet, including metadata already cached by the server. */
-export interface PersonDetail { id: ID; name: string; photo: ArtworkRef | null; roles: string[]; knownFor: string; biography?: string; birthday?: string }
+export interface PersonDetail { id: ID; name: string; photo: ArtworkRef | null; roles: string[]; knownFor: string; biography?: string; birthday?: string; deathday?: string; deathDate?: string }
 /** Ether's library collection endpoint nests its collection metadata in the row entry. */
 export interface LibraryCollectionEntry { id: ID; kind: 'collection'; receiptToken: string; collection: { id: ID; name: string; summary: string; itemCount: number; artwork: ArtworkRef[] } }
 export type RowEntry = { id: ID; receiptToken: string } & (

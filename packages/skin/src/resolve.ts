@@ -256,7 +256,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
         press: node.press && { action: node.press.action, arg: compile(node.press.arg, r), focus: compile(node.press.focus, r) }, pager: node.pager };
     }
     // Legacy and new documents get the same safe synopsis control from this binding.
-    case 'text': return { ...common, kind: 'text', text: compile(node.text, r)!, summary: node.text.trim() === '{detail.summary}' };
+    case 'text': return { ...common, kind: 'text', text: compile(node.text, r)!, summary: ['{detail.summary}', '{personPage.biography}'].includes(node.text.trim()) };
     case 'image': return { ...common, kind: 'image', src: compile(node.src, r, true)!, alt: compile(node.alt, r), fade: node.fade === true };
     case 'icon': return { ...common, kind: 'icon', symbol: node.symbol, paths: node.paths, viewBox: node.viewBox, fillRule: node.fillRule };
     case 'repeat': return { ...common, kind: 'repeat', over: node.over, limit: node.limit ?? 1000, item: convert(node.item, depth + 1, r) };
