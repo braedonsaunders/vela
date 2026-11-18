@@ -52,3 +52,22 @@ export function monogram(name: string): string {
 
 export const cellId = (programmeId: string) => `guide-${programmeId}`;
 export const railId = (channelId: string) => `guide-rail-${channelId}`;
+
+/** A floating shell must clear navigation on every guide mode, including the grid. */
+export function guideTop(flowHeader: boolean, small: boolean, insetTop: number): number {
+  return flowHeader ? 0 : (small ? 108 : 68) + insetTop;
+}
+
+/** Cinematic's band uses the available route area, leaving controls and rows below it.
+ * Portrait phones stack the picture above compact copy; short landscape uses two columns. */
+export function guideBand(width: number, height: number, top: number, side: number) {
+  const available = Math.max(0, height - top);
+  const stacked = width < 640 && height > width;
+  const bandHeight = Math.round(available * (stacked ? 0.46 : 0.38));
+  const gap = stacked ? 8 : 16;
+  const pictureHeight = Math.max(0, Math.min(
+    stacked ? bandHeight - 88 : bandHeight - gap * 2,
+    (width - side * 2) * (stacked ? 1 : 0.46) * 9 / 16,
+  ));
+  return { height: bandHeight, pictureHeight, stacked, gap };
+}

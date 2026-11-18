@@ -71,6 +71,8 @@ export interface ResolvedDocument {
   name: string;
   document: SkinDocument;
   shell?: RNode;
+  /** The live route can opt into the spacious preview/details band. */
+  guideLayout?: 'cinematic';
   /** The shared library switch, also available while a route is still loading. */
   libraryViews?: RNode;
   /** Every route the document draws (home from slots.home or routes.home), resolved. */
@@ -285,6 +287,8 @@ export function resolveDocument(own: SkinDocument, width: number, locale = 'en')
     id: doc.id,
     name: doc.name,
     document: doc,
+    guideLayout: doc.routes?.live?.type === 'widget' && doc.routes.live.widget === 'guide'
+      && doc.routes.live.params?.layout === 'cinematic' ? 'cinematic' : undefined,
     shell: doc.slots?.shell && convert(doc.slots.shell, 1, r),
     libraryViews: doc.templates?.velaLibraryViews && convert({ type: 'use', template: 'velaLibraryViews' }, 1, r),
     routes: Object.fromEntries([

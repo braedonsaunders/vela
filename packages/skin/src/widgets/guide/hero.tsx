@@ -17,10 +17,13 @@ interface HeroProps {
   /** Room on the right for the tile. */
   inset: number;
   side: number;
+  spacious?: boolean;
+  copyTop?: number;
+  compact?: boolean;
   onWatch(channelId: string): void;
 }
 
-export function GuideHero({ look, channel, programme, small, still, inset, side, onWatch }: HeroProps) {
+export function GuideHero({ look, channel, programme, small, still, inset, side, onWatch, spacious = false, copyTop = 0, compact = false }: HeroProps) {
   const entering = still ? undefined : FadeIn.duration(420);
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -46,7 +49,8 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
       <View
         style={{
           flex: 1,
-          justifyContent: 'flex-end',
+          justifyContent: spacious && !compact ? 'center' : 'flex-end',
+          paddingTop: copyTop,
           paddingLeft: side,
           paddingRight: inset,
           paddingBottom: small ? 12 : 8,
@@ -61,7 +65,7 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
           accessibilityLiveRegion="polite"
         >
           {programme ? (
-            <ProgrammeCopy look={look} channel={channel} programme={programme} small={small} onWatch={onWatch} />
+            <ProgrammeCopy look={look} channel={channel} programme={programme} small={small || compact} onWatch={onWatch} spacious={spacious} compact={compact} />
           ) : (
             <ChannelCopy look={look} channel={channel} small={small} onWatch={onWatch} />
           )}
@@ -176,7 +180,11 @@ function ProgrammeCopy({
   programme,
   small,
   onWatch,
+  spacious,
+  compact,
 }: {
+  spacious: boolean;
+  compact: boolean;
   look: GuideLook;
   channel: GuideChannel;
   programme: GuideProgramme;
@@ -201,7 +209,7 @@ function ProgrammeCopy({
       </View>
       <Line
         look={look}
-        size={small ? 24 : 26}
+        size={compact ? 20 : spacious ? 32 : small ? 24 : 26}
         style={[
           look.display(),
           { textShadowColor: look.shadow, textShadowRadius: 40, textShadowOffset: { width: 0, height: 4 } },
@@ -209,14 +217,14 @@ function ProgrammeCopy({
       >
         {programme.name}
       </Line>
-      <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center', minWidth: 0 }}>
+      <View style={{ flexDirection: 'row', flexWrap: spacious ? 'wrap' : 'nowrap', gap: compact ? 4 : 12, alignItems: 'center', minWidth: 0 }}>
         {!small ? (
           <WatchPill look={look} label={watchLabel} onPress={() => onWatch(channel.id)} testID="guide-watch" />
         ) : null}
         <Line look={look} size={13} weight={600} tabular>
           {times}
         </Line>
-        {programme.airing ? (
+        {programme.airing && !compact ? (
           <>
             <Progress look={look} percent={programme.progress} width={small ? 48 : 120} color={look.accent} />
             <Line look={look} size={12} color={look.accent} tabular>
@@ -228,7 +236,7 @@ function ProgrammeCopy({
             {programme.ended ? msg('live.ended') : programme.startsLabel}
           </Line>
         )}
-        {programme.episode && !small ? (
+        {programme.episode && (!small || spacious) ? (
           <Line look={look} size={12} color={look.inkSecondary} style={{ flexShrink: 1, minWidth: 0 }}>
             {programme.episode}
           </Line>
@@ -250,6 +258,11 @@ function ProgrammeCopy({
           </View>
         ) : null}
       </View>
+      {spacious && !compact && programme.summary ? (
+        <Line look={look} size={14} color={look.inkSecondary} lines={3} style={{ marginTop: 8, lineHeight: 22 }}>
+          {programme.summary}
+        </Line>
+      ) : null}
     </>
   );
 }

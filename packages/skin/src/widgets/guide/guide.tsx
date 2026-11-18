@@ -9,7 +9,7 @@ import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@v
 import { HostContext, useHost, type WidgetProps } from '../../host';
 import type { LiveController, LiveView } from './controller';
 import { DayChips, FilterMenu, GuideTabs, IconButton, NowChip, Segments } from './controls-bar';
-import { gutter, keeps, type ChannelFilter, type Zoom } from './geometry';
+import { guideBand, guideTop, gutter, keeps, type ChannelFilter, type Zoom } from './geometry';
 import { GuideGrid, type GridHandle } from './grid';
 import { GuideTile } from './header-tile';
 import { GuideHero } from './hero';
@@ -26,14 +26,14 @@ export interface GuideFocus {
   minute: number;
 }
 
-export function GuideWidget(_: WidgetProps) {
-  return <Guide />;
+export function GuideWidget({ params }: WidgetProps) {
+  return <Guide layout={params.layout === 'cinematic' ? 'cinematic' : undefined} />;
 }
 
-export function Guide({ focus }: { focus?: GuideFocus }) {
+export function Guide({ focus, layout }: { focus?: GuideFocus; layout?: 'cinematic' }) {
   const host = useHost();
   const [area, setArea] = useState({ width: host.viewport.width, height: host.viewport.height });
-  if (!Platform.isTV || Platform.OS !== 'android') return <GuideContent focus={focus} />;
+  if (!Platform.isTV || Platform.OS !== 'android') return <GuideContent focus={focus} layout={layout} />;
   // The guide's authored geometry is a 1080-point TV canvas. Android's dp canvas is
   // commonly 540 points; scale the whole widget, including grid measurements and focus.
   const scale = tvPixelScale(host.viewport.width, host.viewport.height) / 1.25;
@@ -43,14 +43,14 @@ export function Guide({ focus }: { focus?: GuideFocus }) {
       const { width, height } = event.nativeEvent.layout;
       setArea(old => old.width === width && old.height === height ? old : { width, height });
     }}>
-      <View style={{ width: viewport.width, height: viewport.height, paddingTop: hasFlowHeader(host.doc.document.slots?.shell) ? 0 : 108, transform: [{ scale }], transformOrigin: 'top left' }}>
-        <HostContext.Provider value={{ ...host, viewport }}><GuideContent focus={focus} /></HostContext.Provider>
+      <View style={{ width: viewport.width, height: viewport.height, transform: [{ scale }], transformOrigin: 'top left' }}>
+        <HostContext.Provider value={{ ...host, viewport }}><GuideContent focus={focus} layout={layout} /></HostContext.Provider>
       </View>
     </View>
   );
 }
 
-function GuideContent({ focus }: { focus?: GuideFocus }) {
+function GuideContent({ focus, layout }: { focus?: GuideFocus; layout?: 'cinematic' }) {
   const look = useGuideLook();
   const live = useLiveContext();
   const view = useLiveView();
@@ -67,7 +67,7 @@ function GuideContent({ focus }: { focus?: GuideFocus }) {
     }
     return <GuideStatus look={look} text={msg('ui.loadingTheGuide')} busy />;
   }
-  return <GuidePage look={look} model={view.guide} view={view} controller={live.controller} focus={focus} />;
+  return <GuidePage look={look} model={view.guide} view={view} controller={live.controller} focus={focus} layout={layout} />;
 }
 
 interface PageProps {
@@ -76,13 +76,14 @@ interface PageProps {
   view: LiveView;
   controller: LiveController;
   focus?: GuideFocus;
+  layout?: 'cinematic';
 }
 
-function GuidePage({ look, model, view, controller, focus }: PageProps) {
+function GuidePage({ look, model, view, controller, focus, layout }: PageProps) {
   const { viewport, env, doc } = useHost();
   const small = viewport.width < 640;
   const still = env.still;
-  const side = gutter(small, viewport.width);
+  const side = Math.max(gutter(small, viewport.width), viewport.insets.left, viewport.insets.right);
   const [selected, setSelected] = useState({ channel: '', programme: '' });
   const [filter, setFilter] = useState<ChannelFilter>('all');
   const [tab, setTab] = useState('');
@@ -138,8 +139,12 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     if (runOff !== 0) pickDay(model.day + runOff);
   };
 
-  const tileHeight = Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
-  const headerHeight = Platform.isTV ? tileHeight + 32 : small ? 196 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
+  const cinematic = (layout ?? doc.guideLayout) === 'cinematic';
+  const flowHeader = hasFlowHeader(doc.document.slots?.shell);
+  const top = !flowHeader && Platform.isTV && Platform.OS === 'android' ? 108 : guideTop(flowHeader, small, viewport.insets.top);
+  const band = guideBand(viewport.width, viewport.height, top, side);
+  const tileHeight = cinematic ? band.pictureHeight : Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
+  const headerHeight = cinematic ? band.height : Platform.isTV ? tileHeight + 32 : small ? 196 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
   const landing = {
     minute: handOff && handOff.minute >= 0 ? handOff.minute : model.landing,
     channelId: handOff?.channelId ?? '',
@@ -154,7 +159,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     flex: 1,
     minHeight: 0,
     backgroundColor: look.page,
-    paddingTop: hasFlowHeader(doc.document.slots?.shell) ? 0 : pageTop(expanded, showGrid, small, viewport.insets.top),
+    paddingTop: top,
     backgroundImage: `radial-gradient(ellipse 70% 60% at 82% 0%, ${look.aura}, transparent 70%)`,
   } as ViewStyle;
   const highlighted =
@@ -162,7 +167,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
 
   return (
     <View style={page}>
-      {showGrid && !expanded ? (
+      {(showGrid || cinematic) && !expanded ? (
         <View style={{ height: headerHeight, flexShrink: 0, overflow: 'hidden' }}>
           {picked ? (
             <GuideHero
@@ -172,12 +177,15 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
               small={small}
               still={still}
               side={side}
-              inset={small ? 16 + 132 : side + (tileHeight * 16) / 9 + 28}
+              inset={cinematic && band.stacked ? side : small && !cinematic ? 16 + 132 : side + (tileHeight * 16) / 9 + 28}
+              spacious={cinematic}
+              copyTop={cinematic && band.stacked ? tileHeight + band.gap : 0}
+              compact={cinematic && (band.stacked || band.height < 180)}
               onWatch={watch}
             />
           ) : null}
           {view.tile.state !== 'off' ? (
-            <View style={{ position: 'absolute', right: side, bottom: small ? 12 : 8, zIndex: 2 }}>
+            <View style={{ position: 'absolute', right: cinematic && band.stacked ? (viewport.width - tileHeight * 16 / 9) / 2 : side, ...(cinematic ? { top: band.stacked ? 0 : band.gap } : { bottom: small ? 12 : 8 }), zIndex: 2 }}>
               <GuideTile
                 look={look}
                 tile={view.tile}
@@ -375,14 +383,6 @@ function pickHero(model: GuideModel, selected: { channel: string; programme: str
   const programme =
     channel.programmes.find(p => p.id === wanted) ?? channel.programmes.find(p => p.id === channel.nowId);
   return { channel, programme };
-}
-
-/** Room for the shell's floating bar where the header does not already leave it (On now, expanded). */
-/** Below the shell's bar, which stands below the status bar (insetTop). */
-function pageTop(expanded: boolean, showGrid: boolean, small: boolean, insetTop: number): number {
-  if (expanded) return (small ? 108 : 68) + insetTop;
-  if (showGrid) return 0;
-  return (small ? 116 : 112) + insetTop;
 }
 
 function clamp(value: number, min: number, max: number): number {
