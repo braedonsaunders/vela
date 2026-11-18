@@ -3,10 +3,12 @@
 // home, live watch); with none open it holds no clock, loads nothing and keeps no session.
 // React reads it through useSyncExternalStore (hooks.ts); documents read it as env.live.
 import type { Snapshot } from '@vela/player-api';
-import { loadGuide, time, type Images, type GuideChannel, type GuideModel } from '@vela/core';
+import { loadGuide, time, VelaError, type Images, type GuideChannel, type GuideModel } from '@vela/core';
 import type { LiveSource } from './source';
 import { Tile, type TileView } from './tile';
 import { Zap } from './zap';
+import { guideFailure } from './diagnostics';
+import { timeWindow } from './navigation';
 import { requestedDays, timeline } from './timeline';
 
 export type Surface = 'guide' | 'home' | 'watch';
@@ -44,6 +46,8 @@ const HOME_ZAP_WAIT = 800;
 const WATCH_ZAP_WAIT = 1100;
 
 export class LiveController {
+  private disposed = false;
+  private retryDelay = 1000;
   private readonly listeners = new Set<() => void>();
   private readonly surfaces = new Map<Surface, number>();
   private readonly tile: Tile;
@@ -62,6 +66,7 @@ export class LiveController {
   private guideIdsKey = "";
   private guideRange: { from: number; to: number } | undefined;
   private retainedIds: string[] = [];
+  private unavailableTimer: ReturnType<typeof setTimeout> | undefined;
   private viewportTimer: ReturnType<typeof setTimeout> | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private visible = true;
@@ -98,6 +103,7 @@ export class LiveController {
 
   /** A surface is on screen until the returned function runs. */
   open(surface: Surface): () => void {
+    if (this.disposed) return () => {};
     this.surfaces.set(surface, (this.surfaces.get(surface) ?? 0) + 1);
     this.sync();
     return () => {
@@ -148,7 +154,9 @@ export class LiveController {
   }
 
   setGuideRange(from: number, to: number): void {
+    const previous = this.guideRange;
     this.guideRange = { from, to };
+    if (!previous || Math.floor(previous.from / 180) !== Math.floor(from / 180) || Math.ceil(previous.to / 180) !== Math.ceil(to / 180)) this.scheduleFetch();
     if (!this.guide || !this.blocks.size) return;
     const loaded = [...this.blocks.keys()].sort((a, b) => a - b);
     let changed = false;
@@ -163,10 +171,11 @@ export class LiveController {
     const next = [...new Set(ids.filter(Boolean))].sort();
     if (next.join("|") === this.retainedIds.join("|")) return;
     this.retainedIds = next;
-    this.scheduleFetch();
+    if (next.some(id => !this.guideIds.includes(id))) this.scheduleFetch();
   }
 
   private scheduleFetch(): void {
+    if (this.disposed) return;
     ++this.loadGeneration;
     clearTimeout(this.viewportTimer);
     this.viewportTimer = setTimeout(() => { this.viewportTimer = undefined; this.fetch(); }, 100);
@@ -183,7 +192,7 @@ export class LiveController {
   /** Put a channel on the monitor; a live home remembers it as the viewer's current channel. */
   preview(channelId: string): void {
     this.tile.retune(channelId);
-    this.scheduleFetch();
+    if (!this.guideIds.includes(channelId)) this.scheduleFetch();
     if (this.surfaces.has('home')) this.remember(channelId);
   }
 
@@ -248,8 +257,12 @@ export class LiveController {
   }
 
   dispose(): void {
+    this.disposed = true;
+    ++this.loadGeneration;
+    this.surfaces.clear();
     clearTimeout(this.timer);
     clearTimeout(this.viewportTimer);
+    clearTimeout(this.unavailableTimer);
     this.homeZap.cancel();
     this.watchZap.cancel();
     this.tile.dispose();
@@ -281,11 +294,13 @@ export class LiveController {
 
   /** Start or stop the clock with the surfaces, and re-decide the tile. */
   private sync(): void {
+    if (this.disposed) return;
     if (this.active && this.timer === undefined) this.tick();
     if (!this.active && this.timer !== undefined) {
       clearTimeout(this.timer);
       this.timer = undefined;
     }
+    if (!this.active) { clearTimeout(this.unavailableTimer); this.unavailableTimer = undefined; }
     this.updateTile();
     this.emit();
   }
@@ -300,7 +315,7 @@ export class LiveController {
 
   /** Project the shown day at the clock's minute; listings are cached, so a re-projection is cheap. */
   private fetch(): void {
-    if (!this.now) return;
+    if (this.disposed || !this.now) return;
     const generation = ++this.loadGeneration;
     const channels = this.guide?.channels ?? [];
     const retained = [this.tile.target, this.options.memory.get(this.rememberKey) ?? '', this.homeZap.target, this.watchZap.target, ...this.retainedIds];
@@ -310,21 +325,42 @@ export class LiveController {
     }
     const base = this.surfaces.has('guide') && this.guideIds.length ? this.guideIds : channels.slice(0, 48).map(c => c.id);
     const ids = [...new Set([...base, ...retained].filter(Boolean))].sort();
-    const days = Array.from({ length: this.lastDay - this.firstDay + 1 }, (_, i) => this.firstDay + i);
-    Promise.all(days.map(offset => loadGuide(this.options.source, offset, this.now, this.options.scope, this.options.images, undefined, ids))).then(
+    const days = Array.from({ length: this.lastDay - this.firstDay + 1 }, (_, i) => this.firstDay + i).filter(day => {
+      if (!this.guideRange || !this.blocks.has(day) || day === this.day) return true;
+      const start = this.guide?.dayStarts?.[day] ?? day * 1440;
+      return start < this.guideRange.to && start + this.blocks.get(day)!.minutes > this.guideRange.from;
+    });
+    Promise.all(days.map(offset => loadGuide(this.options.source, offset, this.now, this.options.scope, this.options.images, undefined, ids,
+      this.surfaces.has('guide') ? this.guideRange
+        ? timeWindow(this.guideRange.from, this.guideRange.to, this.guide?.dayStarts?.[offset] ?? offset * 1440, this.blocks.get(offset)?.minutes ?? 1440)
+        : { from: -1, to: 0 } : undefined))).then(
       models => {
         if (generation !== this.loadGeneration) return;
         for (const model of models) this.blocks.set(model.day, model);
         this.guide = timeline(this.blocks, this.day);
         this.load = 'ready';
+        this.retryDelay = 1000;
+        clearTimeout(this.unavailableTimer);
+        const retryAt = Math.min(...models.map(model => model.retryAt ?? Infinity));
+        if (this.active && Number.isFinite(retryAt)) this.unavailableTimer = setTimeout(() => {
+          this.unavailableTimer = undefined;
+          this.now = Date.now();
+          this.fetch();
+        }, Math.max(1000, retryAt - Date.now() + 50));
         this.updateTile();
         if (!base.length && models[0]?.channels.length) this.scheduleFetch();
         this.emit();
       },
       error => {
         if (generation !== this.loadGeneration) return;
+        guideFailure(error);
         console.warn('Vela could not load the guide', error);
         if (!this.guide) this.load = 'failed';
+        else if (this.active && (!(error instanceof VelaError) || error.status >= 500 || error.status === 429)) {
+          clearTimeout(this.unavailableTimer);
+          this.unavailableTimer = setTimeout(() => { this.unavailableTimer = undefined; this.fetch(); }, this.retryDelay);
+          this.retryDelay = Math.min(30000, this.retryDelay * 2);
+        }
         this.emit();
       },
     );
