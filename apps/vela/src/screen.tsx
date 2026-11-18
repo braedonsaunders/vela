@@ -7,7 +7,7 @@ import { Animated, Platform, Text, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import type { RNode } from '@vela/skin/src/resolve';
-import { useVela } from './vela';
+import { useSideInsets, useVela } from './vela';
 import { FocusBoundary } from './focus-boundary';
 import { documentIsVisible } from './visible-route';
 import { useSectionFocus } from './section-focus';
@@ -23,6 +23,7 @@ interface Props {
 
 export function DocumentScreen({ route, entry, library, page, sharedShell = false }: Props) {
   const vela = useVela();
+  const sides = useSideInsets();
   const app = vela.host(route, entry, library);
   const host = useMemo(() => app && page ? page(app) : app, [app, page]);
   const season = route === 'title' ? host?.env.season : '';
@@ -68,7 +69,7 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
       {/* On TV the title page is presented in the app's root view, so it stays in the tree under
           the player: while covered it must take no focus (no interaction, which the focus engine
           honours), or the remote's arrows move focus into it and never reach the player. */}
-      <FocusBoundary active={isCurrent} enterWhenReady={host.env.load === 'ready'} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)' }} accessibilityViewIsModal>
+      <FocusBoundary active={isCurrent} enterWhenReady={host.env.load === 'ready'} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)', paddingLeft: sides.paddingLeft, paddingRight: sides.paddingRight }} accessibilityViewIsModal>
         {content}
       </FocusBoundary>
     </ScreenActive.Provider>

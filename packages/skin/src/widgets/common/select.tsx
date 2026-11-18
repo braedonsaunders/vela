@@ -4,7 +4,7 @@
 import { FocusPressable as Pressable } from '../../focus';
 import { useState } from 'react';
 import { FlatList, Modal, StyleSheet, Text, View } from 'react-native';
-import { useInheritedText, type WidgetProps } from '../../host';
+import { useHost, useInheritedText, type WidgetProps } from '../../host';
 import { APressable, Glyph, NO_RING, overlaid, useInteraction, Words } from './controls';
 import { useLook } from './look';
 import { useSelectModel, type Choice } from './select-model';
@@ -70,6 +70,8 @@ function Choices({
   onClose(): void;
 }) {
   const look = useLook();
+  // Over the whole window: clear of the safe area at its sides, which the screen below pads by.
+  const sides = useHost().viewport.sides;
   const panel = look.box({
     width: '100%',
     'max-width': '420px',
@@ -81,7 +83,7 @@ function Choices({
     'box-shadow': '0px 24px 80px $ui.shadow',
   });
   return (
-    <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', padding: 24 }]}>
+    <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', padding: 24, paddingLeft: 24 + (sides?.left ?? 0), paddingRight: 24 + (sides?.right ?? 0) }]}>
       <Pressable
         style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.scrim }]}
         onPress={onClose}

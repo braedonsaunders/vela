@@ -4,6 +4,7 @@
 import { FocusPressable as Pressable } from '@vela/skin/src/focus';
 import { Image, type ImageSource } from 'expo-image';
 import { useEffect, useState, type ReactNode } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BackHandler,
   Platform,
@@ -29,7 +30,9 @@ interface Props {
 
 export function AppearancePicker({ documents, current, image, onPick, onClose }: Props) {
   const { width } = useWindowDimensions();
-  const small = width < 640;
+  // Over the whole window (outside the screens, which pad by the safe area): clear of it too.
+  const insets = useSafeAreaInsets();
+  const small = width - insets.left - insets.right < 640;
 
   useEffect(() => {
     // Web has no hardware Back (react-native-web logs an error for BackHandler): Escape closes.
@@ -44,7 +47,7 @@ export function AppearancePicker({ documents, current, image, onPick, onClose }:
   }, [onClose]);
 
   return (
-    <View style={styles.scrim} accessibilityViewIsModal>
+    <View style={[styles.scrim, { paddingTop: insets.top, paddingRight: insets.right, paddingBottom: insets.bottom, paddingLeft: insets.left }]} accessibilityViewIsModal>
       <View style={[styles.panel, small && styles.panelSmall]}>
         <View style={styles.header}>
           <Text style={styles.title} accessibilityRole="header">{msg('ui.appearance')}</Text>

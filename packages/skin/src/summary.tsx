@@ -84,7 +84,8 @@ export function ExpandableSummary({ value, lines, style, textStyle }: {
 }
 
 function DescriptionSheet({ value, close, restore }: { value: string; close(): void; restore(): void }) {
-  const { env } = useHost();
+  const { env, viewport } = useHost();
+  const pad = env.small ? 16 : 48;
   const look = useLook();
   const preferred = useFocusClaim(true);
   const [focused, setFocused] = useState(false);
@@ -93,7 +94,10 @@ function DescriptionSheet({ value, close, restore }: { value: string; close(): v
   return (
     <Modal visible transparent animationType="none" onRequestClose={close} onDismiss={restore}
       supportedOrientations={['portrait', 'landscape']}>
-      <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', padding: env.small ? 16 : 48, backgroundColor: 'rgba(0,0,0,0.82)' }]}>
+      <View style={[StyleSheet.absoluteFill, {
+        alignItems: 'center', justifyContent: 'center', padding: pad, backgroundColor: 'rgba(0,0,0,0.82)',
+        paddingLeft: pad + (viewport.sides?.left ?? 0), paddingRight: pad + (viewport.sides?.right ?? 0),
+      }]}>
         <View accessibilityViewIsModal style={look.box({
           width: '100%', 'max-width': env.tv ? '960px' : '760px', 'max-height': '85vh', padding: env.small ? '22px' : '40px',
           gap: '24px', 'border-radius': '20px', 'background-color': '$ui.page', border: '1px solid $ui.glassEdge',

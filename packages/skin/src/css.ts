@@ -11,6 +11,10 @@ export interface Viewport {
   height: number;
   /** Safe-area insets, for env(safe-area-inset-*). */
   insets: { top: number; right: number; bottom: number; left: number };
+  /** The safe area at the screen's sides, which the host pads every screen by (so a document
+   * lays out between them and its env(safe-area-inset-left/right) is zero). A layer drawn over
+   * the whole window, such as a modal, pads by them itself. */
+  sides?: { left: number; right: number };
 }
 
 /** What a length is measured against: the font size in force, and which viewport axis a
