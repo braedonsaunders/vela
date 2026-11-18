@@ -2,7 +2,7 @@
 // live preview tile, with Watch, its times and how far it has run.
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { StyleSheet, View, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
 import type { GuideLook } from './look';
@@ -24,7 +24,6 @@ interface HeroProps {
 }
 
 export function GuideHero({ look, channel, programme, small, still, inset, side, onWatch, spacious = false, copyTop = 0, compact = false }: HeroProps) {
-  const entering = still ? undefined : FadeIn.duration(420);
   return (
     <View style={StyleSheet.absoluteFill}>
       {programme ? (
@@ -48,18 +47,17 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
       />
       <View
         style={{
-          flex: 1,
+          position: 'absolute',
+          left: side,
+          right: inset,
+          top: copyTop,
+          bottom: 0,
           justifyContent: spacious && !compact ? 'center' : 'flex-end',
-          paddingTop: copyTop,
-          paddingLeft: side,
-          paddingRight: inset,
           paddingBottom: small ? 12 : 8,
         }}
       >
-        <Animated.View
-          key={`copy-${programme?.id ?? channel.id}`}
-          entering={entering}
-          style={{ gap: small ? 4 : 3, minWidth: 0 }}
+        <View
+          style={{ gap: spacious && !compact ? 10 : small ? 4 : 3, minWidth: 0 }}
           accessibilityRole="summary"
           accessibilityLabel={msg('live.selectedProgramme')}
           accessibilityLiveRegion="polite"
@@ -69,7 +67,7 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
           ) : (
             <ChannelCopy look={look} channel={channel} small={small} onWatch={onWatch} />
           )}
-        </Animated.View>
+        </View>
       </View>
     </View>
   );
@@ -191,6 +189,7 @@ function ProgrammeCopy({
   small: boolean;
   onWatch(id: string): void;
 }) {
+  if (spacious && !compact) return <SpaciousProgrammeCopy look={look} channel={channel} programme={programme} onWatch={onWatch} />;
   const times = msg('ui.startEnd', { start: programme.startLabel, end: programme.endLabel });
   const watchLabel = programme.airing ? msg('live.watch') : msg('ui.watchChannel', { channel: channel.name });
   return (
@@ -263,6 +262,43 @@ function ProgrammeCopy({
           {programme.summary}
         </Line>
       ) : null}
+    </>
+  );
+}
+
+/** Cinematic's details column: a clear reading order beside the full live picture. */
+function SpaciousProgrammeCopy({ look, channel, programme, onWatch }: {
+  look: GuideLook;
+  channel: GuideChannel;
+  programme: GuideProgramme;
+  onWatch(id: string): void;
+}) {
+  return (
+    <>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        {programme.airing ? <LiveBadge look={look} /> : null}
+        <Eyebrow look={look}>{`${channel.number} · ${channel.name}`}</Eyebrow>
+      </View>
+      <Line look={look} size={44} lines={1} style={look.display()}>{programme.name}</Line>
+      <View style={{ gap: 8, maxWidth: 760 }}>
+        <Line look={look} size={16} weight={600} tabular>
+          {msg('ui.startEnd', { start: programme.startLabel, end: programme.endLabel })}
+          {programme.airing ? ` · ${programme.remainingLabel}` : ''}
+        </Line>
+        {programme.episode ? (
+          <Line look={look} size={15} color={look.inkSecondary} lines={2}>{programme.episode}</Line>
+        ) : null}
+        {programme.summary ? (
+          <Line look={look} size={16} color={look.inkSecondary} lines={3}
+            style={{ lineHeight: Platform.isTV ? 28 : 23 }}>{programme.summary}</Line>
+        ) : null}
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 }}>
+        <WatchPill look={look} label={programme.airing ? msg('live.watch') : msg('ui.watchChannel', { channel: channel.name })}
+          onPress={() => onWatch(channel.id)} testID="guide-watch" />
+        {programme.genre ? <Line look={look} size={13} color={look.inkSecondary}>{programme.genre}</Line> : null}
+        {programme.rating ? <Line look={look} size={13} color={look.inkSecondary}>{programme.rating}</Line> : null}
+      </View>
     </>
   );
 }
