@@ -25,6 +25,12 @@ test('nearby edges request adjacent days within the seven-day cap', () => {
   expect(requestedDays(0, 0, 200, 1000, 1440)).toEqual([]);
 });
 
+test('local midnight relabels day offsets without moving the retained absolute timeline', () => {
+  const origin = Date.parse('2026-11-18T05:00:00Z');
+  expect(prependOffset({ 0: 0, 1: 1440 }, { [-1]: 0, 0: 1440 }, origin, origin)).toBe(0);
+  expect(prependOffset({ [-1]: 0, 0: 1380 }, { 0: 0 }, origin, origin + 1380 * 60000)).toBe(-1380);
+});
+
 test('prefetching one channel in another day reuses every unchanged timeline row', () => {
   const channel = (id: string) => ({ id, listed: true, programmes: [{ id: `${id}-p`, at: 0, span: 30 }] }) as GuideModel['channels'][number];
   const today = { ...block(0), channels: [channel('a'), channel('b')] };

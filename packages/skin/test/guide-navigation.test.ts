@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { bandOffset, gapStep, PreviewDebounce, rowWindow } from '../src/widgets/guide/navigation';
+import { bandOffset, coversRange, gapStep, PreviewDebounce, rowWindow } from '../src/widgets/guide/navigation';
 import { programmeAt } from '../src/widgets/guide/geometry';
 import type { GuideChannel } from '@vela/core';
 
@@ -102,4 +102,10 @@ test('programme focus IDs remain distinct across channels and delimiter characte
   const { cellId } = await import('../src/widgets/guide/geometry');
   expect(cellId('shared-programme', 'one')).not.toBe(cellId('shared-programme', 'two'));
   expect(cellId('a|b', 'c')).not.toBe(cellId('b', 'c|a'));
+});
+
+test('retained adjacent windows cover a target but a missing interval needs data', () => {
+  expect(coversRange([{ from: 180, to: 360 }, { from: 0, to: 180 }], 90, 300)).toBe(true);
+  expect(coversRange([{ from: 0, to: 120 }, { from: 180, to: 360 }], 90, 300)).toBe(false);
+  expect(coversRange([], 0, 180)).toBe(false);
 });

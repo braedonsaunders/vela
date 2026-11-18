@@ -3,12 +3,12 @@
 // home, live watch); with none open it holds no clock, loads nothing and keeps no session.
 // React reads it through useSyncExternalStore (hooks.ts); documents read it as env.live.
 import type { Snapshot } from '@vela/player-api';
-import { loadGuide, time, guideRetry, type Images, type GuideChannel, type GuideModel } from '@vela/core';
+import { advanceGuideClock, loadGuide, time, guideRetry, type Images, type GuideChannel, type GuideModel } from '@vela/core';
 import type { LiveSource } from './source';
 import { Tile, type TileView } from './tile';
 import { Zap } from './zap';
 import { guideFailure } from './diagnostics';
-import { timeWindow } from './navigation';
+import { coversRange, timeWindow } from './navigation';
 import { requestedDays, timeline } from './timeline';
 
 export type Surface = 'guide' | 'home' | 'watch';
@@ -66,10 +66,14 @@ export class LiveController {
   private readonly watchZap: Zap;
   private current: LiveView;
   private now = 0;
+  private pendingRead: object | undefined;
+  private clockUntil = 0;
+  private readonly prefetchedClock = new Set<number>();
   private day = 0;
   private load: LiveView['load'] = 'idle';
   private guide: GuideModel | null = null;
   private readonly blocks = new Map<number, GuideModel>();
+  private readonly loadedChannels = new WeakMap<GuideModel, Set<string>>();
   private firstDay = 0;
   private lastDay = 0;
   private loadGeneration = 0;
@@ -312,7 +316,7 @@ export class LiveController {
   /** Start or stop the clock with the surfaces, and re-decide the tile. */
   private sync(): void {
     if (this.disposed) return;
-    if (this.active && this.timer === undefined) this.tick();
+    if (this.active && this.timer === undefined) { this.pendingRead = {}; this.tick(); this.fetch(); }
     if (!this.active && this.timer !== undefined) {
       this.timing.clear(this.timer);
       this.timer = undefined;
@@ -330,15 +334,36 @@ export class LiveController {
     this.now = this.timing.now();
     this.timer = this.timing.set(this.tick, MINUTE - (this.now % MINUTE) + 50);
     if (this.load === 'idle') this.load = 'loading';
-    this.fetch();
+    const advanced = new Map<number, GuideModel>();
+    let shift = 0;
+    for (const [day, block] of this.blocks) {
+      const next = advanceGuideClock(block, this.now);
+      shift = day - next.day;
+      if (next.day >= -1) advanced.set(next.day, next);
+    }
+    if (advanced.size) {
+      this.blocks.clear(); for (const [day, block] of advanced) this.blocks.set(day, block);
+      this.day = Math.max(0, this.day - shift);
+      this.firstDay = Math.min(...advanced.keys()); this.lastDay = Math.max(...advanced.keys());
+      this.guide = timeline(this.blocks, this.day);
+    } else if (this.blocks.size) {
+      this.blocks.clear();
+      this.day = this.firstDay = this.lastDay = 0;
+      this.clockUntil = 0;
+      this.guideRange = undefined;
+      // The clock has left every retained day (for example after a long sleep).
+      if (!this.pendingRead) this.scheduleFetch();
+    }
+    this.prefetchClock();
     this.emit();
   };
 
-  /** Project the shown day at the clock's minute; listings are cached, so a re-projection is cheap. */
+  /** Load missing coverage or explicitly revalidate an open/resume; never a clock tick. */
   private fetch(): void {
     if (this.disposed || !this.now || !this.active) return;
     if (this.backoff.remaining(this.timing.now())) { this.armRetry(); return; }
     const generation = ++this.loadGeneration;
+    const read = this.pendingRead;
     const channels = this.guide?.channels ?? [];
     const retained = [this.tile.target, this.options.memory.get(this.rememberKey) ?? '', this.homeZap.target, this.watchZap.target, ...this.retainedIds];
     for (const id of [this.homeZap.target, this.watchZap.target]) {
@@ -348,30 +373,53 @@ export class LiveController {
     const base = this.surfaces.has('guide') && this.guideIds.length ? this.guideIds : channels.slice(0, 48).map(c => c.id);
     const ids = [...new Set([...base, ...retained].filter(Boolean))].sort();
     const days = Array.from({ length: this.lastDay - this.firstDay + 1 }, (_, i) => this.firstDay + i).filter(day => {
+      if (day < 0) return false;
       if (!this.guideRange || !this.blocks.has(day) || day === this.day) return true;
       const start = this.guide?.dayStarts?.[day] ?? day * 1440;
       return start < this.guideRange.to && start + this.blocks.get(day)!.minutes > this.guideRange.from;
     });
-    Promise.all(days.map(offset => loadGuide(this.options.source, offset, this.now, this.options.scope, this.options.images, undefined, ids,
-      this.surfaces.has('guide') ? this.guideRange
-        ? timeWindow(this.guideRange.from, this.guideRange.to, this.guide?.dayStarts?.[offset] ?? offset * 1440, this.blocks.get(offset)?.minutes ?? 1440)
-        : { from: -1, to: 0 } : undefined, () => this.timing.now()))).then(
+    Promise.all(days.map(offset => {
+      const block = this.blocks.get(offset);
+      const range = this.surfaces.has('guide') && this.guideRange
+        ? timeWindow(this.guideRange.from, this.guideRange.to, this.guide?.dayStarts?.[offset] ?? offset * 1440, block?.minutes ?? 1440)
+        : { from: -1, to: 0 };
+      let loaded = block && this.loadedChannels.get(block);
+      if (block && !loaded) {
+        loaded = new Set(block.channels.filter(channel => channel.listingsLoaded && !channel.listingsUnavailable).map(channel => channel.id));
+        this.loadedChannels.set(block, loaded);
+      }
+      if (!read && block && range.from >= 0 && (block.currentUntil ?? 0) >= this.clockUntil
+        && coversRange(block.loadedRanges ?? [], range.from, range.to)
+        && ids.every(id => loaded?.has(id))) {
+        return Promise.resolve(advanceGuideClock(block, this.now));
+      }
+      return loadGuide(this.options.source, offset, this.now, this.options.scope, this.options.images, undefined, ids, range,
+        { clock: () => this.timing.now(), revalidate: read, currentUntil: this.clockUntil });
+    })).then(
       models => {
         if (generation !== this.loadGeneration) return;
-        for (const model of models) this.blocks.set(model.day, model);
+        this.now = Math.max(this.now, Math.floor(this.timing.now() / MINUTE) * MINUTE);
+        for (const model of models) {
+          const current = advanceGuideClock(model, this.now);
+          this.blocks.set(current.day, current);
+        }
+        // A request started before midnight can finish on the next day. Load today's
+        // missing block before giving initial focus to a programme from yesterday.
+        if (this.day === 0 && !this.blocks.has(0)) {
+          this.firstDay = Math.min(0, ...this.blocks.keys()); this.lastDay = Math.max(0, ...this.blocks.keys());
+          this.scheduleFetch();
+          if (!this.guide) return;
+        }
         this.guide = timeline(this.blocks, this.day);
         this.load = 'ready';
+        this.clockUntil = Math.max(this.clockUntil, ...models.map(model => model.currentUntil ?? 0));
+        if (this.pendingRead === read) this.pendingRead = undefined;
         if (this.backoff.remaining(this.timing.now())) this.armRetry();
         else { this.timing.clear(this.retryTimer); this.retryTimer = undefined; }
         this.timing.clear(this.unavailableTimer);
-        const retryAt = Math.min(...models.map(model => model.retryAt ?? Infinity));
-        if (this.active && !this.backoff.remaining(this.timing.now()) && Number.isFinite(retryAt)) this.unavailableTimer = this.timing.set(() => {
-          this.unavailableTimer = undefined;
-          this.now = this.timing.now();
-          this.fetch();
-        }, Math.max(1000, retryAt - this.timing.now() + 50));
         this.updateTile();
         if (!base.length && models[0]?.channels.length) this.scheduleFetch();
+        this.prefetchClock();
         this.emit();
       },
       error => {
@@ -388,6 +436,16 @@ export class LiveController {
         this.emit();
       },
     );
+  }
+
+  /** A window is extended once before the local clock reaches its retained edge. */
+  private prefetchClock(): void {
+    if (!this.active || this.pendingRead || this.backoff.remaining(this.timing.now())) return;
+    const until = Math.max(...[...this.blocks.values()].map(block => block.currentUntil ?? 0));
+    if (!Number.isFinite(until) || until <= 0 || until - this.now >= 60 * MINUTE || this.prefetchedClock.has(until)) return;
+    this.prefetchedClock.add(until);
+    this.clockUntil = until + 180 * MINUTE;
+    this.scheduleFetch();
   }
 
   /** One wakeup for the whole scope; clock, focus and routes cannot bypass it. */

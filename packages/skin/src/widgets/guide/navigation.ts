@@ -29,6 +29,18 @@ export function timeWindow(from: number, to: number, offset = 0, minutes = 1440)
     to: Math.min(minutes, Math.max(180, Math.ceil((to - offset) / 180) * 180)) };
 }
 
+/** Complete retained coverage, including adjacent windows; a gap still needs data. */
+export function coversRange(ranges: readonly { from: number; to: number }[], from: number, to: number): boolean {
+  let end = from;
+  for (const range of [...ranges].sort((a, b) => a.from - b.from)) {
+    if (range.to <= end) continue;
+    if (range.from > end) return false;
+    end = range.to;
+    if (end >= to) return true;
+  }
+  return end >= to;
+}
+
 /** Reuse native programme views without changing the slot of any programme still visible. */
 export class ProgrammeSlots {
   private readonly slots = new Map<string, number>();

@@ -13,7 +13,7 @@ export function timeline(blocks: ReadonlyMap<number, GuideModel>, selected: numb
   const indexed = ordered.map(([day, block]) => ({ offset: starts[day]!, block, channels: new Map(block.channels.map(c => [c.id, c])) }));
   const now = indexed.find(({ block }) => block.nowMinute >= 0);
   return {
-    ...base, day: selected, minutes, dayStarts: starts,
+    ...base, day: selected, minutes, dayStarts: starts, startsAt: ordered[0]![1].startsAt,
     loadedRanges: indexed.flatMap(({ offset, block }) => (block.loadedRanges ?? [{ from: 0, to: block.minutes }]).map(range => ({ from: range.from + offset, to: range.to + offset }))),
     nowMinute: now ? now.offset + now.block.nowMinute : -1,
     landing: (starts[base.day] ?? 0) + base.landing,
@@ -45,7 +45,8 @@ export function requestedDays(first: number, last: number, from: number, to: num
 }
 
 /** Preserve the same point in time when new blocks are inserted to the left. */
-export function prependOffset(oldStarts: Record<number, number>, newStarts: Record<number, number>): number {
+export function prependOffset(oldStarts: Record<number, number>, newStarts: Record<number, number>, oldOrigin?: number, newOrigin?: number): number {
+  if (oldOrigin !== undefined && newOrigin !== undefined) return (oldOrigin - newOrigin) / 60000;
   const anchor = Object.keys(oldStarts).map(Number).find(day => newStarts[day] !== undefined);
   return anchor === undefined ? 0 : newStarts[anchor]! - oldStarts[anchor]!;
 }

@@ -109,6 +109,7 @@ function GuideGridContent(props: GridProps) {
   const pending = useRef<PendingFocus | null>(null);
   const initialFocus = useRef(false);
   const previousStarts = useRef(model.dayStarts ?? {});
+  const previousOrigin = useRef(model.startsAt);
 
   const nativeReady = Platform.isTV && body.width > 0;
   useAnimatedReaction(() => [nativeReady && canvas.width > 0 ? targetX.value : -1, canvas.width], (next, previous) => {
@@ -174,15 +175,16 @@ function GuideGridContent(props: GridProps) {
 
   useLayoutEffect(() => {
     const next = model.dayStarts ?? {};
-    const added = prependOffset(previousStarts.current, next);
+    const added = prependOffset(previousStarts.current, next, previousOrigin.current, model.startsAt);
     previousStarts.current = next;
+    previousOrigin.current = model.startsAt;
     if (added) {
       if (focusMinute.current >= 0) focusMinute.current += added;
       if (toolbarMinute.current !== null) toolbarMinute.current += added;
       if (pending.current) pending.current.minute += added;
       scrollTo(currentX() / scale + added, false);
     }
-  }, [model.dayStarts, scale, scrollTo, scrollX]);
+  }, [model.dayStarts, model.startsAt, scale, scrollTo, scrollX]);
 
   const enterGrid = (channelId?: string) => {
     if (!props.active || !body.width || Platform.isTV && (!canvas.width || !canvas.height) || waitingTime.current) {

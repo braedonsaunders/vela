@@ -1,11 +1,12 @@
 // A channel's cell in the guide's rail: number, logo on its neutral tile, name, favourite star and
 // how far the programme on now has run. Pressing it watches the channel.
 import { Platform, View } from 'react-native';
-import { memo } from 'react';
+import { memo, useMemo, useSyncExternalStore } from 'react';
 import { msg, type GuideChannel } from '@vela/core';
 import { railId } from './geometry';
 import type { GuideLook } from './look';
 import { Glyph, Line, LogoTile, Press, Progress } from './parts';
+import { useLiveContext } from './live';
 
 interface RailProps {
   look: GuideLook;
@@ -77,7 +78,18 @@ export const RailCell = memo(function RailCell({ look, channel, small, width, ro
   );
 });
 
-function RailText({ look, channel }: { look: GuideLook; channel: GuideChannel }) {
+function RailText({ look, channel: original }: { look: GuideLook; channel: GuideChannel }) {
+  const live = useLiveContext();
+  const read = useMemo(() => {
+    let index = -1;
+    return () => {
+      const rows = live?.controller.view().guide?.channels;
+      if (rows?.[index]?.id !== original.id) index = rows?.findIndex(row => row.id === original.id) ?? -1;
+      return rows?.[index] ?? original;
+    };
+  }, [live?.controller, original]);
+  // Only clock text/progress subscribes; the recycled row and logo never redraw for a minute.
+  const channel = useSyncExternalStore(live?.controller.subscribe ?? (() => () => {}), read, read);
   return (
     <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
       <View style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
