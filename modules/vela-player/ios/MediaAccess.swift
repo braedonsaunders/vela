@@ -35,7 +35,17 @@ struct VelaMediaAuth {
 
     /// The headers for `url`, only when it is inside the authorized origin and path.
     func headers(for url: URL) -> [String: String] {
-        guard let scheme = url.scheme, let host = url.host else {
+        guard let scheme = url.scheme, let host = url.host,
+              url.user == nil, url.password == nil,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return [:]
+        }
+        let encoded = components.percentEncodedPath.lowercased()
+        let traversal = encoded.split(separator: "/").contains { part in
+            let decoded = String(part).removingPercentEncoding
+            return decoded == "." || decoded == ".."
+        }
+        guard !traversal, !encoded.contains("%2f"), !encoded.contains("%5c"), !encoded.contains("%25") else {
             return [:]
         }
         let port = url.port.map { ":\($0)" } ?? ""
@@ -64,6 +74,12 @@ enum VelaMediaAccessStore {
         lock.lock()
         defer { lock.unlock() }
         return current?.headers(for: url) ?? [:]
+    }
+
+    static var snapshot: VelaMediaAuth? {
+        lock.lock()
+        defer { lock.unlock() }
+        return current
     }
 
     static var origin: String? {

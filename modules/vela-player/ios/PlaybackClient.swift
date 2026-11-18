@@ -162,16 +162,20 @@ final class PlaybackClient {
                 }.store(in: &self.subscriptions)
                 engine.$isSeeking.sink { [weak self] in self?.emit("seeking", $0) }.store(in: &self.subscriptions)
                 engine.clock.$bufferedPosition.sink { [weak self] in self?.emit("demuxer-cache-time", $0) }.store(in: &self.subscriptions)
-                var httpHeaders: [String: String] = [:]
-                for header in self.headers {
-                    if let colon = header.firstIndex(of: ":") {
-                        httpHeaders[String(header[..<colon])] = header[header.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-                    }
+                let source: MediaSource
+                if self.headers.isEmpty {
+                    source = .url(url)
+                } else {
+                    guard let access = VelaMediaAccessStore.snapshot,
+                          !access.headers(for: url).isEmpty else { throw MPVError("Media access expired") }
+                    source = .custom(ScopedAetherReader(url: url, access: access))
                 }
                 self.onBackend?("aether")
-                let opts = LoadOptions(httpHeaders: httpHeaders, matchContentEnabled: !preview,
+                // All grant headers stay in the scoped byte reader. Aether's own requests,
+                // including HLS resources and external subtitles, receive no credentials.
+                let opts = LoadOptions(httpHeaders: [:], matchContentEnabled: !preview,
                                        initialSubtitleTrackID: self.subtitle, autoplay: !self.paused)
-                _ = try await engine.load(url: url, startPosition: self.start, options: opts,
+                _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
                 guard !self.dead, self.fallback == nil else { return }
                 print("[vela-player] Aether ready: route=\(engine.videoRoute) format=\(engine.videoFormat) audio=\(engine.audioDelivery) AVPlayerLayer=\(engine.nativePlayerLayer != nil)")
