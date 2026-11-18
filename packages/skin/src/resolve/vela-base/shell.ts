@@ -160,7 +160,8 @@ export const shell: Node = {
       role: 'navigation',
       when: [{ test: 'env.viewer' }],
       motion: 'velaNavIn',
-      style: { position: 'absolute', top: '0px', left: '0px', right: '0px', 'z-index': '20' },
+      // Below the status bar and any notch; its veil reaches up behind them.
+      style: { position: 'absolute', top: '0px', left: '0px', right: '0px', 'z-index': '20', 'padding-top': 'env(safe-area-inset-top)' },
       children: [
         {
           type: 'box',
@@ -332,7 +333,7 @@ export const shell: Node = {
       motion: 'velaPop',
       style: {
         position: 'absolute',
-        top: '78px',
+        top: 'calc(78px + env(safe-area-inset-top))',
         right: 'max(28px, 4vw)',
         'z-index': '30',
         width: '260px',
@@ -347,7 +348,7 @@ export const shell: Node = {
         'backdrop-filter': 'blur(24px)',
         'box-shadow': '0px 24px 70px $ui.shadow',
       },
-      small: { top: '104px', right: '12px' },
+      small: { top: 'calc(104px + env(safe-area-inset-top))', right: '12px' },
       children: [
         {
           type: 'box',

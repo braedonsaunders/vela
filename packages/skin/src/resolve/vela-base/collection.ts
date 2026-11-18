@@ -64,12 +64,12 @@ export const collection: Node = {
             display: 'flex',
             'flex-direction': 'column',
             gap: '12px',
-            'padding-top': '112px',
+            'padding-top': 'calc(112px + env(safe-area-inset-top))',
             'padding-bottom': '8px',
             ...gutter,
             'background-image': 'radial-gradient(ellipse 70% 120% at 15% 0%, #77533525 0%, #77533500 70%)',
           } as Style,
-          small: { gap: '10px', 'padding-top': '120px', 'padding-bottom': '4px', ...gutterSmall } as Style,
+          small: { gap: '10px', 'padding-top': 'calc(120px + env(safe-area-inset-top))', 'padding-bottom': '4px', ...gutterSmall } as Style,
           children: [
             {
               type: 'box',

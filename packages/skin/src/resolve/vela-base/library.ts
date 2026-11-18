@@ -233,7 +233,7 @@ export const toolbar: Node = {
     'z-index': '5',
     display: 'flex',
     'flex-direction': 'column',
-    'padding-top': '84px',
+    'padding-top': 'calc(84px + env(safe-area-inset-top))',
     'background-color': veil(82),
     'backdrop-filter': 'blur(20px) saturate(1.3)',
     'border-width': '0px',
@@ -241,7 +241,7 @@ export const toolbar: Node = {
     'border-bottom-width': '1px',
     'border-bottom-color': '$ui.glassEdge',
   } as Style,
-  small: { 'padding-top': '104px' } as Style,
+  small: { 'padding-top': 'calc(104px + env(safe-area-inset-top))' } as Style,
   children: [
     {
       type: 'text',
@@ -352,8 +352,8 @@ export const libraryLoading: Node = {
   role: 'status',
   label: '{t:ui.findingTitles}',
   motion: 'velaStatusOpen',
-  style: { display: 'flex', 'flex-direction': 'column', gap: '28px', 'padding-top': '128px' },
-  small: { 'padding-top': '120px' },
+  style: { display: 'flex', 'flex-direction': 'column', gap: '28px', 'padding-top': 'calc(128px + env(safe-area-inset-top))' },
+  small: { 'padding-top': 'calc(120px + env(safe-area-inset-top))' },
   children: [
     {
       type: 'box',

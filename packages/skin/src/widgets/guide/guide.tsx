@@ -154,7 +154,7 @@ function GuidePage({ look, model, view, controller, focus }: PageProps) {
     flex: 1,
     minHeight: 0,
     backgroundColor: look.page,
-    paddingTop: hasFlowHeader(doc.document.slots?.shell) ? 0 : pageTop(expanded, showGrid, small),
+    paddingTop: hasFlowHeader(doc.document.slots?.shell) ? 0 : pageTop(expanded, showGrid, small, viewport.insets.top),
     backgroundImage: `radial-gradient(ellipse 70% 60% at 82% 0%, ${look.aura}, transparent 70%)`,
   } as ViewStyle;
   const highlighted =
@@ -378,10 +378,11 @@ function pickHero(model: GuideModel, selected: { channel: string; programme: str
 }
 
 /** Room for the shell's floating bar where the header does not already leave it (On now, expanded). */
-function pageTop(expanded: boolean, showGrid: boolean, small: boolean): number {
-  if (expanded) return small ? 108 : 68;
+/** Below the shell's bar, which stands below the status bar (insetTop). */
+function pageTop(expanded: boolean, showGrid: boolean, small: boolean, insetTop: number): number {
+  if (expanded) return (small ? 108 : 68) + insetTop;
   if (showGrid) return 0;
-  return small ? 116 : 112;
+  return (small ? 116 : 112) + insetTop;
 }
 
 function clamp(value: number, min: number, max: number): number {
