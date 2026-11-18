@@ -7,21 +7,41 @@ module.exports = function withApplePlayer(config) {
   });
   return withXcodeProject(config, mod => {
     const project = mod.modResults;
-    for (const section of Object.values(project.pbxXCBuildConfigurationSection())) {
+    const objects = project.hash.project.objects;
+    const target = objects.PBXNativeTarget[project.getFirstTarget().uuid];
+    const appConfigs = new Set(objects.XCConfigurationList[target.buildConfigurationList].buildConfigurations.map(ref => ref.value));
+    const libraries = ['avcodec', 'avformat', 'avutil', 'avfilter', 'avdevice', 'swresample', 'swscale', 'dav1d'];
+    const clean = value => String(value).replaceAll('"', '');
+    for (const [id, section] of Object.entries(project.pbxXCBuildConfigurationSection())) {
       if (!section.buildSettings) continue;
       section.buildSettings.IPHONEOS_DEPLOYMENT_TARGET = '18.0';
       section.buildSettings.TVOS_DEPLOYMENT_TARGET = '18.0';
+      if (!appConfigs.has(id)) {
+        const flags = section.buildSettings.OTHER_LDFLAGS;
+        if (Array.isArray(flags) && (flags.some(value => clean(value) === 'AetherLibavcodec') ||
+          (flags.some(value => clean(value) === 'Libavcodec') && flags.some(value => clean(value).includes('dead_strip_dylibs'))))) {
+          const remaining = [];
+          for (let i = 0; i < flags.length; i++) {
+            const value = clean(flags[i]);
+            if (value === '-framework' && /^(?:Aether)?Lib(?:av|sw|dav1d|zimg|zvbi)/.test(clean(flags[i + 1]))) { i++; continue; }
+            if (value === '-Wl' && clean(flags[i + 1]) === '-dead_strip_dylibs') { i++; continue; }
+            if (value.includes('dead_strip_dylibs')) continue;
+            remaining.push(flags[i]);
+          }
+          section.buildSettings.OTHER_LDFLAGS = remaining;
+          delete section.buildSettings.LD_GENERATE_MAP_FILE;
+        }
+        continue;
+      }
       // Both engines are static. Resolve every av_* reference against MPVKit's
       // FFmpeg; Aether's protocol-free binaries cannot serve mpv.
       section.buildSettings.OTHER_LDFLAGS = [
-        ...['avcodec', 'avformat', 'avutil', 'avfilter', 'avdevice', 'swresample', 'swscale', 'dav1d']
-          .flatMap(name => ['-framework', `Lib${name}`]),
-        '-Wl,-dead_strip_dylibs',
+        ...libraries.flatMap(name => ['-framework', `Lib${name}`]),
+        '"-Wl,-dead_strip_dylibs"',
         '"$(inherited)"',
       ];
       section.buildSettings.LD_GENERATE_MAP_FILE = 'YES';
     }
-    const objects = project.hash.project.objects;
     objects.XCRemoteSwiftPackageReference ||= {};
     let packageID = Object.keys(objects.XCRemoteSwiftPackageReference).find(id =>
       String(objects.XCRemoteSwiftPackageReference[id]?.repositoryURL || '').includes('superuser404notfound/FFmpegBuild'));
