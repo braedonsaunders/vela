@@ -48,52 +48,8 @@ export const stage: Node = {
         when: [{ test: 'env.searching', not: true }],
         style: { position: 'absolute', inset: '0px' },
         children: [
-          {
-            type: 'box',
-            when: [{ test: 'hero.backdrop' }],
-            motion: 'velaDrift',
-            style: { position: 'absolute', inset: '0px', 'transform-origin': '62% 38%' },
-            children: [
-              {
-                type: 'image',
-                src: '{hero.backdrop}',
-                alt: '',
-                fade: true,
-                style: {
-                  position: 'absolute',
-                  inset: '0px',
-                  width: '100%',
-                  height: '100%',
-                  'object-fit': 'cover',
-                  transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)',
-                },
-              },
-            ],
-          },
-          {
-            type: 'image',
-            when: [{ test: 'hero.backdrop', not: true }, { test: 'hero.poster' }],
-            src: '{hero.poster}',
-            alt: '',
-            motion: 'velaDrift',
-            style: {
-              position: 'absolute',
-              top: '-20%',
-              left: '-20%',
-              width: '140%',
-              height: '140%',
-              'object-fit': 'cover',
-              filter: 'blur(90px) saturate(1.6)',
-              opacity: '0.7',
-            },
-          },
-          // The hero's muted trailer, over its art and under its scrims, while the preview plays.
-          {
-            type: 'widget',
-            widget: 'heroPreview',
-            when: [{ test: 'env.still', not: true }],
-            style: { position: 'absolute', inset: '0px' },
-          },
+          { type: 'widget', widget: 'heroArtwork', style: { position: 'absolute', inset: '0px' } },
+
         ],
       },
       {

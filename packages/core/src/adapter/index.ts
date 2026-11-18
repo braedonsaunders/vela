@@ -15,13 +15,13 @@ export interface ServerAdapter {
   describe(): Promise<ServerDescription>;
 
   /** The signed-in viewer's home: rows, heroes and the server's description. */
-  home(): Promise<Home>;
+  home(fresh?: boolean): Promise<Home>;
   rows(query: V.RowsQuery): Promise<V.Page<V.Row>>;
   row(id: string, cursor?: string, limit?: number): Promise<V.Row>;
   libraries(query: V.LibrariesQuery): Promise<V.Page<V.Library>>;
   library(id: string, query: V.LibraryBrowseQuery): Promise<V.LibraryContents>;
   collection(id: string, cursor?: string, limit?: number): Promise<V.CollectionContents>;
-  detail(id: string): Promise<V.TitleDetail>;
+  detail(id: string, fresh?: boolean): Promise<V.TitleDetail>;
   /** Catalogue search by name. Search by description is the DescriptiveSearch capability. */
   search(request: CatalogueSearch): Promise<V.SearchResponse>;
 

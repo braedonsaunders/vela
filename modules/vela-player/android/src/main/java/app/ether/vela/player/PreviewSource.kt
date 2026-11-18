@@ -7,7 +7,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-internal class PreviewSource(val url: String, val expiresAt: Long, val loop: Boolean) {
+internal class PreviewSource(val url: String, val expiresAt: Long, val loop: Boolean, val startSeconds: Double = 0.0) {
   /** Milliseconds until the grant expires (zero or less: expired). */
   fun remaining(now: Long = System.currentTimeMillis()): Long = expiresAt - now
 
@@ -16,7 +16,8 @@ internal class PreviewSource(val url: String, val expiresAt: Long, val loop: Boo
     fun from(value: Map<String, Any?>): PreviewSource? {
       val url = value.text("url")?.takeIf { it.isNotEmpty() } ?: return null
       val expiresAt = value.text("expiresAt")?.let(::parseTime) ?: return null
-      return PreviewSource(url, expiresAt, value["loop"] == true)
+      val offset = (value["startSeconds"] as? Number)?.toDouble() ?: 0.0
+      return PreviewSource(url, expiresAt, value["loop"] == true, if (offset.isFinite()) maxOf(0.0, offset) else 0.0)
     }
 
     /** An RFC 3339 time in UTC or with an offset, with or without fractional seconds. */

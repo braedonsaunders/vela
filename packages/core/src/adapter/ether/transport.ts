@@ -11,6 +11,8 @@ export interface RequestOptions {
   auth?: boolean;
   /** Revalidate with the server's ETag and keep the answer (default false). */
   cacheable?: boolean;
+  /** Replace cached grants without sending an old ETag. */
+  fresh?: boolean;
   /** Refresh and resend once on 401 (default true). */
   retryAuth?: boolean;
   signal?: AbortSignal;
@@ -51,12 +53,12 @@ export class EtherTransport {
   }
 
   async request<T>(method: Method, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
-    const { auth = true, cacheable = false, retryAuth = true, signal } = options;
+    const { auth = true, cacheable = false, fresh = false, retryAuth = true, signal } = options;
     signal?.throwIfAborted();
     let tokens = auth ? await abortable(this.credentials.get(), signal) : null;
     if (auth && !tokens) throw new Error('Sign in required');
     const key = this.cacheKey(tokens, path);
-    const cached = cacheable ? this.cache.get(key) : undefined;
+    const cached = cacheable && !fresh ? this.cache.get(key) : undefined;
     const send = (token: Token, useCache = true) => {
       const headers: Record<string, string> = {};
       if (body !== undefined) headers['Content-Type'] = 'application/json';

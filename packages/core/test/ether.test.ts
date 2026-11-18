@@ -66,6 +66,21 @@ describe('EtherAdapter', () => {
     expect(seen[1]!.url.pathname).toBe('/vela/v0/titles/a%2Fb');
   });
 
+  test('artwork refresh skips the old ETag and replaces the cached bootstrap grants', async () => {
+    let calls = 0;
+    const seen = routeFetch({ 'GET /vela/v0/bootstrap': () => {
+      calls++;
+      return calls === 3 ? new Response(null, { status: 304 })
+        : Response.json({ heroes: [{ artwork: calls === 1 ? 'expired' : 'fresh' }] }, { headers: { ETag: `"${calls}"` } });
+    } });
+    const adapter = ether();
+    await adapter.home();
+    const fresh = await adapter.home(true);
+    expect(seen[1]!.headers.has('if-none-match')).toBe(false);
+    expect(await adapter.home()).toEqual(fresh);
+    expect(seen[2]!.headers.get('if-none-match')).toBe('"2"');
+  });
+
   test('cacheable answers are revalidated with their ETag and reused on 304', async () => {
     let calls = 0;
     const seen = routeFetch({ 'GET /vela/v0/live/channels': () => {

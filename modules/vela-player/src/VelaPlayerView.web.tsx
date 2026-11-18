@@ -90,7 +90,7 @@ function useMounted(element: React.RefObject<HTMLElement | null>, props: VelaPla
 function WebSurface({ mount, ...props }: VelaPlayerViewProps & { mount: Mount }) {
   const element = useRef<HTMLElement | null>(null);
   useMounted(element, props, mount);
-  return <View ref={element as never} style={[{ backgroundColor: '#000', overflow: 'hidden' }, props.style]} />;
+  return <View ref={element as never} style={[{ backgroundColor: props.preview ? 'transparent' : '#000', overflow: 'hidden' }, props.style]} />;
 }
 
 /** The player view. Switching between a trailer preview, an ambient preview and full playback

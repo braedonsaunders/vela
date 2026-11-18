@@ -253,6 +253,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       viewport,
       dispatch: (action, arg) => dispatch({ route, entry, library }, action, arg),
       image,
+      refreshHeroArtwork: id => store.home.refreshArtwork(id),
       setQuery,
       setFlag: view.setFlag,
       setPager: view.setPager,

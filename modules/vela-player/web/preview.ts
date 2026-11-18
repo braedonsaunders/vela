@@ -4,6 +4,7 @@
 // retries an expired grant. Commands are limited to play and pause.
 import type { Command, Failure, MediaAccess, PreviewSource, Snapshot } from '@vela/player-api';
 import { parseMediaAuthorization, permittedMediaURL } from './engine/media-auth';
+import { previewStart } from './preview-start';
 import { previewSnapshot, type PreviewState } from './preview-snapshot';
 
 export interface PreviewProps {
@@ -76,6 +77,8 @@ export function createWebPreview(
     generation++;
     loaded = '';
     state = null;
+    seeked = false;
+    report('loading');
     video.pause();
     if (video.hasAttribute('src')) {
       video.removeAttribute('src');
@@ -127,7 +130,38 @@ export function createWebPreview(
     else if (command.type === 'play' && video.hasAttribute('src')) void video.play().catch(() => {});
   };
 
-  video.addEventListener('playing', () => report('playing'));
+  let seeked = false;
+  let lastFrame = 0;
+  let lastProgress = performance.now();
+  const frame = () => {
+    if (disposed) return;
+    if (video.currentTime !== lastFrame && !video.paused && !video.seeking && seeked && video.readyState >= 2) {
+      lastFrame = video.currentTime;
+      lastProgress = performance.now();
+      report('playing');
+    } else if (state === 'playing' && performance.now() - lastProgress > 1500) report('loading');
+  };
+  const progress = setInterval(() => {
+    if (!video.requestVideoFrameCallback) frame();
+    if (state === 'playing' && performance.now() - lastProgress > 1500) report('loading');
+  }, 100);
+  const decoded = () => {
+    if (disposed) return;
+    frame();
+    video.requestVideoFrameCallback?.(decoded);
+  };
+  video.requestVideoFrameCallback?.(decoded);
+  video.addEventListener('loadedmetadata', () => {
+    seeked = false;
+    const offset = previewStart(props.preview.startSeconds, video.duration);
+    if (offset > 0) video.currentTime = offset;
+    else seeked = true;
+  });
+  video.addEventListener('seeked', () => { seeked = true; });
+  video.addEventListener('waiting', () => report('loading'));
+  video.addEventListener('stalled', () => report('loading'));
+  video.addEventListener('pause', () => report('loading'));
+  video.addEventListener('seeking', () => report('loading'));
   video.addEventListener('ended', () => report('ended'));
   video.addEventListener('error', () => {
     if (video.hasAttribute('src')) fail('The preview source failed');
@@ -151,6 +185,7 @@ export function createWebPreview(
       if (disposed) return;
       disposed = true;
       clearTimeout(expiry);
+      clearInterval(progress);
       observer.disconnect();
       document.removeEventListener('visibilitychange', apply);
       release();
