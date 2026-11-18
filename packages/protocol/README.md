@@ -659,3 +659,17 @@ they implement. `searchLibraries: true` enables restriction to a visible ID from
 and at least two libraries, in server order, and reset it when the query clears.
 Library and kind controls combine, including advertised plugin kinds.
 Jellyfin/Emby use Items `ParentId`; Plex uses library section search.
+
+When `capabilities.liveGuideWindow` is present, clients may read a complete
+window using `POST /live/guide/window` with `{ channelIds, from, until }`.
+This is a read and does not require an idempotency key. Advertised limits bound
+the channel count and window length. The response has `from`, `until`,
+`revision`, `validUntil`, and one `{ channelId, state, programmes }` entry per
+requested channel in request order. `ready` covers the complete overlap interval,
+including crossing programmes with their original timestamps; `ready` with an
+empty array is distinct from retryable `unavailable`. `validUntil` reflects source
+freshness, including for past windows, and is capped at 60 seconds when any row is
+unavailable. A `guide_window_too_dense` error includes
+`suggest: { maxChannels, maxWindowMinutes }`; split the request rather than treating
+an incomplete row as ready. Servers without this capability retain the paginated
+`GET /live/guide` path.

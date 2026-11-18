@@ -1,13 +1,15 @@
+import { readGuideWindow } from './bulk';
 import { guideWindows } from './window';
 import { VelaError } from '../adapter/errors';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { localeContext, minute, msg, number, time, withLocale } from '../i18n';
-import type { ArtworkRef, Channel, GuideQuery, GuideResponse, Page, Programme } from '../wire';
+import type { ArtworkRef, Channel, GuideQuery, GuideResponse, GuideWindowRequest, GuideWindowResponse, Page, Programme } from '../wire';
 
 /** A single bounded guide window. Times remain the server's original timestamps. */
 export interface GuideApi {
   channels(cursor?: string, limit?: number): Promise<Page<Channel>>;
   guide(query: GuideQuery): Promise<GuideResponse>;
+  guideWindow?(query: GuideWindowRequest): Promise<GuideWindowResponse | null>;
 }
 
 export interface GuideProgramme {
@@ -22,7 +24,7 @@ export interface GuideProgramme {
   episode: string; rating: string; genre: string; tone: number; art: string;
 }
 export interface GuideChannel {
-  id: string; number: string; name: string; favorite: boolean; logo: string; group: string; listed: boolean; listingsLoaded: boolean;
+  id: string; number: string; listingsUnavailable?: boolean; name: string; favorite: boolean; logo: string; group: string; listed: boolean; listingsLoaded: boolean;
   /** The owner-defined Guides this channel belongs to, by id; empty when none or unknown. */
   guideIds: string[];
   now: string; next: string; nowId: string; nowProgress: number; nowRemaining: string; nextLabel: string;
@@ -35,6 +37,7 @@ export interface GuideModel {
   dayStarts?: Record<number, number>;
   /** Completed listing coverage, in timeline minutes. */
   loadedRanges?: { from: number; to: number }[];
+  retryAt?: number;
   day: number; dayLabel: string; fromLabel: string; untilLabel: string; minutes: number; nowMinute: number; nowLabel: string; landing: number;
   ticks: { id: string; label: string; minute: number; hour: boolean }[];
   days: { offset: number; label: string; date: string }[];
@@ -76,12 +79,13 @@ async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise
   }
 }
 
-interface Listings { channels: Channel[]; programmes: Programme[] }
+interface ChannelListings { programmes: Programme[]; ready: boolean; expires: number }
+interface Listings { channels: Channel[]; programmes: Programme[]; loaded: Set<string>; unavailable: Set<string>; retryAt?: number }
 const cache = new Map<string, { at: number; value: Promise<Listings> }>();
 // Viewport channel sets overlap. Reuse each channel's completed pages within
 // the same window, so expanding the initial 30 channels to 48 does not reissue
 // the first 30 channels' listings (and their image grants).
-const channelListings = new Map<string, Map<string, { at: number; value: Promise<Programme[]> }>>();
+const channelListings = new Map<string, Map<string, { at: number; expires: number; lastReady?: Programme[]; value: Promise<ChannelListings> }>>();
 /** Every page of one window, shared by the minute-by-minute re-projections of that window. */
 function listings(api: GuideApi, scope: string, from: number, until: number, now: number, ids?: string[]): Promise<Listings> {
   const key = `${scope}|${from}|${until}|${ids?.join(",") ?? "*"}`;
@@ -89,7 +93,7 @@ function listings(api: GuideApi, scope: string, from: number, until: number, now
   if (ids === undefined && hit && now >= hit.at && now - hit.at < FRESH) return hit.value;
   const value = (async () => {
     const channels = await channelMetadata(api, scope, now);
-    const requested = ids && ids.length === 0 ? [...channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 30).map(c => c.id) : ids;
+    const requested = ids && ids.length === 0 ? [...channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 30).map(c => c.id) : ids && [...new Set(ids)];
     const windowKey = `${scope}|${from}|${until}`;
     let entries = channelListings.get(windowKey);
     if (!entries) {
@@ -100,35 +104,54 @@ function listings(api: GuideApi, scope: string, from: number, until: number, now
     const wanted = requested ?? channels.map(channel => channel.id);
     const missing = wanted.filter(id => {
       const hit = entries.get(id);
-      return !hit || now < hit.at || now - hit.at >= FRESH;
+      return !hit || now < hit.at || now >= hit.expires;
     });
     const batches = Array.from({ length: Math.ceil(missing.length / 100) }, (_, i) => missing.slice(i * 100, (i + 1) * 100));
     // Preserve the server's unfiltered query when no channel filter was requested.
     const queries: (string[] | undefined)[] = requested === undefined && missing.length === wanted.length ? [undefined] : batches;
-    const reads: Promise<Programme[]>[] = [];
+    const reads: Promise<Map<string, ChannelListings>>[] = [];
     for (const batch of queries) {
       const ids = batch ?? wanted;
-      const page = allPages(cursor => {
-        if (process.env.EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS === '1') {
-          const root = globalThis as typeof globalThis & { __velaGuideQueries?: number };
-          root.__velaGuideQueries = (root.__velaGuideQueries ?? 0) + 1;
-        }
-        return api.guide({ from: new Date(from).toISOString(), until: new Date(until).toISOString(), cursor, limit: 100, channelIds: batch });
-      });
+      const page = (async () => {
+        const fromISO = new Date(from).toISOString(), untilISO = new Date(until).toISOString();
+        const bulk = batch && until - from <= 3 * HOUR ? await readGuideWindow(api, { channelIds: batch, from: fromISO, until: untilISO }) : null;
+        if (bulk) return new Map(bulk.channels.map(row => [row.channelId, { programmes: row.programmes, ready: row.state === 'ready', expires: Date.parse(bulk.validUntil) }]));
+        const programmes = await allPages(cursor => {
+          if (process.env.EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS === '1') {
+            const root = globalThis as typeof globalThis & { __velaGuideQueries?: number };
+            root.__velaGuideQueries = (root.__velaGuideQueries ?? 0) + 1;
+          }
+          return api.guide({ from: fromISO, until: untilISO, cursor, limit: 100, channelIds: batch });
+        });
+        return new Map(ids.map(id => [id, { programmes: programmes.filter(p => p.channelId === id), ready: true, expires: now + FRESH }]));
+      })();
       reads.push(page);
       for (const id of ids) {
-        const value = page.then(programmes => programmes.filter(programme => programme.channelId === id));
-        entries.set(id, { at: now, value });
-        value.catch(() => { if (entries.get(id)?.value === value) entries.delete(id); });
+        const previous = entries.get(id);
+        const value = page.then(rows => {
+          const answer = rows.get(id);
+          if (!answer) throw new Error('Missing channel in guide window');
+          return answer.ready ? answer : { ...answer, programmes: previous?.lastReady ?? [] };
+        });
+        const entry = { at: now, expires: now + FRESH, lastReady: previous?.lastReady, value };
+        entries.set(id, entry);
+        value.then(answer => {
+          if (entries.get(id) !== entry) return;
+          entry.expires = answer.expires;
+          if (answer.ready) entry.lastReady = answer.programmes;
+        }, () => { if (entries.get(id) === entry) entries.delete(id); });
       }
     }
     const pending = wanted.map(id => entries.get(id)!.value);
     // Keep scrolling caches bounded independently of the total channel count.
     for (const id of entries.keys()) if (entries.size > 256 && !wanted.includes(id)) entries.delete(id);
     await Promise.all(reads);
-    const programmes = (await Promise.all(pending)).flat();
-
-    return { channels, programmes };
+    const answers = await Promise.all(pending);
+    const retryAt = Math.min(...answers.filter(answer => !answer.ready).map(answer => answer.expires));
+    return { channels, programmes: answers.flatMap(answer => answer.programmes),
+      loaded: new Set(wanted.filter((_, index) => answers[index]!.ready)),
+      unavailable: new Set(wanted.filter((_, index) => !answers[index]!.ready)),
+      retryAt: Number.isFinite(retryAt) ? retryAt : undefined };
   })();
   cache.set(key, { at: now, value });
   value.catch(() => { if (cache.get(key)?.value === value) cache.delete(key); });
@@ -146,20 +169,32 @@ function channelMetadata(api: GuideApi, scope: string, now: number): Promise<Cha
   return value;
 }
 
+const midnightCache = new Map<string, number>();
+const zonedDates = new Map<string, Intl.DateTimeFormat>();
 /** Local midnight in the viewer's zone, `days` after the day containing `ms`. */
 function midnight(ms: number, days: number): number {
   const zone = localeContext().timeZone;
-  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' })
-    .formatToParts(ms).map(p => [p.type, Number(p.value)]));
+  const key = `${zone}|${ms}|${days}`;
+  const cached = midnightCache.get(key);
+  if (cached !== undefined) return cached;
+  let formatter = zonedDates.get(zone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' });
+    zonedDates.set(zone, formatter);
+    if (zonedDates.size > 8) zonedDates.delete(zonedDates.keys().next().value!);
+  }
+  const parts = Object.fromEntries(formatter.formatToParts(ms).map(p => [p.type, Number(p.value)]));
   const wall = Date.UTC(parts.year!, parts.month! - 1, parts.day! + days);
   // The zone's offset at that wall-clock midnight, measured rather than assumed constant across DST.
   const offset = (at: number) => {
-    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' })
-      .formatToParts(at).map(q => [q.type, Number(q.value)]));
+    const p = Object.fromEntries(formatter.formatToParts(at).map(q => [q.type, Number(q.value)]));
     return Date.UTC(p.year!, p.month! - 1, p.day!, p.hour!, p.minute!, p.second!) - at;
   };
   const guess = wall - offset(wall);
-  return wall - offset(guess);
+  const result = wall - offset(guess);
+  midnightCache.set(key, result);
+  if (midnightCache.size > 64) midnightCache.delete(midnightCache.keys().next().value!);
+  return result;
 }
 
 const TONES = ['news', 'sport', 'movie', 'kid', 'documentar', 'drama', 'comedy', 'music', 'lifestyle'];
@@ -230,7 +265,10 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
   const windows = range ? await Promise.all(guideWindows(from, until, start, end).map(window =>
     listings(api, scope, window.from, window.until, now, channelIds))) : [await listings(api, scope, from, Math.max(from + MINUTE, until), now, channelIds)];
   const window = { channels: windows[0]?.channels ?? await channelMetadata(api, scope, now),
-    programmes: [...new Map(windows.flatMap(window => window.programmes).map(p => [p.id, p])).values()] };
+    programmes: [...new Map(windows.flatMap(window => window.programmes).map(p => [p.id, p])).values()],
+    loaded: new Set((windows[0]?.channels ?? []).filter(c => windows.every(w => w.loaded.has(c.id))).map(c => c.id)),
+    unavailable: new Set(windows.flatMap(w => [...w.unavailable])),
+    retryAt: Math.min(...windows.map(w => w.retryAt ?? Infinity)) };
   // Mobile now/next and the channel column stay current even while the grid browses another day.
   const currentStart = Math.floor(now / 1800000) * 1800000;
   const current = !range && day === 0 ? window : await listings(api, scope, currentStart, currentStart + 2 * HOUR, now, channelIds);
@@ -253,7 +291,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
     const groups: string[] = [];
     const groupSet = new Set<string>();
     const guideSet = new Set<string>();
-    const loadedIds = channelIds ? new Set(channelIds.length ? channelIds : [...window.channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 30).map(c => c.id)) : null;
+    const loadedIds = window.loaded;
     const guides: { id: string; name: string }[] = [];
     for (const channel of window.channels) for (const g of channel.guides ?? []) if (!guideSet.has(g.id)) { guideSet.add(g.id); guides.push({ id: g.id, name: g.name }); }
     const projectionKey = `${scope}|${start}`;
@@ -270,7 +308,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       const loaded = !loadedIds || loadedIds.has(channel.id);
       const previous = projected.get(channel.id);
       if (previous && previous.channel === channel && previous.images === images && previous.locale === projectionLocale
-        && previous.loaded === loaded && (!loaded || previous.now === now)
+        && previous.loaded === loaded && previous.value.listingsUnavailable === window.unavailable.has(channel.id) && (!loaded || previous.now === now)
         && sameListings(previous.entries, entries) && sameListings(previous.live, live)) return previous.value;
       const airing = live.find(p => Date.parse(p.start) <= now && now < Date.parse(p.end));
       const next = live.find(p => Date.parse(p.start) > now);
@@ -278,7 +316,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       const value: GuideChannel = {
         id: channel.id, number: channel.number, name: channel.name, favorite: channel.favorite, group: channel.group ?? '',
         guideIds: [...new Set((channel.guides ?? []).map(g => g.id))],
-        logo: channelLogo(channel, images), listed: entries.length > 0, listingsLoaded: !loadedIds || loadedIds.has(channel.id),
+        logo: channelLogo(channel, images), listingsUnavailable: window.unavailable.has(channel.id), listed: entries.length > 0, listingsLoaded: !loadedIds || loadedIds.has(channel.id),
         now: airing?.name ?? '', next: next?.name ?? '', nowId: airing?.id ?? '',
         nowProgress: airing ? Math.round((now - airingStart) / (airingEnd - airingStart) * 1000) / 10 : 0,
         nowRemaining: airing ? left(airingEnd - now) : '',
@@ -307,7 +345,9 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       projected.set(channel.id, { channel, images, locale: projectionLocale, now, loaded, entries, live, value });
       return value;
     });
+    const retryAt = Math.min(window.retryAt ?? Infinity, current.retryAt ?? Infinity);
     const model: GuideModel = {
+      retryAt: Number.isFinite(retryAt) ? retryAt : undefined,
       loadedRanges: range ? guideWindows(from, until, start, end).map(w => ({ from: (w.from - start) / MINUTE, to: (w.until - start) / MINUTE })) : [{ from: 0, to: minutes }],
       day, dayLabel: day === 0 ? msg('live.today') : long.format(start), fromLabel: time(start), untilLabel: time(end), minutes, nowMinute, nowLabel: time(now),
       // The time of day to land on: now today, the same clock time on a later day. The skin places it.

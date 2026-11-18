@@ -3,7 +3,7 @@
 From repository root, put `.tools/bun-darwin-aarch64` first on PATH.
 Install once: `cd mock-server && bun install`. Start from root:
 `bun run mock-server/main.ts` (127.0.0.1:7777). Override `PORT` and
-`DEV_ORIGIN` (default http://localhost:3000) as needed. Loopback only; admin is unauthenticated dev tooling.
+`DEV_ORIGIN` (default http://localhost:3000) as needed. Loopback by default; admin is unauthenticated dev tooling.
 
 Sign in: POST `/vela/v0/auth/sign-in`, JSON
 `{"idempotencyKey":"login-1","username":"demo","password":"vela","device":{"id":"vela-dev","name":"Browser","platform":"web","appVersion":"0.1"}}`.
@@ -153,3 +153,17 @@ AAC48kHz stereo, explicit BT.709 primaries/transfer/matrix and limited range.
 The generator probes those actual encoded fields before exclusive publication
 and preserves any existing file. Existing broker media grants may serve that
 allowlisted filename; normal playback plans/media are unchanged.
+
+Dense live-guide fixtures are opt-in. From the repository root, run:
+
+```sh
+VELA_MOCK_GUIDE_SCALE=1000 VELA_MOCK_GUIDE_WINDOW=1 bun mock-server/main.ts
+# Use VELA_MOCK_GUIDE_SCALE=10000 for the larger lineup.
+```
+
+Programmes last 5–20 minutes and are generated only for requested channels and
+windows. `VELA_MOCK_GUIDE_WINDOW=1` advertises the optional complete-window API;
+omit it to verify paginated fallback. `VELA_MOCK_GUIDE_UNAVAILABLE=scale-5`
+simulates a retryable guide outage, distinct from a ready channel with no listings.
+For a TV on the LAN, set `VELA_MOCK_HOST` to this machine's LAN address; the
+default remains loopback. Sign in with the mock's `demo` / `vela` account.

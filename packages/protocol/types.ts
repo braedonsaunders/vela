@@ -20,6 +20,8 @@ export type SearchKind = string;
 export type SearchKindCapability = string | { id: string; label?: string };
 export interface SearchOptions { sort?: SearchSort; direction?: SearchDirection; kind?: SearchKind; library?: ID }
 export interface ServerCapabilities {
+  /** Complete, unpaginated live guide windows when advertised. */
+  liveGuideWindow?: { maxChannels: number; maxWindowMinutes: number };
   searchSorts?: { id: SearchSort; label?: string; directions: SearchDirection[] }[];
   searchKinds?: SearchKindCapability[];
   /** Search can be restricted to a visible library ID. */
@@ -191,6 +193,7 @@ export type SessionEvent = { cursor: Cursor; revision: number; sessionId: ID } &
 export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'source' | 'decoder' | 'playback' | 'capacity' | 'transient' | 'request' | 'conflict';
   code: string; message: string; retry: { allowed: boolean; afterSeconds?: number; maxAttempts?: number };
   requestId?: ID; currentGenerations?: Generations;
+  suggest?: { maxChannels: number; maxWindowMinutes: number };
   /** Attempted delivery labels (not path IDs) and human-readable diagnostics. */
   rejectedPaths?: { path: string; reasons: string[] }[] }
 export interface ErrorResponse { error: ProtocolError }
@@ -200,6 +203,11 @@ export interface Programme { id: ID; channelId: ID; name: string; summary: strin
   titleId?: ID; episodeTitle?: string; seasonNumber?: number; episodeNumber?: number; artwork: ArtworkRef[]; rating?: string; genres?: string[] }
 export interface GuideQuery { from: Timestamp; until: Timestamp; channelIds?: ID[]; cursor?: Cursor; limit?: number }
 export interface GuideResponse extends Page<Programme> { from: Timestamp; until: Timestamp }
+export interface GuideWindowRequest { channelIds: ID[]; from: Timestamp; until: Timestamp }
+export interface GuideWindowResponse {
+  from: Timestamp; until: Timestamp; revision: string; validUntil: Timestamp;
+  channels: { channelId: ID; state: 'ready' | 'unavailable'; programmes: Programme[] }[];
+}
 export interface ExtrasResponse extends PartialAnswer { items: Extra[] }
 export interface ChildrenPage extends Page<Title>, PartialAnswer {}
 /** One-use console Watch hand-off; redeem against the same Ether instance. */

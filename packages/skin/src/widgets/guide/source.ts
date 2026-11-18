@@ -27,6 +27,7 @@ export function liveSource(adapter: LiveAdapter, client: V.ClientCapabilities): 
   return {
     channels: (cursor, limit) => adapter.channels(cursor, limit),
     guide: query => adapter.guide(query),
+    guideWindow: adapter.guideWindow?.bind(adapter),
     async tune(channelId) {
       const answer = await adapter.startPlayback({ channelId, client, idempotencyKey: key('tune') });
       if ('state' in answer && answer.state === 'preparing')

@@ -20,6 +20,7 @@ const secret = crypto.randomUUID();
 const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevision: 'mock-1' };
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
 const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, aiSearch: no, proactiveFallback: no, liveTV: yes, extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+if (process.env.VELA_MOCK_GUIDE_WINDOW === '1') capabilities.liveGuideWindow = { maxChannels: 128, maxWindowMinutes: 180 };
 const labPreset = process.env.VELA_MOCK_LAB === '1';
 const libraries: V.Library[] = labPreset ? [
   { ...fixtureLibraries[0]!, id: '1', browse: { ...fixtureLibraries[0]!.browse, filters: { ...fixtureLibraries[0]!.browse.filters, genres: undefined } } },
@@ -337,6 +338,23 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const ids = (url.searchParams.get('channelIds') ?? '').split(',').filter(Boolean);
     return cached(req, { ...page(guide(from, until, ids), url, g, `guide:${from}:${until}:${ids.join(',')}`), from: new Date(from).toISOString(), until: new Date(until).toISOString() }, g.id);
   }
+  if (method === 'POST' && path === '/live/guide/window' && capabilities.liveGuideWindow) {
+    const from = Date.parse(body.from), until = Date.parse(body.until);
+    const ids = body.channelIds as string[];
+    if (!Number.isFinite(from) || !Number.isFinite(until) || until <= from || until - from > 3 * 3600000
+      || !Array.isArray(ids) || !ids.length || ids.length > 128 || new Set(ids).size !== ids.length
+      || ids.some(id => !channels.some(channel => channel.id === id))) fail('request', 'invalid_window', 'Invalid complete guide window');
+    const programmes = guide(from, until, ids);
+    if (programmes.length > 20000) fail('request', 'guide_window_too_dense', 'Guide window is too dense', { suggest: { maxChannels: Math.max(1, Math.floor(ids.length / 2)), maxWindowMinutes: 90 } });
+    const unavailable = new Set((process.env.VELA_MOCK_GUIDE_UNAVAILABLE ?? '').split(','));
+    const now = Date.now();
+    const answer: V.GuideWindowResponse = { from: new Date(from).toISOString(), until: new Date(until).toISOString(),
+      revision: mac(JSON.stringify([from, until, ids, programmes.map(p => p.id), [...unavailable]])),
+      validUntil: new Date(Math.min((Math.floor(now / 300000) + 1) * 300000, ids.some(id => unavailable.has(id)) ? now + 60000 : Infinity)).toISOString(),
+      channels: ids.map(channelId => ({ channelId, state: unavailable.has(channelId) ? 'unavailable' : 'ready', programmes: unavailable.has(channelId) ? [] : programmes.filter(p => p.channelId === channelId) })),
+    };
+    return cached(req, answer, g.id);
+  }
   if (method === 'POST' && path === '/playback') {
     if (body.audioTrackId !== undefined || body.subtitleTrackId != null) fail('policy', 'feature_unavailable', 'Initial track selection is unavailable; use native HLS audio and sidecar subtitles');
     if (!body.client || [body.titleId, body.channelId, body.extraId].filter(Boolean).length !== 1) fail('request', 'invalid_target', 'Exactly one playback target required');
@@ -429,6 +447,10 @@ async function dispatch(req: Request): Promise<Response> {
   if (!url.pathname.startsWith('/vela/v0/')) fail('not-found', 'endpoint_not_found', 'Endpoint not found');
   if (req.method !== 'POST') return api(req, url, undefined);
   let raw: string, body: any; try { raw = await req.text(); if (raw.length > 262144) fail('request', 'body_too_large', 'Body exceeds 256KiB'); body = JSON.parse(raw); } catch (e) { if (e instanceof Response) throw e; fail('request', 'invalid_json', 'JSON object required'); }
+  if (url.pathname === '/vela/v0/live/guide/window') {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) fail('request', 'invalid_json', 'JSON object required');
+    return api(req, url, body);
+  }
   if (!body || typeof body.idempotencyKey !== 'string' || !body.idempotencyKey || body.idempotencyKey.length > 200) fail('request', 'idempotency_required', 'Nonempty idempotencyKey required');
   if (url.pathname !== '/vela/v0/negotiate' && !/^\/vela\/v0\/auth\/(sign-in|refresh|device(?:\/poll)?|quick-connect(?:\/poll)?|web-code\/redeem)$/.test(url.pathname)) authenticate(req);
   const identity = access.get(req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '')?.id ?? body.device?.id ?? body.client?.device?.id ?? 'anonymous';
@@ -438,7 +460,7 @@ async function dispatch(req: Request): Promise<Response> {
   idempotency.set(key, { body: raw, response, expires: Date.now() + 86400000 });
   return (await response).clone();
 }
-const server = Bun.serve({ hostname: '127.0.0.1', port, idleTimeout: 0, async fetch(req) {
+const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', port, idleTimeout: 0, async fetch(req) {
   let response: Response;
   try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
   response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;

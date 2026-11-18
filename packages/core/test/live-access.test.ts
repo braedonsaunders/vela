@@ -19,3 +19,22 @@ test.each([true, false])('unavailable Live TV creates no controller (bootstrap l
   expect(await live.access()).toBeNull();
   expect(reads).toBe(0);
 });
+
+test('controller access forwards optional complete-window reads with the adapter receiver', async () => {
+  const query = { channelIds: ['one'], from: '2026-11-18T12:00:00Z', until: '2026-11-18T15:00:00Z' };
+  const adapter = {
+    channels: async () => ({ items: [], continuation: 'exhausted' }), guide: async () => ({}),
+    guideWindow: async function (request: typeof query) {
+      expect(this).toBe(adapter);
+      return { ...request, revision: 'revision', validUntil: '2026-11-18T16:00:00Z', channels: [] };
+    },
+  };
+  const connection = { record: { id: 'server' }, adapter, images: async () => ({}) };
+  const session = {
+    onReset() {}, ready: async () => connection, features: { liveTV: { available: true } },
+    tokens: async () => null, declared: async () => ({}),
+  };
+  const live = new Live(new StateBox({ live: initialLive } as unknown as VelaState), session as unknown as Session, { server: {} } as unknown as Playback);
+  const access = await live.access();
+  expect((await access?.api.guideWindow?.(query))?.revision).toBe('revision');
+});

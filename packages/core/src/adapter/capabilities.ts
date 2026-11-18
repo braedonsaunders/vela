@@ -114,6 +114,7 @@ export interface ProactiveFallback {
 export interface LiveTv {
   channels(cursor?: string, limit?: number): Promise<V.Page<V.Channel>>;
   guide(query: V.GuideQuery): Promise<V.GuideResponse>;
+  guideWindow?(query: V.GuideWindowRequest): Promise<V.GuideWindowResponse | null>;
 }
 
 /** Server-pushed events: a playback session's changes, and the viewer's (appearance first).

@@ -59,6 +59,7 @@ export class Live {
       api: {
         channels: (cursor, limit) => adapter.channels(cursor, limit),
         guide: query => adapter.guide(query),
+        guideWindow: adapter.guideWindow?.bind(adapter),
         startPlayback: request => server.startPlayback(request),
         command: (sessionId, command) => server.command(sessionId, command),
       },

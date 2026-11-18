@@ -35,6 +35,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, EventStream, Appearance {
   private readonly http: EtherTransport;
+  private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
   supportsPersonFilmography = false;
   supportsLibraryRecommendations = false;
@@ -44,6 +45,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   private readonly missingPeople = new Set<string>();
 
   resetOptionalCapabilities(): void {
+    this.guideWindowLimits = undefined;
     this.personSupport = this.librarySupport = 'unknown';
     this.missingPeople.clear();
     this.declaredLibraries.clear();
@@ -172,12 +174,15 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   // The server and its look
 
-  describe(): Promise<ServerDescription> {
-    return this.http.request<V.ServerCapabilities>('GET', '/capabilities', undefined, PUBLIC_CACHED);
+  async describe(): Promise<ServerDescription> {
+    const answer = await this.http.request<V.ServerCapabilities>('GET', '/capabilities', undefined, PUBLIC_CACHED);
+    this.guideWindowLimits = answer.liveGuideWindow;
+    return answer;
   }
 
   async declareClient(request: V.NegotiateRequest): Promise<void> {
-    await this.http.request<V.NegotiateResponse>('POST', '/negotiate', request);
+    const answer = await this.http.request<V.NegotiateResponse>('POST', '/negotiate', request);
+    if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
   }
 
   appearance() {
@@ -198,11 +203,15 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   /** A home whose continuation the server has expired is read again without revalidation. */
   async home(fresh = false): Promise<Home> {
     try {
-      return await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...CACHED, fresh });
+      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...CACHED, fresh });
+      if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
+      return answer;
     } catch (error) {
       const expired = error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired';
       if (!expired) throw error;
-      return this.http.request<V.Bootstrap>('GET', '/bootstrap');
+      const answer = await this.http.request<V.Bootstrap>('GET', '/bootstrap');
+      if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
+      return answer;
     }
   }
 
@@ -354,6 +363,14 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   guide(guideQuery: V.GuideQuery) {
     const path = `/live/guide${query({ ...guideQuery, channelIds: guideQuery.channelIds?.join(',') })}`;
     return this.http.request<V.GuideResponse>('GET', path, undefined, CACHED);
+  }
+
+  async guideWindow(request: V.GuideWindowRequest): Promise<V.GuideWindowResponse | null> {
+    const limits = this.guideWindowLimits;
+    if (!limits || request.channelIds.length > limits.maxChannels || Date.parse(request.until) - Date.parse(request.from) > limits.maxWindowMinutes * 60000) return null;
+    // The shared guide cache keys by channel and time; the transport's URL-only ETag cache
+    // must not reuse a POST answer for a different request body.
+    return this.http.request<V.GuideWindowResponse>('POST', '/live/guide/window', request);
   }
 
   private sessionCommand(sessionId: string, command: V.SessionCommand) {
