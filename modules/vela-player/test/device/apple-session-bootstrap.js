@@ -13,7 +13,15 @@ const keys = ['vela.device', 'vela.session', 'vela.servers'];
 if (privateConfig.restore) {
   const backup = JSON.parse(secrets.get(backupKey) || '{}');
   for (const key of keys) if (key in backup) secrets.set(key, backup[key] || '');
+  if (!keys.every(key => !(key in backup) || secrets.get(key) === (backup[key] || ''))) {
+    throw Error('Saved Vela state restoration failed');
+  }
   secrets.set(backupKey, '');
+  function Restored({ children }) {
+    return React.createElement(View, { style: { flex: 1 } }, children,
+      React.createElement(Text, { pointerEvents: 'none', style: { position: 'absolute', top: 35, left: 35, color: 'white', backgroundColor: '#000b', fontSize: 22, zIndex: 999999 } }, 'Original saved Vela state restored'));
+  }
+  AppRegistry.setWrapperComponentProvider(() => Restored);
 } else {
   const backup = JSON.parse(secrets.get(backupKey) || '{}');
   for (const key of keys) if (!(key in backup)) backup[key] = secrets.get(key);
