@@ -43,6 +43,8 @@ const describing = (s: SearchView) =>
 const programmeLine = (x: LiveProgrammeHit) => (x.episode !== '' ? `${x.episode} · ${x.channelName}` : x.channelName);
 
 export const SEARCH_VOCABULARY: Record<string, Accessor> = {
+  'search.libraryCount': (_, e) => String(e.search?.controls?.searchLibraries ? e.libraries?.length ?? 0 : 0),
+  'search.library': over(s => s.controls?.library ?? ''),
   'search.sortCount': over(s => String(s.controls?.searchSorts?.length ?? 0)),
   'search.kindCount': over(s => String(s.controls?.searchKinds?.length ?? 0)),
   'search.kindOn': (c, e) => yes((c.opt?.id ?? '') === (e.search?.controls?.kind ?? '')),
@@ -94,6 +96,7 @@ export function searchCollection(over: string, c: Ctx, e: Env, limit: number): C
   const hits = (list: Hit[]) => list.slice(0, limit).map((h, index) => ({ ...c, hit: h, index }));
   const programme = (p: LiveProgrammeHit): Hit => ({ kind: 'programme', programme: p });
   switch (over) {
+    case 'search.libraries': return (s.controls?.searchLibraries ? [{ id: '', label: 'All libraries' }, ...(e.libraries ?? []).map(l => ({ id: l.id, label: l.name }))] : []).map((opt, index) => ({ ...c, index, opt: { ...opt, of: 'kind' as const } }));
     case 'search.kinds': return [{ id: '', label: 'All' }, ...(s.controls?.searchKinds ?? []).map(searchOption)].map((opt, index) => ({ ...c, index, opt: { ...opt, of: 'kind' as const } }));
     case 'search.sorts': return (s.controls?.searchSorts ?? []).map(searchOption).map((opt, index) => ({ ...c, index, opt: { ...opt, of: 'sort' as const } }));
     case 'search.directions': return (s.controls?.searchSorts?.find(x => x.id === s.controls?.sort)?.directions ?? []).map((id, index) => ({ ...c, index, opt: { of: 'sort' as const, id, label: id === 'asc' ? 'Ascending' : 'Descending' } }));

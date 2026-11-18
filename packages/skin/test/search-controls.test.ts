@@ -15,3 +15,19 @@ test('server kinds and sorts preserve labels, order and unknown plugin IDs', () 
   expect(SEARCH_VOCABULARY['search.kindCount'](c, env)).toBe('0');
   expect(SEARCH_VOCABULARY['search.sortCount'](c, env)).toBe('0');
 });
+
+
+test('library control gates on capability and count and preserves server order', () => {
+  const env = { libraries: [{ id: 'z', name: 'Z movies' }, { id: 'a', name: 'A shows' }], search: searchView({ ...initialSearch, query: 'heat', searchLibraries: true, library: 'a' }) } as Env;
+  const c = { index: 0 } as Ctx;
+  expect(SEARCH_VOCABULARY['search.libraryCount'](c, env)).toBe('2');
+  expect(SEARCH_VOCABULARY['search.library'](c, env)).toBe('a');
+  expect(searchCollection('search.libraries', c, env, 50)!.map(c => c.opt)).toEqual([
+    { id: '', label: 'All libraries', of: 'kind' }, { id: 'z', label: 'Z movies', of: 'kind' }, { id: 'a', label: 'A shows', of: 'kind' },
+  ]);
+  env.libraries = env.libraries!.slice(0, 1);
+  expect(SEARCH_VOCABULARY['search.libraryCount'](c, env)).toBe('1');
+  env.search!.controls!.searchLibraries = false;
+  expect(SEARCH_VOCABULARY['search.libraryCount'](c, env)).toBe('0');
+  expect(searchCollection('search.libraries', c, env, 50)).toEqual([]);
+});

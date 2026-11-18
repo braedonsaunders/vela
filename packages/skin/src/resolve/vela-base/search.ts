@@ -421,6 +421,8 @@ export const searchControls: Node = {
       ...libChip([{ test: 'search.kindOn' }], '{opt.id}', '{opt.label}'),
       press: { action: 'searchKind', arg: '{opt.id}' },
     } }], [{ test: 'search.kindCount', is: 'gt', value: '0' }]), style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '4px', padding: '4px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', 'max-width': '100%', 'flex-shrink': '1' } },
+    { type: 'widget', widget: 'select', when: [{ test: 'search.libraryCount', is: 'gt', value: '1' }],
+      params: { options: 'search.libraries', action: 'searchLibrary', label: 'Search library', testId: 'search-library' }, style: { ...glassSelect, 'min-width': '140px', 'max-width': '100%', 'flex-shrink': '1' } },
     { type: 'widget', widget: 'select', when: [{ test: 'search.sortCount', is: 'gt', value: '0' }],
       params: { options: 'search.sorts', action: 'searchSort', label: 'Sort search', testId: 'search-sort' }, style: { ...glassSelect, 'min-width': '140px', 'max-width': '100%' } },
     { type: 'widget', widget: 'select', when: [{ test: 'search.directionCount', is: 'gt', value: '1' }],
