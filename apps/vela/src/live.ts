@@ -4,7 +4,7 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import type { Vela as Store } from '@vela/core';
-import { VelaPlayer } from '@vela/player';
+import { VelaPlayer, sampleUIFrames } from '@vela/player';
 import { LiveController, liveSource } from '@vela/skin/src/widgets/guide';
 import { preferences } from './data/preferences';
 
@@ -17,6 +17,12 @@ function openWatch(channelId: string, replace: boolean): void {
 /** `session` changes with the server and viewer (the auth revision); null while signed out. */
 export function useLiveController(store: Store, session: number | null): LiveController | null {
   const [controller, setController] = useState<LiveController | null>(null);
+  useEffect(() => {
+    if (process.env.EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS !== '1') return;
+    const root = globalThis as typeof globalThis & { __velaGuideUIFrames?: typeof sampleUIFrames };
+    root.__velaGuideUIFrames = sampleUIFrames;
+    return () => { delete root.__velaGuideUIFrames; void sampleUIFrames(false); };
+  }, []);
   useEffect(() => {
     if (session === null) return;
     let made: LiveController | null = null;

@@ -30,6 +30,7 @@ interface NativeMediaAccess {
 }
 
 interface NativeModule {
+  sampleUIFrames?(enabled: boolean): Promise<Record<string, number>>;
   capabilities(): PlayerCapabilities;
   attachPlaybackURL(plan: string, source: string, authorized: string, generation: number): boolean;
   detachPlaybackURL(plan: string, generation: number): void;
@@ -58,6 +59,10 @@ interface NativeViewProps {
 const nativeModule = requireNativeModule<NativeModule>('VelaPlayer');
 const NativeView = requireNativeViewManager<NativeViewProps>('VelaPlayer');
 const apple = Platform.OS === 'ios';
+
+/** UI display-link intervals for opt-in benchmarks; missed opportunities are not GPU measurements. */
+export const sampleUIFrames = (enabled: boolean): Promise<Record<string, number> | undefined> =>
+  nativeModule.sampleUIFrames?.(enabled) ?? Promise.resolve(undefined);
 
 let accessGeneration = 0;
 let preparationSequence = 0;

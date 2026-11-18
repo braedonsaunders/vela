@@ -101,3 +101,5 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
 }
 
 export type { VelaPlayerViewProps, MediaAccess };
+
+export const sampleUIFrames = async (_enabled: boolean): Promise<Record<string, number> | undefined> => undefined;

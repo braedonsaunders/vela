@@ -1,10 +1,53 @@
 // The Expo module: VelaPlayer.setMediaAccess and the VelaPlayerView view (packages/player-api).
 import ExpoModulesCore
 import Foundation
+import UIKit
+
+// Opt-in UI timing for device benchmarks. No display link exists in normal builds.
+private final class UIFrameTiming: NSObject {
+    static let shared = UIFrameTiming()
+    private var link: CADisplayLink?
+    private var previous: CFTimeInterval = 0
+    private var intervals: [Double] = []
+    private var missed = 0
+
+    func sample(_ enabled: Bool) -> [String: Any] {
+        if !enabled {
+            link?.invalidate()
+            link = nil
+            previous = 0
+        } else if link == nil {
+            let next = CADisplayLink(target: self, selector: #selector(tick(_:)))
+            next.add(to: .main, forMode: .common)
+            link = next
+        }
+        let sorted = intervals.sorted()
+        let result: [String: Any] = ["frames": sorted.count,
+            "p95": sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))],
+            "max": sorted.last ?? 0, "missed": missed]
+        intervals.removeAll(keepingCapacity: true)
+        missed = 0
+        return result
+    }
+
+    @objc private func tick(_ sender: CADisplayLink) {
+        if previous > 0, intervals.count < 12000 {
+            let elapsed = sender.timestamp - previous
+            intervals.append(elapsed * 1000)
+            let expected = max(0.001, sender.targetTimestamp - sender.timestamp)
+            missed += max(0, Int((elapsed / expected).rounded()) - 1)
+        }
+        previous = sender.timestamp
+    }
+}
 
 public final class VelaPlayerModule: Module {
     public func definition() -> ModuleDefinition {
         Name("VelaPlayer")
+
+        AsyncFunction("sampleUIFrames") { (enabled: Bool) -> [String: Any] in
+            UIFrameTiming.shared.sample(enabled)
+        }.runOnQueue(.main)
 
         OnCreate {
             TVTextFields.install()
