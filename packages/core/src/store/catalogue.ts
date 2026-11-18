@@ -2,6 +2,7 @@
 // and filters, and a collection read page by page. Each is kept by key for the current session
 // and dropped when the session or server changes.
 import type * as V from '../wire';
+import { hasTitleManagement } from '../adapter/media-actions';
 import { capabilitiesOf } from '../adapter/advertise';
 import { hasLibraryRecommendations, hasPersonFilmography } from '../adapter/capabilities';
 import { personDates } from '../discovery/person-date';
@@ -39,6 +40,17 @@ const PAGE = 100;
 const RECONCILE_ATTEMPTS = 3;
 
 export class Catalogue {
+  async titleActions(id: string) {
+    const api = (await this.session.ready()).adapter;
+    return hasTitleManagement(api) ? api.titleActions(id) : null;
+  }
+  async setTitleWatch(id: string, change: { played?: boolean; listed?: boolean }) {
+    const api = (await this.session.ready()).adapter;
+    if (!hasTitleManagement(api)) throw new Error('Title actions are unavailable');
+    await api.setTitleWatch(id, change);
+    await this.title(id, true);
+  }
+
   async personDetails(id: string): Promise<{ name: string; portrait: string; knownFor: string; biography: string; birthday: string } | undefined> {
     const connection = await this.session.ready();
     const adapter = connection.adapter;

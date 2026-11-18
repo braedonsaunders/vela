@@ -162,6 +162,12 @@ interface AnyTrack {
   hearingImpaired?: boolean;
 }
 
+/** Metadata and engine discovery complement each other; an empty early snapshot must not
+ * erase the plan's embedded or external tracks. Engine labels win for the same identity. */
+function trackOptions(planned: AnyTrack[], observed: AnyTrack[]): TrackOption[] {
+  return [...new Map([...planned, ...observed].map(track => [track.id, track])).values()].map(trackOption);
+}
+
 /** Name, language, codec, channels, forced, SDH: the first is the name, the rest its detail. */
 function trackOption(track: AnyTrack): TrackOption {
   const parts = [
@@ -374,10 +380,10 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     muted: snapshot?.muted ?? false,
     speed: snapshot?.speed ?? 1,
     speeds: snapshot?.speeds ?? [],
-    audio: (snapshot?.audioTracks ?? plan?.audioTracks ?? []).map(trackOption),
-    audioId: snapshot ? (snapshot.audioTrackId ?? '') : (plan?.selectedAudioTrackId ?? ''),
+    audio: trackOptions(plan?.audioTracks ?? [], snapshot?.audioTracks ?? []),
+    audioId: snapshot?.audioTrackId ?? plan?.selectedAudioTrackId ?? plan?.audioTracks.find(track => track.default)?.id ?? '',
     pendingAudioId: snapshot?.pendingAudioTrackId ?? '',
-    subtitles: (snapshot?.subtitleTracks ?? plan?.subtitleTracks ?? []).map(trackOption),
+    subtitles: trackOptions(plan?.subtitleTracks ?? [], snapshot?.subtitleTracks ?? []),
     subtitleId: snapshot ? (snapshot.subtitleTrackId ?? '') : (plan?.selectedSubtitleTrackId ?? ''),
     pendingSubtitleId: snapshot?.pendingSubtitleTrackId ?? '',
     subtitleError: snapshot?.subtitleError ?? '',

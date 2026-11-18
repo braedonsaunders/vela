@@ -72,9 +72,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       pendingQuality.current = 0;
       setPendingQualityId(undefined);
       const from = kind === 'title' && positionSeconds !== undefined ? { positionSeconds } : {};
-      void vela.playback.start({ kind, id, ...from } as PlaybackTarget);
+      void vela.playback.start({ ...target, ...from } as PlaybackTarget);
     },
-    [vela, kind, id],
+    [vela, kind, id, target.kind === 'title' ? target.mediaSourceId : undefined, target.kind === 'title' ? target.audioTrackId : undefined],
   );
 
   useEffect(() => {

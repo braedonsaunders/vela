@@ -179,7 +179,16 @@ final class VelaPlayerView: ExpoView {
             return
         }
         let source = "\(next.sessionId):\(path.id):\(next.sourceGeneration)"
-        if source == activeSource {
+        // A server may increment the source generation for a track choice even though the
+        // original file is unchanged. mpv can apply its streams without loading that file again.
+        let sameFile = previous?.sessionId == next.sessionId && path.isOriginalFile &&
+            previous?.selectedPath?.isOriginalFile == true &&
+            (previous?.selectedPath?.url == path.url || (path.sourceId != nil && previous?.selectedPath?.sourceId == path.sourceId && previous?.selectedPath?.timelineId == path.timelineId)) &&
+            previous?.selectedPath?.id == path.id
+        let tracksChanged = previous?.selectedAudioTrackId != next.selectedAudioTrackId ||
+            previous?.selectedSubtitleTrackId != next.selectedSubtitleTrackId
+        if source == activeSource || (sameFile && tracksChanged && previous?.seekGeneration == next.seekGeneration) {
+            activeSource = source
             if let previous, next.seekGeneration != previous.seekGeneration {
                 seekConfirmed(next.positionSeconds)
             }
@@ -478,7 +487,7 @@ final class VelaPlayerView: ExpoView {
             if state.subtitleId != id {
                 mpv?.set("sid", String(id))
             }
-        } else if subtitle == nil || subtitle?.isExternal == true {
+        } else if (subtitle == nil && report.subtitleTrackId?.hasPrefix("mpv-sub-") != true) || subtitle?.isExternal == true {
             mpv?.set("sid", "no")
         }
     }
@@ -611,6 +620,7 @@ final class VelaPlayerView: ExpoView {
     }
 
     private func selectAudio(_ id: String?) -> String? {
+        if id == report.audioTrackId { return nil }
         guard let id, let track = plan?.audioTrack(id) else {
             return "No such audio track"
         }
@@ -626,6 +636,15 @@ final class VelaPlayerView: ExpoView {
     }
 
     private func selectSubtitle(_ id: String?) -> String? {
+        if id == report.subtitleTrackId { return nil }
+        if playsOriginal, let id, id.hasPrefix("mpv-sub-"), let mpvId = Int64(id.dropFirst(8)),
+           state.tracks.contains(where: { $0["type"] as? String == "sub" && $0["id"] as? Int64 == mpvId }) {
+            report.subtitleTrackId = id
+            report.subtitleClientOnly = true
+            mpv?.set("sid", String(mpvId))
+            report.publish(state, seekTarget: pendingSeek, force: true)
+            return nil
+        }
         guard let id else {
             if !playsOriginal {
                 report.sessionCommand(["kind": "tracks", "subtitleTrackId": NSNull()])

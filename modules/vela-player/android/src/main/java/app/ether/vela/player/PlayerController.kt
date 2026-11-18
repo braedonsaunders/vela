@@ -78,7 +78,12 @@ internal class PlayerController(
     report.adopt(next, newSession = previous?.sessionId != next.sessionId)
     val path = next.selectedPath ?: return
     val source = "${next.sessionId}:${path.id}:${next.sourceGeneration}"
-    if (source == activeSource) {
+    val sameFile = previous?.sessionId == next.sessionId && path.isOriginalFile &&
+      previous?.selectedPath?.isOriginalFile == true &&
+      (previous?.selectedPath?.url == path.url || (path.sourceId != null && previous?.selectedPath?.sourceId == path.sourceId && previous?.selectedPath?.timelineId == path.timelineId)) && previous?.selectedPath?.id == path.id
+    val tracksChanged = previous?.selectedAudioTrackId != next.selectedAudioTrackId || previous?.selectedSubtitleTrackId != next.selectedSubtitleTrackId
+    if (source == activeSource || (sameFile && tracksChanged && previous?.seekGeneration == next.seekGeneration)) {
+      activeSource = source
       if (previous != null && next.seekGeneration != previous.seekGeneration) {
         seekConfirmed(next.positionSeconds)
       }
@@ -326,7 +331,7 @@ internal class PlayerController(
       if (state.subtitleId != subtitleId) {
         mpv?.set("sid", subtitleId.toString())
       }
-    } else if (subtitle == null || subtitle.isExternal) {
+    } else if ((subtitle == null && report.subtitleTrackId?.startsWith("mpv-sub-") != true) || subtitle?.isExternal == true) {
       mpv?.set("sid", "no")
     }
   }
@@ -429,6 +434,7 @@ internal class PlayerController(
   }
 
   private fun selectAudio(id: String?): String? {
+    if (id == report.audioTrackId) return null
     val track = plan?.audioTrack(id ?: return "No such audio track") ?: return "No such audio track"
     val mpvId = track.streamIndex?.takeIf { playsOriginal }?.let { state.trackId("audio", it) }
     if (mpvId == null) {
@@ -442,6 +448,15 @@ internal class PlayerController(
   }
 
   private fun selectSubtitle(id: String?): String? {
+    if (id == report.subtitleTrackId) return null
+    val local = id?.takeIf { it.startsWith("mpv-sub-") }?.removePrefix("mpv-sub-")?.toLongOrNull()
+    if (local != null && playsOriginal && state.tracks.any { it["type"] == "sub" && it["id"] == local }) {
+      report.subtitleTrackId = id
+      report.subtitleClientOnly = true
+      mpv?.set("sid", local.toString())
+      report.publish(state, pendingSeek, force = true)
+      return null
+    }
     if (id == null) {
       if (!playsOriginal) {
         report.sessionCommand(mapOf("kind" to "tracks", "subtitleTrackId" to null))

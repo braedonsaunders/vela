@@ -43,7 +43,7 @@ function shownStyle(look: PlayerLook, visible: boolean, from: number): ViewStyle
 function FocusZone({ visible, children }: { visible: boolean; children: ReactNode }) {
   if (!Platform.isTV) return <>{children}</>;
   return (
-    <TVFocusGuideView autoFocus focusable={visible}>
+    <TVFocusGuideView focusable={visible}>
       {children}
     </TVFocusGuideView>
   );
@@ -235,10 +235,9 @@ function Controls({
   // On TV the control row is one focus destination, entered at the play toggle (or the control
   // last used there): down from the full-width timeline would otherwise land on whatever lies
   // under the timeline's middle, past the transport.
-  const Row = look.tv && Platform.isTV ? TVFocusGuideView : View;
+  const Row = View;
   return (
     <Row
-      autoFocus={Row === TVFocusGuideView ? true : undefined}
       style={{ flexDirection: 'row', flexWrap: look.small ? 'wrap' : 'nowrap', alignItems: 'center', gap }}
     >
       <ChromeButton
@@ -246,7 +245,6 @@ function Controls({
         look={look}
         primary
         icon={view.playing ? 'pause' : 'play'}
-        preferred={look.tv && !menu}
         label={view.ended ? msg('ui.finished') : view.playing ? msg('ui.pause') : msg('ui.play')}
         disabled={blocked}
         size={look.small ? 48 : 52}

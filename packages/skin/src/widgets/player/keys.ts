@@ -27,6 +27,10 @@ export interface Shortcuts {
   liveKey?(key: string): boolean;
 }
 
+function onTVControl(target: EventTarget | null): boolean {
+  return !!(target as HTMLElement | null)?.closest?.('[data-testid="player-chrome"] [role="button"], [data-testid="player-chrome"] button');
+}
+
 function typing(target: EventTarget | null): boolean {
   const element = target as { tagName?: string; isContentEditable?: boolean } | null;
   return !!element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || !!element.isContentEditable);
@@ -42,6 +46,8 @@ export function useShortcuts(shortcuts: Shortcuts): void {
       const s = latest.current;
       if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
       if (event.key === 'Escape' && s.menuOpen) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
         s.closeMenu();
         return;
       }
@@ -52,6 +58,21 @@ export function useShortcuts(shortcuts: Shortcuts): void {
       if (event.key === 'Escape') return;
       const arrows = event.key.startsWith('Arrow');
       if (arrows && s.menuOpen) return;
+      if (arrows && onTVControl(event.target)) {
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          const current = event.target as HTMLElement;
+          const box = current.getBoundingClientRect();
+          const controls = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="player-chrome"] button, [data-testid="player-chrome"] [role="button"]'))
+            .filter(el => { const rect = el.getBoundingClientRect(); return !el.hasAttribute('disabled') && el.getAttribute('aria-disabled') !== 'true' && rect.width > 0 && Math.abs(rect.top - box.top) < 20; })
+            .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+          const index = controls.indexOf(current);
+          if (index >= 0) {
+            event.preventDefault(); event.stopPropagation();
+            controls[index + (event.key === 'ArrowRight' ? 1 : -1)]?.focus();
+          }
+        }
+        return;
+      }
       // A focused button takes Space and Enter as its own press.
       const onControl =
         (event.target as { tagName?: string } | null)?.tagName === 'BUTTON' ||

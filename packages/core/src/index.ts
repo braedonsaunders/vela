@@ -29,3 +29,5 @@ export type { SecretStore } from './session';
 export type { ServerKind } from './session/servers';
 export type { Credentials, MediaAccess, ServerAdapter } from './adapter';
 export { sendCommand } from './adapter/commands';
+
+export type { TitleActions, MediaVersion, RemoteSubtitle } from './adapter/media-actions';

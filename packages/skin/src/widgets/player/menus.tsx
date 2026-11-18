@@ -1,6 +1,7 @@
 // The four player menus: subtitles (with their appearance where the engine draws the text),
 // audio, quality (grouped by resolution, each by its bitrate and what it needs, with the info
 // card's switch) and speed. Items the engine cannot switch to right now stay listed, dimmed.
+import { SubtitleSearch } from './subtitle-search';
 import { msg, number } from '@vela/core';
 import type { CommandInput } from './context';
 import type { PlayerLook } from './look';
@@ -57,7 +58,7 @@ export function SubtitlesMenu({ look, view, blocked, send }: Props) {
         selected={off}
         enabled={!blocked}
         testID="player-cc-off"
-        onChoose={() => send({ type: 'subtitle', trackId: null })}
+        onChoose={() => { if (!off) send({ type: 'subtitle', trackId: null }); }}
       />
       {view.subtitles.map(track => (
         <ChoiceRow
@@ -68,9 +69,10 @@ export function SubtitlesMenu({ look, view, blocked, send }: Props) {
           enabled={!blocked}
           selected={view.subtitleId === track.id}
           pending={view.pendingSubtitleId === track.id}
-          onChoose={() => send({ type: 'subtitle', trackId: track.id })}
+          onChoose={() => { if (view.subtitleId !== track.id && view.pendingSubtitleId !== track.id) send({ type: 'subtitle', trackId: track.id }); }}
         />
       ))}
+      <SubtitleSearch look={look} send={send} />
       {view.subtitleError ? <MenuHeading look={look} text={view.subtitleError} /> : null}
       {appearance && view.subtitleId !== '' ? (
         <>
@@ -119,7 +121,7 @@ export function AudioMenu({ look, view, blocked, send }: Props) {
           enabled={!blocked}
           selected={view.audioId === track.id}
           pending={view.pendingAudioId === track.id}
-          onChoose={() => send({ type: 'audio', trackId: track.id })}
+          onChoose={() => { if (view.audioId !== track.id && view.pendingAudioId !== track.id) send({ type: 'audio', trackId: track.id }); }}
         />
       ))}
     </>
@@ -157,7 +159,7 @@ export function QualityMenu({ look, view, blocked, send, info, onInfo, pendingQu
           selected={chosen(option)}
           pending={!!pendingQualityId && option.aliases.includes(pendingQualityId)}
           enabled={!blocked && !option.disabledReason}
-          onChoose={() => send({ type: 'quality', renditionId: option.id })}
+          onChoose={() => { if (!chosen(option)) send({ type: 'quality', renditionId: option.id }); }}
         />
       ))}
       {!view.qualities.length && !view.qualityAuto ? (

@@ -1,3 +1,4 @@
+import type { TitleActions } from '../media-actions';
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
@@ -329,11 +330,50 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const seen = new Set<string>(); const all = (c.Hub || []).flatMap((h: Node) => this.nodes(h)).filter((n: Node) => ['movie','show','season','episode'].includes(n.type) && !seen.has(String(n.ratingKey)) && !!seen.add(String(n.ratingKey)));
     return { query: r.query, generation: r.generation, ...page(all.map((n: Node) => this.title(n)), 0, all.length) };
   }
+  async titleActions(id: string): Promise<TitleActions> {
+    const n = await this.metadata(id);
+    const versions = (n.Media || []).flatMap((m: Node, index: number) => {
+      const release = [m.editionTitle || n.editionTitle, m.videoResolution && `${m.videoResolution}p`].filter(Boolean).join(' · ') || `Version ${index + 1}`;
+      const audio = (m.Part || []).flatMap((p: Node) => (p.Stream || []).filter((t: Node) => Number(t.streamType) === 2));
+      return audio.length > 1 ? audio.map((t: Node) => ({ id: String(m.id ?? index), audioTrackId: String(t.id), name: `${release} · ${t.displayTitle || t.language || t.languageCode || t.codec}` })) : [{ id: String(m.id ?? index), name: release }];
+    });
+    return { watched: true, list: null, watch: this.title(n).watch!, versions };
+  }
+
+  async setTitleWatch(id: string, change: { played?: boolean; listed?: boolean }) {
+    if (change.listed !== undefined) fail('Plex list management is unavailable');
+    if (change.played !== undefined) await this.request(change.played ? '/:/scrobble' : '/:/unscrobble', { key: id, identifier: 'com.plexapp.plugins.library' }, 'PUT');
+  }
+  async searchSubtitles(sessionId: string, language: string) {
+    const s = this.session(sessionId);
+    const result = await this.request(`/library/metadata/${enc(s.plan.titleId!)}/subtitles`, { language });
+    return (result.Stream || []).map((t: Node) => ({ id: String(t.key), name: t.displayTitle || t.title || t.language || language, language: t.languageCode || language }));
+  }
+  async downloadSubtitle(sessionId: string, id: string): Promise<V.PlaybackPlan> {
+    const s = this.session(sessionId);
+    // The selected provider key is opaque and sent as a parameter, never followed as a URL.
+    await this.request(`/library/metadata/${enc(s.plan.titleId!)}/subtitles`, { key: id }, 'PUT');
+    let n = await this.metadata(s.plan.titleId!);
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const streams = (n.Media || []).flatMap((m: Node) => m.Part || []).filter((p: Node) => String(p.id) === String(s.part.id)).flatMap((p: Node) => p.Stream || []);
+      if (streams.some((t: Node) => Number(t.streamType) === 3 && t.key && !s.plan.subtitleTracks.some(p => p.id === String(t.id)))) break;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      n = await this.metadata(s.plan.titleId!);
+    }
+    const part = (n.Media || []).flatMap((m: Node) => m.Part || []).find((p: Node) => String(p.id) === String(s.part.id));
+    for (const t of part?.Stream || []) {
+      if (Number(t.streamType) !== 3 || !t.key || s.plan.subtitleTracks.some(p => p.id === String(t.id))) continue;
+      const url = new URL(this.mediaURL(t.key)); url.searchParams.set('format', 'vtt');
+      s.plan.subtitleTracks.push({ id: String(t.id), kind: 'subtitle', name: t.displayTitle || t.language || 'Subtitle', language: t.languageCode || 'und', codec: 'webvtt', delivery: { kind: 'external', format: 'webvtt', url: url.href } });
+    }
+    s.plan.revision++;
+    return structuredClone(s.plan);
+  }
   async startPlayback(r: V.PlaybackRequest): Promise<V.PlaybackPlan> {
     for (const s of this.sessions.values()) if (s.mutations.has(r.idempotencyKey)) return s.mutations.get(r.idempotencyKey)!;
     if (r.channelId) return this.livePlayback(r);
     const id = r.titleId || r.extraId!; const n = await this.metadata(id);
-    const media = n.Media?.[0]; const part = media?.Part?.[0];
+    const media = r.mediaSourceId ? n.Media?.find((m: Node, index: number) => String(m.id ?? index) === r.mediaSourceId) : n.Media?.[0]; const part = media?.Part?.[0];
     if (!part || media.Part.length !== 1) fail('Plex title has no supported single-part media', 'playback');
     const sessionId = `vela-${randomId()}`;
     const streams: Node[] = part.Stream || [];
@@ -367,7 +407,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       originalVideo: { codec: media.videoCodec, width: media.width, height: media.height }, qualities: [], boundaries: [] });
     if (r.allowTranscode !== false && (r.client.hls || r.client.mse)) {
       const u = new URL('/video/:/transcode/universal/start.m3u8', this.origin);
-      const query = { path: `/library/metadata/${id}`, mediaIndex: 0, partIndex: 0, protocol: 'hls', directPlay: 0, directStream: 1,
+      const query = { path: `/library/metadata/${id}`, mediaIndex: n.Media.indexOf(media), partIndex: 0, protocol: 'hls', directPlay: 0, directStream: 1,
         session: sessionId, offset: 0, fastSeek: 1, 'X-Plex-Client-Identifier': this.config.clientIdentifier,
         maxVideoBitrate: Math.floor((r.client.maxBitrate || 20000000) / 1000), videoResolution: `${r.client.maxWidth || 1920}x${r.client.maxHeight || 1080}`,
         subtitleStreamID: subtitle || 0, subtitles: burnSubtitle ? 'burn' : 'auto', subtitleSize: 100, audioBoost: 100 };

@@ -37,6 +37,8 @@ struct VelaPlan: Decodable {
 }
 
 struct VelaPlanPath: Decodable {
+    let sourceId: String?
+    let timelineId: String?
     let id: String
     let kind: String
     let transport: String

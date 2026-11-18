@@ -27,6 +27,7 @@ export function ExpandableSummary({ value, lines, style, textStyle }: {
   value: string; lines: number; style: ViewStyle; textStyle: TextStyle;
 }) {
   const { env } = useHost();
+  const look = useLook();
   const [sizes, setSizes] = useState({ full: 0, clipped: 0 });
   const [nativeLines, setNativeLines] = useState(0);
   const [open, setOpen] = useState(false);
@@ -67,13 +68,14 @@ export function ExpandableSummary({ value, lines, style, textStyle }: {
       {truncated ? (
         <FocusPressable ref={target => { opener.current = target; }} testID="detail-summary-more"
           accessibilityRole="button" accessibilityLabel={msg('detail.readDescription')}
+          {...(web && env.tv ? { dataSet: { velaFocus: 'frame' } } : {})}
           accessibilityState={{ expanded: open }}
           {...(web ? { 'aria-expanded': open, 'aria-haspopup': 'dialog' as const } : {})}
           onPress={() => setOpen(true)} onFocus={event => {
             setFocused(isFocusVisible(event.currentTarget)); routeFocus?.focused();
             if (opener.current) reveal?.(opener.current);
           }} onBlur={() => setFocused(false)}
-          style={({ pressed }) => [{ padding: 8, margin: -8, borderRadius: 8, opacity: pressed ? 0.8 : 1 }, focused && focusStyle(undefined, env.still)]}>
+          style={({ pressed }) => [{ padding: 8, margin: -8, borderRadius: 8, opacity: pressed ? 0.8 : 1 }, focused && (env.tv ? { backgroundColor: look.ui.control, transform: [{ scale: env.still ? 1 : 1.015 }], outlineWidth: 0 } : focusStyle(undefined, env.still))]}>
           {copy}
           <Text style={[textStyle, { fontSize: Math.max(14, (textStyle.fontSize ?? 16) * 0.85), fontWeight: '700', marginTop: 6 }]}>{msg('detail.more')} ›</Text>
         </FocusPressable>
@@ -106,7 +108,7 @@ function DescriptionSheet({ value, close, restore }: { value: string; close(): v
             <FocusPressable accessibilityRole="button" accessibilityLabel={msg('detail.closeDescription')}
               testID="description-close" hasTVPreferredFocus={preferred} onPress={close}
               onFocus={event => setFocused(isFocusVisible(event.currentTarget))} onBlur={() => setFocused(false)}
-              style={[{ padding: 12, borderRadius: 10, backgroundColor: look.ui.control }, focused && focusStyle(undefined, env.still)]}>
+              style={[{ padding: 12, borderRadius: 10, backgroundColor: look.ui.control }, focused && (env.tv ? { backgroundColor: look.ui.control, transform: [{ scale: env.still ? 1 : 1.015 }], outlineWidth: 0 } : focusStyle(undefined, env.still))]}>
               <Text style={look.text({ 'font-size': '17px', 'font-weight': '600' })}>{msg('ui.close')}</Text>
             </FocusPressable>
           </View>

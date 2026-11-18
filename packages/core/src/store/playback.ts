@@ -3,6 +3,7 @@
 // commands and observations; and stopping. Media credentials never enter state: the trusted host
 // asks `mediaAccess()` and hands the result straight to the native player.
 import type * as V from '../wire';
+import { hasSubtitleSearch } from '../adapter/media-actions';
 import type { Connection } from '../adapter/connection';
 import { sendCommand } from '../adapter/commands';
 import { hasEventStream } from '../adapter/capabilities';
@@ -16,7 +17,7 @@ import { message, type StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
-  | { kind: 'title'; id: string; positionSeconds?: number }
+  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string }
   | { kind: 'extra'; id: string }
   | { kind: 'channel'; id: string };
 
@@ -84,9 +85,8 @@ export class Playback {
   private lastPosition: { sessionId: string; seconds: number; ended: boolean } | undefined;
 
   /**
-   * `watched` is told where the viewer left a title as soon as its session stops or ends (the
-   * last reported position), and `reconcile` once the last report has landed at the server. A
-   * session nothing was reported for changed no resume position.
+   * `watched` receives only server-confirmed resume state after stop/end, and `reconcile`
+   * refreshes the page after the last report. A session with no reports changes no resume.
    */
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -103,10 +103,15 @@ export class Playback {
 
   /** Ask the server for a plan and follow its session. Replaces whatever played before. */
   async start(target: PlaybackTarget): Promise<void> {
-    await this.stop();
+    const current = this.box.get().playback;
+    if ((current.phase === 'starting' || current.phase === 'preparing') &&
+        current.target?.kind === target.kind && current.target.id === target.id) return;
+    const stopping = this.stop();
     const run = {};
     this.run = run;
     this.patch({ ...initialPlayback, phase: 'starting', target });
+    await stopping;
+    if (this.run !== run) return;
     await this.request({ run, target, key: `play-${target.kind}-${target.id}-${randomId()}` }, 0, 0);
   }
 
@@ -144,6 +149,8 @@ export class Playback {
       reply = await api.startPlayback({
         ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id } : { titleId: target.id }),
         ...(position !== undefined ? { positionSeconds: position } : {}),
+        ...(target.kind === 'title' && target.mediaSourceId ? { mediaSourceId: target.mediaSourceId } : {}),
+        ...(target.kind === 'title' && target.audioTrackId ? { audioTrackId: target.audioTrackId } : {}),
         client: this.session.client,
         idempotencyKey: intent.key,
       });
@@ -152,7 +159,14 @@ export class Playback {
       this.failed(intent, error, attempt, preparation);
       return;
     }
-    if (this.run !== run || epoch !== this.session.epoch) return;
+    if (this.run !== run || epoch !== this.session.epoch) {
+      // Navigation or a replacement start can finish before the plan request. Release the
+      // session it allocated; dropping the reply alone leaks a server playback slot.
+      if ('sessionId' in reply) {
+        try { await connection.adapter.command(reply.sessionId, { kind: 'stop', sourceGeneration: reply.sourceGeneration, seekGeneration: reply.seekGeneration, idempotencyKey: `cancel-${intent.key}` }); } catch { /* Already gone. */ }
+      }
+      return;
+    }
     if ('state' in reply && reply.state === 'preparing') {
       const seconds = Math.ceil(reply.retryAfterSeconds);
       if (target.kind !== 'extra' || !Number.isFinite(seconds) || seconds < 1 || preparation >= MAX_PREPARATIONS) {
@@ -199,7 +213,7 @@ export class Playback {
       if (this.run !== run || plan.sessionId !== sessionId) return;
       const ended = plan.state === 'ended' && this.box.get().playback.phase !== 'ended';
       this.patch({ plan, phase: plan.state === 'ended' ? 'ended' : 'playing' });
-      if (ended) this.afterWatching(plan, this.box.get().playback.target);
+      if (ended) this.afterWatching(plan, this.box.get().playback.target, plan.positionSeconds);
     };
     const adapter = connection.adapter;
     const loop = async () => {
@@ -249,6 +263,28 @@ export class Playback {
     },
     reportObservation: (sessionId: string, observation: V.PlayerObservation) => this.observe(sessionId, observation),
   };
+
+  get subtitleSearchAvailable(): boolean {
+    try { return hasSubtitleSearch(this.session.selected().adapter); } catch { return false; }
+  }
+
+  async searchSubtitles(language: string) {
+    const api = (await this.session.ready()).adapter;
+    if (!hasSubtitleSearch(api)) throw new Error('Subtitle search is unavailable on this server');
+    return api.searchSubtitles(this.box.get().playback.sessionId, language);
+  }
+
+  async downloadSubtitle(id: string): Promise<string | null> {
+    const connection = await this.session.ready();
+    const api = connection.adapter;
+    if (!hasSubtitleSearch(api)) throw new Error('Subtitle search is unavailable on this server');
+    const sessionId = this.box.get().playback.sessionId;
+    const previous = this.box.get().playback.plan;
+    const plan = connection.plan(await api.downloadSubtitle(sessionId, id));
+    if (this.box.get().playback.sessionId !== sessionId) return null;
+    this.patch({ plan });
+    return plan.subtitleTracks.find(t => !previous?.subtitleTracks.some(p => p.id === t.id))?.id ?? null;
+  }
 
   /** A player's session command (seek, pause, track change, path switch, fallback, stop). */
   async command(sessionId: string, command: V.SessionCommand): Promise<void> {
@@ -320,7 +356,9 @@ export class Playback {
     this.end();
     this.box.update('playback', () => initialPlayback);
     if (!plan || plan.state === 'ended') return;
+    let confirmedPosition: number | undefined;
     try {
+      await this.reporting;
       const connection = await this.session.ready();
       await connection.adapter.command(plan.sessionId, {
         kind: 'stop',
@@ -328,24 +366,33 @@ export class Playback {
         seekGeneration: plan.seekGeneration,
         idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
       });
+      const titleId = plan.titleId ?? (target?.kind === 'title' ? target.id : '');
+      if (titleId && plan.purpose !== 'preview') {
+        // Some servers return the raw session cursor even though their resume policy drops
+        // it. Read the persisted watch state before publishing any resume UI.
+        const detail = await connection.adapter.detail(titleId, true);
+        confirmedPosition = detail.title.watch?.positionSeconds;
+      }
     } catch {
       // Ended, expired or already stopped: the server holds nothing for it.
     }
-    if (phase !== 'ended') this.afterWatching(plan, target);
+    if (phase !== 'ended') this.afterWatching(plan, target, confirmedPosition);
   }
 
   /**
-   * Where the viewer left the title shows at once on the pages that draw it; once the last
-   * progress report has landed, they read the server's own answer.
+   * Publish persisted resume state only. The player's raw cursor can be below the server's
+   * resume threshold; drawing it optimistically would make the title action flicker.
    */
-  private afterWatching(plan: V.PlaybackPlan, target: PlaybackTarget | null): void {
+  private afterWatching(plan: V.PlaybackPlan, target: PlaybackTarget | null, confirmedPosition?: number): void {
     const titleId = plan.titleId ?? (target?.kind === 'title' ? target.id : '');
     if (!titleId || plan.purpose === 'preview') return;
     const last = this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
     const finished = plan.state === 'ended' || last?.ended === true;
     if (!last && !finished) return;
-    const watched: Watched = { titleId, positionSeconds: last?.seconds ?? 0, finished };
-    this.watched(watched);
+    const watched: Watched = { titleId, positionSeconds: confirmedPosition ?? last?.seconds ?? 0, finished };
+    // Resume eligibility belongs to the server (Ether, for example, drops positions below
+    // 5%). Publish only its answer, never a local position that will immediately disappear.
+    if (confirmedPosition !== undefined) this.watched(watched);
     void this.reporting.then(() => this.reconcile(watched));
   }
 
