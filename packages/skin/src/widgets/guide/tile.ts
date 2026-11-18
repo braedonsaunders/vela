@@ -159,7 +159,12 @@ export class Tile {
 
   /** Put a channel on the tile (the guide's selection, a live home's favourites, flicking). */
   retune(channelId: string): void {
-    if (channelId === this.target && !this.givenUp) return;
+    if (channelId === this.target && !this.givenUp) {
+      // Focusing the automatic candidate is still an explicit choice. A later playback
+      // failure must not silently switch the preview to another channel.
+      this.chosen = channelId;
+      return;
+    }
     this.drop();
     this.chosen = channelId;
     this.attempt = 0;

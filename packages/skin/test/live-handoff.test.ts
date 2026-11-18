@@ -44,3 +44,20 @@ test('changing channels stops only the previous owner session', async () => {
   expect(tile.view().plan?.sessionId).toBe('b');
   tile.dispose();
 });
+
+test('explicitly focusing the automatic channel prevents a failure from playing another channel', async () => {
+  const starts: string[] = [];
+  const source = {
+    tune: async (id: string) => { starts.push(id); return { sessionId: id } as PlaybackPlan; },
+    stop: async () => {},
+  } as unknown as LiveSource;
+  const tile = new Tile(source, () => {}, () => {});
+  tile.update({ open: true, canPreview: true, quiet: false, order: ['a', 'b'], remembered: '' });
+  await Promise.resolve();
+  tile.retune('a');
+  tile.fail();
+  await Promise.resolve();
+  expect(starts).toEqual(['a']);
+  expect(tile.view()).toMatchObject({ channelId: 'a', state: 'unavailable' });
+  tile.dispose();
+});
