@@ -79,7 +79,7 @@ export class Live {
     try {
       const { connection, api } = await this.tv();
       const tokens = await this.session.tokens(connection);
-      const scope = `${connection.record.id}|${tokens?.viewer.id ?? ''}|${tokens?.accessToken ?? ''}`;
+      const scope = `${connection.record.id}|${tokens?.viewer.id ?? ''}`;
       const model = await loadGuide(api, day, Date.now(), scope, await connection.images());
       if (epoch === this.session.epoch) set(ready(model));
     } catch (error) {

@@ -3,7 +3,7 @@
 // home, live watch); with none open it holds no clock, loads nothing and keeps no session.
 // React reads it through useSyncExternalStore (hooks.ts); documents read it as env.live.
 import type { Snapshot } from '@vela/player-api';
-import { loadGuide, time, VelaError, type Images, type GuideChannel, type GuideModel } from '@vela/core';
+import { loadGuide, time, guideRetry, type Images, type GuideChannel, type GuideModel } from '@vela/core';
 import type { LiveSource } from './source';
 import { Tile, type TileView } from './tile';
 import { Zap } from './zap';
@@ -29,7 +29,16 @@ export interface LiveView {
   watchZap: string;
 }
 
+interface GuideTiming {
+  now(): number;
+  set(callback: () => void, delay: number): ReturnType<typeof setTimeout>;
+  clear(timer: ReturnType<typeof setTimeout> | undefined): void;
+}
+const REAL_TIME: GuideTiming = { now: () => Date.now(), set: (callback, delay) => setTimeout(callback, delay), clear: timer => clearTimeout(timer) };
+
 export interface LiveOptions {
+  /** Deterministic guide scheduling; hosts normally use the system clock. */
+  timing?: GuideTiming;
   source: LiveSource;
   /** Cache scope for listings: the server and viewer. */
   scope: string;
@@ -47,7 +56,9 @@ const WATCH_ZAP_WAIT = 1100;
 
 export class LiveController {
   private disposed = false;
-  private retryDelay = 1000;
+  private readonly backoff: ReturnType<typeof guideRetry>;
+  private readonly timing: GuideTiming;
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly listeners = new Set<() => void>();
   private readonly surfaces = new Map<Surface, number>();
   private readonly tile: Tile;
@@ -74,6 +85,8 @@ export class LiveController {
   private canPreview = false;
 
   constructor(private readonly options: LiveOptions) {
+    this.timing = options.timing ?? REAL_TIME;
+    this.backoff = guideRetry(options.scope);
     this.tile = new Tile(
       options.source,
       () => this.emit(),
@@ -177,12 +190,14 @@ export class LiveController {
 
   private scheduleFetch(): void {
     if (this.disposed) return;
+    if (this.backoff.remaining(this.timing.now())) { this.armRetry(); return; }
     ++this.loadGeneration;
-    clearTimeout(this.viewportTimer);
-    this.viewportTimer = setTimeout(() => { this.viewportTimer = undefined; this.fetch(); }, 100);
+    this.timing.clear(this.viewportTimer);
+    this.viewportTimer = this.timing.set(() => { this.viewportTimer = undefined; this.fetch(); }, 100);
   }
 
   retry(): void {
+    if (this.backoff.remaining(this.timing.now())) { this.armRetry(); return; }
     this.load = 'loading';
     this.fetch();
     this.emit();
@@ -261,9 +276,10 @@ export class LiveController {
     this.disposed = true;
     ++this.loadGeneration;
     this.surfaces.clear();
-    clearTimeout(this.timer);
-    clearTimeout(this.viewportTimer);
-    clearTimeout(this.unavailableTimer);
+    this.timing.clear(this.timer);
+    this.timing.clear(this.viewportTimer);
+    this.timing.clear(this.unavailableTimer);
+    this.timing.clear(this.retryTimer);
     this.homeZap.cancel();
     this.watchZap.cancel();
     this.tile.dispose();
@@ -290,7 +306,7 @@ export class LiveController {
   }
 
   private get active(): boolean {
-    return this.surfaces.size > 0;
+    return this.visible && this.surfaces.size > 0;
   }
 
   /** Start or stop the clock with the surfaces, and re-decide the tile. */
@@ -298,17 +314,21 @@ export class LiveController {
     if (this.disposed) return;
     if (this.active && this.timer === undefined) this.tick();
     if (!this.active && this.timer !== undefined) {
-      clearTimeout(this.timer);
+      this.timing.clear(this.timer);
       this.timer = undefined;
     }
-    if (!this.active) { clearTimeout(this.unavailableTimer); this.unavailableTimer = undefined; }
+    if (!this.active) {
+      this.timing.clear(this.unavailableTimer); this.unavailableTimer = undefined;
+      this.timing.clear(this.retryTimer); this.retryTimer = undefined;
+      this.timing.clear(this.viewportTimer); this.viewportTimer = undefined;
+    }
     this.updateTile();
     this.emit();
   }
 
   private tick = (): void => {
-    this.now = Date.now();
-    this.timer = setTimeout(this.tick, MINUTE - (this.now % MINUTE) + 50);
+    this.now = this.timing.now();
+    this.timer = this.timing.set(this.tick, MINUTE - (this.now % MINUTE) + 50);
     if (this.load === 'idle') this.load = 'loading';
     this.fetch();
     this.emit();
@@ -316,7 +336,8 @@ export class LiveController {
 
   /** Project the shown day at the clock's minute; listings are cached, so a re-projection is cheap. */
   private fetch(): void {
-    if (this.disposed || !this.now) return;
+    if (this.disposed || !this.now || !this.active) return;
+    if (this.backoff.remaining(this.timing.now())) { this.armRetry(); return; }
     const generation = ++this.loadGeneration;
     const channels = this.guide?.channels ?? [];
     const retained = [this.tile.target, this.options.memory.get(this.rememberKey) ?? '', this.homeZap.target, this.watchZap.target, ...this.retainedIds];
@@ -334,37 +355,51 @@ export class LiveController {
     Promise.all(days.map(offset => loadGuide(this.options.source, offset, this.now, this.options.scope, this.options.images, undefined, ids,
       this.surfaces.has('guide') ? this.guideRange
         ? timeWindow(this.guideRange.from, this.guideRange.to, this.guide?.dayStarts?.[offset] ?? offset * 1440, this.blocks.get(offset)?.minutes ?? 1440)
-        : { from: -1, to: 0 } : undefined))).then(
+        : { from: -1, to: 0 } : undefined, () => this.timing.now()))).then(
       models => {
         if (generation !== this.loadGeneration) return;
         for (const model of models) this.blocks.set(model.day, model);
         this.guide = timeline(this.blocks, this.day);
         this.load = 'ready';
-        this.retryDelay = 1000;
-        clearTimeout(this.unavailableTimer);
+        if (this.backoff.remaining(this.timing.now())) this.armRetry();
+        else { this.timing.clear(this.retryTimer); this.retryTimer = undefined; }
+        this.timing.clear(this.unavailableTimer);
         const retryAt = Math.min(...models.map(model => model.retryAt ?? Infinity));
-        if (this.active && Number.isFinite(retryAt)) this.unavailableTimer = setTimeout(() => {
+        if (this.active && !this.backoff.remaining(this.timing.now()) && Number.isFinite(retryAt)) this.unavailableTimer = this.timing.set(() => {
           this.unavailableTimer = undefined;
-          this.now = Date.now();
+          this.now = this.timing.now();
           this.fetch();
-        }, Math.max(1000, retryAt - Date.now() + 50));
+        }, Math.max(1000, retryAt - this.timing.now() + 50));
         this.updateTile();
         if (!base.length && models[0]?.channels.length) this.scheduleFetch();
         this.emit();
       },
       error => {
+        if (this.disposed) return;
+        if (this.backoff.remaining(this.timing.now())) {
+          this.timing.clear(this.viewportTimer); this.viewportTimer = undefined;
+          this.timing.clear(this.unavailableTimer); this.unavailableTimer = undefined;
+          this.armRetry();
+        }
         if (generation !== this.loadGeneration) return;
         guideFailure(error);
         console.warn('Vela could not load the guide', error);
         if (!this.guide) this.load = 'failed';
-        if (this.active && (!(error instanceof VelaError) || error.status >= 500 || error.status === 429)) {
-          clearTimeout(this.unavailableTimer);
-          this.unavailableTimer = setTimeout(() => { this.unavailableTimer = undefined; this.now = Date.now(); this.fetch(); }, this.retryDelay);
-          this.retryDelay = Math.min(30000, this.retryDelay * 2);
-        }
         this.emit();
       },
     );
+  }
+
+  /** One wakeup for the whole scope; clock, focus and routes cannot bypass it. */
+  private armRetry(): void {
+    if (!this.active || this.retryTimer !== undefined) return;
+    const delay = this.backoff.remaining(this.timing.now());
+    if (!delay) return;
+    this.retryTimer = this.timing.set(() => {
+      this.retryTimer = undefined;
+      this.now = this.timing.now();
+      this.fetch();
+    }, delay);
   }
 
   private updateTile(): void {

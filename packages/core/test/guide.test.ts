@@ -172,7 +172,7 @@ describe('loadGuide pagination failures', () => {
     await expect(loadGuide(api, 0, NOW, id)).rejects.toThrow('offline');
     await Promise.resolve();
     fail = false;
-    await expect(loadGuide(api, 0, NOW, id)).resolves.toBeDefined();
+    await expect(loadGuide(api, 0, NOW + 31000, id)).resolves.toBeDefined();
   });
 
   test('listings are reused for five minutes', async () => {
@@ -197,7 +197,7 @@ describe('channel metadata revalidation', () => {
     expect(channelCursors).toEqual([undefined]);
   });
 
-  test('a transient metadata refresh keeps the last lineup until revalidation recovers', async () => {
+  test('a transient metadata refresh propagates backoff and then revalidates the lineup', async () => {
     const base = fakeApi([channel(1)], []);
     let reads = 0;
     const api: GuideApi = { ...base.api, channels: async () => {
@@ -206,12 +206,12 @@ describe('channel metadata revalidation', () => {
     } };
     const key = scope();
     await loadGuide(api, 0, NOW, key);
-    const stale = await loadGuide(api, 0, NOW + 5 * MINUTE, key);
-    expect(stale.channels[0]?.name).toBe('Original channel');
-    await loadGuide(api, 0, NOW + 6 * MINUTE, key);
+    await expect(loadGuide(api, 0, NOW + 5 * MINUTE, key)).rejects.toMatchObject({ status: 503 });
+    await expect(loadGuide(api, 0, NOW + 5 * MINUTE + 10000, key)).rejects.toMatchObject({ status: 503 });
     expect(reads).toBe(2);
-    const recovered = await loadGuide(api, 0, NOW + 10 * MINUTE, key);
+    const recovered = await loadGuide(api, 0, NOW + 5 * MINUTE + 31000, key);
     expect(recovered.channels[0]?.name).toBe('Renamed channel');
+    await loadGuide(api, 0, NOW + 6 * MINUTE, key);
     expect(reads).toBe(3);
   });
 

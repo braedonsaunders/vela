@@ -1,4 +1,5 @@
 import { readGuideWindow } from './bulk';
+import { guideRetry, guideRetryable } from './retry';
 import { guideWindows } from './window';
 import { VelaError } from '../adapter/errors';
 import { artworkURL, type Images } from '../discovery/artwork';
@@ -171,8 +172,10 @@ function channelMetadata(api: GuideApi, scope: string, now: number): Promise<Cha
     entry.last = previous?.length === channels.length && channels.every((channel, index) => channel === previous[index]) ? previous : channels;
     return entry.last;
   }, error => {
-    if (hit?.last && (!(error instanceof VelaError) || error.status >= 500 || error.status === 429)) return hit.last;
-    if (channelCache.get(scope) === entry) channelCache.delete(scope);
+    if (channelCache.get(scope) === entry) {
+      if (hit?.last && guideRetryable(error)) channelCache.set(scope, { at: now - FRESH, value: Promise.resolve(hit.last), last: hit.last });
+      else channelCache.delete(scope);
+    }
     throw error;
   });
   channelCache.set(scope, entry);
@@ -261,7 +264,13 @@ function group(programmes: Programme[]) {
  * One local day of listings, every page fetched; incomplete pages are never presented as complete.
  * `day` counts days from today. Airing state and progress are projected at `now`.
  */
-export async function loadGuide(api: GuideApi, day: number, now: number, scope: string, images?: Images, localeJSON?: string, channelIds?: string[], range?: { from: number; to: number }): Promise<GuideModel> {
+export async function loadGuide(api: GuideApi, day: number, now: number, scope: string, images?: Images, localeJSON?: string, channelIds?: string[], range?: { from: number; to: number }, clock?: () => number): Promise<GuideModel> {
+  const started = Date.now();
+  return guideRetry(scope).run(api, clock ?? (() => now + Date.now() - started),
+    guarded => projectGuide(guarded, day, now, scope, images, localeJSON, channelIds, range));
+}
+
+async function projectGuide(api: GuideApi, day: number, now: number, scope: string, images?: Images, localeJSON?: string, channelIds?: string[], range?: { from: number; to: number }): Promise<GuideModel> {
   if (!Number.isInteger(day) || day < 0 || day >= DAYS) throw new Error('Invalid guide day');
   const { start, end } = withLocale(localeJSON, () => {
     const start = midnight(now, day);
@@ -399,6 +408,14 @@ export function guideFocus(at: string, now: number, localeJSON?: string) {
 }
 
 export async function liveIdentity(api: GuideApi, channelId: string, now: number, localeJSON?: string, scope?: string) {
+  if (scope) {
+    const started = Date.now();
+    return guideRetry(scope).run(api, () => now + Date.now() - started, guarded => identity(guarded, channelId, now, localeJSON, scope));
+  }
+  return identity(api, channelId, now, localeJSON);
+}
+
+async function identity(api: GuideApi, channelId: string, now: number, localeJSON?: string, scope?: string) {
   const channels = scope ? await channelMetadata(api, scope, now) : await allPages(cursor => api.channels(cursor, 100));
   const channel = channels.find(c => c.id === channelId);
   if (!channel) return withLocale(localeJSON, () => ({ title: msg('ui.liveTelevisionTitle') }));
