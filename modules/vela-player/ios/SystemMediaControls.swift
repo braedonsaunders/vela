@@ -153,3 +153,16 @@ final class SystemMediaControls {
         registrations.append((command, target))
     }
 }
+
+/// The audio session for Aether playback, including multichannel HDMI output.
+enum PlaybackAudioSession {
+    static func activate() {
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .moviePlayback, options: [])
+        #if os(tvOS)
+        try? session.setSupportsMultichannelContent(true)
+        #endif
+        try? session.setActive(true)
+        try? session.setPreferredOutputNumberOfChannels(min(8, session.maximumOutputNumberOfChannels))
+    }
+}
