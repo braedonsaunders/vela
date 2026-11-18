@@ -144,6 +144,8 @@ export const VOCABULARY: Record<string, Accessor> = {
   'context.label': c => c.contextPart?.label ?? '',
   'context.select': c => c.contextPart?.select ?? '',
   'card.hasContext': from('card', x => yes(x.contextParts.length > 0)),
+  /** The context parts as one line (series · season · episode), for a card too narrow for the links. */
+  'card.contextLine': from('card', x => x.contextParts.map(part => part.label).join(' · ')),
   ...Object.fromEntries(CARD_FIELDS.flatMap(f => [[`card.${f}`, from('card', x => String(x[f]))], [`hero.${f}`, from('hero', x => String(x[f]))]])),
   'card.played': from('card', x => yes(x.played)),
   'card.episodeNumberLabel': from('card', x => x.episodeNumberLabel),

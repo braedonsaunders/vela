@@ -76,9 +76,14 @@ export const episodeContext: Node = {
   children: [contextLinks('detail.contextParts')],
 };
 
+// On a phone a card is too narrow for the links: wrapped, each line began with a separator. It
+// reads as one clamped line there (the card itself opens the title).
 export const cardContext: Node = {
   type: 'box', style: { position: 'relative', 'z-index': '1', 'font-size': '12px', color: '$ui.inkSecondary' },
-  children: [contextLinks('card.contextParts')],
+  children: [
+    { ...contextLinks('card.contextParts'), when: [{ ...small, not: true }] },
+    { type: 'text', when: [small, { test: 'card.hasContext' }], text: '{card.contextLine}', style: { 'line-clamp': '1' } },
+  ],
 };
 
 export const band: Node = {
