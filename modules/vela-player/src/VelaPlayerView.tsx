@@ -4,6 +4,7 @@
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
 import { createElement, useEffect, useState, useSyncExternalStore } from 'react';
 import { redactMediaError } from './media-error';
+import { Platform } from 'react-native';
 import type { NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';
 import type {
   Command,
@@ -56,6 +57,7 @@ interface NativeViewProps {
 
 const nativeModule = requireNativeModule<NativeModule>('VelaPlayer');
 const NativeView = requireNativeViewManager<NativeViewProps>('VelaPlayer');
+const apple = Platform.OS === 'ios';
 
 let accessGeneration = 0;
 let preparationSequence = 0;
@@ -107,6 +109,7 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
   const [nativePlan, setNativePlan] = useState<PlaybackPlan>();
   const [result, setResult] = useState<NativeViewProps['mediaAuthorization']>();
   useEffect(() => {
+    if (!apple) return;
     let cancelled = false;
     const plan = props.plan;
     const key = plan ? planIdentity(plan) : '';
@@ -144,9 +147,8 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
     };
   }, [props.plan, version, request]);
   return createElement(NativeView, {
-    plan: nativePlan,
-    mediaAuthorization: result,
-    onMediaAuthorization: () => setRequest(value => value + 1),
+    plan: apple ? nativePlan : props.plan,
+    ...(apple ? { mediaAuthorization: result, onMediaAuthorization: () => setRequest(value => value + 1) } : {}),
     preview: props.preview,
     active: props.active,
     metadata: props.metadata,
