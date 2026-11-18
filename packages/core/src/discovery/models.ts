@@ -94,7 +94,9 @@ export function entry(item: RowEntry, images?: Images, artWidth = 2560): Card {
     return plainCard(id, item.kind, name, rating ?? '', art, item.receiptToken);
   }
   const art = pictures(item.artwork, images, artWidth, backdropWidth);
-  return plainCard(item.targetId, item.kind, item.name, '', art, item.receiptToken);
+  const model = plainCard(item.targetId, item.kind, item.name, '', art, item.receiptToken);
+  if (item.kind === 'collection' && item.itemCount !== undefined) model.facts = msg(`data.collectionTitles.${plural(item.itemCount)}`, { count: number(item.itemCount) });
+  return model;
 }
 
 /** A card for an entry that is not a title: a name and artwork, no facts. */

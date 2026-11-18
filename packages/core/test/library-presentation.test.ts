@@ -66,3 +66,12 @@ test('facet collection IDs preserve opaque values and reject incomplete IDs', as
   expect(facetCollectionQuery('facet:studios:a', tab)).toBeUndefined();
   expect(facetCollectionQuery('facet:creators:a', { ...tab, facet: undefined })).toBeUndefined();
 });
+
+test('collection counts become localized card facts; absent counts remain absent', async () => {
+  const { entry } = await import('../src/discovery/models');
+  const collection = { id: 'set', kind: 'collection' as const, targetId: 'set', name: 'Studio', receiptToken: '', artwork: [] };
+  expect(entry({ ...collection, itemCount: 24 }).facts).toBe('24 titles');
+  expect(entry({ ...collection, itemCount: 1 }).facts).toBe('1 title');
+  expect(entry({ ...collection, itemCount: 0 }).facts).toBe('0 titles');
+  expect(entry(collection).facts).toBe('');
+});

@@ -220,6 +220,8 @@
   "data.audioTracks.one": "{count} audio",
   "data.audioTracks.other": "{count} audio",
   "data.subtitleTracks.one": "{count} subtitle",
+  "data.collectionTitles.one": "{count} title",
+  "data.collectionTitles.other": "{count} titles",
   "data.subtitleTracks.other": "{count} subtitles",
   "data.transfer": "Transfer: {transfer}",
   "data.dolbyProfile": "Dolby Vision profile {profile}",

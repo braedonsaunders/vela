@@ -83,7 +83,7 @@ export interface LibraryFacetCollection { id: ID; name: string; itemCount: numbe
 export interface LibraryCollectionEntry { id: ID; kind: 'collection'; receiptToken: string; collection: { id: ID; name: string; summary: string; itemCount: number; artwork: ArtworkRef[] } }
 export type RowEntry = { id: ID; receiptToken: string } & (
   { kind: 'title'; title: Title; role?: string } | { kind: 'channel'; channel: Channel } |
-  { kind: 'collection' | 'playlist' | 'directory'; name: string; artwork: ArtworkRef[]; targetId: ID });
+  { kind: 'collection' | 'playlist' | 'directory'; name: string; artwork: ArtworkRef[]; targetId: ID; itemCount?: number });
 export interface Row { id: ID; name: string; purpose: 'continue' | 'nextUp' | 'recent' | 'recentlyReleased' | 'recentlyAdded' | 'collection' | 'recommendation' | 'live' | 'watchlist';
   receiptToken: string; style?: string; presentation?: 'ranked'; previewOnFocus?: boolean; items: RowEntry[]; nextCursor?: Cursor; continuation: 'more' | 'exhausted' | 'unknown' }
 export type HeroReason = 'resume' | 'nextEpisode' | 'newRelease' | 'forYou' | 'trending' | 'featured';

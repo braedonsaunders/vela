@@ -94,7 +94,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     const response = await this.http.request<V.Page<V.LibraryCollectionEntry | V.LibraryFacetCollection>>('GET', `/libraries/${segment(id)}/collections${query({ cursor, tab })}`, undefined, CACHED);
     return { ...response, items: response.items.map(item => {
       const collection = 'collection' in item ? item.collection : item;
-      return { id: item.id, receiptToken: 'receiptToken' in item ? item.receiptToken : '', kind: 'collection' as const, targetId: collection.id, name: collection.name, artwork: collection.artwork };
+      return { id: item.id, receiptToken: 'receiptToken' in item ? item.receiptToken : '', kind: 'collection' as const, targetId: collection.id, name: collection.name, artwork: collection.artwork, itemCount: collection.itemCount };
     }) };
   }
   async libraryGenres(id: string): Promise<{ id: string; label: string }[]> {
