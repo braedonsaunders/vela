@@ -82,12 +82,12 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     url.searchParams.set('X-Plex-Token', await this.transientToken());
     return url.href;
   }
-  private async request(path: string, query: Record<string, unknown> = {}, method = 'GET', auth = true): Promise<Node> {
+  private async request(path: string, query: Record<string, unknown> = {}, method = 'GET', auth = true, signal?: AbortSignal): Promise<Node> {
     const u = new URL(path, this.origin);
     if (u.origin !== this.origin || u.username || u.password) fail('Plex request outside selected server');
     for (const [k, v] of Object.entries(query)) if (v !== undefined) u.searchParams.set(k, String(v));
     const headers = auth ? await this.mediaHeaders() : plexHeaders(this.config.clientIdentifier);
-    const response = await fetch(u.href, { method, headers, redirect: 'error', credentials: 'omit' });
+    const response = await fetch(u.href, { method, headers, signal, redirect: 'error', credentials: 'omit' });
     if (response.status === 401) this.rotateTransientToken();
     if (!response.ok) throw new VelaError({ class: response.status === 401 || response.status === 403 ? 'auth' : response.status === 404 ? 'not-found' : 'source',
       code: 'plex_http', message: `Plex request failed (${response.status})`, retry: { allowed: false } }, response.status);
@@ -138,7 +138,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         }
       } catch (error) { if (!(error instanceof VelaError) || ![403, 404].includes(error.status)) throw error; }
     }
-    return { protocolVersion: 0, server: { id: root.machineIdentifier || this.origin, name: name || this.config.name || 'Plex Media Server', version: root.version || '' },
+    return { searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }], protocolVersion: 0, server: { id: root.machineIdentifier || this.origin, name: name || this.config.name || 'Plex Media Server', version: root.version || '' },
       features: { liveTV: live, extras: yes, extraPlayback: yes, themeMusic: yes, initialTrackSelection: yes, sessionTrackChanges: yes },
       skins: [{ id: 'cinematic', name: 'Cinematic' }], defaultSkinId: 'cinematic' };
   }
@@ -335,9 +335,9 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     }
   }
   private chapters(n: Node): V.Chapter[] { return (n.Chapter || []).map((c: Node) => ({ id: String(c.id), name: c.tag || `Chapter ${Number(c.index || 0) + 1}`, startSeconds: seconds(c.startTimeOffset), endSeconds: c.endTimeOffset === undefined ? undefined : seconds(c.endTimeOffset) })); }
-  async search(r: CatalogueSearch): Promise<V.SearchResponse> {
-    const c = await this.request('/hubs/search', { query: r.query, limit: r.limit || 30 });
-    const seen = new Set<string>(); const all = (c.Hub || []).flatMap((h: Node) => this.nodes(h)).filter((n: Node) => ['movie','show','season','episode'].includes(n.type) && !seen.has(String(n.ratingKey)) && !!seen.add(String(n.ratingKey)));
+  async search(r: CatalogueSearch, signal?: AbortSignal): Promise<V.SearchResponse> {
+    const c = await this.request('/hubs/search', { query: r.query, limit: r.limit || 30, type: r.kind === 'movie' ? 1 : r.kind === 'show' ? 2 : undefined }, 'GET', true, signal);
+    const seen = new Set<string>(); const all = (c.Hub || []).flatMap((h: Node) => this.nodes(h)).filter((n: Node) => (r.kind ? n.type === r.kind : ['movie','show','season','episode'].includes(n.type)) && !seen.has(String(n.ratingKey)) && !!seen.add(String(n.ratingKey)));
     return { query: r.query, generation: r.generation, ...page(all.map((n: Node) => this.title(n)), 0, all.length) };
   }
   async titleActions(id: string): Promise<TitleActions> {

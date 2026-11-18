@@ -23,7 +23,7 @@ export interface ServerAdapter {
   collection(id: string, cursor?: string, limit?: number): Promise<V.CollectionContents>;
   detail(id: string, fresh?: boolean): Promise<V.TitleDetail>;
   /** Catalogue search by name. Search by description is the DescriptiveSearch capability. */
-  search(request: CatalogueSearch): Promise<V.SearchResponse>;
+  search(request: CatalogueSearch, signal?: AbortSignal): Promise<V.SearchResponse>;
 
   /** A playback plan for a title, extra or channel; a server may ask to come back while an extra is prepared. */
   startPlayback(request: V.PlaybackRequest): Promise<V.PlaybackPlan | V.PlaybackPreparing>;

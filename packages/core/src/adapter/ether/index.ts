@@ -261,12 +261,12 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   // Search
 
-  search(request: CatalogueSearch) {
-    return this.http.request<V.SearchResponse>('POST', '/search', { ...request, mode: 'fast' });
+  search(request: CatalogueSearch, signal?: AbortSignal) {
+    return this.http.request<V.SearchResponse>('POST', '/search', { ...request, mode: 'fast' }, { signal });
   }
 
-  searchByDescription(request: CatalogueSearch) {
-    return this.http.request<V.SearchResponse>('POST', '/search', { ...request, mode: 'descriptive' });
+  searchByDescription(request: CatalogueSearch, signal?: AbortSignal) {
+    return this.http.request<V.SearchResponse>('POST', '/search', { ...request, mode: 'descriptive' }, { signal });
   }
 
   startAiSearch(request: V.AISearchRequest) {

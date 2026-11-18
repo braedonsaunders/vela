@@ -75,6 +75,7 @@ export class Home {
       const bootstrap: V.Bootstrap = { ...home, capabilities: advertise(api, home.capabilities) };
       this.session.check(epoch, 'home');
       this.session.features = bootstrap.capabilities.features;
+      this.session.searchCapabilities = bootstrap.capabilities;
       const images = await connection.images();
       const model = homeModel(bootstrap, images, this.artWidth());
       this.box.update('home', home => ({ ...home, ...ready(model), rowsLoading: [], moreRows: 'idle' }));

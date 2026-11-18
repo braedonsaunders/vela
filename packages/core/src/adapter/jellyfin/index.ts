@@ -60,7 +60,7 @@ export class JellyfinAdapter
                 url.searchParams.delete(key);
         return url.href;
     }
-    private async request<T>(method: string, path: string, body?: unknown, auth = true): Promise<T> {
+    private async request<T>(method: string, path: string, body?: unknown, auth = true, signal?: AbortSignal): Promise<T> {
         const tokens = auth ? await this.credentials.get() : null;
         if (auth && !tokens)
             throw this.error('auth', 'sign_in_required', 'Sign in required', 401);
@@ -68,7 +68,7 @@ export class JellyfinAdapter
         const device = this.credentials.device;
         const authorization = `MediaBrowser Client="Vela", Device="${quote(device.name)}", DeviceId="${quote(device.id)}", Version="${quote(device.appVersion)}"${tokens ? `, Token="${quote(tokens.accessToken)}"` : ''}`;
         const response = await fetch(this.url(path).href, {
-            method, redirect: 'error', headers: {
+            method, signal, redirect: 'error', headers: {
                 Authorization: authorization, ...(tokens ? {
                     'X-Emby-Token': tokens.accessToken
                 } : {}), ...(body === undefined ? {} : {
@@ -182,6 +182,8 @@ export class JellyfinAdapter
         const liveChannels = token && live?.IsEnabled === true && !configuredLive ? await this.request<Result>('GET', 'LiveTv/Channels?Limit=1').catch(() => null) : null;
         const hasLive = configuredLive || (liveChannels?.Items.length ?? 0) > 0;
         return {
+            searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }],
+            searchSorts: [{ id: 'relevance', label: 'Relevance', directions: [] }, ...['title', 'released', 'added', 'rating'].map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))],
             protocolVersion: 0, server: {
                 id: info.Id, name: info.ServerName, version: info.Version
             }, features: {
@@ -452,11 +454,13 @@ export class JellyfinAdapter
             id: i.Id, parentId, kind, name: i.Name, durationSeconds: seconds(i.RunTimeTicks), artwork: this.artwork(i)[0], availability: 'ready'
         };
     }
-    async search(r: CatalogueSearch): Promise<V.SearchResponse> {
+    async search(r: CatalogueSearch, signal?: AbortSignal): Promise<V.SearchResponse> {
         const p = this.paging(r.cursor, r.limit);
         const result = await this.request<Result>('GET', `${await this.userPath()}/Items${query({
-            ...p, SearchTerm: r.query, Recursive: true, IncludeItemTypes: 'Movie,Series,Season,Episode', Fields: fields
-        })}`);
+            ...p, SearchTerm: r.query, Recursive: true, IncludeItemTypes: r.kind === 'movie' ? 'Movie' : r.kind === 'show' ? 'Series' : 'Movie,Series,Season,Episode',
+            SortBy: r.sort && r.sort !== 'relevance' ? ({ title: 'SortName', released: 'PremiereDate', added: 'DateCreated', rating: 'CommunityRating' } as Record<string, string>)[r.sort] : undefined,
+            SortOrder: r.sort && r.sort !== 'relevance' ? (r.direction === 'desc' ? 'Descending' : 'Ascending') : undefined, Fields: fields
+        })}`, undefined, true, signal);
         return {
             query: r.query, generation: r.generation, ...this.page(result.Items.filter(i => kinds[i.Type ?? '']).map(i => this.title(i)), result, p.StartIndex)
         };

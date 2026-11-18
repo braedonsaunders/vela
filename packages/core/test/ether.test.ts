@@ -202,3 +202,11 @@ test('Ether passes plugin title names, logos and context through without kind-ba
   expect(model.logo).toBe('https://ether.example/logo.png');
   expect(model.episodeContext).toBe('A series · Season 2, Episode 3');
 });
+
+test('Ether forwards advertised plugin IDs in both search modes', async () => {
+  const seen = routeFetch({ 'POST /vela/v0/search': searchAnswer });
+  const request = { query: 'portal', generation: 2, idempotencyKey: 'plugin', sort: 'play_time', direction: 'desc' as const, kind: 'game', cursor: 'page2' };
+  await ether().search(request);
+  await ether().searchByDescription(request);
+  expect(seen.map(x => x.body)).toEqual([{ ...request, mode: 'fast' }, { ...request, mode: 'descriptive' }]);
+});

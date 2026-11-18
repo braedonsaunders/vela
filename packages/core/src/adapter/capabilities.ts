@@ -37,7 +37,7 @@ export interface ClientDeclaration {
 }
 
 export interface DescriptiveSearch {
-  searchByDescription(request: Omit<V.SearchRequest, 'mode'>): Promise<V.SearchResponse>;
+  searchByDescription(request: Omit<V.SearchRequest, 'mode'>, signal?: AbortSignal): Promise<V.SearchResponse>;
 }
 
 /** Server-provided recommendation rows scoped to a single library. */

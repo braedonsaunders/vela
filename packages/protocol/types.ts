@@ -14,7 +14,14 @@ export interface ClientCapabilities {
   maxWidth?: number; maxHeight?: number; maxBitrate?: number; hdr?: string[];
 }
 export interface Feature { available: boolean; reason?: string }
+export type SearchSort = string;
+export type SearchDirection = 'asc' | 'desc';
+export type SearchKind = string;
+export type SearchKindCapability = string | { id: string; label?: string };
+export interface SearchOptions { sort?: SearchSort; direction?: SearchDirection; kind?: SearchKind }
 export interface ServerCapabilities {
+  searchSorts?: { id: SearchSort; label?: string; directions: SearchDirection[] }[];
+  searchKinds?: SearchKindCapability[];
   /** Trusted advertised HTTPS base origins; no path, query or fragment. */
   secureOrigins?: string[];
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
@@ -82,7 +89,7 @@ export interface Hero { title: Title; receiptToken: string; reason: HeroReason; 
   label?: string; previewOnFocus?: boolean; trailer?: Extra }
 export interface Bootstrap { viewer: Viewer; capabilities: ServerCapabilities; defaultSkinId: ID; heroes?: Hero[]; rows: Row[]; nextCursor?: Cursor }
 export interface RowsQuery { cursor?: Cursor; limit?: number; placement?: 'home' | 'detail' | 'library'; titleId?: ID; libraryId?: ID }
-export interface SearchRequest extends Mutation { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
+export interface SearchRequest extends Mutation, SearchOptions { query: string; generation: number; mode: 'fast' | 'descriptive'; cursor?: Cursor; limit?: number }
 export interface LiveSearchResults { channels: Channel[]; programmes: Programme[]; programmeChannels?: Channel[] }
 export interface DescriptiveSearchState { state: 'ready' | 'pending' | 'partial' | 'busy' | 'failed'; retry?: { allowed: boolean; afterSeconds?: number } }
 export interface SearchResponse extends Page<Title> { query: string; generation: number; receiptToken?: string; live?: LiveSearchResults; descriptive?: DescriptiveSearchState }

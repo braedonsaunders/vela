@@ -22,10 +22,14 @@ export interface SearchLane {
    * states (`queued`, `running`, `partial`, `complete`, `cancelled`, `failed`). */
   status: Load | 'unavailable' | V.AISearchJob['status'];
   items: Card[];
+  nextCursor?: string;
+  loadingMore?: boolean;
   error: string;
 }
 
-export interface SearchState {
+export interface SearchState extends V.SearchOptions {
+  searchSorts?: V.ServerCapabilities['searchSorts'];
+  searchKinds?: V.SearchKindCapability[];
   query: string;
   generation: number;
   fast: SearchLane & { liveChannels: LiveChannelResult[]; liveProgrammes: LiveProgrammeResult[] };
@@ -49,6 +53,7 @@ export const initialSearch: SearchState = {
 const PAUSE_MS = 600;
 
 export class Search {
+  private controller = new AbortController();
   private pause: ReturnType<typeof setTimeout> | undefined;
   private timers = new Set<ReturnType<typeof setTimeout>>();
   /**
@@ -64,6 +69,7 @@ export class Search {
     private readonly artWidth: () => number,
   ) {
     session.onReset(() => {
+      this.controller.abort();
       this.stopTimers();
       this.scope = randomId();
       this.box.update('search', () => initialSearch);
@@ -72,25 +78,58 @@ export class Search {
 
   /** A new query: a new generation, with every lane started again. An empty query clears search. */
   setQuery(query: string): void {
-    const generation = this.box.get().search.generation + 1;
+    const previous = this.box.get().search;
+    const generation = previous.generation + 1;
+    this.controller.abort();
+    this.controller = new AbortController();
+    const caps = this.session.searchCapabilities;
+    const options = this.options(previous, caps);
     this.stopTimers();
     const text = query.trim();
     if (!text) {
-      this.box.update('search', () => ({ ...initialSearch, query, generation }));
+      this.box.update('search', () => ({ ...initialSearch, ...options, ...caps, query, generation }));
       return;
     }
     // A lane the server does not offer says so at once; one it offers is loading until typing pauses.
     const descriptive = this.offersDescriptive();
-    this.box.update('search', search => ({
+    this.box.update('search', () => ({
+      ...options,
+      ...caps,
       query,
       generation,
-      fast: { ...search.fast, status: 'loading', error: '' },
+      fast: { ...initialSearch.fast, status: 'loading', error: '' },
       descriptive: { ...initialSearch.descriptive, status: descriptive ? 'loading' : 'unavailable' },
       ai: emptyLane,
     }));
     void this.fast(text, generation);
     if (!descriptive) return;
     this.pause = setTimeout(() => void this.descriptive(text, generation), PAUSE_MS);
+  }
+
+  /** Accept only advertised options, including a direction valid for the selected sort. */
+  private options(value: V.SearchOptions, caps = this.session.searchCapabilities): V.SearchOptions {
+    const sort = caps?.searchSorts?.find(s => s.id === value.sort) ?? caps?.searchSorts?.[0];
+    return {
+      ...(sort ? { sort: sort.id, ...(sort.directions.length ? { direction: sort.directions.includes(value.direction!) ? value.direction : sort.directions[0] } : {}) } : {}),
+      ...(caps?.searchKinds?.some(k => (typeof k === 'string' ? k : k.id) === value.kind) ? { kind: value.kind } : {}),
+    };
+  }
+
+  setOptions(change: V.SearchOptions): void {
+    const state = this.box.get().search;
+    const options = this.options({ ...state, ...change });
+    if (state.sort === options.sort && state.direction === options.direction && state.kind === options.kind) return;
+    this.box.update('search', s => ({ ...s, sort: undefined, direction: undefined, kind: undefined, ...options }));
+    this.setQuery(state.query);
+  }
+
+  /** Each cursor belongs to its lane and generation. */
+  more(lane: 'fast' | 'descriptive' = 'fast'): void {
+    const state = this.box.get().search;
+    if (!state[lane].nextCursor || state[lane].loadingMore) return;
+    this.patch(lane, { loadingMore: true });
+    if (lane === 'fast') void this.fast(state.query.trim(), state.generation, state.fast.nextCursor);
+    else void this.descriptive(state.query.trim(), state.generation, state.descriptive.nextCursor);
   }
 
   /** The selected server offers descriptive search: stated in its features and implemented by its adapter. */
@@ -106,41 +145,48 @@ export class Search {
     return this.box.get().search.generation === generation;
   }
 
-  private async fast(query: string, generation: number): Promise<void> {
+  private async fast(query: string, generation: number, cursor?: string): Promise<void> {
     try {
+      const signal = this.controller.signal;
+      const options = this.options(this.box.get().search);
       const connection = await this.session.ready();
-      const result = await connection.adapter.search({ query, generation, idempotencyKey: `search-${this.scope}-${generation}` });
+      if (!this.current(generation) || signal.aborted) return;
+      const result = await connection.adapter.search({ ...options, query, generation, cursor, idempotencyKey: cursor ? this.session.key() : `search-${this.scope}-${generation}` }, signal);
       const images = await connection.images();
-      if (!this.current(generation) || result.generation !== generation) return;
+      if (signal.aborted || !this.current(generation) || result.generation !== generation) return;
       const live = liveSearch(result.live, images, Date.now());
       const items = result.items.map(title => card(title, '', images, this.artWidth()));
-      this.patch('fast', { status: 'ready', items, error: '', ...live });
+      this.patch('fast', { status: 'ready', items: cursor ? [...this.box.get().search.fast.items, ...items] : items, nextCursor: result.nextCursor, loadingMore: false, error: '', ...live });
     } catch (error) {
-      if (this.current(generation)) this.patch('fast', { status: 'failed', error: message(error) });
+      if (this.current(generation)) this.patch('fast', { loadingMore: false, status: 'failed', error: message(error) });
     }
   }
 
-  private async descriptive(query: string, generation: number): Promise<void> {
+  private async descriptive(query: string, generation: number, cursor?: string): Promise<void> {
     try {
+      const signal = this.controller.signal;
+      const options = this.options(this.box.get().search);
       const connection = await this.session.ready();
+      if (!this.current(generation) || signal.aborted) return;
       const api = connection.adapter;
       if (!this.session.features?.descriptiveSearch.available || !hasDescriptiveSearch(api)) {
         this.patch('descriptive', { status: 'unavailable' });
         return;
       }
-      this.patch('descriptive', { status: 'loading', canRetry: false });
-      const result = await api.searchByDescription({ query, generation, idempotencyKey: this.session.key() });
+      if (!cursor) this.patch('descriptive', { status: 'loading', canRetry: false });
+      const result = await api.searchByDescription({ ...options, query, generation, cursor, idempotencyKey: this.session.key() }, signal);
       const images = await connection.images();
-      if (!this.current(generation) || result.generation !== generation) return;
+      if (signal.aborted || !this.current(generation) || result.generation !== generation) return;
       const items = result.items.map(title => card(title, '', images, this.artWidth()));
-      this.described(query, generation, result.descriptive, items);
+      this.patch('descriptive', { nextCursor: result.nextCursor, loadingMore: false });
+      this.described(query, generation, result.descriptive, cursor ? [...this.box.get().search.descriptive.items, ...items] : items, cursor);
     } catch (error) {
-      if (this.current(generation)) this.patch('descriptive', { status: 'failed', error: message(error), canRetry: false });
+      if (this.current(generation)) this.patch('descriptive', { loadingMore: false, status: 'failed', error: message(error), canRetry: false });
     }
   }
 
   /** The lane's honest state for an answer, asking again while the server keeps working and allows it. */
-  private described(query: string, generation: number, state: V.DescriptiveSearchState | undefined, items: Card[]): void {
+  private described(query: string, generation: number, state: V.DescriptiveSearchState | undefined, items: Card[], cursor?: string): void {
     const status = state?.state ?? 'ready';
     const allowed = state?.retry?.allowed === true;
     const wait = Math.max(1, Math.ceil(state?.retry?.afterSeconds ?? 1)) * 1000;
@@ -155,7 +201,7 @@ export class Search {
     const more = (still || status === 'partial') && allowed;
     if (more) this.patch('descriptive', { status: 'loading', error: '', canRetry: false });
     else this.patch('descriptive', { status: 'ready', items, error: '', canRetry: false });
-    if (more) this.later(wait, generation, () => void this.descriptive(query, generation));
+    if (more) this.later(wait, generation, () => void this.descriptive(query, generation, cursor));
   }
 
   /** Ask the descriptive lane again, once the server has allowed it. */

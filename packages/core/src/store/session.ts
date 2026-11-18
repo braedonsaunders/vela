@@ -28,6 +28,7 @@ export class Session {
   /** Moves on whenever the session or the selected server changes; answers from an older epoch are dropped. */
   epoch = 0;
   /** The selected server's feature statements, as its home advertised them. */
+  searchCapabilities: Pick<V.ServerCapabilities, 'searchSorts' | 'searchKinds'> | undefined;
   features: V.ServerCapabilities['features'] | undefined;
   /** Server names as they describe themselves, by record ID. */
   readonly names = new Map<string, string>();
@@ -117,6 +118,7 @@ export class Session {
     this.validation = undefined;
     this.negotiation = undefined;
     this.features = undefined;
+    this.searchCapabilities = undefined;
     for (const listener of [...this.resetListeners]) listener('server');
   }
 

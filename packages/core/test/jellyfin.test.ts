@@ -243,3 +243,13 @@ test('Jellyfin and Emby episode primaries remain stills and series primaries sup
   expect(items[1]!.artwork[0]!.sizes[0]!.url).toBe(`${BASE}/Items/s1/Images/Primary?tag=series-p`);
   expect(items[2]!.artwork.map(a => a.kind)).toEqual(['still']);
 });
+
+test('Jellyfin and Emby search use Items sorting, direction and kind before paging', async () => {
+  const seen = routeFetch({ 'GET /jf/Users/viewer-1/Items': { Items: [], TotalRecordCount: 0 } });
+  await new JellyfinAdapter(BASE, new FakeCredentials()).search({ query: 'heat', generation: 1, idempotencyKey: 'sort', sort: 'rating', direction: 'desc', kind: 'show', cursor: '40' });
+  const q = seen[0]!.url.searchParams;
+  expect(q.get('SortBy')).toBe('CommunityRating');
+  expect(q.get('SortOrder')).toBe('Descending');
+  expect(q.get('IncludeItemTypes')).toBe('Series');
+  expect(q.get('StartIndex')).toBe('40');
+});

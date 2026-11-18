@@ -194,3 +194,23 @@ describe('mock server: catalogue and live', () => {
     expect(await errorCode(response)).toBe('feature_unavailable');
   });
 });
+
+test('search sorts, filters, validates and binds cursors to the complete query', async () => {
+  const tokens = await signIn();
+  const search = async (options: object) => post('/search', { query: '', mode: 'fast', generation: 1, idempotencyKey: key(), ...options }, authed(tokens));
+  const asc = await (await search({ sort: 'title', direction: 'asc', limit: 100 })).json() as V.SearchResponse;
+  const desc = await (await search({ sort: 'title', direction: 'desc', limit: 100 })).json() as V.SearchResponse;
+  expect(asc.items.map(t => t.name)).toEqual(asc.items.map(t => t.name).sort((a, b) => a.localeCompare(b)));
+  expect(desc.items.map(t => t.name)).toEqual(desc.items.map(t => t.name).sort((a, b) => b.localeCompare(a)));
+  expect(asc.items[0].name).not.toBe(desc.items[0].name);
+  const movies = await (await search({ kind: 'movie' })).json() as V.SearchResponse;
+  expect(movies.items.length).toBeGreaterThan(0);
+  expect(movies.items.every(t => t.kind === 'movie')).toBe(true);
+  expect((await (await search({ kind: 'game' })).json() as V.SearchResponse).items).toEqual([]);
+  for (const [field, value] of [['sort', 'invalid'], ['direction', 'up'], ['kind', 'invalid']]) {
+    expect(await errorCode(await search({ [field]: value }))).toBe(`invalid_${field}`);
+  }
+  const first = await (await search({ sort: 'title', limit: 1 })).json() as V.SearchResponse;
+  expect(first.nextCursor).toBeDefined();
+  expect((await search({ sort: 'released', cursor: first.nextCursor })).status).toBe(409);
+});

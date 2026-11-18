@@ -9,17 +9,18 @@ const title = (id: string, name = id): V.Title => ({ id, kind: 'movie', name, su
 const answer = (request: { query: string; generation: number }, items: V.Title[], descriptive?: V.DescriptiveSearchState): V.SearchResponse =>
   ({ query: request.query, generation: request.generation, items, continuation: 'exhausted', ...(descriptive ? { descriptive } : {}) });
 
-type Request = { query: string; generation: number; idempotencyKey: string };
+type Request = Omit<V.SearchRequest, 'mode'>;
 interface FakeAdapter {
-  search: (r: Request) => Promise<V.SearchResponse>;
+  search: (r: Request, signal?: AbortSignal) => Promise<V.SearchResponse>;
   searchByDescription?: (r: Request) => Promise<V.SearchResponse>;
 }
 
 /** A session holding one connection to a fake adapter; `descriptive` turns the feature on. */
-function harness(adapter: FakeAdapter, descriptive = true) {
+function harness(adapter: FakeAdapter, descriptive = true, caps?: Pick<V.ServerCapabilities, 'searchSorts' | 'searchKinds'>) {
   const resets: (() => void)[] = [];
   const connection = { adapter, images: async () => ({ origin: 'https://server.example' }) };
   const session = {
+    searchCapabilities: caps,
     features: { descriptiveSearch: { available: descriptive } },
     selected: () => connection,
     ready: async () => connection,
@@ -76,6 +77,7 @@ describe('Search', () => {
     const requests: Request[] = [];
     const { search, state } = harness({ search: r => { requests.push(r); return new Promise(resolve => pending.push(resolve)); } }, false);
     search.setQuery('in');
+    await settle();
     search.setQuery('inception');
     await settle();
     expect(requests.map(r => r.generation)).toEqual([1, 2]);
@@ -224,4 +226,69 @@ describe('Search', () => {
     reset();
     expect(state()).toEqual(initialSearch);
   });
+});
+
+
+test('controls are capability gated, cancel old work and reset lane cursors', async () => {
+  const calls: { r: Request; signal?: AbortSignal }[] = [];
+  const { search, state } = harness({ search: async (r, signal) => {
+    calls.push({ r, signal });
+    return { ...answer(r, [title(r.cursor ? 'second' : 'first')]), nextCursor: r.cursor ? undefined : 'page2' };
+  } }, false, { searchSorts: [{ id: 'title', directions: ['asc', 'desc'] }], searchKinds: ['movie'] });
+  search.setQuery('film'); await settle();
+  search.more(); await settle();
+  expect(calls[1].r.cursor).toBe('page2');
+  expect(state().fast.items.map(x => x.id)).toEqual(['first', 'second']);
+  search.setOptions({ sort: 'title', direction: 'desc', kind: 'movie' }); await settle();
+  expect(calls[0].signal?.aborted).toBe(true);
+  expect(calls[2].r).toMatchObject({ sort: 'title', direction: 'desc', kind: 'movie', generation: 2 });
+  expect(calls[2].r.cursor).toBeUndefined();
+  search.setOptions({ sort: 'popularity', direction: 'asc', kind: 'show' }); await settle();
+  expect(calls.at(-1)?.r.sort).toBe('title');
+  expect(calls.at(-1)?.r.kind).toBeUndefined();
+});
+
+test('older servers never receive unsupported search controls', async () => {
+  const calls: Request[] = [];
+  const { search } = harness({ search: async r => { calls.push(r); return answer(r, []); } }, false);
+  search.setQuery('film'); await settle();
+  search.setOptions({ sort: 'rating', kind: 'movie' }); await settle();
+  expect(calls).toHaveLength(1);
+  expect(calls[0].sort).toBeUndefined();
+});
+
+test('both search modes receive the same options', async () => {
+  const descriptions: Request[] = [];
+  const { search } = harness({ search: async r => answer(r, []), searchByDescription: async r => {
+    descriptions.push(r); return answer(r, []);
+  } }, true, { searchSorts: [{ id: 'rating', directions: ['desc'] }], searchKinds: ['show'] });
+  search.setQuery('space drama');
+  search.setOptions({ sort: 'rating', direction: 'asc', kind: 'show' });
+  jest.advanceTimersByTime(600); await settle();
+  expect(descriptions).toHaveLength(1);
+  expect(descriptions[0]).toMatchObject({ generation: 2, sort: 'rating', direction: 'desc', kind: 'show' });
+});
+
+
+test('plugin kind and sort IDs pass through unchanged', async () => {
+  const calls: Request[] = [];
+  const { search, state } = harness({ search: async r => { calls.push(r); return answer(r, []); } }, false,
+    { searchKinds: [{ id: 'game', label: 'Video games' }], searchSorts: [{ id: 'play_time', label: 'Play time', directions: ['desc'] }] });
+  search.setOptions({ kind: 'game', sort: 'play_time' });
+  search.setQuery('portal'); await settle();
+  expect(calls[0]).toMatchObject({ kind: 'game', sort: 'play_time', direction: 'desc' });
+  expect(state().searchKinds).toEqual([{ id: 'game', label: 'Video games' }]);
+});
+
+test('a late page from the old sort cannot replace the new generation', async () => {
+  const pending: ((answer: V.SearchResponse) => void)[] = [];
+  const requests: Request[] = [];
+  const { search, state } = harness({ search: r => { requests.push(r); return new Promise(resolve => pending.push(resolve)); } }, false,
+    { searchSorts: [{ id: 'title', directions: ['asc', 'desc'] }] });
+  search.setQuery('film'); await settle();
+  search.setOptions({ direction: 'desc' }); await settle();
+  pending[1](answer(requests[1], [title('new')])); await settle();
+  pending[0]({ ...answer(requests[0], [title('old')]), nextCursor: 'stale' }); await settle();
+  expect(state().fast.items.map(x => x.id)).toEqual(['new']);
+  expect(state().fast.nextCursor).toBeUndefined();
 });

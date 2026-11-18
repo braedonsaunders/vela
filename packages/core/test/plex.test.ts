@@ -291,3 +291,10 @@ describe('PlexAdapter server name', () => {
     expect((await adapter.describe()).server.name).toBe('MEDIASERVER');
   });
 });
+
+test('Plex hub search scopes the upstream type and excludes other hubs', async () => {
+  const seen = routeFetch({ 'GET /hubs/search': { MediaContainer: { Hub: [{ Metadata: [movie, episode] }] } } });
+  const result = await plex().search({ query: 'heat', generation: 1, idempotencyKey: 'kind', kind: 'movie' });
+  expect(seen[0]!.url.searchParams.get('type')).toBe('1');
+  expect(result.items.map(x => x.kind)).toEqual(['movie']);
+});

@@ -643,3 +643,14 @@ A live `PlaybackPlan` may include `livePolicy: { latencyProfile, targetLatencySe
 The profile is `auto`, `low`, or `stable`; the positive finite target is a
 preferred latency in seconds, not a strict floor. Playback may adapt to stalls.
 When absent, the profile is auto and the target is unknown.
+
+
+Search controls are optional capabilities. `searchSorts` is an ordered list of
+`{id, label?, directions}`; `searchKinds` is an ordered list of `{id, label?}`
+(legacy string IDs are also accepted). IDs are open strings, including plugin
+kinds such as `game`. Clients preserve the advertised labels and order and
+humanise an ID only when its label is absent. Missing capabilities mean no
+controls. Search requests carry optional `sort`, `direction` and `kind` in both
+fast and descriptive modes; omitting `kind` means All. Every option change starts
+a new generation and invalidates prior cursors. Adapters advertise only controls
+they implement; Plex hub search currently advertises kind filtering only.
