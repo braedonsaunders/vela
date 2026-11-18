@@ -13,7 +13,11 @@ import { scaleGuide } from './guide-fixture';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
 const channels = scaleFixture?.channels ?? defaultChannels;
-const guide = scaleFixture?.guide ?? defaultGuide;
+const fixtureGuide = scaleFixture?.guide ?? defaultGuide;
+const gapChannels = new Set((process.env.VELA_MOCK_GUIDE_GAPS ?? '').split(','));
+const gapHour = Math.floor(Date.now() / 3600000) * 3600000;
+const guide = (from: number, until: number, ids: string[]) => fixtureGuide(from, until, ids).filter(programme =>
+  !gapChannels.has(programme.channelId) || Date.parse(programme.end) <= gapHour - 3 * 3600000 || Date.parse(programme.start) >= gapHour + 5 * 3600000);
 
 const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
 const secret = crypto.randomUUID();

@@ -167,3 +167,5 @@ omit it to verify paginated fallback. `VELA_MOCK_GUIDE_UNAVAILABLE=scale-5`
 simulates a retryable guide outage, distinct from a ready channel with no listings.
 For a TV on the LAN, set `VELA_MOCK_HOST` to this machine's LAN address; the
 default remains loopback. Sign in with the mock's `demo` / `vela` account.
+`VELA_MOCK_GUIDE_GAPS=scale-1` adds a long empty interval around the current
+hour on that channel to verify that vertical focus retains time across gaps.
