@@ -60,11 +60,17 @@ export function useVela(): Vela {
   return vela;
 }
 
+/** The side insets screens are padded by. A TV's are its overscan margins, not hardware in the way:
+ * there a document's pictures run to the edges and its gutters keep within env(safe-area-inset-*). */
+function screenSides(safeArea: { left: number; right: number }): { left: number; right: number } {
+  return Platform.isTV ? { left: 0, right: 0 } : { left: safeArea.left, right: safeArea.right };
+}
+
 /** A screen's padding for the safe area at its sides, filled with the active document's page.
  * Documents lay out between the side insets (AppHost gives them that width), so the padding is
  * applied once, by every screen, rather than by each document's gutters. */
 export function useSideInsets(): { paddingLeft: number; paddingRight: number; backgroundColor: string } {
-  const { left, right } = useSafeAreaInsets();
+  const { left, right } = screenSides(useSafeAreaInsets());
   const doc = useContext(VelaContext)?.doc;
   const page = useMemo(() => resolveUi(doc?.document.ui).page, [doc]);
   return useMemo(() => ({ paddingLeft: left, paddingRight: right, backgroundColor: page }), [left, right, page]);
@@ -162,12 +168,16 @@ interface AppHostProps {
 function AppHost({ store, state, live, children }: AppHostProps) {
   const windowSize = useWindowDimensions();
   const safeArea = useSafeAreaInsets();
+  const sides = screenSides(safeArea);
   // Screens are padded by the side insets (useSideInsets): a document lays out in the width between
   // them, and its env(safe-area-inset-left/right) is then zero. A phone's notch in landscape, or the
   // Dynamic Island on the right edge of an unfolded iPhone, never covers a control.
-  const width = windowSize.width - safeArea.left - safeArea.right;
+  const width = windowSize.width - sides.left - sides.right;
   const height = windowSize.height;
-  const insets = useMemo(() => ({ top: safeArea.top, right: 0, bottom: safeArea.bottom, left: 0 }), [safeArea.top, safeArea.bottom]);
+  const insets = useMemo(
+    () => ({ top: safeArea.top, right: safeArea.right - sides.right, bottom: safeArea.bottom, left: safeArea.left - sides.left }),
+    [safeArea.top, safeArea.right, safeArea.bottom, safeArea.left, sides.left, sides.right],
+  );
   const liveView = useLiveView();
   const heroPreviewing = state.previews.heroId !== '' && state.previews.url !== '';
   const pathname = usePathname();
@@ -226,8 +236,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     return () => window.removeEventListener('vela:find', find);
   }, [dispatch, pathname, state.auth.phase]);
   const viewport: Viewport = useMemo(
-    () => ({ width, height, insets, sides: { left: safeArea.left, right: safeArea.right } }),
-    [width, height, insets, safeArea.left, safeArea.right],
+    () => ({ width, height, insets, sides: { left: sides.left, right: sides.right } }),
+    [width, height, insets, sides.left, sides.right],
   );
   const image = useCallback<SkinHost['image']>(path => {
     const source = assetSource(path, origin);
