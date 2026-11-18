@@ -108,7 +108,13 @@ function listings(api: GuideApi, scope: string, from: number, until: number, now
     const reads: Promise<Programme[]>[] = [];
     for (const batch of queries) {
       const ids = batch ?? wanted;
-      const page = allPages(cursor => api.guide({ from: new Date(from).toISOString(), until: new Date(until).toISOString(), cursor, limit: 100, channelIds: batch }));
+      const page = allPages(cursor => {
+        if (process.env.EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS === '1') {
+          const root = globalThis as typeof globalThis & { __velaGuideQueries?: number };
+          root.__velaGuideQueries = (root.__velaGuideQueries ?? 0) + 1;
+        }
+        return api.guide({ from: new Date(from).toISOString(), until: new Date(until).toISOString(), cursor, limit: 100, channelIds: batch });
+      });
       reads.push(page);
       for (const id of ids) {
         const value = page.then(programmes => programmes.filter(programme => programme.channelId === id));
@@ -182,6 +188,13 @@ function channelLogo(channel: Channel, images?: Images): string {
   return variants.get(images)!;
 }
 
+interface Projection {
+  channel: Channel; images: Images | undefined; locale: string; now: number; loaded: boolean;
+  entries: Programme[]; live: Programme[]; value: GuideChannel;
+}
+const projections = new Map<string, Map<string, Projection>>();
+const sameListings = (a: Programme[], b: Programme[]) => a.length === b.length && a.every((p, i) => p === b[i]);
+
 const valid = (p: Programme) => {
   const a = Date.parse(p.start), b = Date.parse(p.end);
   return Number.isFinite(a) && Number.isFinite(b) && b > a;
@@ -243,14 +256,26 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
     const loadedIds = channelIds ? new Set(channelIds.length ? channelIds : [...window.channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 30).map(c => c.id)) : null;
     const guides: { id: string; name: string }[] = [];
     for (const channel of window.channels) for (const g of channel.guides ?? []) if (!guideSet.has(g.id)) { guideSet.add(g.id); guides.push({ id: g.id, name: g.name }); }
+    const projectionKey = `${scope}|${start}`;
+    let projected = projections.get(projectionKey);
+    if (!projected) {
+      projected = new Map(); projections.set(projectionKey, projected);
+      for (const key of projections.keys()) if (projections.size > 8 && key !== projectionKey) projections.delete(key);
+    }
+    const projectionLocale = JSON.stringify(localeContext());
     const channels: GuideChannel[] = [...window.channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).map(channel => {
       if (channel.group && !groupSet.has(channel.group)) { groupSet.add(channel.group); groups.push(channel.group); }
       const entries = grouped.get(channel.id) ?? [];
       const live = (currentByChannel.get(channel.id) ?? []);
+      const loaded = !loadedIds || loadedIds.has(channel.id);
+      const previous = projected.get(channel.id);
+      if (previous && previous.channel === channel && previous.images === images && previous.locale === projectionLocale
+        && previous.loaded === loaded && (!loaded || previous.now === now)
+        && sameListings(previous.entries, entries) && sameListings(previous.live, live)) return previous.value;
       const airing = live.find(p => Date.parse(p.start) <= now && now < Date.parse(p.end));
       const next = live.find(p => Date.parse(p.start) > now);
       const airingEnd = airing ? Date.parse(airing.end) : 0, airingStart = airing ? Date.parse(airing.start) : 0;
-      return {
+      const value: GuideChannel = {
         id: channel.id, number: channel.number, name: channel.name, favorite: channel.favorite, group: channel.group ?? '',
         guideIds: [...new Set((channel.guides ?? []).map(g => g.id))],
         logo: channelLogo(channel, images), listed: entries.length > 0, listingsLoaded: !loadedIds || loadedIds.has(channel.id),
@@ -279,6 +304,8 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
           };
         }),
       };
+      projected.set(channel.id, { channel, images, locale: projectionLocale, now, loaded, entries, live, value });
+      return value;
     });
     const model: GuideModel = {
       loadedRanges: range ? guideWindows(from, until, start, end).map(w => ({ from: (w.from - start) / MINUTE, to: (w.until - start) / MINUTE })) : [{ from: 0, to: minutes }],

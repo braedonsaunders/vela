@@ -335,3 +335,16 @@ test('concurrent overlapping guide views share in-flight channel pages', async (
   ]);
   expect(guideQueries.map(q => q.channelIds)).toEqual([['c1', 'c2'], ['c3']]);
 });
+
+test('overlapping channel windows preserve projected rows and invalidate on clock changes', async () => {
+  const { api } = fakeApi([channel(1), channel(2)], [programme('c1', 'now', NOW - HOUR, NOW + HOUR)]);
+  const id = scope();
+  const a = await loadGuide(api, 0, NOW, id, undefined, undefined, ['c1'], { from: 700, to: 1000 });
+  const b = await loadGuide(api, 0, NOW, id, undefined, undefined, ['c1', 'c2'], { from: 700, to: 1000 });
+  expect(a.channels[0]).toBe(b.channels[0]);
+  expect(a.channels[1]?.listingsLoaded).toBe(false);
+  expect(b.channels[1]?.listingsLoaded).toBe(true);
+  const c = await loadGuide(api, 0, NOW + MINUTE, id, undefined, undefined, ['c1', 'c2'], { from: 700, to: 1000 });
+  expect(c.channels[0]).not.toBe(b.channels[0]);
+  expect(c.channels[0]!.nowProgress).toBeGreaterThan(b.channels[0]!.nowProgress);
+});
