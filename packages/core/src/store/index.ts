@@ -122,7 +122,9 @@ export function createVela(options: VelaOptions): Vela {
     subscribe: box.subscribe,
     async start() {
       await auth.start();
-      await Promise.all([servers.refresh().catch(() => {}), appearance.load()]);
+      const serverStatus = servers.refresh().catch(() => {});
+      if (box.get().auth.phase === 'offline') { await serverStatus; return; }
+      await Promise.all([serverStatus, appearance.load()]);
     },
     setLocale(context) {
       setLocale(JSON.stringify(context));

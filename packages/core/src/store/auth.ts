@@ -17,8 +17,10 @@ import type { VelaState } from './index';
  * - `starting`: reading the stored session and the server's options.
  * - `redeeming`: the web's sign-in link is being exchanged for a session.
  * - `signed-out` / `signed-in`: settled.
- * - `offline`: a stored session exists but the server did not answer; nothing was signed out.
+ * - `offline`: restoration could not finish; stored credentials remain untouched.
  */
+export const SESSION_RESTORE_TIMEOUT_MS = 10_000;
+
 export type AuthPhase = 'starting' | 'redeeming' | 'signed-out' | 'signed-in' | 'offline';
 
 export interface QuickCode {
@@ -85,7 +87,35 @@ export class Auth {
 
   /** Settle the selected server's session: redeem a sign-in link, validate what is stored. */
   start(): Promise<void> {
-    return this.starting ??= this.startSession();
+    return this.starting ??= this.restoreSession();
+  }
+
+  // One deadline covers validation, credential reads and sign-in option discovery.
+  // A late answer cannot repaint the offline state or a subsequent sign-in.
+  private async restoreSession(): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const restoring = this.startSession();
+    const generation = this.linkGeneration;
+    try {
+      await Promise.race([
+        restoring,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(msg('server.unreachable'))), SESSION_RESTORE_TIMEOUT_MS);
+        }),
+      ]);
+    } catch (error) {
+      if (generation !== this.linkGeneration) return;
+      this.linkGeneration++;
+      const connection = this.session.selected();
+      this.patch({
+        phase: 'offline', error: message(error, msg('server.unreachable')),
+        serverId: connection.record.id, serverKind: connection.record.kind,
+        serverName: this.session.names.get(connection.record.id) ?? connection.record.name,
+        revision: this.session.epoch,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async startSession(): Promise<void> {
@@ -102,6 +132,7 @@ export class Auth {
     try {
       if (this.session.demoSignIn(connection)) await this.session.ready();
       const stored = await this.session.tokens(connection);
+      if (generation !== this.linkGeneration) return;
       if (stored) await this.session.validate(connection, stored);
       if (generation !== this.linkGeneration) return;
       await this.refresh();
@@ -179,6 +210,7 @@ export class Auth {
     if (!this.session.hasServer()) return this.noServer();
     const connection = this.session.selected();
     const epoch = this.session.epoch;
+    const generation = this.linkGeneration;
     const tokens = await this.session.tokens(connection);
     let options = { passwordAvailable: false, quickAvailable: false, secureOrigin: '' };
     let reachable = true;
@@ -188,7 +220,7 @@ export class Auth {
       reachable = false;
     }
     // An older option/session read must never repaint a viewer after a new handoff.
-    if (epoch !== this.session.epoch) return;
+    if (epoch !== this.session.epoch || generation !== this.linkGeneration) return;
     let settled: AuthPhase = tokens ? 'signed-in' : 'signed-out';
     if (phase) settled = phase;
     else if (!reachable && tokens) settled = 'offline';

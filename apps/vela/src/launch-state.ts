@@ -12,6 +12,6 @@ export function searchlightGeometry(width: number, height: number) {
     scale, offsetX: (markWidth - 88 * scale) / 2, offsetY: (markHeight - 55.8 * scale) / 2 };
 }
 export function launchReady(phase: string, load: string, fonts: boolean, authRoute: boolean, docError: boolean): boolean {
-  return fonts && (docError || (phase === 'signed-out' && authRoute) ||
+  return fonts && (docError || ((phase === 'signed-out' || phase === 'offline') && authRoute) ||
     (phase === 'signed-in' && (load === 'ready' || load === 'failed')));
 }

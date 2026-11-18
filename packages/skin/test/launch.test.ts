@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { launchReady, launchDelay, searchlightGeometry } from '../../../apps/vela/src/launch-state';
 
 test('launch waits for the first rendered answer, including failures and signed-out routing', () => {
+  expect(launchReady('offline', 'idle', true, true, false)).toBe(true);
+  expect(launchReady('offline', 'idle', true, false, false)).toBe(false);
   expect(launchReady('starting', 'idle', true, false, false)).toBe(false);
   expect(launchReady('signed-in', 'loading', true, false, false)).toBe(false);
   expect(launchReady('signed-in', 'ready', false, false, false)).toBe(false);
