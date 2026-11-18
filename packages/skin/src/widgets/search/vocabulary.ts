@@ -51,6 +51,8 @@ export const SEARCH_VOCABULARY: Record<string, Accessor> = {
   'search.sort': over(s => s.controls?.sort ?? ''),
   'search.direction': over(s => s.controls?.direction ?? ''),
   'search.kind': over(s => s.controls?.kind ?? ''),
+  // A kind or library restriction is on: an empty answer is about the filters, not the words.
+  'search.filtered': over(s => yes(!!s.controls?.kind || !!s.controls?.library)),
   'search.directionCount': over(s => String(s.controls?.searchSorts?.find(x => x.id === s.controls?.sort)?.directions.length ?? 0)),
   'search.moreFast': over(s => yes(!!s.more?.fast)),
   'search.moreDescriptive': over(s => yes(!!s.more?.descriptive)),

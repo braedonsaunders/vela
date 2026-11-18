@@ -405,6 +405,8 @@
   "live.startsOn": "Starts {day} at {time}",
   "live.startsTomorrow": "Starts tomorrow at {time}",
   "search.lookingForVibe": "Looking for that vibe…",
+  "search.noFilteredMatches": "Nothing matches these filters",
+  "search.noFilteredMatchesMessage": "Try another type or library, or choose All.",
   "search.noMood": "Couldn't find that mood yet",
   "search.noMoodMessage": "Try different words: a genre, a feeling, a setting or who it's for.",
   "search.moodUnavailable": "Mood search couldn't finish",

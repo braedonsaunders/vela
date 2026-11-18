@@ -321,22 +321,26 @@ const titles: Node[] = [
     style: column('4px'),
     children: [
       {
+        ...emptyState('search', '{t:search.noFilteredMatches}', '{t:search.noFilteredMatchesMessage}'),
+        when: [{ test: 'search.filtered' }],
+      },
+      {
         ...emptyState('alert', '{t:search.moodUnavailable}', '{t:search.moodUnavailableMessage}'),
-        when: [{ test: 'search.describing' }, is('search.descriptiveState', 'failed')],
+        when: [{ test: 'search.filtered', not: true }, { test: 'search.describing' }, is('search.descriptiveState', 'failed')],
       },
       {
         type: 'box',
-        when: [{ test: 'search.describing' }, is('search.descriptiveState', 'failed')],
+        when: [{ test: 'search.filtered', not: true }, { test: 'search.describing' }, is('search.descriptiveState', 'failed')],
         style: { display: 'flex', 'flex-direction': 'row', 'justify-content': 'center' },
         children: [retry(44, '22px', '14px')],
       },
       {
         ...emptyState('search', '{t:search.noMood}', '{t:search.noMoodMessage}'),
-        when: [{ test: 'search.describing' }, isNot('search.descriptiveState', 'failed')],
+        when: [{ test: 'search.filtered', not: true }, { test: 'search.describing' }, isNot('search.descriptiveState', 'failed')],
       },
       {
         ...emptyState('search', '{t:ui.noMatches}', '{t:ui.noTitleMatchesTryANameAMoodOrADifferentDescription}'),
-        when: [{ test: 'search.describing', not: true }],
+        when: [{ test: 'search.filtered', not: true }, { test: 'search.describing', not: true }],
       },
     ],
   },

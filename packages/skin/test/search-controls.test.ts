@@ -31,3 +31,14 @@ test('library control gates on capability and count and preserves server order',
   expect(SEARCH_VOCABULARY['search.libraryCount'](c, env)).toBe('0');
   expect(searchCollection('search.libraries', c, env, 50)).toEqual([]);
 });
+
+test('an empty answer under a kind or library restriction is about the filters, not the words', () => {
+  const c = { index: 0 } as Ctx;
+  const kinds = [{ id: 'movie', label: 'Movies' }, { id: 'adult/scene', label: 'Adult' }];
+  const env = { search: searchView({ ...initialSearch, query: 'late night drive', searchKinds: kinds, kind: 'adult/scene' }) } as Env;
+  expect(SEARCH_VOCABULARY['search.filtered'](c, env)).toBe('true');
+  env.search = searchView({ ...initialSearch, query: 'late night drive', searchKinds: kinds });
+  expect(SEARCH_VOCABULARY['search.filtered'](c, env)).toBe('false');
+  env.search = searchView({ ...initialSearch, query: 'heat', searchLibraries: true, library: 'z' });
+  expect(SEARCH_VOCABULARY['search.filtered'](c, env)).toBe('true');
+});
