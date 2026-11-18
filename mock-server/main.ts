@@ -188,14 +188,25 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const library = libraries.find(l => l.id === collectionsMatch[1]);
     if (!library) fail('not-found', 'not_found', 'Library not found');
     const tab = library.tabs?.find(tab => tab.id === url.searchParams.get('tab'));
-    if (url.searchParams.has('tab') && (!tab || tab.kind !== 'collections')) fail('request', 'invalid_tab', 'Unknown collections tab');
+    if (url.searchParams.has('tab') && (!tab || tab.kind !== 'collections' && tab.kind !== 'people')) fail('request', 'invalid_tab', 'Unknown collections tab');
+    if (tab?.kind === 'people') {
+      const entries: V.LibraryPersonEntry[] = Array.from({ length: 105 }, (_, index) => ({
+        id: `person:performer-${index}`, kind: 'person',
+        person: { id: `performer-${index}`, name: `Performer ${String(index + 1).padStart(3, '0')}`, photo: index % 3 === 0 ? personArtwork(g) : null },
+        itemCount: index + 1,
+      }));
+      entries.sort((a, b) => tab.order === 'count' ? b.itemCount - a.itemCount : a.person.name.localeCompare(b.person.name));
+      const paged = new URL(url);
+      if (process.env.VELA_MOCK_COLLECTION_PAGE_SIZE) paged.searchParams.set('limit', process.env.VELA_MOCK_COLLECTION_PAGE_SIZE);
+      return cached(req, page(entries, paged, g, `library-people:${library.id}:${tab.id}`), g.id);
+    }
     if (tab?.facet) {
       const counts = new Map<string, { count: number; artwork: V.ArtworkRef[] }>();
       for (const item of libraryEntries(library.id)) for (const value of facetValues(item, tab.facet)) {
         const held = counts.get(value);
         counts.set(value, { count: (held?.count ?? 0) + 1, artwork: held?.artwork ?? (item.kind === 'title' ? [signedArtwork(g, item.title.id, 'poster')] : []) });
       }
-      const entries = [...counts].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0])).map(([value, data]) => ({ id: `facet:${tab.facet}:${value}`, name: value, itemCount: data.count, artwork: data.artwork }));
+      const entries = [...counts].sort((a, b) => (tab.order === 'name' ? 0 : b[1].count - a[1].count) || a[0].localeCompare(b[0])).map(([value, data]) => ({ id: `facet:${tab.facet}:${value}`, name: value, itemCount: data.count, artwork: data.artwork }));
       // Tests can simulate a server that caps pages below the client's requested size.
       const paged = new URL(url);
       if (process.env.VELA_MOCK_COLLECTION_PAGE_SIZE) paged.searchParams.set('limit', process.env.VELA_MOCK_COLLECTION_PAGE_SIZE);
@@ -207,12 +218,15 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const personMatch = /^\/people\/([^/]+)(\/titles)?$/.exec(path);
   if (method === 'GET' && personMatch && process.env.VELA_MOCK_OLD !== '1') {
-    if (personMatch[1] !== 'person-mara-vale') fail('not-found', 'not_found', 'Person not found');
+    const performer = /^performer-(\d+)$/.exec(personMatch[1]!);
+    const performerIndex = performer ? Number(performer[1]) : -1;
+    if (performer && performerIndex < 105 && !personMatch[2]) return cached(req, { id: personMatch[1], name: `Performer ${String(performerIndex + 1).padStart(3, '0')}`, photo: performerIndex % 3 === 0 ? personArtwork(g) : null, roles: ['Acting'], knownFor: 'Acting' } satisfies V.PersonDetail, g.id);
+    if (!(performer && performerIndex < 105) && personMatch[1] !== 'person-mara-vale') fail('not-found', 'not_found', 'Person not found');
     if (!personMatch[2]) return cached(req, { id: personMatch[1], name: 'Mara Vale', photo: personArtwork(g), roles: ['Acting'], knownFor: 'Acting', biography: 'Mara Vale is a fictional performer whose work spans film, television, and the stage. '.repeat(16), birthday: '1985-04-12' } satisfies V.PersonDetail, g.id);
     const libraryId = url.searchParams.get('libraryId');
     if (libraryId && !libraries.some(l => l.id === libraryId)) fail('not-found', 'not_found', 'Library not found');
     const visible = libraryId ? libraryEntries(libraryId) : libraryEntries('all');
-    const items: V.RowEntry[] = visible.filter(e => e.kind === 'title' && e.title.id === titles[0]!.id).map(e => ({ ...e, id: titles[0]!.id, receiptToken: '', role: 'Commander' }));
+    const items: V.RowEntry[] = (performer ? visible.filter(e => e.kind === 'title').slice(0, performerIndex + 1) : visible.filter(e => e.kind === 'title' && e.title.id === titles[0]!.id)).map(e => ({ ...e, receiptToken: '', role: 'Commander' }));
     return cached(req, page(items, url, g, `person:${personMatch[1]}:${libraryId ?? ''}`), g.id);
   }
   const libraryMatch = /^\/libraries\/([^/]+)\/items$/.exec(path);

@@ -426,3 +426,20 @@ test('library identity precedes shared search and facets in every skin', async (
     expect(sequence.indexOf('header'), `${name} ${width}`).toBeLessThan(sequence.indexOf('filters'));
   }
 });
+
+test('every skin includes a focusable people grid and shared continuation at phone and TV widths', () => {
+  const find = (node: RNode, predicate: (node: RNode) => boolean): RNode | undefined => {
+    if (predicate(node)) return node;
+    if (node.kind === 'box') for (const child of node.children) { const found = find(child, predicate); if (found) return found; }
+    if (node.kind === 'repeat') return find(node.item, predicate);
+    return undefined;
+  };
+  for (const [, doc] of documents) for (const width of [390, 1920]) {
+    const library = resolveDocument(doc, width).routes.library!;
+    const people = find(library, n => n.kind === 'repeat' && n.over === 'library.people');
+    expect(people).toBeDefined();
+    expect(find(people!, n => n.kind === 'box' && n.press?.action === 'select')).toBeDefined();
+    expect(find(people!, n => n.kind === 'image')).toBeDefined();
+    expect(find(library, n => n.kind === 'widget' && n.widget === 'sentinel' && n.params.on === 'library')).toBeDefined();
+  }
+});

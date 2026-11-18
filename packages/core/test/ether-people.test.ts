@@ -82,11 +82,11 @@ test('plugin library facets apply OR within fields, AND across fields and librar
   const { mock, adapter } = await connect();
   try {
     const libraries = await adapter.libraries({});
-    expect(libraries.items.find(l => l.id === 'videos')).toMatchObject({ presentation: { card: 'landscape' }, tabs: [{ id: 'discover', label: 'For you', kind: 'recommended' }, { id: 'videos', label: 'All videos', kind: 'library' }] });
+    expect(libraries.items.find(l => l.id === 'videos')).toMatchObject({ presentation: { card: 'landscape' } });
     await adapter.probeLibraryViews('videos');
     expect(hasLibraryRecommendations(adapter)).toBe(true);
     expect((await adapter.libraryRows('videos', 'mixed')).length).toBeGreaterThan(0);
-    expect((await adapter.libraryCollections('videos')).items).toEqual([]);
+    expect((await adapter.libraryCollections('videos', undefined, 'topics')).items.length).toBeGreaterThan(0);
     const facets = await adapter.libraryFacets('videos', 'topic', 'science');
     expect(facets.items).toEqual([{ id: 'Science Fiction', label: 'Science Fiction', count: 26 }]);
     const first = await adapter.library('videos', { limit: 100 });
@@ -146,5 +146,39 @@ test('collection reads request a full grid page and retain counts', async () => 
     // A smaller explicit request proves the server honors a client's page size.
     const small = await fetch(`${mock.url}/vela/v0/libraries/movies/collections?tab=collections&limit=2`, { headers: { Authorization: `Bearer ${credentials.current!.accessToken}`, 'X-Vela-Device-Id': credentials.device.id } });
     expect((await small.json()).items).toHaveLength(2);
+  } finally { await mock.stop(); }
+});
+
+test('plugin people tabs page in server order and enable direct filmography', async () => {
+  const { mock, adapter } = await connect();
+  try {
+    const libraries = await adapter.libraries({});
+    const plugin = libraries.items.find(l => l.id === 'videos')!;
+    expect(plugin.tabs?.filter(t => t.kind === 'people').map(t => t.order)).toEqual(['name', 'count']);
+    expect(hasPersonFilmography(adapter)).toBe(true);
+    const first = await adapter.libraryCollections('videos', undefined, 'performers');
+    expect(first.items).toHaveLength(2);
+    expect(first.items[0]).toMatchObject({ kind: 'person', id: 'person:performer-0', person: { id: 'performer-0', name: 'Performer 001' }, itemCount: 1 });
+    expect(first.items[1]?.kind === 'person' && first.items[1].person.photo).toBeNull();
+    const next = await adapter.libraryCollections('videos', first.nextCursor, 'performers');
+    expect(next.items[0]).toMatchObject({ person: { id: 'performer-2' } });
+    const counted = await adapter.libraryCollections('videos', undefined, 'popular-cast');
+    expect(counted.items[0]).toMatchObject({ person: { id: 'performer-104' }, itemCount: 105 });
+    expect((await adapter.personDetails('performer-104')).name).toBe('Performer 105');
+    expect((await adapter.personTitles('performer-104')).items.length).toBeGreaterThan(0);
+  } finally { await mock.stop(); }
+});
+
+test('plugin collections honor each declared order without client sorting', async () => {
+  const { mock, adapter } = await connect();
+  try {
+    await adapter.libraries({});
+    const byName = await adapter.libraryCollections('videos', undefined, 'topics');
+    const byCount = await adapter.libraryCollections('videos', undefined, 'popular-topics');
+    expect(byName.items.map(item => item.kind === 'collection' ? item.name : '')).toEqual(['Adventure', 'Comedy']);
+    expect(byCount.items[0]?.kind).toBe('collection');
+    const counts = byCount.items.flatMap(item => item.kind === 'collection' ? [item.itemCount!] : []);
+    expect(counts[0]!).toBeGreaterThanOrEqual(counts[1]!);
+    expect(byCount.items.map(item => item.id)).not.toEqual(byName.items.map(item => item.id));
   } finally { await mock.stop(); }
 });

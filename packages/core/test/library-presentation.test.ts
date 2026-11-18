@@ -75,3 +75,19 @@ test('collection counts become localized card facts; absent counts remain absent
   expect(entry({ ...collection, itemCount: 0 }).facts).toBe('0 titles');
   expect(entry(collection).facts).toBe('');
 });
+
+test('people tabs retain opaque keys, facets and server order declarations', () => {
+  const tabs = [
+    { id: 'cast-count', label: 'Popular cast', kind: 'people' as const, facet: 'performers', order: 'count' as const },
+    { id: 'sets', label: 'Sets', kind: 'collections' as const, order: 'name' as const },
+    { id: 'cast-name', label: 'Cast', kind: 'people' as const, facet: 'performers', order: 'name' as const },
+  ];
+  expect(libraryTabs(tabs)).toEqual(tabs);
+});
+
+test('person cards use the person ID, round portrait source and localized title counts', async () => {
+  const { entry } = await import('../src/discovery/models');
+  const item = { id: 'person:opaque:id', kind: 'person' as const, receiptToken: '', person: { id: 'opaque:id', name: 'A Person', photo: null }, itemCount: 1 };
+  expect(entry(item)).toMatchObject({ id: 'opaque:id', kind: 'person', name: 'A Person', poster: '', facts: '1 title' });
+  expect(entry({ ...item, itemCount: 0 }).facts).toBe('0 titles');
+});

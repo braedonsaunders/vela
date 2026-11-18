@@ -14,7 +14,7 @@ export const libraries: Library[] = [
   const kind = l.kind as Library['kind'];
   const members = l.id === 'shows' ? shows : l.id === 'documentaries' ? movies.filter(t => t.genres.includes('Documentary')) : l.id === 'all' ? titles : movies;
   if (l.id === 'videos') return { ...l, kind, presentation: { card: 'landscape' }, tabs: [
-    { id: 'discover', label: 'For you', kind: 'recommended' }, { id: 'videos', label: 'All videos', kind: 'library' }],
+    { id: 'discover', label: 'For you', kind: 'recommended' }, { id: 'performers', label: 'Performers', kind: 'people', facet: 'creator', order: 'name' }, { id: 'videos', label: 'All videos', kind: 'library' }, { id: 'popular-cast', label: 'Popular cast', kind: 'people', facet: 'creator', order: 'count' }, { id: 'topics', label: 'Topics', kind: 'collections', facet: 'topic', order: 'name' }, { id: 'popular-topics', label: 'Popular topics', kind: 'collections', facet: 'topic', order: 'count' }],
     browse: { sorts: [{ id: 'index', directions: ['asc'] }, { id: 'title', directions: ['asc', 'desc'] }], defaultSort: 'index', defaultDirection: 'asc',
       filters: { facets: [{ id: 'topic', label: 'Topic', type: 'strings', multi: true }, { id: 'creator', label: 'Creator', type: 'people', multi: true }, { id: 'length', label: 'Length', type: 'duration', multi: true }] } } } as Library;
   return { ...l, kind, presentation: { card: 'poster' }, tabs: kind === 'live' ? [{ id: 'library', label: 'Channels', kind: 'library' }] : [
