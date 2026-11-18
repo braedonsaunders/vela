@@ -37,6 +37,7 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
       case 'librarySortFlip':
         return view(flipped(query, model));
       case 'libraryFilter':
+        if (arg.startsWith('tabQuery|')) return library.setSearch(arg.slice('tabQuery|'.length));
         if (library.page.view === 'genres') return router.setParams({ ...paramsOf(filteredBy(query, arg)), view: 'library' });
         return view(filteredBy(query, arg));
       case 'libraryView':

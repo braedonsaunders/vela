@@ -12,7 +12,7 @@ import { HeroArtwork } from './common/hero-artwork';
 import { CardPreview, HeroPreview } from './common/preview';
 import { Select } from './common/select';
 import { Sentinel } from './common/sentinel';
-import { LibraryTabs, LibraryFacets } from './library/presentation';
+import { LibraryTabs, LibraryFacets, LibraryToolbar } from './library/presentation';
 import { YearInput } from './library/year-input';
 
 export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
@@ -28,6 +28,7 @@ export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   guide: GuideWidget,
   liveTile: LiveTileWidget,
   yearInput: YearInput,
+  libraryToolbar: LibraryToolbar,
   libraryTabs: LibraryTabs,
   libraryFacets: LibraryFacets,
 };
@@ -42,6 +43,7 @@ export const FOCUSABLE_WIDGETS = new Set([
   'playerChrome',
   'guide',
   'yearInput',
+  'libraryToolbar',
   'libraryTabs',
   'libraryFacets',
 ]);

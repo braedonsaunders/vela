@@ -29,6 +29,8 @@ export const uiDefaults = {
   live: '#e8513f',
   font: 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif',
   fontDisplay: '"Instrument Serif", "Iowan Old Style", Georgia, serif',
+  controlHeight: 40,
+  controlFontSize: 14,
   radiusControl: 999,
   radiusCard: 14,
   radiusPanel: 28,

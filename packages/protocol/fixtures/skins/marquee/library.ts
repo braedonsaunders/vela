@@ -1,20 +1,6 @@
 // Library pages: the sticky toolbar of filters, then the titles as a grid or a list.
 import type { Condition, Node, Style } from '../../../skin';
-import {
-  sans,
-  gutter,
-  gutterSmall,
-  is,
-  isnt,
-  set,
-  unset,
-  glyph,
-  ring,
-  round,
-  secondary,
-  label,
-  oneLine,
-} from './look';
+import { sans, gutter, gutterSmall, is, set, unset, glyph, round, secondary, label, oneLine } from './look';
 import { block, progress, tri, card, spinner, posterArt } from './cards';
 import { empty } from './home';
 
@@ -40,40 +26,6 @@ const libraryGridSmall = (rowGap: string): Style => ({
   padding: '16px 14px',
 });
 // A dropdown: the platform's select drawn as a flat label; the select draws its own chevron.
-const pick = (params: Record<string, string>, when: Condition[]): Node => ({
-  type: 'box',
-  when,
-  style: {
-    position: 'relative',
-    display: 'flex',
-    'flex-direction': 'row',
-    'align-items': 'center',
-    'flex-shrink': '0',
-    'line-height': 'normal',
-  },
-  children: [
-    {
-      type: 'widget',
-      widget: 'select',
-      params,
-      style: {
-        'box-sizing': 'border-box',
-        height: '34px',
-        padding: '0px 12px',
-        border: 'none',
-        'border-radius': '4px',
-        'background-color': 'transparent',
-        color: '$ink',
-        'font-size': '14px',
-        'font-weight': '600',
-        'line-height': 'normal',
-        'font-family': sans,
-        cursor: 'pointer',
-      },
-    },
-  ],
-});
-// Grid or list: each button shows its view (the one on show is lit).
 const viewButton = (list: boolean): Node => {
   const lit: Condition = { test: 'flag:list', not: !list };
   return {
@@ -87,19 +39,6 @@ const viewButton = (list: boolean): Node => {
     children: [glyph(list ? 'rows' : 'grid', 20)],
   } as Node;
 };
-const favouriteStyle = (on: boolean): Style => ({
-  position: 'relative',
-  outline: 'auto',
-  display: 'flex',
-  'flex-direction': 'row',
-  gap: '6px',
-  'align-items': 'center',
-  'box-sizing': 'border-box',
-  height: '34px',
-  padding: '0px 12px',
-  'border-radius': '4px',
-  color: on ? '$amber' : '$ink',
-});
 const libraryToolbar: Node = {
   type: 'box',
   style: {
@@ -156,140 +95,6 @@ const libraryToolbar: Node = {
       ],
     },
     { type: 'use', template: 'velaLibraryViews' },
-    {
-      type: 'box',
-      style: { display: 'flex', 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none' },
-      when: [is('library.view', 'library')],
-      children: [
-        {
-          type: 'box',
-          role: 'toolbar',
-          label: '{s:libraryControls}',
-          style: {
-            display: 'flex',
-            'flex-direction': 'row',
-            gap: '4px',
-            'align-items': 'center',
-            'padding-left': '28px',
-            'padding-right': '40px',
-            'padding-bottom': '8px',
-          },
-          small: { 'padding-left': '4px', 'padding-right': '14px' },
-          children: [
-            pick(
-              {
-                options: 'library.kinds',
-                action: 'libraryFilter',
-                arg: 'kind|{value}',
-                none: '{s:allTypes}',
-                label: '{s:type}',
-              },
-              [{ test: 'library.kindCount', is: 'gt', value: '1' }],
-            ),
-            pick({ options: 'library.sorts', action: 'librarySort', label: '{s:sortBy}' }, [
-              { test: 'library.sortCount', is: 'gt', value: '1' },
-            ]),
-            {
-              type: 'box',
-              when: [set('library.canFlip')],
-              press: { action: 'librarySortFlip' },
-              label: '{s:ascending}',
-              ...round(34),
-              states: [
-                {
-                  when: [isnt('library.direction', 'asc')],
-                  style: round(34).style!,
-                  label: '{s:descending}',
-                },
-              ],
-              children: [
-                glyph('up', 18, {
-                  style: {
-                    width: '18px',
-                    height: '18px',
-                    'flex-shrink': '0',
-                    rotate: '0',
-                    transition: 'rotate 160ms linear',
-                  },
-                  states: [
-                    {
-                      when: [isnt('library.direction', 'asc')],
-                      style: {
-                        width: '18px',
-                        height: '18px',
-                        'flex-shrink': '0',
-                        rotate: '180',
-                        transition: 'rotate 160ms linear',
-                      },
-                    },
-                  ],
-                } as Partial<Node>),
-              ],
-            } as Node,
-            pick(
-              {
-                options: 'library.genres',
-                action: 'libraryFilter',
-                arg: 'genre|{value}',
-                none: '{s:anyGenre}',
-                label: '{s:genre}',
-              },
-              [{ test: 'library.genreCount', is: 'gt', value: '0' }],
-            ),
-            pick(
-              {
-                options: 'library.played',
-                action: 'libraryFilter',
-                arg: 'played|{value}',
-                label: '{s:watchStatus}',
-                choices: '|{s:anyStatus};false|{s:unwatched};true|{s:watched}',
-              },
-              [set('library.canPlayed')],
-            ),
-            {
-              type: 'box',
-              when: [set('library.canFavorite'), unset('library.favoriteFilter')],
-              press: { action: 'libraryFilter', arg: 'favorite|true' },
-              label: '{s:favourites}',
-              a11y: { pressed: [set('library.favoriteFilter')] },
-              style: favouriteStyle(false),
-              hover: { 'background-color': '$hover' },
-              focus: { 'box-shadow': ring('$amber') },
-              children: [
-                glyph('heart', 16),
-                {
-                  type: 'text',
-                  text: '{s:favourites}',
-                  style: { 'font-size': '14px', 'font-weight': '600' },
-                },
-              ],
-            } as Node,
-            {
-              type: 'box',
-              when: [set('library.canFavorite'), set('library.favoriteFilter')],
-              press: { action: 'libraryFilter', arg: 'favorite|' },
-              label: '{s:favourites}',
-              a11y: { pressed: [set('library.favoriteFilter')] },
-              style: favouriteStyle(true),
-              hover: { 'background-color': '$hover' },
-              focus: { 'box-shadow': ring('$amber') },
-              children: [
-                {
-                  type: 'icon',
-                  symbol: 'heart-fill',
-                  style: { width: '16px', height: '16px', 'flex-shrink': '0' },
-                },
-                {
-                  type: 'text',
-                  text: '{s:favourites}',
-                  style: { 'font-size': '14px', 'font-weight': '600' },
-                },
-              ],
-            } as Node,
-          ],
-        },
-      ],
-    },
   ],
 };
 // The list view: one title per row with columns.

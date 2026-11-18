@@ -15,11 +15,12 @@ function isUiName(name: string): name is UiName {
 function checked(name: UiName, raw: unknown): string | number {
   const fallback = uiDefaults[name];
   if (typeof fallback === 'number') {
-    const radius = Number(raw);
-    if (!Number.isFinite(radius) || radius < 0 || radius > 9999) {
-      throw new Error(`ui.${name} is a radius in px (0 to 9999)`);
+    const size = Number(raw);
+    const dimension = name === 'controlHeight' || name === 'controlFontSize';
+    if (!Number.isFinite(size) || size < (dimension ? 1 : 0) || size > (dimension ? 160 : 9999)) {
+      throw new Error(`ui.${name} is a size in px (${dimension ? '1 to 160' : '0 to 9999'})`);
     }
-    return radius;
+    return size;
   }
   const text = String(raw).trim();
   const ok = name === 'font' || name === 'fontDisplay' ? FONT.test(text) : COLOUR.test(text);

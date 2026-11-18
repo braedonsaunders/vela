@@ -342,24 +342,6 @@ test('every skin has one full-row play target per episode and no separate up-nex
   }
 });
 
-test('library genre view appears only when actual genre choices are available', async () => {
-  const { holds } = await import('../src/resolve');
-  type Env = import('../src/vocabulary').Env;
-  const find = (node: RNode): RNode | undefined => {
-    if (node.id === 'vela-library-view-genres') return node;
-    if (node.kind === 'box') for (const child of node.children) { const found = find(child); if (found) return found; }
-    if (node.kind === 'repeat') return find(node.item);
-    return undefined;
-  };
-  for (const [, doc] of documents) {
-    const tab = find(resolveDocument(doc, 1920).routes.library!);
-    expect(tab).toBeDefined();
-    const env = (genres: { id: string; label: string }[]) => ({ library: { extras: { genres } } }) as unknown as Env;
-    expect(holds(tab!.when, { index: 0 }, env([]))).toBe(false);
-    expect(holds(tab!.when, { index: 0 }, env([{ id: 'Drama', label: 'Drama' }]))).toBe(true);
-  }
-});
-
 test('the shared shell offers Live TV on a library page without a live library', async () => {
   const { holds } = await import('../src/resolve');
   type Env = import('../src/vocabulary').Env;
@@ -405,8 +387,7 @@ test('every skin provides library tabs, facets and card shapes at phone, desktop
         }
       }
     });
-    expect(widgets, name).toContain('libraryTabs');
-    expect(widgets, name).toContain('libraryFacets');
+    expect(widgets.filter(widget => widget === 'libraryToolbar'), name).toHaveLength(1);
     expect(shapes, `${name} ${width}`).toBeGreaterThan(0);
   }
 });
@@ -417,7 +398,7 @@ test('library identity precedes shared search and facets in every skin', async (
     const sequence: string[] = [];
     const env = { library: { model: { name: 'Library identity' } } } as any;
     const visit = (node: RNode) => {
-      if (node.kind === 'widget' && node.widget === 'libraryFacets') sequence.push('filters');
+      if (node.kind === 'widget' && node.widget === 'libraryToolbar') sequence.push('filters');
       if (node.kind === 'text' && node.role === 'heading' && fill(node.text, { index: 0 }, env) === 'Library identity') sequence.push('header');
       if (node.kind === 'box') node.children.forEach(visit);
     };

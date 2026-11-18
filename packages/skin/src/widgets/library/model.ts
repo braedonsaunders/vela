@@ -8,6 +8,7 @@ export type LibraryView = 'recommended' | 'library' | 'collections' | 'people' |
 export interface LibraryPage {
   canRecommend?: boolean;
   tabId?: string;
+  tabQuery?: string;
   facetTitle?: string;
   view?: LibraryView;
   /** Explicit URL selection; an initially arriving server view is not a tab transition. */
