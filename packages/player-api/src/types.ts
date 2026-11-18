@@ -21,6 +21,8 @@ export interface PreviewSource {
   expiresAt: string;
   /** Start again from the beginning at the end. */
   loop?: boolean;
+  /** Skip trailer preambles; clamped to a quarter of a known duration. */
+  startSeconds?: number;
 }
 
 /** A full-screen watch's identity for the system's Now Playing. */

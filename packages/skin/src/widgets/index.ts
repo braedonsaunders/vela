@@ -8,6 +8,7 @@ import { PlayerChrome } from './player/chrome';
 import { SearchInput } from './search-input';
 import { ServerSwitcher } from './auth/server-switcher';
 import { TextInput } from './auth/text-input';
+import { HeroArtwork } from './common/hero-artwork';
 import { CardPreview, HeroPreview } from './common/preview';
 import { Select } from './common/select';
 import { Sentinel } from './common/sentinel';
@@ -21,6 +22,7 @@ export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
   sentinel: Sentinel,
   cardPreview: CardPreview,
   heroPreview: HeroPreview,
+  heroArtwork: HeroArtwork,
   playerChrome: PlayerChrome,
   guide: GuideWidget,
   liveTile: LiveTileWidget,

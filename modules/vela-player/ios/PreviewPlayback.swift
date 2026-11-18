@@ -11,6 +11,7 @@ final class PreviewPlayback {
         let url: String
         let expiresAt: Date
         let loop: Bool
+        let startSeconds: Double
 
         init?(_ map: [String: Any]?) {
             guard let map, let url = map["url"] as? String, !url.isEmpty,
@@ -20,6 +21,8 @@ final class PreviewPlayback {
             self.url = url
             self.expiresAt = expiresAt
             loop = map["loop"] as? Bool ?? false
+            let offset = map["startSeconds"] as? Double ?? 0
+            startSeconds = offset.isFinite ? max(0, offset) : 0
         }
     }
 
@@ -32,6 +35,10 @@ final class PreviewPlayback {
     private var playing: Source?
     private var expiry: Timer?
     private var paused = false
+    private var frameWatch: Timer?
+    private var lastFrame = Date.distantPast
+    private var offsetApplied = false
+    private var startPosition = 0.0
 
     init(layer: CAMetalLayer) {
         self.layer = layer
@@ -57,6 +64,8 @@ final class PreviewPlayback {
 
     func stop() {
         layer.isHidden = true
+        frameWatch?.invalidate()
+        frameWatch = nil
         expiry?.invalidate()
         expiry = nil
         playing = nil
@@ -95,11 +104,30 @@ final class PreviewPlayback {
         }
         mpv = client
         playing = source
+        lastFrame = .distantPast
+        startPosition = source.startSeconds
+        offsetApplied = source.startSeconds == 0
+        client.observe("duration", format: MPV_FORMAT_DOUBLE)
+        client.observe("paused-for-cache", format: MPV_FORMAT_FLAG)
+        frameWatch = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            if Date().timeIntervalSince(self.lastFrame) > 1.5 { self.onState?("loading") }
+        }
         client.observe("pause", format: MPV_FORMAT_FLAG)
         client.observe("video-pts", format: MPV_FORMAT_DOUBLE)
         client.onProperty = { [weak self] name, value in
-            if name == "video-pts", value is Double {
-                self?.layer.isHidden = false
+            guard let self else { return }
+            if name == "duration", let duration = value as? Double, duration > 0, !self.offsetApplied {
+                self.offsetApplied = true
+                self.startPosition = min(source.startSeconds, duration / 4)
+                self.mpv?.command(["seek", String(self.startPosition), "absolute+exact"])
+            }
+            if name == "paused-for-cache", let waiting = value as? Bool, waiting { self.onState?("loading") }
+            if name == "video-pts", let pts = value as? Double, self.offsetApplied,
+               pts >= self.startPosition {
+                self.lastFrame = Date()
+                self.layer.isHidden = false
+                self.onState?("playing")
             }
         }
         client.onEvent = { [weak self] event in
@@ -126,7 +154,7 @@ final class PreviewPlayback {
     private func event(_ event: MPVClient.Event) {
         switch event {
         case .seekDone:
-            onState?("playing")
+            break
         case .endFile(let reason, _):
             // MPV_END_FILE_REASON_ERROR (4); EOF (0) when it does not loop.
             if reason == 4 {

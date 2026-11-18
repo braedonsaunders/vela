@@ -5,7 +5,7 @@ import type * as V from '../wire';
 import { advertise } from '../adapter/advertise';
 import { VelaError } from '../adapter/errors';
 import { artworkURL } from '../discovery/artwork';
-import { entry, feedRow, homeModel } from '../discovery/models';
+import { card, entry, feedRow, homeModel } from '../discovery/models';
 import { homeWatched, type Watched } from '../discovery/progress';
 import type { Destination, HomeModel, Row } from '../models';
 import type { Session } from './session';
@@ -43,6 +43,7 @@ export class Home {
     session.onReset(() => {
       if (this.timer) clearTimeout(this.timer);
       this.reading = undefined;
+      this.artworkRead = undefined;
       this.box.update('home', () => initialHome);
       this.box.update('libraries', () => idle());
     });
@@ -85,6 +86,40 @@ export class Home {
         this.timer = setTimeout(() => void this.load(attempt + 1), retry.delaySeconds * 1000);
       }
     }
+  }
+
+  private artworkRead: Promise<HomeModel> | undefined;
+
+  /** Refresh signed hero art without replacing the carousel, progress or paged rows. */
+  async refreshArtwork(id: string): Promise<{ backdrop: string; poster: string } | undefined> {
+    if (!this.artworkRead) {
+      const epoch = this.session.epoch;
+      const read = (async () => {
+        const connection = await this.session.ready();
+        const bootstrap = await connection.adapter.home(true);
+        const images = await connection.images();
+        this.session.check(epoch, 'hero artwork');
+        return homeModel({ ...bootstrap, capabilities: advertise(connection.adapter, bootstrap.capabilities) }, images, this.artWidth());
+      })();
+      this.artworkRead = read;
+      void read.finally(() => { if (this.artworkRead === read) this.artworkRead = undefined; }).catch(() => {});
+    }
+    const epoch = this.session.epoch;
+    const model = await this.artworkRead;
+    let fresh = model.hero.find(hero => hero.id === id);
+    if (!fresh) {
+      const connection = await this.session.ready();
+      const detail = await connection.adapter.detail(id, true);
+      fresh = card(detail.title, '', await connection.images(), this.artWidth());
+    }
+    this.session.check(epoch, 'hero artwork');
+    this.box.update('home', home => !home.value ? home : ({ ...home, value: {
+      ...home.value, hero: home.value.hero.map(hero => {
+        const art = hero.id === id ? fresh : model.hero.find(item => item.id === hero.id);
+        return art ? { ...hero, backdrop: art.backdrop, poster: art.poster, logo: art.logo } : hero;
+      }),
+    } }));
+    return fresh;
   }
 
   /** Where the viewer left a title, applied at once to Continue Watching and the hero. */

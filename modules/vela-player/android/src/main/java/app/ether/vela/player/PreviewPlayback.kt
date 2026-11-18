@@ -127,9 +127,16 @@ internal class PreviewPlayback(
       return
     }
     mpv = client
+    var offsetApplied = preview.startSeconds == 0.0
+    var startPosition = preview.startSeconds
     client.onProperty = property@{ name, value ->
       if (mpv !== client) return@property
-      if (name == "video-pts" && value is Double) {
+      if (name == "duration" && value is Double && value > 0 && !offsetApplied) {
+        offsetApplied = true
+        startPosition = minOf(preview.startSeconds, value / 4)
+        client.command("seek", startPosition.toString(), "absolute+exact")
+      }
+      if (name == "video-pts" && value is Double && offsetApplied && value >= startPosition) {
         showVideo(true)
       }
       state.update(name, value)

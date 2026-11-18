@@ -184,9 +184,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   // Catalogue
 
   /** A home whose continuation the server has expired is read again without revalidation. */
-  async home(): Promise<Home> {
+  async home(fresh = false): Promise<Home> {
     try {
-      return await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, CACHED);
+      return await this.http.request<V.Bootstrap>('GET', '/bootstrap', undefined, { ...CACHED, fresh });
     } catch (error) {
       const expired = error instanceof VelaError && error.status === 409 && error.detail.code === 'cursor_expired';
       if (!expired) throw error;
@@ -216,8 +216,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.CollectionContents>('GET', path, undefined, CACHED);
   }
 
-  async detail(id: string) {
-    const data = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(id)}`, undefined, CACHED);
+  async detail(id: string, fresh = false) {
+    const data = await this.http.request<V.TitleDetail>('GET', `/titles/${segment(id)}`, undefined, { ...CACHED, fresh });
     if (this.personSupport === 'unknown') {
       const ids = [...new Set([...(data.cast ?? []), ...(data.crew ?? [])].flatMap(person => person.id && !this.missingPeople.has(person.id) ? [person.id] : []))];
       for (const personId of ids) {

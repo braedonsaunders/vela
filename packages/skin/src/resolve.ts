@@ -1,3 +1,4 @@
+import { withHeroArtwork } from './resolve/hero-artwork';
 // A skin document resolved for the React renderer: inherited over the Vela base, templates
 // inlined, viewport variants applied for the current width class, tokens substituted, client
 // and document strings filled, templates and conditions compiled to accessors. Done once per
@@ -285,7 +286,7 @@ export function resolveDocument(own: SkinDocument, width: number, locale = 'en')
     shell: doc.slots?.shell && convert(doc.slots.shell, 1, r),
     libraryViews: doc.templates?.velaLibraryViews && convert({ type: 'use', template: 'velaLibraryViews' }, 1, r),
     routes: Object.fromEntries([
-      ...(home ? [['home', convert(home, 1, r)]] : []),
+      ...(home ? [['home', convert(withHeroArtwork(home), 1, r)]] : []),
       ...Object.entries(doc.routes ?? {}).filter(([name, tree]) => name !== 'home' && tree).map(([name, tree]) => [name, convert(tree as Node, 1, r)]),
     ]) as ResolvedDocument['routes'],
     motion: (doc.motion ?? {}) as Record<string, Motion>,
