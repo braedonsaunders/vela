@@ -368,9 +368,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   async guideWindow(request: V.GuideWindowRequest): Promise<V.GuideWindowResponse | null> {
     const limits = this.guideWindowLimits;
     if (!limits || request.channelIds.length > limits.maxChannels || Date.parse(request.until) - Date.parse(request.from) > limits.maxWindowMinutes * 60000) return null;
-    // The shared guide cache keys by channel and time; the transport's URL-only ETag cache
-    // must not reuse a POST answer for a different request body.
-    return this.http.request<V.GuideWindowResponse>('POST', '/live/guide/window', request);
+    // Conditional POST answers are keyed by the complete body as well as viewer/policy.
+    return this.http.request<V.GuideWindowResponse>('POST', '/live/guide/window', request, CACHED);
   }
 
   private sessionCommand(sessionId: string, command: V.SessionCommand) {

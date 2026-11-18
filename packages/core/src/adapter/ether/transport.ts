@@ -57,7 +57,8 @@ export class EtherTransport {
     signal?.throwIfAborted();
     let tokens = auth ? await abortable(this.credentials.get(), signal) : null;
     if (auth && !tokens) throw new Error('Sign in required');
-    const key = this.cacheKey(tokens, path);
+    const identity = method === 'GET' ? path : JSON.stringify([method, path, body]);
+    const key = this.cacheKey(tokens, identity);
     const cached = cacheable && !fresh ? this.cache.get(key) : undefined;
     const send = (token: Token, useCache = true) => {
       const headers: Record<string, string> = {};
@@ -79,7 +80,7 @@ export class EtherTransport {
     signal?.throwIfAborted();
     const etag = response.headers.get('etag');
     // A refresh may change policy: do not store under the old identity.
-    const sameIdentity = !tokens || key === this.cacheKey(tokens, path);
+    const sameIdentity = !tokens || key === this.cacheKey(tokens, identity);
     // A partial answer (a title still being filled) says no-store: it is never kept or revalidated.
     const storable = !/(^|,)\s*no-store\s*(,|$)/i.test(response.headers.get('cache-control') ?? '');
     if (etag && cacheable && sameIdentity && storable) this.cache.set(key, { etag, body: value });

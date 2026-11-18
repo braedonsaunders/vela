@@ -17,17 +17,21 @@ test('bootstrap advertises bulk reads and different POST bodies never share URL-
   const seen = routeFetch({
     'GET /vela/v0/bootstrap': { capabilities: { liveGuideWindow: { maxChannels: 128, maxWindowMinutes: 180 } }, rows: [] },
     'POST /vela/v0/live/guide/window': (request: Seen) => {
+      if (request.headers.get('If-None-Match') === '"shared-source-revision"') return new Response(null, { status: 304 });
       const body = request.body as GuideWindowRequest;
       return Response.json({ ...body, revision: body.from, validUntil: '2026-11-18T16:00:00Z', channels: body.channelIds.map(channelId => ({ channelId, state: 'ready', programmes: [] })) }, { headers: { ETag: '"shared-source-revision"' } });
     },
   });
   const adapter = new EtherAdapter('https://ether.example', new FakeCredentials(), 'web');
   await adapter.home();
-  expect((await adapter.guideWindow(query))?.from).toBe(query.from);
+  const first = await adapter.guideWindow(query);
+  expect(first?.from).toBe(query.from);
   const next = { ...query, from: '2026-11-18T15:00:00Z', until: '2026-11-18T18:00:00Z' };
   expect((await adapter.guideWindow(next))?.from).toBe(next.from);
-  expect(seen.slice(1).map(call => call.body)).toEqual([query, next]);
-  expect(seen.slice(1).every(call => !call.headers.has('If-None-Match'))).toBe(true);
+  expect(await adapter.guideWindow(query)).toBe(first);
+  expect(seen.slice(1).map(call => call.body)).toEqual([query, next, query]);
+  expect(seen.slice(1, 3).every(call => !call.headers.has('If-None-Match'))).toBe(true);
+  expect(seen[3]?.headers.get('If-None-Match')).toBe('"shared-source-revision"');
   adapter.resetOptionalCapabilities();
   expect(await adapter.guideWindow(query)).toBeNull();
 });
