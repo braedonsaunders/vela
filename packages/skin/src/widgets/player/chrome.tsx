@@ -110,10 +110,10 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   // (select there would leave the player when the viewer meant to pause).
   const tv = look.tv && Platform.isTV;
   useEffect(() => {
-    if (!tv || !idle.visible || failed) return;
+    if (!tv || !idle.visible || failed || blocked) return;
     const frame = requestAnimationFrame(() => toggleRef.current?.requestTVFocus?.());
     return () => cancelAnimationFrame(frame);
-  }, [tv, idle.visible, !!failed]);
+  }, [tv, idle.visible, !!failed, blocked]);
 
   // Touch: a tap on the picture shows a hidden chrome, or hides a standing one (closing a menu first).
   const tapStage = () => {

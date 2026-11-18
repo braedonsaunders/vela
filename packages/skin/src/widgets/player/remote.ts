@@ -1,14 +1,24 @@
 // TV remote events (react-native-tvos): the Siri Remote and Android TV D-pad. Off TV the hook
 // does nothing, and the web build never reaches the TV module.
-import { Platform, useTVEventHandler, type TVRemoteEvent } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { DeviceEventEmitter, Platform, useTVEventHandler, type TVRemoteEvent } from 'react-native';
 
 export type RemoteEvent = TVRemoteEvent;
 
 const none = (_handler: (event: RemoteEvent) => void) => undefined;
 
-/** Every remote event while the component is mounted, focus changes included. */
+function useAndroidRemote(handler: (event: RemoteEvent) => void) {
+  const latest = useRef(handler);
+  latest.current = handler;
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('velaAndroidTVKey', event => latest.current(event));
+    return () => subscription.remove();
+  }, []);
+}
+
+/** Android activity capture survives native focus consumption; tvOS uses its navigation emitter. */
 export const useRemote: (handler: (event: RemoteEvent) => void) => void =
-  Platform.isTV && typeof useTVEventHandler === 'function' ? useTVEventHandler : none;
+  !Platform.isTV ? none : Platform.OS === 'android' ? useAndroidRemote : useTVEventHandler;
 
 /** A completed press, counted once. tvOS reports a button tap when it ends (key-up, 1). Android
  * TV sends key-up, and key-down (0) as well only for a long press or when key-down events are

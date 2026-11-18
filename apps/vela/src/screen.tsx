@@ -68,7 +68,7 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
       {/* On TV the title page is presented in the app's root view, so it stays in the tree under
           the player: while covered it must take no focus (no interaction, which the focus engine
           honours), or the remote's arrows move focus into it and never reach the player. */}
-      <FocusBoundary active={isCurrent} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)' }} accessibilityViewIsModal>
+      <FocusBoundary active={isCurrent} enterWhenReady={host.env.load === 'ready'} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)' }} accessibilityViewIsModal>
         {content}
       </FocusBoundary>
     </ScreenActive.Provider>

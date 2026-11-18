@@ -56,7 +56,8 @@
         }
       ],
       "./plugins/android-cleartext",
-      "./plugins/android-signing"
+      "./plugins/android-signing",
+      "./plugins/android-tv-keys"
     ]
   }
 }
