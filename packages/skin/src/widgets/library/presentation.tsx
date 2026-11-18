@@ -28,9 +28,9 @@ function Button({ label, onPress, selected = false, role = 'button', id, quiet =
     {...(Platform.OS === 'web' ? { 'aria-selected': tab ? selected : undefined, 'aria-checked': role === 'checkbox' ? selected : undefined } : {})}
     hasTVPreferredFocus={claim} onFocus={event => { focus(true); if (Platform.OS === 'web') (event.target as unknown as HTMLElement).scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }} onBlur={() => focus(false)} onPress={onPress}
     style={look.box({ ...control, position: 'relative',
-      'background-color': focused || selected ? '$ui.controlHover' : '$ui.control',
-      'border-color': focused ? '$ui.accent' : '$ui.glassEdge' })}>
-    <Text numberOfLines={1} style={look.text({ ...controlText, color: quiet ? '$ui.inkSecondary' : '$ui.ink' })}>
+      'background-color': tab && selected ? '$ui.accent' : focused || selected ? '$ui.controlHover' : '$ui.control',
+      'border-color': focused && tab && selected ? '$ui.ink' : focused ? '$ui.accent' : '$ui.glassEdge' })}>
+    <Text numberOfLines={1} style={look.text({ ...controlText, color: tab && selected ? '$ui.onAccent' : quiet ? '$ui.inkSecondary' : '$ui.ink', 'font-weight': tab && selected ? '700' : '500' })}>
       {role === 'checkbox' && selected ? '✓ ' : ''}{label}
     </Text>
 
