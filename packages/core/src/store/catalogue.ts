@@ -212,7 +212,7 @@ export class Catalogue {
   /** Library-specific native server views. Ether v0 does not identify a library in RowsQuery. */
   /** A library's recommendations, collections and genres, read together. `onRows` has the
    * recommendations as soon as they arrive, so they show while the others are still read. */
-  async libraryExtras(id: string, kind: V.Library['kind'], onRows?: (rows: LibraryExtras) => void): Promise<LibraryExtras | undefined> {
+  async libraryExtras(id: string, kind: V.Library['kind'], onRows?: (rows: LibraryExtras) => void, tab?: string): Promise<LibraryExtras | undefined> {
     const connection = await this.session.ready();
     const adapter = connection.adapter;
     if (!hasLibraryRecommendations(adapter)) return undefined;
@@ -222,7 +222,7 @@ export class Catalogue {
       recommendationsAvailable: true, collectionsAvailable: true, rows: value.map(row => feedRow(row, sized, this.artWidth())),
       collections: [], collectionCursor: '', genres: [], failed: false,
     }), () => {});
-    const [rows, collections, genres] = await Promise.allSettled([reading, adapter.libraryCollections(id), adapter.libraryGenres(id)]);
+    const [rows, collections, genres] = await Promise.allSettled([reading, adapter.libraryCollections(id, undefined, tab), adapter.libraryGenres(id)]);
     return this.extras(rows, collections, genres, await images);
   }
 
@@ -238,10 +238,10 @@ export class Catalogue {
     };
   }
 
-  async moreLibraryCollections(id: string, cursor: string): Promise<{ items: Card[]; cursor: string }> {
+  async moreLibraryCollections(id: string, cursor: string, tab?: string): Promise<{ items: Card[]; cursor: string }> {
     const connection = await this.session.ready();
     if (!hasLibraryRecommendations(connection.adapter)) return { items: [], cursor: '' };
-    const [page, images] = await Promise.all([connection.adapter.libraryCollections(id, cursor), connection.images()]);
+    const [page, images] = await Promise.all([connection.adapter.libraryCollections(id, cursor, tab), connection.images()]);
     return { items: page.items.map(item => entry(item, images, this.artWidth())), cursor: page.nextCursor ?? '' };
   }
 

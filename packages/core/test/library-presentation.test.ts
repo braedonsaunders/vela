@@ -51,3 +51,18 @@ test('landscape art prefers thumb, then backdrop, then poster; square retains po
   expect(libraryCardArtwork(art, 'square').poster).toBe('poster');
   expect(libraryCardArtwork(art, 'unknown').poster).toBe('poster');
 });
+
+test('facet collection IDs preserve opaque values and reject incomplete IDs', async () => {
+  const { parseFacetCollectionId, facetCollectionQuery } = await import('../src/library-presentation');
+  expect(parseFacetCollectionId('facet:creators:plugin:a/b%20')).toEqual({ field: 'creators', valueId: 'plugin:a/b%20' });
+  for (const id of ['collection:abc', 'facet::value', 'facet:studios:', 'facet:studios']) expect(parseFacetCollectionId(id)).toBeUndefined();
+  const tab = { id: 'studios-new', label: 'Studios', kind: 'collections' as const, facet: 'creators', sort: 'released' as const, direction: 'desc' as const };
+  const query = facetCollectionQuery('facet:creators:plugin:a/b%20', tab)!;
+  const params = new URLSearchParams(libraryBrowseQuery(query));
+  expect(params.get('facet.creators')).toBe('plugin:a/b%20');
+  expect(params.get('sort')).toBe('released');
+  expect(params.get('direction')).toBe('desc');
+  expect(params.has('collectionId')).toBe(false);
+  expect(facetCollectionQuery('facet:studios:a', tab)).toBeUndefined();
+  expect(facetCollectionQuery('facet:creators:a', { ...tab, facet: undefined })).toBeUndefined();
+});

@@ -77,7 +77,9 @@ export interface TitleDetail extends PartialAnswer { title: Title; canPlay?: boo
   extras: Extra[]; chapters: Chapter[]; crew?: { id?: ID; name: string; role?: string; artwork?: ArtworkRef }[]; mediaSummary?: MediaSummary; cast: { id?: ID; name: string; role?: string; artwork?: ArtworkRef }[] }
 /** A visible person facet, including metadata already cached by the server. */
 export interface PersonDetail { id: ID; name: string; photo: ArtworkRef | null; roles: string[]; knownFor: string; biography?: string; birthday?: string; deathday?: string; deathDate?: string }
-/** Ether's library collection endpoint nests its collection metadata in the row entry. */
+/** A facet-backed collections tab returns direct collection metadata. */
+export interface LibraryFacetCollection { id: ID; name: string; itemCount: number; artwork: ArtworkRef[] }
+/** Ordinary library collection entries retain the nested metadata envelope. */
 export interface LibraryCollectionEntry { id: ID; kind: 'collection'; receiptToken: string; collection: { id: ID; name: string; summary: string; itemCount: number; artwork: ArtworkRef[] } }
 export type RowEntry = { id: ID; receiptToken: string } & (
   { kind: 'title'; title: Title; role?: string } | { kind: 'channel'; channel: Channel } |
@@ -211,7 +213,7 @@ export interface CollectionContents extends Page<RowEntry> { collection: Collect
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated';
 export type SortDirection = 'asc' | 'desc';
 export type LibraryCard = 'poster' | 'landscape' | 'square';
-export interface LibraryTab { id: string; label: string; kind: 'recommended' | 'library' | 'collections' }
+export interface LibraryTab { id: string; label: string; kind: 'recommended' | 'library' | 'collections'; facet?: string; sort?: LibrarySort; direction?: SortDirection }
 /** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
 export interface LibraryFacet { id: string; label: string; type: 'enum' | 'strings' | 'people' | 'int' | 'date' | 'duration'; multi: boolean }
 export interface FacetValue { id: string; label: string; count: number }

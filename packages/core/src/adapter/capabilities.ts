@@ -43,7 +43,7 @@ export interface DescriptiveSearch {
 /** Server-provided recommendation rows scoped to a single library. */
 export interface LibraryRecommendations {
   libraryRows(id: string, kind: V.Library['kind']): Promise<V.Row[]>;
-  libraryCollections(id: string, cursor?: string): Promise<V.Page<V.RowEntry>>;
+  libraryCollections(id: string, cursor?: string, tab?: string): Promise<V.Page<V.RowEntry>>;
   libraryGenres(id: string): Promise<{ id: string; label: string }[]>;
 }
 

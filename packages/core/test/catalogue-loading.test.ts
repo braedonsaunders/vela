@@ -85,3 +85,22 @@ test('a library\'s recommendations are handed over before its collections and ge
   expect(done?.rows.map(row => row.name)).toEqual(['Recently added']);
   expect(done?.genres).toEqual([{ id: 'g', label: 'Drama' }]);
 });
+
+test('collection first and continuation reads carry the selected tab and preserve its cursor', async () => {
+  const calls: unknown[][] = [];
+  const adapter = {
+    libraryRows: async () => [], libraryGenres: async () => [],
+    libraryCollections: async (id: string, cursor?: string, tab?: string) => {
+      calls.push([id, cursor, tab]);
+      return { items: [{ id: 'facet:people:creator:1', targetId: 'facet:people:creator:1', name: 'Creator', kind: 'collection', artwork: [], receiptToken: '' }], nextCursor: cursor ? undefined : 'opaque-next', continuation: cursor ? 'exhausted' : 'more' };
+    },
+  };
+  const session = { onReset() {}, async ready() { return { adapter, images: async () => ({ origin: 'https://fixture.test' }) }; } };
+  const catalogue = new Catalogue(new StateBox({} as VelaState), session as unknown as Session, () => 640);
+  const first = await catalogue.libraryExtras('library', 'mixed', undefined, 'creator-collections');
+  expect(first?.collectionCursor).toBe('opaque-next');
+  expect(first?.collections[0]?.id).toBe('facet:people:creator:1');
+  const next = await catalogue.moreLibraryCollections('library', first!.collectionCursor, 'creator-collections');
+  expect(next.cursor).toBe('');
+  expect(calls).toEqual([['library', undefined, 'creator-collections'], ['library', 'opaque-next', 'creator-collections']]);
+});

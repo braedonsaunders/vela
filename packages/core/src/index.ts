@@ -31,4 +31,4 @@ export type { Credentials, MediaAccess, ServerAdapter } from './adapter';
 export { sendCommand } from './adapter/commands';
 
 export type { TitleActions, MediaVersion, RemoteSubtitle } from './adapter/media-actions';
-export { libraryCardArtwork, libraryCard, libraryCardRatio, libraryTabs } from './library-presentation';
+export { parseFacetCollectionId, facetCollectionQuery, libraryCardArtwork, libraryCard, libraryCardRatio, libraryTabs } from './library-presentation';
