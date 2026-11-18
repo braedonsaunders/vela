@@ -187,6 +187,48 @@ describe('loadGuide pagination failures', () => {
   });
 });
 
+describe('channel metadata revalidation', () => {
+  test('clock ticks and full-watch identity reuse the guide lineup', async () => {
+    const { api, channelCursors } = fakeApi([channel(1)], []);
+    const key = scope();
+    await loadGuide(api, 0, NOW, key);
+    for (let i = 1; i < 5; i++) await loadGuide(api, 0, NOW + i * MINUTE, key);
+    expect((await liveIdentity(api, 'c1', NOW + 4 * MINUTE, undefined, key)).title).toBe('Channel 1');
+    expect(channelCursors).toEqual([undefined]);
+  });
+
+  test('a transient metadata refresh keeps the last lineup until revalidation recovers', async () => {
+    const base = fakeApi([channel(1)], []);
+    let reads = 0;
+    const api: GuideApi = { ...base.api, channels: async () => {
+      if (++reads === 2) throw new VelaError({ class: 'transient', code: 'service_unavailable', message: 'Unavailable', retry: { allowed: true } }, 503);
+      return { items: [channel(1, { name: reads >= 3 ? 'Renamed channel' : 'Original channel' })], continuation: 'exhausted' };
+    } };
+    const key = scope();
+    await loadGuide(api, 0, NOW, key);
+    const stale = await loadGuide(api, 0, NOW + 5 * MINUTE, key);
+    expect(stale.channels[0]?.name).toBe('Original channel');
+    await loadGuide(api, 0, NOW + 6 * MINUTE, key);
+    expect(reads).toBe(2);
+    const recovered = await loadGuide(api, 0, NOW + 10 * MINUTE, key);
+    expect(recovered.channels[0]?.name).toBe('Renamed channel');
+    expect(reads).toBe(3);
+  });
+
+  test('a permanent metadata refusal is never hidden behind a stale lineup', async () => {
+    const base = fakeApi([channel(1)], []);
+    let refused = false;
+    const api: GuideApi = { ...base.api, channels: async () => {
+      if (refused) throw new VelaError({ class: 'policy', code: 'forbidden', message: 'Forbidden', retry: { allowed: false } }, 403);
+      return base.api.channels();
+    } };
+    const key = scope();
+    await loadGuide(api, 0, NOW, key);
+    refused = true;
+    await expect(loadGuide(api, 0, NOW + 5 * MINUTE, key)).rejects.toMatchObject({ status: 403 });
+  });
+});
+
 describe('loadGuide projection', () => {
   const channels = [
     channel(1, { group: 'News', guides: [{ id: 'g-news', name: 'News' }] }),

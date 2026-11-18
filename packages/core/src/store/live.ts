@@ -89,8 +89,9 @@ export class Live {
 
   /** The player's title for a channel: the channel, and what it is airing now. */
   async identity(channelId: string): Promise<{ title: string }> {
-    const { api } = await this.tv();
-    return liveIdentity(api, channelId, Date.now());
+    const { connection, api } = await this.tv();
+    const tokens = await this.session.tokens(connection);
+    return liveIdentity(api, channelId, Date.now(), undefined, `${connection.record.id}|${tokens?.viewer.id ?? ''}`);
   }
 
   /** Where a server timestamp falls in the guide: its day offset (-1 outside the week) and minute. */
