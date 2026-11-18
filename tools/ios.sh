@@ -3,11 +3,15 @@
 # team's automatic provisioning, install it, and launch it or open a route.
 #
 #   tools/ios.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>]
+#   tools/ios.sh --tour [<test>...] [--device <udid|name>] [--team <id>]
 #
 #   --prebuild   regenerate apps/vela/ios for iOS (expo prebuild --clean without EXPO_TV, then pod install)
 #   --simulator  build for the iOS simulator and install on the booted (or first) iPhone simulator
 #   --device     a paired iPhone; when omitted and exactly one is connected, that one is used
 #   --team       your Apple developer team ID (device builds; see Xcode > Settings > Accounts)
+#   --tour       instead of installing, run the scripted UI tour (tools/ios-tour) on the device: it
+#                taps through the app and saves a screenshot per step in <build dir>/tour/<time>/.
+#                Name tests (test05MovieTitle) to run only those.
 #
 # apps/vela/ios is generated for one platform at a time: tools/apple-tv.sh generates it for tvOS,
 # this script for iOS, and each regenerates it when it finds the other platform's project.
@@ -35,7 +39,9 @@ team=${VELA_APPLE_TEAM:-}
 prebuild=0
 simulator=0
 open=""
-usage="usage: tools/ios.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>]"
+tour=0
+tests=""
+usage="usage: tools/ios.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>] [--tour [<test>...]]"
 while [ $# -gt 0 ]; do
   case "$1" in
     --prebuild) prebuild=1 ;;
@@ -43,6 +49,8 @@ while [ $# -gt 0 ]; do
     --device) device=$2; shift ;;
     --team) team=$2; shift ;;
     --open) open=$2; shift ;;
+    --tour) tour=1 ;;
+    test[0-9A-Z]*) [ "$tour" = 1 ] || { echo "$usage" >&2; exit 2; }; tests="$tests $1" ;;
     -h|--help) echo "$usage"; exit 0 ;;
     *) echo "$usage" >&2; exit 2 ;;
   esac
@@ -92,6 +100,60 @@ version=$(sed -n 's/^ *"version": "\([0-9.]*\)".*/\1/p' "$root/apps/vela/app.jso
 # A native module's new or removed files join the Pods project only through pod install.
 if [ ! -f Pods/Manifest.lock ] || [ -n "$(find "$root/modules" -path '*/ios/*' -newer Pods/Manifest.lock -print -quit 2>/dev/null)" ]; then
   pod install >/dev/null
+fi
+if [ "$tour" = 1 ]; then
+  # The UI-test target lives in tools/ios-tour and joins the generated project here.
+  pods_gems=$(sed -n 's/^GEM_HOME="\([^"]*\)".*/\1/p' "$(command -v pod)" 2>/dev/null || true)
+  GEM_HOME=${pods_gems:-${GEM_HOME:-}} ruby "$root/tools/ios-tour/add-target.rb" "$PWD" "$team"
+  results=$build/tour/$(date +%Y%m%d-%H%M%S)
+  mkdir -p "$results"
+  set -- -workspace Vela.xcworkspace -scheme Vela -configuration Release -derivedDataPath "$derived" \
+    -destination "id=$device" -allowProvisioningUpdates DEVELOPMENT_TEAM="$team" CODE_SIGN_STYLE=Automatic
+  if ! locked xcodebuild "$@" build-for-testing >"$build/tour-build.log" 2>&1; then
+    grep -E "error:|The following build commands failed" -A3 "$build/tour-build.log" | head -40
+    echo "ios: tour build failed; the log is $build/tour-build.log" >&2
+    exit 1
+  fi
+  [ -n "$tests" ] || tests=$(sed -n 's/^ *func \(test[0-9][0-9A-Za-z]*\)().*/\1/p' "$root/tools/ios-tour/VelaTour.swift")
+  # One area at a time, each in its own run: a stalled accessibility snapshot (XCUITest asks the
+  # app for its whole tree, thousands of elements here) costs one area, not the tour.
+  failed=0
+  for test in $tests; do
+    out=$results/$test
+    mkdir -p "$out"
+    xcodebuild "$@" -test-timeouts-enabled YES -default-test-execution-time-allowance 240 -maximum-test-execution-time-allowance 300 \
+      -resultBundlePath "$out/run.xcresult" -only-testing:"VelaTour/VelaTour/$test" test-without-building >"$out/run.log" 2>&1 &
+    runner=$!
+    size=0 quiet=0
+    while kill -0 "$runner" 2>/dev/null; do
+      sleep 5
+      now=$(wc -c <"$out/run.log")
+      if [ "$now" = "$size" ]; then quiet=$((quiet + 5)); else quiet=0 size=$now; fi
+      if [ "$quiet" -ge 90 ]; then
+        # Still drawing (the hero advances on its own) or frozen? Two screenshots tell.
+        xcrun devicectl device capture screenshot --device "$device" --destination "$out/stall-1.png" >/dev/null 2>&1 || true
+        sleep 4
+        xcrun devicectl device capture screenshot --device "$device" --destination "$out/stall-2.png" >/dev/null 2>&1 || true
+        if cmp -s "$out/stall-1.png" "$out/stall-2.png"; then state="its screen did not change in 4s"; else state="Vela is still drawing"; fi
+        echo "ios: $test silent for 90s at: $(grep -v '^20[0-9][0-9]-' "$out/run.log" | tail -1 | sed 's/^ *//') ($state); stopping it"
+        kill "$runner" 2>/dev/null || true
+        break
+      fi
+    done
+    wait "$runner" 2>/dev/null && result=passed || { result=failed; failed=1; }
+    if [ -d "$out/run.xcresult" ] && xcrun xcresulttool export attachments --path "$out/run.xcresult" --output-path "$out" >/dev/null 2>&1; then
+      # Name each exported file by its attachment (the step), from the manifest.
+      (cd "$out" && /usr/bin/python3 -c '
+import json, os
+for test in json.load(open("manifest.json")):
+    for a in test.get("attachments", []):
+        src, name = a["exportedFileName"], a.get("suggestedHumanReadableName", "")
+        if name and os.path.exists(src): os.rename(src, name.rsplit("_", 2)[0] + os.path.splitext(src)[1])
+')
+    fi
+    echo "ios: $test $result, $(ls "$out" | grep -c '\.png$') screenshots in $out"
+  done
+  exit "$failed"
 fi
 if [ "$simulator" = 1 ]; then
   # Signed to run locally: an unsigned app has no Keychain, where the app keeps its sessions.
