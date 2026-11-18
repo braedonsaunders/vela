@@ -16,9 +16,10 @@ interface RulerProps {
   rail: number;
   small: boolean;
   scrollX: SharedValue<number>;
+  window: { from: number; to: number };
 }
 
-export function Ruler({ look, model, scale, rail, small, scrollX }: RulerProps) {
+export function Ruler({ look, model, scale, rail, small, scrollX, window }: RulerProps) {
   const width = model.minutes * scale;
   const follow = useAnimatedStyle(() => ({ transform: [{ translateX: -scrollX.value }] }));
   const dayName = small ? (model.days.find(d => d.offset === model.day)?.label ?? '') : model.dayLabel;
@@ -63,7 +64,7 @@ export function Ruler({ look, model, scale, rail, small, scrollX }: RulerProps) 
         importantForAccessibility="no-hide-descendants"
       >
         <Animated.View style={[{ width, height: RULER }, follow]}>
-          {model.ticks.map(tick => {
+          {model.ticks.filter(tick => tick.minute + 30 > window.from && tick.minute < window.to).map(tick => {
             const x = tick.minute * scale;
             // A label the now pill would cover fades out rather than colliding with it.
 

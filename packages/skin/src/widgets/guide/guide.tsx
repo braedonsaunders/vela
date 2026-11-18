@@ -1,3 +1,6 @@
+import { guideSelection } from './diagnostics';
+import { GuideFocusScope, GuideToolbar } from './focus';
+import { PreviewDebounce } from './navigation';
 import { hasFlowHeader } from '../../resolve/inherit';
 // The channel guide as an app (widget `guide`, and the Live TV route): a half-height header with
 // the selected programme beside the live preview tile, a toolbar of days, time and filters, the
@@ -9,7 +12,7 @@ import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@v
 import { HostContext, useHost, type WidgetProps } from '../../host';
 import type { LiveController, LiveView } from './controller';
 import { DayChips, FilterMenu, GuideTabs, IconButton, NowChip, Segments } from './controls-bar';
-import { guideBand, guideTop, gutter, keeps, type ChannelFilter, type Zoom } from './geometry';
+import { guideBand, guideTop, gutter, keeps, programmeAt, type ChannelFilter, type Zoom } from './geometry';
 import { GuideGrid, type GridHandle } from './grid';
 import { currentlyAiring } from './content';
 import { GuideTile } from './header-tile';
@@ -31,10 +34,10 @@ export function GuideWidget({ params }: WidgetProps) {
   return <Guide layout={params.layout === 'cinematic' ? 'cinematic' : undefined} />;
 }
 
-export function Guide({ focus, layout }: { focus?: GuideFocus; layout?: 'cinematic' }) {
+export function Guide({ focus, layout, active = true }: { focus?: GuideFocus; layout?: 'cinematic'; active?: boolean }) {
   const host = useHost();
   const [area, setArea] = useState({ width: host.viewport.width, height: host.viewport.height });
-  if (!Platform.isTV || Platform.OS !== 'android') return <GuideContent focus={focus} layout={layout} />;
+  if (!Platform.isTV || Platform.OS !== 'android') return <GuideContent focus={focus} layout={layout} active={active} />;
   // The guide's authored geometry is a 1080-point TV canvas. Android's dp canvas is
   // commonly 540 points; scale the whole widget, including grid measurements and focus.
   const scale = tvPixelScale(host.viewport.width, host.viewport.height) / 1.25;
@@ -45,13 +48,13 @@ export function Guide({ focus, layout }: { focus?: GuideFocus; layout?: 'cinemat
       setArea(old => old.width === width && old.height === height ? old : { width, height });
     }}>
       <View style={{ width: viewport.width, height: viewport.height, transform: [{ scale }], transformOrigin: 'top left' }}>
-        <HostContext.Provider value={{ ...host, viewport }}><GuideContent focus={focus} layout={layout} /></HostContext.Provider>
+        <HostContext.Provider value={{ ...host, viewport }}><GuideContent focus={focus} layout={layout} active={active} /></HostContext.Provider>
       </View>
     </View>
   );
 }
 
-function GuideContent({ focus, layout }: { focus?: GuideFocus; layout?: 'cinematic' }) {
+function GuideContent({ focus, layout, active }: { focus?: GuideFocus; layout?: 'cinematic'; active: boolean }) {
   const look = useGuideLook();
   const live = useLiveContext();
   const view = useLiveView();
@@ -68,7 +71,7 @@ function GuideContent({ focus, layout }: { focus?: GuideFocus; layout?: 'cinemat
     }
     return <GuideStatus look={look} text={msg('ui.loadingTheGuide')} busy />;
   }
-  return <GuidePage look={look} model={view.guide} view={view} controller={live.controller} focus={focus} layout={layout} />;
+  return <GuidePage look={look} model={view.guide} view={view} controller={live.controller} focus={focus} layout={layout} active={active} />;
 }
 
 interface PageProps {
@@ -78,28 +81,46 @@ interface PageProps {
   controller: LiveController;
   focus?: GuideFocus;
   layout?: 'cinematic';
+  active: boolean;
 }
 
-function GuidePage({ look, model, view, controller, focus, layout }: PageProps) {
+function GuidePage({ look, model, view, controller, focus, layout, active }: PageProps) {
   const { viewport, env, doc } = useHost();
   const small = viewport.width < 640;
   const still = env.still;
   const side = Math.max(gutter(small, viewport.width), viewport.insets.left, viewport.insets.right);
-  const [selected, setSelected] = useState({ channel: '', programme: '' });
+  const [selected, setSelected] = useState(() => {
+    const channel = model.channels.find(c => c.id === (focus?.channelId || view.tunedId)) ?? model.channels[0];
+    return { channel: channel?.id ?? '', programme: focus?.programmeId || channel?.nowId || '' };
+  });
   const [filter, setFilter] = useState<ChannelFilter>('all');
   const [tab, setTab] = useState('');
   const [mode, setMode] = useState<'now' | 'guide'>('now');
   const [zoom, setZoom] = useState<Zoom>(1);
   const [expanded, setExpanded] = useState(false);
+  const [holding, setHolding] = useState(false);
   const grid = useRef<GridHandle>(null);
-  const pendingDay = useRef<number | null>(null);
+  const preview = useMemo(() => new PreviewDebounce(id => controller.preview(id)), [controller]);
+  useEffect(() => () => preview.cancel(), [preview]);
+  const visible = active && !view.tile.fullscreen;
+  useEffect(() => { preview.select(!visible || holding || view.zapping ? '' : selected.channel); }, [preview, selected.channel, holding, view.zapping, visible]);
+  const wasVisible = useRef(visible);
   useEffect(() => {
-    if (pendingDay.current !== null && grid.current?.jumpDay(pendingDay.current)) pendingDay.current = null;
-  }, [model.dayStarts]);
+    const returning = visible && !wasVisible.current;
+    wasVisible.current = visible;
+    if (!visible) { preview.cancel(); grid.current?.leaveGrid(); return; }
+    if (!returning) return;
+    if (!focus) { controller.chooseDay(0); grid.current?.jumpNow(); }
+    const frame = requestAnimationFrame(() => grid.current?.focusGrid(focus?.channelId || controller.view().tunedId));
+    return () => cancelAnimationFrame(frame);
+  }, [visible, controller, preview, focus?.channelId, focus?.minute]);
 
   const tabOn = model.guides.some(g => g.id === tab) ? tab : '';
   // A hand-off shows its channel whatever the filter, on its own day.
   const handOff = focus && focus.channelId ? focus : undefined;
+  const handOffOffset = handOff && handOff.minute >= 0 ? model.dayStarts?.[view.day] ?? (model.day === view.day ? 0 : undefined) : 0;
+  const gridKey = useRef('');
+  if (handOff) gridKey.current = `${handOff.channelId}|${handOff.minute}`;
   const rows = useMemo(
     () => model.channels.filter(c => keeps(c, filter, tabOn) || c.id === handOff?.channelId),
     [model.channels, filter, tabOn, handOff?.channelId],
@@ -108,9 +129,17 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
   const picked = pickHero(model, selected, handOff);
   const tunedName = model.channels.find(c => c.id === view.tile.channelId)?.name ?? '';
 
-  const select = useCallback((channel: GuideChannel, programme: GuideProgramme | null) =>
+  const select = useCallback((channel: GuideChannel, programme: GuideProgramme | null) => {
+    guideSelection(channel.id, programme?.id ?? '');
     setSelected(old => old.channel === channel.id && old.programme === (programme?.id ?? '')
-      ? old : { channel: channel.id, programme: programme?.id ?? '' }), []);
+      ? old : { channel: channel.id, programme: programme?.id ?? '' });
+  }, []);
+  useEffect(() => {
+    if (!view.zapping || !view.tunedId || view.tunedId === selected.channel) return;
+    if (grid.current?.selectChannel(view.tunedId)) return;
+    const channel = model.channels.find(channel => channel.id === view.tunedId);
+    if (channel) select(channel, programmeAt(channel, Math.max(0, model.nowMinute)) ?? null);
+  }, [view.zapping, view.tunedId, selected.channel, model.channels, model.nowMinute, select]);
   // Pressing what is airing puts it on the tile; pressing it again once it is there watches it.
   const press = useCallback((channel: GuideChannel, programme: GuideProgramme) => {
     select(channel, programme);
@@ -122,18 +151,15 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
   const watch = useCallback((channelId: string) => controller.watch(channelId), [controller]);
   useEffect(() => {
     controller.setRetainedChannels([selected.channel, handOff?.channelId ?? "", view.tunedId]);
-    return () => controller.setRetainedChannels([]);
   }, [controller, selected.channel, handOff?.channelId, view.tunedId]);
+  useEffect(() => () => controller.setRetainedChannels([]), [controller]);
   const onRange = useCallback((from: number, to: number) => controller.setGuideRange(from, to), [controller]);
   const onVisible = useCallback((ids: string[]) => controller.setGuideChannels(ids), [controller]);
   const pickDay = (day: number) => {
-    setSelected({ channel: '', programme: '' });
-    pendingDay.current = day;
     controller.chooseDay(day);
-    if (grid.current?.jumpDay(day)) pendingDay.current = null;
+    grid.current?.jumpDay(day);
   };
   const jumpNow = () => {
-    setSelected({ channel: '', programme: '' });
     controller.chooseDay(0);
     grid.current?.jumpNow();
   };
@@ -148,10 +174,10 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
   const band = guideBand(viewport.width, viewport.height, top, side);
   const tileHeight = cinematic ? band.pictureHeight : Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
   const headerHeight = cinematic ? band.height : Platform.isTV ? tileHeight + 32 : small ? 196 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
-  const landing = {
-    minute: handOff && handOff.minute >= 0 ? handOff.minute : model.landing,
-    channelId: handOff?.channelId ?? '',
-  };
+  const landing = useMemo(() => ({
+    minute: handOff && handOff.minute >= 0 ? handOff.minute + (handOffOffset ?? 0) : model.landing,
+    channelId: handOff?.channelId || view.tunedId || rows[0]?.id || '',
+  }), [handOff?.channelId, handOff?.minute, handOffOffset]);
   const zoomOptions = ([0, 1, 2] as Zoom[]).map(z => {
     const hours = z === 0 ? '4½' : z === 1 ? '3' : '2';
     return { value: z, label: msg('live.hours', { hours }), name: msg('live.hoursAcross', { hours }) };
@@ -168,7 +194,10 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
   const highlighted =
     selected.channel || !handOff ? selected : { channel: handOff.channelId, programme: handOff.programmeId };
 
+  if (handOffOffset === undefined) return <GuideStatus look={look} text={msg('ui.loadingTheGuide')} busy />;
+
   return (
+    <GuideFocusScope active={visible} enter={() => grid.current?.focusGrid()} leave={() => grid.current?.leaveGrid()} onHold={setHolding}>
     <View style={page}>
       {(showGrid || cinematic) && !expanded ? (
         <View style={{ height: headerHeight, flexShrink: 0, overflow: 'hidden' }}>
@@ -178,7 +207,7 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
               channel={picked.channel}
               programme={picked.programme}
               small={small}
-              still={still}
+              still={still || holding}
               side={side}
               inset={cinematic && band.stacked ? side : small && !cinematic ? 16 + 132 : side + (tileHeight * 16) / 9 + 28}
               spacious={cinematic}
@@ -192,6 +221,7 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
               <GuideTile
                 look={look}
                 tile={view.tile}
+                focusedChannel={picked ? { id: picked.channel.id, name: picked.channel.name } : undefined}
                 channelName={tunedName}
                 height={tileHeight}
                 small={small}
@@ -202,6 +232,7 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
           ) : null}
         </View>
       ) : null}
+      <GuideToolbar>
       {small ? (
         <View style={{ zIndex: 10 }}>
           <View
@@ -291,6 +322,7 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
       {model.guides.length > 0 ? (
         <GuideTabs look={look} model={model} tab={tabOn} onPick={setTab} side={side} small={small} />
       ) : null}
+      </GuideToolbar>
       <GuideBody
         look={look}
         liveView={controller.view}
@@ -298,11 +330,12 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
         rows={rows}
         small={small}
         showGrid={showGrid}
+        active={visible}
         zoom={zoom}
         still={still}
         selected={highlighted}
         landing={landing}
-        gridKey={`${handOff?.channelId ?? ''}|${handOff?.minute ?? ''}`}
+        gridKey={gridKey.current}
         grid={grid}
         onSelect={select}
         onPress={press}
@@ -312,6 +345,7 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
         onAll={() => setFilter('all')}
       />
     </View>
+    </GuideFocusScope>
   );
 }
 
@@ -322,6 +356,7 @@ interface BodyProps {
   rows: GuideChannel[];
   small: boolean;
   showGrid: boolean;
+  active: boolean;
   zoom: Zoom;
   still: boolean;
   selected: { channel: string; programme: string };
@@ -368,6 +403,7 @@ function GuideBody(props: BodyProps) {
         small={small}
         zoom={props.zoom}
         still={props.still}
+        active={props.active}
         selected={props.selected}
         landing={props.landing}
         onSelect={props.onSelect}
@@ -385,6 +421,7 @@ function pickHero(model: GuideModel, selected: { channel: string; programme: str
   const id = selected.channel || handOff?.channelId || model.channels.find(c => c.nowId)?.id || model.channels[0]?.id;
   const channel = model.channels.find(c => c.id === id);
   if (!channel) return undefined;
+  if (selected.channel && !selected.programme) return { channel, programme: undefined };
   const wanted = selected.channel ? selected.programme : handOff?.programmeId || channel.nowId;
   const programme =
     channel.programmes.find(p => p.id === wanted) ?? channel.programmes.find(p => p.id === channel.nowId);

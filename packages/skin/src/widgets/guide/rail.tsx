@@ -1,6 +1,7 @@
 // A channel's cell in the guide's rail: number, logo on its neutral tile, name, favourite star and
 // how far the programme on now has run. Pressing it watches the channel.
 import { Platform, View } from 'react-native';
+import { memo } from 'react';
 import { msg, type GuideChannel } from '@vela/core';
 import { railId } from './geometry';
 import type { GuideLook } from './look';
@@ -16,7 +17,7 @@ interface RailProps {
   onWatch(channelId: string): void;
 }
 
-export function RailCell({ look, channel, small, width, row, selected, onWatch }: RailProps) {
+export const RailCell = memo(function RailCell({ look, channel, small, width, row, selected, onWatch }: RailProps) {
   return (
     <Press
       nativeID={railId(channel.id)}
@@ -74,7 +75,7 @@ export function RailCell({ look, channel, small, width, row, selected, onWatch }
       {!small ? <RailText look={look} channel={channel} /> : null}
     </Press>
   );
-}
+});
 
 function RailText({ look, channel }: { look: GuideLook; channel: GuideChannel }) {
   return (

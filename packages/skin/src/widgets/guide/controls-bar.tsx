@@ -15,6 +15,7 @@ import type { ChannelFilter } from './geometry';
 import type { GuideLook } from './look';
 import { Glyph, Line, Press, type Interaction } from './parts';
 import { holdBack } from '../../menu-key';
+import { GuideRegion } from './focus';
 
 const ring = (look: GuideLook, focused: boolean) =>
   focused ? `0px 0px 0px 2px ${look.page}, 0px 0px 0px 4px ${look.accent}` : undefined;
@@ -27,6 +28,7 @@ export function Chip({
   onPress,
   children,
   height = 36,
+  nativeID,
 }: {
   look: GuideLook;
   label: string;
@@ -34,9 +36,11 @@ export function Chip({
   onPress(): void;
   children: React.ReactNode;
   height?: number;
+  nativeID?: string;
 }) {
   return (
     <Press
+      nativeID={nativeID}
       label={label}
       selected={on}
       onPress={onPress}
@@ -151,7 +155,7 @@ export function NowChip({ look, still, onPress }: { look: GuideLook; still: bool
     transform: [{ scale: 1 + Math.min(1, pulse.value / 0.7) * 1.6 }],
   }));
   return (
-    <Chip look={look} label={msg('live.jumpToNow')} onPress={onPress} height={38}>
+    <Chip nativeID="guide-toolbar-now" look={look} label={msg('live.jumpToNow')} onPress={onPress} height={38}>
       <View style={{ width: 8, height: 8 }}>
         {!still ? (
           <Animated.View
@@ -273,6 +277,7 @@ export function FilterMenu({
     };
   }, [open]);
   return (
+    <GuideRegion.Provider value={open ? 'header' : 'toolbar'}>
     <View ref={box} style={{ position: 'relative', zIndex: 20 }}>
       <Chip
         look={look}
@@ -334,6 +339,7 @@ export function FilterMenu({
         </View>
       ) : null}
     </View>
+    </GuideRegion.Provider>
   );
 }
 

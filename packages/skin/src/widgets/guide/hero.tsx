@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { memo } from 'react';
 import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
 import type { GuideLook } from './look';
 import { Glyph, Line, LiveBadge, Press, Progress } from './parts';
@@ -27,7 +28,7 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
   return (
     <View style={StyleSheet.absoluteFill}>
       {programme ? (
-        <HeroArt key={`art-${programme.id}`} look={look} programme={programme} small={small} still={still} />
+        <HeroArt key={still ? 'art-still' : `art-${programme.id}`} look={look} programme={programme} small={small} still={still} />
       ) : null}
       <LinearGradient
         colors={[look.page, look.scrimMid, look.scrimClear]}
@@ -73,7 +74,7 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
   );
 }
 
-function HeroArt({
+const HeroArt = memo(function HeroArt({
   look,
   programme,
   small,
@@ -118,7 +119,8 @@ function HeroArt({
       {programme.tone >= 0 ? <View style={glow} /> : null}
     </Animated.View>
   );
-}
+}, (a, b) => a.look === b.look && a.small === b.small && a.still === b.still
+  && a.programme.art === b.programme.art && a.programme.tone === b.programme.tone);
 
 function Eyebrow({ look, children, size = 10 }: { look: GuideLook; children: string; size?: number }) {
   return (

@@ -14,10 +14,11 @@ export default function Live() {
   const { ch = '', prog = '', at = '' } = useLocalSearchParams<{ ch?: string; prog?: string; at?: string }>();
   const vela = useVela();
   const host = vela.host('live', 'live');
-  useLiveSurface('guide', useSectionFocus() ?? false);
+  const active = useSectionFocus() ?? false;
+  useLiveSurface('guide', active);
   const focus = useHandOff(ch, prog, at);
   if (!host) return <View style={{ flex: 1 }} />;
-  const content = <Guide focus={focus} />;
+  const content = <Guide focus={focus} active={active} />;
   return content;
 }
 

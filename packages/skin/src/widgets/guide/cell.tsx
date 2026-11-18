@@ -1,9 +1,11 @@
 // One programme block on the timeline. Its label stays readable beside the rail when the
 // programme began before the panel's left edge; an airing block fills as it runs.
-import { View } from 'react-native';
+import { guideRender } from './diagnostics';
+import { memo, type ComponentProps } from 'react';
+import { Platform, View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
-import { cellId } from './geometry';
+import { cellId, labelFollows } from './geometry';
 import type { GuideLook } from './look';
 import { Line, Press } from './parts';
 
@@ -15,6 +17,7 @@ export interface CellProps {
   row: number;
   small: boolean;
   nowMinute: number;
+  visibleFrom: number;
   selected: boolean;
   /** The timeline's horizontal scroll, for the label that keeps clear of the panel's edge. */
   scrollX: SharedValue<number>;
@@ -23,12 +26,22 @@ export interface CellProps {
   onKey(channel: GuideChannel, programme: GuideProgramme, key: string, prevent: () => void): void;
 }
 
+const passive = { hovered: false, focused: false, pressed: false };
+/** TV focus is owned by the grid anchor. Passive cells avoid a focus registry and state per slot. */
+function PassiveProgramme(props: ComponentProps<typeof Press>) {
+  return <View nativeID={props.nativeID} testID={props.testID} pointerEvents="none" accessible={false} focusable={false} style={props.style(passive)}>
+    {typeof props.children === 'function' ? props.children(passive) : props.children}
+  </View>;
+}
+const CellSurface = Platform.isTV ? PassiveProgramme : Press;
+
 function metaLine(p: GuideProgramme): string {
   const when = p.airing ? p.remainingLabel : msg('ui.startEnd', { start: p.startLabel, end: p.endLabel });
   return [when, p.episode].filter(Boolean).join(' · ');
 }
 
-export function ProgrammeCell(props: CellProps) {
+export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
+  guideRender('cell');
   const { look, programme: p, channel, scale, row, small, nowMinute, selected, scrollX } = props;
   const left = p.at * scale;
   const width = p.span * scale;
@@ -41,9 +54,10 @@ export function ProgrammeCell(props: CellProps) {
     channel: channel.name,
   });
   return (
-    <Press
-      nativeID={cellId(p.id)}
-      testID={cellId(p.id)}
+    <CellSurface
+      focusable={!Platform.isTV}
+      nativeID={cellId(p.id, channel.id)}
+      testID={cellId(p.id, channel.id)}
       label={label}
       selected={selected}
       onPress={() => props.onPress(channel, p)}
@@ -59,11 +73,11 @@ export function ProgrammeCell(props: CellProps) {
         alignItems: 'stretch',
         overflow: 'hidden',
         borderRadius: look.radiusCell,
-        borderWidth: 1,
-        borderColor: focused ? look.accent : hovered ? look.edgeStrong : p.airing ? look.liveEdge : look.hairline,
+        borderWidth: Platform.isTV && selected ? 2 : 1,
+        borderColor: focused || Platform.isTV && selected ? look.accent : hovered ? look.edgeStrong : p.airing ? look.liveEdge : look.hairline,
         backgroundColor: p.airing ? look.live : hovered ? look.cellHover : look.cell,
         opacity: p.ended ? 0.46 : 1,
-        boxShadow: focused
+        boxShadow: Platform.isTV ? undefined : focused
           ? `inset 0px 0px 0px 1px ${look.accent}, 0px 10px 34px ${look.shadow}`
           : selected
             ? `inset 0px 0px 0px 2px ${look.accent}`
@@ -95,12 +109,27 @@ export function ProgrammeCell(props: CellProps) {
         />
       ) : null}
       {labelled ? <CellLabel {...props} left={left} width={width} /> : null}
-    </Press>
+    </CellSurface>
   );
+}, (a, b) => a.look === b.look && a.channel.id === b.channel.id && a.channel.name === b.channel.name
+  && a.scale === b.scale && a.row === b.row && a.small === b.small && a.selected === b.selected && a.scrollX === b.scrollX
+  && a.onFocus === b.onFocus && a.onPress === b.onPress && a.onKey === b.onKey
+  && a.programme.id === b.programme.id && a.programme.name === b.programme.name
+  && a.programme.at === b.programme.at && a.programme.span === b.programme.span
+  && (!Platform.isTV || labelFollows(a.programme.at, a.programme.span, a.visibleFrom) === labelFollows(b.programme.at, b.programme.span, b.visibleFrom))
+  && a.programme.episode === b.programme.episode && a.programme.tone === b.programme.tone);
+
+/** Future cells have static labels; only edge cells need an animation worklet on TV. */
+function CellLabel(props: CellProps & { left: number; width: number }) {
+  if (!Platform.isTV || labelFollows(props.programme.at, props.programme.span, props.visibleFrom)) return <SlidingCellLabel {...props} />;
+  return <View style={{ justifyContent: 'center', gap: props.small ? 3 : 4, paddingLeft: 12, paddingRight: 10, minWidth: 0, maxWidth: props.width - 4 }}>
+    <Line look={props.look} size={props.small ? 13 : 14} weight={props.programme.airing ? 680 : 600}>{props.programme.name}</Line>
+    {props.width > 110 ? <Line look={props.look} size={12} color={props.programme.airing ? props.look.accent : props.look.inkSecondary} tabular>{metaLine(props.programme)}</Line> : null}
+  </View>;
 }
 
 /** The cell's title and times, slid right while the cell's start is scrolled past. */
-function CellLabel({ look, programme: p, small, scrollX, left, width }: CellProps & { left: number; width: number }) {
+function SlidingCellLabel({ look, programme: p, small, scrollX, left, width }: CellProps & { left: number; width: number }) {
   const slide = useAnimatedStyle(() => {
     const past = Math.max(0, scrollX.value - left);
     const shift = Math.min(past, Math.max(0, width - 120));

@@ -1,10 +1,12 @@
 // Small pieces every Live TV surface draws with: a symbol, a line of text in the guide's type, a
 // pressable that knows its hover and focus, the live badge, a progress bar and a channel logo
 // fitted on its neutral tile.
+import { GuideRegion, useGuideNavigation } from './focus';
+import type { Focusable } from '../../escape';
 import { FocusPressable as Pressable } from '../../focus';
 import { Image } from 'expo-image';
-import { useState, type ReactNode } from 'react';
-import { Platform, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { useState, useEffect, useRef, useId, useContext, type ReactNode } from 'react';
+import { findNodeHandle, Platform, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { msg } from '@vela/core';
 import { SYMBOLS } from '../../icons';
@@ -77,35 +79,61 @@ interface PressProps {
   /** Whether the TV focus engine may land here. */
   focusable?: boolean;
   hasTVPreferredFocus?: boolean;
+  /** The surrounding TV focus guide already contains directional focus. */
+  containedFocus?: boolean;
 }
 
 /** A pressable that tracks its own hover and focus, so focus looks work on web, TV and touch alike. */
 export function Press(props: PressProps) {
   const { onPress, onFocus, label, style, children, nativeID, testID, selected, role = 'button', onKey } = props;
+  const navigation = useGuideNavigation();
+  const region = useContext(GuideRegion);
+  const generatedId = useId();
+  const id = nativeID ?? generatedId;
+  const target = useRef<Focusable | null>(null);
+  const [node, setNode] = useState<number | undefined>();
+  useEffect(() => {
+    if (target.current) navigation?.register(id, { target: target.current, key: onKey, toolbar: region === 'toolbar' });
+    return () => navigation?.register(id, null);
+  }, [navigation, id, onKey, region]);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [pressed, setPressed] = useState(false);
   const state = { hovered, focused, pressed };
   // react-native-web hands Pressable its DOM key events; native TV moves focus itself.
   const keys =
-    Platform.OS === 'web' && onKey
+    Platform.OS === 'web' && (onKey || navigation)
       ? {
           onKeyDown: (e: { nativeEvent: object; preventDefault(): void }) =>
-            onKey((e.nativeEvent as { key?: string }).key ?? '', () => e.preventDefault()),
+            {
+            const key = (e.nativeEvent as { key?: string }).key ?? '';
+            if (onKey) onKey(key, () => e.preventDefault());
+            else if (region === 'toolbar' && key === 'ArrowDown') { e.preventDefault(); navigation?.enter(); }
+          },
         }
       : {};
   return (
     <Pressable
+      ref={value => {
+        target.current = value;
+        if (value && Platform.isTV && navigation && props.focusable !== false) setNode(findNodeHandle(value) ?? undefined);
+      }}
+      nextFocusDown={!props.containedFocus && navigation && (onKey || region === 'toolbar') ? node : undefined}
+      nextFocusUp={!props.containedFocus && navigation && onKey ? node : undefined}
+      nextFocusLeft={!props.containedFocus && navigation && onKey ? node : undefined}
+      nextFocusRight={!props.containedFocus && navigation && onKey ? node : undefined}
+      tvParallaxProperties={onKey ? { enabled: false } : undefined}
       onPress={onPress}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
       onFocus={() => {
+        navigation?.focused(id);
         setFocused(true);
         onFocus?.();
       }}
-      onBlur={() => setFocused(false)}
+      onBlur={() => { navigation?.blurred(id); setFocused(false); }}
       accessibilityRole={role === 'togglebutton' ? 'togglebutton' : role === 'tab' ? 'tab' : 'button'}
       accessibilityLabel={label}
       accessibilityState={selected === undefined ? undefined : { selected }}

@@ -37,10 +37,10 @@ test('an already retained offscreen preview cannot refetch on every visible focu
   try {
     controller.setGuideChannels(['one', 'two']);
     controller.setRetainedChannels(['preview', 'one']);
-    controller.open('guide');
+    const close = controller.open('guide');
     await Bun.sleep(250);
     // Keep a wall-clock minute boundary out of the projection-count observation.
-    controller.setVisible(false);
+    close();
     let updates = 0;
     controller.subscribe(() => { updates++; });
     controller.setRetainedChannels(['preview', 'two']);
