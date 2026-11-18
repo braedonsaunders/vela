@@ -83,6 +83,7 @@
       "executableName": "vela"
     },
     "afterPack": "./after-pack.js",
+    "afterSign": "./after-sign.js",
     "publish": {
       "provider": "github",
       "owner": "braedonsaunders",
