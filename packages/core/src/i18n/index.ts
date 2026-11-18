@@ -48,6 +48,7 @@ function formatter<T>(cache: Map<string, T>, key: string, create: () => T): T {
 }
 const numbers = new Map<string, Intl.NumberFormat>();
 const clocks = new Map<string, Intl.DateTimeFormat>();
+const clockLabels = new Map<string, string>();
 const plurals = new Map<string, Intl.PluralRules>();
 export function number(value: number, options?: Intl.NumberFormatOptions): string { return formatter(numbers, `${current.formatLocale}|${JSON.stringify(options)}`, () => new Intl.NumberFormat(current.formatLocale, options)).format(value); }
 export function plural(value: number): string {
@@ -67,7 +68,15 @@ export function second(value: number, maximumFractionDigits = 0): string {
 export function percent(fraction: number): string {
   return msg('unit.percent', { value: number(Math.round(fraction * 100)) });
 }
-export function time(value: number): string { return formatter(clocks, `${current.formatLocale}|${current.timeZone}`, () => new Intl.DateTimeFormat(current.formatLocale, { timeZone: current.timeZone, hour: 'numeric', minute: '2-digit' })).format(value); }
+export function time(value: number): string {
+  const key = `${current.formatLocale}|${current.timeZone}|${value}`;
+  const hit = clockLabels.get(key);
+  if (hit !== undefined) return hit;
+  const text = formatter(clocks, `${current.formatLocale}|${current.timeZone}`, () => new Intl.DateTimeFormat(current.formatLocale, { timeZone: current.timeZone, hour: 'numeric', minute: '2-digit' })).format(value);
+  clockLabels.set(key, text);
+  if (clockLabels.size > 512) clockLabels.delete(clockLabels.keys().next().value!);
+  return text;
+}
 export function clock(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
   return `${number(Math.floor(whole / 60), { useGrouping: false })}:${number(whole % 60, { minimumIntegerDigits: 2, useGrouping: false })}`;
