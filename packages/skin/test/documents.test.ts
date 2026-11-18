@@ -380,3 +380,33 @@ test('the shared shell offers Live TV on a library page without a live library',
     expect(holds(node.when, { index: 0 }, env(true, [{ kind: 'live' }]))).toBe(false);
   }
 });
+
+test('every skin provides library tabs, facets and card shapes at phone, desktop and TV widths', async () => {
+  const { fill, holds } = await import('../src/resolve');
+  const { libraryCardRatio } = await import('../../core/src/library-presentation');
+  const walk = (node: RNode, visit: (node: RNode) => void) => {
+    visit(node);
+    if (node.kind === 'box') node.children.forEach(child => walk(child, visit));
+    if (node.kind === 'repeat') walk(node.item, visit);
+  };
+  for (const [name, doc] of documents) for (const width of WIDTHS) {
+    const tree = resolveDocument(doc, width).routes.library!;
+    const widgets: string[] = [];
+    let shapes = 0;
+    walk(tree, node => {
+      if (node.kind === 'widget') widgets.push(node.widget);
+      if (!node.states.some(state => state.when.some(test => test.value === 'landscape'))) return;
+      for (const card of ['landscape', 'square'] as const) {
+        const env = { library: { model: { presentation: { card } } } } as any;
+        const style = Object.assign({}, node.base.style, ...node.states.filter(s => holds(s.when, { index: 0 }, env)).map(s => s.layer.style));
+        if (style['aspect-ratio']) {
+          expect(fill(style['aspect-ratio'], { index: 0 }, env), `${name} ${width} ${card}`).toBe(libraryCardRatio(card));
+          shapes++;
+        }
+      }
+    });
+    expect(widgets, name).toContain('libraryTabs');
+    expect(widgets, name).toContain('libraryFacets');
+    expect(shapes, `${name} ${width}`).toBeGreaterThan(0);
+  }
+});

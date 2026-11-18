@@ -15,10 +15,10 @@ export default function Library() {
 
 /** A retained section has a stable identity independent of the navigator's route key. */
 export function LibrarySection({ id, params }: { id: string; params: LibraryParams }) {
-  const { sort, dir, kind, genre, year, played, fav, collectionId } = params;
+  const { sort, dir, kind, genre, year, played, fav, collectionId, query: search, facets } = params;
   const query = useMemo(
-    () => queryOf({ sort, dir, kind, genre, year, played, fav, collectionId }),
-    [sort, dir, kind, genre, year, played, fav, collectionId],
+    () => queryOf({ sort, dir, kind, genre, year, played, fav, collectionId, query: search, facets }),
+    [sort, dir, kind, genre, year, played, fav, collectionId, search, facets],
   );
   const library = useLibraryPage(id, query, params.view);
   const page = useCallback((host: SkinHost) => libraryHost(host, id, query, library), [id, query, library]);

@@ -88,7 +88,7 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
 function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
   const request = host.env.library?.viewRequest ?? '';
   const view = host.env.library?.view ?? 'library';
-  const order = ['recommended', 'library', 'collections', 'genres'];
+  const order = host.env.library?.model?.tabs?.map(tab => tab.kind) ?? ['recommended', 'library', 'collections', 'genres'];
   const still = host.env.still || Platform.isTV;
   const current = useRef({ request, view, host });
   const outgoing = useRef<{ request: string; view: string; host: SkinHost } | null>(null);
@@ -106,7 +106,7 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
     fixedNav.current = null;
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const selected = document.activeElement;
-      restoreTab.current = selected?.getAttribute('role') === 'tab' ? view : '';
+      restoreTab.current = selected?.getAttribute('role') === 'tab' ? host.env.library?.tabId ?? view : '';
       const nav = document.getElementById('vela-library-views');
       const parent = frame.current;
       if (active && pinned) fixedNav.current = pinned;

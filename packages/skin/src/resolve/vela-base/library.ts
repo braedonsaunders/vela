@@ -189,13 +189,15 @@ const viewTab = (id: string, label: string): Node => {
 };
 
 /** Shared tabs and content for skins which provide their own library header. */
-export const libraryViews: Node = {
+const libraryTabBar: Node = {
   type: 'box', id: 'vela-library-views', role: 'tablist', label: '{t:ui.library}',
   style: { display: 'flex', 'flex-direction': 'row', 'overflow-x': 'auto', 'padding-top': '6px', 'padding-bottom': '12px', gap: '4px', ...gutter }, small: { ...gutterSmall },
-  children: [viewTab('recommended', '{t:library.view.recommended}'), viewTab('library', '{t:ui.library}'), viewTab('collections', '{t:library.view.collections}'), viewTab('genres', '{t:library.view.genres}'),
+  children: [{ type: 'widget', widget: 'libraryTabs', when: [{ test: 'library.declaredTabs' }] }, ...[viewTab('recommended', '{t:library.view.recommended}'), viewTab('library', '{t:ui.library}'), viewTab('collections', '{t:library.view.collections}'), viewTab('genres', '{t:library.view.genres}')].map(tab => ({ ...tab, when: [...(tab.when ?? []), { test: 'library.declaredTabs', not: true }] })),
     { type: 'box', when: [{ test: 'env.libraryExtrasFailed' }], press: { action: 'retry' }, label: '{t:library.view.failed}',
       style: { padding: '8px', color: '$ui.inkSecondary', 'flex-shrink': '0' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.view.failed}' }] }],
 };
+
+export const libraryViews: Node = { type: 'box', children: [libraryTabBar, { type: 'widget', widget: 'libraryFacets', when: [is('library.view', 'library')], style: { ...gutter }, small: { ...gutterSmall } }] };
 
 export const libraryFilters: Node = {
   type: 'box', when: [is('library.view', 'library')],

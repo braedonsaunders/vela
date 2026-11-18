@@ -33,7 +33,7 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
         if (library.page.view === 'genres') return router.setParams({ ...paramsOf(filteredBy(query, arg)), view: 'library' });
         return view(filteredBy(query, arg));
       case 'libraryView':
-        if (['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ view: arg, collectionId: undefined });
+        if (model?.tabs ? model.tabs.some(tab => tab.id === arg && ['recommended', 'library', 'collections'].includes(tab.kind)) : ['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ view: arg, collectionId: undefined });
         return;
       case 'libraryMore':
         return library.more();

@@ -2,7 +2,7 @@
 // held yet, what the page shows meanwhile, and its next page. Each view is kept in the store for
 // the session, so a revisited view shows at once and paging continues where it stopped.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { libraryKey, type LibraryExtras, type LibraryQuery } from '@vela/core';
+import { libraryTabs, libraryKey, type LibraryExtras, type LibraryQuery } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { Env } from '@vela/skin';
 import type { LibraryPage } from '@vela/skin/src/widgets/library/model';
@@ -52,12 +52,16 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     return () => { active = false; };
   }, [store, id, kind, revision, focused, extraAttempt, canRecommend]);
   const nativeExtras = extraState.id === id && extraState.revision === revision ? extraState.value : undefined;
-  const extras = useMemo<LibraryExtras | undefined>(() => nativeExtras ? { ...nativeExtras, genres: nativeExtras.genres.length ? nativeExtras.genres : current?.value?.genres ?? [] } : (current?.value?.genres.length ? {
+  const rawExtras = useMemo<LibraryExtras | undefined>(() => nativeExtras ? { ...nativeExtras, genres: nativeExtras.genres.length ? nativeExtras.genres : current?.value?.genres ?? [] } : (current?.value?.genres.length ? {
     recommendationsAvailable: false, collectionsAvailable: false, rows: [], collections: [], collectionCursor: '', genres: current.value.genres, failed: false,
   } : undefined), [nativeExtras, current?.value]);
-  const view = requestedView === 'library' || requestedView === 'recommended' || requestedView === 'collections' || requestedView === 'genres'
+  const landscape = (current?.value ?? earlier)?.presentation?.card === 'landscape';
+  const extras = useMemo(() => rawExtras && landscape ? { ...rawExtras, rows: rawExtras.rows.map(row => ({ ...row, items: row.items.map(card => ({ ...card, poster: card.backdrop || card.poster })) })) } : rawExtras, [rawExtras, landscape]);
+  const tabs = libraryTabs((current?.value ?? earlier)?.tabs);
+  const selectedTab = tabs?.find(tab => tab.id === requestedView) ?? tabs?.[0];
+  const view = tabs ? selectedTab?.kind ?? 'library' : requestedView === 'library' || requestedView === 'recommended' || requestedView === 'collections' || requestedView === 'genres'
     ? requestedView : canRecommend ? 'recommended' : 'library';
-  const usableView = view === 'recommended' && !canRecommend || view === 'collections' && !extras?.collectionsAvailable || view === 'genres' && !extras?.genres.length ? 'library' : view;
+  const usableView = tabs ? view : view === 'recommended' && !canRecommend || view === 'collections' && !extras?.collectionsAvailable || view === 'genres' && !extras?.genres.length ? 'library' : view;
 
   useEffect(() => {
     if (focused && !current?.value && current?.load !== 'loading' && current?.load !== 'failed') void store.catalogue.library(id, query, current?.value?.pages ?? 1, !!current?.value);
@@ -75,13 +79,14 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
       loading: !held && current?.load !== 'failed',
       moreLoading: usableView === 'collections' ? !!extraState.moreLoading : !!held && current?.load === 'loading',
       view: usableView,
+      tabId: selectedTab?.id,
       canRecommend,
       viewRequest: requestedView ?? '',
       extras,
       extrasLoading: canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.failed) || extraState.id === id && extraState.loading),
       extrasFailed: extraState.id === id && (extraState.failed || !!extras?.failed),
     };
-  }, [current, earlier, query, usableView, requestedView, extras, extraState, canRecommend, nativeExtras, id, revision]);
+  }, [current, earlier, query, selectedTab?.id, usableView, requestedView, extras, extraState, canRecommend, nativeExtras, id, revision]);
 
   const failed = current?.load === 'failed' && !current.value;
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';

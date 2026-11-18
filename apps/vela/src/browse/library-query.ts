@@ -7,6 +7,8 @@ import type { LibraryModel, LibraryQuery } from '@vela/core';
 /** The route's search parameters, as expo-router hands them over. */
 export type LibraryParams = {
   view?: string;
+  query?: string;
+  facets?: string;
   sort?: string;
   dir?: string;
   kind?: string;
@@ -22,6 +24,7 @@ type Direction = NonNullable<LibraryQuery['direction']>;
 type Kind = NonNullable<LibraryQuery['kind']>;
 
 const SORTS: Record<Sort, true> = {
+  index: true,
   server: true,
   title: true,
   added: true,
@@ -51,6 +54,8 @@ function played(text: string | undefined): boolean | undefined {
 
 export function queryOf(params: LibraryParams): LibraryQuery {
   return {
+    query: params.query || undefined,
+    facets: parseFacets(params.facets),
     sort: isSort(params.sort) ? params.sort : undefined,
     direction: isDirection(params.dir) ? params.dir : undefined,
     kind: isKind(params.kind) ? params.kind : undefined,
@@ -65,6 +70,8 @@ export function queryOf(params: LibraryParams): LibraryQuery {
 /** Every parameter, an absent part as undefined so setting them clears it from the URL. */
 export function paramsOf(query: LibraryQuery): Record<Exclude<keyof LibraryParams, 'view'>, string | undefined> {
   return {
+    query: query.query,
+    facets: query.facets && Object.keys(query.facets).length ? JSON.stringify(query.facets) : undefined,
     sort: query.sort,
     dir: query.direction,
     kind: query.kind,
@@ -95,6 +102,8 @@ export function filteredBy(query: LibraryQuery, arg: string): LibraryQuery {
   const [name = '', ...rest] = arg.split('|');
   const value = rest.join('|');
   switch (name) {
+    case 'query': return { ...query, query: value || undefined };
+    case 'facets': return { ...query, facets: parseFacets(value) };
     case 'kind':
       return { ...query, kind: isKind(value) ? value : undefined };
     case 'genre':
@@ -115,6 +124,8 @@ export function filteredBy(query: LibraryQuery, arg: string): LibraryQuery {
 export function asQueried(model: LibraryModel, query: LibraryQuery): LibraryModel {
   return {
     ...model,
+    query: query.query,
+    facetFilters: query.facets,
     sort: query.sort ?? model.sort,
     direction: query.direction ?? model.direction,
     kindFilter: query.kind ?? '',
@@ -123,4 +134,12 @@ export function asQueried(model: LibraryModel, query: LibraryQuery): LibraryMode
     favoriteFilter: query.favorite === true,
     yearFilter: query.year ?? 0,
   };
+}
+
+function parseFacets(text?: string): Record<string, string[]> | undefined {
+  try {
+    const value = JSON.parse(text ?? 'null');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    return Object.fromEntries(Object.entries(value).filter((pair): pair is [string, string[]] => Array.isArray(pair[1]) && pair[1].every(v => typeof v === 'string')));
+  } catch { return undefined; }
 }

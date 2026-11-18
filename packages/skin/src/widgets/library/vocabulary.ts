@@ -2,6 +2,7 @@
 // the library view on show (`library.*`), its sort and filter options (`opt.*`), the collection
 // on show (`collection.*`), and the collections those pages repeat over. The semantics are those
 // of the Contract renderer's table (tools/renderer.ts at cf3b1e5), key for key.
+import { libraryCard, libraryCardRatio } from '@vela/core';
 import type { Choice, CollectionModel, LibraryModel } from '@vela/core';
 import type { CollectionPage, LibraryOption, LibraryPage, OptionOf } from './model';
 
@@ -49,6 +50,9 @@ function chosen(o: LibraryOption, l: LibraryModel | undefined): boolean {
 }
 
 export const LIBRARY_VOCABULARY: Record<string, LibraryAccessor> = {
+  'library.declaredTabs': (_, e) => yes(e.library?.model?.tabs !== undefined),
+  'library.card': (_, e) => libraryCard(e.library?.model?.presentation?.card),
+  'library.cardRatio': (_, e) => libraryCardRatio(e.library?.model?.presentation?.card),
   'library.view': (_, e) => e.library?.view ?? 'library',
   'library.hasViews': (_, e) => yes(!!e.library?.extras),
   'library.canRecommend': (_, e) => yes(e.library?.canRecommend ?? !!e.library?.extras?.recommendationsAvailable),

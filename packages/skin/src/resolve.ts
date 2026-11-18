@@ -1,3 +1,4 @@
+import { withLibraryPresentation } from './resolve/library-presentation';
 import { withHeroArtwork } from './resolve/hero-artwork';
 // A skin document resolved for the React renderer: inherited over the Vela base, templates
 // inlined, viewport variants applied for the current width class, tokens substituted, client
@@ -210,6 +211,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
       when: [...(template.when ?? []), ...(node.when ?? [])],
       motion: node.motion ?? template.motion, stagger: node.stagger ?? template.stagger } as Node, depth, r);
   }
+  node = withLibraryPresentation(node, r.width);
   const n = node as Node & { below?: Record<string, Style>; above?: Record<string, Style> };
   const style = variant(n, r, node.style);
   const layer = (s: Style, extra: { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; label?: string }): Layer => ({
