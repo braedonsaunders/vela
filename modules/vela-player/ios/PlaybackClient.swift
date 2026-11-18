@@ -148,7 +148,9 @@ final class PlaybackClient {
                 engine.diagnostics.$sessionCacheStatus.removeDuplicates().sink { [weak self] status in
                     self?.logCacheStatus(status)
                 }.store(in: &self.subscriptions)
-                engine.$state.sink { [weak self] state in
+                // Published values initially belong to the previous load on this reused
+                // engine. Only subsequent transitions can fail this client's source.
+                engine.$state.dropFirst().sink { [weak self] state in
                     guard let self, !self.dead else { return }
                     switch state {
                     case .playing: self.emit("pause", false)
@@ -157,7 +159,9 @@ final class PlaybackClient {
                         self.emit("eof-reached", true)
                         self.onEvent?(.endFile(reason: 0, error: 0))
                         if self.loops { self.load(url) }
-                    case .error: self.failPath()
+                    // @Published delivers before assigning. Stop after that setter returns,
+                    // otherwise its error assignment can overwrite stop()'s idle state.
+                    case .error: Task { @MainActor [weak self] in self?.failPath() }
                     default: break
                     }
                 }.store(in: &self.subscriptions)
@@ -166,8 +170,10 @@ final class PlaybackClient {
                     if self?.engine?.hasFirstFrameReadyForDisplay == true { self?.emit("video-pts", time) }
                     self?.drawCaptions()
                 }.store(in: &self.subscriptions)
-                engine.$audioDelivery.sink { [weak self] delivery in
-                    if delivery == .droppedNoPipeline { self?.failPath() }
+                engine.$audioDelivery.dropFirst().sink { [weak self] delivery in
+                    if delivery == .droppedNoPipeline {
+                        Task { @MainActor [weak self] in self?.failPath() }
+                    }
                 }.store(in: &self.subscriptions)
                 engine.$activeAudioTrackIndex.sink { [weak self] in self?.emit("aid", $0.map { Int64($0) }) }.store(in: &self.subscriptions)
                 engine.$activeSubtitleTrackIndex.sink { [weak self] in self?.emit("sid", $0.map { Int64($0) }) }.store(in: &self.subscriptions)

@@ -25,16 +25,20 @@ function Probe() {
   const lastLog = useRef(-10);
   const polling = useRef(null);
   const [status, setStatus] = useState('starting');
+  const [history, setHistory] = useState([]);
   useEffect(() => {
     (async () => {
       setStatus('negotiating lab session');
       const client = { device: config.device, protocolVersions: [0], ...await VelaPlayer.capabilities() };
       await call('/negotiate', { idempotencyKey: key(), client });
       setStatus('requesting lab playback plan');
-      const plan = await call('/playback', { idempotencyKey: key(), titleId: config.titleId, client });
+      const plan = await call('/playback', { idempotencyKey: key(), titleId: config.titleId, positionSeconds: 0, client });
       VelaPlayer.setMediaAccess({ ...config.mediaAccess, headers: async () => config.mediaAccess.headers });
       await new Promise(resolve => setTimeout(resolve, 100));
-      setPlan({ ...plan, paths: plan.paths.map(path => path.id === plan.selectedPathId ? {
+      // A test may constrain the offered alternatives to one real server rendition,
+      // so a stream-copy remux cannot satisfy a forced-transcode proof accidentally.
+      const paths = plan.paths.filter(path => !config.recoveryPathId || path.id === plan.selectedPathId || path.id === config.recoveryPathId);
+      setPlan({ ...plan, paths: paths.map(path => path.id === plan.selectedPathId ? {
         ...path, transport: 'file', original: true, url: config.refusedURL,
       } : path) });
     })().catch(error => setStatus(error.message));
@@ -52,6 +56,8 @@ function Probe() {
         try {
           console.log('[apple-recovery-command]', event.command.kind, event.command.pathId || '');
           const next = await call(`/sessions/${event.sessionId}/commands`, event.command);
+          const selected = next.paths.find(path => path.id === next.selectedPathId);
+          setHistory(history => [...history, `${event.command.kind} ${event.command.pathId || ''} → ${selected?.kind} ${selected?.readiness}`]);
           await VelaPlayer.setMediaAccess(null);
           setPlan(resolvedPlan(next));
           clearInterval(polling.current);
@@ -60,7 +66,7 @@ function Probe() {
           }, 2000);
         } catch (error) { setStatus(error.message); }
       }} />}
-    <Text style={{ color: 'white', fontSize: 28, position: 'absolute', bottom: 40, left: 40 }}>{status}</Text>
+    <Text style={{ color: 'white', fontSize: 28, position: 'absolute', bottom: 40, left: 40 }}>{[...history, status].join('\n')}</Text>
   </View>;
 }
 AppRegistry.registerComponent('main', () => Probe);
