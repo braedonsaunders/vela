@@ -57,3 +57,12 @@ test('a responsive restore settles normally and stays signed in past the deadlin
   await settle();
   expect(h.state().phase).toBe('signed-in');
 });
+
+test('an unreadable saved server leaves startup even when recovery cannot read it either', async () => {
+  const box = new StateBox({ auth: { ...initialAuth } } as VelaState);
+  const session = { epoch: 0, onReset: () => {}, hasServer: () => { throw new Error('Stored server unavailable'); },
+    selected: () => { throw new Error('Stored server unavailable'); } };
+  const auth = new Auth(box, session as unknown as Session, {} as VelaPlatform);
+  await auth.start();
+  expect(box.get().auth).toMatchObject({ phase: 'offline', error: 'Stored server unavailable' });
+});

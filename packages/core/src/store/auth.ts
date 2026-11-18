@@ -106,13 +106,16 @@ export class Auth {
     } catch (error) {
       if (generation !== this.linkGeneration) return;
       this.linkGeneration++;
-      const connection = this.session.selected();
-      this.patch({
-        phase: 'offline', error: message(error, msg('server.unreachable')),
-        serverId: connection.record.id, serverKind: connection.record.kind,
-        serverName: this.session.names.get(connection.record.id) ?? connection.record.name,
-        revision: this.session.epoch,
-      });
+      let server: Partial<AuthState> = {};
+      try {
+        const connection = this.session.selected();
+        server = { serverId: connection.record.id, serverKind: connection.record.kind,
+          serverName: this.session.names.get(connection.record.id) ?? connection.record.name };
+      } catch {
+        // An unreadable stored registry must not break the recovery path too.
+      }
+      this.patch({ phase: 'offline', error: message(error, msg('server.unreachable')),
+        ...server, revision: this.session.epoch });
     } finally {
       clearTimeout(timer);
     }
