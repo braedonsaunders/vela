@@ -2,13 +2,14 @@
 # Build apps/vela for iPhone (Release: the JS bundle is embedded, no Metro), sign it with your
 # team's automatic provisioning, install it, and launch it or open a route.
 #
-#   tools/ios.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>]
+#   tools/ios.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>] [--no-launch]
 #   tools/ios.sh --tour [<test>...] [--device <udid|name>] [--team <id>]
 #
 #   --prebuild   regenerate apps/vela/ios for iOS (expo prebuild --clean without EXPO_TV, then pod install)
 #   --simulator  build for the iOS simulator and install on the booted (or first) iPhone simulator
 #   --device     a paired iPhone; when omitted and exactly one is connected, that one is used
 #   --team       your Apple developer team ID (device builds; see Xcode > Settings > Accounts)
+#   --no-launch  install without opening Vela (the phone may be in use)
 #   --tour       instead of installing, run the scripted UI tour (tools/ios-tour) on the device: it
 #                taps through the app and saves a screenshot per step in <build dir>/tour/<time>/.
 #                Name tests (test05MovieTitle) to run only those.
@@ -39,9 +40,10 @@ team=${VELA_APPLE_TEAM:-}
 prebuild=0
 simulator=0
 open=""
+launch=1
 tour=0
 tests=""
-usage="usage: tools/ios.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>] [--tour [<test>...]]"
+usage="usage: tools/ios.sh [--prebuild] [--simulator] [--device <udid|name>] [--team <id>] [--open <vela://route>] [--no-launch] [--tour [<test>...]]"
 while [ $# -gt 0 ]; do
   case "$1" in
     --prebuild) prebuild=1 ;;
@@ -49,6 +51,7 @@ while [ $# -gt 0 ]; do
     --device) device=$2; shift ;;
     --team) team=$2; shift ;;
     --open) open=$2; shift ;;
+    --no-launch) launch=0 ;;
     --tour) tour=1 ;;
     test[0-9A-Z]*) [ "$tour" = 1 ] || { echo "$usage" >&2; exit 2; }; tests="$tests $1" ;;
     -h|--help) echo "$usage"; exit 0 ;;
@@ -188,7 +191,7 @@ echo "ios: installed $app"
 if [ -n "$open" ]; then
   xcrun devicectl device process launch --device "$device" --terminate-existing --payload-url "$open" app.ether.vela >/dev/null
   echo "ios: opened $open"
-else
+elif [ "$launch" = 1 ]; then
   xcrun devicectl device process launch --device "$device" --terminate-existing app.ether.vela >/dev/null
   echo "ios: launched app.ether.vela"
 fi
