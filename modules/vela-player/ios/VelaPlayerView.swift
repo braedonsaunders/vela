@@ -313,6 +313,18 @@ final class VelaPlayerView: ExpoView {
         }
     }
 
+    /// Whether this player holds the screen awake: no screensaver or auto-lock while a film plays
+    /// (or loads or buffers to play). Paused, ended or gone, the device sleeps as it normally would.
+    private var holdsAwake = false
+    private func keepAwake(_ on: Bool) {
+        guard on != holdsAwake else {
+            return
+        }
+        holdsAwake = on
+        let apply = { UIApplication.shared.isIdleTimerDisabled = on }
+        if Thread.isMainThread { apply() } else { DispatchQueue.main.async(execute: apply) }
+    }
+
     /// How mpv hands its picture to the display. HDR asks for the display's HDR mode through the
     /// swapchain's colour space (`target-colorspace-hint`). On tvOS, SDR does not: tvOS composites
     /// in sRGB and converts to the TV's BT.1886 signal on the way out (so a UI made for monitors
@@ -341,6 +353,7 @@ final class VelaPlayerView: ExpoView {
         heartbeat?.invalidate()
         heartbeat = nil
         endAwaitedSeek()
+        keepAwake(false)
         guard let client = mpv else {
             return
         }
@@ -366,6 +379,7 @@ final class VelaPlayerView: ExpoView {
 
     private func propertyChanged(_ name: String, _ value: Any?) {
         state.update(name, value)
+        keepAwake(!ambient && (state.phase == .playing || state.phase == .buffering || state.phase == .loading))
         if name == "track-list" {
             applyTracks()
         }
