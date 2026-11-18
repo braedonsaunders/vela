@@ -24,14 +24,21 @@ final class VelaTour: XCTestCase {
   let app = XCUIApplication()
   private static var step = 0
 
-  override func setUp() {
+  private var ownsPhone = false
+
+  override func setUpWithError() throws {
     _ = skipIdleWaits
+    let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    guard app.state == .runningForeground || home.state == .runningForeground else {
+      throw XCTSkip("Another app is foreground; leave the owner's phone alone")
+    }
+    ownsPhone = true
     continueAfterFailure = true
     XCUIDevice.shared.orientation = .portrait
   }
 
   override func tearDown() {
-    XCUIDevice.shared.orientation = .portrait
+    if ownsPhone { XCUIDevice.shared.orientation = .portrait }
   }
 
   // MARK: Areas
@@ -147,7 +154,10 @@ final class VelaTour: XCTestCase {
 
   func test08Live() {
     start()
-    guard tap("Live TV") else { return }
+    if !tap("Live TV") {
+      drag(from: CGVector(dx: 0.8, dy: 0.14), to: CGVector(dx: 0.1, dy: 0.14))
+      guard tap("Live TV") else { return }
+    }
     wait(6)
     shot("live", tree: true)
     app.swipeUp()
@@ -304,6 +314,36 @@ final class VelaTour: XCTestCase {
     }
   }
 
+  func test15Film() {
+    start()
+    guard tap("Movies") else { return }
+    wait(4)
+    guard let card = first(identifierPrefix: "title-") else { return note("no movie card") }
+    card.tap()
+    wait(3)
+    guard tapID("detail-play") else { return }
+    wait(10)
+    shot("film-playing-portrait", tree: true)
+    XCUIDevice.shared.orientation = .landscapeLeft
+    wait(3)
+    showControls()
+    shot("film-playing-landscape", tree: true)
+    print("VELA_IDLE_PHASE=playing")
+    wait(35)
+    showControls()
+    if tap("Pause") {
+      wait(3); shot("film-paused", tree: true)
+      print("VELA_IDLE_PHASE=paused")
+      wait(35)
+    }
+    showControls()
+    if tapID("player-close") {
+      wait(3); shot("film-left")
+      print("VELA_IDLE_PHASE=left")
+      wait(20)
+    }
+  }
+
   /// Adds a server by its address (VELA_TOUR_SERVER, else the lab) and signs in with Quick
   /// Connect: the code is printed as VELA_QUICK_CODE=<code> for an approver outside the phone.
   /// No credential is ever typed here (test logs and results record typed text).
@@ -316,7 +356,12 @@ final class VelaTour: XCTestCase {
     shot("connect", tree: true)
     guard let field = first(identifierPrefix: "connect-address") else { return note("no address field") }
     field.tap()
-    field.typeText(ProcessInfo.processInfo.environment["VELA_TOUR_SERVER"] ?? "http://192.168.68.65:32550")
+    // XCTest can drop repeated keys when typing faster than native input events settle.
+    let address = ProcessInfo.processInfo.environment["VELA_TOUR_SERVER"] ?? "http://192.168.68.65:32550"
+    for character in address { field.typeText(String(character)); wait(0.12) }
+    // Start above the keyboard; app.swipeUp() starts on the keyboard on an iPhone.
+    drag(from: CGVector(dx: 0.5, dy: 0.49), to: CGVector(dx: 0.5, dy: 0.17))
+    wait(1)
     // The address is checked as it is typed; Continue appears once the server has answered.
     guard let next = first(identifierPrefix: "connect-continue", timeout: 15) else {
       shot("connect-typed", tree: true)
