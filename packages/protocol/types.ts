@@ -47,7 +47,7 @@ export interface QuickConnect { secret: string; code: string; expiresAt: Timesta
 export interface QuickPollRequest extends Mutation { secret: string; device: Device }
 export interface QuickApproveRequest extends Mutation { code: string }
 export interface ArtworkRef {
-  id: ID; kind: 'poster' | 'backdrop' | 'logo' | 'still' | 'person' | 'channel'; tag: string;
+  id: ID; kind: 'poster' | 'backdrop' | 'thumb' | 'logo' | 'still' | 'person' | 'channel'; tag: string;
   /** Positive dimensions describe delivered pixels; 0/0 means an unmeasured source. */
   sizes: { width: number; height: number; url: string }[]; blurHash?: string; thumbHash?: string; color?: string;
 }
@@ -208,17 +208,23 @@ export interface WatchRequest extends Mutation { played?: boolean; favorite?: bo
 export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[] }
 export interface CollectionContents extends Page<RowEntry> { collection: Collection }
 
-export type LibrarySort = 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated';
+export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated';
 export type SortDirection = 'asc' | 'desc';
+export type LibraryCard = 'poster' | 'landscape' | 'square';
+export interface LibraryTab { id: string; label: string; kind: 'recommended' | 'library' | 'collections' }
+/** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
+export interface LibraryFacet { id: string; label: string; type: 'enum' | 'strings' | 'people' | 'int' | 'date' | 'duration'; multi: boolean }
+export interface FacetValue { id: string; label: string; count: number }
 export interface LibraryBrowseOptions {
   sorts: { id: LibrarySort; directions: SortDirection[] }[];
   defaultSort: LibrarySort; defaultDirection: SortDirection;
   /** Boolean fields declare support; kind lists supported values. */
-  filters: { kind?: TitleKind[]; genre?: boolean; genres?: string[]; year?: boolean; played?: boolean; favorite?: boolean; collectionId?: boolean };
+  filters: { facets?: LibraryFacet[]; kind?: TitleKind[]; genre?: boolean; genres?: string[]; year?: boolean; played?: boolean; favorite?: boolean; collectionId?: boolean };
 }
-export interface Library { id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
+export interface Library { presentation?: { card: LibraryCard }; tabs?: LibraryTab[]; id: ID; name: string; kind: 'movies' | 'shows' | 'live' | 'mixed'; artwork: ArtworkRef[]; browse: LibraryBrowseOptions }
 export interface LibrariesQuery { cursor?: Cursor; limit?: number }
 export interface LibraryBrowseQuery extends LibrariesQuery {
+  query?: string; facets?: Record<string, string[]>;
   sort?: LibrarySort; direction?: SortDirection; kind?: TitleKind; genre?: string; year?: number; played?: boolean; favorite?: boolean; collectionId?: ID;
 }
 export interface LibraryContents extends Page<RowEntry> { library: Library; sort: LibrarySort; direction: SortDirection }

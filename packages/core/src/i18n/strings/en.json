@@ -250,6 +250,7 @@
   "ui.noMatches": "Nothing by that name",
   "ui.notAvailableYet": "Not available yet",
   "ui.somethingWentQuiet": "Something went quiet",
+  "library.sort.index": "Plugin order",
   "library.sort.server": "Recommended order",
   "library.sort.title": "Title",
   "library.sort.added": "Recently added",

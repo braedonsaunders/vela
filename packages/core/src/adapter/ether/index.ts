@@ -40,16 +40,19 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   supportsLibraryRecommendations = false;
   private personSupport: 'unknown' | 'yes' | 'no' = 'unknown';
   private librarySupport: 'unknown' | 'yes' | 'no' = 'unknown';
+  private readonly declaredLibraries = new Map<string, V.Library>();
   private readonly missingPeople = new Set<string>();
 
   resetOptionalCapabilities(): void {
     this.personSupport = this.librarySupport = 'unknown';
     this.missingPeople.clear();
+    this.declaredLibraries.clear();
     this.supportsPersonFilmography = this.supportsLibraryRecommendations = false;
   }
 
   /** Probe with a visible library: a 404 here identifies an older collections route. */
   async probeLibraryViews(id: string): Promise<void> {
+    if (this.declaredLibraries.get(id)?.tabs) { this.librarySupport = 'yes'; this.supportsLibraryRecommendations = true; return; }
     if (this.librarySupport !== 'unknown') return;
     try {
       await this.http.request('GET', `/libraries/${segment(id)}/collections?limit=1`);
@@ -68,11 +71,15 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.Page<V.RowEntry>>('GET', `/people/${segment(id)}/titles${query({ libraryId, cursor })}`, undefined, CACHED);
   }
   async libraryRows(id: string, _kind: V.Library['kind']): Promise<V.Row[]> {
+    const tabs = this.declaredLibraries.get(id)?.tabs;
+    if (tabs && !tabs.some(tab => tab.kind === 'recommended')) return [];
     const result: V.Row[] = [];
     const seen = new Set<string>();
     let cursor: string | undefined;
     for (let n = 0; n < 100; n++) {
-      const page = await this.rows({ placement: 'library', libraryId: id, cursor, limit: 100 });
+      const page = this.declaredLibraries.get(id)?.tabs
+        ? await this.http.request<V.Page<V.Row>>('GET', `/libraries/${segment(id)}/rows${query({ cursor, limit: 100 })}`, undefined, CACHED)
+        : await this.rows({ placement: 'library', libraryId: id, cursor, limit: 100 });
       result.push(...page.items);
       if (page.continuation !== 'more') return result;
       if (!page.nextCursor || seen.has(page.nextCursor)) throw new Error('Invalid library row continuation');
@@ -82,6 +89,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     throw new Error('Library rows exceed page limit');
   }
   async libraryCollections(id: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
+    const tabs = this.declaredLibraries.get(id)?.tabs;
+    if (tabs && !tabs.some(tab => tab.kind === 'collections')) return { items: [], continuation: 'exhausted' };
     const response = await this.http.request<V.Page<V.LibraryCollectionEntry>>('GET', `/libraries/${segment(id)}/collections${query({ cursor })}`, undefined, CACHED);
     return { ...response, items: response.items.map(({ id: entryId, receiptToken, collection }) => ({ id: entryId, receiptToken, kind: 'collection' as const, targetId: collection.id, name: collection.name, artwork: collection.artwork })) };
   }
@@ -202,13 +211,20 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.Row>('GET', `/rows/${segment(id)}${query({ cursor, limit })}`, undefined, CACHED);
   }
 
-  libraries(librariesQuery: V.LibrariesQuery) {
-    return this.http.request<V.Page<V.Library>>('GET', `/libraries${query(librariesQuery)}`, undefined, CACHED);
+  async libraries(librariesQuery: V.LibrariesQuery) {
+    const page = await this.http.request<V.Page<V.Library>>('GET', `/libraries${query(librariesQuery)}`, undefined, CACHED);
+    for (const library of page.items) this.declaredLibraries.set(library.id, library);
+    return page;
   }
 
-  library(id: string, browse: V.LibraryBrowseQuery) {
-    const path = `/libraries/${segment(id)}/items${query(browse)}`;
-    return this.http.request<V.LibraryContents>('GET', path, undefined, CACHED);
+  libraryFacets(id: string, field: string, search = '', cursor?: string) {
+    return this.http.request<V.Page<V.FacetValue>>('GET', `/libraries/${segment(id)}/facets/${segment(field)}${query({ query: search, cursor, limit: 50 })}`, undefined, CACHED);
+  }
+
+  async library(id: string, browse: V.LibraryBrowseQuery) {
+    const path = `/libraries/${segment(id)}/items${libraryBrowseQuery(browse)}`;
+    const contents = await this.http.request<V.LibraryContents>('GET', path, undefined, CACHED);
+    return { ...contents, library: { ...this.declaredLibraries.get(id), ...contents.library } };
   }
 
   collection(id: string, cursor?: string, limit?: number) {
@@ -340,6 +356,13 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   private sessionCommand(sessionId: string, command: V.SessionCommand) {
     return this.http.request<V.PlaybackPlan>('POST', `/sessions/${segment(sessionId)}/commands`, command);
   }
+}
+
+export function libraryBrowseQuery(browse: V.LibraryBrowseQuery): string {
+  const { facets, ...rest } = browse;
+  const params = new URLSearchParams(query(rest).slice(1));
+  for (const [field, values] of Object.entries(facets ?? {})) for (const value of new Set(values)) params.append(`facet.${field}`, value);
+  return params.size ? `?${params}` : '';
 }
 
 const segment = encodeURIComponent;

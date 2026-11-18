@@ -18,7 +18,8 @@ function pictures(artwork: ArtworkRef[], images: Images | undefined, artWidth: n
     poster: art(artwork, 'poster', posterWidth, Math.ceil(posterWidth * 1.5), images),
     // An episode often has only a still (a frame from it): that is its landscape art.
     backdrop: art(artwork, preferStill ? 'still' : 'backdrop', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images)
-      || art(artwork, preferStill ? 'backdrop' : 'still', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images),
+      || art(artwork, preferStill ? 'backdrop' : 'still', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images)
+      || art(artwork, 'thumb', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images),
     logo: art(artwork, 'logo', logoWidth, Math.ceil(logoWidth / 2), images),
     accent: artwork.find(a => a.color)?.color ?? '',
   };

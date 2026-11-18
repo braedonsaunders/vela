@@ -161,6 +161,12 @@ export interface SortChoice extends Choice {
 
 /** One library, browsed with a sort and filters. */
 export interface LibraryModel {
+  canSearch?: boolean;
+  presentation?: V.Library["presentation"];
+  tabs?: V.LibraryTab[];
+  facets?: V.LibraryFacet[];
+  query?: string;
+  facetFilters?: Record<string, string[]>;
   canCollectionId?: boolean;
   id: string;
   name: string;

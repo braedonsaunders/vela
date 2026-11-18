@@ -31,3 +31,4 @@ export type { Credentials, MediaAccess, ServerAdapter } from './adapter';
 export { sendCommand } from './adapter/commands';
 
 export type { TitleActions, MediaVersion, RemoteSubtitle } from './adapter/media-actions';
+export { libraryCard, libraryCardRatio, libraryTabs } from './library-presentation';

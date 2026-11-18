@@ -4,7 +4,7 @@
 import type * as V from '../wire';
 import { hasTitleManagement } from '../adapter/media-actions';
 import { capabilitiesOf } from '../adapter/advertise';
-import { hasLibraryRecommendations, hasPersonFilmography } from '../adapter/capabilities';
+import { hasLibraryFacets, supportsLibraryBrowse, hasLibraryRecommendations, hasPersonFilmography } from '../adapter/capabilities';
 import { personDates } from '../discovery/person-date';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { detailModel, entry, feedRow } from '../discovery/models';
@@ -19,6 +19,8 @@ import type { VelaState } from './index';
 
 /** A library view: sort, direction and filters; absent fields are the server's defaults. */
 export interface LibraryQuery {
+  query?: string;
+  facets?: Record<string, string[]>;
   collectionId?: string;
   sort?: V.LibrarySort;
   direction?: V.SortDirection;
@@ -32,7 +34,10 @@ export interface LibraryQuery {
 /** The key a library view is kept under in state (`state.library`). */
 export function libraryKey(id: string, query: LibraryQuery): string {
   const { sort, direction, kind, genre, year, played, favorite, collectionId } = query;
-  return JSON.stringify([id, sort, direction, kind, genre, year, played, favorite, collectionId]);
+  const facets = Object.entries(query.facets ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([field, values]) => [field, [...new Set(values)].sort()]);
+  return JSON.stringify([id, sort, direction, kind, genre, year, played, favorite, collectionId, query.query, facets]);
 }
 
 const PAGE = 100;
@@ -51,6 +56,11 @@ export class Catalogue {
     await this.title(id, true);
   }
 
+  async libraryFacets(id: string, field: string, query = '', cursor?: string): Promise<V.Page<V.FacetValue>> {
+    const adapter = (await this.session.ready()).adapter;
+    if (!hasLibraryFacets(adapter)) throw new Error('Library facets are unavailable');
+    return adapter.libraryFacets(id, field, query, cursor);
+  }
   async personDetails(id: string): Promise<{ name: string; portrait: string; knownFor: string; biography: string; birthday: string } | undefined> {
     const connection = await this.session.ready();
     const adapter = connection.adapter;
@@ -266,7 +276,7 @@ export class Catalogue {
       }
       if (result.continuation === 'more' && !result.nextCursor) throw new Error('Invalid library continuation');
       const images = await connection.images();
-      return libraryModel(result, items, read, query, images, this.artWidth());
+      return { ...libraryModel(result, items, read, query, images, this.artWidth()), canSearch: supportsLibraryBrowse(api, result.library) };
     }, background);
     this.libraryReads.set(key, { pages, promise: reading });
     void reading.finally(() => {
@@ -344,8 +354,16 @@ function libraryModel(
   const library = result.library;
   const filters = library.browse.filters;
   const image = library.artwork.find(a => a.kind === 'backdrop');
-  const cards: Card[] = items.map(item => entry(item, images, artWidth));
+  const cards: Card[] = items.map(item => {
+    const card = entry(item, images, artWidth);
+    return library.presentation?.card === 'landscape' ? { ...card, poster: card.backdrop || card.poster } : card;
+  });
   return {
+    presentation: library.presentation,
+    tabs: library.tabs,
+    facets: filters.facets,
+    query: query.query,
+    facetFilters: query.facets,
     id: library.id,
     name: library.name,
     kind: library.kind,

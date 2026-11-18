@@ -193,3 +193,14 @@ export function hasEventStream(adapter: ServerAdapter): adapter is ServerAdapter
 export function hasAppearance(adapter: ServerAdapter): adapter is ServerAdapter & Appearance {
   return 'appearance' in adapter && 'skinDocument' in adapter;
 }
+
+/** Searchable discrete values; adapters without this operation advertise no facets. */
+export interface LibraryFacets {
+  libraryFacets(id: string, field: string, query?: string, cursor?: string): Promise<V.Page<V.FacetValue>>;
+}
+export function hasLibraryFacets(adapter: ServerAdapter): adapter is ServerAdapter & LibraryFacets {
+  return 'libraryFacets' in adapter && typeof adapter.libraryFacets === 'function';
+}
+export function supportsLibraryBrowse(adapter: ServerAdapter, library: V.Library): boolean {
+  return hasLibraryFacets(adapter) && (library.tabs !== undefined || library.browse.filters.facets !== undefined);
+}
