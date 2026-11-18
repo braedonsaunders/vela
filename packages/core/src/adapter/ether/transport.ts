@@ -90,7 +90,7 @@ export class EtherTransport {
   /** Rotate the session's tokens once, shared by every request that found them rejected. */
   refresh(tokens: V.Tokens): Promise<V.Tokens> {
     if (!this.refreshing) {
-      this.refreshing = this.rotate(tokens).finally(() => {
+      this.refreshing = acrossWindows(`vela-refresh:${this.origin}`, () => this.rotate(tokens)).finally(() => {
         this.refreshing = undefined;
       });
     }
@@ -105,7 +105,9 @@ export class EtherTransport {
     const request: V.RefreshRequest = {
       refreshToken: current.refreshToken,
       device: this.credentials.device,
-      idempotencyKey: this.credentials.refreshKey(),
+      // One key per refresh token: two requests rotating the same token (a retry, another window
+      // that raced this one) are the same operation to the server, never a reuse of a rotated token.
+      idempotencyKey: refreshIdempotencyKey(current.refreshToken),
     };
     let next: V.Tokens | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -215,4 +217,27 @@ function abortable<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
     );
     if (signal.aborted) abort();
   });
+}
+
+/**
+ * Runs `work` while holding a lock shared by every window of this origin (the Web Locks API), so
+ * two tabs of the web app never rotate the same refresh token at once: the second waits, then
+ * finds the rotated tokens in shared storage. Where there are no Web Locks (native), it just runs.
+ */
+export function acrossWindows<T>(name: string, work: () => Promise<T>): Promise<T> {
+  const locks = (globalThis as { navigator?: { locks?: { request(name: string, run: () => Promise<T>): Promise<T> } } }).navigator?.locks;
+  return locks ? locks.request(name, work) : work();
+}
+
+/** A stable, non-reversible idempotency key for rotating one refresh token (two FNV-1a 64 passes). */
+export function refreshIdempotencyKey(refreshToken: string): string {
+  const pass = (seed: bigint) => {
+    let hash = seed;
+    for (let i = 0; i < refreshToken.length; i++) {
+      hash ^= BigInt(refreshToken.charCodeAt(i));
+      hash = (hash * 0x100000001b3n) & 0xffffffffffffffffn;
+    }
+    return hash.toString(16).padStart(16, '0');
+  };
+  return `refresh-${pass(0xcbf29ce484222325n)}${pass(0x84222325cbf29ce4n)}`;
 }

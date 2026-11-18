@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { refreshIdempotencyKey } from '../src/adapter/ether/transport';
 import { EtherAdapter } from '../src/adapter/ether';
 import { VelaError } from '../src/adapter/errors';
 import { FakeCredentials, restoreFetch, routeFetch, tokens } from './helpers';
@@ -120,7 +121,7 @@ describe('EtherAdapter', () => {
     });
     await ether(credentials).libraries({});
     expect(seen.map(s => `${s.method} ${s.url.pathname}`)).toEqual(['GET /vela/v0/libraries', 'POST /vela/v0/auth/refresh', 'GET /vela/v0/libraries']);
-    expect(seen[1]!.body).toEqual({ refreshToken: 'old', device: credentials.device, idempotencyKey: 'refresh-key' });
+    expect(seen[1]!.body).toEqual({ refreshToken: 'old', device: credentials.device, idempotencyKey: refreshIdempotencyKey('old') });
     expect(seen[1]!.headers.has('authorization')).toBe(false);
     expect(credentials.current).toEqual(rotated);
   });
