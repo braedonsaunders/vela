@@ -253,3 +253,11 @@ test('Jellyfin and Emby search use Items sorting, direction and kind before pagi
   expect(q.get('IncludeItemTypes')).toBe('Series');
   expect(q.get('StartIndex')).toBe('40');
 });
+
+
+test('Jellyfin/Emby search restricts Items to the selected library', async () => {
+  const seen = routeFetch({ 'GET /jf/Users/viewer-1/Items': { Items: [movie] } });
+  await new JellyfinAdapter(BASE, new FakeCredentials()).search({ query: 'heat', generation: 1, idempotencyKey: 'library', library: 'movies', kind: 'movie' });
+  expect(seen[0]!.url.searchParams.get('ParentId')).toBe('movies');
+  expect(seen[0]!.url.searchParams.get('SearchTerm')).toBe('heat');
+});

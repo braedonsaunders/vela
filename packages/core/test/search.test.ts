@@ -16,7 +16,7 @@ interface FakeAdapter {
 }
 
 /** A session holding one connection to a fake adapter; `descriptive` turns the feature on. */
-function harness(adapter: FakeAdapter, descriptive = true, caps?: Pick<V.ServerCapabilities, 'searchSorts' | 'searchKinds'>) {
+function harness(adapter: FakeAdapter, descriptive = true, caps?: Pick<V.ServerCapabilities, 'searchSorts' | 'searchKinds' | 'searchLibraries'>) {
   const resets: (() => void)[] = [];
   const connection = { adapter, images: async () => ({ origin: 'https://server.example' }) };
   const session = {
@@ -27,7 +27,7 @@ function harness(adapter: FakeAdapter, descriptive = true, caps?: Pick<V.ServerC
     key: () => crypto.randomUUID(),
     onReset: (listener: () => void) => { resets.push(listener); return () => {}; },
   } as unknown as Session;
-  const box = new StateBox({ search: initialSearch } as unknown as VelaState);
+  const box = new StateBox({ search: initialSearch, libraries: { value: [{ id: 'movies' }, { id: 'shows' }] } } as unknown as VelaState);
   const search = new Search(box, session, () => 400);
   return { search, state: (): SearchState => box.get().search, reset: () => resets.forEach(r => r()) };
 }
@@ -291,4 +291,40 @@ test('a late page from the old sort cannot replace the new generation', async ()
   pending[0]({ ...answer(requests[0], [title('old')]), nextCursor: 'stale' }); await settle();
   expect(state().fast.items.map(x => x.id)).toEqual(['new']);
   expect(state().fast.nextCursor).toBeUndefined();
+});
+
+
+test('library changes abort old requests, reset paging and survive kind and sort changes', async () => {
+  const calls: Request[] = [];
+  const signals: AbortSignal[] = [];
+  const { search, state } = harness({ search: async (r, signal) => {
+    calls.push(r); signals.push(signal!);
+    return { ...answer(r, [title(r.library ?? 'all')]), nextCursor: 'next', continuation: 'more' };
+  } }, false, { searchLibraries: true, searchKinds: ['movie'], searchSorts: [{ id: 'title', directions: ['asc', 'desc'] }] });
+  search.setQuery('heat'); await settle();
+  search.more(); await settle();
+  search.setOptions({ library: 'movies' });
+  expect(signals[0]!.aborted).toBe(true);
+  expect(state().fast.nextCursor).toBeUndefined();
+  expect(state().fast.items).toEqual([]);
+  await settle();
+  expect(calls.at(-1)).toMatchObject({ library: 'movies', generation: 2 });
+  expect(calls.at(-1)!.cursor).toBeUndefined();
+  search.setOptions({ kind: 'movie', direction: 'desc' }); await settle();
+  expect(calls.at(-1)).toMatchObject({ library: 'movies', kind: 'movie', direction: 'desc', generation: 3 });
+  search.setOptions({ library: 'invisible' }); await settle();
+  expect(calls.at(-1)!.library).toBeUndefined();
+  search.setOptions({ library: 'shows' }); await settle();
+  search.clear();
+  expect(state().library).toBeUndefined();
+  search.setQuery('heat'); await settle();
+  expect(calls.at(-1)!.library).toBeUndefined();
+});
+
+test('library options are ignored without server support', async () => {
+  const { search, state } = harness({ search: async r => answer(r, []) }, false);
+  search.setQuery('heat'); await settle();
+  search.setOptions({ library: 'movies' });
+  expect(state().generation).toBe(1);
+  expect(state().library).toBeUndefined();
 });

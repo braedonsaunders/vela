@@ -207,10 +207,15 @@ test('search sorts, filters, validates and binds cursors to the complete query',
   expect(movies.items.length).toBeGreaterThan(0);
   expect(movies.items.every(t => t.kind === 'movie')).toBe(true);
   expect((await (await search({ kind: 'game' })).json() as V.SearchResponse).items).toEqual([]);
-  for (const [field, value] of [['sort', 'invalid'], ['direction', 'up'], ['kind', 'invalid']]) {
+  for (const [field, value] of [['sort', 'invalid'], ['direction', 'up'], ['kind', 'invalid'], ['library', 'invisible']]) {
     expect(await errorCode(await search({ [field]: value }))).toBe(`invalid_${field}`);
   }
+  const scoped = await (await search({ library: 'shows', sort: 'title', direction: 'desc', kind: 'show' })).json() as V.SearchResponse;
+  expect(scoped.items.length).toBeGreaterThan(0);
+  expect(scoped.items.every(t => t.kind === 'show')).toBe(true);
+  expect((await (await search({ library: 'shows', kind: 'movie' })).json() as V.SearchResponse).items).toEqual([]);
   const first = await (await search({ sort: 'title', limit: 1 })).json() as V.SearchResponse;
   expect(first.nextCursor).toBeDefined();
   expect((await search({ sort: 'released', cursor: first.nextCursor })).status).toBe(409);
+  expect((await search({ sort: 'title', library: 'shows', cursor: first.nextCursor })).status).toBe(409);
 });

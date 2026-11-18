@@ -18,10 +18,12 @@ export type SearchSort = string;
 export type SearchDirection = 'asc' | 'desc';
 export type SearchKind = string;
 export type SearchKindCapability = string | { id: string; label?: string };
-export interface SearchOptions { sort?: SearchSort; direction?: SearchDirection; kind?: SearchKind }
+export interface SearchOptions { sort?: SearchSort; direction?: SearchDirection; kind?: SearchKind; library?: ID }
 export interface ServerCapabilities {
   searchSorts?: { id: SearchSort; label?: string; directions: SearchDirection[] }[];
   searchKinds?: SearchKindCapability[];
+  /** Search can be restricted to a visible library ID. */
+  searchLibraries?: boolean;
   /** Trusted advertised HTTPS base origins; no path, query or fragment. */
   secureOrigins?: string[];
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };

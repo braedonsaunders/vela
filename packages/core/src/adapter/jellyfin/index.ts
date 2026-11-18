@@ -182,6 +182,7 @@ export class JellyfinAdapter
         const liveChannels = token && live?.IsEnabled === true && !configuredLive ? await this.request<Result>('GET', 'LiveTv/Channels?Limit=1').catch(() => null) : null;
         const hasLive = configuredLive || (liveChannels?.Items.length ?? 0) > 0;
         return {
+            searchLibraries: true,
             searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }],
             searchSorts: [{ id: 'relevance', label: 'Relevance', directions: [] }, ...['title', 'released', 'added', 'rating'].map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))],
             protocolVersion: 0, server: {
@@ -457,7 +458,7 @@ export class JellyfinAdapter
     async search(r: CatalogueSearch, signal?: AbortSignal): Promise<V.SearchResponse> {
         const p = this.paging(r.cursor, r.limit);
         const result = await this.request<Result>('GET', `${await this.userPath()}/Items${query({
-            ...p, SearchTerm: r.query, Recursive: true, IncludeItemTypes: r.kind === 'movie' ? 'Movie' : r.kind === 'show' ? 'Series' : 'Movie,Series,Season,Episode',
+            ...p, ParentId: r.library, SearchTerm: r.query, Recursive: true, IncludeItemTypes: r.kind === 'movie' ? 'Movie' : r.kind === 'show' ? 'Series' : 'Movie,Series,Season,Episode',
             SortBy: r.sort && r.sort !== 'relevance' ? ({ title: 'SortName', released: 'PremiereDate', added: 'DateCreated', rating: 'CommunityRating' } as Record<string, string>)[r.sort] : undefined,
             SortOrder: r.sort && r.sort !== 'relevance' ? (r.direction === 'desc' ? 'Descending' : 'Ascending') : undefined, Fields: fields
         })}`, undefined, true, signal);

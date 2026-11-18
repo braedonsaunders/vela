@@ -650,7 +650,12 @@ Search controls are optional capabilities. `searchSorts` is an ordered list of
 (legacy string IDs are also accepted). IDs are open strings, including plugin
 kinds such as `game`. Clients preserve the advertised labels and order and
 humanise an ID only when its label is absent. Missing capabilities mean no
-controls. Search requests carry optional `sort`, `direction` and `kind` in both
+controls. Search requests carry optional `sort`, `direction`, `kind` and `library` in both
 fast and descriptive modes; omitting `kind` means All. Every option change starts
 a new generation and invalidates prior cursors. Adapters advertise only controls
-they implement; Plex hub search currently advertises kind filtering only.
+they implement. `searchLibraries: true` enables restriction to a visible ID from
+`GET /libraries`; unknown or invisible IDs return `400 invalid_library`. Omit
+`library` for all libraries. Clients show the library select only with support
+and at least two libraries, in server order, and reset it when the query clears.
+Library and kind controls combine, including advertised plugin kinds.
+Jellyfin/Emby use Items `ParentId`; Plex uses library section search.

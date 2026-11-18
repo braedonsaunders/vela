@@ -298,3 +298,12 @@ test('Plex hub search scopes the upstream type and excludes other hubs', async (
   expect(seen[0]!.url.searchParams.get('type')).toBe('1');
   expect(result.items.map(x => x.kind)).toEqual(['movie']);
 });
+
+
+test('Plex searches the selected library section and maps its direct metadata', async () => {
+  const seen = routeFetch({ 'GET /library/sections/4/search': { MediaContainer: { Metadata: [movie, episode] } } });
+  const result = await plex().search({ query: 'heat', generation: 1, idempotencyKey: 'library', library: '4', kind: 'movie' });
+  expect(seen[0]!.url.searchParams.get('query')).toBe('heat');
+  expect(seen[0]!.url.searchParams.get('type')).toBe('1');
+  expect(result.items.map(t => t.id)).toEqual(['10']);
+});

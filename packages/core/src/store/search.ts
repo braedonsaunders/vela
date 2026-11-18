@@ -30,6 +30,7 @@ export interface SearchLane {
 export interface SearchState extends V.SearchOptions {
   searchSorts?: V.ServerCapabilities['searchSorts'];
   searchKinds?: V.SearchKindCapability[];
+  searchLibraries?: boolean;
   query: string;
   generation: number;
   fast: SearchLane & { liveChannels: LiveChannelResult[]; liveProgrammes: LiveProgrammeResult[] };
@@ -87,7 +88,7 @@ export class Search {
     this.stopTimers();
     const text = query.trim();
     if (!text) {
-      this.box.update('search', () => ({ ...initialSearch, ...options, ...caps, query, generation }));
+      this.box.update('search', () => ({ ...initialSearch, ...options, library: undefined, ...caps, query, generation }));
       return;
     }
     // A lane the server does not offer says so at once; one it offers is loading until typing pauses.
@@ -110,6 +111,7 @@ export class Search {
   private options(value: V.SearchOptions, caps = this.session.searchCapabilities): V.SearchOptions {
     const sort = caps?.searchSorts?.find(s => s.id === value.sort) ?? caps?.searchSorts?.[0];
     return {
+      ...(caps?.searchLibraries && this.box.get().libraries.value?.some(l => l.id === value.library) ? { library: value.library } : {}),
       ...(sort ? { sort: sort.id, ...(sort.directions.length ? { direction: sort.directions.includes(value.direction!) ? value.direction : sort.directions[0] } : {}) } : {}),
       ...(caps?.searchKinds?.some(k => (typeof k === 'string' ? k : k.id) === value.kind) ? { kind: value.kind } : {}),
     };
@@ -118,8 +120,8 @@ export class Search {
   setOptions(change: V.SearchOptions): void {
     const state = this.box.get().search;
     const options = this.options({ ...state, ...change });
-    if (state.sort === options.sort && state.direction === options.direction && state.kind === options.kind) return;
-    this.box.update('search', s => ({ ...s, sort: undefined, direction: undefined, kind: undefined, ...options }));
+    if (state.sort === options.sort && state.direction === options.direction && state.kind === options.kind && state.library === options.library) return;
+    this.box.update('search', s => ({ ...s, sort: undefined, direction: undefined, kind: undefined, library: undefined, ...options }));
     this.setQuery(state.query);
   }
 
