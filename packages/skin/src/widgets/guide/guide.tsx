@@ -6,7 +6,7 @@ import { hasFlowHeader } from '../../resolve/inherit';
 import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, View, type ViewStyle } from 'react-native';
 import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@vela/core';
-import { useHost, type WidgetProps } from '../../host';
+import { HostContext, useHost, type WidgetProps } from '../../host';
 import type { LiveController, LiveView } from './controller';
 import { DayChips, FilterMenu, GuideTabs, IconButton, NowChip, Segments } from './controls-bar';
 import { gutter, keeps, type ChannelFilter, type Zoom } from './geometry';
@@ -17,6 +17,7 @@ import { useLiveContext, useLiveView } from './live';
 import { useGuideLook, type GuideLook } from './look';
 import { NowList } from './now-list';
 import { GuideStatus } from './status';
+import { tvPixelScale } from '../../tv-pixel-scale';
 
 /** A search hand-off: open on this channel (and programme) at this minute of the shown day. */
 export interface GuideFocus {
@@ -30,6 +31,26 @@ export function GuideWidget(_: WidgetProps) {
 }
 
 export function Guide({ focus }: { focus?: GuideFocus }) {
+  const host = useHost();
+  const [area, setArea] = useState({ width: host.viewport.width, height: host.viewport.height });
+  if (!Platform.isTV || Platform.OS !== 'android') return <GuideContent focus={focus} />;
+  // The guide's authored geometry is a 1080-point TV canvas. Android's dp canvas is
+  // commonly 540 points; scale the whole widget, including grid measurements and focus.
+  const scale = tvPixelScale(host.viewport.width, host.viewport.height) / 1.25;
+  const viewport = { ...host.viewport, width: area.width / scale, height: area.height / scale };
+  return (
+    <View style={{ flex: 1, overflow: 'hidden' }} onLayout={event => {
+      const { width, height } = event.nativeEvent.layout;
+      setArea(old => old.width === width && old.height === height ? old : { width, height });
+    }}>
+      <View style={{ width: viewport.width, height: viewport.height, paddingTop: hasFlowHeader(host.doc.document.slots?.shell) ? 0 : 108, transform: [{ scale }], transformOrigin: 'top left' }}>
+        <HostContext.Provider value={{ ...host, viewport }}><GuideContent focus={focus} /></HostContext.Provider>
+      </View>
+    </View>
+  );
+}
+
+function GuideContent({ focus }: { focus?: GuideFocus }) {
   const look = useGuideLook();
   const live = useLiveContext();
   const view = useLiveView();
