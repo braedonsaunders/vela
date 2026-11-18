@@ -36,6 +36,7 @@ beforeAll(async () => {
       '/return': `${origin}/grant/target`,
     };
     if (redirects[url.pathname]) return Response.redirect(redirects[url.pathname]!, 302);
+    if (url.pathname === '/grant/stall') return new Promise<Response>(() => {});
     const body = url.pathname === '/grant/oversized' ? 'x'.repeat(2048) : 'media payload';
     return new Response(body, { status: 206, headers: { 'Content-Range': `bytes 0-${body.length - 1}/${body.length}` } });
   } });
@@ -47,9 +48,9 @@ afterAll(async () => {
   if (process.platform === 'darwin') await rm(scratch, { recursive: true, force: true });
 });
 
-async function request(path: string) {
+async function request(path: string, mode?: string) {
   seen.length = 0;
-  const child = Bun.spawn([binary, origin, `${origin}${path}`], { stdout: 'pipe', stderr: 'pipe' });
+  const child = Bun.spawn([binary, origin, `${origin}${path}`, ...(mode ? [mode] : [])], { stdout: 'pipe', stderr: 'pipe' });
   const [output, errors, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
   expect(errors).toBe('');
   return { output, status };
@@ -74,4 +75,19 @@ for (const path of ['/grant/cross', '/grant/outside', '/grant/lookalike', '/gran
 
 appleTest('an origin that ignores the requested byte bound is refused', async () => {
   expect((await request('/grant/oversized')).status).toBe(1);
+});
+
+appleTest('the production reader seeks cached bytes, reports size, closes and creates independent readers', async () => {
+  expect(await request('/grant/target', 'reader')).toEqual({ output: 'reader_ok\n', status: 0 });
+});
+
+appleTest('cancellation racing the first read never starts a request', async () => {
+  expect(await request('/grant/target', 'cancel-before')).toEqual({ output: 'cancelled\n', status: 0 });
+  expect(seen).toHaveLength(0);
+});
+
+appleTest('cancellation promptly unblocks a stalled native read', async () => {
+  const began = Date.now();
+  expect(await request('/grant/stall', 'cancel')).toEqual({ output: 'cancelled\n', status: 0 });
+  expect(Date.now() - began).toBeLessThan(2000);
 });
