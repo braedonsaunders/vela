@@ -50,6 +50,7 @@ function chosen(o: LibraryOption, l: LibraryModel | undefined): boolean {
 }
 
 export const LIBRARY_VOCABULARY: Record<string, LibraryAccessor> = {
+  'library.facetTitle': (_, e) => e.library?.facetTitle ?? '',
   'library.declaredTabs': (_, e) => yes(e.library?.model?.tabs !== undefined),
   'library.card': (_, e) => libraryCard(e.library?.model?.presentation?.card),
   'library.cardRatio': (_, e) => libraryCardRatio(e.library?.model?.presentation?.card),

@@ -254,6 +254,7 @@ export const toolbar: Node = {
       text: '{library.name}',
       role: 'heading',
       level: 1,
+      states: [{ when: [{ test: 'library.facetTitle' }], style: { position: 'relative', width: '100%', height: 'auto', opacity: '1', 'font-size': '24px', 'font-weight': '650', ...gutter, 'padding-top': '12px', 'padding-bottom': '12px' } }],
       style: {
         position: 'absolute',
         width: '1px',

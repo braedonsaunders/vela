@@ -20,7 +20,7 @@ export function LibrarySection({ id, params }: { id: string; params: LibraryPara
     () => queryOf({ sort, dir, kind, genre, year, played, fav, collectionId, query: search, facets }),
     [sort, dir, kind, genre, year, played, fav, collectionId, search, facets],
   );
-  const library = useLibraryPage(id, query, params.view);
+  const library = useLibraryPage(id, query, params.view, params.facetTitle);
   const page = useCallback((host: SkinHost) => libraryHost(host, id, query, library), [id, query, library]);
   return <DocumentScreen route="library" entry={id} page={page} sharedShell />;
 }

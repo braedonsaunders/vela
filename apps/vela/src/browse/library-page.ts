@@ -1,7 +1,7 @@
 // One library page: its view (the URL's sort and filters) read from core's store when it is not
 // held yet, what the page shows meanwhile, and its next page. Each view is kept in the store for
 // the session, so a revisited view shows at once and paging continues where it stopped.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { libraryCardArtwork, libraryTabs, libraryKey, type LibraryExtras, type LibraryQuery } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { Env } from '@vela/skin';
@@ -20,7 +20,7 @@ export interface LibraryState {
   retry(): void;
 }
 
-export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: string): LibraryState {
+export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: string, facetTitle?: string): LibraryState {
   const store = useVela();
   useVelaState(state => state.libraries.load);
   const canRecommend = store.catalogue.libraryRecommendationsAvailable;
@@ -30,8 +30,12 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const current = useVelaState(state => state.library[key]);
   const earlier = useMemo(() => Object.values(store.getState().library)
     .find(view => view.value?.id === id)?.value, [store, id, key]);
+  const tabs = libraryTabs((current?.value ?? earlier)?.tabs);
+  const selectedTab = tabs?.find(tab => tab.id === requestedView) ?? tabs?.[0];
+  const collectionTab = selectedTab?.kind === 'collections' ? selectedTab.id : undefined;
   const missing = current === undefined;
   const kind = current?.value?.kind;
+  const extraGeneration = useRef(0);
   const [extraAttempt, setExtraAttempt] = useState(0);
   const [rowLoading, setRowLoading] = useState<string[]>([]);
   const [extraState, setExtraState] = useState<{ id: string; revision: number; loading: boolean; failed: boolean; moreLoading?: boolean; value?: LibraryExtras }>({ id: '', revision: -1, loading: false, failed: false });
@@ -39,29 +43,28 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   useEffect(() => {
     if (!id || !kind || !focused) return;
     let active = true;
+    extraGeneration.current++;
     setExtraState({ id, revision, loading: true, failed: false });
     // The recommendations show as soon as they arrive; collections and genres follow.
     const rows = (value: LibraryExtras) => {
       if (active) setExtraState(previous => previous.id === id && previous.revision === revision && previous.loading ? { ...previous, value } : previous);
     };
-    void store.catalogue.libraryExtras(id, kind, rows).then(value => {
+    void store.catalogue.libraryExtras(id, kind, rows, collectionTab).then(value => {
       if (active) setExtraState({ id, revision, loading: false, failed: false, value });
     }).catch(() => {
       if (active) setExtraState({ id, revision, loading: false, failed: true });
     });
-    return () => { active = false; };
-  }, [store, id, kind, revision, focused, extraAttempt, canRecommend]);
+    return () => { active = false; extraGeneration.current++; };
+  }, [store, id, kind, revision, focused, extraAttempt, canRecommend, collectionTab]);
   const nativeExtras = extraState.id === id && extraState.revision === revision ? extraState.value : undefined;
   const rawExtras = useMemo<LibraryExtras | undefined>(() => nativeExtras ? { ...nativeExtras, genres: nativeExtras.genres.length ? nativeExtras.genres : current?.value?.genres ?? [] } : (current?.value?.genres.length ? {
     recommendationsAvailable: false, collectionsAvailable: false, rows: [], collections: [], collectionCursor: '', genres: current.value.genres, failed: false,
   } : undefined), [nativeExtras, current?.value]);
   const landscape = (current?.value ?? earlier)?.presentation?.card === 'landscape';
   const extras = useMemo(() => rawExtras && landscape ? { ...rawExtras, rows: rawExtras.rows.map(row => ({ ...row, items: row.items.map(card => libraryCardArtwork(card, 'landscape')) })) } : rawExtras, [rawExtras, landscape]);
-  const tabs = libraryTabs((current?.value ?? earlier)?.tabs);
-  const selectedTab = tabs?.find(tab => tab.id === requestedView) ?? tabs?.[0];
   const view = tabs ? selectedTab?.kind ?? 'library' : requestedView === 'library' || requestedView === 'recommended' || requestedView === 'collections' || requestedView === 'genres'
     ? requestedView : canRecommend ? 'recommended' : 'library';
-  const usableView = tabs ? view : view === 'recommended' && !canRecommend || view === 'collections' && !extras?.collectionsAvailable || view === 'genres' && !extras?.genres.length ? 'library' : view;
+  const usableView = facetTitle ? 'library' : tabs ? view : view === 'recommended' && !canRecommend || view === 'collections' && !extras?.collectionsAvailable || view === 'genres' && !extras?.genres.length ? 'library' : view;
 
   useEffect(() => {
     if (focused && !current?.value && current?.load !== 'loading' && current?.load !== 'failed') void store.catalogue.library(id, query, current?.value?.pages ?? 1, !!current?.value);
@@ -74,19 +77,20 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     return {
       model: (() => {
         const model = held ?? (earlier ? asQueried(earlier, query) : undefined);
-        return model && extras ? { ...model, genres: extras.genres } : model;
+        return model ? { ...model, name: facetTitle || model.name, genres: extras?.genres ?? model.genres } : model;
       })(),
       loading: !held && current?.load !== 'failed',
       moreLoading: usableView === 'collections' ? !!extraState.moreLoading : !!held && current?.load === 'loading',
       view: usableView,
       tabId: selectedTab?.id,
+      facetTitle,
       canRecommend,
       viewRequest: requestedView ?? '',
       extras,
       extrasLoading: canRecommend && (!nativeExtras && !(extraState.id === id && extraState.revision === revision && extraState.failed) || extraState.id === id && extraState.loading),
       extrasFailed: extraState.id === id && (extraState.failed || !!extras?.failed),
     };
-  }, [current, earlier, query, selectedTab?.id, usableView, requestedView, extras, extraState, canRecommend, nativeExtras, id, revision]);
+  }, [current, earlier, query, facetTitle, selectedTab?.id, usableView, requestedView, extras, extraState, canRecommend, nativeExtras, id, revision]);
 
   const failed = current?.load === 'failed' && !current.value;
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';
@@ -94,17 +98,18 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const more = useCallback(() => {
     if (page.view === 'collections' && extras?.collectionCursor && !extraState.moreLoading) {
       const cursor = extras.collectionCursor;
+      const generation = extraGeneration.current;
       setExtraState(previous => ({ ...previous, moreLoading: true }));
-      void store.catalogue.moreLibraryCollections(id, cursor).then(result => setExtraState(previous => previous.id !== id || previous.revision !== revision || previous.value?.collectionCursor !== cursor ? previous : {
+      void store.catalogue.moreLibraryCollections(id, cursor, collectionTab).then(result => setExtraState(previous => generation !== extraGeneration.current || previous.id !== id || previous.revision !== revision || previous.value?.collectionCursor !== cursor ? previous : {
         ...previous, moreLoading: false, value: { ...previous.value, collections: [...previous.value.collections, ...result.items], collectionCursor: result.cursor },
-      })).catch(() => setExtraState(previous => previous.id === id && previous.revision === revision ? { ...previous, moreLoading: false, failed: true } : previous));
+      })).catch(() => setExtraState(previous => generation === extraGeneration.current && previous.id === id && previous.revision === revision ? { ...previous, moreLoading: false, failed: true } : previous));
       return;
     }
     if (page.view !== 'library') return;
     const held = current?.value;
     if (!held?.more || current?.load === 'loading') return;
     void store.catalogue.library(id, query, held.pages + 1);
-  }, [store, id, revision, query, current, extras, page.view, extraState.moreLoading]);
+  }, [store, id, revision, query, current, extras, page.view, extraState.moreLoading, collectionTab]);
 
   const retry = useCallback(() => {
     setExtraAttempt(value => value + 1);
@@ -115,12 +120,13 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     const row = extras?.rows.find(item => item.id === rowId);
     if (!row?.nextCursor || rowLoading.includes(rowId)) return;
     const cursor = row.nextCursor;
+    const generation = extraGeneration.current;
     setRowLoading(ids => [...ids, rowId]);
     void store.catalogue.moreLibraryRow(rowId, cursor).then(next => setExtraState(previous => {
-      if (previous.id !== id || previous.revision !== revision || !previous.value) return previous;
+      if (generation !== extraGeneration.current || previous.id !== id || previous.revision !== revision || !previous.value) return previous;
       return { ...previous, value: { ...previous.value, rows: previous.value.rows.map(item => item.id === rowId && item.nextCursor === cursor
         ? { ...item, items: [...item.items, ...next.items], nextCursor: next.nextCursor, continuation: next.continuation } : item) } };
-    })).catch(() => setExtraState(previous => previous.id === id && previous.revision === revision ? { ...previous, failed: true } : previous))
+    })).catch(() => setExtraState(previous => generation === extraGeneration.current && previous.id === id && previous.revision === revision ? { ...previous, failed: true } : previous))
       .finally(() => setRowLoading(ids => ids.filter(value => value !== rowId)));
   }, [store, id, revision, extras, rowLoading]);
 

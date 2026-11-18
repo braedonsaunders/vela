@@ -2,7 +2,7 @@
 // environment (its model, load state and section) and the page's own actions. Sorting and
 // filtering set the route's parameters; paging and retrying read through core's store.
 import { router } from 'expo-router';
-import type { LibraryQuery } from '@vela/core';
+import { facetCollectionQuery, type LibraryQuery } from '@vela/core';
 import type { SkinHost } from '@vela/skin';
 import type { CollectionState } from './collection-page';
 import type { LibraryState } from './library-page';
@@ -18,6 +18,12 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
     switch (action) {
       case 'select': {
         const [target, kind] = arg.split('|');
+        const tab = model?.tabs?.find(tab => tab.id === library.page.tabId);
+        const facetQuery = kind === 'collection' && target && tab ? facetCollectionQuery(target, tab) : undefined;
+        if (facetQuery) {
+          const name = library.page.extras?.collections.find(card => card.id === target)?.name ?? target;
+          return router.push({ pathname: '/library/[id]', params: { id, ...paramsOf(facetQuery), view: tab!.id, facetTitle: name } });
+        }
         if (kind === 'collection' && target && model?.canCollectionId) return router.setParams({ collectionId: target, view: 'library' });
         if (kind === 'directory' && target?.startsWith('vela-library-genre:')) {
           const genre = decodeURIComponent(target.slice('vela-library-genre:'.length));
@@ -33,7 +39,7 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
         if (library.page.view === 'genres') return router.setParams({ ...paramsOf(filteredBy(query, arg)), view: 'library' });
         return view(filteredBy(query, arg));
       case 'libraryView':
-        if (model?.tabs ? model.tabs.some(tab => tab.id === arg && ['recommended', 'library', 'collections'].includes(tab.kind)) : ['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ view: arg, collectionId: undefined });
+        if (model?.tabs ? model.tabs.some(tab => tab.id === arg && ['recommended', 'library', 'collections'].includes(tab.kind)) : ['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ ...(library.page.facetTitle ? paramsOf({}) : {}), view: arg, collectionId: undefined, facetTitle: undefined });
         return;
       case 'libraryMore':
         return library.more();

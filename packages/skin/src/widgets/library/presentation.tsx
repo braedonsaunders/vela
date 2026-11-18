@@ -33,6 +33,7 @@ function Button({ label, onPress, selected = false, role = 'button', id, quiet =
 export function LibraryTabs() {
   const host = useHost();
   return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 4 }}>
+    {host.env.library?.facetTitle && <Button label="Back to collections" onPress={() => host.dispatch('libraryView', host.env.library?.tabId ?? 'collections')} />}
     {libraryTabs(host.env.library?.model?.tabs)?.map(tab => <Button key={tab.id} id={`vela-library-view-${tab.id}`} role="tab" label={tab.label}
       selected={host.env.library?.tabId === tab.id} onPress={() => host.dispatch('libraryView', tab.id)} />)}
   </ScrollView>;
