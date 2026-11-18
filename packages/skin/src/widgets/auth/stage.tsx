@@ -98,6 +98,8 @@ export function Stage({ children }: { children: ReactNode }) {
           gap: '32px',
           padding: 'max(28px, 7vh) 16px',
         })}
+        automaticallyAdjustKeyboardInsets
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         keyboardShouldPersistTaps="handled"
       >
         {mark ? <Image source={mark} style={{ width: 60, height: 104 }} accessibilityElementsHidden /> : null}
