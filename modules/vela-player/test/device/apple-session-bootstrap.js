@@ -29,9 +29,12 @@ if (privateConfig.restore) {
 }
 if (privateConfig.traceNetwork) {
   const messages = [`server ${config.server}`];
+  const started = Date.now();
+  const counts = { guide: 0, channels: 0 };
+  const pages = new Set();
   function Overlay({ children }) {
     const [status, setStatus] = useState('');
-    useEffect(() => { const timer = setInterval(() => setStatus(messages.slice(-6).join('\n')), 500); return () => clearInterval(timer); }, []);
+    useEffect(() => { const timer = setInterval(() => setStatus([`elapsed ${Math.floor((Date.now() - started) / 1000)}s guide ${counts.guide} channels ${counts.channels} unique guide pages ${pages.size}`, ...messages.slice(-3)].join('\n')), 500); return () => clearInterval(timer); }, []);
     return React.createElement(View, { style: { flex: 1 } }, children,
       React.createElement(Text, { pointerEvents: 'none', style: { position: 'absolute', top: 35, left: 35, color: 'white', backgroundColor: '#000b', fontSize: 22 } }, status));
   }
@@ -39,7 +42,12 @@ if (privateConfig.traceNetwork) {
   const nativeFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     let origin = 'unknown';
-    try { origin = new URL(typeof input === 'string' ? input : input.url).origin; } catch {}
+    try {
+      const url = new URL(typeof input === 'string' ? input : input.url);
+      origin = url.origin;
+      if (url.pathname.endsWith('/live/guide')) { counts.guide++; pages.add(url.href); }
+      if (url.pathname.endsWith('/live/channels')) counts.channels++;
+    } catch {}
     try {
       const response = await nativeFetch(input, init);
       messages.push(`${origin} HTTP ${response.status}`);

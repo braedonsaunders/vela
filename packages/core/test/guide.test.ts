@@ -322,3 +322,13 @@ test('a 30-to-48 channel expansion reads 24 pages once, rather than repeating th
   }
   expect(guideQueries).toHaveLength(24);
 });
+
+test('concurrent overlapping guide views share in-flight channel pages', async () => {
+  const { api, guideQueries } = fakeApi([channel(1), channel(2), channel(3)], []);
+  const id = scope();
+  await Promise.all([
+    loadGuide(api, 0, NOW, id, undefined, undefined, ['c1', 'c2']),
+    loadGuide(api, 0, NOW, id, undefined, undefined, ['c2', 'c3']),
+  ]);
+  expect(guideQueries.map(q => q.channelIds)).toEqual([['c1', 'c2'], ['c3']]);
+});
