@@ -21,8 +21,8 @@ function Probe() {
     const timers = [setTimeout(() => setReady(true), 100),
       setTimeout(() => setCommand({ id: 1, type: 'audio', trackId: 'spanish' }), 7000),
       setTimeout(() => setCommand({ id: 2, type: 'subtitle', trackId: 'captions' }), 12000),
-      setTimeout(() => setCommand({ id: 3, type: 'subtitle', trackId: null }), 26000),
-      setTimeout(() => setCommand({ id: 4, type: 'audio', trackId: 'english' }), 30000)];
+      setTimeout(() => setCommand({ id: 3, type: 'subtitle', trackId: null }), 34000),
+      setTimeout(() => setCommand({ id: 4, type: 'audio', trackId: 'english' }), 36000)];
     return () => timers.forEach(clearTimeout);
   }, []);
   return <View style={{ flex: 1, backgroundColor: 'black' }}>
