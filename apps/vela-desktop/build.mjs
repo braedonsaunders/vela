@@ -14,8 +14,9 @@ rmSync('ui', { recursive: true, force: true });
 cpSync(resolve(ui), 'ui', { recursive: true, dereference: true });
 const targets = ['--mac', '--linux'].filter(t => process.argv.includes(t));
 // VELA_MAC_SIGN_IDENTITY is a Developer ID Application identity in the keychain.
-// VELA_NOTARY_PROFILE=vela-notary opts into notarization after signing.
-const signing = process.env.VELA_MAC_SIGN_IDENTITY;
+// The vela-notary keychain profile enables notarization; VELA_NOTARY_PROFILE overrides it.
+// electron-builder selects the certificate type and rejects the full Keychain prefix.
+const signing = process.env.VELA_MAC_SIGN_IDENTITY?.replace(/^Developer ID Application:\s*/, '').trim();
 const signArgs = signing ? [
   `--config.mac.identity=${signing}`, '--config.mac.hardenedRuntime=true',
   '--config.mac.entitlements=build/entitlements.mac.plist',
