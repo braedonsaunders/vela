@@ -17,6 +17,9 @@ export function Select(props: WidgetProps) {
     minWidth: 0,
     margin: 0,
     padding: 0,
+    // Reserve room for the browser arrow even when the parent sizes to the label.
+    paddingRight: 24,
+    boxSizing: 'border-box',
     border: 'none',
     outlineOffset: 2,
     background: 'transparent',
