@@ -281,6 +281,7 @@ final class PlaybackClient {
     private func failPath() {
         guard !dead, !failed else { return }
         failed = true
+        loadTask?.cancel()
         if engine?.hasFirstFrameReadyForDisplay == true {
             start = (properties["time-pos"] as? Double) ?? start
         }

@@ -35,7 +35,6 @@ final class VelaPlayerView: ExpoView {
     private var pendingSeek: Double?
     private var wantsPlay = true
     private var ambient = false
-    private var displayFacts: VideoFacts?
     private var loggedOutput = false
     private var refreshAsked = ""
     private var heartbeat: Timer?
@@ -269,7 +268,6 @@ final class VelaPlayerView: ExpoView {
         if !ambient {
             PlaybackAudioSession.activate()
         }
-        displayFacts = path.isOriginalFile ? DisplayMatching.facts(path.originalVideo) : nil
         let client: PlaybackClient
         do {
             client = try PlaybackClient(layer: metalLayer, options: [
@@ -356,9 +354,6 @@ final class VelaPlayerView: ExpoView {
         player = nil
         client.destroy()
         SystemMediaControls.shared.release(self)
-        if !ambient {
-            DisplayMatching.prefer(nil, in: window)
-        }
     }
 
     private func resolve(_ text: String) -> URL? {
@@ -439,26 +434,12 @@ final class VelaPlayerView: ExpoView {
         onSessionRefresh(["sessionId": plan.sessionId])
     }
 
-    /// What the video is and what player and the display make of it, for the console.
     private func logOutput() {
-        let input = state.videoParams
-        let output = player?.value("video-target-params") as? [String: Any] ?? [:]
-        let field = { (params: [String: Any], key: String) in params[key].map { "\($0)" } ?? "?" }
-        let video = "\(field(input, "w"))x\(field(input, "h")) \(field(input, "gamma"))/\(field(input, "primaries"))"
-        let target = "\(field(output, "gamma"))/\(field(output, "primaries")) peak \(field(output, "sig-peak"))"
-        let display = DisplayMatching.describe(window)
-        let layer = metalLayer.colorspace.flatMap { $0.name as String? } ?? "untagged"
-        print("[vela-player] video \(video) range \(state.dynamicRange ?? "?") -> output \(target), layer \(layer); display \(display)")
+        print("[vela-player] decoded video range=\(state.dynamicRange ?? "unknown")")
     }
 
-    /// Unpauses once the display has finished switching modes (it blanks meanwhile).
-    private func resumeAfterDisplaySwitch(waited: Double = 0) {
-        if DisplayMatching.switching(in: window) && waited < 6 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                self?.resumeAfterDisplaySwitch(waited: waited + 0.1)
-            }
-            return
-        }
+    /// Aether load completes after its own display matching.
+    private func resumeAfterDisplaySwitch() {
         player?.set("pause", flag: !wantsPlay)
     }
 
