@@ -1,18 +1,24 @@
 // Test-only bootstrap for an owner-approved Quick Connect session. Private config
 // stays beside the probe and is ignored. Restore mode restores the previous device
 // identity and credentials before entering the regular application.
+import React, { useEffect, useState } from 'react';
+import { AppRegistry, Text, View } from 'react-native';
 import { secrets } from '../../../../apps/vela/src/data/secrets';
 import { config } from '../../../../apps/vela/src/data/config';
 import privateConfig from './probe-config.json';
 
 const backupKey = 'vela.apple-proof-backup';
-const keys = ['vela.device', 'vela.session'];
+const keys = ['vela.device', 'vela.session', 'vela.servers'];
 if (privateConfig.restore) {
   const backup = JSON.parse(secrets.get(backupKey) || '{}');
   for (const key of keys) if (key in backup) secrets.set(key, backup[key] || '');
   secrets.set(backupKey, '');
 } else {
-  if (!secrets.get(backupKey)) secrets.set(backupKey, JSON.stringify(Object.fromEntries(keys.map(key => [key, secrets.get(key)]))));
+  const backup = JSON.parse(secrets.get(backupKey) || '{}');
+  for (const key of keys) if (!(key in backup)) backup[key] = secrets.get(key);
+  secrets.set(backupKey, JSON.stringify(backup));
+  const registry = JSON.parse(secrets.get('vela.servers') || '{"servers":[]}');
+  secrets.set('vela.servers', JSON.stringify({ ...registry, selectedId: 'ether' }));
   if (secrets.get('vela.device') !== privateConfig.device.id) {
     secrets.set('vela.device', privateConfig.device.id);
     secrets.set('vela.session', JSON.stringify(privateConfig.tokens));
@@ -20,5 +26,31 @@ if (privateConfig.restore) {
   config.server = privateConfig.origin;
   config.user = '';
   config.password = '';
+}
+if (privateConfig.traceNetwork) {
+  const messages = [`server ${config.server}`];
+  function Overlay({ children }) {
+    const [status, setStatus] = useState('');
+    useEffect(() => { const timer = setInterval(() => setStatus(messages.slice(-6).join('\n')), 500); return () => clearInterval(timer); }, []);
+    return React.createElement(View, { style: { flex: 1 } }, children,
+      React.createElement(Text, { pointerEvents: 'none', style: { position: 'absolute', top: 35, left: 35, color: 'white', backgroundColor: '#000b', fontSize: 22 } }, status));
+  }
+  AppRegistry.setWrapperComponentProvider(() => Overlay);
+  const nativeFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    let origin = 'unknown';
+    try { origin = new URL(typeof input === 'string' ? input : input.url).origin; } catch {}
+    try {
+      const response = await nativeFetch(input, init);
+      messages.push(`${origin} HTTP ${response.status}`);
+      console.log('[apple-network]', origin, response.status);
+      return response;
+    } catch (error) {
+      messages.push(`${origin} network error`);
+      console.log('[apple-network]', origin, 'network-error');
+      throw error;
+    }
+  };
+  console.log('[apple-bootstrap-origin]', config.server);
 }
 require('expo-router/entry');

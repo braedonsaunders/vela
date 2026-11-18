@@ -1,8 +1,15 @@
 // Exact engine and LGPL FFmpeg pins survive every Expo prebuild.
-const { withPodfileProperties, withXcodeProject } = require('expo/config-plugins');
+const { withInfoPlist, withPodfileProperties, withXcodeProject } = require('expo/config-plugins');
 module.exports = function withApplePlayer(config) {
   config = withPodfileProperties(config, mod => {
     mod.modResults['ios.deploymentTarget'] = '18.0';
+    return mod;
+  });
+  config = withInfoPlist(config, mod => {
+    const ats = mod.modResults.NSAppTransportSecurity;
+    // Public HTTP servers are user-selected too. On modern Apple OS versions,
+    // the local-only key overrides NSAllowsArbitraryLoads, even when both are true.
+    if (ats?.NSAllowsArbitraryLoads === true) delete ats.NSAllowsLocalNetworking;
     return mod;
   });
   return withXcodeProject(config, mod => {

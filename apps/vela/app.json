@@ -13,8 +13,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true,
-          "NSAllowsLocalNetworking": true
+          "NSAllowsArbitraryLoads": true
         },
         "NSLocalNetworkUsageDescription": "Vela connects to the media servers on your network that you add, such as Ether, Jellyfin, Emby or Plex.",
         "ITSAppUsesNonExemptEncryption": false

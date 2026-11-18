@@ -53,3 +53,11 @@ test('repeated prebuilds retain exactly one copy of each dynamic package product
   expect(p.objects.PBXNativeTarget.app.packageProductDependencies).toHaveLength(9);
   expect(p.objects.PBXFrameworksBuildPhase.frameworks.files).toHaveLength(9);
 });
+
+test('Apple transport permits explicitly selected public HTTP servers after prebuild', async () => {
+  const config: any = withApplePlayer({ name: 'Vela', slug: 'vela' });
+  const result = await config.mods.ios.infoPlist({ ...config,
+    modResults: { NSAppTransportSecurity: { NSAllowsArbitraryLoads: true, NSAllowsLocalNetworking: true } },
+    modRequest: { projectRoot: '/fixture', platform: 'ios', modName: 'infoPlist' } });
+  expect(result.modResults.NSAppTransportSecurity).toEqual({ NSAllowsArbitraryLoads: true });
+});
