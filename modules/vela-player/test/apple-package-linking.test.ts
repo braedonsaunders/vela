@@ -12,8 +12,9 @@ function project() {
     PBXNativeTarget: { app: { buildConfigurationList: 'app', packageProductDependencies: [] } },
     PBXFrameworksBuildPhase: { frameworks: { files: [] } }, PBXBuildFile: {},
   };
+  let serial = 0;
   return { configs, objects, hash: { project: { objects } }, pbxXCBuildConfigurationSection: () => configs,
-    getFirstTarget: () => ({ uuid: 'app' }), getFirstProject: () => ({ firstProject: {} }), generateUuid: () => 'package' };
+    getFirstTarget: () => ({ uuid: 'app' }), getFirstProject: () => ({ firstProject: {} }), generateUuid: () => serial++ === 0 ? 'package' : `id${serial}` };
 }
 async function apply(p: ReturnType<typeof project>) {
   const config: any = withApplePlayer({ name: 'Vela', slug: 'vela' });
@@ -39,6 +40,8 @@ test('upgrading removes static FFmpeg flags and preserves Aether dynamic product
   p.objects.PBXNativeTarget.app.packageProductDependencies = [{ value: 'ffmpeg' }];
   await apply(p);
   expect(p.configs.projectDebug.buildSettings.OTHER_LDFLAGS).toEqual(['"$(inherited)"', '-lCustom']);
-  expect(p.objects.PBXNativeTarget.app.packageProductDependencies).toEqual([{ value: 'ffmpeg' }]);
-  expect(p.objects.PBXFrameworksBuildPhase.frameworks.files).toEqual([{ value: 'old' }]);
+  expect(p.objects.PBXNativeTarget.app.packageProductDependencies).toContainEqual({ value: 'ffmpeg' });
+  expect(p.objects.PBXNativeTarget.app.packageProductDependencies).toHaveLength(9);
+  expect(p.objects.PBXFrameworksBuildPhase.frameworks.files).toContainEqual({ value: 'old' });
+  expect(p.objects.PBXFrameworksBuildPhase.frameworks.files).toHaveLength(9);
 });

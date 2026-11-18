@@ -42,6 +42,31 @@ module.exports = function withApplePlayer(config) {
       root.packageReferences.push({ value: id, comment: 'FFmpegBuild' });
     }
     objects.XCRemoteSwiftPackageReference[id].requirement = { kind: 'exactVersion', version: '3.15.0' };
+    // CocoaPods compiles the static engine, but Xcode needs app product references
+    // to copy and sign its dynamic FFmpeg dependencies into the application.
+    objects.XCSwiftPackageProductDependency ||= {};
+    objects.PBXBuildFile ||= {};
+    const target = objects.PBXNativeTarget[project.getFirstTarget().uuid];
+    target.packageProductDependencies ||= [];
+    const phase = Object.values(objects.PBXFrameworksBuildPhase).find(value => Array.isArray(value?.files));
+    for (const name of ['avcodec', 'avformat', 'avutil', 'swresample', 'swscale', 'avfilter', 'dav1d', 'zimg', 'zvbi']) {
+      const productName = `AetherLib${name}`;
+      let product = Object.keys(objects.XCSwiftPackageProductDependency).find(key =>
+        objects.XCSwiftPackageProductDependency[key]?.package === id &&
+        objects.XCSwiftPackageProductDependency[key]?.productName === productName);
+      if (!product) {
+        product = project.generateUuid();
+        objects.XCSwiftPackageProductDependency[product] = { isa: 'XCSwiftPackageProductDependency', package: id, productName };
+      }
+      if (!target.packageProductDependencies.some(ref => ref.value === product)) {
+        target.packageProductDependencies.push({ value: product, comment: productName });
+      }
+      if (!phase.files.some(ref => objects.PBXBuildFile[ref.value]?.productRef === product)) {
+        const file = project.generateUuid();
+        objects.PBXBuildFile[file] = { isa: 'PBXBuildFile', productRef: product, productRef_comment: productName };
+        phase.files.push({ value: file, comment: `${productName} in Frameworks` });
+      }
+    }
     return mod;
   });
 };
