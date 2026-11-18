@@ -1,7 +1,7 @@
 // Live watch, for the player chrome: the live panel (the LIVE badge, channel up and down, honest
 // delivery states and "Go live" when playback has fallen behind the edge) and the keys that flick
 // channels. Latency is automatic; there is no viewer-facing latency toggle.
-import { View } from 'react-native';
+import { Platform, TVFocusGuideView, View } from 'react-native';
 import { msg, number } from '@vela/core';
 import type { Snapshot } from '@vela/player-api';
 import type { LiveController } from './controller';
@@ -48,8 +48,12 @@ export function LiveControls({ live, onGoLive, onZap }: ControlsProps) {
   const look = useGuideLook();
   const drift = live ? behind(live) : 0;
   const delivery = live ? DELIVERY[live.delivery] : undefined;
+  // The transport toggle sits below the badge, outside the arrows' horizontal
+  // projection. Let native TV focus enter the whole panel and find its buttons.
+  const Panel = Platform.isTV ? TVFocusGuideView : View;
   return (
-    <View
+    <Panel
+      {...(Platform.isTV ? { autoFocus: true } : {})}
       style={{
         gap: 10,
         paddingVertical: 14,
@@ -95,7 +99,7 @@ export function LiveControls({ live, onGoLive, onZap }: ControlsProps) {
           </Press>
         </>
       ) : null}
-    </View>
+    </Panel>
   );
 }
 
