@@ -1,4 +1,4 @@
-import { createBrowserSurface } from './host/surface';
+import { createBrowserSurface, pageFullscreenContainer } from './host/surface';
 import { PlaybackEngine } from './engine';
 import { MediaAccess, redactMediaError } from './media-auth';
 import type { Command, PlaybackSession } from './model';
@@ -110,7 +110,9 @@ export function createBrowserPlayerView(
         }
       }
     },
-    element.parentElement ?? element,
+    // Fullscreen takes the whole page: the player chrome is drawn over the video in the app's own
+    // layer, which a fullscreen video element (or its parent) would leave behind.
+    pageFullscreenContainer(element),
     ambient,
     media,
     loadedRuntimeServices,

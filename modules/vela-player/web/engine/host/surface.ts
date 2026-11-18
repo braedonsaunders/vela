@@ -29,3 +29,13 @@ export function createBrowserSurface(element: HTMLElement): BrowserSurface {
     },
   };
 }
+
+/**
+ * The element a player's fullscreen request takes. The app draws the player chrome (title, timeline,
+ * menus) in its own layer over the video, outside the player's element, so fullscreen covers the
+ * whole page: a fullscreen video (or its container) would show the picture with no way to bring
+ * the controls up. Without a document (tests), the player's own element.
+ */
+export function pageFullscreenContainer(element: HTMLElement): HTMLElement {
+  return element.ownerDocument?.documentElement ?? element;
+}

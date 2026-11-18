@@ -5,7 +5,7 @@ import { sessionFromPlan } from './protocol';
 import { playbackMark } from './timing';
 import { bundledRuntimeServices } from './host/bundled-runtime';
 import { ControllerMediaAccess } from './host/controller-access';
-import { createBrowserSurface } from './host/surface';
+import { createBrowserSurface, pageFullscreenContainer } from './host/surface';
 import { createViewEvents, publicFailure } from './host/view-events';
 
 /** Typed DOM seam shared by React Native Web and any other browser shell. */
@@ -26,7 +26,8 @@ export const createWebPlayerHost: CreateWebPlayerHost = (element, initialProps, 
     () => props,
     () => engine,
   );
-  const engine = new PlaybackEngine(surface.video, events, element, ambient, media, runtimes);
+  // Fullscreen takes the whole page, so the player chrome drawn over the video stays visible.
+  const engine = new PlaybackEngine(surface.video, events, pageFullscreenContainer(element), ambient, media, runtimes);
 
   async function applyCommand(command: NonNullable<VelaPlayerProps['command']>) {
     if (!Number.isSafeInteger(command.id)) {
