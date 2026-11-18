@@ -1,13 +1,15 @@
 // One route drawn by the active document: the shell's tree around the route's tree. A document
 // that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
 // library, a collection) adds it to the host with `page`.
-import { useIsFocused } from 'expo-router';
+import { useIsFocused, usePathname } from 'expo-router';
 import { useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import type { RNode } from '@vela/skin/src/resolve';
 import { useVela } from './vela';
+import { FocusBoundary } from './focus-boundary';
+import { documentIsVisible } from './visible-route';
 import { useSectionFocus } from './section-focus';
 import { SECTION_SLIDE_MS, slideInForward, slideInBackward, slideOutForward, slideOutBackward } from './section-motion';
 
@@ -29,9 +31,11 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   }, [season, vela.store]);
   // On TV, focus returns to the card or button that opened the route above when it closes.
   const navigationFocused = useIsFocused();
+  const pathname = usePathname();
   const sectionFocused = useSectionFocus();
-  useReturnFocus(sectionFocused ?? navigationFocused);
-  const isCurrent = sectionFocused ?? navigationFocused;
+  const visibleRoute = !(Platform.isTV && Platform.OS === 'android') || documentIsVisible(route, entry, pathname);
+  const isCurrent = (sectionFocused ?? navigationFocused) && visibleRoute;
+  useReturnFocus(isCurrent);
   const focusSearch = !!host?.env.flags.includes('focus-search-on-home');
   const setFlag = host?.setFlag;
   useEffect(() => {
@@ -64,10 +68,9 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
       {/* On TV the title page is presented in the app's root view, so it stays in the tree under
           the player: while covered it must take no focus (no interaction, which the focus engine
           honours), or the remote's arrows move focus into it and never reach the player. */}
-      <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)' }} accessibilityViewIsModal
-        pointerEvents={isCurrent ? 'auto' : 'none'}>
+      <FocusBoundary active={isCurrent} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)' }} accessibilityViewIsModal>
         {content}
-      </View>
+      </FocusBoundary>
     </ScreenActive.Provider>
   );
   return (

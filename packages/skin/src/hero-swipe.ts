@@ -1,12 +1,31 @@
-import { useRef } from 'react';
-import { Platform, type GestureResponderEvent } from 'react-native';
+import { useMemo, useRef } from 'react';
+import { PanResponder, Platform, type GestureResponderEvent } from 'react-native';
 import { heroSwipe } from './hero-swipe-logic';
 
 /** Touch-only: leave mouse hover, keyboard and TV focus to their existing handlers. */
 export function useHeroSwipe(enabled: boolean, count: number, index: number, dispatch: (action: 'pickHero', arg: string) => void) {
   const start = useRef<{ x: number; y: number } | null>(null);
   const consumed = useRef(false);
-  if (!enabled || Platform.OS !== 'web' || count < 2) return undefined;
+  const latest = useRef({ count, index, dispatch });
+  latest.current = { count, index, dispatch };
+  const captured = useRef({ dx: 0, dy: 0 });
+  const native = useMemo(() => PanResponder.create({
+    // Claim only a deliberate horizontal drag. Taps reach hero buttons and vertical drags
+    // remain with the page ScrollView. Capture cancels an already pressed child button.
+    onMoveShouldSetPanResponderCapture: (_event, gesture) => {
+      const claim = gesture.numberActiveTouches === 1 && heroSwipe(gesture.dx, gesture.dy, 0, 2) !== null;
+      if (claim) captured.current = { dx: gesture.dx, dy: gesture.dy };
+      return claim;
+    },
+    onPanResponderRelease: (_event, gesture) => {
+      const { count, index, dispatch } = latest.current;
+      // PanResponder resets dx/dy when it grants capture; retain the opening drag.
+      const next = heroSwipe(captured.current.dx + gesture.dx, captured.current.dy + gesture.dy, index, count);
+      if (next !== null) dispatch('pickHero', String(next));
+    },
+  }), []);
+  if (!enabled || Platform.isTV || count < 2) return undefined;
+  if (Platform.OS !== 'web') return native.panHandlers;
   return {
     onTouchStart(event: GestureResponderEvent) {
       consumed.current = false;

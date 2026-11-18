@@ -8,6 +8,7 @@ import { useVela } from '../../src/vela';
 import Home from './index';
 import { LibrarySection } from './library/[id]';
 import type { LibraryParams } from '../../src/browse/library-query';
+import { FocusBoundary } from '../../src/focus-boundary';
 import { SectionFocusContext } from '../../src/section-focus';
 import { SECTION_SLIDE_MS, slideInForward, slideInBackward, slideOutForward, slideOutBackward } from '../../src/section-motion';
 
@@ -24,7 +25,8 @@ function sectionForPath(path: string): Section | null {
 
 export default function SectionsLayout() {
   const pathname = usePathname();
-  const focused = useIsFocused();
+  const navigationFocused = useIsFocused();
+  const focused = navigationFocused && (!(Platform.isTV && Platform.OS === 'android') || sectionForPath(pathname) !== null);
   const section = useRef<Section>({ route: 'home', entry: 'home' });
   section.current = sectionForPath(pathname) ?? section.current;
   const vela = useVela();
@@ -84,7 +86,10 @@ export default function SectionsLayout() {
     </View>
   );
   if (!host || !shell) return content;
-  return <SkinRoot host={{ ...host, children: content }} node={shell} />;
+  const drawn = <SkinRoot host={{ ...host, children: content }} node={shell} />;
+  return Platform.isTV && Platform.OS === 'android'
+    ? <FocusBoundary active={focused} style={{ flex: 1 }}>{drawn}</FocusBoundary>
+    : drawn;
 }
 
 /** Keep visited sections mounted; only the active and briefly outgoing scenes are visible. */

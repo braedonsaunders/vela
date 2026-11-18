@@ -19,6 +19,8 @@ import {
 import { fontFace } from './fonts';
 import { easing } from './motion';
 
+export { fontSizeOf } from './css';
+
 export type Css = Record<string, string>;
 
 const web = Platform.OS === 'web';
@@ -294,13 +296,6 @@ export function textStyle(css: Css, m: Measure): { style: TextStyle; numberOfLin
   return { style: s as TextStyle, numberOfLines, ellipsize: ellipsize || numberOfLines !== undefined };
 }
 
-/** The computed font size in points for a font-size row, against the parent's. */
-export function fontSizeOf(raw: string | undefined, parent: number, m: Measure): number {
-  if (!raw) return parent;
-  const v = raw.trim();
-  if (v.endsWith('%')) return (parseFloat(v) / 100) * parent;
-  return points(v, { ...m, fontSize: parent, axis: 'x' }) ?? parent;
-}
 
 function camel(row: string): string {
   return row.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());

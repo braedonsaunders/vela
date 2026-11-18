@@ -1,5 +1,5 @@
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
-import { inheritRows } from './inherit-rows';
+import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
@@ -31,7 +31,7 @@ import { animation } from './motion';
 import { useHeroSwipe } from './hero-swipe';
 import { resolveUi } from './resolve/ui';
 import { fill, holds, type CssT, type Layer, type RNode, type ResolvedDocument } from './resolve';
-import { INHERITED, boxStyle, fontSizeOf, textStyle, type Css, type Effects } from './translate';
+import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './translate';
 import { collection, itemKey, type Ctx, type Env } from './vocabulary';
 
 const ROOT_CONTEXT: Ctx = { index: 0 };
@@ -275,14 +275,6 @@ function translatedBox(rows: Css, viewport: Viewport, fontSize: number) {
   return cached(`b${viewport.width}x${viewport.height}|${fontSize}|${JSON.stringify(rows)}`, () => boxStyle(rows, measure(viewport, fontSize)));
 }
 
-/** The text context children inherit: the parent's rows with this node's inherited rows over them. */
-function inheritFrom(parent: { rows: Css; fontSize: number }, inherited: Css, viewport: Viewport) {
-  if (!Object.keys(inherited).length) return parent;
-  const rows = inheritRows(parent.rows, inherited);
-  const fontSize = fontSizeOf(rows['font-size'], parent.fontSize, measure(viewport, parent.fontSize));
-  return { rows: { ...rows, 'font-size': `${fontSize}px` }, fontSize };
-}
-
 function a11yProps(node: RNode, c: Ctx, e: Env) {
   const role = node.role === 'heading' ? 'header' : node.role === 'button' ? 'button' : node.role === 'link' ? 'link' : node.role === 'tab' ? 'tab' : node.role === 'img' ? 'image' : undefined;
   const label = node.label ? fill(node.label, c, e) : undefined;
@@ -403,7 +395,7 @@ function Box({ node, ctx, route, after, hero }: { node: Extract<RNode, { kind: '
       {fx.backgroundUrl ? <BackgroundImage src={fx.backgroundUrl} /> : null}
     </>
   );
-  const drawn: Record<string, unknown> = { ...style, ...(swipe ? { touchAction: 'pan-y pinch-zoom' } : {}), ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion, ...focusRing };
+  const drawn: Record<string, unknown> = { ...style, ...(web && swipe ? { touchAction: 'pan-y pinch-zoom' } : {}), ...(fx.backdropBlur ? { overflow: 'hidden' } : {}), ...motion, ...focusRing };
   // Web sticky headers add a z-index: 10 wrapper, which puts decorative backdrops
   // above their foreground. Native CSS keeps the document's own stacking order.
   if (web && fx.sticky) drawn.position = 'sticky';
