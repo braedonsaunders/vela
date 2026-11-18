@@ -185,8 +185,9 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
         counts.set(value, { count: (held?.count ?? 0) + 1, artwork: held?.artwork ?? (item.kind === 'title' ? [signedArtwork(g, item.title.id, 'poster')] : []) });
       }
       const entries = [...counts].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0])).map(([value, data]) => ({ id: `facet:${tab.facet}:${value}`, name: value, itemCount: data.count, artwork: data.artwork }));
-      // Keep fixture pages small to exercise collection continuation in the UI.
-      const paged = new URL(url); if (!paged.searchParams.has('limit')) paged.searchParams.set('limit', '2');
+      // Tests can simulate a server that caps pages below the client's requested size.
+      const paged = new URL(url);
+      if (process.env.VELA_MOCK_COLLECTION_PAGE_SIZE) paged.searchParams.set('limit', process.env.VELA_MOCK_COLLECTION_PAGE_SIZE);
       return cached(req, page(entries, paged, g, `library-collections:${library.id}:${tab.id}`), g.id);
     }
     const members = libraryEntries(library.id).filter(e => e.kind === 'title' && e.title.id === titles[0]!.id);

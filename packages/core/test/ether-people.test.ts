@@ -5,7 +5,7 @@ import { FakeCredentials } from './helpers';
 import { launchMock } from '../../../mock-server/test/launch';
 
 async function connect(old = false) {
-  const mock = await launchMock(old ? { VELA_MOCK_OLD: '1' } : { VELA_MOCK_LIBRARY_ROW_PAGE: '2' });
+  const mock = await launchMock(old ? { VELA_MOCK_OLD: '1' } : { VELA_MOCK_LIBRARY_ROW_PAGE: '2', VELA_MOCK_COLLECTION_PAGE_SIZE: '2' });
   const credentials = new FakeCredentials(null);
   const adapter = new EtherAdapter(mock.url, credentials, 'test');
   credentials.current = await adapter.signInWithPassword({ username: 'demo', password: 'vela', device: credentials.device, idempotencyKey: 'sign-in' });
@@ -130,5 +130,21 @@ test('facet collection tab pages stay scoped and open newest-first filtered item
     }
     // Legacy collections keep the existing wrapped response and endpoint behavior.
     expect((await adapter.libraryCollections('movies')).items[0]?.kind).toBe('collection');
+  } finally { await mock.stop(); }
+});
+
+test('collection reads request a full grid page and retain counts', async () => {
+  const mock = await launchMock();
+  const credentials = new FakeCredentials(null);
+  const adapter = new EtherAdapter(mock.url, credentials, 'test');
+  try {
+    credentials.current = await adapter.signInWithPassword({ username: 'demo', password: 'vela', device: credentials.device, idempotencyKey: 'sign-in' });
+    const page = await adapter.libraryCollections('movies', undefined, 'collections');
+    expect(page.items).toHaveLength(4);
+    expect(page.continuation).toBe('exhausted');
+    expect(page.items[0]).toMatchObject({ kind: 'collection', itemCount: expect.any(Number) });
+    // A smaller explicit request proves the server honors a client's page size.
+    const small = await fetch(`${mock.url}/vela/v0/libraries/movies/collections?tab=collections&limit=2`, { headers: { Authorization: `Bearer ${credentials.current!.accessToken}`, 'X-Vela-Device-Id': credentials.device.id } });
+    expect((await small.json()).items).toHaveLength(2);
   } finally { await mock.stop(); }
 });

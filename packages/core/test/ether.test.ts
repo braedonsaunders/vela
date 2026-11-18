@@ -210,3 +210,14 @@ test('Ether forwards advertised plugin IDs in both search modes', async () => {
   await ether().searchByDescription(request);
   expect(seen.map(x => x.body)).toEqual([{ ...request, mode: 'fast' }, { ...request, mode: 'descriptive' }]);
 });
+
+test('collection requests fill a grid page and retain tab and page size on continuation', async () => {
+  const seen = routeFetch({ 'GET /vela/v0/libraries/movies/collections': { items: [], continuation: 'exhausted' } });
+  const adapter = ether();
+  await adapter.libraryCollections('movies', undefined, 'studio-sets');
+  await adapter.libraryCollections('movies', 'opaque-next', 'studio-sets');
+  expect(seen.map(call => Object.fromEntries(call.url.searchParams))).toEqual([
+    { tab: 'studio-sets', limit: '100' },
+    { cursor: 'opaque-next', tab: 'studio-sets', limit: '100' },
+  ]);
+});
