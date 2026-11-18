@@ -74,8 +74,9 @@ final class PlaybackClient {
         if name == "mute" { engine?.volume = flag ? 0 : volume }
     }
     func set(_ name: String, double: Double) {
+        if name == "volume" { volume = Float(double / 100) }
         if let fallback { fallback.set(name, double: double); return }
-        if name == "volume" { volume = Float(double / 100); engine?.volume = muted ? 0 : volume }
+        if name == "volume" { engine?.volume = muted ? 0 : volume }
     }
     func command(_ args: [String]) {
         if let fallback { fallback.command(args); return }
@@ -173,6 +174,7 @@ final class PlaybackClient {
                 _ = try await engine.load(url: url, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
                 guard !self.dead, self.fallback == nil else { return }
+                print("[vela-player] Aether ready: route=\(engine.videoRoute) format=\(engine.videoFormat) audio=\(engine.audioDelivery) AVPlayerLayer=\(engine.nativePlayerLayer != nil)")
                 self.emit("track-list", engine.audioTracks.map { self.track($0, type: "audio") } + engine.subtitleTracks.map { self.track($0, type: "sub") })
                 let gamma: String
                 switch engine.videoFormat {
@@ -245,7 +247,11 @@ final class PlaybackClient {
         surface = nil
         do {
             print("[vela-player] AetherEngine failed; falling back to mpv")
-            let mpv = try MPVClient(layer: layer, options: options)
+            var fallbackOptions = options
+            fallbackOptions["pause"] = paused ? "yes" : "no"
+            fallbackOptions["mute"] = muted ? "yes" : "no"
+            fallbackOptions["volume"] = String(volume * 100)
+            let mpv = try MPVClient(layer: layer, options: fallbackOptions)
             fallback = mpv
             layer.isHidden = false
             mpv.onProperty = { [weak self] in self?.onProperty?($0, $1) }

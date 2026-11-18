@@ -36,3 +36,14 @@ Anime4K: MIT, Copyright (c) 2019-2021 bloc97.
 The upstream license texts and dependency notices ship in the
 VelaPlayerLicenses resource bundle. The existing MPVKit notices still apply
 to the fallback.
+
+## Verification in progress
+
+The Basement Apple TV has played Camp Crystal through the loopback AVPlayerLayer
+route with Vela's play/pause and ten-second seeks. Picture comparison with Plex
+is awaiting the owner's assessment. iPhone compilation and HDR, track switching,
+hero previews and a deliberately refused source still need device verification.
+
+Fallback carries the current pause, mute and volume settings. A native ready log
+records the route, video format, audio delivery and AVPlayerLayer presence without
+logging the media URL or its authorization.
