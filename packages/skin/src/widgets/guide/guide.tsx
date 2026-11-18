@@ -115,9 +115,10 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
   const press = useCallback((channel: GuideChannel, programme: GuideProgramme) => {
     select(channel, programme);
     if (!currentlyAiring(controller.view().guide, channel.id, programme.id)) return;
-    if (view.tile.channelId === channel.id && view.tile.plan !== null) controller.watch(channel.id);
+    const tile = controller.view().tile;
+    if (tile.channelId === channel.id && tile.plan !== null) controller.watch(channel.id);
     else controller.preview(channel.id);
-  }, [controller, select, view.tile.channelId, view.tile.plan]);
+  }, [controller, select]);
   const watch = useCallback((channelId: string) => controller.watch(channelId), [controller]);
   useEffect(() => {
     controller.setRetainedChannels([selected.channel, handOff?.channelId ?? "", view.tunedId]);
