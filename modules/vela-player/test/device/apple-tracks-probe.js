@@ -1,3 +1,4 @@
+import 'expo/src/Expo.fx';
 // Test-only entry for the authenticated two-audio/SRT fixture from AETHER.md.
 import React, { useEffect, useState } from 'react';
 import { AppRegistry, Text, View } from 'react-native';

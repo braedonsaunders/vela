@@ -21,7 +21,7 @@ public final class VelaPlayerModule: Module {
                 VelaMediaAccessStore.set(nil)
                 return
             }
-            VelaMediaAccessStore.set(try VelaMediaAuth(access), generation: access["generation"] as? Int ?? 0)
+            VelaMediaAccessStore.set(try VelaMediaAuth(access), generation: (access["generation"] as? NSNumber)?.intValue ?? 0)
         }
 
         Function("attachPlaybackURL") { (plan: String, source: String, authorized: String, generation: Int) -> Bool in

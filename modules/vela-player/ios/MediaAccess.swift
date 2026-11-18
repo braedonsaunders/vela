@@ -80,9 +80,12 @@ enum VelaMediaAccessStore {
     static func attach(plan: String, source: URL, authorized: URL, generation: Int) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard self.generation == generation, let current,
-              !current.headers(for: source).isEmpty,
-              !current.headers(for: authorized).isEmpty else { return false }
+        let sourceScoped = current?.headers(for: source).isEmpty == false
+        let authorizedScoped = current?.headers(for: authorized).isEmpty == false
+        guard self.generation == generation, sourceScoped, authorizedScoped else {
+            print("[vela-player] native attachment refused: stale=\(self.generation != generation) sourceScoped=\(sourceScoped) authorizedScoped=\(authorizedScoped)")
+            return false
+        }
         attachments[plan] = Attachment(source: source, authorized: authorized)
         return true
     }

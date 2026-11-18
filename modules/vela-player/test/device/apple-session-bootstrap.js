@@ -3,6 +3,7 @@
 // identity and credentials before entering the regular application.
 import React, { useEffect, useState } from 'react';
 import { AppRegistry, Text, View } from 'react-native';
+import { Session } from '../../../../packages/core/src/store/session';
 import { secrets } from '../../../../apps/vela/src/data/secrets';
 import { config } from '../../../../apps/vela/src/data/config';
 import privateConfig from './probe-config.json';
@@ -30,11 +31,14 @@ if (privateConfig.restore) {
 if (privateConfig.traceNetwork) {
   const messages = [`server ${config.server}`];
   const started = Date.now();
+  let selected = '';
+  const selectedConnection = Session.prototype.selected;
+  Session.prototype.selected = function (...args) { const connection = selectedConnection.apply(this, args); selected = `${connection.record.kind} ${connection.record.origin}`; return connection; };
   const counts = { guide: 0, channels: 0 };
   const pages = new Set();
   function Overlay({ children }) {
     const [status, setStatus] = useState('');
-    useEffect(() => { const timer = setInterval(() => setStatus([`elapsed ${Math.floor((Date.now() - started) / 1000)}s guide ${counts.guide} channels ${counts.channels} unique guide pages ${pages.size}`, ...messages.slice(-3)].join('\n')), 500); return () => clearInterval(timer); }, []);
+    useEffect(() => { const timer = setInterval(() => setStatus([`${selected} elapsed ${Math.floor((Date.now() - started) / 1000)}s guide ${counts.guide} channels ${counts.channels} unique guide pages ${pages.size}`, ...messages.slice(-3)].join('\n')), 500); return () => clearInterval(timer); }, []);
     return React.createElement(View, { style: { flex: 1 } }, children,
       React.createElement(Text, { pointerEvents: 'none', style: { position: 'absolute', top: 35, left: 35, color: 'white', backgroundColor: '#000b', fontSize: 22, zIndex: 999999 } }, status));
   }

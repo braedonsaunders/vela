@@ -1,3 +1,4 @@
+import 'expo/src/Expo.fx';
 // Test-only entry. Supply a private, gitignored probe-config.json beside this file,
 // export with Expo export:embed, and swap into a signed device build for runtime QA.
 // Never include the config or exported bundle in distribution artifacts.

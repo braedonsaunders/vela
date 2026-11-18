@@ -205,7 +205,7 @@ final class VelaPlayerView: ExpoView {
         }
         // Not on screen (not yet attached, or already left): keep the plan; it starts on attaching.
         guard window != nil else {
-            VelaMediaAccessStore.detach(plan: next.mediaIdentity, generation: mediaAuthorization?["generation"] as? Int)
+            VelaMediaAccessStore.detach(plan: next.mediaIdentity, generation: (mediaAuthorization?["generation"] as? NSNumber)?.intValue)
             return
         }
         start(next, path: path, url: url, source: source)
@@ -215,10 +215,10 @@ final class VelaPlayerView: ExpoView {
         mediaAuthorization = result
         guard let plan, result?["planId"] as? String == plan.mediaIdentity else { return }
         guard window != nil else {
-            VelaMediaAccessStore.detach(plan: plan.mediaIdentity, generation: result?["generation"] as? Int)
+            VelaMediaAccessStore.detach(plan: plan.mediaIdentity, generation: (result?["generation"] as? NSNumber)?.intValue)
             return
         }
-        let changedGrant = authorizedPlan != nil && authorizedGeneration != (result?["generation"] as? Int)
+        let changedGrant = authorizedPlan != nil && authorizedGeneration != ((result?["generation"] as? NSNumber)?.intValue)
         guard awaitingAuthorization || changedGrant else { return }
         setPlanObject(plan)
     }
@@ -369,7 +369,7 @@ final class VelaPlayerView: ExpoView {
     }
 
     private func stop() {
-        if let plan { VelaMediaAccessStore.detach(plan: plan.mediaIdentity, generation: mediaAuthorization?["generation"] as? Int) }
+        if let plan { VelaMediaAccessStore.detach(plan: plan.mediaIdentity, generation: (mediaAuthorization?["generation"] as? NSNumber)?.intValue) }
         if let authorizedPlan { VelaMediaAccessStore.detach(plan: authorizedPlan, generation: authorizedGeneration) }
         authorizedPlan = nil
         authorizedGeneration = nil
