@@ -75,17 +75,49 @@ async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise
 
 interface Listings { channels: Channel[]; programmes: Programme[] }
 const cache = new Map<string, { at: number; value: Promise<Listings> }>();
+// Viewport channel sets overlap. Reuse each channel's completed pages within
+// the same window, so expanding the initial 30 channels to 48 does not reissue
+// the first 30 channels' listings (and their image grants).
+const channelListings = new Map<string, Map<string, { at: number; value: Promise<Programme[]> }>>();
 /** Every page of one window, shared by the minute-by-minute re-projections of that window. */
 function listings(api: GuideApi, scope: string, from: number, until: number, now: number, ids?: string[]): Promise<Listings> {
   const key = `${scope}|${from}|${until}|${ids?.join(",") ?? "*"}`;
   const hit = cache.get(key);
-  if (hit && now >= hit.at && now - hit.at < FRESH) return hit.value;
+  if (ids === undefined && hit && now >= hit.at && now - hit.at < FRESH) return hit.value;
   const value = (async () => {
     const channels = await channelMetadata(api, scope, now);
     const requested = ids && ids.length === 0 ? [...channels].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 30).map(c => c.id) : ids;
-    const programmes: Programme[] = [];
-    const batches = requested ? Array.from({ length: Math.ceil(requested.length / 100) }, (_, i) => requested.slice(i * 100, (i + 1) * 100)) : [undefined];
-    for (const batch of batches) programmes.push(...await allPages(cursor => api.guide({ from: new Date(from).toISOString(), until: new Date(until).toISOString(), cursor, limit: 100, channelIds: batch })));
+    const windowKey = `${scope}|${from}|${until}`;
+    let entries = channelListings.get(windowKey);
+    if (!entries) {
+      entries = new Map();
+      channelListings.set(windowKey, entries);
+      for (const old of channelListings.keys()) if (channelListings.size > 8 && old !== windowKey) channelListings.delete(old);
+    }
+    const wanted = requested ?? channels.map(channel => channel.id);
+    const missing = wanted.filter(id => {
+      const hit = entries.get(id);
+      return !hit || now < hit.at || now - hit.at >= FRESH;
+    });
+    const batches = Array.from({ length: Math.ceil(missing.length / 100) }, (_, i) => missing.slice(i * 100, (i + 1) * 100));
+    // Preserve the server's unfiltered query when no channel filter was requested.
+    const queries: (string[] | undefined)[] = requested === undefined && missing.length === wanted.length ? [undefined] : batches;
+    const reads: Promise<Programme[]>[] = [];
+    for (const batch of queries) {
+      const ids = batch ?? wanted;
+      const page = allPages(cursor => api.guide({ from: new Date(from).toISOString(), until: new Date(until).toISOString(), cursor, limit: 100, channelIds: batch }));
+      reads.push(page);
+      for (const id of ids) {
+        const value = page.then(programmes => programmes.filter(programme => programme.channelId === id));
+        entries.set(id, { at: now, value });
+        value.catch(() => { if (entries.get(id)?.value === value) entries.delete(id); });
+      }
+    }
+    const pending = wanted.map(id => entries.get(id)!.value);
+    // Keep scrolling caches bounded independently of the total channel count.
+    for (const id of entries.keys()) if (entries.size > 256 && !wanted.includes(id)) entries.delete(id);
+    await Promise.all(reads);
+    const programmes = (await Promise.all(pending)).flat();
 
     return { channels, programmes };
   })();

@@ -286,3 +286,39 @@ describe('liveIdentity', () => {
     expect((await liveIdentity(api, 'missing', NOW)).title).toBeTruthy();
   });
 });
+
+test('guide viewport expansion and minute projections reuse completed channel pages for five minutes', async () => {
+  const { api, guideQueries } = fakeApi([channel(1), channel(2), channel(3)], [
+    programme('c1', 'one', NOW - MINUTE, NOW + HOUR),
+    programme('c2', 'two', NOW - MINUTE, NOW + HOUR),
+    programme('c3', 'three', NOW - MINUTE, NOW + HOUR),
+  ]);
+  const id = scope();
+  await loadGuide(api, 0, NOW, id, undefined, undefined, ['c1', 'c2']);
+  const expanded = await loadGuide(api, 0, NOW, id, undefined, undefined, ['c1', 'c2', 'c3']);
+  expect(guideQueries.map(q => q.channelIds)).toEqual([['c1', 'c2'], ['c3']]);
+  expect(expanded.channels.find(c => c.id === 'c2')?.programmes[0]?.name).toBe('two');
+  for (let minute = 1; minute < 5; minute++) {
+    await loadGuide(api, 0, NOW + minute * MINUTE, id, undefined, undefined, ['c2', 'c3']);
+  }
+  expect(guideQueries).toHaveLength(2);
+  await loadGuide(api, 0, NOW + 5 * MINUTE, id, undefined, undefined, ['c2', 'c3']);
+  expect(guideQueries).toHaveLength(3);
+  expect(guideQueries[2]?.channelIds).toEqual(['c2', 'c3']);
+});
+
+test('a 30-to-48 channel expansion reads 24 pages once, rather than repeating the first 15', async () => {
+  const channels = Array.from({ length: 48 }, (_, i) => channel(i));
+  const programmes = channels.flatMap(c => Array.from({ length: 48 }, (_, i) =>
+    programme(c.id, `${c.id}-${i}`, MIDNIGHT + i * 30 * MINUTE, MIDNIGHT + (i + 1) * 30 * MINUTE)));
+  const { api, guideQueries } = fakeApi(channels, programmes, 100);
+  const id = scope();
+  await loadGuide(api, 0, NOW, id, undefined, undefined, []);
+  expect(guideQueries).toHaveLength(15);
+  await loadGuide(api, 0, NOW, id, undefined, undefined, channels.map(c => c.id));
+  expect(guideQueries).toHaveLength(24);
+  for (let minute = 1; minute < 5; minute++) {
+    await loadGuide(api, 0, NOW + minute * MINUTE, id, undefined, undefined, channels.slice(10, 30).map(c => c.id));
+  }
+  expect(guideQueries).toHaveLength(24);
+});
