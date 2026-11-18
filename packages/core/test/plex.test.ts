@@ -194,6 +194,24 @@ describe('PlexAdapter requests', () => {
     await expect(adapter.guide({ from: '2026-03-01T00:00:00Z', until: '2026-03-10T00:00:00Z' })).rejects.toThrow('Invalid Plex guide window');
   });
 
+  test.each(['xmltv', 'cloud'])('%s DVR channels and airings share the provider grid identity', async kind => {
+    const base = `/tv.plex.providers.epg.${kind}:48`;
+    const seen = routeFetch({
+      'GET /identity': { MediaContainer: {} },
+      'GET /livetv/dvrs': { MediaContainer: { Dvr: [{ key: '48' }] } },
+      'GET /media/providers': { MediaContainer: { MediaProvider: [{ identifier: base.slice(1), Feature: [{ type: 'grid', key: `${base}/grid` }] }] } },
+      [`GET ${base}/lineups/dvr/channels`]: { MediaContainer: { Channel: [{ id: 1000, gridKey: 'station-1000', title: 'News', vcn: '10' }] } },
+      [`GET ${base}/grid`]: { MediaContainer: { size: 1, Metadata: [{ ratingKey: 7, title: 'Evening News', Media: [{ channelIdentifier: 'station-1000', beginsAt: 1_773_144_000, endsAt: 1_773_147_600 }] }] } },
+      'GET /livetv/epg/channels': new Response('', { status: 400 }),
+    });
+    const adapter = plex();
+    const channel = (await adapter.channels()).items[0]!;
+    const guide = await adapter.guide({ from: '2026-03-10T12:00:00Z', until: '2026-03-10T18:00:00Z', channelIds: [channel.id] });
+    expect(channel).toMatchObject({ id: 'station-1000', number: '10', name: 'News' });
+    expect(guide.items[0]?.channelId).toBe(channel.id);
+    expect(seen.some(r => r.url.pathname === '/livetv/epg/channels')).toBe(false);
+  });
+
   test('removing the DVR clears a previously available guide without querying providers', async () => {
     let present = true;
     const seen = routeFetch({
