@@ -76,7 +76,10 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   );
   return (
     <ScreenActive.Provider value={isCurrent}>
-      {shell ? <SkinRoot host={{ ...host, children: content }} node={shell} /> : content}
+      {/* On TV a covered screen (home under a title page, a section behind another) takes no focus. */}
+      <FocusBoundary active={isCurrent} entered={false} style={{ flex: 1 }}>
+        {shell ? <SkinRoot host={{ ...host, children: content }} node={shell} /> : content}
+      </FocusBoundary>
     </ScreenActive.Provider>
   );
 }

@@ -5,10 +5,19 @@ type Focusable = { requestTVFocus(): void };
 // RN's generated TV guide declarations omit the ref that its implementation forwards.
 const NativeFocusGuide = TVFocusGuideView as ComponentType<ComponentProps<typeof TVFocusGuideView> & { ref?: Ref<Focusable> }>;
 
-type Props = Omit<ViewProps, 'safePadding'> & { active: boolean; enterWhenReady?: boolean };
+type Props = Omit<ViewProps, 'safePadding'> & {
+  active: boolean;
+  enterWhenReady?: boolean;
+  /** Android TV: the boundary is a guide that is entered (a page or modal). Off, Android keeps a plain view. */
+  entered?: boolean;
+};
 
-/** pointerEvents only gates touch. Covered Android routes must also block native focus. */
-export function FocusBoundary({ active, enterWhenReady = false, ...props }: Props) {
+/** pointerEvents only gates touch: a covered route must also leave the TV focus engine. On tvOS a
+ * plain view stays focusable whatever its pointerEvents (react-native-tvos answers YES to
+ * isUserInteractionEnabled for any view but a focus guide), so a covered home or title page kept
+ * the remote's presses under the page or player above it. A focus guide that is not focusable takes
+ * its whole subtree out; an active route is a plain view again, so its own focus requests stand. */
+export function FocusBoundary({ active, enterWhenReady = false, entered: guided = true, ...props }: Props) {
   const guide = useRef<Focusable>(null);
   const entered = useRef(false);
   useEffect(() => {
@@ -23,7 +32,9 @@ export function FocusBoundary({ active, enterWhenReady = false, ...props }: Prop
     return () => cancelAnimationFrame(frame);
   }, [active, enterWhenReady]);
   const common = { ...props, pointerEvents: active ? 'auto' as const : 'none' as const };
-  return Platform.isTV && Platform.OS === 'android'
-    ? <NativeFocusGuide ref={guide} autoFocus {...common} focusable={active} />
-    : <View {...common} />;
+  if (!Platform.isTV) return <View {...common} />;
+  if (Platform.OS === 'android') {
+    return guided ? <NativeFocusGuide ref={guide} autoFocus {...common} focusable={active} /> : <View {...common} />;
+  }
+  return <NativeFocusGuide {...common} focusable={active ? undefined : false} />;
 }
