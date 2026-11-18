@@ -6,50 +6,53 @@ module.exports = function withApplePlayer(config) {
     return mod;
   });
   return withXcodeProject(config, mod => {
-    for (const section of Object.values(mod.modResults.pbxXCBuildConfigurationSection())) {
+    const project = mod.modResults;
+    for (const section of Object.values(project.pbxXCBuildConfigurationSection())) {
       if (!section.buildSettings) continue;
       section.buildSettings.IPHONEOS_DEPLOYMENT_TARGET = '18.0';
       section.buildSettings.TVOS_DEPLOYMENT_TARGET = '18.0';
-      // AetherEngine's static object must resolve av_* to its own FFmpeg,
-      // before the inherited MPVKit framework flags.
+      // Both engines are static. Resolve every av_* reference against MPVKit's
+      // FFmpeg; Aether's protocol-free binaries cannot serve mpv.
       section.buildSettings.OTHER_LDFLAGS = [
-        ...['avcodec', 'avformat', 'avutil', 'avfilter', 'swresample', 'swscale', 'dav1d', 'zimg', 'zvbi']
-          .flatMap(name => ['-framework', `AetherLib${name}`]),
+        ...['avcodec', 'avformat', 'avutil', 'avfilter', 'avdevice', 'swresample', 'swscale', 'dav1d']
+          .flatMap(name => ['-framework', `Lib${name}`]),
+        '-Wl,-dead_strip_dylibs',
         '"$(inherited)"',
       ];
+      section.buildSettings.LD_GENERATE_MAP_FILE = 'YES';
     }
-    // The static pod already contains AetherEngine and Dovi. Link only the
-    // dynamic FFmpeg products here, otherwise -ObjC loads the engine twice.
-    const project = mod.modResults;
     const objects = project.hash.project.objects;
-    const target = project.getFirstTarget().uuid;
-    if (Object.values(objects.XCRemoteSwiftPackageReference || {}).some(
-      ref => String(ref.repositoryURL || '').includes('superuser404notfound/FFmpegBuild'))) return mod;
-    const packageID = project.generateUuid();
     objects.XCRemoteSwiftPackageReference ||= {};
-    objects.XCSwiftPackageProductDependency ||= {};
-    objects.XCRemoteSwiftPackageReference[packageID] = {
-      isa: 'XCRemoteSwiftPackageReference',
-      repositoryURL: '"https://github.com/superuser404notfound/FFmpegBuild"',
-      requirement: { kind: 'exactVersion', version: '3.15.0' },
-    };
-    const root = project.getFirstProject().firstProject;
-    root.packageReferences ||= [];
-    root.packageReferences.push({ value: packageID, comment: 'FFmpegBuild' });
-    const nativeTarget = objects.PBXNativeTarget[target];
-    nativeTarget.packageProductDependencies ||= [];
-    const phase = Object.values(objects.PBXFrameworksBuildPhase).find(p => p.isa === 'PBXFrameworksBuildPhase');
-    for (const name of ['avcodec', 'avformat', 'avutil', 'avfilter', 'swresample', 'swscale', 'dav1d', 'zimg', 'zvbi']) {
-      const productID = project.generateUuid();
-      const buildID = project.generateUuid();
-      const productName = `AetherLib${name}`;
-      objects.XCSwiftPackageProductDependency[productID] = {
-        isa: 'XCSwiftPackageProductDependency', package: packageID, productName,
+    let packageID = Object.keys(objects.XCRemoteSwiftPackageReference).find(id =>
+      String(objects.XCRemoteSwiftPackageReference[id]?.repositoryURL || '').includes('superuser404notfound/FFmpegBuild'));
+    if (!packageID) {
+      packageID = project.generateUuid();
+      objects.XCRemoteSwiftPackageReference[packageID] = {
+        isa: 'XCRemoteSwiftPackageReference',
+        repositoryURL: '"https://github.com/superuser404notfound/FFmpegBuild"',
       };
-      nativeTarget.packageProductDependencies.push({ value: productID, comment: productName });
-      objects.PBXBuildFile[buildID] = { isa: 'PBXBuildFile', productRef: productID };
-      phase.files.push({ value: buildID, comment: `${productName} in Frameworks` });
+      const root = project.getFirstProject().firstProject;
+      root.packageReferences ||= [];
+      root.packageReferences.push({ value: packageID, comment: 'FFmpegBuild' });
     }
+    objects.XCRemoteSwiftPackageReference[packageID].requirement = { kind: 'exactVersion', version: '3.15.0' };
+    // The pod compiles Aether with this package's headers. Do not link its dynamic
+    // FFmpeg products into the app: both engines use the one static MPVKit build.
+    // Also remove products written by older versions of this plugin.
+    const products = objects.XCSwiftPackageProductDependency || {};
+    const removedProducts = new Set(Object.keys(products).filter(id => products[id]?.package === packageID));
+    const removedFiles = new Set(Object.keys(objects.PBXBuildFile || {}).filter(id =>
+      removedProducts.has(objects.PBXBuildFile[id]?.productRef)));
+    for (const target of Object.values(objects.PBXNativeTarget || {})) {
+      if (target.packageProductDependencies) {
+        target.packageProductDependencies = target.packageProductDependencies.filter(ref => !removedProducts.has(ref.value));
+      }
+    }
+    for (const phase of Object.values(objects.PBXFrameworksBuildPhase || {})) {
+      if (phase.files) phase.files = phase.files.filter(ref => !removedFiles.has(ref.value));
+    }
+    for (const id of removedFiles) { delete objects.PBXBuildFile[id]; delete objects.PBXBuildFile[`${id}_comment`]; }
+    for (const id of removedProducts) { delete products[id]; delete products[`${id}_comment`]; }
     return mod;
   });
 };
