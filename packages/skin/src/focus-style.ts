@@ -17,16 +17,23 @@ export function focusStyle(transform?: unknown, still = false) {
  * focus-visible, so the fallback drew a hard white rectangle over the field's own look.
  * !important deliberately wins over controls that suppress the platform outline inline. */
 export const FOCUS_CSS = `
-:where(button, select, [tabindex]):not(input, textarea, [data-vela-focus="frame"]):focus-visible {
+:where(button, select, [tabindex]):not(input, textarea, [data-vela-focus="frame"], [data-vela-focus="timeline"]):focus-visible {
   outline: 3px solid #fff !important;
   outline-offset: -3px !important;
   box-shadow: inset 0 0 0 5px #101216 !important;
   scale: 1.025;
 }
+/* A timeline spans the picture: a fine inset edge is enough when tabbed to. */
+[data-vela-focus="timeline"]:focus-visible {
+  outline: 1px solid #ffffff99 !important;
+  outline-offset: -1px !important;
+  box-shadow: none !important;
+}
 @media (prefers-reduced-motion: reduce) {
-  :where(button, select, [tabindex]):not(input, textarea, [data-vela-focus="frame"]):focus-visible { scale: none; }
+  :where(button, select, [tabindex]):not(input, textarea, [data-vela-focus="frame"], [data-vela-focus="timeline"]):focus-visible { scale: none; }
 }
 @media (forced-colors: active) {
-  :where(button, select, [tabindex]):not(input, textarea, [data-vela-focus="frame"]):focus-visible { outline-color: Highlight !important; }
+  :where(button, select, [tabindex]):not(input, textarea, [data-vela-focus="frame"], [data-vela-focus="timeline"]):focus-visible { outline-color: Highlight !important; }
+  [data-vela-focus="timeline"]:focus-visible { outline-color: Highlight !important; }
 }
 `;

@@ -154,6 +154,7 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail }: 
         disabled={disabled || duration <= 0}
         focusable={(look.tv || Platform.OS === 'web') && !disabled && duration > 0}
         testID="player-scrub"
+        {...(Platform.OS === 'web' ? { dataSet: { velaFocus: 'timeline' } } : {})}
         onFocus={() => setFocused(true)}
         onBlur={() => {
           setFocused(false);

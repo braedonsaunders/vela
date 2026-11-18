@@ -28,10 +28,6 @@ export interface Shortcuts {
   liveKey?(key: string): boolean;
 }
 
-function onTVControl(target: EventTarget | null): boolean {
-  return !!(target as HTMLElement | null)?.closest?.('[data-testid="player-chrome"] [role="button"], [data-testid="player-chrome"] button');
-}
-
 function typing(target: EventTarget | null): boolean {
   const element = target as { tagName?: string; isContentEditable?: boolean } | null;
   return !!element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || !!element.isContentEditable);
@@ -59,21 +55,6 @@ export function useShortcuts(shortcuts: Shortcuts): void {
       if (event.key === 'Escape') return;
       const arrows = event.key.startsWith('Arrow');
       if (arrows && s.menuOpen) return;
-      if (arrows && onTVControl(event.target)) {
-        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-          const current = event.target as HTMLElement;
-          const box = current.getBoundingClientRect();
-          const controls = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="player-chrome"] button, [data-testid="player-chrome"] [role="button"]'))
-            .filter(el => { const rect = el.getBoundingClientRect(); return !el.hasAttribute('disabled') && el.getAttribute('aria-disabled') !== 'true' && rect.width > 0 && Math.abs(rect.top - box.top) < 20; })
-            .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-          const index = controls.indexOf(current);
-          if (index >= 0) {
-            event.preventDefault(); event.stopPropagation();
-            controls[index + (event.key === 'ArrowRight' ? 1 : -1)]?.focus();
-          }
-        }
-        return;
-      }
       // A focused button takes Space and Enter as its own press.
       const onControl =
         (event.target as { tagName?: string } | null)?.tagName === 'BUTTON' ||
@@ -81,6 +62,14 @@ export function useShortcuts(shortcuts: Shortcuts): void {
       const act = (run: () => void) => {
         event.preventDefault();
         run();
+      };
+      // Seeking is a page shortcut, including after a pointer scrub. Release the
+      // timeline's retained pointer focus before the browser switches to keyboard
+      // focus-visible; Tab can deliberately return to it. Native TV focus is separate.
+      const seek = (seconds: number) => {
+        const timeline = document.activeElement as HTMLElement | null;
+        if (timeline?.getAttribute('data-testid') === 'player-scrub') timeline.blur();
+        s.seekBy(seconds);
       };
       switch (event.key) {
         case ' ':
@@ -93,12 +82,12 @@ export function useShortcuts(shortcuts: Shortcuts): void {
         case 'ArrowLeft':
         case 'j':
         case 'J':
-          act(() => s.seekBy(-10));
+          act(() => seek(-10));
           return;
         case 'ArrowRight':
         case 'l':
         case 'L':
-          act(() => s.seekBy(10));
+          act(() => seek(10));
           return;
         case 'ArrowUp':
           act(() => s.volumeBy(0.05));
