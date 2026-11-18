@@ -16,6 +16,9 @@ async function call(path, body) {
   if (!response.ok) throw Error(`server ${response.status}`);
   return response.json();
 }
+function resolvedPlan(plan) {
+  return { ...plan, paths: plan.paths.map(path => ({ ...path, ...(path.url ? { url: new URL(path.url, config.api).href } : {}) })) };
+}
 function Probe() {
   const [plan, setPlan] = useState(null);
   const lastLog = useRef(-10);
@@ -47,10 +50,10 @@ function Probe() {
           console.log('[apple-recovery-command]', event.command.kind, event.command.pathId || '');
           const next = await call(`/sessions/${event.sessionId}/commands`, event.command);
           await VelaPlayer.setMediaAccess(null);
-          setPlan(next);
+          setPlan(resolvedPlan(next));
           clearInterval(polling.current);
           polling.current = setInterval(() => {
-            void call(`/sessions/${event.sessionId}`).then(snapshot => setPlan(snapshot.plan)).catch(() => {});
+            void call(`/sessions/${event.sessionId}`).then(snapshot => setPlan(resolvedPlan(snapshot.plan))).catch(() => {});
           }, 2000);
         } catch (error) { setStatus(error.message); }
       }} />}

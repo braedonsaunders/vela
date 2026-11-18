@@ -48,7 +48,8 @@ module.exports = function withApplePlayer(config) {
     objects.PBXBuildFile ||= {};
     const target = objects.PBXNativeTarget[project.getFirstTarget().uuid];
     target.packageProductDependencies ||= [];
-    const phase = Object.values(objects.PBXFrameworksBuildPhase).find(value => Array.isArray(value?.files));
+    const phaseRef = target.buildPhases.find(ref => objects.PBXFrameworksBuildPhase[ref.value]);
+    const phase = objects.PBXFrameworksBuildPhase[phaseRef.value];
     for (const name of ['avcodec', 'avformat', 'avutil', 'swresample', 'swscale', 'avfilter', 'dav1d', 'zimg', 'zvbi']) {
       const productName = `AetherLib${name}`;
       let product = Object.keys(objects.XCSwiftPackageProductDependency).find(key =>

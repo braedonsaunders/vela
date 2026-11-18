@@ -9,7 +9,7 @@ function project() {
   };
   const objects: any = { XCBuildConfiguration: configs,
     XCConfigurationList: { app: { buildConfigurations: [{ value: 'appDebug' }, { value: 'appRelease' }] } },
-    PBXNativeTarget: { app: { buildConfigurationList: 'app', packageProductDependencies: [] } },
+    PBXNativeTarget: { app: { buildConfigurationList: 'app', buildPhases: [{ value: 'frameworks' }], packageProductDependencies: [] } },
     PBXFrameworksBuildPhase: { frameworks: { files: [] } }, PBXBuildFile: {},
   };
   let serial = 0;
@@ -43,5 +43,13 @@ test('upgrading removes static FFmpeg flags and preserves Aether dynamic product
   expect(p.objects.PBXNativeTarget.app.packageProductDependencies).toContainEqual({ value: 'ffmpeg' });
   expect(p.objects.PBXNativeTarget.app.packageProductDependencies).toHaveLength(9);
   expect(p.objects.PBXFrameworksBuildPhase.frameworks.files).toContainEqual({ value: 'old' });
+  expect(p.objects.PBXFrameworksBuildPhase.frameworks.files).toHaveLength(9);
+});
+
+test('repeated prebuilds retain exactly one copy of each dynamic package product', async () => {
+  const p = project();
+  await apply(p);
+  await apply(p);
+  expect(p.objects.PBXNativeTarget.app.packageProductDependencies).toHaveLength(9);
   expect(p.objects.PBXFrameworksBuildPhase.frameworks.files).toHaveLength(9);
 });
