@@ -136,6 +136,7 @@ internal sealed class Playback : IDisposable
             ApplyTrack("subtitle", Str(plan, "selectedSubtitleTrackId"));
             double position=Read("time-pos")+offset, ahead=Read("demuxer-cache-duration");
             string state=mpv.Property("eof-reached")=="yes" ? "ended" : mpv.Property("paused-for-cache")=="yes" ? "buffering" : mpv.Property("pause")=="yes" ? "paused" : "playing";
+            Awake(state == "playing" || state == "buffering");
             emit("snapshot",new { state,position,duration=Read("duration")+offset,bufferAheadSeconds=ahead,volume=Read("volume")/100,muted=mpv.Property("mute")=="yes",speed=Read("speed"),droppedFrames=Read("frame-drop-count") });
             if (state!=phase || (DateTime.UtcNow-observed).TotalSeconds>=1) {
                 observed=DateTime.UtcNow; phase=state; sequence++;
@@ -152,7 +153,17 @@ internal sealed class Playback : IDisposable
             error = new { @class = "source", message = "Native playback failed" }
         }});
         Stop(); emit("snapshot",new {state="failed",failure=new {message="Native playback failed",kind="source",recoverable=false}}); }
-    public void Stop() { if (!disposed) { try {mpv.Command("stop");} catch {} } source="";seek="";phase="idle"; }
+    public void Stop() { if (!disposed) { try {mpv.Command("stop");} catch {} } source="";seek="";phase="idle";Awake(false); }
+    // No screensaver, display sleep or lock while a film plays (or buffers to play); released when
+    // paused, ended or stopped. Called on the UI thread, which holds the execution state.
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern uint SetThreadExecutionState(uint flags);
+    const uint EsContinuous = 0x80000000, EsSystemRequired = 0x00000001, EsDisplayRequired = 0x00000002;
+    bool awake;
+    void Awake(bool on) {
+        if (on == awake) return;
+        awake = on;
+        SetThreadExecutionState(on ? EsContinuous | EsSystemRequired | EsDisplayRequired : EsContinuous);
+    }
     public void Dispose() { if(disposed)return; Stop();disposed=true;mpv.Dispose();proxy.Dispose(); }
 }
 internal static class PlaybackJson { internal static double TryGetDoubleSafe(this JsonElement e) => e.ValueKind==JsonValueKind.Number && e.TryGetDouble(out var n) && double.IsFinite(n) ? n : 0; }

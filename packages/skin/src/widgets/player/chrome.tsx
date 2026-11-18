@@ -12,6 +12,7 @@ import { useHost } from '../../host';
 import { BottomBar, TopBar, type Opened } from './bars';
 import { usePlayerChrome, type PlayerChromeState } from './context';
 import { useIdle } from './idle';
+import { useScreenAwake } from './wake-lock';
 import { InfoCard } from './info-card';
 import { useLiveWatchChrome } from './live';
 import { useShortcuts } from './keys';
@@ -60,6 +61,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const waiting = !failed && (!state.plan || view.waiting);
   const live = useLiveWatchChrome(state.plan, state.snapshot);
   const idle = useIdle(!view.playing || opened !== null || active || !!failed || live.attention);
+  // No screensaver or display sleep over a playing film (web and desktop; native players hold it themselves).
+  useScreenAwake(view.playing);
   const { send } = state;
 
   const seek = (seconds: number) => {

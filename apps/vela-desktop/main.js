@@ -238,8 +238,8 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.whenReady().then(() => {
     protocol.handle(SCHEME, serve);
-    // Only fullscreen is ever granted to the page (cameras, location and the rest are refused).
-    session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'fullscreen'));
+    // Only fullscreen, and keeping the screen awake while a film plays, are ever granted to the page.
+    session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'fullscreen' || permission === 'screen-wake-lock'));
     Menu.setApplicationMenu(menu());
     // A packaged app carries its icon; a development run would otherwise show Electron's.
     if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, 'build', 'icon.png'));
