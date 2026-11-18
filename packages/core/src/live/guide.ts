@@ -1,3 +1,4 @@
+import { guideWindows } from './window';
 import { VelaError } from '../adapter/errors';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { localeContext, minute, msg, number, time, withLocale } from '../i18n';
@@ -32,6 +33,8 @@ export interface GuideChannel {
 export interface GuideModel {
   /** Minutes from the start of the loaded timeline to each day. */
   dayStarts?: Record<number, number>;
+  /** Completed listing coverage, in timeline minutes. */
+  loadedRanges?: { from: number; to: number }[];
   day: number; dayLabel: string; fromLabel: string; untilLabel: string; minutes: number; nowMinute: number; nowLabel: string; landing: number;
   ticks: { id: string; label: string; minute: number; hour: boolean }[];
   days: { offset: number; label: string; date: string }[];
@@ -211,7 +214,10 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
   if (range && range.from === -1) range = { from: Math.max(0, initialMinute - 150), to: initialMinute + 240 };
   const from = range ? Math.max(start, start + Math.floor(range.from / 30) * 30 * MINUTE) : start;
   const until = range ? Math.min(end, start + Math.ceil(range.to / 30) * 30 * MINUTE) : end;
-  const window = await listings(api, scope, from, Math.max(from + MINUTE, until), now, channelIds);
+  const windows = range ? await Promise.all(guideWindows(from, until, start, end).map(window =>
+    listings(api, scope, window.from, window.until, now, channelIds))) : [await listings(api, scope, from, Math.max(from + MINUTE, until), now, channelIds)];
+  const window = { channels: windows[0]?.channels ?? await channelMetadata(api, scope, now),
+    programmes: [...new Map(windows.flatMap(window => window.programmes).map(p => [p.id, p])).values()] };
   // Mobile now/next and the channel column stay current even while the grid browses another day.
   const currentStart = Math.floor(now / 1800000) * 1800000;
   const current = !range && day === 0 ? window : await listings(api, scope, currentStart, currentStart + 2 * HOUR, now, channelIds);
@@ -275,6 +281,7 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
       };
     });
     const model: GuideModel = {
+      loadedRanges: range ? guideWindows(from, until, start, end).map(w => ({ from: (w.from - start) / MINUTE, to: (w.until - start) / MINUTE })) : [{ from: 0, to: minutes }],
       day, dayLabel: day === 0 ? msg('live.today') : long.format(start), fromLabel: time(start), untilLabel: time(end), minutes, nowMinute, nowLabel: time(now),
       // The time of day to land on: now today, the same clock time on a later day. The skin places it.
       landing: Math.max(0, Math.min(minutes, (now - midnight(now, 0)) / MINUTE)),

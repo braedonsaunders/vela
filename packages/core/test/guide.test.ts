@@ -68,14 +68,17 @@ describe('loadGuide window', () => {
     expect(guideQueries[1]).toMatchObject({ from: iso(Date.parse('2026-03-10T14:00:00Z')), until: iso(Date.parse('2026-03-10T16:00:00Z')) });
   });
 
-  test('a range around now snaps outwards to half hours and stays inside the day', async () => {
+  test('bounded ranges reuse fixed three-hour requests and clamp to the day', async () => {
     const { api, guideQueries } = fakeApi([channel(1)], []);
-    await loadGuide(api, 0, NOW, scope(), undefined, undefined, undefined, { from: -1, to: 0 });
-    // now is minute 850: 150 before (700 → 690) to 240 after (1090 → 1110).
-    expect(guideQueries[0]).toMatchObject({ from: iso(MIDNIGHT + 690 * MINUTE), until: iso(MIDNIGHT + 1110 * MINUTE) });
+    const cacheScope = scope();
+    const model = await loadGuide(api, 0, NOW, cacheScope, undefined, undefined, ['c1'], { from: 700, to: 1090 });
+    expect(model.loadedRanges).toEqual([{ from: 540, to: 720 }, { from: 720, to: 900 }, { from: 900, to: 1080 }, { from: 1080, to: 1260 }]);
+    const reads = guideQueries.length;
+    await loadGuide(api, 0, NOW, cacheScope, undefined, undefined, ['c1'], { from: 720, to: 1100 });
+    expect(guideQueries.length).toBe(reads);
     guideQueries.length = 0;
-    await loadGuide(api, 0, NOW, scope(), undefined, undefined, undefined, { from: -100, to: 5000 });
-    expect(guideQueries[0]).toMatchObject({ from: iso(MIDNIGHT), until: iso(MIDNIGHT + DAY) });
+    await loadGuide(api, 0, NOW, scope(), undefined, undefined, ['c1'], { from: -100, to: 5000 });
+    expect(guideQueries.every(q => Date.parse(q.from) >= MIDNIGHT && Date.parse(q.until) <= MIDNIGHT + DAY)).toBe(true);
   });
 
   test.each([-1, 7, 1.5])('refuses day %p', async day => {
