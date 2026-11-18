@@ -9,6 +9,7 @@
     "backgroundColor": "#090b0e",
     "ios": {
       "bundleIdentifier": "app.ether.vela",
+      "icon": "./assets/brand/vela-app-icon-1024.png",
       "supportsTablet": true,
       "infoPlist": {
         "NSAppTransportSecurity": {

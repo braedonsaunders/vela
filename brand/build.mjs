@@ -2,7 +2,7 @@
 //   node brand/build.mjs          SVG sources in brand/svg and the app's assets in apps/vela/assets/brand
 //   node brand/build.mjs --png    also the PNG icons in brand/png (needs Google Chrome and playwright-core)
 // Geometry is on the 64-unit symbol grid; the wordmark is on its own 100-unit ascender grid.
-import { writeFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -120,5 +120,8 @@ if (process.argv.includes("--png")) {
   await shot("apple-touch-icon-180.png", "vela-icon-square.svg", 180);
   for (const s of [192, 512]) await shot(`vela-icon-${s}.png`, "vela-icon.svg", s);
   for (const s of [192, 512]) await shot(`vela-icon-maskable-${s}.png`, "vela-icon-maskable.svg", s);
+  // The iOS app icon (app.json expo.ios.icon): the square tile, opaque to its edges, at 1024.
+  await shot("vela-app-icon-1024.png", "vela-icon-square.svg", 1024);
+  copyFileSync(join(here, "png", "vela-app-icon-1024.png"), join(app, "vela-app-icon-1024.png"));
   await browser.close();
 }

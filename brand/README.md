@@ -10,7 +10,7 @@ Everything here comes from one file, [build.mjs](build.mjs):
 ```sh
 node brand/build.mjs --readme # only the animated GitHub README logo
 node brand/build.mjs          # SVG sources in brand/svg and the app's assets in apps/vela/assets/brand
-node brand/build.mjs --png    # also the PNG icons in brand/png (uses Google Chrome through playwright-core)
+node brand/build.mjs --png    # also the PNG icons in brand/png and the iOS app icon (uses Google Chrome through playwright-core)
 ```
 
 Edit the geometry or colours there, never the generated files. The round-by-round explorations
