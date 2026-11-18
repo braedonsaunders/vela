@@ -16,6 +16,17 @@ import Foundation
                     var bytes = [UInt8](repeating: 0, count: 5)
                     guard reader.read(&bytes, size: 5) == -1 else { exit(2) }
                     print("cancelled")
+                } else if args[3] == "reload" {
+                    var bytes = [UInt8](repeating: 0, count: 5)
+                    guard reader.read(&bytes, size: 5) == 5 else { exit(2) }
+                    reader.cancel()
+                    guard reader.read(&bytes, size: 5) == -1,
+                          reader.seek(offset: 0, whence: 0) == 0,
+                          reader.read(&bytes, size: 5) == 5,
+                          String(bytes: bytes, encoding: .utf8) == "media" else { exit(2) }
+                    reader.close()
+                    guard reader.seek(offset: 0, whence: 0) == -1 else { exit(2) }
+                    print("reload_ok")
                 } else if args[3] == "cancel" {
                     DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { reader.cancel() }
                     var bytes = [UInt8](repeating: 0, count: 5)

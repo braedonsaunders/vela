@@ -91,3 +91,7 @@ appleTest('cancellation promptly unblocks a stalled native read', async () => {
   expect(await request('/grant/stall', 'cancel')).toEqual({ output: 'cancelled\n', status: 0 });
   expect(Date.now() - began).toBeLessThan(2000);
 });
+
+appleTest('a retained reader can rewind after cancellation, while final close remains terminal', async () => {
+  expect(await request('/grant/target', 'reload')).toEqual({ output: 'reload_ok\n', status: 0 });
+});

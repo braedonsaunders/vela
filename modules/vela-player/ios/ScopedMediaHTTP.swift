@@ -155,6 +155,7 @@ final class ScopedMediaByteReader: @unchecked Sendable {
     private let lock = NSLock()
     private var operation: ScopedMediaRequest?
     private var closed = false
+    private var interrupted = false
     private var position: Int64 = 0
     private var totalSize: Int64?
     private var cache = Data()
@@ -169,7 +170,7 @@ final class ScopedMediaByteReader: @unchecked Sendable {
     private func fetch(at offset: Int64, count: Int) throws -> ScopedMediaResponse {
         let request = ScopedMediaRequest(url: url, access: access, offset: offset, count: count)
         lock.lock()
-        guard !closed else { lock.unlock(); throw URLError(.cancelled) }
+        guard !closed && !interrupted else { lock.unlock(); throw URLError(.cancelled) }
         operation = request
         lock.unlock()
         defer { lock.lock(); operation = nil; lock.unlock() }
@@ -178,7 +179,7 @@ final class ScopedMediaByteReader: @unchecked Sendable {
 
     func read(_ buffer: UnsafeMutablePointer<UInt8>?, size: Int32) -> Int32 {
         guard let buffer, size > 0 else { return 0 }
-        lock.lock(); let stopped = closed; lock.unlock()
+        lock.lock(); let stopped = closed || interrupted; lock.unlock()
         guard !stopped else { return -1 }
         if let totalSize, position >= totalSize { return 0 }
         do {
@@ -199,9 +200,14 @@ final class ScopedMediaByteReader: @unchecked Sendable {
     }
 
     func seek(offset: Int64, whence: Int32) -> Int64 {
-        lock.lock(); let stopped = closed; lock.unlock()
-        guard !stopped else { return -1 }
         let mode = whence & ~131072
+        lock.lock()
+        // Aether retains custom readers across audio-track rebuilds. A positional
+        // seek starts the next read epoch; cancellation alone never closes the grant.
+        if !closed, mode == 0, offset >= 0 { interrupted = false }
+        let stopped = closed || interrupted
+        lock.unlock()
+        guard !stopped else { return -1 }
         if totalSize == nil, mode == 65536 || mode == 2 {
             do { totalSize = try fetch(at: 0, count: 1).totalSize } catch { return -1 }
         }
@@ -225,7 +231,10 @@ final class ScopedMediaByteReader: @unchecked Sendable {
         return target
     }
 
-    func cancel() { close() }
+    func cancel() {
+        lock.lock(); interrupted = true; let request = operation; lock.unlock()
+        request?.cancel()
+    }
 
     func close() {
         lock.lock(); closed = true; let request = operation; lock.unlock()
