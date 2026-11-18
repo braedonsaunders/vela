@@ -22,15 +22,125 @@ spelling and does not select an engine.
 Authenticated files use ScopedAetherReader and bounded URLSession ranges under
 an immutable media grant. Redirects strip grant fields outside its origin/path
 prefix and never restore them in the same chain. Aether LoadOptions.httpHeaders
-stays empty, including secondary requests. Header-dependent playlists refused by
-the custom reader must be replaced by a server path; credentials must never be
-passed to an unrestricted engine HTTP loader. Tests exercise real redirects,
-seeks, clones, size probes, bounded responses and cancellation.
+stays empty, including secondary requests. Header-dependent HLS may use only the
+adapter's existing `MediaAccess.nativeURL` (Plex transient token or Jellyfin
+api_key). This private attachment must match the clean source, plan identity and
+current grant generation, and both URLs must remain within that grant. It is
+discarded on stop, plan change or grant replacement. URLs never enter snapshots
+or diagnostics. Otherwise a refused playlist must be replaced by a server path.
+Tests exercise real redirects, seeks, clones, size probes, bounded responses,
+cancellation, attachment lifetime and credential-free diagnostics. Cancellation
+interrupts the active I/O epoch; retained readers can rewind for track reloads.
 
 Aether owns display matching. Main and muted hero preview sessions use separate
 reusable engine instances. Detaching stops playback and removes subscriptions.
 Upstream free-form logs are suppressed because they may contain grant URLs;
 Vela logs route, video format, audio delivery and cache counters without URLs.
+
+Public HTTP servers use the owner's selected address. The generated Apple plist
+must not combine `NSAllowsArbitraryLoads` with `NSAllowsLocalNetworking`: the
+latter overrides the former on current Apple OS versions. Local and public HTTP
+connections were checked on the Basement Apple TV.
+
+## Single-engine device verification, 2026-11-18
+
+Release builds installed on the Basement Apple TV and owner's iPhone played
+Camp Crystal (Crystal Lake S01E01) through the loopback AVPlayerLayer route.
+Camp Crystal's audio/subtitle menus were exercised on TV. The authenticated
+two-audio-track fixture switched to Spanish and visibly rendered its English
+subtitle on both devices, exercising reader reuse after cancellation. The final
+TV fixture visibly displayed the caption over the full-screen picture after
+placing subtitle layers above Aether's later-attached video layer. English/off
+switches were also exercised. Hero trailers played through the separate preview
+Aether instance on both devices; successive TV hero picture crops differed
+while the native route remained Aether loopback/AVPlayerLayer.
+
+Fall's 71,425,306,132-byte Asmo HEVC remux played through
+`route=loopback format=hdr10 audio=bridged AVPlayerLayer=true` on both devices.
+The lab needed a temporary owner-approved release pin: Ether reused a cached
+19.9 GB SDR release despite HDR-capable client capabilities. The pin was removed
+after proof, restoring the original no-pin state. This is recorded as an Ether
+selection gap in `packages/protocol/title-player-gaps.md`. No client format
+spoofing or production server changes were made.
+
+The production Ether public address on port 32450 played BBC Two HEVC on the
+TV through `remoteBypass` for more than ten minutes. Pause froze successive
+frames and resume advanced them. Quick Connect was approved by the owner.
+Production guide requests hit Ether's image-grant quota (503); the server team
+identified and fixed that issue separately. Vela caches guide pages per channel
+and time window for five minutes and coalesces overlapping loads. A controlled
+48-channel/48-programme case used 24 startup pages rather than 39, with no repeat
+fetches during the next four minutes.
+
+The lab's Ether On Air CHROMA 80 channel played full screen on TV uninterrupted
+from 02:11:43 through 02:17, using `remoteBypass` and AVPlayerLayer. Paused
+frames eight seconds apart had zero pixel difference; resume advanced the image.
+The server advertised adaptive live playback with a rolling window (0–6 seconds
+in a fresh lab14 session), without a persistent DVR/recording capability. This
+proves pause/resume within retained live media, not recording or arbitrary
+timeshift seeking. The real
+TV counter measured two distinct startup guide requests, one on tuning, then
+two at the five-minute refresh: five guide requests and two channel-list
+requests by elapsed 360 seconds, with no identical guide URL requested twice.
+The guide's days and programme focus were exercised. The native TV channel
+arrows tuned SHIFT 10 → CHROMA 80 → SHIFT 10, with a fresh Aether/AVPlayer
+ready event and visible picture after each change. A TV focus guide makes these
+arrows reachable above the transport controls without changing directional
+navigation into transport shortcuts. Later fresh lab tunes briefly failed with
+503/-1008: Ether traced those to Giganews refusing the shared account's
+simultaneous IPs, not a lab restart. Cached sources subsequently allowed the
+successful tuning checks. Production was not modified.
+
+An authenticated fMP4 HLS fixture on TV used the real Jellyfin adapter's native
+URL helper and played through Aether/AVPlayer. A redirect outside the grant
+received neither the query token nor an authorization header. The displayed
+diagnostic URL omitted its query. These are test-only entries under
+`modules/vela-player/test/device`, never distribution entry points.
+
+The final TV recovery probe replaced the original URL in a real Ether plan with
+the authenticated refused-M3U fixture. Aether emitted `customSourceProbeFailed`
+(-1094995529), then Vela's `switch` selected the actual advertised
+`quality-720p4000k-hevc-sdr` path. The probe limited alternatives to that real
+server path to require conversion rather than a stream-copy remux. It visibly
+played as `aether-hls` through `remoteBypass`. The original was H.264 1920x1080;
+ffprobe of the returned initialization and first fragment confirmed HEVC
+1280x720. Ether labels the prepared delivery `remux`, despite serving this
+converted rendition. No replacement media URL was manufactured by the client.
+The Ether team corrected this quality-rung label to `transcode` in lab14,
+deployed around 02:48; the earlier observation above records the pre-fix server.
+The final post-restart TV run repeated the refusal and played the first requested
+720p path with `kind=transcode`, `readiness=ready` and `aether-hls`.
+The test also caught a reused engine's initial previous-error publication:
+subscriptions now ignore their initial old values and defer stopping out of
+`@Published`'s setter. The final run had one refusal and used the first requested
+replacement, without skipping it.
+
+App bundle sizes below count regular-file bytes, excluding symlinks, using the
+same measure for the supplied dual-engine baseline and the final Release build:
+
+| Platform | Aether + mpv baseline | Aether only |
+| --- | ---: | ---: |
+| tvOS | 99,078,013 | 78,746,254 |
+| iOS | 85,490,183 | 78,637,811 |
+
+Both bundles contain nine AetherLib FFmpeg/dependency frameworks and no mpv,
+MoltenVK, libplacebo or libass files. Allocated bundle bytes were respectively
+99,627,008 to 80,912,384 (tvOS) and 86,081,536 to 80,773,120 (iOS).
+In KiB, matching the supplied on-disk baseline measure, tvOS went from 97,292
+to 79,016 (-18.8%) and iOS from 84,064 to 78,880 (-6.2%). Logical file bytes
+fell 20.5% and 8.0% respectively. Neither normal bundle contains the test-only
+bootstrap or fixture-token markers.
+
+At handoff, the TV's original saved state was restored with synchronous Keychain
+readback verification, and the normal Release app was installed and opened.
+The final normal iPhone app is built and audited. Its original-state restore
+launch remains blocked by the phone's lock screen: both foreground and
+`--no-activate` launches returned FrontBoard error 7 (`Locked`). The installed
+test-only restore entry restores the saved device/session/server values on its
+next launch; after that verified launch, install the normal iPhone Release app.
+The phone was left locked, with no personal app driven. Device-test servers and
+the agent's TV playback process were stopped. No production configuration was
+changed and the temporary Fall lab pin was removed.
 
 ## Distribution notices
 
@@ -85,7 +195,7 @@ Fallback carries the current pause, mute and volume settings. A native ready log
 records the route, video format, audio delivery and AVPlayerLayer presence without
 logging the media URL or its authorization.
 
-## Cleared-space Fall endurance run
+## Historical cleared-space Fall endurance run
 
 On 2026-11-18, after the owner cleared TV storage, the final build played Fall
 continuously through AetherEngine beyond ten minutes (`cpuprobe t=601s`). It
@@ -98,7 +208,7 @@ reserve zero, and retention ten forward/twenty backward segments: all defaults.
 The playback-safe floor can exceed the soft safety budget, but with space
 available that did not disrupt this run. No cache-sizing workaround ships.
 
-## Upstream issue: default VOD cache can exhaust tvOS storage
+## Historical upstream issue: default VOD cache can exhaust tvOS storage
 
 With little free space, AetherEngine 7.70.0 defaults exhausted the cache volume
 on the Basement Apple TV
