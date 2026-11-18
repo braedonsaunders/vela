@@ -87,9 +87,11 @@ final class VelaTour: XCTestCase {
   func test04Library() {
     start()
     for section in ["Movies", "TV Shows"] {
+      scrollToTop()
       guard tap(section) else { continue }
       wait(4)
       for view in ["Recommended", "Library", "Collections", "Genres"] {
+        scrollToTop()
         if tap(view) {
           wait(4)
           shot("library-\(section)-\(view)", tree: view == "Library")
@@ -105,7 +107,7 @@ final class VelaTour: XCTestCase {
     start()
     guard tap("Movies") else { return }
     wait(4)
-    guard let card = first(identifierPrefix: "title-") else { return note("no movie card") }
+    guard let card = firstTitle() else { return note("no movie card") }
     card.tap()
     wait(3)
     shot("title-movie", tree: true)
@@ -119,7 +121,7 @@ final class VelaTour: XCTestCase {
     _ = tap("Library")
     wait(4)
     shot("series-library")
-    guard let card = first(identifierPrefix: "title-") else { return note("no series card") }
+    guard let card = firstTitle() else { return note("no series card") }
     card.tap()
     wait(3)
     shot("series-title", tree: true)
@@ -221,7 +223,7 @@ final class VelaTour: XCTestCase {
 
   func test10Profile() {
     start()
-    guard tap("Profile and appearance") else { return }
+    guard tapID("profile-menu") else { return }
     wait(1.2)
     shot("profile-menu", tree: true)
     if tap("Appearance") {
@@ -237,7 +239,7 @@ final class VelaTour: XCTestCase {
   func test11Skins() {
     for skin in ["Mochi", "Late Night", "Kids", "Cinematic"] {
       start()
-      guard tap("Profile and appearance") else { return }
+      guard tapID("profile-menu") else { return }
       wait(1.5)
       guard tap("Appearance") else { return }
       wait(2)
@@ -318,7 +320,7 @@ final class VelaTour: XCTestCase {
     start()
     guard tap("Movies") else { return }
     wait(4)
-    guard let card = first(identifierPrefix: "title-") else { return note("no movie card") }
+    guard let card = firstTitle() else { return note("no movie card") }
     card.tap()
     wait(3)
     guard tapID("detail-play") else { return }
@@ -344,12 +346,58 @@ final class VelaTour: XCTestCase {
     }
   }
 
+  func test16FiltersAndLibraryRotation() {
+    start()
+    guard tap("Movies") else { return }
+    wait(3)
+    guard tap("Library") else { return }
+    wait(3)
+    shot("library-filters", tree: true)
+    for filter in ["Unwatched", "Watched", "All"] {
+      if tap(filter) { wait(2); shot("library-filter-\(filter)") }
+    }
+    if tap("Genre") {
+      wait(1); shot("library-genres-menu", tree: true)
+      if tap("Drama") { wait(3); shot("library-genre-drama") } else { dismissMenu() }
+    }
+    XCUIDevice.shared.orientation = .landscapeLeft
+    wait(3)
+    shot("library-landscape", tree: true)
+    app.swipeUp(); wait(2)
+    shot("library-landscape-scrolled")
+    XCUIDevice.shared.orientation = .portrait
+    wait(3)
+    shot("library-portrait-after-rotation")
+  }
+
+  func test17PlexEmptyGuide() {
+    start()
+    guard tapID("profile-menu") else { return }
+    wait(1)
+    shot("server-menu", tree: true)
+    guard pickServer(containing: "Plex") else { return }
+    wait(5)
+    if !tap("Live TV") {
+      drag(from: CGVector(dx: 0.8, dy: 0.14), to: CGVector(dx: 0.1, dy: 0.14))
+      guard tap("Live TV") else { return }
+    }
+    wait(5)
+    let pending = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Loading the guide")).firstMatch
+    XCTAssertTrue(pending.waitForNonExistence(timeout: 60), "Plex guide must settle")
+    shot("plex-empty-guide", tree: true)
+    XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Plex request failed")).firstMatch.exists)
+    if tapID("profile-menu") {
+      wait(1)
+      if pickServer(containing: "Ether On Air Lab") { wait(5); shot("lab-restored") }
+    }
+  }
+
   /// Adds a server by its address (VELA_TOUR_SERVER, else the lab) and signs in with Quick
   /// Connect: the code is printed as VELA_QUICK_CODE=<code> for an approver outside the phone.
   /// No credential is ever typed here (test logs and results record typed text).
   func testAddServer() {
     start()
-    guard tap("Profile and appearance") else { return }
+    guard tapID("profile-menu") else { return }
     wait(1.2)
     guard tapID("server-add") else { return }
     wait(2)
@@ -363,12 +411,13 @@ final class VelaTour: XCTestCase {
     drag(from: CGVector(dx: 0.5, dy: 0.49), to: CGVector(dx: 0.5, dy: 0.17))
     wait(1)
     // The address is checked as it is typed; Continue appears once the server has answered.
-    guard let next = first(identifierPrefix: "connect-continue", timeout: 15) else {
+    let next = app.descendants(matching: .any).matching(identifier: "connect-continue").firstMatch
+    guard next.waitForExistence(timeout: 15) else {
       shot("connect-typed", tree: true)
       return note("the address found no server")
     }
     shot("connect-found")
-    next.tap()
+    if next.isHittable { next.tap() } else { field.typeText("\n") }
     wait(4)
     shot("connect-probed", tree: true)
     guard tapID("quick-connect") else { return }
@@ -397,13 +446,15 @@ final class VelaTour: XCTestCase {
       wait(1.5)
       shot("title-\(name)-\(label)")
     }
+    var personFrame: CGRect?
     for i in 0..<5 {
       app.swipeUp()
       wait(1.2)
       shot("title-\(name)-scroll-\(i)", tree: i == 1)
+      if let person = castTile() { personFrame = person; break }
     }
     // A cast tile: a button labelled with the person's name above their role.
-    if let person = castTile() {
+    if let person = personFrame ?? castTile() {
       app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: person.midX, dy: person.midY)).tap()
       wait(3)
       shot("person-from-\(name)", tree: true)
@@ -422,8 +473,28 @@ final class VelaTour: XCTestCase {
     waitForHome()
   }
 
+  private func pickServer(containing name: String) -> Bool {
+    let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS[c] %@", "server-", name)).firstMatch
+    guard row.waitForExistence(timeout: 3) else { note("server not found: \(name)"); return false }
+    row.tap()
+    return true
+  }
+
+  private func scrollToTop() {
+    app.swipeDown(); app.swipeDown()
+    wait(0.5)
+  }
+
+  private func firstTitle() -> XCUIElement? {
+    for _ in 0..<4 {
+      if let card = first(identifierPrefix: "title-", timeout: 1) { return card }
+      app.swipeUp(); wait(0.7)
+    }
+    return nil
+  }
+
   private func waitForHome() {
-    _ = app.descendants(matching: .any).matching(NSPredicate(format: "label ==[c] 'Profile and appearance'")).firstMatch.waitForExistence(timeout: 20)
+    _ = app.descendants(matching: .any).matching(identifier: "profile-menu").firstMatch.waitForExistence(timeout: 40)
     wait(1.5)
   }
 
