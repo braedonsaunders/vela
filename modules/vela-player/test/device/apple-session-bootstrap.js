@@ -13,8 +13,10 @@ if (privateConfig.restore) {
   secrets.set(backupKey, '');
 } else {
   if (!secrets.get(backupKey)) secrets.set(backupKey, JSON.stringify(Object.fromEntries(keys.map(key => [key, secrets.get(key)]))));
-  secrets.set('vela.device', privateConfig.device.id);
-  secrets.set('vela.session', JSON.stringify(privateConfig.tokens));
+  if (secrets.get('vela.device') !== privateConfig.device.id) {
+    secrets.set('vela.device', privateConfig.device.id);
+    secrets.set('vela.session', JSON.stringify(privateConfig.tokens));
+  }
   config.server = privateConfig.origin;
   config.user = '';
   config.password = '';
