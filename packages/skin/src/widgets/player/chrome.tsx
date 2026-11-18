@@ -146,6 +146,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           seek={seek}
           seekBy={seekBy}
           toggle={toggle}
+          closeMenu={() => setOpened(null)}
           toggleInfo={toggleInfo}
           onActive={setActive}
           live={live}
