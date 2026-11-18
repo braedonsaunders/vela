@@ -1,3 +1,4 @@
+import { matchesLibrarySearch } from './library-search';
 import { renderArtwork } from './artwork';
 import { previewSessions, stopPreview, trailerPreview } from './previews';
 import { libraries as fixtureLibraries, libraryEntries as fixtureLibraryEntries } from '../packages/protocol/fixtures/libraries';
@@ -189,6 +190,9 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (!library) fail('not-found', 'not_found', 'Library not found');
     const tab = library.tabs?.find(tab => tab.id === url.searchParams.get('tab'));
     if (url.searchParams.has('tab') && (!tab || tab.kind !== 'collections' && tab.kind !== 'people')) fail('request', 'invalid_tab', 'Unknown collections tab');
+    const query = (url.searchParams.get('query') ?? '').trim();
+    if (query && tab?.search === false) fail('request', 'unsupported_library_query', 'Tab search is disabled');
+    const matches = (name: string) => matchesLibrarySearch(name, query);
     if (tab?.kind === 'people') {
       const entries: V.LibraryPersonEntry[] = Array.from({ length: 105 }, (_, index) => ({
         id: `person:performer-${index}`, kind: 'person',
@@ -198,7 +202,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       entries.sort((a, b) => tab.order === 'count' ? b.itemCount - a.itemCount : a.person.name.localeCompare(b.person.name));
       const paged = new URL(url);
       if (process.env.VELA_MOCK_COLLECTION_PAGE_SIZE) paged.searchParams.set('limit', process.env.VELA_MOCK_COLLECTION_PAGE_SIZE);
-      return cached(req, page(entries, paged, g, `library-people:${library.id}:${tab.id}`), g.id);
+      return cached(req, page(entries.filter(entry => matches(entry.person.name)), paged, g, `library-people:${library.id}:${tab.id}:${query}`), g.id);
     }
     if (tab?.facet) {
       const counts = new Map<string, { count: number; artwork: V.ArtworkRef[] }>();
@@ -210,11 +214,11 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       // Tests can simulate a server that caps pages below the client's requested size.
       const paged = new URL(url);
       if (process.env.VELA_MOCK_COLLECTION_PAGE_SIZE) paged.searchParams.set('limit', process.env.VELA_MOCK_COLLECTION_PAGE_SIZE);
-      return cached(req, page(entries, paged, g, `library-collections:${library.id}:${tab.id}`), g.id);
+      return cached(req, page(entries.filter(entry => matches(entry.name)), paged, g, `library-collections:${library.id}:${tab.id}:${query}`), g.id);
     }
     const members = libraryEntries(library.id).filter(e => e.kind === 'title' && e.title.id === titles[0]!.id);
     const entries: V.LibraryCollectionEntry[] = members.length ? [{ id: 'fixture-collection', kind: 'collection', receiptToken: '', collection: { id: 'fixture-collection', name: 'Observatory Collection', summary: 'Fixture collection', itemCount: members.length, artwork: [signedArtwork(g, titles[0]!.id, 'poster')] } }] : [];
-    return cached(req, page(entries, url, g, `library-collections:${library.id}`), g.id);
+    return cached(req, page(entries.filter(entry => matches(entry.collection.name)), url, g, `library-collections:${library.id}:${query}`), g.id);
   }
   const personMatch = /^\/people\/([^/]+)(\/titles)?$/.exec(path);
   if (method === 'GET' && personMatch && process.env.VELA_MOCK_OLD !== '1') {

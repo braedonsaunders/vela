@@ -182,3 +182,17 @@ test('plugin collections honor each declared order without client sorting', asyn
     expect(byCount.items.map(item => item.id)).not.toEqual(byName.items.map(item => item.id));
   } finally { await mock.stop(); }
 });
+
+
+test('tab search retains server order and query-bound paging', async () => {
+  const { mock, adapter } = await connect();
+  try {
+    await adapter.libraries({});
+    const first = await adapter.libraryCollections('videos', undefined, 'performers', 'Performer 10');
+    expect(first.items.map(item => item.id)).toEqual(['person:performer-99', 'person:performer-100']);
+    const next = await adapter.libraryCollections('videos', first.nextCursor, 'performers', 'Performer 10');
+    expect(next.items[0]?.id).toBe('person:performer-101');
+    await expect(adapter.libraryCollections('videos', first.nextCursor, 'performers', 'Performer 09')).rejects.toThrow('Refresh from first page');
+    expect((await adapter.libraryCollections('videos', undefined, 'performers', 'No such performer')).items).toEqual([]);
+  } finally { await mock.stop(); }
+});

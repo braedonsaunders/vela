@@ -222,3 +222,15 @@ test('collection requests fill a grid page and retain tab and page size on conti
     { cursor: 'opaque-next', tab: 'studio-sets', limit: '100' },
   ]);
 });
+
+
+test('collection search query is retained unchanged on cursor continuation', async () => {
+  const seen = routeFetch({ 'GET /vela/v0/libraries/movies/collections': { items: [], continuation: 'exhausted' } });
+  const adapter = ether();
+  await adapter.libraryCollections('movies', undefined, 'studios', 'Jo & José');
+  await adapter.libraryCollections('movies', 'opaque-next', 'studios', 'Jo & José');
+  expect(seen.map(call => Object.fromEntries(call.url.searchParams))).toEqual([
+    { tab: 'studios', query: 'Jo & José', limit: '100' },
+    { cursor: 'opaque-next', tab: 'studios', query: 'Jo & José', limit: '100' },
+  ]);
+});

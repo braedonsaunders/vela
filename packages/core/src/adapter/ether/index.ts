@@ -90,10 +90,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     }
     throw new Error('Library rows exceed page limit');
   }
-  async libraryCollections(id: string, cursor?: string, tab?: string): Promise<V.Page<V.RowEntry>> {
+  async libraryCollections(id: string, cursor?: string, tab?: string, search?: string): Promise<V.Page<V.RowEntry>> {
     const tabs = this.declaredLibraries.get(id)?.tabs;
     if (tabs && !tabs.some(candidate => (candidate.kind === 'collections' || candidate.kind === 'people') && (!tab || candidate.id === tab))) return { items: [], continuation: 'exhausted' };
-    const response = await this.http.request<V.Page<V.LibraryCollectionEntry | V.LibraryFacetCollection | V.LibraryPersonEntry>>('GET', `/libraries/${segment(id)}/collections${query({ cursor, tab, limit: 100 })}`, undefined, CACHED);
+    const response = await this.http.request<V.Page<V.LibraryCollectionEntry | V.LibraryFacetCollection | V.LibraryPersonEntry>>('GET', `/libraries/${segment(id)}/collections${query({ cursor, tab, query: search || undefined, limit: 100 })}`, undefined, CACHED);
     return { ...response, items: response.items.map(item => {
       if ('kind' in item && item.kind === 'person') return { ...item, receiptToken: '' };
       const collection = 'collection' in item ? item.collection : item;

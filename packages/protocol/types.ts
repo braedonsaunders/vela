@@ -222,7 +222,7 @@ export interface CollectionContents extends Page<RowEntry> { collection: Collect
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated';
 export type SortDirection = 'asc' | 'desc';
 export type LibraryCard = 'poster' | 'landscape' | 'square';
-export interface LibraryTab { id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people'; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
+export interface LibraryTab { search?: boolean; searchPlaceholder?: string; id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people'; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
 /** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
 export interface LibraryFacet { id: string; label: string; type: 'enum' | 'strings' | 'people' | 'int' | 'date' | 'duration'; multi: boolean }
 export interface FacetValue { id: string; label: string; count: number }
