@@ -85,7 +85,7 @@ test('a retryable outage retains previous programme geometry until fresh data ar
   };
   const first = await loadGuide(api, 0, NOW, 'bulk-stale', undefined, undefined, ['one'], { from: 720, to: 900 });
   failed = true;
-  const unavailable = await loadGuide(api, 0, NOW + MINUTE + 1, 'bulk-stale', undefined, undefined, ['one'], { from: 720, to: 900 });
+  const unavailable = await loadGuide(api, 0, NOW + MINUTE + 1, 'bulk-stale', undefined, undefined, ['one'], { from: 720, to: 900 }, { revalidate: {} });
   expect(unavailable.channels[0]).toMatchObject({ listingsLoaded: false, listingsUnavailable: true });
   expect(unavailable.channels[0]?.programmes.map(p => [p.id, p.at, p.span])).toEqual(first.channels[0]?.programmes.map(p => [p.id, p.at, p.span]));
 });

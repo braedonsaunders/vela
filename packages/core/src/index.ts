@@ -6,7 +6,7 @@ export { card, detailModel, entry, feedRow, homeModel } from './discovery/models
 export { clock, localeContext, minute, msg, number, percent, plural, second, setLocale, time, withLocale } from './i18n';
 export type { LocaleContext } from './i18n';
 export { VelaError } from './adapter/errors';
-export { guideFocus, liveIdentity, loadGuide } from './live/guide';
+export { advanceGuideClock, guideFocus, liveIdentity, loadGuide } from './live/guide';
 export { guideRetry } from './live/retry';
 export { liveSearch } from './live/search';
 export { consoleURL, parseWebHandoff } from './session/web-handoff';

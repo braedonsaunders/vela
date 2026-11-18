@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { setLocale } from '../src/i18n';
 import { VelaError } from '../src/adapter/errors';
-import { guideFocus, liveIdentity, loadGuide, type GuideApi } from '../src/live/guide';
+import { advanceGuideClock, guideFocus, liveIdentity, loadGuide, type GuideApi } from '../src/live/guide';
 import type * as V from '../src/wire';
 
 const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
@@ -64,8 +64,8 @@ describe('loadGuide window', () => {
     expect(model.nowMinute).toBe(-1);
     expect(model.landing).toBe(850);
     expect(guideQueries[0]).toMatchObject({ from: iso(MIDNIGHT + 2 * DAY), until: iso(MIDNIGHT + 3 * DAY) });
-    // The channel column's now/next always reads the current two hours as well.
-    expect(guideQueries[1]).toMatchObject({ from: iso(Date.parse('2026-03-10T14:00:00Z')), until: iso(Date.parse('2026-03-10T16:00:00Z')) });
+    // Now/next uses reusable fixed three-hour windows.
+    expect(guideQueries[1]).toMatchObject({ from: iso(Date.parse('2026-03-10T12:00:00Z')), until: iso(Date.parse('2026-03-10T15:00:00Z')) });
   });
 
   test('bounded ranges reuse fixed three-hour requests and clamp to the day', async () => {
@@ -175,14 +175,16 @@ describe('loadGuide pagination failures', () => {
     await expect(loadGuide(api, 0, NOW + 31000, id)).resolves.toBeDefined();
   });
 
-  test('listings are reused for five minutes', async () => {
+  test('ready listings are retained until explicit revalidation', async () => {
     const { api, guideQueries, channelCursors } = fakeApi([channel(1)], []);
     const id = scope();
     await loadGuide(api, 0, NOW, id);
     await loadGuide(api, 0, NOW + 4 * MINUTE, id);
     expect(guideQueries).toHaveLength(1);
     expect(channelCursors).toHaveLength(1);
-    await loadGuide(api, 0, NOW + 5 * MINUTE, id);
+    await loadGuide(api, 0, NOW + 60 * MINUTE, id);
+    expect(guideQueries).toHaveLength(1);
+    await loadGuide(api, 0, NOW + 60 * MINUTE, id, undefined, undefined, undefined, undefined, { revalidate: {} });
     expect(guideQueries).toHaveLength(2);
   });
 });
@@ -206,7 +208,7 @@ describe('channel metadata revalidation', () => {
     } };
     const key = scope();
     await loadGuide(api, 0, NOW, key);
-    await expect(loadGuide(api, 0, NOW + 5 * MINUTE, key)).rejects.toMatchObject({ status: 503 });
+    await expect(loadGuide(api, 0, NOW + 5 * MINUTE, key, undefined, undefined, undefined, undefined, { revalidate: {} })).rejects.toMatchObject({ status: 503 });
     await expect(loadGuide(api, 0, NOW + 5 * MINUTE + 10000, key)).rejects.toMatchObject({ status: 503 });
     expect(reads).toBe(2);
     const recovered = await loadGuide(api, 0, NOW + 5 * MINUTE + 31000, key);
@@ -225,7 +227,7 @@ describe('channel metadata revalidation', () => {
     const key = scope();
     await loadGuide(api, 0, NOW, key);
     refused = true;
-    await expect(loadGuide(api, 0, NOW + 5 * MINUTE, key)).rejects.toMatchObject({ status: 403 });
+    await expect(loadGuide(api, 0, NOW + 5 * MINUTE, key, undefined, undefined, undefined, undefined, { revalidate: {} })).rejects.toMatchObject({ status: 403 });
   });
 });
 
@@ -332,7 +334,7 @@ describe('liveIdentity', () => {
   });
 });
 
-test('guide viewport expansion and minute projections reuse completed channel pages for five minutes', async () => {
+test('guide viewport expansion and minute projections reuse completed channel pages until explicit revalidation', async () => {
   const { api, guideQueries } = fakeApi([channel(1), channel(2), channel(3)], [
     programme('c1', 'one', NOW - MINUTE, NOW + HOUR),
     programme('c2', 'two', NOW - MINUTE, NOW + HOUR),
@@ -348,6 +350,8 @@ test('guide viewport expansion and minute projections reuse completed channel pa
   }
   expect(guideQueries).toHaveLength(2);
   await loadGuide(api, 0, NOW + 5 * MINUTE, id, undefined, undefined, ['c2', 'c3']);
+  expect(guideQueries).toHaveLength(2);
+  await loadGuide(api, 0, NOW + 5 * MINUTE, id, undefined, undefined, ['c2', 'c3'], undefined, { revalidate: {} });
   expect(guideQueries).toHaveLength(3);
   expect(guideQueries[2]?.channelIds).toEqual(['c2', 'c3']);
 });
@@ -389,4 +393,32 @@ test('overlapping channel windows preserve projected rows and invalidate on cloc
   const c = await loadGuide(api, 0, NOW + MINUTE, id, undefined, undefined, ['c1', 'c2'], { from: 700, to: 1000 });
   expect(c.channels[0]).not.toBe(b.channels[0]);
   expect(c.channels[0]!.nowProgress).toBeGreaterThan(b.channels[0]!.nowProgress);
+});
+
+ test('local clock projection changes airing, now/next and progress without adapter calls', async () => {
+  const { api, guideQueries, channelCursors } = fakeApi([channel(1)], [
+    programme('c1', 'First', NOW - 10 * MINUTE, NOW + 10 * MINUTE),
+    programme('c1', 'Second', NOW + 10 * MINUTE, NOW + 30 * MINUTE),
+    programme('c1', 'Third', NOW + 30 * MINUTE, NOW + HOUR),
+  ]);
+  const initial = await loadGuide(api, 0, NOW, scope());
+  const reads = guideQueries.length;
+  const later = advanceGuideClock(initial, NOW + 15 * MINUTE);
+  expect(later.channels[0]?.now).toBe('Second');
+  expect(later.channels[0]?.next).toBe('Third');
+  expect(later.channels[0]?.nowProgress).toBe(25);
+  expect(later.channels[0]?.nowRemaining).toBe('15 min left');
+  expect(later.channels[0]?.programmes[0]?.ended).toBe(true);
+  expect(later.channels[0]?.programmes[1]?.airing).toBe(true);
+  expect(guideQueries).toHaveLength(reads); expect(channelCursors).toHaveLength(1);
+});
+
+test('a narrower time request reuses retained complete coverage without clipping programmes', async () => {
+  const { api, guideQueries } = fakeApi([channel(1)], [programme('c1', 'spanning', NOW - HOUR, NOW + HOUR)]);
+  const key = scope();
+  await loadGuide(api, 0, NOW, key);
+  const count = guideQueries.length;
+  const narrow = await loadGuide(api, 0, NOW, key, undefined, undefined, ['c1'], { from: 720, to: 900 });
+  expect(guideQueries).toHaveLength(count);
+  expect(narrow.channels[0]?.programmes[0]?.span).toBe(120);
 });
