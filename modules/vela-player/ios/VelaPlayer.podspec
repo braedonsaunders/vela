@@ -21,6 +21,7 @@ Pod::Spec.new do |s|
   s.source         = { :git => 'https://github.com/braedonsaunders/vela.git' }
   s.static_framework = true
   s.source_files   = '*.swift'
+  s.resource_bundles = { 'VelaPlayerLicenses' => ['Licenses/*'] }
 
   s.dependency 'ExpoModulesCore'
   spm_dependency(s, url: 'https://github.com/superuser404notfound/AetherEngine',

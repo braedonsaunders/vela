@@ -10,33 +10,46 @@ module.exports = function withApplePlayer(config) {
       if (!section.buildSettings) continue;
       section.buildSettings.IPHONEOS_DEPLOYMENT_TARGET = '18.0';
       section.buildSettings.TVOS_DEPLOYMENT_TARGET = '18.0';
+      // AetherEngine's static object must resolve av_* to its own FFmpeg,
+      // before the inherited MPVKit framework flags.
+      section.buildSettings.OTHER_LDFLAGS = [
+        ...['avcodec', 'avformat', 'avutil', 'avfilter', 'swresample', 'swscale', 'dav1d', 'zimg', 'zvbi']
+          .flatMap(name => ['-framework', `AetherLib${name}`]),
+        '"$(inherited)"',
+      ];
     }
-    // The pod imports the product; the app must also link it so SwiftPM embeds
-    // its transitive dynamic FFmpeg frameworks and resource bundle.
+    // The static pod already contains AetherEngine and Dovi. Link only the
+    // dynamic FFmpeg products here, otherwise -ObjC loads the engine twice.
     const project = mod.modResults;
     const objects = project.hash.project.objects;
     const target = project.getFirstTarget().uuid;
+    if (Object.values(objects.XCRemoteSwiftPackageReference || {}).some(
+      ref => String(ref.repositoryURL || '').includes('superuser404notfound/FFmpegBuild'))) return mod;
     const packageID = project.generateUuid();
-    const productID = project.generateUuid();
-    const buildID = project.generateUuid();
     objects.XCRemoteSwiftPackageReference ||= {};
     objects.XCSwiftPackageProductDependency ||= {};
     objects.XCRemoteSwiftPackageReference[packageID] = {
       isa: 'XCRemoteSwiftPackageReference',
-      repositoryURL: '"https://github.com/superuser404notfound/AetherEngine"',
-      requirement: { kind: 'exactVersion', version: '7.70.0' },
+      repositoryURL: '"https://github.com/superuser404notfound/FFmpegBuild"',
+      requirement: { kind: 'exactVersion', version: '3.15.0' },
     };
     const root = project.getFirstProject().firstProject;
     root.packageReferences ||= [];
-    root.packageReferences.push({ value: packageID, comment: 'AetherEngine' });
-    objects.XCSwiftPackageProductDependency[productID] = {
-      isa: 'XCSwiftPackageProductDependency', package: packageID, productName: 'AetherEngine',
-    };
-    objects.PBXNativeTarget[target].packageProductDependencies ||= [];
-    objects.PBXNativeTarget[target].packageProductDependencies.push({ value: productID, comment: 'AetherEngine' });
-    objects.PBXBuildFile[buildID] = { isa: 'PBXBuildFile', productRef: productID };
+    root.packageReferences.push({ value: packageID, comment: 'FFmpegBuild' });
+    const nativeTarget = objects.PBXNativeTarget[target];
+    nativeTarget.packageProductDependencies ||= [];
     const phase = Object.values(objects.PBXFrameworksBuildPhase).find(p => p.isa === 'PBXFrameworksBuildPhase');
-    phase.files.push({ value: buildID, comment: 'AetherEngine in Frameworks' });
+    for (const name of ['avcodec', 'avformat', 'avutil', 'avfilter', 'swresample', 'swscale', 'dav1d', 'zimg', 'zvbi']) {
+      const productID = project.generateUuid();
+      const buildID = project.generateUuid();
+      const productName = `AetherLib${name}`;
+      objects.XCSwiftPackageProductDependency[productID] = {
+        isa: 'XCSwiftPackageProductDependency', package: packageID, productName,
+      };
+      nativeTarget.packageProductDependencies.push({ value: productID, comment: productName });
+      objects.PBXBuildFile[buildID] = { isa: 'PBXBuildFile', productRef: productID };
+      phase.files.push({ value: buildID, comment: `${productName} in Frameworks` });
+    }
     return mod;
   });
 };

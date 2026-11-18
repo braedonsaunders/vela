@@ -6,6 +6,7 @@ import Foundation
 import Libmpv
 import QuartzCore
 
+@MainActor
 final class PreviewPlayback {
     struct Source: Equatable {
         let url: String
@@ -31,7 +32,7 @@ final class PreviewPlayback {
     var onFailure: ((String) -> Void)?
 
     private let layer: CAMetalLayer
-    private var mpv: MPVClient?
+    private var mpv: PlaybackClient?
     private var playing: Source?
     private var expiry: Timer?
     private var paused = false
@@ -82,9 +83,9 @@ final class PreviewPlayback {
             onState?("failed")
             return
         }
-        let client: MPVClient
+        let client: PlaybackClient
         do {
-            client = try MPVClient(layer: layer, options: [
+            client = try PlaybackClient(layer: layer, options: [
                 "mute": "yes",
                 "keep-open": "no",
                 "audio": "no",
@@ -126,7 +127,7 @@ final class PreviewPlayback {
             if name == "video-pts", let pts = value as? Double, self.offsetApplied,
                pts >= self.startPosition {
                 self.lastFrame = Date()
-                self.layer.isHidden = false
+                self.layer.isHidden = self.mpv?.usesAether != false
                 self.onState?("playing")
             }
         }
@@ -151,7 +152,7 @@ final class PreviewPlayback {
         }
     }
 
-    private func event(_ event: MPVClient.Event) {
+    private func event(_ event: PlaybackClient.Event) {
         switch event {
         case .seekDone:
             break
@@ -183,7 +184,7 @@ final class PreviewPlayback {
         return URL(string: text, relativeTo: URL(string: origin))?.absoluteURL
     }
 
-    private static func date(_ text: String) -> Date? {
+    nonisolated private static func date(_ text: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)

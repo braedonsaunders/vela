@@ -1,4 +1,4 @@
-// VelaPlayerView: libmpv drawing into a CAMetalLayer, driven by the contract's props.
+// VelaPlayerView: AetherEngine first, with mpv fallback, driven by the contract's props.
 //   - `plan`: the server's plan; the selected ready path plays (an original file or the server's HLS).
 //     A newer plan of the same source moves the clock only when its seek generation changed.
 //   - `command`: { id, type, ... } (modules/vela-player/web/engine/model.ts Command); each id is consumed once.
@@ -19,7 +19,7 @@ final class VelaPlayerView: ExpoView {
     let onSessionRefresh = EventDispatcher()
 
     private let metalLayer = PlayerMetalLayer()
-    private var mpv: MPVClient?
+    private var mpv: PlaybackClient?
     private var state = PlayerState()
     private lazy var report = PlayerReport(
         snapshot: { [weak self] in self?.onSnapshot($0) },
@@ -80,8 +80,10 @@ final class VelaPlayerView: ExpoView {
     }
 
     deinit {
-        stop()
-        madePreview?.stop()
+        MainActor.assumeIsolated {
+            stop()
+            madePreview?.stop()
+        }
     }
 
     override func didMoveToWindow() {
@@ -163,7 +165,7 @@ final class VelaPlayerView: ExpoView {
             return
         }
         backgroundColor = .black
-        metalLayer.isHidden = false
+        metalLayer.isHidden = mpv?.usesAether != false
         let previous = plan
         if let previous, previous.sessionId == next.sessionId {
             let stale = next.revision <= previous.revision
@@ -264,9 +266,9 @@ final class VelaPlayerView: ExpoView {
             PlaybackAudioSession.activate()
         }
         displayFacts = path.isOriginalFile ? DisplayMatching.facts(path.originalVideo) : nil
-        let client: MPVClient
+        let client: PlaybackClient
         do {
-            client = try MPVClient(layer: metalLayer, options: Self.colourOptions(displayFacts).merging([
+            client = try PlaybackClient(layer: metalLayer, options: Self.colourOptions(displayFacts).merging([
                 "pause": "yes",
                 "mute": ambient ? "yes" : "no",
                 // AVSampleBufferAudioRenderer. While mpv played through a raw AudioUnit, tvOS's MediaRemote never made
@@ -282,6 +284,12 @@ final class VelaPlayerView: ExpoView {
             return
         }
         mpv = client
+        client.onBackend = { [weak self] backend in
+            guard let self else { return }
+            self.report.backend = backend + (path.isOriginalFile ? "-original" : "-hls")
+            print("[vela-player] backend \(backend), session \(plan.sessionId), path \(path.id)")
+            if backend == "mpv", !self.ambient { DisplayMatching.prefer(self.displayFacts, in: self.window) }
+        }
         if !ambient {
             SystemMediaControls.shared.claim(self)
         }
@@ -303,15 +311,15 @@ final class VelaPlayerView: ExpoView {
             client.observe(property.name, format: property.format)
         }
         let subtitle = plan.subtitleTrack(report.subtitleTrackId)
+        if let index = plan.audioTrack(report.audioTrackId)?.streamIndex { client.set("aid", String(index)) }
+        client.set("sid", subtitle?.isExternal == false ? subtitle?.streamIndex.map(String.init) ?? "no" : "no")
         var options = ["start=\(plan.positionSeconds)"]
         if path.isOriginalFile {
             // Source stream indexes are FFmpeg's; mpv selects by its own ids, mapped once loaded (applyTracks).
             options.append(subtitle == nil || subtitle?.isExternal == true ? "sid=no" : "sid=auto")
         }
         // The display switches before the first frame; mpv loads meanwhile, paused.
-        if !ambient {
-            DisplayMatching.prefer(displayFacts, in: window)
-        }
+
         report.publish(state, seekTarget: nil, force: true)
         Task { @MainActor [weak self] in
             let media = await MediaRedirects.resolve(url)
@@ -352,7 +360,7 @@ final class VelaPlayerView: ExpoView {
     }
 
     /// Loads the resolved URL with its headers; with headers attached, FFmpeg follows no redirect.
-    private func load(_ media: ResolvedMedia, options: [String], on client: MPVClient) {
+    private func load(_ media: ResolvedMedia, options: [String], on client: PlaybackClient) {
         client.setStringList("http-header-fields", media.headers.map { "\($0.key): \($0.value)" })
         client.set("stream-lavf-o", media.refusesRedirects ? "max_redirects=0" : "")
         client.command(["loadfile", media.url.absoluteString, "replace", "-1", options.joined(separator: ",")])
@@ -392,7 +400,7 @@ final class VelaPlayerView: ExpoView {
         if name == "track-list" {
             applyTracks()
         }
-        if name == "video-params", displayFacts == nil, !ambient {
+        if name == "video-params", displayFacts == nil, !ambient, mpv?.usesAether == false {
             // A path without verified facts (the server's HLS) matches once the video is decoded.
             displayFacts = DisplayMatching.facts(
                 videoParams: state.videoParams,
@@ -411,7 +419,7 @@ final class VelaPlayerView: ExpoView {
         updateNowPlaying()
     }
 
-    private func event(_ event: MPVClient.Event) {
+    private func event(_ event: PlaybackClient.Event) {
         switch event {
         case .fileLoaded:
             state.loaded = true
