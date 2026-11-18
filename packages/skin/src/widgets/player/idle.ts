@@ -23,14 +23,19 @@ export function useIdle(hold: boolean): Idle {
   held.current = hold;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const shown = useRef(visible);
-  shown.current = visible;
+  const expire = useCallback(() => {
+    if (held.current) return;
+    shown.current = false;
+    setVisible(false);
+  }, []);
 
   const wake = useCallback(() => {
+    shown.current = true;
     setVisible(true);
     clearTimeout(timer.current);
-    if (!held.current) timer.current = setTimeout(() => setVisible(false), IDLE_MS);
-  }, []);
-  const hide = useCallback(() => setVisible(false), []);
+    if (!held.current) timer.current = setTimeout(expire, IDLE_MS);
+  }, [expire]);
+  const hide = useCallback(() => { shown.current = false; setVisible(false); }, []);
   // Moving focus along the chrome keeps it up. Not once it is hiding: hiding moves focus itself,
   // and taking that for the viewer would bring the chrome straight back, again and again.
   const stir = useCallback(() => {
@@ -40,12 +45,13 @@ export function useIdle(hold: boolean): Idle {
   useEffect(() => {
     clearTimeout(timer.current);
     if (hold) {
+      shown.current = true;
       setVisible(true);
       return;
     }
-    timer.current = setTimeout(() => setVisible(false), IDLE_MS);
+    timer.current = setTimeout(expire, IDLE_MS);
     return () => clearTimeout(timer.current);
-  }, [hold]);
+  }, [hold, expire]);
 
   // The web: any pointer movement or key over the page.
   useEffect(() => {

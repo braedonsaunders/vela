@@ -3,11 +3,10 @@
 // the clock, then icon transport and the screening controls with their menus). Both slide
 // and fade with the chrome's visibility.
 import { LinearGradient } from 'expo-linear-gradient';
-import type { ReactNode, Ref } from 'react';
+import type { ReactNode } from 'react';
 import { Platform, Text, TVFocusGuideView, View, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { msg } from '@vela/core';
-import type { Focusable } from '../../escape';
 import { easing } from '../../motion';
 import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
@@ -28,12 +27,14 @@ function clear(colour: string): string {
   return hex ? `#${hex[1]}00` : 'transparent';
 }
 
+// UIKit must be able to focus the controls in the same commit that removes the hidden
+// picture target. An animated bar can still be moving when requestTVFocus is processed.
 function shownStyle(look: PlayerLook, visible: boolean, from: number): ViewStyle {
   return {
     opacity: visible ? 1 : 0,
-    transform: [{ translateY: visible || look.still ? 0 : from }],
+    transform: [{ translateY: visible || look.still || look.tv ? 0 : from }],
     transitionProperty: ['opacity', 'transform'],
-    transitionDuration: look.still ? 160 : 420,
+    transitionDuration: look.tv ? 0 : look.still ? 160 : 420,
     // Native Reanimated takes a bezier only as cubicBezier(): easing() converts the CSS text.
     transitionTimingFunction: easing('cubic-bezier(0.16, 1, 0.3, 1)'),
   } as ViewStyle;
@@ -123,8 +124,6 @@ interface BottomProps {
   toggleInfo(): void;
   onActive(active: boolean): void;
   live: LiveWatch;
-  /** The play toggle's view: on TV the chrome puts focus there whenever it comes up. */
-  toggleRef?: Ref<Focusable>;
 }
 
 export function BottomBar(props: BottomProps) {
@@ -204,7 +203,7 @@ function Controls({
   toggleInfo,
   onActive,
   live,
-  toggleRef,
+  visible,
 }: BottomProps) {
   // A channel plays at the live edge: no ten-second steps, no speed, no chapters.
   const timeline = !live.live;
@@ -235,15 +234,20 @@ function Controls({
   // On TV the control row is one focus destination, entered at the play toggle (or the control
   // last used there): down from the full-width timeline would otherwise land on whatever lies
   // under the timeline's middle, past the transport.
-  const Row = View;
+  // Remount only the play toggle at reveal/readiness so its one-shot focus claim starts
+  // in that commit, rather than an effect arriving after the viewer already pressed Right.
+  // Menus and position reports keep the same key and never reclaim focus.
+  const Row = Platform.isTV ? TVFocusGuideView : View;
   return (
     <Row
+      {...(Platform.isTV ? { autoFocus: true, focusable: visible && !blocked } : {})}
       style={{ flexDirection: 'row', flexWrap: look.small ? 'wrap' : 'nowrap', alignItems: 'center', gap }}
     >
       <ChromeButton
-        buttonRef={toggleRef}
+        key={Platform.isTV && visible && !blocked ? 'focus-ready' : 'inactive'}
         look={look}
         primary
+        preferred={Platform.isTV && visible && !blocked}
         icon={view.playing ? 'pause' : 'play'}
         label={view.ended ? msg('ui.finished') : view.playing ? msg('ui.pause') : msg('ui.play')}
         disabled={blocked}
