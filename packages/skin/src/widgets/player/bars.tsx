@@ -3,8 +3,8 @@
 // the clock, then icon transport and the screening controls with their menus). Both slide
 // and fade with the chrome's visibility.
 import { LinearGradient } from 'expo-linear-gradient';
-import type { ReactNode } from 'react';
-import { Platform, Text, TVFocusGuideView, View, type ViewStyle } from 'react-native';
+import { useRef, type ComponentRef, type ReactNode } from 'react';
+import { Platform, Text, View, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { msg } from '@vela/core';
 import { easing } from '../../motion';
@@ -40,14 +40,10 @@ function shownStyle(look: PlayerLook, visible: boolean, from: number): ViewStyle
   } as ViewStyle;
 }
 
-/** On TV, a hidden bar takes no focus, and focus re-entering a bar lands where it left. */
+/** Hidden TV controls leave the native focus tree completely. A disabled focus guide around
+ * a live row can retain a destination and send horizontal navigation back to that child. */
 function FocusZone({ visible, children }: { visible: boolean; children: ReactNode }) {
-  if (!Platform.isTV) return <>{children}</>;
-  return (
-    <TVFocusGuideView focusable={visible}>
-      {children}
-    </TVFocusGuideView>
-  );
+  return Platform.isTV && !visible ? null : <>{children}</>;
 }
 
 interface TopProps {
@@ -121,6 +117,7 @@ interface BottomProps {
   seek(seconds: number): void;
   seekBy(seconds: number): void;
   toggle(menu: Exclude<Opened, null>): void;
+  closeMenu(): void;
   toggleInfo(): void;
   onActive(active: boolean): void;
   live: LiveWatch;
@@ -151,7 +148,7 @@ export function BottomBar(props: BottomProps) {
               {state.actionError}
             </Text>
           ) : null}
-          {opened === 'chapters' && view.chapters.length ? (
+          {Platform.OS === 'web' && opened === 'chapters' && view.chapters.length ? (
             <ChapterStrip look={look} view={view} disabled={blocked} onSeek={props.seek} />
           ) : null}
           {props.live.live ? (
@@ -199,7 +196,9 @@ function Controls({
   menuHeight,
   send,
   seekBy,
+  seek,
   toggle,
+  closeMenu,
   toggleInfo,
   onActive,
   live,
@@ -208,15 +207,19 @@ function Controls({
   // A channel plays at the live edge: no ten-second steps, no speed, no chapters.
   const timeline = !live.live;
   const gap = look.size(look.small ? 4 : 8);
-  const names: Record<MenuName, string> = {
+  const anchorRef = useRef<ComponentRef<typeof View>>(null);
+  const names: Record<Exclude<Opened, null>, string> = {
     subtitles: msg('ui.subtitles'),
     audio: msg('ui.audio'),
     quality: msg('ui.quality'),
     speed: msg('player.speed'),
+    chapters: msg('ui.chapters'),
   };
-  const menu = opened && opened !== 'chapters' ? opened : null;
-  const contents = (name: MenuName): ReactNode => {
+  const menu = opened === 'chapters' && Platform.OS === 'web' ? null : opened;
+  const contents = (name: Exclude<Opened, null>): ReactNode => {
     switch (name) {
+      case 'chapters':
+        return <ChapterStrip look={look} view={view} disabled={blocked} onSeek={seek} />;
       case 'subtitles':
         return <SubtitlesMenu look={look} view={view} blocked={blocked} send={send} />;
       case 'audio':
@@ -231,16 +234,11 @@ function Controls({
   const cluster: ViewStyle = look.small
     ? { flexGrow: 1, flexDirection: 'row', justifyContent: 'flex-end', gap }
     : { flex: 1, minWidth: 0, flexDirection: 'row', justifyContent: 'flex-end', gap };
-  // On TV the control row is one focus destination, entered at the play toggle (or the control
-  // last used there): down from the full-width timeline would otherwise land on whatever lies
-  // under the timeline's middle, past the transport.
-  // Remount only the play toggle at reveal/readiness so its one-shot focus claim starts
-  // in that commit, rather than an effect arriving after the viewer already pressed Right.
-  // Menus and position reports keep the same key and never reclaim focus.
-  const Row = Platform.isTV ? TVFocusGuideView : View;
+  // Each TV button is a native focus destination. The play toggle claims focus once on
+  // reveal/readiness; menus and position reports never reclaim it.
+  const Row = View;
   return (
-    <Row
-      {...(Platform.isTV ? { autoFocus: true, focusable: visible && !blocked } : {})}
+    <Row ref={anchorRef} collapsable={false}
       style={{ flexDirection: 'row', flexWrap: look.small ? 'wrap' : 'nowrap', alignItems: 'center', gap }}
     >
       <ChromeButton
@@ -367,7 +365,7 @@ function Controls({
         ) : null}
       </View>
       {menu ? (
-        <MenuPanel look={look} name={names[menu]} maxHeight={menuHeight}>
+        <MenuPanel look={look} name={names[menu]} maxHeight={menuHeight} anchorRef={anchorRef} onClose={closeMenu}>
           {contents(menu)}
         </MenuPanel>
       ) : null}

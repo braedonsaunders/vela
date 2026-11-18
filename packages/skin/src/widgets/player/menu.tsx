@@ -2,11 +2,12 @@
 // radio list. On TV focus starts on the active choice and stays inside until the menu closes.
 import { FocusPressable as Pressable } from '../../focus';
 import { BlurView } from 'expo-blur';
-import { useState, type ReactNode } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View } from 'react-native';
+import { useEffect, useState, type ReactNode, type RefObject, type ComponentRef } from 'react';
+import { Modal, Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View } from 'react-native';
 import { PlayerIcon } from './icons';
 import type { PlayerLook } from './look';
 import { Spinner } from './spinner';
+import { useHost } from '../../host';
 import { useFocusClaim } from '../common/focus-claim';
 
 /** Keeps focus inside on TV; a plain view elsewhere (react-native-web has no focus guide). */
@@ -25,25 +26,40 @@ export function MenuPanel({
   name,
   maxHeight,
   children,
+  anchorRef,
+  onClose,
 }: {
   look: PlayerLook;
   name: string;
   maxHeight: number;
   children: ReactNode;
+  anchorRef: RefObject<ComponentRef<typeof View> | null>;
+  onClose(): void;
 }) {
-  return (
+  const { viewport } = useHost();
+  const [anchor, setAnchor] = useState<{ left: number; top: number; width: number } | null>(null);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    let active = true;
+    anchorRef.current?.measureInWindow((left, top, width) => {
+      if (active) setAnchor({ left, top, width });
+    });
+    return () => { active = false; };
+  }, [anchorRef, viewport.width, viewport.height]);
+  const native = Platform.OS !== 'web';
+  const panel = (
     <View
       accessibilityRole="menu"
       accessibilityLabel={name}
       testID="player-menu"
       style={{
         position: 'absolute',
-        right: 0,
-        left: look.small ? 0 : undefined,
-        bottom: '100%',
+        right: native && anchor ? Math.max(0, viewport.width - anchor.left - anchor.width) : 0,
+        left: !native && look.small ? 0 : undefined,
+        bottom: native && anchor ? Math.max(0, viewport.height - anchor.top) : '100%',
         marginBottom: look.size(12),
-        width: look.small ? undefined : look.size(320),
-        maxHeight,
+        width: look.small ? (native ? anchor?.width : undefined) : look.size(320),
+        maxHeight: native && anchor ? Math.min(maxHeight, Math.max(44, anchor.top - look.size(24))) : maxHeight,
         borderRadius: Math.min(look.radiusPanel, look.size(18)),
         borderWidth: 1,
         borderColor: look.glassEdge,
@@ -72,6 +88,15 @@ export function MenuPanel({
       </ScrollView>
     </View>
   );
+  if (!native) return panel;
+  // A native modal owns Menu/Back at the presented controller/dialog. A JS-only overlay
+  // cannot stop tvOS's native stack from receiving that same Menu press and popping the film.
+  return <Modal visible={anchor !== null} transparent animationType="none" onRequestClose={onClose} supportedOrientations={['portrait', 'landscape']}>
+    <View style={StyleSheet.absoluteFill}>
+      <Pressable accessible={false} focusable={false} onPress={onClose} style={StyleSheet.absoluteFill} />
+      {panel}
+    </View>
+  </Modal>;
 }
 
 interface Choice {
