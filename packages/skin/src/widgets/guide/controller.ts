@@ -170,8 +170,9 @@ export class LiveController {
   setRetainedChannels(ids: string[]): void {
     const next = [...new Set(ids.filter(Boolean))].sort();
     if (next.join("|") === this.retainedIds.join("|")) return;
+    const added = next.filter(id => !this.retainedIds.includes(id) && !this.guideIds.includes(id));
     this.retainedIds = next;
-    if (next.some(id => !this.guideIds.includes(id))) this.scheduleFetch();
+    if (added.length) this.scheduleFetch();
   }
 
   private scheduleFetch(): void {
