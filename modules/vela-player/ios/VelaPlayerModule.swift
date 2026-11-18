@@ -1,5 +1,6 @@
 // The Expo module: VelaPlayer.setMediaAccess and the VelaPlayerView view (packages/player-api).
 import ExpoModulesCore
+import Foundation
 
 public final class VelaPlayerModule: Module {
     public func definition() -> ModuleDefinition {
@@ -20,11 +21,19 @@ public final class VelaPlayerModule: Module {
                 VelaMediaAccessStore.set(nil)
                 return
             }
-            VelaMediaAccessStore.set(try VelaMediaAuth(access))
+            VelaMediaAccessStore.set(try VelaMediaAuth(access), generation: access["generation"] as? Int ?? 0)
+        }
+
+        Function("attachPlaybackURL") { (plan: String, source: String, authorized: String, generation: Int) -> Bool in
+            guard let source = URL(string: source), let authorized = URL(string: authorized) else { return false }
+            return VelaMediaAccessStore.attach(plan: plan, source: source, authorized: authorized, generation: generation)
+        }
+        Function("detachPlaybackURL") { (plan: String, generation: Int) in
+            VelaMediaAccessStore.detach(plan: plan, generation: generation)
         }
 
         View(VelaPlayerView.self) {
-            Events("onSnapshot", "onError", "onObservation", "onCommand", "onSessionCommand", "onSessionRefresh")
+            Events("onMediaAuthorization", "onSnapshot", "onError", "onObservation", "onCommand", "onSessionCommand", "onSessionRefresh")
 
             Prop("ambient") { (view: VelaPlayerView, ambient: Bool?) in
                 view.setAmbient(ambient ?? false)
@@ -40,6 +49,9 @@ public final class VelaPlayerModule: Module {
             }
             Prop("plan") { (view: VelaPlayerView, plan: [String: Any]?) in
                 view.setPlan(plan)
+            }
+            Prop("mediaAuthorization") { (view: VelaPlayerView, result: [String: Any]?) in
+                view.setMediaAuthorization(result)
             }
             Prop("command") { (view: VelaPlayerView, command: [String: Any]?) in
                 view.setCommand(command)

@@ -71,7 +71,7 @@ export interface MediaAccess {
   pathPrefix: string;
   /** Headers attached only to requests inside origin + pathPrefix, never after a redirect leaves it. */
   headers(): Promise<Record<string, string>>;
-  /** A credentialed URL for one native-element attachment, minted on request and never stored (web only). */
+  /** A credentialed URL for one native-element attachment, minted on request and confined to the native attachment. */
   nativeURL?(url: string): Promise<string>;
 }
 

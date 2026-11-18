@@ -95,3 +95,7 @@ appleTest('cancellation promptly unblocks a stalled native read', async () => {
 appleTest('a retained reader can rewind after cancellation, while final close remains terminal', async () => {
   expect(await request('/grant/target', 'reload')).toEqual({ output: 'reload_ok\n', status: 0 });
 });
+
+appleTest('native URL attachments stay within their plan and grant generation and diagnostics omit tokens', async () => {
+  expect(await request('/grant/target', 'attachment')).toEqual({ output: 'attachment_ok\n', status: 0 });
+});

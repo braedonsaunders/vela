@@ -10,6 +10,7 @@ import ExpoModulesCore
 import UIKit
 
 final class VelaPlayerView: ExpoView {
+    let onMediaAuthorization = EventDispatcher()
     let onSnapshot = EventDispatcher()
     let onError = EventDispatcher()
     let onObservation = EventDispatcher()
@@ -18,6 +19,10 @@ final class VelaPlayerView: ExpoView {
     let onSessionRefresh = EventDispatcher()
 
     private var player: PlaybackClient?
+    private var authorizedPlan: String?
+    private var authorizedGeneration: Int?
+    private var awaitingAuthorization = false
+    private var mediaAuthorization: [String: Any]?
     private var state = PlayerState()
     private lazy var report = PlayerReport(
         snapshot: { [weak self] in self?.onSnapshot($0) },
@@ -200,9 +205,22 @@ final class VelaPlayerView: ExpoView {
         }
         // Not on screen (not yet attached, or already left): keep the plan; it starts on attaching.
         guard window != nil else {
+            VelaMediaAccessStore.detach(plan: next.mediaIdentity, generation: mediaAuthorization?["generation"] as? Int)
             return
         }
         start(next, path: path, url: url, source: source)
+    }
+
+    func setMediaAuthorization(_ result: [String: Any]?) {
+        mediaAuthorization = result
+        guard let plan, result?["planId"] as? String == plan.mediaIdentity else { return }
+        guard window != nil else {
+            VelaMediaAccessStore.detach(plan: plan.mediaIdentity, generation: result?["generation"] as? Int)
+            return
+        }
+        let changedGrant = authorizedPlan != nil && authorizedGeneration != (result?["generation"] as? Int)
+        guard awaitingAuthorization || changedGrant else { return }
+        setPlanObject(plan)
     }
 
     func setServerError(_ failure: [String: Any]?) {
@@ -252,8 +270,30 @@ final class VelaPlayerView: ExpoView {
     // MARK: Playback
 
     private func start(_ plan: VelaPlan, path: VelaPlanPath, url: URL, source: String) {
+        let key = plan.mediaIdentity
+        if mediaAuthorization?["planId"] as? String == key, mediaAuthorization?["ok"] as? Bool == false {
+            stop()
+            activeSource = source
+            state = PlayerState()
+            report.pathId = path.id
+            event(.endFile(reason: 4, error: -1))
+            return
+        }
+        let authorized = VelaMediaAccessStore.playbackURL(plan: key, source: url)
+        if path.transport == "hls", !VelaMediaAccessStore.headers(for: url).isEmpty, authorized == nil {
+            stop()
+            activeSource = source
+            awaitingAuthorization = true
+            state = PlayerState()
+            report.pathId = path.id
+            report.publish(state, seekTarget: nil, force: true)
+            onMediaAuthorization([:])
+            return
+        }
         stop()
         activeSource = source
+        authorizedPlan = authorized == nil ? nil : key
+        authorizedGeneration = authorized == nil ? nil : VelaMediaAccessStore.activeGeneration
         recoveryPosition = nil
         state = PlayerState()
         pendingSeek = nil
@@ -300,7 +340,9 @@ final class VelaPlayerView: ExpoView {
 
         report.publish(state, seekTarget: nil, force: true)
         Task { @MainActor [weak self] in
-            let media = await MediaRedirects.resolve(url)
+            let media: ResolvedMedia
+            if let authorized { media = ResolvedMedia(url: authorized, headers: [:]) }
+            else { media = await MediaRedirects.resolve(url) }
             guard let self, self.activeSource == source, self.player === client else {
                 return
             }
@@ -327,6 +369,11 @@ final class VelaPlayerView: ExpoView {
     }
 
     private func stop() {
+        if let plan { VelaMediaAccessStore.detach(plan: plan.mediaIdentity, generation: mediaAuthorization?["generation"] as? Int) }
+        if let authorizedPlan { VelaMediaAccessStore.detach(plan: authorizedPlan, generation: authorizedGeneration) }
+        authorizedPlan = nil
+        authorizedGeneration = nil
+        awaitingAuthorization = false
         recoveryLimit?.invalidate()
         recoveryLimit = nil
         heartbeat?.invalidate()

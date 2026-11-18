@@ -2,7 +2,8 @@
 // contract (packages/player-api). Props are typed objects; events carry the shapes of
 // modules/vela-player/web/engine/model.ts. Media credentials go to the native side through VelaPlayer only.
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
-import { createElement } from 'react';
+import { createElement, useEffect, useState, useSyncExternalStore } from 'react';
+import { redactMediaError } from './media-error';
 import type { NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';
 import type {
   Command,
@@ -24,15 +25,20 @@ interface NativeMediaAccess {
   origin: string;
   pathPrefix: string;
   headers: Record<string, string>;
+  generation: number;
 }
 
 interface NativeModule {
   capabilities(): PlayerCapabilities;
+  attachPlaybackURL(plan: string, source: string, authorized: string, generation: number): boolean;
+  detachPlaybackURL(plan: string, generation: number): void;
   setMediaAccess(access: NativeMediaAccess | null): void;
 }
 
 interface NativeViewProps {
   plan?: PlaybackPlan;
+  mediaAuthorization?: { planId: string; generation: number; nonce: number; ok: boolean };
+  onMediaAuthorization?: () => void;
   preview?: PreviewSource;
   active?: boolean;
   metadata?: PlayerMetadata;
@@ -52,6 +58,12 @@ const nativeModule = requireNativeModule<NativeModule>('VelaPlayer');
 const NativeView = requireNativeViewManager<NativeViewProps>('VelaPlayer');
 
 let accessGeneration = 0;
+let preparationSequence = 0;
+let authorization: { access: MediaAccess; generation: number; requiresHeaders: boolean; ready: Promise<void> } | null = null;
+const accessListeners = new Set<() => void>();
+const subscribeAccess = (callback: () => void) => { accessListeners.add(callback); return () => { accessListeners.delete(callback); }; };
+const accessVersion = () => accessGeneration;
+const planIdentity = (plan: PlaybackPlan) => `${plan.sessionId}:${plan.sourceGeneration}:${plan.seekGeneration}:${plan.revision}:${plan.selectedPathId}`;
 
 /** What AetherEngine plays on Apple devices: originals of these families, never converted by the server.
  * A constant until the native side probes VideoToolbox and the audio route. */
@@ -61,15 +73,22 @@ export const VelaPlayer: VelaPlayerModule = {
   setMediaAccess(access: MediaAccess | null) {
     const generation = ++accessGeneration;
     if (!access) {
+      authorization = null;
       nativeModule.setMediaAccess(null);
-      return;
+    } else {
+      const current = { access, generation, requiresHeaders: false, ready: Promise.resolve() };
+      current.ready = access.headers().then(headers => {
+        if (generation !== accessGeneration) return;
+        current.requiresHeaders = Object.keys(headers).length > 0;
+        nativeModule.setMediaAccess({ origin: access.origin, pathPrefix: access.pathPrefix, headers, generation });
+      }).catch(() => {
+        if (generation === accessGeneration) nativeModule.setMediaAccess(null);
+        throw new Error('Media authorization is unavailable');
+      });
+      void current.ready.catch(() => undefined);
+      authorization = current;
     }
-    // The headers are resolved here and handed over once; JavaScript keeps no copy.
-    void access.headers().then((headers) => {
-      if (generation === accessGeneration) {
-        nativeModule.setMediaAccess({ origin: access.origin, pathPrefix: access.pathPrefix, headers });
-      }
-    });
+    for (const listener of accessListeners) listener();
   },
 };
 
@@ -83,16 +102,59 @@ export function VelaPlayerView(props: VelaPlayerViewProps) {
     // The Apple implementation translates server plans natively; a pre-translated session is the web engine's input.
     throw new Error('VelaPlayerView on Apple platforms takes `plan`, not `session`');
   }
+  const version = useSyncExternalStore(subscribeAccess, accessVersion, accessVersion);
+  const [request, setRequest] = useState(0);
+  const [nativePlan, setNativePlan] = useState<PlaybackPlan>();
+  const [result, setResult] = useState<NativeViewProps['mediaAuthorization']>();
+  useEffect(() => {
+    let cancelled = false;
+    const plan = props.plan;
+    const key = plan ? planIdentity(plan) : '';
+    let generation = accessGeneration;
+    void (async () => {
+      // Let the trusted host's effect install this session's grant first.
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const current = authorization;
+      generation = current?.generation ?? accessGeneration;
+      try {
+        await current?.ready;
+        if (cancelled || generation !== accessGeneration) return;
+        const path = plan?.paths.find(path => path.id === plan.selectedPathId);
+        if (path?.transport === 'hls' && path.readiness === 'ready' && path.url && current?.requiresHeaders) {
+          if (!current.access.nativeURL) throw new Error('Native authorization unavailable');
+          const url = await current.access.nativeURL(path.url);
+          if (cancelled || generation !== accessGeneration) return;
+          if (!nativeModule.attachPlaybackURL(key, path.url, url, generation)) throw new Error('Native authorization refused');
+        }
+        if (!cancelled) {
+          setNativePlan(plan);
+          setResult(plan ? { planId: key, generation, nonce: ++preparationSequence, ok: true } : undefined);
+        }
+      } catch {
+        // Adapter errors may contain credentialed URLs: emit only a static result.
+        if (!cancelled && generation === accessGeneration) {
+          setNativePlan(plan);
+          setResult(plan ? { planId: key, generation, nonce: ++preparationSequence, ok: false } : undefined);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (key) nativeModule.detachPlaybackURL(key, generation);
+    };
+  }, [props.plan, version, request]);
   return createElement(NativeView, {
-    plan: props.plan,
+    plan: nativePlan,
+    mediaAuthorization: result,
+    onMediaAuthorization: () => setRequest(value => value + 1),
     preview: props.preview,
     active: props.active,
     metadata: props.metadata,
     command: props.command,
     ambient: props.ambient,
-    serverError: props.serverError ?? null,
+    serverError: props.serverError ? { ...props.serverError, message: redactMediaError(props.serverError.message) } : null,
     onSnapshot: forward(props.onSnapshot),
-    onError: forward(props.onError),
+    onError: forward<Failure>(error => props.onError?.({ ...error, message: redactMediaError(error.message) })),
     onObservation: forward(props.onObservation),
     onCommand: forward(props.onCommand),
     onSessionCommand: forward(props.onSessionCommand),

@@ -63,11 +63,56 @@ struct VelaMediaAuth {
 enum VelaMediaAccessStore {
     private static let lock = NSLock()
     private static var current: VelaMediaAuth?
+    private static var generation = 0
+    private struct Attachment { let source: URL; let authorized: URL }
+    private static var attachments: [String: Attachment] = [:]
 
-    static func set(_ access: VelaMediaAuth?) {
+    static func set(_ access: VelaMediaAuth?, generation: Int = 0) {
         lock.lock()
         current = access
+        self.generation = generation
+        attachments.removeAll()
         lock.unlock()
+    }
+
+    // Only adapter-minted URLs within the unchanged grant may reach AVPlayer.
+    // These attachments never enter plans, snapshots, diagnostics or event payloads.
+    static func attach(plan: String, source: URL, authorized: URL, generation: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard self.generation == generation, let current,
+              !current.headers(for: source).isEmpty,
+              !current.headers(for: authorized).isEmpty else { return false }
+        attachments[plan] = Attachment(source: source, authorized: authorized)
+        return true
+    }
+
+    static func playbackURL(plan: String, source: URL) -> URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let attachment = attachments[plan], attachment.source == source else { return nil }
+        return attachment.authorized
+    }
+
+    static func detach(plan: String, generation: Int? = nil) {
+        lock.lock()
+        defer { lock.unlock() }
+        if generation == nil || self.generation == generation { attachments.removeValue(forKey: plan) }
+    }
+
+    static func diagnosticURL(_ url: URL) -> String {
+        guard var value = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return "[media URL]" }
+        value.query = nil
+        value.fragment = nil
+        value.user = nil
+        value.password = nil
+        return value.string ?? "[media URL]"
+    }
+
+    static var activeGeneration: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return generation
     }
 
     static func headers(for url: URL) -> [String: String] {

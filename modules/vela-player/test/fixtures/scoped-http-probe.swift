@@ -11,7 +11,26 @@ import Foundation
             ]])
             if args.count > 3 {
                 let reader = ScopedMediaByteReader(url: URL(string: args[2])!, access: access)
-                if args[3] == "cancel-before" {
+                if args[3] == "attachment" {
+                    let source = URL(string: args[2])!
+                    let authorized = URL(string: args[2] + "?api_key=never-log-this&X-Plex-Token=transient-secret#private")!
+                    VelaMediaAccessStore.set(access, generation: 1)
+                    guard VelaMediaAccessStore.attach(plan: "plan", source: source, authorized: authorized, generation: 1),
+                          VelaMediaAccessStore.playbackURL(plan: "plan", source: source) == authorized,
+                          VelaMediaAccessStore.playbackURL(plan: "another-plan", source: source) == nil,
+                          VelaMediaAccessStore.diagnosticURL(authorized) == args[2],
+                          !VelaMediaAccessStore.attach(plan: "escape", source: source, authorized: URL(string: args[1] + "/outside?api_key=never-log-this")!, generation: 1),
+                          !VelaMediaAccessStore.attach(plan: "escape", source: source, authorized: URL(string: args[2].replacingOccurrences(of: "127.0.0.1", with: "localhost"))!, generation: 1)
+                    else { exit(2) }
+                    VelaMediaAccessStore.detach(plan: "plan", generation: 1)
+                    guard VelaMediaAccessStore.playbackURL(plan: "plan", source: source) == nil,
+                          VelaMediaAccessStore.attach(plan: "plan", source: source, authorized: authorized, generation: 1) else { exit(2) }
+                    VelaMediaAccessStore.set(access, generation: 2)
+                    guard VelaMediaAccessStore.playbackURL(plan: "plan", source: source) == nil,
+                          !VelaMediaAccessStore.attach(plan: "plan", source: source, authorized: authorized, generation: 1) else { exit(2) }
+                    VelaMediaAccessStore.set(nil)
+                    print("attachment_ok")
+                } else if args[3] == "cancel-before" {
                     reader.cancel()
                     var bytes = [UInt8](repeating: 0, count: 5)
                     guard reader.read(&bytes, size: 5) == -1 else { exit(2) }

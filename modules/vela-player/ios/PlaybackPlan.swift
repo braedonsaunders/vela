@@ -17,6 +17,8 @@ struct VelaPlan: Decodable {
     let fallback: VelaFallback?
     let chapters: [VelaPlanChapter]?
 
+    var mediaIdentity: String { "\(sessionId):\(sourceGeneration):\(seekGeneration):\(revision):\(selectedPathId)" }
+
     var selectedPath: VelaPlanPath? {
         paths.first { $0.id == selectedPathId }
     }
