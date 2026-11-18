@@ -5,6 +5,11 @@ import { msg } from '@vela/core';
 import type { Accessor, Ctx, Env } from '../../vocabulary';
 import type { Hit, LiveChannelHit, LiveProgrammeHit, SearchView } from './model';
 
+export const searchOption = (value: string | { id: string; label?: string }) => {
+  const id = typeof value === 'string' ? value : value.id;
+  return { id, label: (typeof value === 'string' ? undefined : value.label) ?? id.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) };
+};
+
 const yes = (value: boolean) => (value ? 'true' : 'false');
 
 /** A key over the open query's search view; nothing while no query is open. */
@@ -38,6 +43,15 @@ const describing = (s: SearchView) =>
 const programmeLine = (x: LiveProgrammeHit) => (x.episode !== '' ? `${x.episode} · ${x.channelName}` : x.channelName);
 
 export const SEARCH_VOCABULARY: Record<string, Accessor> = {
+  'search.sortCount': over(s => String(s.controls?.searchSorts?.length ?? 0)),
+  'search.kindCount': over(s => String(s.controls?.searchKinds?.length ?? 0)),
+  'search.kindOn': (c, e) => yes((c.opt?.id ?? '') === (e.search?.controls?.kind ?? '')),
+  'search.sort': over(s => s.controls?.sort ?? ''),
+  'search.direction': over(s => s.controls?.direction ?? ''),
+  'search.kind': over(s => s.controls?.kind ?? ''),
+  'search.directionCount': over(s => String(s.controls?.searchSorts?.find(x => x.id === s.controls?.sort)?.directions.length ?? 0)),
+  'search.moreFast': over(s => yes(!!s.more?.fast)),
+  'search.moreDescriptive': over(s => yes(!!s.more?.descriptive)),
   // With no query open the title lane reads ready and empty.
   'env.search': (_, e) => e.search?.titles.state ?? 'ready',
   'search.titleCount': over(s => String(titles(s).length)),
@@ -80,6 +94,9 @@ export function searchCollection(over: string, c: Ctx, e: Env, limit: number): C
   const hits = (list: Hit[]) => list.slice(0, limit).map((h, index) => ({ ...c, hit: h, index }));
   const programme = (p: LiveProgrammeHit): Hit => ({ kind: 'programme', programme: p });
   switch (over) {
+    case 'search.kinds': return [{ id: '', label: 'All' }, ...(s.controls?.searchKinds ?? []).map(searchOption)].map((opt, index) => ({ ...c, index, opt: { ...opt, of: 'kind' as const } }));
+    case 'search.sorts': return (s.controls?.searchSorts ?? []).map(searchOption).map((opt, index) => ({ ...c, index, opt: { ...opt, of: 'sort' as const } }));
+    case 'search.directions': return (s.controls?.searchSorts?.find(x => x.id === s.controls?.sort)?.directions ?? []).map((id, index) => ({ ...c, index, opt: { of: 'sort' as const, id, label: id === 'asc' ? 'Ascending' : 'Descending' } }));
     case 'search.titles': return cards(titles(s));
     case 'search.descriptive': return cards(descriptive(s));
     case 'search.ai': return cards(discovered(s));

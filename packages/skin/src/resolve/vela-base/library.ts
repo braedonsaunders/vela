@@ -1,4 +1,4 @@
-import type { Condition, Node, Style } from '../../../../protocol/skin';
+import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
 import { gridCard, titleGrid } from './cards';
 import {
   bone,
@@ -20,7 +20,7 @@ import {
 
 // A library page (compiled cinematic's Library): its art faint behind a sticky toolbar of
 // filters and sort, then its titles in a grid, with "Show more" while the server has more.
-export const libChip = (on: Condition[], arg: string, label: string): Node => {
+export const libChip = (on: Condition[], arg: string, label: string): BoxNode => {
   const base: Style = {
     position: 'relative',
     display: 'flex',

@@ -33,6 +33,8 @@ export interface DiscoveryLane {
 
 export interface SearchView {
   query: string;
+  controls?: Pick<import('@vela/core').SearchState, 'sort' | 'direction' | 'kind' | 'searchSorts' | 'searchKinds'>;
+  more?: { fast: boolean; descriptive: boolean };
   titles: TitleLane;
   descriptive: DescriptiveLane;
   ai: DiscoveryLane;

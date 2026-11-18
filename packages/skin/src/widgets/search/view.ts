@@ -39,6 +39,8 @@ export function searchView(state: SearchState): SearchView | undefined {
   if (state.query.trim() === '') return undefined;
   return {
     query: state.query,
+    controls: state,
+    more: { fast: !!state.fast.nextCursor && !state.fast.loadingMore, descriptive: !!state.descriptive.nextCursor && !state.descriptive.loadingMore },
     titles: titles(state.fast),
     descriptive: descriptive(state.descriptive),
     ai: discovery(state.ai),

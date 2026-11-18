@@ -109,6 +109,10 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
         // The field's own focus sets search-focused; on a TV it opens the keyboard.
         if (focusElement('vela-search')) return;
         return actions.setFlag('search-focused', true);
+      case 'searchSort': return store.search.setOptions({ sort: (arg || undefined) as import('../../../packages/protocol/types').SearchSort | undefined });
+      case 'searchDirection': return store.search.setOptions({ direction: arg as import('../../../packages/protocol/types').SearchDirection });
+      case 'searchKind': return store.search.setOptions({ kind: (arg || undefined) as import('../../../packages/protocol/types').SearchKind | undefined });
+      case 'searchMore': return store.search.more(arg === 'descriptive' ? 'descriptive' : 'fast');
       case 'retryDescriptive':
         return store.search.retryDescriptive();
       case 'pageNext':

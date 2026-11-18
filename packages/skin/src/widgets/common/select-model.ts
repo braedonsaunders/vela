@@ -21,6 +21,8 @@ export interface SelectModel {
 
 /** The vocabulary key that holds each collection's current value. */
 const CURRENT: Record<string, string> = {
+  'search.sorts': 'search.sort',
+  'search.directions': 'search.direction',
   'library.sorts': 'library.sort',
   'library.kinds': 'library.kindFilter',
   'library.genres': 'library.genreFilter',

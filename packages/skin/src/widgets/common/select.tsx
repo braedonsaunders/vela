@@ -1,8 +1,9 @@
+import { holdBack } from '../../menu-key';
 // Widget `select` on native (iOS, tvOS, Android, Android TV): the current choice in the node's
 // box, in its inherited ink and font; pressing it opens the choices in a popover list that the
 // focus engine and a D-pad can walk. The web draws the browser's own select (select.web.tsx).
 import { FocusPressable as Pressable } from '../../focus';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FlatList, Modal, StyleSheet, Text, View } from 'react-native';
 import { useHost, useInheritedText, type WidgetProps } from '../../host';
 import { APressable, Glyph, NO_RING, overlaid, useInteraction, Words } from './controls';
@@ -14,6 +15,7 @@ export function Select(props: WidgetProps) {
   const model = useSelectModel(props);
   const drawn = useInheritedText();
   const [open, setOpen] = useState(false);
+  useEffect(() => open ? holdBack(() => { setOpen(false); return true; }) : undefined, [open]);
   const current = model.choices.find(choice => choice.value === model.value) ?? model.choices[0];
   const choose = (value: string) => {
     setOpen(false);

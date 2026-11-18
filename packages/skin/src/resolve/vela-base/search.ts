@@ -1,3 +1,4 @@
+import { chipGroup, libChip, glassSelect } from './library';
 // Search (routes.search), on the document's ui look: drawn in home's view under the search field
 // while a query is open. The title matches (or the honest empty or failed state), live hits on now
 // and coming up, and the descriptive lane with its failed answers. Titles lie in the library's
@@ -408,4 +409,27 @@ export const searchMotion = {
     iterations: 'infinite' as const,
     fill: 'none' as const,
   },
+};
+
+/** Shared controls are also inserted before search routes supplied by a skin. */
+export const searchControls: Node = {
+  type: 'box', id: 'vela-search-controls',
+  style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px', ...gutter },
+  small: { ...gutterSmall },
+  children: [
+    { ...chipGroup('Filter search', [{ type: 'repeat', over: 'search.kinds', item: {
+      ...libChip([{ test: 'search.kindOn' }], '{opt.id}', '{opt.label}'),
+      press: { action: 'searchKind', arg: '{opt.id}' },
+    } }], [{ test: 'search.kindCount', is: 'gt', value: '0' }]), style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '4px', padding: '4px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', 'max-width': '100%', 'flex-shrink': '1' } },
+    { type: 'widget', widget: 'select', when: [{ test: 'search.sortCount', is: 'gt', value: '0' }],
+      params: { options: 'search.sorts', action: 'searchSort', label: 'Sort search', testId: 'search-sort' }, style: { ...glassSelect, 'min-width': '140px', 'max-width': '100%' } },
+    { type: 'widget', widget: 'select', when: [{ test: 'search.directionCount', is: 'gt', value: '1' }],
+      params: { options: 'search.directions', action: 'searchDirection', label: 'Sort direction' }, style: glassSelect },
+  ],
+};
+export const searchPaging: Node = {
+  type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px', ...gutter },
+  children: ['fast', 'descriptive'].map(lane => ({ type: 'box', when: [{ test: lane === 'fast' ? 'search.moreFast' : 'search.moreDescriptive' }],
+    press: { action: 'searchMore', arg: lane }, label: 'Show more', style: { ...glassSelect, padding: '12px' }, focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
+    children: [{ type: 'text', text: lane === 'fast' ? 'More title matches' : 'More descriptive matches' }] } as Node)),
 };
