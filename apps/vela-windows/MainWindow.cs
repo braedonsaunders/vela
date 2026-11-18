@@ -223,6 +223,7 @@ internal sealed class MainWindow : Form
             {
                 DisposePlayback();
                 playerId = id;
+                SetNativeVideoLayer(true);
                 video.Visible = true;
                 browser.BringToFront();
                 playback = new Playback(video.Handle, Emit);
@@ -256,7 +257,41 @@ internal sealed class MainWindow : Form
         playback = null;
         playerId = "";
         video.Visible = false;
+        SetNativeVideoLayer(false);
     }
+
+    private void SetNativeVideoLayer(bool active)
+    {
+        if (browser.CoreWebView2 != null)
+            _ = browser.CoreWebView2.ExecuteScriptAsync($"({NativeVideoLayer})({(active ? "true" : "false")})");
+    }
+
+    // The bundled Windows bridge clears backgrounds, but the navigator also keeps previous
+    // screens mounted. Hide only siblings above the watch stage, preserving its player controls.
+    private const string NativeVideoLayer = """
+        active => {
+          window.__velaRestoreVideoLayer?.();
+          delete window.__velaRestoreVideoLayer;
+          if (!active) return;
+          const stage = document.querySelector('[data-testid="watch-stage"]');
+          if (!stage) return;
+          const saved = [];
+          for (let node = stage; node && node !== document.body; node = node.parentElement) {
+            for (const sibling of node.parentElement?.children || []) {
+              if (sibling === node || !(sibling instanceof HTMLElement)) continue;
+              const style = sibling.style;
+              saved.push([style, style.getPropertyValue('visibility'), style.getPropertyPriority('visibility')]);
+              style.setProperty('visibility', 'hidden', 'important');
+            }
+          }
+          window.__velaRestoreVideoLayer = () => {
+            for (const [style, value, priority] of saved) {
+              if (value) style.setProperty('visibility', value, priority);
+              else style.removeProperty('visibility');
+            }
+          };
+        }
+        """;
 
     // F11 fills the screen anywhere in the app; Escape leaves it before the page sees it. Fullscreen
     // the page asked for (the player's button or F) is left through the page so it hears the change.
