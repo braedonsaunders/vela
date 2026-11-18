@@ -292,6 +292,7 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
       ) : null}
       <GuideBody
         look={look}
+        liveView={controller.view}
         model={model}
         rows={rows}
         small={small}
@@ -314,6 +315,7 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
 }
 
 interface BodyProps {
+  liveView: LiveController['view'];
   look: GuideLook;
   model: GuideModel;
   rows: GuideChannel[];
@@ -358,6 +360,7 @@ function GuideBody(props: BodyProps) {
       <GuideGrid
         key={props.gridKey}
         handle={props.grid}
+        liveView={props.liveView}
         look={look}
         model={model}
         rows={rows}

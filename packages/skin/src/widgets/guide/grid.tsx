@@ -15,7 +15,7 @@ import { Ruler } from './ruler';
 import { TimelineRow } from './timeline-row';
 import { currentlyAiring, gridContentKey } from './content';
 import { useGuideMinute } from './clock';
-import { useLiveContext } from './live';
+import type { LiveController } from './controller';
 import { guideRender } from './diagnostics';
 
 export interface GridHandle {
@@ -27,6 +27,7 @@ export interface GridHandle {
 }
 
 export interface GridProps {
+  liveView: LiveController['view'];
   look: GuideLook;
   model: GuideModel;
   rows: GuideChannel[];
@@ -48,7 +49,7 @@ export interface GridProps {
 const MARGIN = 150;
 
 export const GuideGrid = memo(GuideGridContent, (a, b) =>
-  a.look === b.look && a.small === b.small && a.zoom === b.zoom && a.still === b.still
+  a.liveView === b.liveView && a.look === b.look && a.small === b.small && a.zoom === b.zoom && a.still === b.still
   && a.selected.channel === b.selected.channel && a.selected.programme === b.selected.programme
   && a.landing.channelId === b.landing.channelId && (!a.landing.channelId || a.landing.minute === b.landing.minute)
   && a.onSelect === b.onSelect && a.onPress === b.onPress && a.onWatch === b.onWatch
@@ -56,7 +57,6 @@ export const GuideGrid = memo(GuideGridContent, (a, b) =>
   && gridContentKey(a.model, a.rows) === gridContentKey(b.model, b.rows));
 
 function GuideGridContent(props: GridProps) {
-  const live = useLiveContext();
   guideRender('grid');
   const { look, model, rows, small, zoom, still, selected, landing } = props;
   const scale = minuteWidth(small, zoom);
@@ -145,7 +145,7 @@ function GuideGridContent(props: GridProps) {
         return true;
       },
       jumpNow() {
-        const now = live?.controller.view().guide?.nowMinute ?? model.nowMinute;
+        const now = props.liveView().guide?.nowMinute ?? model.nowMinute;
         if (now < 0) return false;
         scrollTo(leftFor(now, visibleMinutes, model.minutes), true);
         return true;
@@ -163,7 +163,7 @@ function GuideGridContent(props: GridProps) {
   const window = { from: leftMinute - MARGIN, to: leftMinute + visibleMinutes + MARGIN };
   /** Web keyboard: move focus through the grid, bringing the target into view first. */
   const onKey = (channel: GuideChannel, p: GuideProgramme, key: string, prevent: () => void) => {
-    if (key === 'Enter' && currentlyAiring(live?.controller.view().guide ?? model, channel.id, p.id)) {
+    if (key === 'Enter' && currentlyAiring(props.liveView().guide ?? model, channel.id, p.id)) {
       prevent();
       props.onWatch(channel.id);
       return;
