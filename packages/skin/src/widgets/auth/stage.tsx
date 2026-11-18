@@ -4,7 +4,7 @@
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useHost } from '../../host';
 import type { Css } from '../../translate';
@@ -65,7 +65,11 @@ export function Stage({ children }: { children: ReactNode }) {
   const mark = host.image('assets/brand/vela-stacked.svg');
   const card = look.layer(CARD);
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.page }]}>
+    <KeyboardAvoidingView
+      style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.page }]}
+      enabled={Platform.OS !== 'web'}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <View
         style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}
         pointerEvents="none"
@@ -91,6 +95,7 @@ export function Stage({ children }: { children: ReactNode }) {
         />
       </View>
       <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={look.box({
           'flex-grow': '1',
           'align-items': 'center',
@@ -98,8 +103,7 @@ export function Stage({ children }: { children: ReactNode }) {
           gap: '32px',
           padding: 'max(28px, 7vh) 16px',
         })}
-        automaticallyAdjustKeyboardInsets
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
       >
         {mark ? <Image source={mark} style={{ width: 60, height: 104 }} accessibilityElementsHidden /> : null}
@@ -114,6 +118,6 @@ export function Stage({ children }: { children: ReactNode }) {
           {children}
         </Animated.View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
