@@ -23,7 +23,7 @@ const libraries: V.Library[] = labPreset ? [
 const libraryEntries = (id: string) => fixtureLibraryEntries(labPreset ? id === '1' ? 'movies' : id === '2' || id === '4' ? 'shows' : id : id);
 const visibleLibraries: V.Library[] = process.env.VELA_MOCK_OLD === '1' ? libraries.map(library => {
   const { collectionId: _collectionId, ...filters } = library.browse.filters;
-  return { ...library, browse: { ...library.browse, filters } };
+  return { ...library, tabs: undefined, presentation: undefined, browse: { ...library.browse, filters: { ...filters, facets: undefined } } };
 }) : libraries;
 interface Grant { id: string; device: V.Device; access: string; refresh: string; expires: number; revoked: boolean; client?: V.ClientCapabilities }
 const grants = new Map<string, Grant>(), access = new Map<string, Grant>(), refresh = new Map<string, Grant>();
@@ -150,6 +150,28 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const g = authenticate(req);
   if (method === 'GET' && path === '/libraries') return cached(req, page(visibleLibraries, url, g, `libraries:${viewer.policyRevision}:${mac(JSON.stringify(visibleLibraries))}`), g.id);
+  const facetsMatch = /^\/libraries\/([^/]+)\/facets\/([^/]+)$/.exec(path);
+  if (method === 'GET' && facetsMatch) {
+    const library = libraries.find(l => l.id === decodeURIComponent(facetsMatch[1]!));
+    const field = decodeURIComponent(facetsMatch[2]!);
+    if (!library?.browse.filters.facets?.some(f => f.id === field)) fail('not-found', 'not_found', 'Facet not found');
+    const counts = new Map<string, number>();
+    for (const item of libraryEntries(library.id)) for (const value of facetValues(item, field)) counts.set(value, (counts.get(value) ?? 0) + 1);
+    const search = (url.searchParams.get('query') ?? '').toLowerCase();
+    return cached(req, page([...counts].filter(([id]) => id.toLowerCase().includes(search)).map(([id, count]) => ({ id, label: id, count })), url, g, `facets:${library.id}:${field}:${search}`), g.id);
+  }
+  const libraryRowsMatch = /^\/libraries\/([^/]+)\/rows$/.exec(path);
+  if (method === 'GET' && libraryRowsMatch) {
+    const library = libraries.find(l => l.id === decodeURIComponent(libraryRowsMatch[1]!));
+    if (!library) fail('not-found', 'not_found', 'Library not found');
+    if (labPreset) { const first = new URL(url); first.search = ''; return cached(req, page(labRows.map(row => homeRow(g, row, first)), url, g, `library-rows:${library.id}`), g.id); }
+    const items = libraryEntries(library.id);
+    const ids = new Set(items.filter(e => e.kind === 'title').map(e => e.kind === 'title' ? e.title.id : ''));
+    const selected: V.Row[] = library.id === 'videos'
+      ? [{ id: 'creator-picks', name: 'From your creators', purpose: 'recommendation', receiptToken: '', items: items.slice(0, 24), continuation: 'exhausted' }]
+      : rows.map(row => ({ ...row, items: row.items.filter(e => e.kind === 'title' && ids.has(e.title.id)) })).filter(row => row.items.length);
+    return cached(req, page(selected.map(row => boundRow(g, row)), url, g, `library-rows:${library.id}`), g.id);
+  }
   const collectionsMatch = /^\/libraries\/([^/]+)\/collections$/.exec(path);
   if (method === 'GET' && collectionsMatch && process.env.VELA_MOCK_OLD !== '1') {
     const library = libraries.find(l => l.id === collectionsMatch[1]);
@@ -174,7 +196,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (!library) fail('not-found', 'library_not_found', 'Library not found');
     const q = url.searchParams, options = library.browse;
     const invalid = () => fail('request', 'invalid_library_query', 'Unsupported or malformed library query');
-    for (const key of q.keys()) if (!['cursor','limit','sort','direction','kind','genre','year','played','favorite','collectionId'].includes(key) || q.getAll(key).length !== 1) invalid();
+    for (const key of q.keys()) if (key.startsWith('facet.') ? !options.filters.facets?.some(f => `facet.${f.id}` === key) : !['cursor','limit','sort','direction','kind','genre','year','played','favorite','collectionId','query'].includes(key) || q.getAll(key).length !== 1) invalid();
     const collectionId = q.get('collectionId');
     if (collectionId && (process.env.VELA_MOCK_OLD === '1' || !options.filters.collectionId || collectionId !== 'fixture-collection')) invalid();
     const sort = q.get('sort') ?? options.defaultSort, direction = q.get('direction') ?? options.defaultDirection;
@@ -187,17 +209,19 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     let items = libraryEntries(library.id).filter(e => {
       if (e.kind !== 'title') return true;
       const t = e.title;
+      if (q.get('query') && !t.name.toLowerCase().includes(q.get('query')!.toLowerCase())) return false;
+      for (const facet of options.filters.facets ?? []) { const wanted = q.getAll(`facet.${facet.id}`); if (wanted.length && !facetValues(e, facet.id).some(value => wanted.includes(value))) return false; }
       return (!collectionId || t.id === titles[0]!.id) && (!kind || kind === t.kind) && (!genre || t.genres.some(g => g.toLowerCase() === genre.trim().toLowerCase()))
         && (!year || t.year === Number(year)) && (!q.has('played') || !!t.watch?.played === (q.get('played') === 'true'))
         && (!q.has('favorite') || !!t.watch?.favorite === (q.get('favorite') === 'true'));
     });
-    if (sort !== 'server') items.sort((a, b) => {
+    if (sort !== 'server' && sort !== 'index') items.sort((a, b) => {
       if (a.kind !== 'title' || b.kind !== 'title') return 0;
       const cmp = sort === 'title' ? a.title.name.localeCompare(b.title.name, 'en') : (a.title.year ?? 0) - (b.title.year ?? 0);
       return (cmp || a.id.localeCompare(b.id)) * (direction === 'desc' ? -1 : 1);
     });
     const query = [sort, direction, kind, genre?.trim().toLowerCase(), year, q.get('played'), q.get('favorite'), q.get('limit') ?? '50', collectionId];
-    const scope = `library:${library.id}:${viewer.policyRevision}:${mac(JSON.stringify([query, items]))}`;
+    const scope = `library:${library.id}:${viewer.policyRevision}:${mac(JSON.stringify([query, q.getAll('query'), [...q].filter(([key]) => key.startsWith('facet.')), items]))}`;
     items = items.map(i => ({ ...i, receiptToken: receipt(g, `library:${scope}:${i.id}`) }));
     return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, url, g, scope) } satisfies V.LibraryContents, g.id);
   }
@@ -400,3 +424,11 @@ const server = Bun.serve({ hostname: '127.0.0.1', port, idleTimeout: 0, async fe
   response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length'); return response;
 } });
 console.log(`Vela mock: ${server.url} — demo / vela`);
+
+function facetValues(entry: V.RowEntry, field: string): string[] {
+  if (entry.kind !== 'title') return [];
+  if (field === 'topic') return entry.title.genres;
+  if (field === 'creator') return [(entry.title.year ?? 0) % 2 ? 'Studio North' : 'Pixel Workshop'];
+  if (field === 'length') return [(entry.title.durationSeconds ?? 0) < 6000 ? 'Under 100 min' : '100 min or longer'];
+  return [];
+}

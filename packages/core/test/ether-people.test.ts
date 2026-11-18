@@ -77,3 +77,30 @@ test('lab-shaped library rows retain row continuations and ranked shelves', asyn
     expect((await adapter.home()).capabilities.features.liveTV?.available).toBe(true);
   } finally { await mock.stop(); }
 });
+
+test('plugin library facets apply OR within fields, AND across fields and library search', async () => {
+  const { mock, adapter } = await connect();
+  try {
+    const libraries = await adapter.libraries({});
+    expect(libraries.items.find(l => l.id === 'videos')).toMatchObject({ presentation: { card: 'landscape' }, tabs: [{ id: 'discover', label: 'For you', kind: 'recommended' }, { id: 'videos', label: 'All videos', kind: 'library' }] });
+    await adapter.probeLibraryViews('videos');
+    expect(hasLibraryRecommendations(adapter)).toBe(true);
+    expect((await adapter.libraryRows('videos', 'mixed')).length).toBeGreaterThan(0);
+    expect((await adapter.libraryCollections('videos')).items).toEqual([]);
+    const facets = await adapter.libraryFacets('videos', 'topic', 'science');
+    expect(facets.items).toEqual([{ id: 'Science Fiction', label: 'Science Fiction', count: 26 }]);
+    const first = await adapter.library('videos', { limit: 100 });
+    expect(first.sort).toBe('index');
+    const all = first.items;
+    const or = (await adapter.library('videos', { limit: 100, facets: { topic: ['Science Fiction', 'Romance'] } })).items;
+    expect(or.length).toBe(53);
+    const and = (await adapter.library('videos', { limit: 100, facets: { topic: ['Science Fiction', 'Romance'], creator: ['Pixel Workshop'] } })).items;
+    expect(and.length).toBeGreaterThan(0);
+    expect(and.length).toBeLessThan(or.length);
+    expect(and.every(e => e.kind === 'title' && e.title.year! % 2 === 0)).toBe(true);
+    const found = (await adapter.library('videos', { query: 'Observatory' })).items;
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.every(e => e.kind === 'title' && e.title.name.includes('Observatory'))).toBe(true);
+    expect(all.length).toBeGreaterThan(or.length);
+  } finally { await mock.stop(); }
+});
