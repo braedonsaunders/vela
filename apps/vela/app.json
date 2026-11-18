@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "app.ether.vela",
-      "versionCode": 2011
+      "versionCode": 2016
     },
     "web": {
       "output": "single",
