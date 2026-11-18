@@ -15,8 +15,8 @@ function setup(status: number) {
       tune: async () => { throw new Error('Unexpected tune'); }, stop: async () => {},
     },
   });
-  controller.open('guide');
-  return { controller, reads: () => reads };
+  const close = controller.open('guide');
+  return { controller, close, reads: () => reads };
 }
 
 test('an initial transient guide failure retries without a manual action', async () => {
@@ -31,11 +31,13 @@ test('an initial transient guide failure retries without a manual action', async
 });
 
 test('leaving the guide cancels an initial transient retry', async () => {
-  const { controller, reads } = setup(503);
-  await Bun.sleep(100);
-  controller.dispose();
-  await Bun.sleep(1100);
-  expect(reads()).toBe(1);
+  const { controller, close, reads } = setup(503);
+  try {
+    await Bun.sleep(100);
+    close();
+    await Bun.sleep(1100);
+    expect(reads()).toBe(1);
+  } finally { controller.dispose(); }
 });
 
 test('an initial permanent refusal does not poll the server', async () => {
