@@ -176,6 +176,19 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'GET' && collectionsMatch && process.env.VELA_MOCK_OLD !== '1') {
     const library = libraries.find(l => l.id === collectionsMatch[1]);
     if (!library) fail('not-found', 'not_found', 'Library not found');
+    const tab = library.tabs?.find(tab => tab.id === url.searchParams.get('tab'));
+    if (url.searchParams.has('tab') && (!tab || tab.kind !== 'collections')) fail('request', 'invalid_tab', 'Unknown collections tab');
+    if (tab?.facet) {
+      const counts = new Map<string, { count: number; artwork: V.ArtworkRef[] }>();
+      for (const item of libraryEntries(library.id)) for (const value of facetValues(item, tab.facet)) {
+        const held = counts.get(value);
+        counts.set(value, { count: (held?.count ?? 0) + 1, artwork: held?.artwork ?? (item.kind === 'title' ? [signedArtwork(g, item.title.id, 'poster')] : []) });
+      }
+      const entries = [...counts].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0])).map(([value, data]) => ({ id: `facet:${tab.facet}:${value}`, name: value, itemCount: data.count, artwork: data.artwork }));
+      // Keep fixture pages small to exercise collection continuation in the UI.
+      const paged = new URL(url); if (!paged.searchParams.has('limit')) paged.searchParams.set('limit', '2');
+      return cached(req, page(entries, paged, g, `library-collections:${library.id}:${tab.id}`), g.id);
+    }
     const members = libraryEntries(library.id).filter(e => e.kind === 'title' && e.title.id === titles[0]!.id);
     const entries: V.LibraryCollectionEntry[] = members.length ? [{ id: 'fixture-collection', kind: 'collection', receiptToken: '', collection: { id: 'fixture-collection', name: 'Observatory Collection', summary: 'Fixture collection', itemCount: members.length, artwork: [signedArtwork(g, titles[0]!.id, 'poster')] } }] : [];
     return cached(req, page(entries, url, g, `library-collections:${library.id}`), g.id);
@@ -217,7 +230,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     });
     if (sort !== 'server' && sort !== 'index') items.sort((a, b) => {
       if (a.kind !== 'title' || b.kind !== 'title') return 0;
-      const cmp = sort === 'title' ? a.title.name.localeCompare(b.title.name, 'en') : (a.title.year ?? 0) - (b.title.year ?? 0);
+      const cmp = sort === 'title' ? a.title.name.localeCompare(b.title.name, 'en') : sort === 'released' ? (a.title.airDate ?? '').localeCompare(b.title.airDate ?? '') : (a.title.year ?? 0) - (b.title.year ?? 0);
       return (cmp || a.id.localeCompare(b.id)) * (direction === 'desc' ? -1 : 1);
     });
     const query = [sort, direction, kind, genre?.trim().toLowerCase(), year, q.get('played'), q.get('favorite'), q.get('limit') ?? '50', collectionId];
@@ -427,6 +440,7 @@ console.log(`Vela mock: ${server.url} — demo / vela`);
 
 function facetValues(entry: V.RowEntry, field: string): string[] {
   if (entry.kind !== 'title') return [];
+  if (field === 'studios') return [['Studio North', 'Pixel Workshop', 'Moonlight Pictures', 'Observatory Films'][(entry.title.year ?? 0) % 4]!];
   if (field === 'topic') return entry.title.genres;
   if (field === 'creator') return [(entry.title.year ?? 0) % 2 ? 'Studio North' : 'Pixel Workshop'];
   if (field === 'length') return [(entry.title.durationSeconds ?? 0) < 6000 ? 'Under 100 min' : '100 min or longer'];

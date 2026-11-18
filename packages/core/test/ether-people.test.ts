@@ -104,3 +104,31 @@ test('plugin library facets apply OR within fields, AND across fields and librar
     expect(all.length).toBeGreaterThan(or.length);
   } finally { await mock.stop(); }
 });
+
+test('facet collection tab pages stay scoped and open newest-first filtered items', async () => {
+  const { mock, adapter } = await connect();
+  try {
+    await adapter.libraries({});
+    const first = await adapter.libraryCollections('movies', undefined, 'collections');
+    expect(first.items).toHaveLength(2);
+    expect(first.continuation).toBe('more');
+    const next = await adapter.libraryCollections('movies', first.nextCursor, 'collections');
+    expect(next.continuation).toBe('exhausted');
+    expect(new Set([...first.items, ...next.items].map(item => item.id)).size).toBe(4);
+    const { facetCollectionQuery } = await import('../src/library-presentation');
+    const { libraries } = await import('../../protocol/fixtures/libraries');
+    const tab = libraries[0]!.tabs!.find(tab => tab.id === 'collections')!;
+    const queries = [...first.items, ...next.items].map(item => facetCollectionQuery(item.id, tab)!);
+    let previous = Infinity;
+    for (const query of queries) {
+      const answer = await adapter.library('movies', query);
+      expect(answer.items.length).toBeLessThanOrEqual(previous);
+      previous = answer.items.length;
+      const dates = answer.items.flatMap(item => item.kind === 'title' ? [item.title.airDate!] : []);
+      expect(dates.length).toBeGreaterThan(0);
+      expect(dates).toEqual([...dates].sort().reverse());
+    }
+    // Legacy collections keep the existing wrapped response and endpoint behavior.
+    expect((await adapter.libraryCollections('movies')).items[0]?.kind).toBe('collection');
+  } finally { await mock.stop(); }
+});
