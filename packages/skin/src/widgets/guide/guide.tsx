@@ -11,6 +11,7 @@ import type { LiveController, LiveView } from './controller';
 import { DayChips, FilterMenu, GuideTabs, IconButton, NowChip, Segments } from './controls-bar';
 import { guideBand, guideTop, gutter, keeps, type ChannelFilter, type Zoom } from './geometry';
 import { GuideGrid, type GridHandle } from './grid';
+import { currentlyAiring } from './content';
 import { GuideTile } from './header-tile';
 import { GuideHero } from './hero';
 import { useLiveContext, useLiveView } from './live';
@@ -107,16 +108,17 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
   const picked = pickHero(model, selected, handOff);
   const tunedName = model.channels.find(c => c.id === view.tile.channelId)?.name ?? '';
 
-  const select = (channel: GuideChannel, programme: GuideProgramme | null) =>
-    setSelected({ channel: channel.id, programme: programme?.id ?? '' });
+  const select = useCallback((channel: GuideChannel, programme: GuideProgramme | null) =>
+    setSelected(old => old.channel === channel.id && old.programme === (programme?.id ?? '')
+      ? old : { channel: channel.id, programme: programme?.id ?? '' }), []);
   // Pressing what is airing puts it on the tile; pressing it again once it is there watches it.
-  const press = (channel: GuideChannel, programme: GuideProgramme) => {
+  const press = useCallback((channel: GuideChannel, programme: GuideProgramme) => {
     select(channel, programme);
-    if (!programme.airing) return;
+    if (!currentlyAiring(controller.view().guide, channel.id, programme.id)) return;
     if (view.tile.channelId === channel.id && view.tile.plan !== null) controller.watch(channel.id);
     else controller.preview(channel.id);
-  };
-  const watch = (channelId: string) => controller.watch(channelId);
+  }, [controller, select, view.tile.channelId, view.tile.plan]);
+  const watch = useCallback((channelId: string) => controller.watch(channelId), [controller]);
   useEffect(() => {
     controller.setRetainedChannels([selected.channel, handOff?.channelId ?? "", view.tunedId]);
     return () => controller.setRetainedChannels([]);
@@ -180,7 +182,7 @@ function GuidePage({ look, model, view, controller, focus, layout }: PageProps) 
               inset={cinematic && band.stacked ? side : small && !cinematic ? 16 + 132 : side + (tileHeight * 16) / 9 + 28}
               spacious={cinematic}
               copyTop={cinematic && band.stacked ? tileHeight + band.gap : 0}
-              compact={cinematic && (band.stacked || band.height < 180)}
+              compact={cinematic && (band.stacked || band.height < 240)}
               onWatch={watch}
             />
           ) : null}

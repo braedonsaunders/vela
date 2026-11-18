@@ -3,8 +3,8 @@
 // virtualized and each row draws only the programmes near the visible time, so a lineup of
 // hundreds over a whole day scrolls as smoothly as a dozen. On the web, arrow keys walk the grid
 // (Enter watches what is airing); TV focus engines walk it natively.
-import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from 'react';
-import { FlatList, Platform, View, type LayoutChangeEvent } from 'react-native';
+import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from 'react';
+import { FlatList, Platform, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { runOnJS, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { msg, type GuideChannel, type GuideModel, type GuideProgramme } from '@vela/core';
 import { cellId, leftFor, minuteWidth, programmeAt, railId, railWidth, rowHeight, RULER, type Zoom } from './geometry';
@@ -13,6 +13,10 @@ import { prependOffset } from './timeline';
 import { RailCell } from './rail';
 import { Ruler } from './ruler';
 import { TimelineRow } from './timeline-row';
+import { currentlyAiring, gridContentKey } from './content';
+import { useGuideMinute } from './clock';
+import { useLiveContext } from './live';
+import { guideRender } from './diagnostics';
 
 export interface GridHandle {
   /** Bring now into view; false when the shown day is not today. */
@@ -43,7 +47,17 @@ export interface GridProps {
 /** Programmes this far either side of the visible time are drawn ahead of a scroll. */
 const MARGIN = 150;
 
-export function GuideGrid(props: GridProps) {
+export const GuideGrid = memo(GuideGridContent, (a, b) =>
+  a.look === b.look && a.small === b.small && a.zoom === b.zoom && a.still === b.still
+  && a.selected.channel === b.selected.channel && a.selected.programme === b.selected.programme
+  && a.landing.channelId === b.landing.channelId && (!a.landing.channelId || a.landing.minute === b.landing.minute)
+  && a.onSelect === b.onSelect && a.onPress === b.onPress && a.onWatch === b.onWatch
+  && a.onVisible === b.onVisible && a.onRange === b.onRange && a.handle === b.handle
+  && gridContentKey(a.model, a.rows) === gridContentKey(b.model, b.rows));
+
+function GuideGridContent(props: GridProps) {
+  const live = useLiveContext();
+  guideRender('grid');
   const { look, model, rows, small, zoom, still, selected, landing } = props;
   const scale = minuteWidth(small, zoom);
   const row = rowHeight(small, Platform.isTV);
@@ -131,8 +145,9 @@ export function GuideGrid(props: GridProps) {
         return true;
       },
       jumpNow() {
-        if (model.nowMinute < 0) return false;
-        scrollTo(leftFor(model.nowMinute, visibleMinutes, model.minutes), true);
+        const now = live?.controller.view().guide?.nowMinute ?? model.nowMinute;
+        if (now < 0) return false;
+        scrollTo(leftFor(now, visibleMinutes, model.minutes), true);
         return true;
       },
       shift(hours) {
@@ -148,7 +163,7 @@ export function GuideGrid(props: GridProps) {
   const window = { from: leftMinute - MARGIN, to: leftMinute + visibleMinutes + MARGIN };
   /** Web keyboard: move focus through the grid, bringing the target into view first. */
   const onKey = (channel: GuideChannel, p: GuideProgramme, key: string, prevent: () => void) => {
-    if (key === 'Enter' && p.airing) {
+    if (key === 'Enter' && currentlyAiring(live?.controller.view().guide ?? model, channel.id, p.id)) {
       prevent();
       props.onWatch(channel.id);
       return;
@@ -284,21 +299,7 @@ export function GuideGrid(props: GridProps) {
                   />
                 )}
               />
-              {model.nowMinute >= 0 ? (
-                <View
-                  pointerEvents="none"
-                  style={{
-                    position: 'absolute',
-                    left: model.nowMinute * scale - 1,
-                    top: 0,
-                    bottom: 0,
-                    width: 2,
-                    zIndex: 2,
-                    backgroundColor: look.now,
-                    boxShadow: `0px 0px 14px ${look.nowGlow}`,
-                  }}
-                />
-              ) : null}
+              <NowLine look={look} model={model} scale={scale} />
             </View>
           </Animated.ScrollView>
         </View>
@@ -327,18 +328,7 @@ function TimeLines({ look, model, scale }: { look: GuideLook; model: GuideModel;
           }}
         />
       ))}
-      {model.nowMinute >= 0 ? (
-        <View
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: model.nowMinute * scale,
-            backgroundColor: look.past,
-          }}
-        />
-      ) : null}
+
     </View>
   );
 }
@@ -357,4 +347,14 @@ function focusLater(id: string) {
     if (tries < 6) setTimeout(attempt, 40);
   };
   requestAnimationFrame(attempt);
+}
+
+function NowLine({ look, model, scale }: { look: GuideLook; model: GuideModel; scale: number }) {
+  const minute = useGuideMinute(model.nowMinute);
+  const counts = guideRender('marker');
+  if (minute < 0) return null;
+  return <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: minute * scale, backgroundColor: look.past }}>
+    <View style={{ position: 'absolute', right: -1, top: 0, bottom: 0, width: 2, backgroundColor: look.now, boxShadow: `0px 0px 14px ${look.nowGlow}` }} />
+    {counts ? <Text style={{ position: 'absolute', right: 8, top: 4, color: '#ffff00', backgroundColor: '#000000', fontSize: 14 }}>{counts}</Text> : null}
+  </View>;
 }

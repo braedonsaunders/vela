@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { msg, type GuideChannel, type GuideProgramme } from '@vela/core';
 import { ProgrammeCell } from './cell';
+import { guideRender } from './diagnostics';
 import type { GuideLook } from './look';
 import { Line, Press } from './parts';
 
@@ -27,6 +28,7 @@ interface RowProps {
 }
 
 export function TimelineRow(props: RowProps) {
+  guideRender('row');
   const { look, channel, scale, row, width, window } = props;
   const near = channel.programmes.filter(p => p.at + p.span > window.from && p.at < window.to);
   return (

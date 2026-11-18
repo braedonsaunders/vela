@@ -6,6 +6,8 @@ import type { GuideModel } from '@vela/core';
 import { RULER } from './geometry';
 import type { GuideLook } from './look';
 import { Line } from './parts';
+import { useGuideMinute } from './clock';
+import { useLiveContext } from './live';
 
 interface RulerProps {
   look: GuideLook;
@@ -20,7 +22,7 @@ export function Ruler({ look, model, scale, rail, small, scrollX }: RulerProps) 
   const width = model.minutes * scale;
   const follow = useAnimatedStyle(() => ({ transform: [{ translateX: -scrollX.value }] }));
   const dayName = small ? (model.days.find(d => d.offset === model.day)?.label ?? '') : model.dayLabel;
-  const nowX = model.nowMinute * scale;
+
   return (
     <View
       style={{
@@ -64,7 +66,7 @@ export function Ruler({ look, model, scale, rail, small, scrollX }: RulerProps) 
           {model.ticks.map(tick => {
             const x = tick.minute * scale;
             // A label the now pill would cover fades out rather than colliding with it.
-            const covered = model.nowMinute >= 0 && x > nowX - 112 && x < nowX + 30;
+
             return (
               <View
                 key={tick.id}
@@ -93,18 +95,29 @@ export function Ruler({ look, model, scale, rail, small, scrollX }: RulerProps) 
                   weight={tick.hour ? 650 : 500}
                   color={tick.hour ? look.ink : look.inkQuiet}
                   tabular
-                  style={{ paddingLeft: 10, opacity: covered ? 0 : 1 }}
+                  style={{ paddingLeft: 10 }}
                 >
                   {tick.label}
                 </Line>
               </View>
             );
           })}
-          {model.nowMinute >= 0 ? (
-            <View
+          <NowPill look={look} model={model} scale={scale} />
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
+function NowPill({ look, model, scale }: { look: GuideLook; model: GuideModel; scale: number }) {
+  const minute = useGuideMinute(model.nowMinute);
+  const live = useLiveContext();
+  if (minute < 0) return null;
+  return (
+<View
               style={{
                 position: 'absolute',
-                left: nowX,
+                left: minute * scale,
                 bottom: 7,
                 transform: [{ translateX: '-50%' }],
                 flexDirection: 'row',
@@ -117,12 +130,8 @@ export function Ruler({ look, model, scale, rail, small, scrollX }: RulerProps) 
               }}
             >
               <Line look={look} size={11} weight={700} tabular>
-                {model.nowLabel}
+                {live?.controller.view().guide?.nowLabel ?? model.nowLabel}
               </Line>
             </View>
-          ) : null}
-        </Animated.View>
-      </View>
-    </View>
   );
 }
