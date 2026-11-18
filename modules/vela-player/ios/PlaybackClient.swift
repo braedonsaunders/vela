@@ -19,6 +19,8 @@ final class PlaybackClient {
     var onBackend: ((String) -> Void)?
     private weak var host: UIView?
     private let preview: Bool
+    private let isLive: Bool
+    private let remoteHLS: Bool
     private let loops: Bool
     private let aspectFill: Bool
     private var failed = false
@@ -44,11 +46,13 @@ final class PlaybackClient {
     private static var previewEngine: AetherEngine?
 
     init(host: UIView, preview: Bool = false, paused: Bool = false, muted: Bool = false,
-         loops: Bool = false, aspectFill: Bool = false) {
+         loops: Bool = false, aspectFill: Bool = false, isLive: Bool = false, remoteHLS: Bool = false) {
         self.host = host
         self.preview = preview
         self.paused = paused
         self.muted = muted
+        self.isLive = isLive
+        self.remoteHLS = remoteHLS
         self.loops = loops
         self.aspectFill = aspectFill
     }
@@ -189,6 +193,7 @@ final class PlaybackClient {
                 // All grant headers stay in the scoped byte reader. Aether's own requests,
                 // including HLS resources and external subtitles, receive no credentials.
                 let opts = LoadOptions(httpHeaders: [:], matchContentEnabled: !preview,
+                                       isLive: self.isLive, nativeRemoteHLS: self.remoteHLS && self.headers.isEmpty,
                                        initialSubtitleTrackID: self.subtitle, autoplay: !self.paused)
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))

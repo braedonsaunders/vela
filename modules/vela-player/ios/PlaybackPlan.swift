@@ -2,6 +2,7 @@
 import Foundation
 
 struct VelaPlan: Decodable {
+    let channelId: String?
     let sessionId: String
     let revision: Int
     let sourceGeneration: Int

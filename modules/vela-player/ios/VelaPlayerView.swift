@@ -262,7 +262,8 @@ final class VelaPlayerView: ExpoView {
         if !ambient {
             PlaybackAudioSession.activate()
         }
-        let client = PlaybackClient(host: self, paused: true, muted: ambient || report.muted)
+        let client = PlaybackClient(host: self, paused: !wantsPlay, muted: ambient || report.muted,
+                                    isLive: plan.channelId != nil, remoteHLS: path.transport == "hls")
         player = client
         client.set("volume", double: report.volume * 100)
         client.onBackend = { [weak self] backend in
