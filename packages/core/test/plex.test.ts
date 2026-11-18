@@ -173,16 +173,20 @@ describe('PlexAdapter requests', () => {
       'GET /media/providers': { MediaContainer: { MediaProvider: [{ Feature: [{ type: 'search' }, { type: 'grid', key: '/tv.plex.providers.epg/grid' }] }] } },
       'GET /tv.plex.providers.epg/grid': { MediaContainer: { size: 1, Metadata: [{ ratingKey: 77, grandparentTitle: 'The Show', title: 'Episode One', parentIndex: 1, index: 3, Genre: [{ tag: 'Drama' }],
         Media: [{ channelIdentifier: 'ch-5', beginsAt: 1_773_144_000, endsAt: 1_773_147_600 }] }] } },
-      'GET /livetv/epg/channels': { MediaContainer: { Channel: [{ id: 5, vcn: '5.1', title: 'Five' }, { id: 6, callSign: 'KSIX' }] } },
+      'GET /tv.plex.providers.epg/lineups/dvr/channels': { MediaContainer: { Channel: [{ id: 5, gridKey: 'ch-5', vcn: '5.1', title: 'Five' }, { id: 6, callSign: 'KSIX' }] } },
     });
     const adapter = plex();
     expect((await adapter.describe()).features.liveTV).toEqual({ available: true });
     const channels = await adapter.channels(undefined, 1);
-    expect(channels).toMatchObject({ items: [{ id: '5', number: '5.1', name: 'Five', kind: 'tv', favorite: false }], continuation: 'more', nextCursor: '1' });
+    expect(channels).toMatchObject({ items: [{ id: 'ch-5', number: '5.1', name: 'Five', kind: 'tv', favorite: false }], continuation: 'more', nextCursor: '1' });
     expect((await adapter.channels('1')).items[0]).toMatchObject({ id: '6', name: 'KSIX', number: '' });
     const guide = await adapter.guide({ from: '2026-03-10T12:00:00Z', until: '2026-03-10T18:00:00Z', channelIds: ['ch-5'] });
     const grid = seen.find(s => s.url.pathname === '/tv.plex.providers.epg/grid')!.url.searchParams;
-    expect(grid.get('beginsAt')).toBe(String(Date.parse('2026-03-10T12:00:00Z') / 1000));
+    expect(grid.get('endsAt>')).toBe(String(Date.parse('2026-03-10T12:00:00Z') / 1000));
+    expect(grid.get('beginsAt<')).toBe(String(Date.parse('2026-03-10T18:00:00Z') / 1000));
+    expect(grid.get('type')).toBe('1,4');
+    expect(grid.has('beginsAt')).toBe(false);
+    expect(seen.some(s => s.url.pathname === '/livetv/epg/channels')).toBe(false);
     expect(grid.get('channelGridKey')).toBe('ch-5');
     expect(guide.items).toEqual([{ id: '77', channelId: 'ch-5', name: 'The Show', episodeTitle: 'Episode One', summary: '',
       start: '2026-03-10T12:00:00.000Z', end: '2026-03-10T13:00:00.000Z', artwork: [], seasonNumber: 1, episodeNumber: 3, rating: undefined, genres: ['Drama'] }]);

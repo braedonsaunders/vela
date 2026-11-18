@@ -223,7 +223,7 @@ test('live channel logos reach channel artwork for both native-server families',
     'GET /identity': { MediaContainer: { machineIdentifier: 'plex' } },
     'GET /livetv/dvrs': { MediaContainer: { Dvr: [{ key: 'dvr' }] } },
     'GET /media/providers': { MediaContainer: { MediaProvider: [{ Feature: [{ type: 'grid', key: '/grid' }] }] } },
-    'GET /livetv/epg/channels': { MediaContainer: { Channel: [{ id: 'channel', title: 'One', logo: 'https://images.example/channel.png' }] } },
+    'GET /lineups/dvr/channels': { MediaContainer: { Channel: [{ id: 'channel', title: 'One', logo: 'https://images.example/channel.png' }] } },
     'GET /LiveTv/Channels': { Items: [{ Id: 'channel', Name: 'One', ImageTags: { Primary: 'thumb', Logo: 'logo' } }] },
   });
   expect((await plex().channels()).items[0]?.artwork[0]?.sizes[0]?.url).toBe('https://images.example/channel.png');

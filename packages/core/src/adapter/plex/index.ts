@@ -43,7 +43,7 @@ function page<T>(items: T[], start = 0, total?: number): V.Page<T> {
 export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges {
   readonly origin: string;
   private sessions = new Map<string, PlexSession>();
-  private liveConfig?: { dvr: string; grid: string };
+  private liveConfig?: { dvr: string; grid: string; channels: string };
   private delegation?: Promise<string>;
   constructor(private config: PlexConfig) {
     const u = new URL(config.origin);
@@ -124,8 +124,17 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         const dvrs = await this.request('/livetv/dvrs');
         if (dvrs.Dvr?.length) {
           const providers = await this.request('/media/providers');
-          const grid = (providers.MediaProvider || []).flatMap((p: Node) => p.Feature || []).find((f: Node) => f.type === 'grid')?.key;
-          if (grid) { this.liveConfig = { dvr: String(dvrs.Dvr[0].key), grid }; live = yes; }
+          const provider = (providers.MediaProvider || []).find((p: Node) => (p.Feature || []).some((f: Node) => f.type === 'grid' && f.key));
+          const grid = provider?.Feature.find((f: Node) => f.type === 'grid')?.key;
+          if (grid) {
+            // PMS exposes configured channels under the grid's provider. /livetv/epg/channels
+            // is lineup discovery and rejects a request without a lineup (HTTP 400).
+            const channels = new URL(grid, this.origin);
+            channels.pathname = channels.pathname.replace(/\/grid$/, '/lineups/dvr/channels');
+            channels.search = '';
+            this.liveConfig = { dvr: String(dvrs.Dvr[0].key), grid, channels: channels.href };
+            live = yes;
+          }
         }
       } catch (error) { if (!(error instanceof VelaError) || ![403, 404].includes(error.status)) throw error; }
     }
@@ -577,8 +586,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   async channels(cursor?: string, limit = 100): Promise<V.Page<V.Channel>> {
     if (!this.liveConfig) await this.describe();
     if (!this.liveConfig) return page([], 0, 0);
-    const c = await this.request('/livetv/epg/channels');
-    const all: V.Channel[] = (c.Channel || []).map((n: Node) => ({ id: String(n.id), number: String(n.vcn || ''), name: n.title || n.callSign || '', kind: 'tv',
+    const c = await this.request(this.liveConfig.channels);
+    const all: V.Channel[] = (c.Channel || []).map((n: Node) => ({ id: String(n.gridKey ?? n.id), number: String(n.vcn || ''), name: n.title || n.callSign || '', kind: 'tv',
       artwork: this.artwork(n).sort((a, b) => Number(b.kind === 'logo') - Number(a.kind === 'logo')).map(a => ({ ...a, kind: 'channel' as const })), favorite: false }));
     return page(all.slice(offset(cursor), offset(cursor) + limit), offset(cursor), all.length);
   }
@@ -588,7 +597,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     if (!this.liveConfig) await this.describe();
     if (!this.liveConfig) return { from: q.from, until: q.until, ...page<V.Programme>([], 0, 0) };
     const live = this.liveConfig;
-    const c = await this.request(live.grid, { beginsAt: Math.floor(from / 1000), endsAt: Math.floor(until / 1000), channelGridKey: q.channelIds?.join(','),
+    const c = await this.request(live.grid, { type: '1,4', sort: 'beginsAt', 'endsAt>': Math.floor(from / 1000), 'beginsAt<': Math.floor(until / 1000), channelGridKey: q.channelIds?.join(','),
       'X-Plex-Container-Start': offset(q.cursor), 'X-Plex-Container-Size': q.limit || 500 });
     const programmes: V.Programme[] = this.nodes(c).flatMap(n => (n.Media || []).map((m: Node) => ({ id: String(n.ratingKey), channelId: String(m.channelIdentifier || m.channelID || m.gridKey),
       name: n.grandparentTitle || n.title || '', episodeTitle: n.grandparentTitle ? n.title : undefined, summary: n.summary || '',
