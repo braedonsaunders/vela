@@ -357,9 +357,9 @@ export class LiveController {
         guideFailure(error);
         console.warn('Vela could not load the guide', error);
         if (!this.guide) this.load = 'failed';
-        else if (this.active && (!(error instanceof VelaError) || error.status >= 500 || error.status === 429)) {
+        if (this.active && (!(error instanceof VelaError) || error.status >= 500 || error.status === 429)) {
           clearTimeout(this.unavailableTimer);
-          this.unavailableTimer = setTimeout(() => { this.unavailableTimer = undefined; this.fetch(); }, this.retryDelay);
+          this.unavailableTimer = setTimeout(() => { this.unavailableTimer = undefined; this.now = Date.now(); this.fetch(); }, this.retryDelay);
           this.retryDelay = Math.min(30000, this.retryDelay * 2);
         }
         this.emit();
