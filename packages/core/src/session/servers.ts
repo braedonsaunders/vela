@@ -20,6 +20,7 @@ export function serverAddress(value: string, kind: ServerKind): { origin: string
  * existing session. A standalone app has no implicit server: every server, Ether included, is added.
  */
 export class ServerRegistry {
+  private dormantEther: ServerRecord[] = [];
   constructor(private readonly store: SecretStore, private readonly etherOrigin?: string) {}
   /** Ether servers can be added by address only where none is implicit. */
   get standalone(): boolean {
@@ -29,6 +30,7 @@ export class ServerRegistry {
     return ['jellyfin', 'emby', 'plex'].includes(kind) || (kind === 'ether' && this.standalone);
   }
   read(): Registry {
+    this.dormantEther = [];
     const implicit: ServerRecord[] = this.etherOrigin
       ? [{ id: 'ether', name: 'Vela', kind: 'ether', origin: this.etherOrigin, basePath: '/' }] : [];
     const raw = this.store.get(registryKey);
@@ -38,6 +40,9 @@ export class ServerRegistry {
     const servers = [...implicit];
     for (const item of parsed.servers) {
       if (!item || item.id === 'ether') continue;
+      // A hosted/lab build uses its configured Ether, but must still open a
+      // registry written by the standalone app. Keep those records for later.
+      if (this.etherOrigin && item.kind === 'ether') { this.dormantEther.push(item); continue; }
       if (!/^[a-f0-9-]{36}$/.test(item.id) || !this.addable(item.kind) || typeof item.name !== 'string' || !item.name.trim() || item.name.length > 100) throw new Error('Invalid server record');
       const address = serverAddress(item.origin + (item.basePath === '/' ? '' : item.basePath), item.kind);
       if (address.origin !== item.origin || address.basePath !== item.basePath || servers.some(s => s.id === item.id)) throw new Error('Invalid server record');
@@ -45,7 +50,9 @@ export class ServerRegistry {
     }
     return { selectedId: servers.some(s => s.id === parsed.selectedId) ? parsed.selectedId : servers[0]?.id ?? '', servers };
   }
-  private write(value: Registry): void { this.store.set(registryKey, JSON.stringify(value)); }
+  private write(value: Registry): void {
+    this.store.set(registryKey, JSON.stringify({ ...value, servers: [...value.servers, ...this.dormantEther] }));
+  }
   get(id: string): ServerRecord {
     const record = this.read().servers.find(s => s.id === id);
     if (!record) throw new Error('Server not found');

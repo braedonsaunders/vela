@@ -177,7 +177,15 @@ describe('ServerRegistry, standalone (no implicit Ether)', () => {
     const store = new MemoryStore();
     const added = new ServerRegistry(store).add('ether', 'Ether', 'https://other.example');
     // The same store read by an Ether-hosted page: the added Ether record is not one it can use.
-    expect(() => new ServerRegistry(store, ETHER).read()).toThrow('Invalid server record');
+    const hosted = new ServerRegistry(store, ETHER);
+    expect(hosted.read()).toEqual({ selectedId: 'ether', servers: [
+      { id: 'ether', name: 'Vela', kind: 'ether', origin: ETHER, basePath: '/' },
+    ] });
+    expect(new ServerRegistry(store).read().servers).toEqual([added]);
+    const plex = hosted.add('plex', 'Plex', 'https://plex.example');
+    hosted.select(plex.id);
+    expect(hosted.read().selectedId).toBe(plex.id);
+    expect(new ServerRegistry(store).read().servers).toEqual(expect.arrayContaining([added, plex]));
     expect(added.kind).toBe('ether');
   });
 });
