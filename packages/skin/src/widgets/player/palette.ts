@@ -1,10 +1,10 @@
-// Video has no page palette. Every bar uses a dark scrim whose opaque plateau
+// Video has no page palette. Every bar uses a dark scrim whose translucent plateau
 // covers its controls; check inks against both black and white behind that scrim.
 const surface = {
   page: '#101318', raised: '#20262e', inkInverse: '#101318',
   onAccent: '#101318', control: '#ffffff24', controlHover: '#ffffff38',
   glass: '#101318f5', glassEdge: '#ffffff45', glassEdgeStrong: '#ffffff75',
-  popover: '#101318fa', scrim: '#000000f2', track: '#ffffff70', trackStrong: '#ffffffa0',
+  popover: '#101318fa', scrim: '#000000bf', track: '#ffffff70', trackStrong: '#ffffffa0',
   focusHalo: '#ffffff66', shadow: '#000000cc',
 };
 function rgba(value: string): number[] | undefined {
@@ -34,9 +34,9 @@ export function playerPalette(input: Record<string, string>) {
   const result: Record<string, string> = { ...surface };
   for (const key of ['ink', 'inkSecondary', 'inkQuiet', 'inkHover', 'accent']) {
     const value = input[key] ?? '';
-    // #0d0d0d is white video through the 95% black scrim. Raised menus
+    // #404040 is white video through the translucent black scrim. Raised menus
     // and filled controls also need readable ink; unknown formats fail closed.
-    result[key] = ['#000000', '#0d0d0d', surface.raised].every(bg => playerContrast(value, bg) >= 4.5)
+    result[key] = ['#000000', '#404040', surface.raised].every(bg => playerContrast(value, bg) >= 4.5)
       && playerContrast(value, surface.inkInverse) >= 4.5 ? value : '#ffffff';
   }
   return result;

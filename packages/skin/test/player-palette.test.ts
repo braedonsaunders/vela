@@ -32,7 +32,17 @@ test('keeps legible skin inks and replaces dark, translucent and unknown inks', 
   for (const ink of ['#1b2550', '#41245c', '#ffffff20', 'transparent']) {
     const safe = playerPalette({ ink, inkSecondary: ink, inkQuiet: ink, accent: ink });
     for (const key of ['ink', 'inkSecondary', 'inkQuiet', 'accent']) {
-      expect(playerContrast(safe[key]!, '#0d0d0d')).toBeGreaterThanOrEqual(4.5);
+      expect(playerContrast(safe[key]!, '#404040')).toBeGreaterThanOrEqual(4.5);
     }
+  }
+});
+
+// The bar plateaus must still let the picture through, including light-page skins.
+test('player scrim leaves at least a quarter of the picture visible for every skin palette', () => {
+  for (const scrim of ['#000000bf', '#2a1546a6', '#22221e66', '#000000ff']) {
+    const palette = playerPalette({ scrim, ink: '#41245c' });
+    expect(palette.scrim).toBe('#000000bf');
+    expect(parseInt(palette.scrim.slice(7), 16) / 255).toBeLessThanOrEqual(0.75);
+    expect(playerContrast(palette.ink!, '#404040')).toBeGreaterThanOrEqual(4.5);
   }
 });
