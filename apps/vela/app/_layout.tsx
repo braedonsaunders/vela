@@ -31,9 +31,9 @@ function Screens() {
           contentStyle: { backgroundColor: 'transparent' },
         }}
       />
-      {/* Over a title page (contained, above) the player is contained too on a TV: pushed as a
-          card it went under the title page's container, which kept the remote's focus and input. */}
-      <Stack.Screen name="watch/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : 'card', contentStyle: { ...sides, backgroundColor: '#000' } }} />
+      {/* Playback must present above title/person modals. A card is pushed beneath their
+          native controller on Apple devices, hiding the playing film and its controls. */}
+      <Stack.Screen name="watch/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : 'fullScreenModal', contentStyle: { ...sides, backgroundColor: '#000' } }} />
       <Stack.Screen name="person" options={{ presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal', contentStyle: { backgroundColor: 'transparent' } }} />
     </Stack>
   );
