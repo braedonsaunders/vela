@@ -1,13 +1,12 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { VelaProvider } from '../src/vela';
 
 export default function Layout() {
-  return (
-    <VelaProvider>
-      <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#090b0e' }, animation: 'fade' }}>
+  const stackNode = (
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#090b0e' }, animation: 'fade' }}>
         <Stack.Screen
           name="title/[id]"
           // On a TV the title page is presented within the app's root view: react-native-tvos finds
@@ -23,6 +22,13 @@ export default function Layout() {
         <Stack.Screen name="watch/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : 'card' }} />
         <Stack.Screen name="person" options={{ presentation: Platform.isTV ? 'containedTransparentModal' : 'transparentModal', contentStyle: { backgroundColor: 'transparent' } }} />
       </Stack>
+  );
+  return (
+    <VelaProvider>
+      <StatusBar style="light" />
+      {Platform.OS === 'android' && !Platform.isTV
+        ? <SafeAreaView style={{ flex: 1, backgroundColor: '#090b0e' }}>{stackNode}</SafeAreaView>
+        : stackNode}
     </VelaProvider>
   );
 }

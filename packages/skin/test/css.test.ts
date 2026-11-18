@@ -2,12 +2,12 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 import type { Measure } from '../src/css';
 
 // css.ts asks react-native which platform it draws on; the real package is Flow source Bun
-// cannot load, and only `Platform.OS` is read.
-const platform = { OS: 'ios' as string };
+// cannot load, so provide the platform here.
+const platform = { OS: 'ios' as string, isTV: false };
 mock.module('react-native', () => ({ Platform: platform }));
 const { colour, length, linearGradient, points, pxText, radialGradient, splitTop, withTokens } = await import('../src/css');
 
-afterEach(() => { platform.OS = 'ios'; });
+afterEach(() => { platform.OS = 'ios'; platform.isTV = false; });
 
 const measure = (width = 1000, height = 800, fontSize = 20, axis: 'x' | 'y' = 'x'): Measure =>
   ({ viewport: { width, height, insets: { top: 47, right: 0, bottom: 34, left: 0 } }, fontSize, axis });
@@ -176,4 +176,18 @@ describe('gradients', () => {
 test('explicit inherit keeps the parent text rows', async () => {
   const { inheritRows } = await import('../src/inherit-rows');
   expect(inheritRows({ color: '#eee', 'font-weight': '600' }, { color: 'inherit', 'font-weight': '700' })).toEqual({ color: '#eee', 'font-weight': '700' });
+});
+
+
+test('nested inherited font sizes stay in points on TV instead of scaling at each box', async () => {
+  const { inheritText } = await import('../src/text-inheritance');
+  platform.OS = 'android'; platform.isTV = true;
+  const viewport = measure(960, 540).viewport;
+  const first = inheritText({ rows: {}, fontSize: 16 }, { 'font-size': '20px' }, viewport);
+  const second = inheritText(first, { color: 'red' }, viewport);
+  const third = inheritText(second, { 'font-size': 'inherit' }, viewport);
+  expect(first.fontSize).toBe(12.5);
+  expect(second.fontSize).toBe(first.fontSize);
+  expect(third.fontSize).toBe(first.fontSize);
+  expect(inheritText(third, { 'font-size': '150%' }, viewport).fontSize).toBe(first.fontSize * 1.5);
 });

@@ -4,6 +4,7 @@
 // size in force. Theme token names become their colours.
 import { Platform } from 'react-native';
 import { THEME } from './theme';
+import { tvPixelScale } from './tv-pixel-scale';
 
 export interface Viewport {
   width: number;
@@ -63,8 +64,8 @@ function unitPoints(unit: string, m: Measure): number | undefined {
   const { width, height } = m.viewport;
   switch (unit) {
     case '': return 1;
-    case 'px': return PX;
-    case 'rem': return ROOT_FONT * PX;
+    case 'px': return Platform.isTV && Platform.OS === 'android' ? tvPixelScale(width, height) : PX;
+    case 'rem': return ROOT_FONT * (Platform.isTV && Platform.OS === 'android' ? tvPixelScale(width, height) : PX);
     case 'em': return m.fontSize;
     case 'ch': return m.fontSize * 0.5;
     case 'ex': return m.fontSize * 0.5;
@@ -263,4 +264,12 @@ export function radialGradient(raw: string): RadialGradient | undefined {
   const closest = shape.includes('closest-side');
   const reach = (c: number) => (closest ? Math.min(c, 1 - c) : Math.max(c, 1 - c) * Math.SQRT2);
   return { ...stops, centre, radius: { x: reach(centre.x), y: reach(centre.y) } };
+}
+
+/** The computed font size in points for a font-size row, against the parent's. */
+export function fontSizeOf(raw: string | undefined, parent: number, m: Measure): number {
+  if (!raw) return parent;
+  const v = raw.trim();
+  if (v.endsWith('%')) return (parseFloat(v) / 100) * parent;
+  return points(v, { ...m, fontSize: parent, axis: 'x' }) ?? parent;
 }
