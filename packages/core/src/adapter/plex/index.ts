@@ -21,7 +21,7 @@ interface PlexSession {
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
 }
-export interface PlexConfig { origin: string; credentials: Credentials; clientIdentifier: string }
+export interface PlexConfig { origin: string; credentials: Credentials; clientIdentifier: string; /** The name the server was added under (plex.tv's resource name). */ name?: string }
 const ack: V.Ack = { accepted: true };
 const no = (reason: string): V.Feature => ({ available: false, reason });
 const yes: V.Feature = { available: true };
@@ -114,7 +114,10 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   async describe(): Promise<ServerDescription> {
     const root = await this.request('/identity', {}, 'GET', false);
     let live: V.Feature = no('No accessible Plex DVR');
+    // /identity carries no name (PMS and Ether alike): the server's name is its root container's.
+    let name = '';
     if (await this.config.credentials.get()) {
+      try { name = (await this.request('/')).friendlyName || ''; } catch { /* the name the server was added under stands */ }
       try {
         const dvrs = await this.request('/livetv/dvrs');
         const providers = await this.request('/media/providers');
@@ -122,7 +125,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         if (dvrs.Dvr?.length && grid) { this.liveConfig = { dvr: String(dvrs.Dvr[0].key), grid }; live = yes; }
       } catch (error) { if (!(error instanceof VelaError) || ![403, 404].includes(error.status)) throw error; }
     }
-    return { protocolVersion: 0, server: { id: root.machineIdentifier || this.origin, name: root.friendlyName || 'Plex Media Server', version: root.version || '' },
+    return { protocolVersion: 0, server: { id: root.machineIdentifier || this.origin, name: name || this.config.name || 'Plex Media Server', version: root.version || '' },
       features: { liveTV: live, extras: yes, extraPlayback: yes, themeMusic: yes, initialTrackSelection: yes, sessionTrackChanges: yes },
       skins: [{ id: 'cinematic', name: 'Cinematic' }], defaultSkinId: 'cinematic' };
   }

@@ -39,7 +39,7 @@ export function etherConnection(record: ServerRecord, adapter: EtherAdapter, cre
 export function nativeConnection(record: ServerRecord, credentials: Credentials, onSessionRejected: () => void): Connection {
   const base = record.origin + (record.basePath === '/' ? '' : record.basePath);
   if (record.kind === 'plex') {
-    const adapter = new PlexAdapter({ origin: record.origin, credentials, clientIdentifier: credentials.device.id });
+    const adapter = new PlexAdapter({ origin: record.origin, credentials, clientIdentifier: credentials.device.id, name: record.name });
     const media: MediaAccess = { origin: record.origin, pathPrefix: '/', headers: () => adapter.mediaHeaders(), nativeURL: url => adapter.transientMediaURL(url) };
     return { record, adapter, credentials, media,
       images: async () => {

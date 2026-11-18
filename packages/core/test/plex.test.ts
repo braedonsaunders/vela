@@ -238,3 +238,15 @@ test('episode and season posters use series art, while landscape cards keep epis
   expect(items[1]!.artwork[0]!.sizes[0]!.url).toBe(`${ORIGIN}/library/metadata/18/thumb`);
   expect(items[2]!.artwork.map(a => a.kind)).toEqual(['still']);
 });
+
+describe('PlexAdapter server name', () => {
+  test('reads the name from the root container, not /identity', async () => {
+    routeFetch({ 'GET /identity': { MediaContainer: { machineIdentifier: 'm1', version: '1.43' } }, 'GET /': { MediaContainer: { friendlyName: 'Ether' } } });
+    expect((await plex().describe()).server.name).toBe('Ether');
+  });
+  test('falls back to the name it was added under', async () => {
+    routeFetch({ 'GET /identity': { MediaContainer: { machineIdentifier: 'm1', version: '1.43' } } });
+    const adapter = new PlexAdapter({ origin: ORIGIN, credentials: new FakeCredentials(), clientIdentifier: 'client-1', name: 'MEDIASERVER' });
+    expect((await adapter.describe()).server.name).toBe('MEDIASERVER');
+  });
+});
