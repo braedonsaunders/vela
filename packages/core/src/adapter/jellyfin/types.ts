@@ -68,6 +68,7 @@ export interface Stream {
     DeliveryUrl?: string;
 }
 export interface MediaSource {
+    Name?: string;
     Id: string;
     Container?: string;
     Size?: number;

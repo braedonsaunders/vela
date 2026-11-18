@@ -105,7 +105,14 @@ final class PlayerReport {
             "qualityIds": [String](),
             "renditions": [Any](),
             "audioTracks": plan.audioTracks.map(\.snapshot),
-            "subtitleTracks": plan.subtitleTracks.map(\.snapshot),
+            "subtitleTracks": plan.subtitleTracks.map(\.snapshot) + state.tracks.compactMap { track -> [String: Any]? in
+                guard plan.selectedPath?.isOriginalFile == true, track["type"] as? String == "sub", track["external"] as? Bool != true,
+                      let id = track["id"] as? Int64 else { return nil }
+                let index = (track["ff-index"] as? Int64).map(Int.init)
+                if let index, plan.subtitleTracks.contains(where: { $0.streamIndex == index }) { return nil }
+                return ["id": "mpv-sub-\(id)", "label": track["title"] as? String ?? track["lang"] as? String ?? "Subtitle \(id)",
+                        "language": track["lang"] as? String ?? "und", "codec": track["codec"] as? String ?? ""]
+            },
             "audioTrackIds": plan.audioTracks.map(\.id),
             "chapters": (plan.chapters ?? []).map(\.snapshot),
             "throughputHistory": state.cacheSpeed.map { [Double($0 * 8)] } ?? [],
@@ -124,6 +131,7 @@ final class PlayerReport {
             "position": seekTarget ?? state.position,
             "playable": playable(state).map { ["start": $0.start, "end": $0.end] },
         ]
+        let observedAudio = plan.audioTracks.first { $0.streamIndex != nil && $0.streamIndex == state.streamIndex(type: "audio", id: state.audioId) }?.id
         let optional: [String: Any?] = [
             "sourceId": pathId.isEmpty ? nil : pathId,
             "strategy": plan.paths.first { $0.id == pathId }?.kind,
@@ -144,7 +152,7 @@ final class PlayerReport {
             "throughputBps": state.cacheSpeed.map { Double($0 * 8) },
             "droppedFrames": state.droppedFrames,
             "totalFrames": nil,
-            "audioTrackId": audioTrackId,
+            "audioTrackId": audioTrackId ?? observedAudio,
             "pendingAudioTrackId": nil,
             "subtitleTrackId": subtitleTrackId,
             "failure": state.failure.map { ["kind": state.failureKind, "message": $0, "recoverable": false] },

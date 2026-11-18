@@ -63,3 +63,22 @@ test('a quality spinner waits for the engine, not just server acceptance', () =>
   snapshot.sourceGeneration++;
   expect(qualityReached('path:convert-720', snapshot, source)).toBe(false);
 });
+
+test('plan subtitles survive an empty engine snapshot; discovered embedded tracks supplement them', () => {
+  const source = plan();
+  source.subtitleTracks = [{ id: 'server-sub', kind: 'subtitle', language: 'en', name: 'English', codec: 'srt', delivery: { kind: 'embedded' } }];
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, subtitleTracks: [], throughputHistory: [], capabilities: {} } as unknown as Snapshot;
+  expect(present(source, snapshot).subtitles.map(t => t.id)).toEqual(['server-sub']);
+  snapshot.subtitleTracks = [{ id: 'mpv-sub-2', label: 'French', language: 'fr' }, { id: 'server-sub', label: 'English SDH', language: 'en' }];
+  const choices = present(source, snapshot).subtitles;
+  expect(choices.map(t => t.id)).toEqual(['server-sub', 'mpv-sub-2']);
+  expect(choices[0]?.name).toBe('English SDH');
+});
+
+test('an early snapshot without an audio choice retains the server-selected track', () => {
+  const source = plan();
+  source.selectedAudioTrackId = 'en';
+  source.audioTracks = [{ id: 'en', kind: 'audio', name: 'English', language: 'en', codec: 'aac' }];
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, audioTrackId: null, throughputHistory: [], capabilities: {} } as unknown as Snapshot;
+  expect(present(source, snapshot).audioId).toBe('en');
+});

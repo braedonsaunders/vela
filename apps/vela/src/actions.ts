@@ -73,7 +73,10 @@ export function useDispatcher({ store, view, live, openPicker }: Context): Dispa
         if (place.entry && arg) return router.push({ pathname: '/person', params: { title: place.entry, name: arg, library: place.library ?? '' } });
         return;
       case 'play':
-        if (arg) router.push({ pathname: '/watch/[id]', params: { id: arg } });
+        if (arg) {
+          const [id, mediaSourceId, audioTrackId] = arg.split('|');
+          router.navigate({ pathname: '/watch/[id]', params: { id, ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}) } });
+        }
         return;
       case 'pickHero':
         return actions.setHeroIndex(Number(arg) || 0);

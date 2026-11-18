@@ -46,6 +46,8 @@ internal class PlaybackPlan(
 
 internal class PlanPath(
   val id: String,
+  val sourceId: String?,
+  val timelineId: String?,
   val kind: String,
   val transport: String,
   val readiness: String,
@@ -61,6 +63,8 @@ internal class PlanPath(
   companion object {
     fun from(value: Map<String, Any?>): PlanPath? {
       return PlanPath(
+        sourceId = value.text("sourceId"),
+        timelineId = value.text("timelineId"),
         id = value.text("id") ?: return null,
         kind = value.text("kind") ?: return null,
         transport = value.text("transport") ?: return null,

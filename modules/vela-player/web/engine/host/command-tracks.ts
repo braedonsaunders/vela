@@ -15,6 +15,7 @@ export async function selectAudioFromCommand(
     }
   >,
 ) {
+  if (command.trackId === context.tracks.audio) return true;
   if (
     !(
       context.media.runtime && context.media.runtime.supportsLocalAudioSwitch !== false
@@ -68,6 +69,7 @@ export async function selectSubtitleFromCommand(
     }
   >,
 ) {
+  if (command.trackId === context.tracks.subtitle) return true;
   if (context.media.runtime?.supportsSubtitles) {
     const overlay = await ensureOverlay(context);
     const local = overlay.tracks.find((track) => track.id === command.trackId);

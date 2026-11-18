@@ -138,7 +138,13 @@ internal class PlayerReport(
       "qualityIds" to emptyList<String>(),
       "renditions" to emptyList<Any>(),
       "audioTracks" to plan?.audioTracks.orEmpty().map { it.snapshot },
-      "subtitleTracks" to plan?.subtitleTracks.orEmpty().map { it.snapshot },
+      "subtitleTracks" to (plan?.subtitleTracks.orEmpty().map { it.snapshot } + state.tracks.mapNotNull { track ->
+        val id = track["id"] as? Long
+        val index = (track["ff-index"] as? Long)?.toInt()
+        if (plan?.selectedPath?.isOriginalFile != true || track["type"] != "sub" || track["external"] == true || id == null ||
+          (index != null && plan?.subtitleTracks.orEmpty().any { it.streamIndex == index })) null
+        else mapOf("id" to "mpv-sub-$id", "label" to (track["title"] ?: track["lang"] ?: "Subtitle $id"), "language" to (track["lang"] ?: "und"), "codec" to (track["codec"] ?: ""))
+      }),
       "audioTrackIds" to plan?.audioTracks.orEmpty().map { it.id },
       "chapters" to plan?.chapters.orEmpty().map { it.snapshot },
       "throughputHistory" to listOfNotNull(throughput(state)),
@@ -172,7 +178,7 @@ internal class PlayerReport(
       "throughputBps" to throughput(state),
       "droppedFrames" to state.droppedFrames,
       "totalFrames" to null,
-      "audioTrackId" to audioTrackId,
+      "audioTrackId" to (audioTrackId ?: plan?.audioTracks?.firstOrNull { track -> state.audioId != null && track.streamIndex?.let { state.trackId("audio", it) } == state.audioId }?.id),
       "pendingAudioTrackId" to null,
       "subtitleTrackId" to subtitleTrackId,
       "failure" to state.failure?.let { mapOf("kind" to state.failureKind, "message" to it, "recoverable" to false) },

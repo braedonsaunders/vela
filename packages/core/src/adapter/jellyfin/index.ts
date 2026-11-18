@@ -1,3 +1,4 @@
+import type { TitleActions } from '../media-actions';
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
@@ -491,6 +492,36 @@ export class JellyfinAdapter
                 }]
         };
     }
+    async titleActions(id: string): Promise<TitleActions> {
+        const item = await this.request<Item>('GET', `${await this.userPath()}/Items/${e(id)}`);
+        return { watched: true, list: 'favorite' as const, watch: this.title(item).watch!, versions: (item.MediaSources || []).flatMap(s => {
+            const audio = (s.MediaStreams || []).filter(t => t.Type === 'Audio');
+            return audio.length > 1 ? audio.map(t => ({ id: s.Id, audioTrackId: String(t.Index), name: `${s.Name || s.Id} · ${t.DisplayTitle || t.Language || t.Codec}` })) : [{ id: s.Id, name: s.Name || s.Id }];
+        }) };
+    }
+    async setTitleWatch(id: string, change: { played?: boolean; listed?: boolean }) {
+        const user = await this.userPath();
+        if (change.played !== undefined) await this.request(change.played ? 'POST' : 'DELETE', `${user}/PlayedItems/${e(id)}`);
+        if (change.listed !== undefined) await this.request(change.listed ? 'POST' : 'DELETE', `${user}/FavoriteItems/${e(id)}`);
+    }
+    async searchSubtitles(sessionId: string, language: string) {
+        const s = this.session(sessionId);
+        const results = await this.request<{ Id: string; Name: string; Language: string }[]>('GET', `Items/${e(s.itemId)}/RemoteSearch/Subtitles/${e(language)}`);
+        return results.map(t => ({ id: t.Id, name: t.Name, language: t.Language }));
+    }
+    async downloadSubtitle(sessionId: string, id: string): Promise<V.PlaybackPlan> {
+        const s = this.session(sessionId);
+        await this.request('POST', `Items/${e(s.itemId)}/RemoteSearch/Subtitles/${e(id)}`);
+        const item = await this.request<Item>('GET', `${await this.userPath()}/Items/${e(s.itemId)}`);
+        const source = item.MediaSources?.find(m => m.Id === s.source.Id);
+        for (const t of source?.MediaStreams || []) {
+            if (t.Type !== 'Subtitle' || s.plan.subtitleTracks.some(p => p.id === String(t.Index))) continue;
+            const url = this.mediaURL(this.url(`Videos/${e(s.itemId)}/${e(s.source.Id)}/Subtitles/${t.Index}/Stream.vtt`).href);
+            s.plan.subtitleTracks.push({ id: String(t.Index), kind: 'subtitle', name: t.DisplayTitle || t.Language || 'Subtitle', language: t.Language || 'und', codec: 'webvtt', delivery: { kind: 'external', format: 'webvtt', url } });
+        }
+        s.plan.revision++;
+        return structuredClone(s.plan);
+    }
     startPlayback(r: V.PlaybackRequest): Promise<V.PlaybackPlan> {
         let work = this.starts.get(r.idempotencyKey);
         if (!work) {
@@ -511,6 +542,7 @@ export class JellyfinAdapter
             ErrorCode?: string;
         }>('POST', `Items/${e(id)}/PlaybackInfo`, {
             UserId: (await this.credentials.get())?.viewer.id, DeviceProfile: this.profile(r.client), StartTimeTicks: ticks(position),
+            ...(r.mediaSourceId ? { MediaSourceId: r.mediaSourceId } : {}),
             IsPlayback: true, AutoOpenLiveStream: !!r.channelId, EnableDirectPlay: !r.channelId, EnableDirectStream: true,
             EnableTranscoding: r.allowTranscode !== false, MaxStreamingBitrate: r.client.maxBitrate ?? 120000000,
             ...(r.audioTrackId !== undefined ? {
@@ -520,7 +552,7 @@ export class JellyfinAdapter
                 SubtitleStreamIndex: r.subtitleTrackId === null ? -1 : this.trackIndex(r.subtitleTrackId)
             } : {}),
         });
-        let source = info.MediaSources?.find(s => s.SupportsDirectPlay) ?? info.MediaSources?.[0];
+        let source = r.mediaSourceId ? info.MediaSources?.find(s => s.Id === r.mediaSourceId) : info.MediaSources?.find(s => s.SupportsDirectPlay) ?? info.MediaSources?.[0];
         if (!source || info.ErrorCode)
             throw this.error('playback', 'no_playable_source', 'Server could not provide a playable source');
         const sessionId = info.PlaySessionId || `jf-${r.idempotencyKey}`;

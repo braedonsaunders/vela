@@ -19,14 +19,16 @@ export interface Idle {
 
 export function useIdle(hold: boolean): Idle {
   const [visible, setVisible] = useState(true);
-  const [touched, setTouched] = useState(0);
+  const held = useRef(hold);
+  held.current = hold;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const shown = useRef(visible);
   shown.current = visible;
 
   const wake = useCallback(() => {
     setVisible(true);
-    setTouched(Date.now());
+    clearTimeout(timer.current);
+    if (!held.current) timer.current = setTimeout(() => setVisible(false), IDLE_MS);
   }, []);
   const hide = useCallback(() => setVisible(false), []);
   // Moving focus along the chrome keeps it up. Not once it is hiding: hiding moves focus itself,
@@ -43,7 +45,7 @@ export function useIdle(hold: boolean): Idle {
     }
     timer.current = setTimeout(() => setVisible(false), IDLE_MS);
     return () => clearTimeout(timer.current);
-  }, [hold, touched]);
+  }, [hold]);
 
   // The web: any pointer movement or key over the page.
   useEffect(() => {

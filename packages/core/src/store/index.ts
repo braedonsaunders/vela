@@ -103,7 +103,7 @@ export function createVela(options: VelaOptions): Vela {
   const home = new Home(box, session, width);
   const catalogue = new Catalogue(box, session, width);
   // What the viewer watched changes their resume positions, Continue Watching and the hero:
-  // applied locally from the player's last report. Only detail is reconciled with
+  // applied locally only from the server-confirmed stop position. Detail is reconciled with
   // the server; navigation and playback never repeat the full bootstrap.
   const playback = new Playback(
     box,

@@ -30,9 +30,9 @@ function targetOf(kind: string | undefined, id: string): PlaybackTarget {
 }
 
 export default function Watch() {
-  const { id = '', kind } = useLocalSearchParams<{ id: string; kind?: string }>();
+  const { id = '', kind, mediaSourceId, audioTrackId } = useLocalSearchParams<{ id: string; kind?: string; mediaSourceId?: string; audioTrackId?: string }>();
   const { host, openTitle, store } = useVela();
-  const target = useMemo(() => targetOf(kind, id), [kind, id]);
+  const target = useMemo(() => ({ ...targetOf(kind, id), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}) }), [kind, id, mediaSourceId, audioTrackId]);
   const live = useLiveContext();
   const liveView = useLiveView();
   const owned = target.kind === 'channel' && live ? {

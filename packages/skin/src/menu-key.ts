@@ -15,6 +15,7 @@ const SAME_PRESS_MS = 600;
 const held: (() => boolean)[] = [];
 const listeners = new Set<() => void>();
 let lastHandled = 0;
+let releaseTimer: ReturnType<typeof setTimeout> | undefined;
 
 function changed(): void {
   for (const listener of listeners) listener();
@@ -22,7 +23,11 @@ function changed(): void {
 
 function run(onBack: () => boolean): boolean {
   const handled = onBack();
-  if (handled) lastHandled = Date.now();
+  if (handled) {
+    lastHandled = Date.now();
+    clearTimeout(releaseTimer);
+    releaseTimer = setTimeout(changed, SAME_PRESS_MS + 10);
+  }
   return handled;
 }
 
@@ -52,7 +57,7 @@ function subscribe(listener: () => void): () => void {
 
 /** Whether something open holds Back now. */
 export function useBackHeld(): boolean {
-  return useSyncExternalStore(subscribe, () => held.length > 0, () => false);
+  return useSyncExternalStore(subscribe, () => held.length > 0 || Date.now() - lastHandled < SAME_PRESS_MS, () => false);
 }
 
 /** A screen's removal was prevented while Back was held: unless the press was already handled
