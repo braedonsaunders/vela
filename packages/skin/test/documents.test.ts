@@ -410,3 +410,19 @@ test('every skin provides library tabs, facets and card shapes at phone, desktop
     expect(shapes, `${name} ${width}`).toBeGreaterThan(0);
   }
 });
+
+test('library identity precedes shared search and facets in every skin', async () => {
+  const { fill } = await import('../src/resolve');
+  for (const [name, doc] of documents) for (const width of WIDTHS) {
+    const sequence: string[] = [];
+    const env = { library: { model: { name: 'Library identity' } } } as any;
+    const visit = (node: RNode) => {
+      if (node.kind === 'widget' && node.widget === 'libraryFacets') sequence.push('filters');
+      if (node.kind === 'text' && node.role === 'heading' && fill(node.text, { index: 0 }, env) === 'Library identity') sequence.push('header');
+      if (node.kind === 'box') node.children.forEach(visit);
+    };
+    visit(resolveDocument(doc, width).routes.library!);
+    expect(sequence.indexOf('header'), `${name} ${width}`).toBeGreaterThanOrEqual(0);
+    expect(sequence.indexOf('header'), `${name} ${width}`).toBeLessThan(sequence.indexOf('filters'));
+  }
+});

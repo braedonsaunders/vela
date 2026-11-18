@@ -36,6 +36,32 @@ function hasLibraryViews(node: Node): boolean {
   return false;
 }
 
+/** A skin's library-name/kind bar precedes the shared view tabs and browse controls. */
+function libraryHeaderOrder(node: Node): Node {
+  if (node.type !== 'box') return node;
+  const children = (node.children ?? []).map(libraryHeaderOrder);
+  const views = children.findIndex(child => child.type === 'use' && child.template === 'velaLibraryViews');
+  const header = children.findIndex(child => child.type === 'box' && child.role === 'tablist' && child.label === '{library.name}');
+  if (views >= 0 && header > views) {
+    const [switcher] = children.splice(views, 1);
+    children.splice(header, 0, switcher!);
+  } else if (views >= 0) {
+    // Plain list skins keep the library heading inside their catalogue block. Lift that
+    // heading above the controls while keeping its typography and page gutter.
+    const catalogue = children.findIndex((child, index) => index > views && child.type === 'box'
+      && child.children?.some(part => part.type === 'text' && part.text === '{library.name}')
+      && child.children.some(part => part.type === 'repeat' && part.over === 'library.items'));
+    const content = children[catalogue];
+    if (content?.type === 'box') {
+      const heading = content.children!.find(part => part.type === 'text' && part.text === '{library.name}')!;
+      children[catalogue] = { ...content, children: content.children!.filter(part => part !== heading) };
+      children.splice(views, 0, { type: 'box', when: content.when?.filter(test => test.test !== 'library.view'),
+        style: { ...content.style, 'padding-bottom': '0px' }, children: [heading] });
+    }
+  }
+  return { ...node, children };
+}
+
 function withLibraryViews(node: Node): Node {
   if (hasLibraryViews(node)) return node;
   const switcher: Node = { type: 'use', template: 'velaLibraryViews' };
@@ -118,7 +144,7 @@ export function withBase(doc: SkinDocument, base: SkinDocument): InheritedDocume
   if (routes.search) routes.search = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '18px' }, children: [searchControls, routes.search, searchPaging] };
   if (routes.title) routes.title = sharedCast(routes.title);
   if (!doc.routes?.library && hasFlowHeader(doc.slots?.shell)) routes.library = libraryBelowHeader;
-  if (routes.library) routes.library = withLibraryViews(routes.library);
+  if (routes.library) routes.library = withLibraryViews(libraryHeaderOrder(routes.library));
   const layout = libraryLayout(doc.routes?.library ?? base.routes?.library);
   const personCard = layout?.item ?? doc.templates?.gridCard ?? doc.templates?.gridPoster ?? doc.templates?.poster ?? doc.templates?.card ?? base.templates!.velaCard!;
   const title = doc.routes?.title ?? base.routes?.title;
