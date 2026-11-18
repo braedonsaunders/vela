@@ -156,6 +156,8 @@ final class ScopedMediaByteReader: @unchecked Sendable {
     private var operation: ScopedMediaRequest?
     private var closed = false
     private var interrupted = false
+    private var hasRead = false
+    private var cancellationEpoch: UInt64 = 0
     private var position: Int64 = 0
     private var totalSize: Int64?
     private var cache = Data()
@@ -167,10 +169,10 @@ final class ScopedMediaByteReader: @unchecked Sendable {
         self.access = access
     }
 
-    private func fetch(at offset: Int64, count: Int) throws -> ScopedMediaResponse {
+    private func fetch(at offset: Int64, count: Int, epoch: UInt64) throws -> ScopedMediaResponse {
         let request = ScopedMediaRequest(url: url, access: access, offset: offset, count: count)
         lock.lock()
-        guard !closed && !interrupted else { lock.unlock(); throw URLError(.cancelled) }
+        guard !closed && !interrupted && epoch == cancellationEpoch else { lock.unlock(); throw URLError(.cancelled) }
         operation = request
         lock.unlock()
         defer { lock.lock(); operation = nil; lock.unlock() }
@@ -179,13 +181,17 @@ final class ScopedMediaByteReader: @unchecked Sendable {
 
     func read(_ buffer: UnsafeMutablePointer<UInt8>?, size: Int32) -> Int32 {
         guard let buffer, size > 0 else { return 0 }
-        lock.lock(); let stopped = closed || interrupted; lock.unlock()
+        lock.lock()
+        let stopped = closed || interrupted
+        let epoch = cancellationEpoch
+        if !stopped { hasRead = true }
+        lock.unlock()
         guard !stopped else { return -1 }
         if let totalSize, position >= totalSize { return 0 }
         do {
             if position < cacheStart || position >= cacheStart + Int64(cache.count) {
                 let remaining = totalSize.map { max(0, $0 - position) } ?? 1_048_576
-                let result = try fetch(at: position, count: Int(min(1_048_576, remaining)))
+                let result = try fetch(at: position, count: Int(min(1_048_576, remaining)), epoch: epoch)
                 cache = result.data
                 cacheStart = position
                 totalSize = result.totalSize ?? totalSize
@@ -206,10 +212,12 @@ final class ScopedMediaByteReader: @unchecked Sendable {
         // seek starts the next read epoch; cancellation alone never closes the grant.
         if !closed, mode == 0, offset >= 0 { interrupted = false }
         let stopped = closed || interrupted
+        let epoch = cancellationEpoch
+        if !stopped { hasRead = true }
         lock.unlock()
         guard !stopped else { return -1 }
         if totalSize == nil, mode == 65536 || mode == 2 {
-            do { totalSize = try fetch(at: 0, count: 1).totalSize } catch { return -1 }
+            do { totalSize = try fetch(at: 0, count: 1, epoch: epoch).totalSize } catch { return -1 }
         }
         if mode == 65536 { return totalSize ?? -1 }
         let target: Int64
@@ -232,7 +240,14 @@ final class ScopedMediaByteReader: @unchecked Sendable {
     }
 
     func cancel() {
-        lock.lock(); interrupted = true; let request = operation; lock.unlock()
+        lock.lock()
+        cancellationEpoch &+= 1
+        // A cancellation racing the initial read must prevent it from starting.
+        // Once used, only the in-flight operation is interrupted: Aether may
+        // reuse this reader immediately, even before a positional seek.
+        if !hasRead { interrupted = true }
+        let request = operation
+        lock.unlock()
         request?.cancel()
     }
 

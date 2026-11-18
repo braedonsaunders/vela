@@ -36,7 +36,7 @@ if (privateConfig.traceNetwork) {
     const [status, setStatus] = useState('');
     useEffect(() => { const timer = setInterval(() => setStatus([`elapsed ${Math.floor((Date.now() - started) / 1000)}s guide ${counts.guide} channels ${counts.channels} unique guide pages ${pages.size}`, ...messages.slice(-3)].join('\n')), 500); return () => clearInterval(timer); }, []);
     return React.createElement(View, { style: { flex: 1 } }, children,
-      React.createElement(Text, { pointerEvents: 'none', style: { position: 'absolute', top: 35, left: 35, color: 'white', backgroundColor: '#000b', fontSize: 22 } }, status));
+      React.createElement(Text, { pointerEvents: 'none', style: { position: 'absolute', top: 35, left: 35, color: 'white', backgroundColor: '#000b', fontSize: 22, zIndex: 999999 } }, status));
   }
   AppRegistry.setWrapperComponentProvider(() => Overlay);
   const nativeFetch = globalThis.fetch;

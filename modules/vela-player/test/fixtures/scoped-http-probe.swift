@@ -20,7 +20,7 @@ import Foundation
                     var bytes = [UInt8](repeating: 0, count: 5)
                     guard reader.read(&bytes, size: 5) == 5 else { exit(2) }
                     reader.cancel()
-                    guard reader.read(&bytes, size: 5) == -1,
+                    guard reader.read(&bytes, size: 5) == 5,
                           reader.seek(offset: 0, whence: 0) == 0,
                           reader.read(&bytes, size: 5) == 5,
                           String(bytes: bytes, encoding: .utf8) == "media" else { exit(2) }
