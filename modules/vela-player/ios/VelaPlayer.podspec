@@ -16,13 +16,15 @@ Pod::Spec.new do |s|
   s.license        = 'LicenseRef-Vela'
   s.author         = 'Vela'
   s.homepage       = 'https://github.com/braedonsaunders/vela'
-  s.platforms      = { :ios => '15.1', :tvos => '15.1' }
+  s.platforms      = { :ios => '18.0', :tvos => '18.0' }
   s.swift_version  = '5.9'
   s.source         = { :git => 'https://github.com/braedonsaunders/vela.git' }
   s.static_framework = true
   s.source_files   = '*.swift'
 
   s.dependency 'ExpoModulesCore'
+  spm_dependency(s, url: 'https://github.com/superuser404notfound/AetherEngine',
+    requirement: {kind: 'exactVersion', version: '7.70.0'}, products: ['AetherEngine'])
 
   s.vendored_frameworks = 'Frameworks/*.xcframework'
   # What MPVKit's Package.swift links for its LGPL product.
