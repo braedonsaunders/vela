@@ -190,6 +190,22 @@ describe('PlexAdapter requests', () => {
     await expect(adapter.guide({ from: '2026-03-01T00:00:00Z', until: '2026-03-10T00:00:00Z' })).rejects.toThrow('Invalid Plex guide window');
   });
 
+  test('removing the DVR clears a previously available guide without querying providers', async () => {
+    let present = true;
+    const seen = routeFetch({
+      'GET /identity': { MediaContainer: {} },
+      'GET /livetv/dvrs': () => ({ MediaContainer: { Dvr: present ? [{ key: '/livetv/dvrs/4' }] : [] } }),
+      'GET /media/providers': { MediaContainer: { MediaProvider: [{ Feature: [{ type: 'grid', key: '/grid' }] }] } },
+    });
+    const adapter = plex();
+    expect((await adapter.describe()).features.liveTV?.available).toBe(true);
+    present = false;
+    expect((await adapter.describe()).features.liveTV?.available).toBe(false);
+    expect(await adapter.channels()).toEqual({ items: [], continuation: 'exhausted' });
+    expect(seen.filter(r => r.url.pathname === '/media/providers')).toHaveLength(1);
+    await expect(adapter.guide({ from: 'bad', until: 'bad' })).rejects.toThrow('Invalid Plex guide window');
+  });
+
   test('without a DVR, live TV is unavailable', async () => {
     routeFetch({
       'GET /identity': { MediaContainer: {} },
@@ -199,7 +215,10 @@ describe('PlexAdapter requests', () => {
     const described = await adapter.describe();
     expect(described.server).toEqual({ id: ORIGIN, name: 'Plex Media Server', version: '' });
     expect(described.features.liveTV?.available).toBe(false);
-    await expect(adapter.channels()).rejects.toThrow('No accessible Plex DVR');
+    expect(await adapter.channels()).toEqual({ items: [], continuation: 'exhausted' });
+    expect(await adapter.guide({ from: '2026-03-10T12:00:00Z', until: '2026-03-10T18:00:00Z' })).toEqual({
+      from: '2026-03-10T12:00:00Z', until: '2026-03-10T18:00:00Z', items: [], continuation: 'exhausted',
+    });
   });
 });
 

@@ -115,15 +115,18 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   async describe(): Promise<ServerDescription> {
     const root = await this.request('/identity', {}, 'GET', false);
     let live: V.Feature = no('No accessible Plex DVR');
+    this.liveConfig = undefined;
     // /identity carries no name (PMS and Ether alike): the server's name is its root container's.
     let name = '';
     if (await this.config.credentials.get()) {
       try { name = (await this.request('/')).friendlyName || ''; } catch { /* the name the server was added under stands */ }
       try {
         const dvrs = await this.request('/livetv/dvrs');
-        const providers = await this.request('/media/providers');
-        const grid = (providers.MediaProvider || []).flatMap((p: Node) => p.Feature || []).find((f: Node) => f.type === 'grid')?.key;
-        if (dvrs.Dvr?.length && grid) { this.liveConfig = { dvr: String(dvrs.Dvr[0].key), grid }; live = yes; }
+        if (dvrs.Dvr?.length) {
+          const providers = await this.request('/media/providers');
+          const grid = (providers.MediaProvider || []).flatMap((p: Node) => p.Feature || []).find((f: Node) => f.type === 'grid')?.key;
+          if (grid) { this.liveConfig = { dvr: String(dvrs.Dvr[0].key), grid }; live = yes; }
+        }
       } catch (error) { if (!(error instanceof VelaError) || ![403, 404].includes(error.status)) throw error; }
     }
     return { protocolVersion: 0, server: { id: root.machineIdentifier || this.origin, name: name || this.config.name || 'Plex Media Server', version: root.version || '' },
@@ -572,16 +575,19 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return this.liveConfig;
   }
   async channels(cursor?: string, limit = 100): Promise<V.Page<V.Channel>> {
-    await this.requireLive();
+    if (!this.liveConfig) await this.describe();
+    if (!this.liveConfig) return page([], 0, 0);
     const c = await this.request('/livetv/epg/channels');
     const all: V.Channel[] = (c.Channel || []).map((n: Node) => ({ id: String(n.id), number: String(n.vcn || ''), name: n.title || n.callSign || '', kind: 'tv',
       artwork: this.artwork(n).sort((a, b) => Number(b.kind === 'logo') - Number(a.kind === 'logo')).map(a => ({ ...a, kind: 'channel' as const })), favorite: false }));
     return page(all.slice(offset(cursor), offset(cursor) + limit), offset(cursor), all.length);
   }
   async guide(q: V.GuideQuery): Promise<V.GuideResponse> {
-    const live = await this.requireLive();
     const from = Date.parse(q.from), until = Date.parse(q.until);
     if (!Number.isFinite(from) || !Number.isFinite(until) || until <= from || until - from > 7 * 86400000) fail('Invalid Plex guide window');
+    if (!this.liveConfig) await this.describe();
+    if (!this.liveConfig) return { from: q.from, until: q.until, ...page<V.Programme>([], 0, 0) };
+    const live = this.liveConfig;
     const c = await this.request(live.grid, { beginsAt: Math.floor(from / 1000), endsAt: Math.floor(until / 1000), channelGridKey: q.channelIds?.join(','),
       'X-Plex-Container-Start': offset(q.cursor), 'X-Plex-Container-Size': q.limit || 500 });
     const programmes: V.Programme[] = this.nodes(c).flatMap(n => (n.Media || []).map((m: Node) => ({ id: String(n.ratingKey), channelId: String(m.channelIdentifier || m.channelID || m.gridKey),
