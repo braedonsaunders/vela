@@ -17,7 +17,6 @@ final class VelaPlayerView: ExpoView {
     let onSessionCommand = EventDispatcher()
     let onSessionRefresh = EventDispatcher()
 
-    private let metalLayer = CAMetalLayer()
     private var player: PlaybackClient?
     private var state = PlayerState()
     private lazy var report = PlayerReport(
@@ -73,11 +72,6 @@ final class VelaPlayerView: ExpoView {
         super.init(appContext: appContext)
         backgroundColor = .clear
         clipsToBounds = true
-        metalLayer.contentsScale = UIScreen.main.nativeScale
-        metalLayer.framebufferOnly = true
-        metalLayer.backgroundColor = UIColor.black.cgColor
-        metalLayer.isHidden = true
-        layer.addSublayer(metalLayer)
     }
 
     deinit {
@@ -109,7 +103,6 @@ final class VelaPlayerView: ExpoView {
         super.layoutSubviews()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        metalLayer.frame = bounds
         player?.layout()
         madePreview?.layout()
         CATransaction.commit()
@@ -153,7 +146,7 @@ final class VelaPlayerView: ExpoView {
     }
 
     private func makePreview() -> PreviewPlayback {
-        let playback = PreviewPlayback(layer: metalLayer)
+        let playback = PreviewPlayback(host: self)
         playback.onState = { [weak self] state in
             self?.onSnapshot(["state": state])
         }
@@ -168,7 +161,6 @@ final class VelaPlayerView: ExpoView {
             return
         }
         backgroundColor = .black
-        metalLayer.isHidden = true
         let previous = plan
         if let previous, previous.sessionId == next.sessionId {
             let stale = next.revision <= previous.revision
@@ -270,17 +262,7 @@ final class VelaPlayerView: ExpoView {
         if !ambient {
             PlaybackAudioSession.activate()
         }
-        let client: PlaybackClient
-        do {
-            client = try PlaybackClient(layer: metalLayer, options: [
-                "pause": "yes", "mute": (ambient || report.muted) ? "yes" : "no",
-            ])
-        } catch {
-            state.failure = "\(error)"
-            state.failureKind = "decoder"
-            report.publish(state, seekTarget: nil, force: true)
-            return
-        }
+        let client = PlaybackClient(host: self, paused: true, muted: ambient || report.muted)
         player = client
         client.set("volume", double: report.volume * 100)
         client.onBackend = { [weak self] backend in

@@ -17,8 +17,10 @@ final class PlaybackClient {
     var onProperty: ((String, Any?) -> Void)?
     var onEvent: ((Event) -> Void)?
     var onBackend: ((String) -> Void)?
-    private let layer: CAMetalLayer
-    private let options: [String: String]
+    private weak var host: UIView?
+    private let preview: Bool
+    private let loops: Bool
+    private let aspectFill: Bool
     private var failed = false
     private var engine: AetherEngine?
     private var surface: AetherPlayerView?
@@ -41,15 +43,19 @@ final class PlaybackClient {
     private static var primaryEngine: AetherEngine?
     private static var previewEngine: AetherEngine?
 
-    init(layer: CAMetalLayer, options: [String: String]) throws {
-        self.layer = layer
-        self.options = options
-        paused = options["pause"] == "yes"
-        muted = options["mute"] == "yes"
+    init(host: UIView, preview: Bool = false, paused: Bool = false, muted: Bool = false,
+         loops: Bool = false, aspectFill: Bool = false) {
+        self.host = host
+        self.preview = preview
+        self.paused = paused
+        self.muted = muted
+        self.loops = loops
+        self.aspectFill = aspectFill
     }
 
     func layout() {
-        surface?.frame = layer.frame
+        guard let host else { return }
+        surface?.frame = host.bounds
         surface?.setNeedsLayout()
     }
 
@@ -109,24 +115,21 @@ final class PlaybackClient {
             self.subscriptions.removeAll()
             self.surface?.removeFromSuperview()
             do {
+                guard let host = self.host else { throw PlaybackError("Missing native video host") }
                 // Upstream messages may contain media URLs. Keep grant URLs out of logs.
                 EngineLog.handler = { _ in }
-                let preview = self.options["audio"] == "no"
+                let preview = self.preview
                 let cached = preview ? Self.previewEngine : Self.primaryEngine
                 let engine = try cached ?? AetherEngine()
                 if preview { Self.previewEngine = engine } else { Self.primaryEngine = engine }
                 self.engine = engine
                 engine.maximumSubtitleOffsetSeconds = 0
-                let view = AetherPlayerView(frame: self.layer.frame)
+                let view = AetherPlayerView(frame: host.bounds)
                 view.isUserInteractionEnabled = false
                 view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-                engine.videoGravity = self.options["panscan"] == "1.0" ? .resizeAspectFill : .resizeAspect
-                guard let host = self.layer.delegate as? UIView ?? self.layer.superlayer?.delegate as? UIView else {
-                    throw PlaybackError("Missing native video host")
-                }
+                engine.videoGravity = self.aspectFill ? .resizeAspectFill : .resizeAspect
                 host.addSubview(view)
                 self.surface = view
-                self.layer.isHidden = true
                 engine.bind(view: view)
                 self.layout()
                 engine.volume = self.muted ? 0 : self.volume
@@ -149,7 +152,7 @@ final class PlaybackClient {
                     case .ended:
                         self.emit("eof-reached", true)
                         self.onEvent?(.endFile(reason: 0, error: 0))
-                        if self.options["loop-file"] == "inf" { self.load(url) }
+                        if self.loops { self.load(url) }
                     case .error: self.failPath()
                     default: break
                     }

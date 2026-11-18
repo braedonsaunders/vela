@@ -3,7 +3,7 @@
 // it is wanted (active, on screen, unexpired) and releases player at once when any of those ends. It fills
 // its box, cropped, as the web preview does (object-fit: cover).
 import Foundation
-import QuartzCore
+import UIKit
 
 @MainActor
 final class PreviewPlayback {
@@ -30,7 +30,7 @@ final class PreviewPlayback {
     var onState: ((String) -> Void)?
     var onFailure: ((String) -> Void)?
 
-    private let layer: CAMetalLayer
+    private weak var host: UIView?
     private var player: PlaybackClient?
     private var playing: Source?
     private var expiry: Timer?
@@ -40,8 +40,8 @@ final class PreviewPlayback {
     private var offsetApplied = false
     private var startPosition = 0.0
 
-    init(layer: CAMetalLayer) {
-        self.layer = layer
+    init(host: UIView) {
+        self.host = host
     }
 
     /// Plays `source` when it is wanted, else releases the decoder.
@@ -65,7 +65,6 @@ final class PreviewPlayback {
     }
 
     func stop() {
-        layer.isHidden = true
         frameWatch?.invalidate()
         frameWatch = nil
         expiry?.invalidate()
@@ -84,21 +83,9 @@ final class PreviewPlayback {
             onState?("failed")
             return
         }
-        let client: PlaybackClient
-        do {
-            client = try PlaybackClient(layer: layer, options: [
-                "mute": "yes",
-                "audio": "no",
-                "pause": paused ? "yes" : "no",
-                "loop-file": source.loop ? "inf" : "no",
-                // Aspect fill (CSS object-fit: cover): a preview fills its box edge to edge, cropped.
-                "panscan": "1.0",
-            ])
-        } catch {
-            onFailure?("\(error)")
-            onState?("failed")
-            return
-        }
+        guard let host else { return }
+        let client = PlaybackClient(host: host, preview: true, paused: paused, muted: true,
+                                    loops: source.loop, aspectFill: true)
         player = client
         playing = source
         lastFrame = .distantPast
@@ -119,7 +106,6 @@ final class PreviewPlayback {
             if name == "video-pts", let pts = value as? Double, self.offsetApplied,
                pts >= self.startPosition {
                 self.lastFrame = Date()
-                self.layer.isHidden = true
                 self.onState?("playing")
             }
         }
