@@ -1,4 +1,4 @@
-// VelaPlayerView and VelaPlayer on native platforms (Apple today: libmpv from MPVKit) behind the player view
+// VelaPlayerView and VelaPlayer on native platforms (Apple: AetherEngine) behind the player view
 // contract (packages/player-api). Props are typed objects; events carry the shapes of
 // modules/vela-player/web/engine/model.ts. Media credentials go to the native side through VelaPlayer only.
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
@@ -53,7 +53,7 @@ const NativeView = requireNativeViewManager<NativeViewProps>('VelaPlayer');
 
 let accessGeneration = 0;
 
-/** What libmpv plays on Apple devices: originals of these families, never converted by the server.
+/** What AetherEngine plays on Apple devices: originals of these families, never converted by the server.
  * A constant until the native side probes VideoToolbox and the audio route. */
 export const VelaPlayer: VelaPlayerModule = {
   // The native side probes the device (hardware decoders) rather than declaring a fixed list.

@@ -1,18 +1,14 @@
 // Media credentials never follow a redirect out of their scope (packages/player-api MediaAccess).
 // When a URL carries headers, its redirects are resolved here first, one hop at a time: a hop
 // inside the authorized origin and path keeps the headers, a hop outside drops them for good.
-// The scoped byte reader enforces the grant on every later redirect (on a seek or
-// a reconnect) fails instead of being followed with the headers attached.
+// The scoped byte reader enforces the grant on every later redirect, seek and reconnect.
 import Foundation
 
 struct ResolvedMedia {
     let url: URL
     /// The headers for `url`: empty once a redirect left the authorized scope.
     let headers: [String: String]
-    /// Whether the resolved resource has scoped headers.
-    var refusesRedirects: Bool {
-        !headers.isEmpty
-    }
+
 }
 
 enum MediaRedirects {

@@ -9,6 +9,19 @@ module.exports = function withApplePlayer(config) {
     const project = mod.modResults;
     for (const section of Object.values(project.pbxXCBuildConfigurationSection())) {
       if (!section.buildSettings) continue;
+      // Remove the old static-provider overrides when updating a generated project.
+      const flags = section.buildSettings.OTHER_LDFLAGS;
+      if (Array.isArray(flags)) {
+        const clean = value => String(value).replaceAll('"', '');
+        const kept = [];
+        for (let i = 0; i < flags.length; i++) {
+          if (clean(flags[i]) === '-framework' && /^Lib(?:av|sw|dav1d)/.test(clean(flags[i + 1]))) { i++; continue; }
+          if (clean(flags[i]) === '-Wl' && clean(flags[i + 1]) === '-dead_strip_dylibs') { i++; continue; }
+          if (clean(flags[i]).includes('dead_strip_dylibs')) continue;
+          kept.push(flags[i]);
+        }
+        section.buildSettings.OTHER_LDFLAGS = kept;
+      }
       section.buildSettings.IPHONEOS_DEPLOYMENT_TARGET = '18.0';
       section.buildSettings.TVOS_DEPLOYMENT_TARGET = '18.0';
     }
