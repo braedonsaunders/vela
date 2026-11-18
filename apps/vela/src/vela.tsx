@@ -21,6 +21,7 @@ import {
 import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { ServersProvider } from '@vela/skin/src/widgets/auth';
 import { LiveProvider, useLiveView } from '@vela/skin/src/widgets/guide';
+import { GuideRowDrawing } from '@vela/guide-native';
 import { holdBack } from '@vela/skin/src/menu-key';
 import { useDispatcher } from './actions';
 import { config } from './data/config';
@@ -142,7 +143,7 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   // The providers wrap the app whether or not they have a value: wrapping on sign-in would remount
   // every route under them (a watch route would start its session again).
   return (
-    <LiveProvider controller={live} Player={VelaPlayerView}>
+    <LiveProvider controller={live} Player={VelaPlayerView} GuideRow={GuideRowDrawing}>
       <ServersProvider value={signedIn ? serverSwitch : null}>
         <AppHost store={store} state={state} live={live}>
           {children}

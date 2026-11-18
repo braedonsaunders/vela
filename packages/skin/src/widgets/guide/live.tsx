@@ -12,11 +12,13 @@ import {
 } from 'react';
 import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import type { LiveController, LiveView, Surface } from './controller';
+import type { GuideRowDrawingProps } from './drawing';
 
 interface LiveContextValue {
   controller: LiveController;
   /** Draws a session's picture; absent until the app has a player view, and then the tile stays off. */
   Player?: ComponentType<VelaPlayerViewProps>;
+  GuideRow?: ComponentType<GuideRowDrawingProps>;
 }
 
 const LiveContext = createContext<LiveContextValue | null>(null);
@@ -32,12 +34,13 @@ interface ProviderProps {
   /** The signed-in server's controller; null while signed out or where the server has no live TV. */
   controller: LiveController | null;
   Player?: ComponentType<VelaPlayerViewProps>;
+  GuideRow?: ComponentType<GuideRowDrawingProps>;
   children: ReactNode;
 }
 
 /** Wraps the app (always, so the tree never remounts when a controller arrives). It follows the
  * foreground, reduced motion and Save-Data for the controller it is given. */
-export function LiveProvider({ controller, Player, children }: ProviderProps) {
+export function LiveProvider({ controller, Player, GuideRow, children }: ProviderProps) {
   useEffect(() => {
     controller?.setCanPreview(Player !== undefined);
   }, [controller, Player]);
@@ -65,7 +68,7 @@ export function LiveProvider({ controller, Player, children }: ProviderProps) {
     return () => sub.remove();
   }, [controller]);
 
-  const value = useMemo(() => (controller ? { controller, Player } : null), [controller, Player]);
+  const value = useMemo(() => (controller ? { controller, Player, GuideRow } : null), [controller, Player, GuideRow]);
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
 
@@ -94,6 +97,21 @@ export function useLiveView(): LiveView {
     live?.controller.view ?? (() => IDLE),
     live?.controller.view ?? (() => IDLE),
   );
+}
+
+/** Guide cache/clock changes cannot cause native player prop commits. */
+export function useLiveTile(): LiveView['tile'] {
+  const live = useContext(LiveContext);
+  const read = useMemo(() => {
+    let previous = IDLE.tile;
+    return () => {
+      const next = live?.controller.view().tile ?? IDLE.tile;
+      if (next.state !== previous.state || next.channelId !== previous.channelId || next.muted !== previous.muted
+        || next.fullscreen !== previous.fullscreen || next.plan !== previous.plan || next.command !== previous.command) previous = next;
+      return previous;
+    };
+  }, [live?.controller]);
+  return useSyncExternalStore(live?.controller.subscribe ?? none, read, read);
 }
 
 /** Keeps a surface open while `active` (the screen holding it is focused). */
