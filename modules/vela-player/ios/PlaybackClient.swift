@@ -144,6 +144,9 @@ final class PlaybackClient {
                 self.captions.layer.shadowColor = UIColor.black.cgColor
                 self.captions.layer.shadowOpacity = 1
                 self.captions.layer.shadowRadius = 3
+                // Aether attaches its video CALayer after load, above existing
+                // subviews. Captions must remain above it even inside the picture.
+                self.captions.layer.zPosition = 2
                 view.addSubview(self.captions)
                 engine.diagnostics.$sessionCacheStatus.removeDuplicates().sink { [weak self] status in
                     self?.logCacheStatus(status)
@@ -271,7 +274,11 @@ final class PlaybackClient {
         for cue in cues {
             guard case .image(let image) = cue.body else { continue }
             let view = bitmapCaptions[cue.id] ?? UIImageView()
-            if bitmapCaptions[cue.id] == nil { surface.addSubview(view); bitmapCaptions[cue.id] = view }
+            if bitmapCaptions[cue.id] == nil {
+                view.layer.zPosition = 1
+                surface.addSubview(view)
+                bitmapCaptions[cue.id] = view
+            }
             view.image = UIImage(cgImage: image.cgImage)
             let canvas = image.canvasSize == .zero ? coded : image.canvasSize
             guard canvas.width > 0, coded.width > 0, coded.height > 0 else { continue }
