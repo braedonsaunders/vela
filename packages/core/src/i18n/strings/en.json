@@ -290,6 +290,7 @@
   "library.view.recommended": "Recommended",
   "library.view.collections": "Collections",
   "library.view.genres": "Genres",
+  "library.view.emptyPeople": "No people in this library.",
   "library.view.emptyCollections": "No collections in this library.",
   "library.view.emptyGenres": "No genres in this library.",
   "library.view.failed": "Library views couldn't be loaded.",

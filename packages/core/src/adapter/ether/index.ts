@@ -92,9 +92,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
   async libraryCollections(id: string, cursor?: string, tab?: string): Promise<V.Page<V.RowEntry>> {
     const tabs = this.declaredLibraries.get(id)?.tabs;
-    if (tabs && !tabs.some(tab => tab.kind === 'collections')) return { items: [], continuation: 'exhausted' };
-    const response = await this.http.request<V.Page<V.LibraryCollectionEntry | V.LibraryFacetCollection>>('GET', `/libraries/${segment(id)}/collections${query({ cursor, tab, limit: 100 })}`, undefined, CACHED);
+    if (tabs && !tabs.some(candidate => (candidate.kind === 'collections' || candidate.kind === 'people') && (!tab || candidate.id === tab))) return { items: [], continuation: 'exhausted' };
+    const response = await this.http.request<V.Page<V.LibraryCollectionEntry | V.LibraryFacetCollection | V.LibraryPersonEntry>>('GET', `/libraries/${segment(id)}/collections${query({ cursor, tab, limit: 100 })}`, undefined, CACHED);
     return { ...response, items: response.items.map(item => {
+      if ('kind' in item && item.kind === 'person') return { ...item, receiptToken: '' };
       const collection = 'collection' in item ? item.collection : item;
       return { id: item.id, receiptToken: 'receiptToken' in item ? item.receiptToken : '', kind: 'collection' as const, targetId: collection.id, name: collection.name, artwork: collection.artwork, itemCount: collection.itemCount };
     }) };
@@ -225,7 +226,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   async libraries(librariesQuery: V.LibrariesQuery) {
     const page = await this.http.request<V.Page<V.Library>>('GET', `/libraries${query(librariesQuery)}`, undefined, CACHED);
-    for (const library of page.items) this.declaredLibraries.set(library.id, library);
+    for (const library of page.items) {
+      this.declaredLibraries.set(library.id, library);
+      if (library.tabs?.some(tab => tab.kind === 'people')) { this.personSupport = 'yes'; this.supportsPersonFilmography = true; }
+    }
     return page;
   }
 

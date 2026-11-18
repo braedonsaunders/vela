@@ -83,8 +83,9 @@ export interface PersonDetail { id: ID; name: string; photo: ArtworkRef | null; 
 export interface LibraryFacetCollection { id: ID; name: string; itemCount: number; artwork: ArtworkRef[] }
 /** Ordinary library collection entries retain the nested metadata envelope. */
 export interface LibraryCollectionEntry { id: ID; kind: 'collection'; receiptToken: string; collection: { id: ID; name: string; summary: string; itemCount: number; artwork: ArtworkRef[] } }
+export interface LibraryPersonEntry { id: ID; kind: 'person'; person: Pick<PersonDetail, 'id' | 'name' | 'photo'>; itemCount: number }
 export type RowEntry = { id: ID; receiptToken: string } & (
-  { kind: 'title'; title: Title; role?: string } | { kind: 'channel'; channel: Channel } |
+  { kind: 'title'; title: Title; role?: string } | { kind: 'person'; person: LibraryPersonEntry['person']; itemCount: number } | { kind: 'channel'; channel: Channel } |
   { kind: 'collection' | 'playlist' | 'directory'; name: string; artwork: ArtworkRef[]; targetId: ID; itemCount?: number });
 export interface Row { id: ID; name: string; purpose: 'continue' | 'nextUp' | 'recent' | 'recentlyReleased' | 'recentlyAdded' | 'collection' | 'recommendation' | 'live' | 'watchlist';
   receiptToken: string; style?: string; presentation?: 'ranked'; previewOnFocus?: boolean; items: RowEntry[]; nextCursor?: Cursor; continuation: 'more' | 'exhausted' | 'unknown' }
@@ -221,7 +222,7 @@ export interface CollectionContents extends Page<RowEntry> { collection: Collect
 export type LibrarySort = 'index' | 'server' | 'title' | 'added' | 'released' | 'year' | 'rating' | 'duration' | 'popularity' | 'updated';
 export type SortDirection = 'asc' | 'desc';
 export type LibraryCard = 'poster' | 'landscape' | 'square';
-export interface LibraryTab { id: string; label: string; kind: 'recommended' | 'library' | 'collections'; facet?: string; sort?: LibrarySort; direction?: SortDirection }
+export interface LibraryTab { id: string; label: string; kind: 'recommended' | 'library' | 'collections' | 'people'; facet?: string; order?: 'name' | 'count'; sort?: LibrarySort; direction?: SortDirection }
 /** All types return discrete value IDs; numeric/date/duration facets may be server-bucketed. */
 export interface LibraryFacet { id: string; label: string; type: 'enum' | 'strings' | 'people' | 'int' | 'date' | 'duration'; multi: boolean }
 export interface FacetValue { id: string; label: string; count: number }
