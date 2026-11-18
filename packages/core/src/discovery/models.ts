@@ -15,6 +15,7 @@ function pictures(artwork: ArtworkRef[], images: Images | undefined, artWidth: n
   const posterWidth = Math.min(600, Math.ceil(artWidth / 6));
   const logoWidth = Math.min(800, Math.ceil(artWidth / 3));
   return {
+    thumbnail: art(artwork, 'thumb', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images),
     poster: art(artwork, 'poster', posterWidth, Math.ceil(posterWidth * 1.5), images),
     // An episode often has only a still (a frame from it): that is its landscape art.
     backdrop: art(artwork, preferStill ? 'still' : 'backdrop', backdropWidth, Math.ceil(backdropWidth * 9 / 16), images)

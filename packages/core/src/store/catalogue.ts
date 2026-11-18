@@ -2,6 +2,7 @@
 // and filters, and a collection read page by page. Each is kept by key for the current session
 // and dropped when the session or server changes.
 import type * as V from '../wire';
+import { libraryCardArtwork } from '../library-presentation';
 import { hasTitleManagement } from '../adapter/media-actions';
 import { capabilitiesOf } from '../adapter/advertise';
 import { hasLibraryFacets, supportsLibraryBrowse, hasLibraryRecommendations, hasPersonFilmography } from '../adapter/capabilities';
@@ -356,7 +357,7 @@ function libraryModel(
   const image = library.artwork.find(a => a.kind === 'backdrop');
   const cards: Card[] = items.map(item => {
     const card = entry(item, images, artWidth);
-    return library.presentation?.card === 'landscape' ? { ...card, poster: card.backdrop || card.poster } : card;
+    return libraryCardArtwork(card, library.presentation?.card);
   });
   return {
     presentation: library.presentation,

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { libraryCard, libraryCardRatio, libraryTabs } from '../src/library-presentation';
+import { libraryCardArtwork, libraryCard, libraryCardRatio, libraryTabs } from '../src/library-presentation';
 import { libraryKey } from '../src/store/catalogue';
 import { libraryBrowseQuery } from '../src/adapter/ether';
 
@@ -41,4 +41,13 @@ test('thumb-only plugin artwork remains available to landscape card rendering', 
   const { entry } = await import('../src/discovery/models');
   const model = entry({ id: 'plugin', receiptToken: '', kind: 'directory', targetId: 'plugin', name: 'Video', artwork: [{ id: 'art', kind: 'thumb', tag: '', sizes: [{ width: 1600, height: 900, url: 'https://example.test/thumb.jpg' }] }] });
   expect(model.backdrop).toBe('https://example.test/thumb.jpg');
+});
+
+test('landscape art prefers thumb, then backdrop, then poster; square retains poster', () => {
+  const art = { poster: 'poster', backdrop: 'backdrop', thumbnail: 'thumb' } as any;
+  expect(libraryCardArtwork(art, 'landscape').poster).toBe('thumb');
+  expect(libraryCardArtwork({ ...art, thumbnail: '' }, 'landscape').poster).toBe('backdrop');
+  expect(libraryCardArtwork({ ...art, thumbnail: '', backdrop: '' }, 'landscape').poster).toBe('poster');
+  expect(libraryCardArtwork(art, 'square').poster).toBe('poster');
+  expect(libraryCardArtwork(art, 'unknown').poster).toBe('poster');
 });

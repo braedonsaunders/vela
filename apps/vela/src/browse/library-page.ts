@@ -2,7 +2,7 @@
 // held yet, what the page shows meanwhile, and its next page. Each view is kept in the store for
 // the session, so a revisited view shows at once and paging continues where it stopped.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { libraryTabs, libraryKey, type LibraryExtras, type LibraryQuery } from '@vela/core';
+import { libraryCardArtwork, libraryTabs, libraryKey, type LibraryExtras, type LibraryQuery } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { Env } from '@vela/skin';
 import type { LibraryPage } from '@vela/skin/src/widgets/library/model';
@@ -56,7 +56,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     recommendationsAvailable: false, collectionsAvailable: false, rows: [], collections: [], collectionCursor: '', genres: current.value.genres, failed: false,
   } : undefined), [nativeExtras, current?.value]);
   const landscape = (current?.value ?? earlier)?.presentation?.card === 'landscape';
-  const extras = useMemo(() => rawExtras && landscape ? { ...rawExtras, rows: rawExtras.rows.map(row => ({ ...row, items: row.items.map(card => ({ ...card, poster: card.backdrop || card.poster })) })) } : rawExtras, [rawExtras, landscape]);
+  const extras = useMemo(() => rawExtras && landscape ? { ...rawExtras, rows: rawExtras.rows.map(row => ({ ...row, items: row.items.map(card => libraryCardArtwork(card, 'landscape')) })) } : rawExtras, [rawExtras, landscape]);
   const tabs = libraryTabs((current?.value ?? earlier)?.tabs);
   const selectedTab = tabs?.find(tab => tab.id === requestedView) ?? tabs?.[0];
   const view = tabs ? selectedTab?.kind ?? 'library' : requestedView === 'library' || requestedView === 'recommended' || requestedView === 'collections' || requestedView === 'genres'

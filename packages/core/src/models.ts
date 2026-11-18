@@ -9,6 +9,7 @@ export interface ContextPart { label: string; select: string }
 
 /** A card: a title, or a row entry that is not one (a collection, channel, playlist or directory). */
 export interface Card {
+  thumbnail?: string;
   id: string;
   /** A title kind (`movie`, `show`, `season`, `episode`) or the entry's kind (`collection`, `channel`, …). */
   kind: string;
