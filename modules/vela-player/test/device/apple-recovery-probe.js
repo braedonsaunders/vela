@@ -27,8 +27,10 @@ function Probe() {
   const [status, setStatus] = useState('starting');
   useEffect(() => {
     (async () => {
+      setStatus('negotiating lab session');
       const client = { device: config.device, protocolVersions: [0], ...await VelaPlayer.capabilities() };
       await call('/negotiate', { idempotencyKey: key(), client });
+      setStatus('requesting lab playback plan');
       const plan = await call('/playback', { idempotencyKey: key(), titleId: config.titleId, client });
       VelaPlayer.setMediaAccess({ ...config.mediaAccess, headers: async () => config.mediaAccess.headers });
       await new Promise(resolve => setTimeout(resolve, 100));

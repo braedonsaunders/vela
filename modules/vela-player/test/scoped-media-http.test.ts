@@ -97,5 +97,11 @@ appleTest('a retained reader can rewind after cancellation, while final close re
 });
 
 appleTest('native URL attachments stay within their plan and grant generation and diagnostics omit tokens', async () => {
-  expect(await request('/grant/target', 'attachment')).toEqual({ output: 'attachment_ok\n', status: 0 });
+  const result = await request('/grant/target', 'attachment');
+  expect(result.status).toBe(0);
+  expect(result.output).toEndWith('attachment_ok\n');
+  expect(result.output).toContain('native attachment refused:');
+  expect(result.output).not.toContain('never-log-this');
+  expect(result.output).not.toContain('transient-secret');
+  expect(result.output).not.toContain('api_key');
 });
