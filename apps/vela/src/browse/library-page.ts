@@ -32,27 +32,32 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     .find(view => view.value?.id === id)?.value, [store, id, key]);
   const tabs = libraryTabs((current?.value ?? earlier)?.tabs);
   const selectedTab = tabs?.find(tab => tab.id === requestedView) ?? tabs?.[0];
-  const collectionTab = selectedTab?.kind === 'collections' ? selectedTab.id : undefined;
+  const collectionTab = (selectedTab?.kind === 'collections' || selectedTab?.kind === 'people') ? selectedTab.id : undefined;
   const missing = current === undefined;
   const kind = current?.value?.kind;
   const extraGeneration = useRef(0);
   const [extraAttempt, setExtraAttempt] = useState(0);
   const [rowLoading, setRowLoading] = useState<string[]>([]);
-  const [extraState, setExtraState] = useState<{ id: string; revision: number; loading: boolean; failed: boolean; moreLoading?: boolean; value?: LibraryExtras }>({ id: '', revision: -1, loading: false, failed: false });
+  const [extraState, setExtraState] = useState<{ id: string; tab?: string; attempt?: number; revision: number; loading: boolean; failed: boolean; moreLoading?: boolean; value?: LibraryExtras }>({ id: '', revision: -1, loading: false, failed: false });
 
   useEffect(() => {
     if (!id || !kind || !focused) return;
+    // A modal person page keeps this library mounted. Keep its accumulated pages on return.
+    if (extraState.id === id && extraState.revision === revision && extraState.tab === collectionTab && extraState.attempt === extraAttempt && extraState.value && !extraState.loading && !extraState.failed && !extraState.value.failed) {
+      setExtraState(previous => ({ ...previous, moreLoading: false }));
+      return;
+    }
     let active = true;
     extraGeneration.current++;
-    setExtraState({ id, revision, loading: true, failed: false });
+    setExtraState({ id, tab: collectionTab, attempt: extraAttempt, revision, loading: true, failed: false });
     // The recommendations show as soon as they arrive; collections and genres follow.
     const rows = (value: LibraryExtras) => {
       if (active) setExtraState(previous => previous.id === id && previous.revision === revision && previous.loading ? { ...previous, value } : previous);
     };
     void store.catalogue.libraryExtras(id, kind, rows, collectionTab).then(value => {
-      if (active) setExtraState({ id, revision, loading: false, failed: false, value });
+      if (active) setExtraState({ id, tab: collectionTab, attempt: extraAttempt, revision, loading: false, failed: false, value });
     }).catch(() => {
-      if (active) setExtraState({ id, revision, loading: false, failed: true });
+      if (active) setExtraState({ id, tab: collectionTab, attempt: extraAttempt, revision, loading: false, failed: true });
     });
     return () => { active = false; extraGeneration.current++; };
   }, [store, id, kind, revision, focused, extraAttempt, canRecommend, collectionTab]);
@@ -80,7 +85,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
         return model ? { ...model, name: facetTitle || model.name, genres: extras?.genres ?? model.genres } : model;
       })(),
       loading: !held && current?.load !== 'failed',
-      moreLoading: usableView === 'collections' ? !!extraState.moreLoading : !!held && current?.load === 'loading',
+      moreLoading: (usableView === 'collections' || usableView === 'people') ? !!extraState.moreLoading : !!held && current?.load === 'loading',
       view: usableView,
       tabId: selectedTab?.id,
       facetTitle,
@@ -96,7 +101,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const load: Env['load'] = failed ? 'failed' : page.model ? 'ready' : 'loading';
 
   const more = useCallback(() => {
-    if (page.view === 'collections' && extras?.collectionCursor && !extraState.moreLoading) {
+    if ((page.view === 'collections' || page.view === 'people') && extras?.collectionCursor && !extraState.moreLoading) {
       const cursor = extras.collectionCursor;
       const generation = extraGeneration.current;
       setExtraState(previous => ({ ...previous, moreLoading: true }));

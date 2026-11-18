@@ -3,7 +3,7 @@
 // read them through the library vocabulary.
 import type { Choice, CollectionModel, LibraryExtras, LibraryModel } from '@vela/core';
 
-export type LibraryView = 'recommended' | 'library' | 'collections' | 'genres';
+export type LibraryView = 'recommended' | 'library' | 'collections' | 'people' | 'genres';
 
 export interface LibraryPage {
   canRecommend?: boolean;

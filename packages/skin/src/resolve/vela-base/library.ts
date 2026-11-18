@@ -1,3 +1,4 @@
+import { castPerson } from './person-tile';
 import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
 import { gridCard, titleGrid } from './cards';
 import {
@@ -215,6 +216,11 @@ export const libraryFilters: Node = {
   ],
 };
 
+function peopleTile(node: Node): Node {
+  if (node.type !== 'box') return node;
+  return { ...node, ...(node.press ? { press: { action: 'select', arg: '{person.id}|person' } } : {}), children: node.children?.map(peopleTile) };
+}
+
 export const libraryAlternative: Node = {
   type: 'box', id: 'vela-library-alternative', when: [ready, { test: 'library.view', is: 'ne', value: 'library' }],
   style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '24px', 'padding-bottom': '60px', gap: '16px' },
@@ -228,6 +234,10 @@ export const libraryAlternative: Node = {
     { type: 'text', when: [is('library.view', 'collections'), is('library.collectionCount', '0')], text: '{t:library.view.emptyCollections}', style: { ...gutter, color: '$ui.inkSecondary' } },
     { type: 'widget', widget: 'sentinel', params: { on: 'library' }, when: [is('library.view', 'collections'), { test: 'library.collectionsMore' }, { test: 'env.libraryMoreLoading', not: true }, { test: 'env.libraryExtrasFailed', not: true }] },
     { type: 'box', when: [is('library.view', 'collections'), { test: 'library.collectionsMore' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{t:library.loadMore}', style: { ...pill(false, 48), 'align-self': 'center' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.loadMore}' }] },
+    { ...titleGrid, style: { ...titleGrid.style, 'grid-template-columns': 'repeat(auto-fill, minmax(124px, 1fr))' }, small: { ...titleGrid.small, 'grid-template-columns': 'repeat(auto-fill, minmax(96px, 1fr))' }, when: [is('library.view', 'people')], children: [{ type: 'repeat', over: 'library.people', item: peopleTile(castPerson) }] } as Node,
+    { type: 'text', when: [is('library.view', 'people'), is('library.collectionCount', '0')], text: '{t:library.view.emptyPeople}', style: { ...gutter, color: '$ui.inkSecondary' } },
+    { type: 'widget', widget: 'sentinel', params: { on: 'library' }, when: [is('library.view', 'people'), { test: 'library.collectionsMore' }, { test: 'env.libraryMoreLoading', not: true }, { test: 'env.libraryExtrasFailed', not: true }] },
+    { type: 'box', when: [is('library.view', 'people'), { test: 'library.collectionsMore' }], press: { action: 'libraryMore' }, disabled: [{ test: 'env.libraryMoreLoading' }], label: '{t:library.loadMore}', style: { ...pill(false, 48), 'align-self': 'center' }, focus: { 'box-shadow': focusRing }, children: [{ type: 'text', text: '{t:library.loadMore}' }] },
     { type: 'box', when: [is('library.view', 'genres')], style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px', ...gutter }, small: { ...gutterSmall }, children: [{ type: 'repeat', over: 'library.genreViews', item: libChip([{ test: 'opt.on' }], 'genre|{opt.id}', '{opt.label}') }] },
     { type: 'text', when: [is('library.view', 'genres'), is('library.genresCount', '0')], text: '{t:library.view.emptyGenres}', style: { ...gutter, color: '$ui.inkSecondary' } },
   ],

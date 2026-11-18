@@ -114,6 +114,7 @@ export function libraryCollection<C extends LibraryCtx & { card?: LibraryModel['
   const cards = (list: LibraryModel['items']) => list.slice(0, limit).map((card, index) => ({ ...c, card, index }));
   switch (over) {
     case 'library.rows': return (e.library?.extras?.rows ?? []).slice(0, limit).map((row, index) => ({ ...c, row, index }));
+    case 'library.people': return (e.library?.extras?.collections ?? []).slice(0, limit).map((card, index) => ({ ...c, index, person: { id: card.id, name: card.name, portrait: card.poster, role: card.facts, canOpen: true } }));
     case 'library.collections': return cards(e.library?.extras?.collections ?? []);
     case 'library.genreViews': return options('genre', e.library?.extras?.genres ?? []);
     case 'library.items': return cards(model?.items ?? []);

@@ -8,10 +8,11 @@ import { DocumentScreen } from '../src/screen';
 
 /** A person's server-provided filmography, drawn by the active skin. */
 export default function PersonPage() {
-  const { title = '', name = '', library = '' } = useLocalSearchParams<{ title: string; name: string; library?: string }>();
+  const { id = '', title = '', name = '', library = '' } = useLocalSearchParams<{ id?: string; title: string; name: string; library?: string }>();
   const store = useVela();
   const detail = useVelaState(state => state.titles[title]);
-  const person = detail?.value?.castPeople.find(p => p.name === name);
+  const castPerson = detail?.value?.castPeople.find(p => p.name === name);
+  const person = id ? { id, name, canOpen: true, portrait: '', role: '' } : castPerson;
   const [items, setItems] = useState<Card[]>([]);
   const [cursor, setCursor] = useState<string>();
   const [loading, setLoading] = useState(true);

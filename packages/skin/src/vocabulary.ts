@@ -206,6 +206,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'extra.ready': c => (c.extra ? yes(c.extra.ready) : ''),
   'extra.seed': c => (c.extra ? String(c.extra.id.length) : ''),
   'person.name': c => c.person?.name ?? '',
+  'person.id': c => c.person?.id ?? '',
   'person.canOpen': c => yes(!!c.person?.canOpen),
   'person.role': c => c.person?.role ?? '',
   'person.portrait': c => c.person?.portrait ?? '',

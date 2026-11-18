@@ -88,7 +88,7 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
 function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
   const request = host.env.library?.viewRequest ?? '';
   const view = host.env.library?.view ?? 'library';
-  const order = host.env.library?.model?.tabs?.map(tab => tab.kind) ?? ['recommended', 'library', 'collections', 'genres'];
+  const order: string[] = host.env.library?.model?.tabs?.map(tab => tab.kind) ?? ['recommended', 'library', 'collections', 'genres'];
   const still = host.env.still || Platform.isTV;
   const current = useRef({ request, view, host });
   const outgoing = useRef<{ request: string; view: string; host: SkinHost } | null>(null);

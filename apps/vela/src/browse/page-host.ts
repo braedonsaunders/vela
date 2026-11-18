@@ -18,6 +18,7 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
     switch (action) {
       case 'select': {
         const [target, kind] = arg.split('|');
+        if (kind === 'person' && target) return router.push({ pathname: '/person', params: { id: target } });
         const tab = model?.tabs?.find(tab => tab.id === library.page.tabId);
         const facetQuery = kind === 'collection' && target && tab ? facetCollectionQuery(target, tab) : undefined;
         if (facetQuery) {
@@ -39,7 +40,7 @@ export function libraryHost(host: SkinHost, id: string, query: LibraryQuery, lib
         if (library.page.view === 'genres') return router.setParams({ ...paramsOf(filteredBy(query, arg)), view: 'library' });
         return view(filteredBy(query, arg));
       case 'libraryView':
-        if (model?.tabs ? model.tabs.some(tab => tab.id === arg && ['recommended', 'library', 'collections'].includes(tab.kind)) : ['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ ...(library.page.facetTitle ? paramsOf({}) : {}), view: arg, collectionId: undefined, facetTitle: undefined });
+        if (model?.tabs ? model.tabs.some(tab => tab.id === arg && ['recommended', 'library', 'collections', 'people'].includes(tab.kind)) : ['recommended', 'library', 'collections', 'genres'].includes(arg)) router.setParams({ ...(library.page.facetTitle ? paramsOf({}) : {}), view: arg, collectionId: undefined, facetTitle: undefined });
         return;
       case 'libraryMore':
         return library.more();
