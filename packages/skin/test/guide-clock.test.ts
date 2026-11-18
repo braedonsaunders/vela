@@ -21,3 +21,12 @@ test('clock/progress changes do not invalidate rows, only listing content does',
   const changed=structuredClone(tick);changed.channels[0]!.programmes[0]!.name='Corrected listing';
   expect(gridContentKey(changed,changed.channels)).not.toBe(gridContentKey(model,model.channels));
 });
+test('large shared lineups compare by unchanged rows while preserving clock isolation', async () => {
+  const { sameGridContent } = await import('../src/widgets/guide/content');
+  const channels = Array.from({ length: 10000 }, (_, index) => ({ id: String(index), programmes: [], listingsLoaded: false }));
+  const model = { day: 0, minutes: 1440, ticks: [], channels } as unknown as GuideModel;
+  const next = { ...model, channels: [...model.channels] };
+  expect(sameGridContent(model, model.channels, next, next.channels)).toBe(true);
+  next.channels[9999] = { ...next.channels[9999]!, listingsLoaded: true };
+  expect(sameGridContent(model, model.channels, next, next.channels)).toBe(false);
+});

@@ -1,4 +1,6 @@
-import type { GuideModel, GuideProgramme } from '@vela/core';
+import type { GuideChannel, GuideModel, GuideProgramme } from '@vela/core';
+
+const rows = new WeakMap<GuideChannel, { parts: (GuideChannel | undefined)[]; offsets: number[]; value: GuideChannel }>();
 
 /** Contiguous local-day blocks, each expressed in its own minutes. */
 export function timeline(blocks: ReadonlyMap<number, GuideModel>, selected: number): GuideModel & { dayStarts: Record<number, number> } {
@@ -12,19 +14,25 @@ export function timeline(blocks: ReadonlyMap<number, GuideModel>, selected: numb
   const now = indexed.find(({ block }) => block.nowMinute >= 0);
   return {
     ...base, day: selected, minutes, dayStarts: starts,
+    loadedRanges: indexed.flatMap(({ offset, block }) => (block.loadedRanges ?? [{ from: 0, to: block.minutes }]).map(range => ({ from: range.from + offset, to: range.to + offset }))),
     nowMinute: now ? now.offset + now.block.nowMinute : -1,
     landing: (starts[base.day] ?? 0) + base.landing,
     ticks: indexed.flatMap(({ offset, block }) => block.ticks.map(t => ({ ...t, minute: t.minute + offset }))),
-    channels: base.channels.map(channel => ({
-      ...channel,
-      listed: indexed.some(({ channels }) => channels.get(channel.id)?.listed),
-      programmes: indexed.flatMap(({ offset, channels }) => (channels.get(channel.id)?.programmes ?? []).map(p => ({ ...p, at: p.at + offset }))).reduce<GuideProgramme[]>((merged, p) => {
+    channels: indexed.length === 1 && indexed[0]!.offset === 0 ? base.channels : base.channels.map(channel => {
+      const parts = indexed.map(({ channels }) => channels.get(channel.id));
+      const offsets = indexed.map(({ offset }) => offset);
+      const previous = rows.get(channel);
+      if (previous && previous.parts.length === parts.length && parts.every((part, i) => part === previous.parts[i] && offsets[i] === previous.offsets[i])) return previous.value;
+      const value = { ...channel, listed: parts.some(part => part?.listed),
+      programmes: parts.flatMap((part, i) => (part?.programmes ?? []).map(p => ({ ...p, at: p.at + offsets[i]! }))).reduce<GuideProgramme[]>((merged, p) => {
         const last = merged[merged.length - 1];
         if (last?.id === p.id && Math.abs(last.at + last.span - p.at) < 0.01) last.span += p.span;
         else merged.push(p);
         return merged;
-      }, []),
-    })),
+      }, []) };
+      rows.set(channel, { parts, offsets, value });
+      return value;
+    }),
   };
 }
 

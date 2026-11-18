@@ -22,6 +22,13 @@ test('empty guide intervals remain navigable across request windows without leav
   expect(gapStep(20, -1, 1440)).toBe(0);
   expect(gapStep(1430, 1, 1440)).toBeCloseTo(1439.99);
 });
+test('date entry waits for the requested day and resolves offsets in the combined timeline', async () => {
+  const { resolveTimeTarget } = await import('../src/widgets/guide/navigation');
+  expect(resolveTimeTarget({ kind: 'day', day: 1, offset: 0 }, { 0: 0 }, 900, 180, 1440)).toBeUndefined();
+  expect(resolveTimeTarget({ kind: 'day', day: 1, offset: 120 }, { 0: 0, 1: 1440 }, 900, 180, 2880)).toEqual({ left: 1560, minute: 1620 });
+  expect(resolveTimeTarget({ kind: 'now', offset: 0 }, { 1: 0 }, -1, 180, 1440)).toBeUndefined();
+  expect(resolveTimeTarget({ kind: 'now', offset: 120 }, { 0: 0 }, 900, 180, 1440)).toEqual({ left: 960, minute: 1020 });
+});
 test('vertical focus retains its time across rows with different programme lengths', () => {
   const channel = { programmes: [{ id: 'a', at: 0, span: 45 }, { id: 'b', at: 45, span: 60 }] } as GuideChannel;
   expect(programmeAt(channel, 44)?.id).toBe('a');
@@ -64,6 +71,14 @@ test('a fully recycled row keeps native child order instead of reversing every c
   expect(slots.keys(['a', 'b', 'c', 'd'])).toEqual([0, 1, 2, 3]);
   expect(slots.keys(['e', 'f'])).toEqual([0, 1]);
   expect(slots.keys(['g', 'h', 'i', 'j'])).toEqual([0, 1, 2, 3]);
+});
+test('scrolling recycles row content and positions without rotating native child order', async () => {
+  const { ProgrammeSlots } = await import('../src/widgets/guide/navigation');
+  const pool = new ProgrammeSlots();
+  expect(pool.ordered(['a', 'b', 'c'], id => id).map(slot => slot.key)).toEqual([0, 1, 2]);
+  const next = pool.ordered(['b', 'c', 'd'], id => id);
+  expect(next.map(slot => slot.key)).toEqual([0, 1, 2]);
+  expect(next.map(slot => [slot.item, slot.index])).toEqual([['d', 2], ['b', 0], ['c', 1]]);
 });
 
 test('TV taps, long presses and swipes share directional navigation', async () => {

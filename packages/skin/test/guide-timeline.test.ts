@@ -24,3 +24,16 @@ test('nearby edges request adjacent days within the seven-day cap', () => {
   expect(requestedDays(0, 6, 0, 10080, 10080)).toEqual([]);
   expect(requestedDays(0, 0, 200, 1000, 1440)).toEqual([]);
 });
+
+test('prefetching one channel in another day reuses every unchanged timeline row', () => {
+  const channel = (id: string) => ({ id, listed: true, programmes: [{ id: `${id}-p`, at: 0, span: 30 }] }) as GuideModel['channels'][number];
+  const today = { ...block(0), channels: [channel('a'), channel('b')] };
+  const tomorrow = { ...block(1), channels: [channel('a'), channel('b')] };
+  const first = timeline(new Map([[0, today], [1, tomorrow]]), 0);
+  const updated = { ...tomorrow, channels: [tomorrow.channels[0]!, { ...tomorrow.channels[1]!, programmes: [] }] };
+  const second = timeline(new Map([[0, today], [1, updated]]), 0);
+  expect(second.channels[0]).toBe(first.channels[0]);
+  expect(second.channels[1]).not.toBe(first.channels[1]);
+  expect(first.channels[0]!.programmes.map(p => p.at)).toEqual([0, 1440]);
+  expect(second.channels[1]!.programmes).toHaveLength(1);
+});

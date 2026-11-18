@@ -50,7 +50,7 @@ export function monogram(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-export const cellId = (programmeId: string) => `guide-${programmeId}`;
+export const cellId = (programmeId: string, channelId: string) => `guide-programme-${encodeURIComponent(channelId)}|${encodeURIComponent(programmeId)}`;
 export const railId = (channelId: string) => `guide-rail-${channelId}`;
 
 /** A floating shell must clear navigation on every guide mode, including the grid. */
@@ -71,3 +71,25 @@ export function guideBand(width: number, height: number, top: number, side: numb
   ));
   return { height: bandHeight, pictureHeight, stacked, gap };
 }
+
+/** Only cells crossing the left viewport edge need a per-frame sliding label. */
+export function labelFollows(at: number, span: number, visibleFrom: number): boolean {
+  return at < visibleFrom + 30 && at + span > visibleFrom;
+}
+
+export function programmeOverlapping(channel: GuideChannel, minute: number): GuideProgramme | undefined {
+  return channel.programmes.find(p => p.at <= minute && p.at + p.span > minute);
+}
+
+/** Empty time keeps its own geometry instead of moving focus to a distant programme. */
+export function programmeGap(channel: GuideChannel, minute: number, minutes: number): { at: number; span: number } | undefined {
+  let from = 0, to = minutes;
+  for (const programme of channel.programmes) {
+    const end = programme.at + programme.span;
+    if (programme.at <= minute && end > minute) return undefined;
+    if (end <= minute) from = Math.max(from, end);
+    else if (programme.at > minute) { to = Math.min(to, programme.at); break; }
+  }
+  return to > from ? { at: from, span: to - from } : undefined;
+}
+export const gapId = (channelId: string, at: number) => `guide-gap-${encodeURIComponent(channelId)}|${at}`;

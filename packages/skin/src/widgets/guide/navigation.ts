@@ -46,6 +46,10 @@ export class ProgrammeSlots {
       return slot;
     });
   }
+  ordered<T>(items: T[], id: (item: T) => string): { key: number; index: number; item: T }[] {
+    const keys = this.keys(items.map(id));
+    return items.map((item, index) => ({ key: keys[index]!, index, item })).sort((a, b) => a.key - b.key);
+  }
 
 }
 
@@ -63,4 +67,13 @@ export function programmeMinute(programme: { at: number; span: number }, preferr
 /** Traverse a known gap in one-hour steps, requesting the next window when needed. */
 export function gapStep(minute: number, direction: -1 | 1, minutes: number): number {
   return Math.max(0, Math.min(minutes - 0.01, minute + direction * 60));
+}
+
+export type TimeTarget = { kind: 'day'; day: number; offset: number } | { kind: 'now'; offset: number };
+export function resolveTimeTarget(target: TimeTarget, starts: Record<number, number>, now: number, visible: number, total: number) {
+  const at = target.kind === 'day' ? starts[target.day] : now < 0 ? undefined : now;
+  if (at === undefined) return undefined;
+  const desired = at + target.offset;
+  const left = Math.max(0, Math.min(Math.max(0, total - visible), target.kind === 'now' ? desired - visible / 3 : desired));
+  return { left, minute: target.kind === 'now' ? Math.max(0, Math.min(total - 0.01, desired)) : left + visible / 3 };
 }
