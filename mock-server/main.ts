@@ -3,11 +3,17 @@ import { previewSessions, stopPreview, trailerPreview } from './previews';
 import { libraries as fixtureLibraries, libraryEntries as fixtureLibraryEntries } from '../packages/protocol/fixtures/libraries';
 import { createHmac } from 'node:crypto';
 import type * as V from '../packages/protocol/types';
-import { allTitles, artwork, channels, detail, extras, featuredSources, featuredTitles, guide, rows, titles } from '../packages/protocol/fixtures/catalogue';
+import { allTitles, artwork, channels as defaultChannels, detail, extras, featuredSources, featuredTitles, guide as defaultGuide, rows, titles } from '../packages/protocol/fixtures/catalogue';
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia } from './media';
 import { serveLive, liveFaults } from './live';
 import { applyCommand, createSession, events, observe, requestedInit, sessions, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
+
+import { scaleGuide } from './guide-fixture';
+const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
+const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
+const channels = scaleFixture?.channels ?? defaultChannels;
+const guide = scaleFixture?.guide ?? defaultGuide;
 
 const port = Number(process.env.PORT ?? 7777), origin = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
 const secret = crypto.randomUUID();
