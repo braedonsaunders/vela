@@ -28,6 +28,7 @@ final class VelaPlayerView: ExpoView {
     )
 
     private var recovery = PathRecovery()
+    private var recoveryPosition: Double?
     private var recoveryLimit: Timer?
     private var plan: VelaPlan?
     private var activeSource = ""
@@ -261,6 +262,7 @@ final class VelaPlayerView: ExpoView {
     private func start(_ plan: VelaPlan, path: VelaPlanPath, url: URL, source: String) {
         stop()
         activeSource = source
+        recoveryPosition = nil
         state = PlayerState()
         pendingSeek = nil
         report.pathId = path.id
@@ -410,7 +412,10 @@ final class VelaPlayerView: ExpoView {
     }
 
     private func recoverPath() -> Bool {
-        guard let plan, let command = recovery.next(plan, at: state.loaded ? state.position : plan.positionSeconds) else { return false }
+        guard let plan else { return false }
+        let position = recoveryPosition ?? (state.loaded ? state.position : plan.positionSeconds)
+        guard let command = recovery.next(plan, at: position) else { return false }
+        recoveryPosition = position
         state.loaded = false
         state.pausedForCache = true
         recoveryLimit?.invalidate()
