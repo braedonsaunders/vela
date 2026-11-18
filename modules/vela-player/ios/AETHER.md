@@ -37,12 +37,25 @@ The upstream license texts and dependency notices ship in the
 VelaPlayerLicenses resource bundle. The existing MPVKit notices still apply
 to the fallback.
 
-## Verification in progress
+## Device verification
 
 The Basement Apple TV has played Camp Crystal through the loopback AVPlayerLayer
-route with Vela's play/pause and ten-second seeks. Picture comparison with Plex
-is awaiting the owner's assessment. iPhone compilation and HDR, track switching,
-hero previews and a deliberately refused source still need device verification.
+route with Vela's play/pause and ten-second seeks. The owner reported that the
+picture may look better. A framebuffer at 2436.6 seconds tracked the source
+levels: 20 to 19, 52 to 52, 68 to 66 (the previous mpv route lifted 20 to 27).
+No colour compensation is applied.
+
+Fall's 4K source has also played on the Basement TV. The native ready log reports
+`route=loopback format=hdr10 audio=bridged AVPlayerLayer=true`. This display
+reports HDR10 support and no Dolby Vision support. TrueHD uses the audio bridge;
+this check does not establish TrueHD Atmos object delivery or Dolby Vision output.
+
+The iPhone Release build compiled and installed. Full-app playback still needs a
+runtime check while the phone is available. Its initial launch hang also occurred
+in the pre-Aether baseline: lab-pinned builds rejected saved standalone Ether
+records. Shared session restoration now preserves those records and bounds startup.
+The TV resumed playback after that fix. Track switching, hero previews and a
+source refused by Aether still need device verification.
 
 Fallback carries the current pause, mute and volume settings. A native ready log
 records the route, video format, audio delivery and AVPlayerLayer presence without
