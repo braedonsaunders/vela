@@ -187,14 +187,23 @@ export class Catalogue {
   }
 
   /** Library-specific native server views. Ether v0 does not identify a library in RowsQuery. */
-  async libraryExtras(id: string, kind: V.Library['kind']): Promise<LibraryExtras | undefined> {
+  /** A library's recommendations, collections and genres, read together. `onRows` has the
+   * recommendations as soon as they arrive, so they show while the others are still read. */
+  async libraryExtras(id: string, kind: V.Library['kind'], onRows?: (rows: LibraryExtras) => void): Promise<LibraryExtras | undefined> {
     const connection = await this.session.ready();
     const adapter = connection.adapter;
     if (!hasLibraryRecommendations(adapter)) return undefined;
-    const [rows, collections, genres] = await Promise.allSettled([
-      adapter.libraryRows(id, kind), adapter.libraryCollections(id), adapter.libraryGenres(id),
-    ]);
-    const images = await connection.images();
+    const images = connection.images();
+    const reading = adapter.libraryRows(id, kind);
+    if (onRows) void Promise.all([reading, images]).then(([value, sized]) => onRows({
+      recommendationsAvailable: true, collectionsAvailable: true, rows: value.map(row => feedRow(row, sized, this.artWidth())),
+      collections: [], collectionCursor: '', genres: [], failed: false,
+    }), () => {});
+    const [rows, collections, genres] = await Promise.allSettled([reading, adapter.libraryCollections(id), adapter.libraryGenres(id)]);
+    return this.extras(rows, collections, genres, await images);
+  }
+
+  private extras(rows: PromiseSettledResult<V.Row[]>, collections: PromiseSettledResult<V.Page<V.RowEntry>>, genres: PromiseSettledResult<{ id: string; label: string }[]>, images: Images): LibraryExtras {
     return {
       recommendationsAvailable: true,
       collectionsAvailable: true,

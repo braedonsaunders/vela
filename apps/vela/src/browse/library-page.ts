@@ -40,7 +40,11 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     if (!id || !kind || !focused) return;
     let active = true;
     setExtraState({ id, revision, loading: true, failed: false });
-    void store.catalogue.libraryExtras(id, kind).then(value => {
+    // The recommendations show as soon as they arrive; collections and genres follow.
+    const rows = (value: LibraryExtras) => {
+      if (active) setExtraState(previous => previous.id === id && previous.revision === revision && previous.loading ? { ...previous, value } : previous);
+    };
+    void store.catalogue.libraryExtras(id, kind, rows).then(value => {
       if (active) setExtraState({ id, revision, loading: false, failed: false, value });
     }).catch(() => {
       if (active) setExtraState({ id, revision, loading: false, failed: true });

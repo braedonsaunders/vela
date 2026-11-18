@@ -117,6 +117,7 @@ export const favouritesOff: Node = {
   press: { action: 'libraryFilter', arg: 'favorite|true' },
 } as Node;
 export const favouritesOn: Node = { ...favourites, when: [{ test: 'library.canFavorite' }, favOn] } as Node;
+const notSmall: Condition = { ...small, not: true };
 export const ascending: Condition = { test: 'library.direction', is: 'eq', value: 'asc' };
 // Sort: its label, the server's sort options and, when the sort has both directions, a flip.
 // They sit in the toolbar row itself (a select stays near the top of its tree); the label's
@@ -162,7 +163,7 @@ export const flip: Node = {
 export const sortControls: Node[] = [
   {
     type: 'text',
-    when: [sorting],
+    when: [sorting, notSmall],
     text: '{t:library.sortBy}',
     style: { ...eyebrow, 'font-size': '10px', color: '$ui.inkQuiet', 'flex-shrink': '0' } as Style,
   },
@@ -217,6 +218,9 @@ export const libraryAlternative: Node = {
   style: { display: 'flex', 'flex-direction': 'column', 'padding-top': '24px', 'padding-bottom': '60px', gap: '16px' },
   children: [
     { type: 'repeat', over: 'library.rows', when: [is('library.view', 'recommended')], item: { type: 'use', template: 'velaRow' } },
+    // Until the first recommendations arrive, rows' outlines rather than an empty page.
+    { type: 'box', role: 'status', label: '{t:ui.findingTitles}', when: [is('library.view', 'recommended'), is('library.recommendationCount', '0'), { test: 'env.libraryExtrasLoading' }],
+      style: { display: 'flex', 'flex-direction': 'column' }, children: [rowSkeleton, rowSkeleton] },
     { type: 'text', when: [is('library.view', 'recommended'), is('library.recommendationCount', '0'), { test: 'env.libraryExtrasLoading', not: true }], text: '{t:ui.yourLibraryHasNoRowsYet}', style: { ...gutter, color: '$ui.inkSecondary' } },
     { ...titleGrid, when: [is('library.view', 'collections')], children: [{ type: 'repeat', over: 'library.collections', item: gridCard }] } as Node,
     { type: 'text', when: [is('library.view', 'collections'), is('library.collectionCount', '0')], text: '{t:library.view.emptyCollections}', style: { ...gutter, color: '$ui.inkSecondary' } },
@@ -321,8 +325,11 @@ export const toolbar: Node = {
                   '{t:library.filter.watched}',
                 ),
               ],
-              [{ test: 'library.canPlayed' }],
+              [{ test: 'library.canPlayed' }, notSmall],
             ),
+            // A phone's row is short of room: watched is one Unwatched toggle there.
+            { ...libChip([is('library.playedFilter', 'false')], 'played|', '{t:library.filter.unwatched}'), when: [{ test: 'library.canPlayed' }, small, is('library.playedFilter', 'false')] } as Node,
+            { ...libChip([is('library.playedFilter', 'false')], 'played|false', '{t:library.filter.unwatched}'), when: [{ test: 'library.canPlayed' }, small, { ...is('library.playedFilter', 'false'), not: true }] } as Node,
             favouritesOff,
             favouritesOn,
             {

@@ -666,11 +666,22 @@ const ANDROID_VEIL = 0.7;
 const ROUTE_SCROLL: ViewStyle = { flex: 1 };
 const BOX_SCROLL: ViewStyle = { flexGrow: 0 };
 
+const GRID_FIRST = 24;
+const GRID_BATCH = 24;
+
 /** A grid's cells, in a track that fills the box's content width. The track measures that width
  * itself (a box's padding may be a percentage of its parent's width), and the columns divide it:
  * auto-fill takes as many columns as fit at the minimum, then stretches them to fill the row. */
 function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>; rowGap: unknown; items: ReactElement[] }) {
   const [width, setWidth] = useState(0);
+  // A library page is a hundred cards: the first screenful draws at once and the rest a batch a
+  // frame, so switching to a grid answers at once rather than after every card has been made.
+  const [drawn, setDrawn] = useState(GRID_FIRST);
+  useEffect(() => {
+    if (drawn >= items.length) return;
+    const frame = requestAnimationFrame(() => setDrawn(count => count + GRID_BATCH));
+    return () => cancelAnimationFrame(frame);
+  }, [drawn, items.length]);
   const layout = useContext(RouteLayout);
   useLayoutEffect(() => { if (items.length) layout?.grid(); }, [layout, items.length]);
   const gap = grid.gap;
@@ -689,7 +700,7 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
       // committed layout is enough, including after a populated grid becomes empty.
       if (next > 0 && !items.length) layout?.drawn();
     }}>
-      {width > 0 ? items.map((item, index) => <View key={item.key} style={{ width: cell }} onLayout={index === 0 ? () => layout?.drawn() : undefined}>{item}</View>) : null}
+      {width > 0 ? items.slice(0, drawn).map((item, index) => <View key={item.key} style={{ width: cell }} onLayout={index === 0 ? () => layout?.drawn() : undefined}>{item}</View>) : null}
     </View>
   );
 }

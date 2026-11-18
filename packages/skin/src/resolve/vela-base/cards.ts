@@ -116,7 +116,9 @@ export const card: Node = {
     'flex-shrink': '0',
     gap: '12px',
   },
-  small: { width: '132px' },
+  // A phone's row card is a grid column's size (titleGrid), so a library reads the same in
+  // its rows and its grid.
+  small: { width: '112px' },
   children: [
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
     {
@@ -422,8 +424,9 @@ export const titleGrid: Node = {
     'row-gap': '34px',
     ...gutter,
   } as Style,
+  // Columns about a row card wide (112 px): three across a phone, more as the width allows.
   small: {
-    'grid-template-columns': 'repeat(auto-fill, minmax(140px, 1fr))',
+    'grid-template-columns': 'repeat(auto-fill, minmax(104px, 1fr))',
     'column-gap': '12px',
     'row-gap': '22px',
     ...gutterSmall,

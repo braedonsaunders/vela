@@ -2,7 +2,7 @@
 // that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
 // library, a collection) adds it to the host with `page`.
 import { useIsFocused, usePathname } from 'expo-router';
-import { useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
@@ -116,27 +116,35 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
     transition.current = { request, direction: order.indexOf(view) >= order.indexOf(previous.view) ? 1 : -1, active };
   }
   current.current = { request, view, host };
+  const complete = useCallback(() => {
+    outgoing.current = null; fixedNav.current = null; transition.current.active = false; refresh(value => value + 1);
+    const tab = restoreTab.current;
+    restoreTab.current = '';
+    if (tab) requestAnimationFrame(() => focusElement(`vela-library-view-${tab}`));
+  }, []);
+  // Natively the slide ends the transition when it finishes: a timer ran out first whenever the
+  // JS thread was busy drawing the new view, and the scene was left where the slide had got to.
   useLayoutEffect(() => {
     if (!transition.current.active || still || Platform.OS === 'web') return;
     const direction = transition.current.direction;
     incomingOffset.setValue(direction * host.viewport.width);
     outgoingOffset.setValue(0);
-    Animated.parallel([
+    const slide = Animated.parallel([
       Animated.timing(incomingOffset, { toValue: 0, duration: SECTION_SLIDE_MS, useNativeDriver: true }),
       Animated.timing(outgoingOffset, { toValue: -direction * host.viewport.width, duration: SECTION_SLIDE_MS, useNativeDriver: true }),
-    ]).start();
-  }, [request, still, host.viewport.width, incomingOffset, outgoingOffset]);
+    ]);
+    slide.start(({ finished }) => { if (finished) complete(); });
+    return () => { slide.stop(); incomingOffset.setValue(0); };
+  }, [request, still, host.viewport.width, incomingOffset, outgoingOffset, complete]);
   useEffect(() => {
-    const complete = () => {
-      outgoing.current = null; fixedNav.current = null; transition.current.active = false; refresh(value => value + 1);
-      const tab = restoreTab.current;
-      restoreTab.current = '';
-      if (tab) requestAnimationFrame(() => focusElement(`vela-library-view-${tab}`));
-    };
+    if (Platform.OS !== 'web' && !still) {
+      if (!outgoing.current && restoreTab.current) requestAnimationFrame(complete);
+      return;
+    }
     if (!outgoing.current) { if (restoreTab.current) requestAnimationFrame(complete); return; }
     const timer = setTimeout(complete, SECTION_SLIDE_MS);
     return () => clearTimeout(timer);
-  }, [request, still]);
+  }, [request, still, complete]);
   const scene = (sceneHost: SkinHost, isCurrent: boolean) => {
     const active = transition.current.active && !still;
     const webAnimation = Platform.OS === 'web' && active ? {
@@ -144,9 +152,13 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
       animationDuration: SECTION_SLIDE_MS, animationTimingFunction: 'ease-in-out' as const, animationFillMode: 'both' as const,
     } : undefined;
     const Scene = Platform.OS === 'web' ? Reanimated.View : Animated.View;
-    return <Scene key={isCurrent ? `current:${request}` : `outgoing:${outgoing.current?.request}`} pointerEvents={isCurrent ? 'auto' : 'none'}
+    // Keyed by the request alone: the view that was current stays mounted as it leaves, rather
+    // than being drawn again from nothing alongside the view coming in.
+    return <Scene key={`scene:${isCurrent ? request : outgoing.current?.request}`} pointerEvents={isCurrent ? 'auto' : 'none'}
       accessibilityElementsHidden={!isCurrent} importantForAccessibility={isCurrent ? 'auto' : 'no-hide-descendants'}
-      style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, ...(Platform.OS === 'web' ? webAnimation : { transform: [{ translateX: active ? isCurrent ? incomingOffset : outgoingOffset : 0 }] }) }}>
+      // Natively always bound to its offset (at rest, zero): a view switched from a native-driven
+      // value to a constant keeps the last value the slide drew.
+      style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, ...(Platform.OS === 'web' ? webAnimation : { transform: [{ translateX: isCurrent ? incomingOffset : outgoingOffset }] }) }}>
       <SkinRoute host={sceneHost} node={node} hideLibraryViews={!!fixedNav.current && active} />
     </Scene>;
   };

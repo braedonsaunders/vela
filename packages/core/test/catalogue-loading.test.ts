@@ -66,3 +66,22 @@ test('person titles require a real adapter capability and never fall back to nam
   await expect(catalogue.personTitles('person-id', 'library-id')).rejects.toThrow('Person filmography is unavailable');
   expect(searches).toBe(0);
 });
+
+test('a library\'s recommendations are handed over before its collections and genres arrive', async () => {
+  const box = new StateBox({ library: {}, titles: {}, related: {}, collections: {} } as unknown as VelaState);
+  const collections = deferred<{ items: never[] }>();
+  const adapter = {
+    libraryRows: async () => [{ id: 'r', name: 'Recently added', purpose: 'recentlyAdded', items: [], receiptToken: '', continuation: 'exhausted' }],
+    libraryCollections: () => collections.promise,
+    libraryGenres: async () => [{ id: 'g', label: 'Drama' }],
+  };
+  const session = { epoch: 0, onReset() {}, async ready() { return { adapter, images: async () => ({ origin: 'https://fixture.test' }) }; } };
+  const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
+  const early = deferred<string[]>();
+  const all = catalogue.libraryExtras('movies', 'movies', extras => early.resolve(extras.rows.map(row => row.name)));
+  expect(await early.promise).toEqual(['Recently added']);
+  collections.resolve({ items: [] });
+  const done = await all;
+  expect(done?.rows.map(row => row.name)).toEqual(['Recently added']);
+  expect(done?.genres).toEqual([{ id: 'g', label: 'Drama' }]);
+});
