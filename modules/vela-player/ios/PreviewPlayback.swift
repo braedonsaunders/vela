@@ -58,6 +58,8 @@ final class PreviewPlayback {
         start(source)
     }
 
+    func layout() { mpv?.layout() }
+
     func setPaused(_ value: Bool) {
         paused = value
         mpv?.set("pause", flag: value)

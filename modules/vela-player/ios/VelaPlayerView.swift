@@ -109,6 +109,8 @@ final class VelaPlayerView: ExpoView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         metalLayer.frame = bounds
+        mpv?.layout()
+        madePreview?.layout()
         CATransaction.commit()
     }
 

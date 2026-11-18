@@ -19,6 +19,7 @@ final class PlaybackClient {
     private var engine: AetherEngine?
     private var surface: AetherPlayerView?
     private var subscriptions = Set<AnyCancellable>()
+    private var lastCacheDiagnostic = Date.distantPast
     private var loadTask: Task<Void, Never>?
     private var headers: [String] = []
     private var properties: [String: Any] = [:]
@@ -41,6 +42,11 @@ final class PlaybackClient {
         self.options = options
         paused = options["pause"] == "yes"
         muted = options["mute"] == "yes"
+    }
+
+    func layout() {
+        surface?.frame = layer.frame
+        surface?.setNeedsLayout()
     }
 
     func observe(_ name: String, format: mpv_format) {}
@@ -123,6 +129,7 @@ final class PlaybackClient {
                 self.surface = view
                 self.layer.isHidden = true
                 engine.bind(view: view)
+                self.layout()
                 engine.volume = self.muted ? 0 : self.volume
                 self.captions.textColor = .white
                 self.captions.font = .boldSystemFont(ofSize: 30)
@@ -132,6 +139,9 @@ final class PlaybackClient {
                 self.captions.layer.shadowOpacity = 1
                 self.captions.layer.shadowRadius = 3
                 view.addSubview(self.captions)
+                engine.diagnostics.$sessionCacheStatus.removeDuplicates().sink { [weak self] status in
+                    self?.logCacheStatus(status)
+                }.store(in: &self.subscriptions)
                 engine.$state.sink { [weak self] state in
                     guard let self, !self.dead else { return }
                     switch state {
@@ -155,6 +165,9 @@ final class PlaybackClient {
                 }.store(in: &self.subscriptions)
                 engine.$activeAudioTrackIndex.sink { [weak self] in self?.emit("aid", $0.map { Int64($0) }) }.store(in: &self.subscriptions)
                 engine.$activeSubtitleTrackIndex.sink { [weak self] in self?.emit("sid", $0.map { Int64($0) }) }.store(in: &self.subscriptions)
+                engine.$videoFormat.sink { [weak self, weak engine] format in
+                    if let engine { self?.publishVideoParams(engine, format: format) }
+                }.store(in: &self.subscriptions)
                 engine.$duration.sink { [weak self] in self?.emit("duration", $0) }.store(in: &self.subscriptions)
                 engine.$isBuffering.sink { [weak self] in self?.emit("paused-for-cache", $0) }.store(in: &self.subscriptions)
                 engine.seekEvents.sink { [weak self] event in
@@ -178,17 +191,9 @@ final class PlaybackClient {
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
                 guard !self.dead, self.fallback == nil else { return }
-                print("[vela-player] Aether ready: route=\(engine.videoRoute) format=\(engine.videoFormat) audio=\(engine.audioDelivery) AVPlayerLayer=\(engine.nativePlayerLayer != nil)")
+                print("[vela-player] Aether ready: route=\(engine.videoRoute) format=\(engine.videoFormat) audio=\(engine.audioDelivery) AVPlayerLayer=\(engine.nativePlayerLayer != nil) surface=\(view.bounds.size) videoRect=\(engine.nativePlayerLayer?.videoRect ?? .zero) external=\(engine.currentAVPlayer?.isExternalPlaybackActive ?? false)")
                 self.emit("track-list", engine.audioTracks.map { self.track($0, type: "audio") } + engine.subtitleTracks.map { self.track($0, type: "sub") })
-                let gamma: String
-                switch engine.videoFormat {
-                case .sdr: gamma = "bt.1886"
-                case .hlg: gamma = "hlg"
-                default: gamma = "pq"
-                }
-                var params: [String: Any] = ["w": Int64(engine.sourceVideoWidth), "h": Int64(engine.sourceVideoHeight), "gamma": gamma]
-                if engine.videoFormat == .dolbyVision { params["dovi"] = true }
-                self.emit("video-params", params)
+                self.publishVideoParams(engine, format: engine.videoFormat)
                 self.onEvent?(.fileLoaded)
             } catch is CancellationError {} catch {
                 guard !self.dead else { return }
@@ -196,6 +201,43 @@ final class PlaybackClient {
             }
         }
     }
+    private func publishVideoParams(_ engine: AetherEngine, format: VideoFormat) {
+        guard !dead, fallback == nil, engine.sourceVideoWidth > 0, engine.sourceVideoHeight > 0 else { return }
+        let gamma: String
+        switch format {
+        case .sdr: gamma = "bt.1886"
+        case .hlg: gamma = "hlg"
+        default: gamma = "pq"
+        }
+        var params: [String: Any] = ["w": Int64(engine.sourceVideoWidth), "h": Int64(engine.sourceVideoHeight), "gamma": gamma]
+        if format == .dolbyVision { params["dovi"] = true }
+        emit("video-params", params)
+    }
+
+    private func logCacheStatus(_ status: SessionCacheStatus, force: Bool = false) {
+        guard force || status.lastFailure != nil || Date().timeIntervalSince(lastCacheDiagnostic) >= 15 else { return }
+        lastCacheDiagnostic = Date()
+        func number(_ value: Int?) -> Any { value.map { $0 as Any } ?? NSNull() }
+        let fields: [String: Any] = [
+            "route": String(describing: status.route), "capability": String(describing: status.capability),
+            "requestedBudgetBytes": number(status.requestedBudgetBytes),
+            "volumeSafetyLimitBytes": number(status.volumeSafetyLimitBytes),
+            "baseEffectiveBudgetBytes": status.baseEffectiveBudgetBytes,
+            "playbackSafeFloorBytes": status.playbackSafeFloorBytes, "effectiveBudgetBytes": status.effectiveBudgetBytes,
+            "hardLimitBytes": number(status.hardLimitBytes), "freeDiskReserveBytes": status.freeDiskReserveBytes,
+            "residentBytes": status.currentResidentBytes, "forwardBytes": status.currentForwardBytes,
+            "stagingBytes": status.stagingBytes, "forwardSegments": status.forwardWindowSegments,
+            "backwardSegments": status.backwardWindowSegments, "producerParked": status.producerParked,
+            "diskAdmissionWaiting": status.diskAdmissionWaiting, "evictionCount": status.evictionCount,
+            "hardWindowFloorExceeded": status.hardWindowFloorExceeded, "rejectedWrites": status.rejectedDiskWrites,
+            "lastFailure": status.lastFailure.map { String(describing: $0) } ?? "none",
+            "cleanupReason": status.cleanupReason.map { String(describing: $0) } ?? "none",
+            "cleanupResult": String(describing: status.cleanupResult),
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]),
+           let text = String(data: data, encoding: .utf8) { print("[vela-aether-cache] \(text)") }
+    }
+
     private func track(_ track: TrackInfo, type: String) -> [String: Any] {
         ["id": Int64(track.id), "ff-index": Int64(track.id), "type": type, "title": track.name,
          "lang": track.language ?? "und", "codec": track.codec, "external": track.isExternal]
@@ -241,6 +283,12 @@ final class PlaybackClient {
         guard !dead, fallback == nil, let url else { return }
         if engine?.hasFirstFrameReadyForDisplay == true {
             start = (properties["time-pos"] as? Double) ?? start
+        }
+        if let engine {
+            logCacheStatus(engine.diagnostics.sessionCacheStatus, force: true)
+            if let failure = engine.errorInfo {
+                print("[vela-player] Aether failure kind=\(failure.kind) underlying=\(failure.underlyingCode ?? 0) ffmpeg=\(failure.ffmpegErrorCode ?? 0)")
+            }
         }
         subscriptions.removeAll()
         bitmapCaptions.values.forEach { $0.removeFromSuperview() }
