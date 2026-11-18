@@ -3,19 +3,23 @@
 import AetherEngine
 import AVFoundation
 import Combine
-import Libmpv
 import UIKit
 
 @MainActor
 final class PlaybackClient {
-    typealias Event = MPVClient.Event
+    enum Event {
+        case fileLoaded
+        case endFile(reason: Int32, error: Int32)
+        case seekDone
+        case refused(status: Int)
+        case shutdown
+    }
     var onProperty: ((String, Any?) -> Void)?
     var onEvent: ((Event) -> Void)?
     var onBackend: ((String) -> Void)?
     private let layer: CAMetalLayer
     private let options: [String: String]
-    var usesAether: Bool { fallback == nil }
-    private var fallback: MPVClient?
+    private var failed = false
     private var engine: AetherEngine?
     private var surface: AetherPlayerView?
     private var subscriptions = Set<AnyCancellable>()
@@ -49,18 +53,15 @@ final class PlaybackClient {
         surface?.setNeedsLayout()
     }
 
-    func observe(_ name: String, format: mpv_format) {}
-    func value(_ name: String) -> Any? { fallback?.value(name) ?? properties[name] }
+    func value(_ name: String) -> Any? { properties[name] }
     private func emit(_ name: String, _ value: Any?) {
         properties[name] = value
         onProperty?(name, value)
     }
     func setStringList(_ name: String, _ values: [String]) {
         if name == "http-header-fields" { headers = values }
-        fallback?.setStringList(name, values)
     }
     func set(_ name: String, _ value: String) {
-        if let fallback { fallback.set(name, value); return }
         switch name {
         case "aid":
             audio = Int(value)
@@ -75,17 +76,14 @@ final class PlaybackClient {
     func set(_ name: String, flag: Bool) {
         if name == "pause" { paused = flag }
         if name == "mute" { muted = flag }
-        if let fallback { fallback.set(name, flag: flag); return }
         if name == "pause" { flag ? engine?.pause() : engine?.play() }
         if name == "mute" { engine?.volume = flag ? 0 : volume }
     }
     func set(_ name: String, double: Double) {
         if name == "volume" { volume = Float(double / 100) }
-        if let fallback { fallback.set(name, double: double); return }
         if name == "volume" { engine?.volume = muted ? 0 : volume }
     }
     func command(_ args: [String]) {
-        if let fallback { fallback.command(args); return }
         switch args.first {
         case "loadfile":
             guard args.count > 1, let url = URL(string: args[1]) else { return }
@@ -94,7 +92,7 @@ final class PlaybackClient {
                 for flag in flags where flag.hasPrefix("start=") { start = Double(flag.dropFirst(6)) ?? 0 }
             }
             if ["http", "https", "file"].contains(url.scheme?.lowercased() ?? "") { load(url) }
-            else { demote() }
+            else { failPath() }
         case "seek":
             guard args.count > 1, let target = Double(args[1]), let engine else { return }
             Task { @MainActor in await engine.seek(to: target) }
@@ -111,7 +109,8 @@ final class PlaybackClient {
             self.subscriptions.removeAll()
             self.surface?.removeFromSuperview()
             do {
-                EngineLog.handler = { print("[aether] \($0)") }
+                // Upstream messages may contain media URLs. Keep grant URLs out of logs.
+                EngineLog.handler = { _ in }
                 let preview = self.options["audio"] == "no"
                 let cached = preview ? Self.previewEngine : Self.primaryEngine
                 let engine = try cached ?? AetherEngine()
@@ -123,7 +122,7 @@ final class PlaybackClient {
                 view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
                 engine.videoGravity = self.options["panscan"] == "1.0" ? .resizeAspectFill : .resizeAspect
                 guard let host = self.layer.delegate as? UIView ?? self.layer.superlayer?.delegate as? UIView else {
-                    throw MPVError("Missing native video host")
+                    throw PlaybackError("Missing native video host")
                 }
                 host.addSubview(view)
                 self.surface = view
@@ -151,7 +150,7 @@ final class PlaybackClient {
                         self.emit("eof-reached", true)
                         self.onEvent?(.endFile(reason: 0, error: 0))
                         if self.options["loop-file"] == "inf" { self.load(url) }
-                    case .error: self.demote()
+                    case .error: self.failPath()
                     default: break
                     }
                 }.store(in: &self.subscriptions)
@@ -161,7 +160,7 @@ final class PlaybackClient {
                     self?.drawCaptions()
                 }.store(in: &self.subscriptions)
                 engine.$audioDelivery.sink { [weak self] delivery in
-                    if delivery == .droppedNoPipeline { self?.demote() }
+                    if delivery == .droppedNoPipeline { self?.failPath() }
                 }.store(in: &self.subscriptions)
                 engine.$activeAudioTrackIndex.sink { [weak self] in self?.emit("aid", $0.map { Int64($0) }) }.store(in: &self.subscriptions)
                 engine.$activeSubtitleTrackIndex.sink { [weak self] in self?.emit("sid", $0.map { Int64($0) }) }.store(in: &self.subscriptions)
@@ -180,7 +179,7 @@ final class PlaybackClient {
                     source = .url(url)
                 } else {
                     guard let access = VelaMediaAccessStore.snapshot,
-                          !access.headers(for: url).isEmpty else { throw MPVError("Media access expired") }
+                          !access.headers(for: url).isEmpty else { throw PlaybackError("Media access expired") }
                     source = .custom(ScopedAetherReader(url: url, access: access))
                 }
                 self.onBackend?("aether")
@@ -190,19 +189,19 @@ final class PlaybackClient {
                                        initialSubtitleTrackID: self.subtitle, autoplay: !self.paused)
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
-                guard !self.dead, self.fallback == nil else { return }
+                guard !self.dead, !self.failed else { return }
                 print("[vela-player] Aether ready: route=\(engine.videoRoute) format=\(engine.videoFormat) audio=\(engine.audioDelivery) AVPlayerLayer=\(engine.nativePlayerLayer != nil) surface=\(view.bounds.size) videoRect=\(engine.nativePlayerLayer?.videoRect ?? .zero) external=\(engine.currentAVPlayer?.isExternalPlaybackActive ?? false)")
                 self.emit("track-list", engine.audioTracks.map { self.track($0, type: "audio") } + engine.subtitleTracks.map { self.track($0, type: "sub") })
                 self.publishVideoParams(engine, format: engine.videoFormat)
                 self.onEvent?(.fileLoaded)
             } catch is CancellationError {} catch {
                 guard !self.dead else { return }
-                self.demote()
+                self.failPath()
             }
         }
     }
     private func publishVideoParams(_ engine: AetherEngine, format: VideoFormat) {
-        guard !dead, fallback == nil, engine.sourceVideoWidth > 0, engine.sourceVideoHeight > 0 else { return }
+        guard !dead, !failed, engine.sourceVideoWidth > 0, engine.sourceVideoHeight > 0 else { return }
         let gamma: String
         switch format {
         case .sdr: gamma = "bt.1886"
@@ -279,8 +278,9 @@ final class PlaybackClient {
         captions.text = text
         captions.frame = CGRect(x: 40, y: surface.bounds.height * 0.7, width: max(0, surface.bounds.width - 80), height: surface.bounds.height * 0.25)
     }
-    private func demote() {
-        guard !dead, fallback == nil, let url else { return }
+    private func failPath() {
+        guard !dead, !failed else { return }
+        failed = true
         if engine?.hasFirstFrameReadyForDisplay == true {
             start = (properties["time-pos"] as? Double) ?? start
         }
@@ -297,25 +297,10 @@ final class PlaybackClient {
         engine = nil
         surface?.removeFromSuperview()
         surface = nil
-        do {
-            print("[vela-player] AetherEngine failed; falling back to mpv")
-            var fallbackOptions = options
-            fallbackOptions["pause"] = paused ? "yes" : "no"
-            fallbackOptions["mute"] = muted ? "yes" : "no"
-            fallbackOptions["volume"] = String(volume * 100)
-            let mpv = try MPVClient(layer: layer, options: fallbackOptions)
-            fallback = mpv
-            layer.isHidden = false
-            mpv.onProperty = { [weak self] in self?.onProperty?($0, $1) }
-            mpv.onEvent = { [weak self] in self?.onEvent?($0) }
-            for property in PlayerState.observed { mpv.observe(property.name, format: property.format) }
-            mpv.observe("video-pts", format: MPV_FORMAT_DOUBLE)
-            mpv.setStringList("http-header-fields", headers)
-            mpv.set("stream-lavf-o", headers.isEmpty ? "" : "max_redirects=0")
-            mpv.command(["loadfile", url.absoluteString, "replace", "-1", "start=\(start)"])
-            onBackend?("mpv")
-        } catch { onEvent?(.endFile(reason: 4, error: -1)) }
+        print("[vela-player] AetherEngine refused path; requesting server recovery")
+        onEvent?(.endFile(reason: 4, error: -1))
     }
+
     func destroy() {
         dead = true
         loadTask?.cancel()
@@ -327,9 +312,12 @@ final class PlaybackClient {
         engine = nil
         surface?.removeFromSuperview()
         surface = nil
-        fallback?.destroy()
-        fallback = nil
         onProperty = nil
         onEvent = nil
     }
+}
+
+struct PlaybackError: Error, CustomStringConvertible {
+    let description: String
+    init(_ message: String) { description = message }
 }

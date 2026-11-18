@@ -13,6 +13,7 @@ struct VelaPlan: Decodable {
     let subtitleTracks: [VelaPlanTrack]
     let selectedAudioTrackId: String?
     let selectedSubtitleTrackId: String?
+    let fallback: VelaFallback?
     let chapters: [VelaPlanChapter]?
 
     var selectedPath: VelaPlanPath? {
@@ -129,4 +130,9 @@ struct VelaPlanChapter: Decodable {
         out["endSeconds"] = endSeconds
         return out
     }
+}
+
+struct VelaFallback: Decodable {
+    let state: String
+    let pathId: String?
 }

@@ -1,7 +1,7 @@
 // Media credentials never follow a redirect out of their scope (packages/player-api MediaAccess).
 // When a URL carries headers, its redirects are resolved here first, one hop at a time: a hop
 // inside the authorized origin and path keeps the headers, a hop outside drops them for good.
-// mpv then loads the final URL with FFmpeg's `max_redirects=0`, so a later redirect (on a seek or
+// The scoped byte reader enforces the grant on every later redirect (on a seek or
 // a reconnect) fails instead of being followed with the headers attached.
 import Foundation
 
@@ -9,7 +9,7 @@ struct ResolvedMedia {
     let url: URL
     /// The headers for `url`: empty once a redirect left the authorized scope.
     let headers: [String: String]
-    /// Whether mpv must refuse any further redirect (headers are attached).
+    /// Whether the resolved resource has scoped headers.
     var refusesRedirects: Bool {
         !headers.isEmpty
     }
@@ -18,7 +18,7 @@ struct ResolvedMedia {
 enum MediaRedirects {
     private static let maximumHops = 8
 
-    /// The final URL and its headers. Without headers there is nothing to protect: mpv follows redirects itself.
+    /// The final URL and its headers. Without headers there is nothing to protect: Aether follows redirects itself.
     static func resolve(_ url: URL) async -> ResolvedMedia {
         var current = url
         var headers = VelaMediaAccessStore.headers(for: url)

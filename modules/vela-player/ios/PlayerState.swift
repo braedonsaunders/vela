@@ -1,6 +1,5 @@
-// What mpv reports about the file playing, kept from its observed properties.
+// What the engine reports about the file playing, kept from its observed properties.
 import Foundation
-import Libmpv
 
 struct PlayerState {
     enum Phase: String {
@@ -45,7 +44,7 @@ struct PlayerState {
         return paused ? .paused : .playing
     }
 
-    /// The position is at the file's end. mpv also raises `eof-reached` for a moment while it
+    /// The position is at the file's end. the engine also raises `eof-reached` for a moment while it
     /// switches tracks on a network stream; reporting that as `ended` makes Ether end the session.
     var atEnd: Bool {
         guard let duration else {
@@ -77,7 +76,7 @@ struct PlayerState {
         }
     }
 
-    /// The mpv track id of a source stream (FFmpeg stream index), for `aid` and `sid`.
+    /// The the engine track id of a source stream (FFmpeg stream index), for `aid` and `sid`.
     func trackId(type: String, streamIndex: Int) -> Int64? {
         let track = tracks.first { track in
             track["type"] as? String == type && (track["ff-index"] as? Int64).map(Int.init) == streamIndex
@@ -85,7 +84,7 @@ struct PlayerState {
         return track?["id"] as? Int64
     }
 
-    /// The source stream index (FFmpeg) of the selected mpv track.
+    /// The source stream index (FFmpeg) of the selected the engine track.
     func streamIndex(type: String, id: Int64?) -> Int? {
         guard let id else {
             return nil
@@ -109,23 +108,4 @@ struct PlayerState {
         }
     }
 
-    /// Properties the view observes, with the format each is read in.
-    static let observed: [(name: String, format: mpv_format)] = [
-        ("time-pos", MPV_FORMAT_DOUBLE),
-        ("duration", MPV_FORMAT_DOUBLE),
-        ("pause", MPV_FORMAT_FLAG),
-        ("paused-for-cache", MPV_FORMAT_FLAG),
-        ("seeking", MPV_FORMAT_FLAG),
-        ("eof-reached", MPV_FORMAT_FLAG),
-        ("demuxer-cache-time", MPV_FORMAT_DOUBLE),
-        ("cache-speed", MPV_FORMAT_INT64),
-        ("frame-drop-count", MPV_FORMAT_INT64),
-        ("track-list", MPV_FORMAT_NODE),
-        ("aid", MPV_FORMAT_INT64),
-        ("sid", MPV_FORMAT_INT64),
-        ("video-params", MPV_FORMAT_NODE),
-        ("container-fps", MPV_FORMAT_DOUBLE),
-        ("video-codec-name", MPV_FORMAT_STRING),
-        ("audio-codec-name", MPV_FORMAT_STRING),
-    ]
 }

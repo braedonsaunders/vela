@@ -22,7 +22,7 @@ struct VelaMediaAuth {
             headers.count <= 8,
             headers.keys.allSatisfy(VelaMediaAuth.isAllowed)
         else {
-            throw MPVError("Invalid media access")
+            throw MediaAccessError.invalid
         }
         self.origin = origin
         pathPrefix = prefix
@@ -88,3 +88,5 @@ enum VelaMediaAccessStore {
         return current?.origin
     }
 }
+
+enum MediaAccessError: Error { case invalid }

@@ -1,5 +1,5 @@
-// What this device's libmpv plays, declared to the server (packages/player-api PlayerCapabilities).
-// Video is what VideoToolbox decodes in hardware (mpv's software decoders could take the rest, but
+// What this device's AetherEngine plays, declared to the server (packages/player-api PlayerCapabilities).
+// Video is what VideoToolbox decodes in hardware (AetherEngine's software decoders could take the rest, but
 // not at 4K in real time on an Apple TV); audio and subtitles are all decoded on the device.
 import CoreMedia
 import VideoToolbox

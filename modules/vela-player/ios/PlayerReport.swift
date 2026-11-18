@@ -122,7 +122,7 @@ final class PlayerReport {
             "subtitleClientOnly": subtitleClientOnly,
             "audioClientOnly": audioClientOnly,
             "diagnostics": [
-                "implementation": backend?.hasPrefix("aether") == true ? "vela-aether" : "vela-mpv",
+                "implementation": "vela-aether",
                 "metadataDiscrepancies": [String](),
             ],
             "waiting": phase == "loading" || phase == "buffering",

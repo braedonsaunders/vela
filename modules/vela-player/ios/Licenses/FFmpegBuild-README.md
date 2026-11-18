@@ -1,5 +1,10 @@
 # Third-party licenses
 
+Vela ships FFmpegBuild 3.15.0 as AetherEngine’s sole FFmpeg provider.
+Source, build configuration, patches and corresponding notices:
+https://github.com/superuser404notfound/FFmpegBuild/tree/3.15.0
+
+
 FFmpegBuild's shipped xcframeworks aggregate the following components. Apps
 that distribute these frameworks must reproduce the applicable license texts
 (for example on an acknowledgements screen or in bundled documentation).

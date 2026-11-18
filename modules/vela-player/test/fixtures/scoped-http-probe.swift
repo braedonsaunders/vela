@@ -1,6 +1,5 @@
 import Foundation
 
-struct MPVError: Error { init(_ message: String) {} }
 
 @main struct ScopedHTTPProbe {
     static func main() {

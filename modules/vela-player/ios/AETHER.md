@@ -1,61 +1,52 @@
 # Apple playback
 
-Vela's Apple player uses AetherEngine 7.70.0 first, with MPVKit 1.0.0's LGPL
-product retained as a load-error fallback. Both use the same native view,
-PlayerState and PlayerReport, so JavaScript commands and Ether observations
-keep their existing shapes. The snapshot backend identifies the active engine.
+Vela's tvOS and iOS apps use AetherEngine 7.70.0 exclusively. AVPlayer and
+software decoding are routes inside that engine. No MPVKit, libmpv, MoltenVK,
+libplacebo, libass or mpv-only libraries are linked or bundled on Apple mobile
+platforms. Desktop hosts retain their own mpv implementations.
 
-The pod uses React Native's `spm_dependency` to compile AetherEngine. The Expo
-`apple-player` plugin pins FFmpegBuild 3.15.0 for the package's C module headers,
-but the executable resolves both engines against MPVKit's single LGPL FFmpeg
-build. MPVKit provides libavcodec 62.28.102, libavformat 62.12.102, libavutil
-60.26.102 and libswresample 6.3.102. Their public codec/packet/format/frame/channel
-layout declarations match FFmpegBuild's micro-103 headers apart from framework
-include names. All 293 FFmpeg symbols Aether imported are supplied by MPVKit.
+The pod compiles only the AetherEngine product, with no optional traits or GPL
+products. The Expo apple-player plugin pins its LGPL FFmpegBuild dependency to
+3.15.0. Aether's own dynamic AetherLib frameworks supply FFmpeg; there is no
+second provider or static FFmpeg symbol override. Deployment targets are 18.0.
 
-This matters because both engines are static: each `av_*` symbol resolves once
-in the executable. Linking Aether's dynamic FFmpeg first made mpv use a build
-without HTTP protocols. The plugin links MPVKit's libraries first, removes the
-app's AetherLib product dependencies and strips unused dylibs. There are no
-AetherLib frameworks in the resulting app and no AetherLib load commands. The
-link map places `avformat_open_input`, `avcodec_version` and
-`av_interleaved_write_frame` in MPVKit's archives. Preserve this check on upgrades;
-a different API/ABI requires rebuilding the common LGPL FFmpeg provider.
+An engine refusal emits the existing native session-command event. PathRecovery
+selects an untried ready or on-demand path (preferring server transcodes) using
+`switch` with the current position. If the plan advertises idle fallback, it
+requests `prepare-fallback` once, then switches when a ready path arrives.
+Failed paths are bounded per session. Commands receive authoritative generations
+and idempotency keys through PlayerReport; the shared JS chrome is unchanged.
+The historical `mpv-sub-` client-only subtitle identifier remains a wire-contract
+spelling and does not select an engine.
 
-Only the AetherEngine product is compiled. Optional package traits and GPL
-products are not enabled. SwiftPM copies the engine resource bundle. Both
-release pins are exact, and both deployment targets are 18.0.
+Authenticated files use ScopedAetherReader and bounded URLSession ranges under
+an immutable media grant. Redirects strip grant fields outside its origin/path
+prefix and never restore them in the same chain. Aether LoadOptions.httpHeaders
+stays empty, including secondary requests. Header-dependent playlists refused by
+the custom reader must be replaced by a server path; credentials must never be
+passed to an unrestricted engine HTTP loader. Tests exercise real redirects,
+seeks, clones, size probes, bounded responses and cancellation.
 
-Authenticated files use `ScopedAetherReader`: bounded range requests are made by
-Vela's URLSession transport under the immutable media grant. Redirects strip
-all grant fields outside the origin/path prefix and never restore them later in
-the same chain. Aether's own `LoadOptions.httpHeaders` stays empty, including for
-secondary requests. The real URLSession tests cover cross-host, path escape,
-encoded traversal and return redirects, oversized replies, real byte-reader
-seeks/size/clones, and cancellation before or during a native read. A header-dependent
-playlist that cannot work through a custom byte reader falls back to mpv.
-
-The engine owns display matching on its route. Vela's existing display matching
-is used only after mpv fallback. Engine instances are retained for reuse across
-loads; the muted hero preview has an independent instance. Detaching the view
-cancels loading, removes subscriptions and stops playback.
+Aether owns display matching. Main and muted hero preview sessions use separate
+reusable engine instances. Detaching stops playback and removes subscriptions.
+Upstream free-form logs are suppressed because they may contain grant URLs;
+Vela logs route, video format, audio delivery and cache counters without URLs.
 
 ## Distribution notices
 
-AetherEngine: LGPL-3.0 with App Store exception, unmodified source at
+AetherEngine: LGPL-3.0 with App Store exception, unmodified source:
 https://github.com/superuser404notfound/AetherEngine/tree/7.70.0 .
-FFmpegBuild: LGPL headers used at build time; its dynamic FFmpeg products are
-not embedded. Source and notices are at
-https://github.com/superuser404notfound/FFmpegBuild . The shipped FFmpeg provider
-is MPVKit's LGPL product, covered by its existing notices.
-LibDovi: MIT, including quietvoid and contributors' notice.
-Anime4K: MIT, Copyright (c) 2019-2021 bloc97.
+FFmpegBuild 3.15.0: dynamic LGPL FFmpeg provider and dependency notices:
+https://github.com/superuser404notfound/FFmpegBuild/tree/3.15.0 .
+LibDovi and Anime4K: MIT. The VelaPlayerLicenses resource bundle carries their
+texts and FFmpegBuild's LGPL, dav1d, zimg and libzvbi notices. FFmpegBuild's
+published build script documents its FFmpeg patches and GPL source exclusions.
 
-The upstream license texts and dependency notices ship in the
-VelaPlayerLicenses resource bundle. The existing MPVKit notices still apply
-to the fallback.
+## Historical device verification (before mpv removal)
 
-## Device verification
+The following observations describe the earlier dual-engine build and are not
+verification of the single-engine build.
+
 
 The Basement Apple TV has played Camp Crystal through the loopback AVPlayerLayer
 route with Vela's play/pause and ten-second seeks. The owner reported that the
