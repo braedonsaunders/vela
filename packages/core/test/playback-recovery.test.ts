@@ -45,7 +45,8 @@ test('session recovery coalesces, backs off, resumes VOD, waits for auth and can
     offline = false;
     await tick(15000);
     expect(requests.at(-1).positionSeconds).toBe(123);
-    expect(requests.at(-1).audioTrackId).toBe('fr');
+    expect(requests.at(-1).audioTrackId).toBeUndefined();
+    expect(tracks.at(-1).audioTrackId).toBe('fr');
     expect(tracks.at(-1).subtitleTrackId).toBe('en');
     expect(stops).toContain('s1');
     playback.recover(box.get().playback.sessionId);

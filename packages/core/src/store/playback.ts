@@ -162,7 +162,7 @@ export class Playback {
         ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id } : { titleId: target.id }),
         ...(position !== undefined ? { positionSeconds: position } : {}),
         ...(target.kind === 'title' && target.mediaSourceId ? { mediaSourceId: target.mediaSourceId } : {}),
-        ...(target.kind === 'title' && target.audioTrackId ? { audioTrackId: target.audioTrackId } : {}),
+        ...(target.kind === 'title' && target.audioTrackId && !this.recovering ? { audioTrackId: target.audioTrackId } : {}),
         client: this.session.client,
         idempotencyKey: intent.key,
       });
