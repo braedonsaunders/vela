@@ -27,6 +27,7 @@ export type { ReceiptKind } from './store/receipts';
 export type { AppearanceModel, DocEntryModel } from './appearance';
 export type { GuideApi, GuideChannel, GuideModel, GuideProgramme } from './live/guide';
 export type { SecretStore } from './session';
+export { cachedSecretStore } from './session/cached-store';
 export type { ServerKind } from './session/servers';
 export type { Credentials, MediaAccess, ServerAdapter } from './adapter';
 export { sendCommand } from './adapter/commands';
