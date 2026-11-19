@@ -18,6 +18,16 @@
 #include <unistd.h>
 #include <fcntl.h>
 static void *get_proc(void *ctx, const char *name) { (void)ctx; return (void *)eglGetProcAddress(name); }
+static Window root_ancestor(Display *display, Window window) {
+    for (int depth=0;depth<32;depth++) {
+        Window root,parent,*children=NULL; unsigned count=0;
+        if (!XQueryTree(display,window,&root,&parent,&children,&count)) return window;
+        if (children) XFree(children);
+        if (!parent || parent==root) return window;
+        window=parent;
+    }
+    return window;
+}
 static void wake(void *ctx) { int fd=*(int *)ctx; char c=1; (void)write(fd,&c,1); }
 int main(int argc, char **argv) {
     if (!strstr(avformat_license(),"LGPL") || !strstr(avfilter_license(),"LGPL") || !strstr(avutil_license(),"LGPL") || !strstr(swresample_license(),"LGPL") || !strstr(swscale_license(),"LGPL") || !strstr(avcodec_license(),"LGPL") || strstr(avcodec_configuration(),"--enable-gpl") || strstr(avcodec_configuration(),"--enable-nonfree")) return 11;
@@ -85,7 +95,7 @@ int main(int argc, char **argv) {
             if (!shown) XUnmapWindow(display,surface);
             else {
                 width=w; height=h; XMoveResizeWindow(display,surface,x,y,(unsigned)w,(unsigned)h);
-                XWindowChanges changes={.sibling=above,.stack_mode=Below};
+                XWindowChanges changes={.sibling=root_ancestor(display,above),.stack_mode=Below};
                 XConfigureWindow(display,surface,CWSibling|CWStackMode,&changes); XMapWindow(display,surface);
             }
             XFlush(display);

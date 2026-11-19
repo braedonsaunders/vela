@@ -7,7 +7,7 @@ function inScope(address, grant) {
     const path = decodeURIComponent(url.pathname);
     const prefix = decodeURIComponent(grant.pathPrefix || '/').replace(/\/$/, '');
     return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
-      && url.origin === origin.origin && !path.includes('\\') && !path.split('/').some(part => part === '..' || part === '.')
+      && url.origin === origin.origin && !path.includes('\\') && !/%(?:00|2e|2f|5c)/i.test(path) && !/[\x00-\x1f\x7f]/.test(path) && !path.split('/').some(part => part === '..' || part === '.')
       && (path === prefix || path.startsWith(prefix + '/'));
   } catch { return false; }
 }

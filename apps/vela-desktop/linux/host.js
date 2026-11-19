@@ -29,6 +29,7 @@ async function create({ window, emit }) {
     env: { ...process.env, LD_LIBRARY_PATH: path.join(root(), 'lib') }, stdio: ['pipe','pipe','ignore'] });
   let ipc, proxy, plan, source = '', seek = '', disposed = false, timer, sequence = 0, lastCommand = -1, pendingSeek, externalSubtitle, accessGeneration = 0, loadedAt = 0, appliedTracks = {}, activeEntry = null;
   let rect = { x:0, y:0, width:0, height:0, scaleFactor:1 }, chain = Promise.resolve();
+  const windowEvents=['move','resize','show','hide','minimize','restore','focus','blur','enter-full-screen','leave-full-screen'];
   const send = (event, value) => { if (!disposed) emit(event, value); };
   function bounds() {
     if (disposed || window.isDestroyed()) return;
@@ -37,7 +38,7 @@ async function create({ window, emit }) {
   }
   async function destroy() {
     if (disposed) return; disposed = true; clearInterval(timer); proxy?.close(); ipc?.close();
-    for (const event of ['move','resize','show','hide','minimize','restore']) window.removeListener(event, bounds);
+    for (const event of windowEvents) window.removeListener(event, bounds);
     child.stdin.destroy();
     if (child.exitCode === null && child.signalCode === null) {
       child.kill('SIGTERM');
@@ -64,7 +65,7 @@ async function create({ window, emit }) {
   const cmd = (...args) => ipc.command(...args);
   const get = name => cmd('get_property', name).catch(() => null);
   const enqueue = fn => { chain = chain.then(() => disposed ? undefined : fn()).catch(fallback); return chain; };
-  for (const event of ['move','resize','show','hide','minimize','restore']) window.on(event, bounds);
+  for (const event of windowEvents) window.on(event, bounds);
   let ticking = false;
   timer = setInterval(() => {
     if (!plan || !source || disposed || ticking) return;

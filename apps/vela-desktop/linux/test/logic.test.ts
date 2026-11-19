@@ -4,7 +4,7 @@ const { acceptPlan, physicalBounds } = require('../logic');
 test('access uses exact origin and path boundary, including decoded paths', () => {
   const grant = { origin:'https://media.example:443',pathPrefix:'/stream',headers:{} };
   expect(inScope('/stream/movie',grant)).toBe(true);
-  for (const url of ['/streaming/movie','https://elsewhere/stream/movie','http://media.example/stream/a','/stream/%2e%2e/private','/stream%2f..%2fprivate','https://u:p@media.example/stream/a'])
+  for (const url of ['/streaming/movie','https://elsewhere/stream/movie','http://media.example/stream/a','/stream/%2e%2e/private','/stream%2f..%2fprivate','/stream/%252e%252e/private','/stream/%2500','https://u:p@media.example/stream/a'])
     expect(inScope(url,grant)).toBe(false);
 });
 test('generations cannot regress within a session', () => {
