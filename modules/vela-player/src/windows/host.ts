@@ -8,6 +8,9 @@ let sequence = 0;
  * every ancestor so the page's chrome lies over the picture, and put them back on dispose. */
 function seeThrough(node: HTMLElement): () => void {
   const saved: [HTMLElement, string, string, string, string][] = [];
+  const backdrop = document.createElement('style');
+  backdrop.textContent = ':fullscreen::backdrop { background: transparent !important; }';
+  document.head.appendChild(backdrop);
   for (let element: HTMLElement | null = node; element; element = element.parentElement) {
     const style = element.style;
     saved.push([element, style.getPropertyValue('background-color'), style.getPropertyPriority('background-color'),
@@ -16,6 +19,7 @@ function seeThrough(node: HTMLElement): () => void {
     style.setProperty('background-image', 'none', 'important');
   }
   return () => {
+    backdrop.remove();
     for (const [element, color, colorPriority, image, imagePriority] of saved) {
       element.style.setProperty('background-color', color, colorPriority);
       element.style.setProperty('background-image', image, imagePriority);
