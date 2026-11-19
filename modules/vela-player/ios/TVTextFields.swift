@@ -18,11 +18,45 @@ enum TVTextFields {
         // is when UIKit sets it up again.
         hook(field, #selector(UIView.layoutSubviews)) { object in
             if let view = object as? UIView {
-                clearPlatter(in: view)
+                styleField(view)
             }
         }
+        hook(field, #selector(UIView.didMoveToWindow)) { object in
+            if let view = object as? UIView { styleField(view) }
+        }
+        hookFocus(field)
         #endif
     }
+
+    private static func styleField(_ view: UIView) {
+        if let field = view as? UITextField {
+            if field.borderStyle != .none { field.borderStyle = .none }
+            if field.background != nil { field.background = nil }
+            if field.disabledBackground != nil { field.disabledBackground = nil }
+            if field.backgroundColor != .clear { field.backgroundColor = .clear }
+        }
+        clearPlatter(in: view)
+    }
+
+    #if os(tvOS)
+    private static func hookFocus(_ cls: AnyClass) {
+        let selector = #selector(UIView.didUpdateFocus(in:with:))
+        guard let method = class_getInstanceMethod(cls, selector) else { return }
+        typealias Call = @convention(c) (AnyObject, Selector, UIFocusUpdateContext, UIFocusAnimationCoordinator) -> Void
+        let previous = unsafeBitCast(method_getImplementation(method), to: Call.self)
+        let block: @convention(block) (AnyObject, UIFocusUpdateContext, UIFocusAnimationCoordinator) -> Void = { object, context, coordinator in
+            previous(object, selector, context, coordinator)
+            guard let view = object as? UIView else { return }
+            styleField(view)
+            // UIKit rebuilds its focused platter during the focus animation, after layout.
+            coordinator.addCoordinatedAnimations({ styleField(view) }, completion: { styleField(view) })
+        }
+        let implementation = imp_implementationWithBlock(block)
+        if !class_addMethod(cls, selector, implementation, method_getTypeEncoding(method)) {
+            method_setImplementation(method, implementation)
+        }
+    }
+    #endif
 
     private static func clearPlatter(in view: UIView) {
         for child in view.subviews {
@@ -30,6 +64,8 @@ enum TVTextFields {
                 if effect.effect != nil {
                     effect.effect = nil
                 }
+                if effect.backgroundColor != .clear { effect.backgroundColor = .clear }
+                if effect.contentView.backgroundColor != .clear { effect.contentView.backgroundColor = .clear }
                 for layer in effect.subviews where layer !== effect.contentView {
                     layer.isHidden = true
                 }
