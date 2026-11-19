@@ -68,7 +68,8 @@
  "skins/catalog.json": [
   "d2596b55a1d892cf70ba64c65e55fba5ac68974be5b61f1853012c6e34865240",
   "379c637b15f95dabf8a492be8841a34e696ca951685932d2489ca7208cbd53c5",
-  "50e64affbd854b11ed8d3561539d9ff01cab1185ae7f84bfd9101a3dffda2c75"
+  "50e64affbd854b11ed8d3561539d9ff01cab1185ae7f84bfd9101a3dffda2c75",
+  "5cfea7d0a75e6b8c16beb21a5289e9ac73225b8db5d3dd286a7c9eb9feebac43"
  ],
  "skins/cinematic-doc/1.0.0/document.json": [
   "1dbd8c2bc3c7eecf4783b6115072c336bd7fedcab980c7b39868c59b29c2605b",
@@ -87,6 +88,12 @@
   "0359c3a55481d2cf14f48fe8358b99443f9dbf21ecc977bebfe2710392a8b1ed"
  ],
  "skins/cinematic-doc/1.0.1/preview.jpg": [
+  "cbd92269a0a1544f55dac37ab36d0834f6be76d7a92d5451f967d906dbe2e3aa"
+ ],
+ "skins/cinematic-doc/1.0.2/document.json": [
+  "5fb9d8024e2ff44cd83576a5f12c19e92eb25f0b2a22ef68466e830c2ada548a"
+ ],
+ "skins/cinematic-doc/1.0.2/preview.jpg": [
   "cbd92269a0a1544f55dac37ab36d0834f6be76d7a92d5451f967d906dbe2e3aa"
  ],
  "skins/index-data/1.0.0/document.json": [
@@ -182,6 +189,12 @@
   "a2e09f12ff7a3664369554333c06bef127e2ddbbf05f687d8572cd5a1e1c0210"
  ],
  "skins/jellytwin/1.0.1/preview.jpg": [
+  "7eafabb11a4f22b1d1ec0de59d3329ac14b549cb0b53447aaa9c88da8728fc41"
+ ],
+ "skins/jellytwin/1.0.10/document.json": [
+  "d152d8eaed528b1ee2b172964fac351254f06d672f99d8e43486558cdf017d42"
+ ],
+ "skins/jellytwin/1.0.10/preview.jpg": [
   "7eafabb11a4f22b1d1ec0de59d3329ac14b549cb0b53447aaa9c88da8728fc41"
  ],
  "skins/jellytwin/1.0.9/document.json": [
@@ -416,6 +429,51 @@
  "skins/kids/1.2.8/watch.svg": [
   "5ce3ed6c9b66e88c53b61a61aa2ba8036d88ccf338e0a08ca85601328b530c99"
  ],
+ "skins/kids/1.2.9/cloud.svg": [
+  "ff99b5f1166fd871f51e60c91e9bc1d2411074223b9e7a038b8e36b77561f4cc"
+ ],
+ "skins/kids/1.2.9/document.json": [
+  "d4c3ae4dc392f0c10c6a77c99e568ad33626807ecdd46f2c05a509fa7a0e9e02"
+ ],
+ "skins/kids/1.2.9/licences/OFL-nunito.txt": [
+  "580df76c95a1ec5ab878ceb25bb3d85c6a076804e9c970c8c6972aea775fdf65"
+ ],
+ "skins/kids/1.2.9/licences/README.md": [
+  "91cf66489f07f9a537e03bed6eaefe983c2c9fc80752d8952e76da1b52a76a33"
+ ],
+ "skins/kids/1.2.9/moon.svg": [
+  "135a35fd536a5af29eee05e52164ac160e2ea0474bc2d5bd8383c8dbb11474e2"
+ ],
+ "skins/kids/1.2.9/movies.svg": [
+  "fb21d8f97004d12f01fc7ea8c5e92ce07a06dead4a7d3bd651de0231fcff064d"
+ ],
+ "skins/kids/1.2.9/nunito.woff2": [
+  "2cafb09a1fb2f117e11297b4af7bd702fb3cb787110dc668a84d4efd8b6ce8e5"
+ ],
+ "skins/kids/1.2.9/preview.jpg": [
+  "2b90103180c9c37acb2235b81d67ad886ae8c5505065ec4c9a0e734b54a25614"
+ ],
+ "skins/kids/1.2.9/shows.svg": [
+  "d1c2470d2ece926f9382502dbae499f010402dab4a79100c5c766e6f52304205"
+ ],
+ "skins/kids/1.2.9/sky.svg": [
+  "802b414d3821123f6c971e50b14d8d373301dd91b80fd6b2185986b25f8fb98d"
+ ],
+ "skins/kids/1.2.9/sleepy.svg": [
+  "35a20c26ee7075da4d3a6a86cf964c5d4c0d261d8140b75c3a5040f1f4bc2534"
+ ],
+ "skins/kids/1.2.9/sparkle.svg": [
+  "beb3d607b4ce3386a09ef50c5696f3be6a43300a7a306900e38920f789263ee0"
+ ],
+ "skins/kids/1.2.9/star.svg": [
+  "854fda777ce15ac2828aae4621ecad0d8e8e24ac1a72a69da9ac689d5924f06c"
+ ],
+ "skins/kids/1.2.9/toys.svg": [
+  "b88f61a530cff247c474b3fa2a35cce6ef2b8b2f946526822917af2d66728115"
+ ],
+ "skins/kids/1.2.9/watch.svg": [
+  "5ce3ed6c9b66e88c53b61a61aa2ba8036d88ccf338e0a08ca85601328b530c99"
+ ],
  "skins/latenight/1.0.0/document.json": [
   "0fb611652f912b2a64e0d2da2b1dcd2015c4d8e82007db34caaba4e1b4166003",
   "d7b0d45acc60e99daf7bdd02de7bfa7c4b6360ad4e1a222e5eddf68e0a27154c",
@@ -508,6 +566,36 @@
  "skins/latenight/1.0.10/vt323.ttf": [
   "cf4de751ada78ceac033dbe16a687742939995b77bc2a052ae17a4957958594d"
  ],
+ "skins/latenight/1.0.11/document.json": [
+  "f2d9e8152e2370f6aa32a7d146ef808b1d29cfe3a4d457651a79b04b8047a4f4"
+ ],
+ "skins/latenight/1.0.11/licences/Michroma-OFL.txt": [
+  "33c39ce59a45bfb0dae3280e98bdb46be59d6d68efc62d4dc5fae90a26d2f393"
+ ],
+ "skins/latenight/1.0.11/licences/PermanentMarker-Apache-2.0.txt": [
+  "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+ ],
+ "skins/latenight/1.0.11/licences/README.md": [
+  "1e6ab4dc7b3391776b9711b5b86895da61d7e139f237f7c4c78182fd74a8d41b"
+ ],
+ "skins/latenight/1.0.11/licences/VT323-OFL.txt": [
+  "27d9af34210253e7ca1251fbace86c6f65b40031d6ce1a75493a1b2093631298"
+ ],
+ "skins/latenight/1.0.11/michroma.ttf": [
+  "b62301163788bc5b7f8fcac0b74b184e34e1827e577b499ecb724da065098f87"
+ ],
+ "skins/latenight/1.0.11/permanent-marker.ttf": [
+  "28f82c8a7943cb8e9d599f8554da1d4fc75dbcf69b9885ad6c0611d20c6946c5"
+ ],
+ "skins/latenight/1.0.11/preview.svg": [
+  "e36baf0f618eae2bd9934cc7a555620b390c6f691c83551f39d9cae03d0906b3"
+ ],
+ "skins/latenight/1.0.11/static.svg": [
+  "a408916c93a5a8971e55076925b95e0fe9ce86ac87e249702f6544178240f28c"
+ ],
+ "skins/latenight/1.0.11/vt323.ttf": [
+  "cf4de751ada78ceac033dbe16a687742939995b77bc2a052ae17a4957958594d"
+ ],
  "skins/latenight/1.0.2/document.json": [
   "4d21e0a660e84042787c5c220b145344d9b2a35d85fe7859123673c05b32762e"
  ],
@@ -561,6 +649,12 @@
  "skins/lounge/1.0.10/preview.jpg": [
   "92d8c115b015957665146be5349aed05057236341d642a40ba96efb4a430455a"
  ],
+ "skins/lounge/1.0.12/document.json": [
+  "a0e2ac091e017831d3dbcdf5fd86030fec163c960df287a8ca588417aed66366"
+ ],
+ "skins/lounge/1.0.12/preview.jpg": [
+  "92d8c115b015957665146be5349aed05057236341d642a40ba96efb4a430455a"
+ ],
  "skins/lounge/1.0.3/document.json": [
   "cf5c9325addb3df2d1a05ec0ffb653a185108305d85f236f535cd5c089add4b1"
  ],
@@ -595,6 +689,12 @@
   "3032ed5e26feb7c9966b08816a01f8460a4cf598088f1bbc1613ffb522b28299"
  ],
  "skins/marquee/1.0.8/preview.jpg": [
+  "58c5fc40b4c1af88556bf015e9a80dd2a522555ef0d6f3737a3eac801ad90a6f"
+ ],
+ "skins/marquee/1.0.9/document.json": [
+  "cdec04c62da1058cd1cdd1b1c1746dd2293732ee503caa47c7cdd1bfb62e24cd"
+ ],
+ "skins/marquee/1.0.9/preview.jpg": [
   "58c5fc40b4c1af88556bf015e9a80dd2a522555ef0d6f3737a3eac801ad90a6f"
  ],
  "skins/mochi-data/1.0.0/document.json": [
@@ -787,6 +887,69 @@
   "7ab94ce822b94ac650e5b8a17f588c5d7197e5574e4d1ea60126031f20e58335"
  ],
  "skins/mochi/1.0.1/vela-mark.svg": [
+  "b2055283516be4a53a2df70cab9ea36e1e8885619b48f05a92abf0f90ba5df4b"
+ ],
+ "skins/mochi/1.0.11/document.json": [
+  "b86a31f41c70c9621b98276d0e0357b08d44b82af46721143a654c74255fed97"
+ ],
+ "skins/mochi/1.0.11/dots.svg": [
+  "8b07d080af056e209a2d772f5dd7445f562f5ab36d6409adde3fefcb94b47ca6"
+ ],
+ "skins/mochi/1.0.11/fredoka.ttf": [
+  "2ba02e68b152868aef9ba28e24b3648c7d457fe6f25c761f2c2c53fb61a73fc8"
+ ],
+ "skins/mochi/1.0.11/licences/Fredoka-OFL.txt": [
+  "5c9e7eee5c6b25f4b05b8d53b2e470ea4962f9ced742d044a98f7d95d1375bab"
+ ],
+ "skins/mochi/1.0.11/licences/PixelifySans-OFL.txt": [
+  "b66ba46f511a851ab09998b5a5a9fdbb102545a3864cb993095e1745996873a7"
+ ],
+ "skins/mochi/1.0.11/mascot-happy.svg": [
+  "405e01fce9d728a877b7bdb713295b3b6b02e138c49e63868ed39f742de7047c"
+ ],
+ "skins/mochi/1.0.11/mascot-sad.svg": [
+  "c713555a3fa1736046e525f8080fe86744009c02f7a3d927917e62894e524147"
+ ],
+ "skins/mochi/1.0.11/mascot-sleepy.svg": [
+  "562d6572d8e26d19eddcd2d8bb86c3ac7c7a734047f97a09ca4ae14979d197c7"
+ ],
+ "skins/mochi/1.0.11/mascot-wow.svg": [
+  "194f6b4a152c0d81d61fd60c22d905e107c1578fa5f62cf533f5ddb885e4e5e6"
+ ],
+ "skins/mochi/1.0.11/petal.svg": [
+  "cd3ee1dc05e1d9876d8d44acb71b208e71ff86c349ccd9a70528c59ca552dfd8"
+ ],
+ "skins/mochi/1.0.11/pixelify-sans.ttf": [
+  "9ba86cd010a4de309d263ceff8e8044092c9db7efda869620cb9ff1c4389e8a5"
+ ],
+ "skins/mochi/1.0.11/preview.jpg": [
+  "2582eaf67cd4b4f0776a5a39e238079dcc859a19f04dae16bbb9f6043c798ac3"
+ ],
+ "skins/mochi/1.0.11/squiggle-lavender.svg": [
+  "00a57dc3e2890bd7c3df9fac3ed0f03b815c40b2642afe088fe520a76031bf34"
+ ],
+ "skins/mochi/1.0.11/squiggle-mint.svg": [
+  "5ea62fd3c84f1683c385abaccca1e0cc08b9f5c7026081509549398bfb0d5f36"
+ ],
+ "skins/mochi/1.0.11/squiggle-pink.svg": [
+  "6c427b9767745bed8a2821c6dca6ebdb5ecdeefc99082cb20e5985340a046724"
+ ],
+ "skins/mochi/1.0.11/tail-down.svg": [
+  "dded1b58da25a403e8964c899ed797dcb4f2d95ab0d2f609ce7aac3af3b45e9f"
+ ],
+ "skins/mochi/1.0.11/tail-small-butter.svg": [
+  "aabbc93ea4d6f512a289433e9381f43d85fc120c427dd2f432b5f776fd36902f"
+ ],
+ "skins/mochi/1.0.11/tail-small-up.svg": [
+  "41ada61633916aae2f1bdecf19baf0fd0affb7ddc1c856b06387dd222c082308"
+ ],
+ "skins/mochi/1.0.11/tail-small.svg": [
+  "98fb98e7d89730654a0d03d21c695469578980f494d748b36e14347b365313ab"
+ ],
+ "skins/mochi/1.0.11/tail-up.svg": [
+  "7ab94ce822b94ac650e5b8a17f588c5d7197e5574e4d1ea60126031f20e58335"
+ ],
+ "skins/mochi/1.0.11/vela-mark.svg": [
   "b2055283516be4a53a2df70cab9ea36e1e8885619b48f05a92abf0f90ba5df4b"
  ],
  "skins/mochi/1.0.9/document.json": [
