@@ -59,6 +59,39 @@ test('a responsive restore settles normally and stays signed in past the deadlin
   expect(h.state().phase).toBe('signed-in');
 });
 
+test('retry revalidates a timed-out session and coalesces repeated attempts', async () => {
+  const h = harness('validation');
+  const starting = h.auth.start();
+  await settle();
+  jest.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS);
+  await starting;
+  h.pending.resolve(h.saved);
+  await settle();
+  expect(h.state().phase).toBe('offline');
+  const retry = h.auth.retry();
+  expect(h.auth.retry()).toBe(retry);
+  await retry;
+  expect(h.state()).toMatchObject({ phase: 'signed-in', viewer: h.saved.viewer.name, error: '' });
+  expect(h.validations()).toBe(2);
+});
+
+test('an unsuccessful retry remains bounded and ignores late answers', async () => {
+  const h = harness('credentials');
+  const starting = h.auth.start();
+  await settle();
+  jest.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS);
+  await starting;
+  const retry = h.auth.retry();
+  await settle();
+  jest.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS);
+  await retry;
+  expect(h.state().phase).toBe('offline');
+  h.pending.resolve(h.saved);
+  await settle();
+  expect(h.state().phase).toBe('offline');
+  expect(h.validations()).toBe(0);
+});
+
 test('an unreadable saved server leaves startup even when recovery cannot read it either', async () => {
   const box = new StateBox({ auth: { ...initialAuth } } as VelaState);
   const session = { epoch: 0, onReset: () => {}, hasServer: () => { throw new Error('Stored server unavailable'); },
