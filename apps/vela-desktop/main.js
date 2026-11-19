@@ -3,7 +3,9 @@
 // keeps the window, opens links in the browser and checks Vela's own releases for updates.
 // It is standalone: the page is told so, and connects to any Ether, Jellyfin, Emby or Plex server.
 'use strict';
-const { app, BrowserWindow, Menu, dialog, net, protocol, screen, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, screen, session, shell } = require('electron');
+const { loadNativeHost, attachNativePlayer, attachFullscreen } = require('./native-player');
+const nativeAdapter = loadNativeHost();
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -22,6 +24,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 if (process.platform === 'linux') {
   // Chromium keeps WebGPU behind a switch on Linux; without it the page uses the server's other paths.
+  if (nativeAdapter) app.commandLine.appendSwitch('ozone-platform', 'x11');
   app.commandLine.appendSwitch('enable-unsafe-webgpu');
   app.commandLine.appendSwitch('enable-features', 'Vulkan,VaapiVideoDecoder');
 }
@@ -108,6 +111,8 @@ function createWindow() {
     show: false,
     title: 'Vela',
     backgroundColor: '#090b0e',
+    transparent: !!nativeAdapter,
+    fullscreenable: true,
     darkTheme: true,
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 14 } } : {}),
     autoHideMenuBar: true,
@@ -126,6 +131,17 @@ function createWindow() {
       devTools: !app.isPackaged || process.env.VELA_DEVTOOLS === '1',
     },
   });
+  const nativePlayer = nativeAdapter ? attachNativePlayer(window, nativeAdapter) : null;
+  window.__velaNativePlayer = nativePlayer;
+  const resetNative = () => {
+    nativePlayer?.receive({ kind: 'dispose', id: window.__velaPlayerId });
+    nativePlayer?.receive({ kind: 'media-access', origin: null });
+  };
+  window.webContents.on('render-process-gone', resetNative);
+  window.webContents.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => {
+    if (mainFrame && !_inPlace) resetNative();
+  });
+  window.on('closed', () => void nativePlayer?.dispose());
   if (place.maximized) window.maximize();
   window.once('ready-to-show', () => window.show());
   window.on('close', () => remember(window));
@@ -138,21 +154,8 @@ function createWindow() {
     event.preventDefault();
     openExternal(url);
   });
-  for (const event of ['enter-full-screen', 'leave-full-screen']) {
-    window.on(event, () => window.webContents.send('vela:fullscreen', window.isFullScreen()));
-  }
-  // Fullscreen comes from the page (the player's button or F) or the menu (F11, Ctrl+Cmd+F).
-  window.webContents.on('before-input-event', (event, input) => {
-    if (input.type === 'keyDown' && input.key === 'Escape' && window.isFullScreen()) {
-      event.preventDefault();
-      void window.webContents.executeJavaScript('document.fullscreenElement ? document.exitFullscreen().then(() => true) : false')
-        .then(exited => { if (!exited && !window.isDestroyed()) window.setFullScreen(false); }).catch(() => window.setFullScreen(false));
-    }
-    if (input.type === 'keyDown' && input.key === 'F11' && process.platform !== 'darwin') {
-      event.preventDefault();
-      window.setFullScreen(!window.isFullScreen());
-    }
-  });
+  const detachFullscreen = attachFullscreen(window);
+  window.once('closed', detachFullscreen);
   void window.loadURL(START);
   return window;
 }
@@ -238,6 +241,28 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.whenReady().then(() => {
     protocol.handle(SCHEME, serve);
+    const trusted = event => event.senderFrame === event.sender.mainFrame
+      && event.senderFrame?.url.startsWith(START);
+    ipcMain.on('vela:native-available', event => { event.returnValue = trusted(event) && !!nativeAdapter; });
+    ipcMain.on('vela:native-message', (event, message) => {
+      if (!trusted(event) || !nativeAdapter) return;
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (!window || !message || typeof message !== 'object') return;
+      if (message.kind === 'capabilities') {
+        Promise.resolve().then(() => nativeAdapter.capabilities()).then(value => {
+          if (!window.isDestroyed()) event.sender.send('vela:native-event', { kind: 'capabilities', requestId: message.requestId, value });
+        }).catch(() => {
+          if (!window.isDestroyed()) event.sender.send('vela:native-event', { kind: 'capabilities', requestId: message.requestId, error: true });
+        });
+      } else if (message.kind === 'diagnostics') {
+        window.__velaNativePlayer?.diagnostics().then(value => {
+          if (!window.isDestroyed()) event.sender.send('vela:native-event', { kind: 'diagnostics', requestId: message.requestId, value });
+        }).catch(() => {});
+      } else {
+        if (message.kind === 'mount') window.__velaPlayerId = message.id;
+        void window.__velaNativePlayer?.receive(message);
+      }
+    });
     // Only fullscreen, and keeping the screen awake while a film plays, are ever granted to the page.
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'fullscreen' || permission === 'screen-wake-lock'));
     Menu.setApplicationMenu(menu());

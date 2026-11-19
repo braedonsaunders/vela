@@ -5,7 +5,7 @@ import AVFoundation
 import AVKit
 import Combine
 import CoreImage
-import UIKit
+import Foundation
 
 @MainActor
 final class PlaybackClient {
@@ -19,7 +19,7 @@ final class PlaybackClient {
     var onProperty: ((String, Any?) -> Void)?
     var onEvent: ((Event) -> Void)?
     var onBackend: ((String) -> Void)?
-    private weak var host: UIView?
+    private let rendering: PlaybackRendering
     private let preview: Bool
     private let isLive: Bool
     private let remoteHLS: Bool
@@ -28,7 +28,6 @@ final class PlaybackClient {
     private let retainPausedPicture: Bool
     private var frameOutput: AVPlayerItemVideoOutput?
     private weak var outputItem: AVPlayerItem?
-    private var frozenPicture: UIView?
     private var reportedFirstFrame = false
     private static let frameContext = CIContext()
     private var failed = false
@@ -36,7 +35,6 @@ final class PlaybackClient {
     private var readRetryStarted: Date?
     private var readRetryAttempt = 0
     private var engine: AetherEngine?
-    private var surface: AetherPlayerView?
     private var subscriptions = Set<AnyCancellable>()
     private var liveRateObservation: NSKeyValueObservation?
     private var liveItemObservation: NSKeyValueObservation?
@@ -55,17 +53,15 @@ final class PlaybackClient {
     private var muted: Bool
     private var audio: Int?
     private var subtitle: Int?
-    private let captions = UILabel()
-    private var bitmapCaptions: [Int: UIImageView] = [:]
     // Idle engines are reused across titles. A mounted client leases its engine exclusively,
     // including while a paused outgoing picture overlaps the next view.
     private static var primaryEngine: AetherEngine?
     private static var previewEngine: AetherEngine?
 
-    init(host: UIView, preview: Bool = false, paused: Bool = false, muted: Bool = false,
+    init(rendering: PlaybackRendering, preview: Bool = false, paused: Bool = false, muted: Bool = false,
          loops: Bool = false, aspectFill: Bool = false, isLive: Bool = false, remoteHLS: Bool = false, retainPausedPicture: Bool = false) {
         self.retainPausedPicture = retainPausedPicture
-        self.host = host
+        self.rendering = rendering
         self.preview = preview
         self.paused = paused
         self.muted = muted
@@ -76,10 +72,7 @@ final class PlaybackClient {
     }
 
     func layout() {
-        guard let host else { return }
-        frozenPicture?.frame = host.bounds
-        surface?.frame = host.bounds
-        surface?.setNeedsLayout()
+        rendering.layout()
     }
 
     func value(_ name: String) -> Any? { properties[name] }
@@ -107,7 +100,7 @@ final class PlaybackClient {
         if name == "mute" { muted = flag }
         if name == "pause" {
             if flag && retainPausedPicture { freezePicture() }
-            if !flag { frozenPicture?.removeFromSuperview(); frozenPicture = nil }
+            if !flag { rendering.clearFrozenPicture() }
             flag ? engine?.pause() : engine?.play()
         }
         if name == "mute" { engine?.volume = flag ? 0 : volume }
@@ -142,9 +135,8 @@ final class PlaybackClient {
             self.liveRateObservation = nil
             self.liveItemObservation = nil
             self.subscriptions.removeAll()
-            self.surface?.removeFromSuperview()
+            self.rendering.removeSurface()
             do {
-                guard let host = self.host else { throw PlaybackError("Missing native video host") }
                 // Upstream messages may contain media URLs. Keep grant URLs out of logs.
                 EngineLog.handler = { _ in }
                 let preview = self.preview
@@ -153,26 +145,10 @@ final class PlaybackClient {
                 if preview { Self.previewEngine = nil } else { Self.primaryEngine = nil }
                 self.engine = engine
                 engine.maximumSubtitleOffsetSeconds = 0
-                let view = AetherPlayerView(frame: host.bounds)
-                view.isUserInteractionEnabled = false
-                view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
                 engine.videoGravity = self.aspectFill ? .resizeAspectFill : .resizeAspect
-                host.addSubview(view)
-                self.surface = view
-                engine.bind(view: view)
+                try self.rendering.bind(engine: engine)
                 self.layout()
                 engine.volume = self.muted ? 0 : self.volume
-                self.captions.textColor = .white
-                self.captions.font = .boldSystemFont(ofSize: 30)
-                self.captions.textAlignment = .center
-                self.captions.numberOfLines = 0
-                self.captions.layer.shadowColor = UIColor.black.cgColor
-                self.captions.layer.shadowOpacity = 1
-                self.captions.layer.shadowRadius = 3
-                // Aether attaches its video CALayer after load, above existing
-                // subviews. Captions must remain above it even inside the picture.
-                self.captions.layer.zPosition = 2
-                view.addSubview(self.captions)
                 engine.diagnostics.$sessionCacheStatus.removeDuplicates().sink { [weak self] status in
                     self?.logCacheStatus(status)
                 }.store(in: &self.subscriptions)
@@ -255,19 +231,7 @@ final class PlaybackClient {
                 // A guide/hero picture never owns the HDMI mode. Disabling matching alone
                 // still permits criteria writes in Aether; host ownership suppresses all writes.
                 if preview { opts.displayCriteriaOwner = .host }
-                #if os(tvOS)
-                let manager = host.window?.avDisplayManager
-                self.displayCriteriaObservation = manager?.observe(\.preferredDisplayCriteria, options: [.new]) { manager, _ in
-                    print("[vela-display] criteriaChanged preview=\(preview) present=\(manager.preferredDisplayCriteria != nil)")
-                }
-                self.displayObservers.forEach(NotificationCenter.default.removeObserver)
-                self.displayObservers = [NSNotification.Name.AVDisplayManagerModeSwitchStart, NSNotification.Name.AVDisplayManagerModeSwitchEnd].map { name in
-                    NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
-                        print("[vela-display] event=\(name.rawValue) preview=\(preview)")
-                    }
-                }
-                print("[vela-display] load preview=\(preview) match=\(opts.matchContentEnabled) owner=\(preview ? "host" : "engine") matching=\(manager?.isDisplayCriteriaMatchingEnabled ?? false) criteria=\(manager?.preferredDisplayCriteria != nil) switching=\(manager?.isDisplayModeSwitchInProgress ?? false)")
-                #endif
+                self.rendering.configureLoad(options: &opts, preview: preview)
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))
                 guard !self.dead, !self.failed else { return }
@@ -284,10 +248,6 @@ final class PlaybackClient {
                         }
                     }
                 }
-                #if os(tvOS)
-                print("[vela-display] ready preview=\(preview) criteria=\(host.window?.avDisplayManager.preferredDisplayCriteria != nil) switching=\(host.window?.avDisplayManager.isDisplayModeSwitchInProgress ?? false)")
-                #endif
-                print("[vela-player] Aether ready: route=\(engine.videoRoute) format=\(engine.videoFormat) audio=\(engine.audioDelivery) AVPlayerLayer=\(engine.nativePlayerLayer != nil) surface=\(view.bounds.size) videoRect=\(engine.nativePlayerLayer?.videoRect ?? .zero) external=\(engine.currentAVPlayer?.isExternalPlaybackActive ?? false)")
                 self.emit("track-list", engine.audioTracks.map { self.track($0, type: "audio") } + engine.subtitleTracks.map { self.track($0, type: "sub") })
                 self.publishVideoParams(engine, format: engine.videoFormat)
                 self.onEvent?(.fileLoaded)
@@ -339,45 +299,7 @@ final class PlaybackClient {
          "lang": track.language ?? "und", "codec": track.codec, "external": track.isExternal]
     }
     private func drawCaptions() {
-        guard let engine, let surface else { return }
-        let time = engine.clock.sourceTime
-        let cues = engine.subtitleCues.filter { $0.startTime <= time && time < $0.endTime }
-        let imageIDs = Set(cues.compactMap { cue -> Int? in
-            if case .image = cue.body { return cue.id }; return nil
-        })
-        for id in Array(bitmapCaptions.keys) where !imageIDs.contains(id) {
-            bitmapCaptions.removeValue(forKey: id)?.removeFromSuperview()
-        }
-        let coded = CGSize(width: Int(engine.sourceVideoWidth), height: Int(engine.sourceVideoHeight))
-        let display = engine.softwareDisplaySize ?? coded
-        let rect = engine.nativePlayerLayer?.videoRect ?? AVMakeRect(aspectRatio: display, insideRect: surface.bounds)
-        for cue in cues {
-            guard case .image(let image) = cue.body else { continue }
-            let view = bitmapCaptions[cue.id] ?? UIImageView()
-            if bitmapCaptions[cue.id] == nil {
-                view.layer.zPosition = 1
-                surface.addSubview(view)
-                bitmapCaptions[cue.id] = view
-            }
-            view.image = UIImage(cgImage: image.cgImage)
-            let canvas = image.canvasSize == .zero ? coded : image.canvasSize
-            guard canvas.width > 0, coded.width > 0, coded.height > 0 else { continue }
-            let canvasHeight = canvas.height * coded.width / canvas.width
-            let canvasRect = CGRect(x: rect.minX, y: rect.midY - rect.height * canvasHeight / coded.height / 2,
-                                    width: rect.width, height: rect.height * canvasHeight / coded.height)
-            view.frame = CGRect(x: canvasRect.minX + image.position.minX * canvasRect.width,
-                                y: canvasRect.minY + image.position.minY * canvasRect.height,
-                                width: image.position.width * canvasRect.width, height: image.position.height * canvasRect.height)
-        }
-        let text = cues.compactMap { cue -> String? in
-            switch cue.body {
-            case .text(let text): return text
-            case .richText(let runs): return runs.map(\.text).joined()
-            case .image: return nil
-            }
-        }.joined(separator: "\n")
-        captions.text = text
-        captions.frame = CGRect(x: 40, y: surface.bounds.height * 0.7, width: max(0, surface.bounds.width - 80), height: surface.bounds.height * 0.25)
+        if let engine { rendering.drawCaptions(engine: engine) }
     }
     private func failPath() {
         guard !dead, !failed, !reconnecting else { return }
@@ -424,13 +346,11 @@ final class PlaybackClient {
         liveRateObservation = nil
         liveItemObservation = nil
         subscriptions.removeAll()
-        bitmapCaptions.values.forEach { $0.removeFromSuperview() }
-        bitmapCaptions.removeAll()
+
         engine?.stop()
         if preview { Self.previewEngine = engine } else { Self.primaryEngine = engine }
         engine = nil
-        surface?.removeFromSuperview()
-        surface = nil
+        rendering.removeSurface()
         print("[vela-player] AetherEngine refused path; requesting server recovery")
         onEvent?(.endFile(reason: 4, error: -1))
     }
@@ -446,26 +366,13 @@ final class PlaybackClient {
     }
 
     private func freezePicture() {
-        guard frozenPicture == nil, let host else { return }
+        var frame: CGImage?
         if let item = outputItem, let buffer = frameOutput?.copyPixelBuffer(forItemTime: item.currentTime(), itemTimeForDisplay: nil) {
             let image = CIImage(cvPixelBuffer: buffer)
-            let scale = min(1, 1280 / image.extent.width)
-            let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-            if let frame = Self.frameContext.createCGImage(scaled, from: scaled.extent) {
-                let still = UIImageView(image: UIImage(cgImage: frame))
-                still.contentMode = aspectFill ? .scaleAspectFill : .scaleAspectFit
-                still.backgroundColor = .black
-                still.clipsToBounds = true
-                frozenPicture = still
-            }
+            let scaled = image.transformed(by: CGAffineTransform(scaleX: min(1, 1280 / image.extent.width), y: min(1, 1280 / image.extent.width)))
+            frame = Self.frameContext.createCGImage(scaled, from: scaled.extent)
         }
-        let decoded = frozenPicture != nil
-        if frozenPicture == nil { frozenPicture = surface?.snapshotView(afterScreenUpdates: false) }
-        guard let still = frozenPicture else { return }
-        print("[vela-preview] retained decoded=\(decoded)")
-        still.frame = host.bounds
-        still.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        host.addSubview(still)
+        rendering.freezePicture(frame: frame, aspectFill: aspectFill)
     }
 
     func destroy() {
@@ -473,8 +380,7 @@ final class PlaybackClient {
         displayObservers.forEach(NotificationCenter.default.removeObserver)
         displayObservers.removeAll()
         dead = true
-        frozenPicture?.removeFromSuperview()
-        frozenPicture = nil
+        rendering.clearFrozenPicture()
         if let output = frameOutput { outputItem?.remove(output) }
         frameOutput = nil
         outputItem = nil
@@ -483,13 +389,11 @@ final class PlaybackClient {
         liveRateObservation = nil
         liveItemObservation = nil
         subscriptions.removeAll()
-        bitmapCaptions.values.forEach { $0.removeFromSuperview() }
-        bitmapCaptions.removeAll()
+
         engine?.stop()
         if preview { Self.previewEngine = engine } else { Self.primaryEngine = engine }
         engine = nil
-        surface?.removeFromSuperview()
-        surface = nil
+        rendering.removeSurface()
         onProperty = nil
         onEvent = nil
     }

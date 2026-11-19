@@ -1,12 +1,14 @@
-import type { MediaAccess, PlayerCapabilities } from '@vela/player-api';
+import type { MediaAccess, PlayerCapabilities, VelaPlayerProps } from '@vela/player-api';
 
 type Message = { kind: string; [key: string]: unknown };
 type WebView = { postMessage(message: unknown): void; addEventListener(type: 'message', listener: (event: MessageEvent) => void): void; removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void };
 function transport(): WebView | undefined {
   if (typeof window === 'undefined') return;
-  const host = window as unknown as { __VELA_WINDOWS__?: { version: number }; chrome?: { webview?: WebView } };
+  const host = window as unknown as { __VELA_NATIVE_PLAYER__?: WebView & { version: number }; __VELA_WINDOWS__?: { version: number }; chrome?: { webview?: WebView } };
+  if (host.__VELA_NATIVE_PLAYER__?.version === 1) return host.__VELA_NATIVE_PLAYER__;
   return host.__VELA_WINDOWS__?.version === 1 ? host.chrome?.webview : undefined;
 }
+export const isDesktopNativeHost = () => typeof window !== 'undefined' && !!(window as unknown as { __VELA_NATIVE_PLAYER__?: unknown }).__VELA_NATIVE_PLAYER__;
 export const isWindowsHost = () => !!transport();
 export function send(message: Message) { transport()?.postMessage(message); }
 export function listen(listener: (message: Message) => void): () => void {
@@ -24,18 +26,48 @@ export function windowsCapabilities(): Promise<PlayerCapabilities> {
     const timer = setTimeout(() => { unsubscribe(); reject(new Error('Windows player capabilities timed out')); }, 10000);
     const unsubscribe = listen(message => {
       if (message.kind !== 'capabilities' || message.requestId !== requestId) return;
-      clearTimeout(timer); unsubscribe(); resolve(message.value as PlayerCapabilities);
+      clearTimeout(timer); unsubscribe();
+      if (message.error) reject(new Error('Native player capabilities unavailable'));
+      else resolve(message.value as PlayerCapabilities);
     });
     send({ kind: 'capabilities', requestId });
   });
 }
 let accessRevision = 0;
+let authorization: { access: MediaAccess; generation: number; ready: Promise<boolean> } | null = null;
+
+/** Private adapter attachment; native code validates scope again before use. */
+export async function desktopMediaAuthorization(props: VelaPlayerProps) {
+  const current = authorization;
+  const generation = accessRevision;
+  const plan = props.plan;
+  if (!plan) return {};
+  const planId = `${plan.sessionId}:${plan.sourceGeneration}:${plan.seekGeneration}:${plan.revision}:${plan.selectedPathId}`;
+  try {
+    const headers = await current?.ready;
+    if (generation !== accessRevision) return null;
+    const path = plan.paths.find(path => path.id === plan.selectedPathId);
+    if (headers && path?.transport === 'hls' && path.readiness === 'ready' && path.url) {
+      if (!current?.access.nativeURL) throw new Error('Native authorization unavailable');
+      const authorized = await current.access.nativeURL(path.url);
+      if (generation !== accessRevision) return null;
+      return { nativeMedia: { planId, source: path.url, authorized, generation }, mediaAuthorization: { planId, generation, ok: true } };
+    }
+    return { mediaAuthorization: { planId, generation, ok: true } };
+  } catch {
+    return generation === accessRevision ? { mediaAuthorization: { planId, generation, ok: false } } : null;
+  }
+}
 export function setWindowsMediaAccess(access: MediaAccess | null): void {
   const revision = ++accessRevision;
   if (!isWindowsHost()) return;
-  send({ kind: 'media-access', origin: null, pathPrefix: null, headers: {} });
+  authorization = null;
+  send({ kind: 'media-access', origin: null, pathPrefix: null, headers: {}, generation: revision });
   if (!access) return;
-  void access.headers().then(headers => {
-    if (revision === accessRevision) send({ kind: 'media-access', origin: access.origin, pathPrefix: access.pathPrefix, headers });
-  }).catch(() => { /* Keep the native credential scope cleared on failure. */ });
+  const ready = access.headers().then(headers => {
+    if (revision === accessRevision) send({ kind: 'media-access', origin: access.origin, pathPrefix: access.pathPrefix, headers, generation: revision });
+    return Object.keys(headers).length > 0;
+  });
+  authorization = { access, generation: revision, ready };
+  void ready.catch(() => { /* Keep native credentials revoked on failure. */ });
 }

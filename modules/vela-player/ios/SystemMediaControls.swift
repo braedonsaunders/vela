@@ -7,29 +7,7 @@ import Foundation
 import MediaPlayer
 import UIKit
 
-/// What the owner is asked to do.
-enum SystemMediaCommand {
-    case play
-    case pause
-    case toggle
-    case skip(seconds: Double)
-    case seek(to: Double)
-}
-
-/// What the owner says about itself for Now Playing.
-struct NowPlayingState: Equatable {
-    var title: String
-    var subtitle: String?
-    var artworkURL: URL?
-    var duration: Double?
-    var position: Double
-    var playing: Bool
-}
-
-protocol SystemMediaOwner: AnyObject {
-    func systemMediaCommand(_ command: SystemMediaCommand)
-}
-
+@MainActor
 final class SystemMediaControls {
     static let shared = SystemMediaControls()
 
