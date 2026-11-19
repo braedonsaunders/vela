@@ -2,6 +2,9 @@
 // Video is what VideoToolbox decodes in hardware (AetherEngine's software decoders could take the rest, but
 // not at 4K in real time on an Apple TV); audio and subtitles are all decoded on the device.
 import AVFoundation
+#if os(macOS)
+import AppKit
+#endif
 import CoreMedia
 import VideoToolbox
 
@@ -21,9 +24,13 @@ enum PlayerCapabilities {
             "aac", "ac3", "eac3", "dts", "truehd", "mlp", "flac", "alac", "opus", "vorbis", "mp3", "mp2",
             "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_bluray", "pcm_dvd",
         ]
+        #if os(macOS)
+        let hdr: [String] = NSScreen.screens.contains { $0.maximumPotentialExtendedDynamicRangeColorComponentValue > 1 } ? ["hdr10", "hlg"] : []
+        #else
         let modes = AVPlayer.availableHDRModes
         let hdrModes: [(AVPlayer.HDRMode, String)] = [(.hdr10, "hdr10"), (.hlg, "hlg"), (.dolbyVision, "dv")]
         let hdr = hdrModes.filter { modes.contains($0.0) }.map(\.1)
+        #endif
         return [
             // What the server's HLS may carry when an original cannot be played.
             "containers": ["mp4"],

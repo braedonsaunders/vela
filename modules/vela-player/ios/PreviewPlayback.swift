@@ -3,7 +3,6 @@
 // it is wanted (active, on screen, unexpired) and releases player at once when any of those ends. It fills
 // its box, cropped, as the web preview does (object-fit: cover).
 import Foundation
-import UIKit
 
 @MainActor
 final class PreviewPlayback {
@@ -30,7 +29,7 @@ final class PreviewPlayback {
     var onState: ((String) -> Void)?
     var onFailure: ((String) -> Void)?
 
-    private weak var host: UIView?
+    private weak var host: PlaybackHost?
     private var player: PlaybackClient?
     private var playing: Source?
     private var expiry: Timer?
@@ -40,7 +39,7 @@ final class PreviewPlayback {
     private var offsetApplied = false
     private var startPosition = 0.0
 
-    init(host: UIView) {
+    init(host: PlaybackHost) {
         self.host = host
     }
 
@@ -84,7 +83,7 @@ final class PreviewPlayback {
             return
         }
         guard let host else { return }
-        let client = PlaybackClient(host: host, preview: true, paused: paused, muted: true,
+        let client = PlaybackClient(rendering: host.makeRendering(retainPausedPicture: false), preview: true, paused: paused, muted: true,
                                     loops: source.loop, aspectFill: true)
         player = client
         playing = source
