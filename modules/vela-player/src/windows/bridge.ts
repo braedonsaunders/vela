@@ -4,9 +4,11 @@ type Message = { kind: string; [key: string]: unknown };
 type WebView = { postMessage(message: unknown): void; addEventListener(type: 'message', listener: (event: MessageEvent) => void): void; removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void };
 function transport(): WebView | undefined {
   if (typeof window === 'undefined') return;
-  const host = window as unknown as { __VELA_WINDOWS__?: { version: number }; chrome?: { webview?: WebView } };
+  const host = window as unknown as { __VELA_NATIVE_PLAYER__?: WebView & { version: number }; __VELA_WINDOWS__?: { version: number }; chrome?: { webview?: WebView } };
+  if (host.__VELA_NATIVE_PLAYER__?.version === 1) return host.__VELA_NATIVE_PLAYER__;
   return host.__VELA_WINDOWS__?.version === 1 ? host.chrome?.webview : undefined;
 }
+export const isDesktopNativeHost = () => typeof window !== 'undefined' && !!(window as unknown as { __VELA_NATIVE_PLAYER__?: unknown }).__VELA_NATIVE_PLAYER__;
 export const isWindowsHost = () => !!transport();
 export function send(message: Message) { transport()?.postMessage(message); }
 export function listen(listener: (message: Message) => void): () => void {

@@ -43,3 +43,17 @@ if (platform === 'mac') {
   });
 }
 ipcRenderer.on('vela:find', () => window.dispatchEvent(new Event('vela:find')));
+
+// Expose only the fixed playback transport, never ipcRenderer itself.
+if (ipcRenderer.sendSync('vela:native-available')) {
+  const listeners = new Set();
+  ipcRenderer.on('vela:native-event', (_event, data) => {
+    for (const listener of listeners) listener({ data });
+  });
+  contextBridge.exposeInMainWorld('__VELA_NATIVE_PLAYER__', {
+    version: 1,
+    postMessage: message => ipcRenderer.send('vela:native-message', message),
+    addEventListener: (type, listener) => { if (type === 'message') listeners.add(listener); },
+    removeEventListener: (type, listener) => { if (type === 'message') listeners.delete(listener); },
+  });
+}

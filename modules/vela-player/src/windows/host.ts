@@ -1,5 +1,5 @@
 import type { VelaPlayerProps, WebPlayerHost } from '@vela/player-api';
-import { listen, send } from './bridge';
+import { isDesktopNativeHost, listen, send } from './bridge';
 import { windowsSnapshot } from './snapshot';
 
 let sequence = 0;
@@ -33,14 +33,34 @@ function serializable(props: VelaPlayerProps) {
   const command = props.command?.type === 'fullscreen' ? undefined : props.command;
   return { plan: props.plan, command, active: props.active, metadata: props.metadata, serverError: props.serverError };
 }
-export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerProps): WebPlayerHost {
+export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerProps, fallback?: (props: VelaPlayerProps) => WebPlayerHost): WebPlayerHost {
   const id = `windows-player-${++sequence}`;
   let props = initial;
   const restore = seeThrough(node);
+  let browser: WebPlayerHost | undefined;
+  let disposed = false;
+  const bounds = () => {
+    if (!isDesktopNativeHost() || disposed || browser) return;
+    const rect = node.getBoundingClientRect();
+    send({ kind: 'bounds', id, bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scaleFactor: window.devicePixelRatio } });
+  };
+  const observer = new ResizeObserver(bounds);
+  observer.observe(node);
+  window.addEventListener('resize', bounds);
+  window.addEventListener('scroll', bounds, true);
+  document.addEventListener('fullscreenchange', bounds);
   let fullscreenId = initial.command?.type === 'fullscreen' ? initial.command.id : 0;
   const unsubscribe = listen(message => {
     if (message.kind !== 'event' || message.id !== id) return;
+    if (browser || disposed) return;
     switch (message.event) {
+      case 'fallback':
+        if (fallback) {
+          send({ kind: 'dispose', id });
+          restore();
+          browser = fallback(props);
+        }
+        break;
       case 'snapshot': props.onSnapshot?.(windowsSnapshot(message.value, props)); break;
       case 'error': props.onError?.(message.value as Parameters<NonNullable<VelaPlayerProps['onError']>>[0]); break;
       case 'command': props.onCommand?.(message.value as Parameters<NonNullable<VelaPlayerProps['onCommand']>>[0]); break;
@@ -51,9 +71,11 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
     }
   });
   send({ kind: 'mount', id, props: serializable(props) });
+  bounds();
   return {
     update(next) {
       props = next;
+      if (browser) { browser.update(next); return; }
       if (next.command?.type === 'fullscreen' && next.command.id > fullscreenId) {
         fullscreenId = next.command.id;
         toggleFullscreen();
@@ -61,6 +83,12 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
       send({ kind: 'update', id, props: serializable(props) });
     },
     dispose() {
+      disposed = true;
+      browser?.dispose();
+      observer.disconnect();
+      window.removeEventListener('resize', bounds);
+      window.removeEventListener('scroll', bounds, true);
+      document.removeEventListener('fullscreenchange', bounds);
       unsubscribe();
       restore();
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});

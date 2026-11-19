@@ -1,7 +1,8 @@
 # Desktop native player bridge v1
 
 Electron main loads `./mac/host.js` on Darwin or `./linux/host.js` on Linux.
-The module exports synchronous `available(): boolean` and async
+The module exports synchronous `available(): boolean`, async
+`capabilities(): Promise<PlayerCapabilities>` and async
 `create({ window, emit }): Promise<Host>`. `window` is the BrowserWindow;
 `emit(event, value)` delivers player events. No host is advertised unless its
 binary and dependencies are available. The renderer retains the browser engine.
