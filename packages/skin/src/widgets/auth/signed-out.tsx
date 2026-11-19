@@ -3,7 +3,7 @@
 // and its actions behind `signIn`, `startQuick`, `cancelQuick` and `goSecure`. A signed-out Plex
 // server has no password or code of its own: its page is Connect, opened on that server.
 import { msg } from '@vela/core';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Linking, Platform, View } from 'react-native';
 import type { Action } from '../../../../protocol/skin';
 import { HostContext, type SkinHost } from '../../host';
@@ -14,6 +14,7 @@ import type { ServerActions, ServersView } from './connect/model';
 import { AuthFormProvider, useAuthFields } from './form';
 import type { AuthStage, AuthView } from './model';
 import { Stage } from './stage';
+import { Pill } from '../common/controls';
 
 /** The session's sign-in state for the selected server (packages/core, `s.auth`). */
 export interface SessionAuth {
@@ -68,6 +69,13 @@ function quickError(auth: SessionAuth): string {
 
 export function SignedOut(props: SignedOutProps) {
   const { auth, servers, serverActions, host } = props;
+  const [connecting, setConnecting] = useState(false);
+  useEffect(() => setConnecting(false), [auth.serverId]);
+  if (connecting) return (
+    <HostContext.Provider value={host}>
+      <Stage><Connect servers={servers} actions={serverActions} onClose={() => setConnecting(false)} /></Stage>
+    </HostContext.Provider>
+  );
   // A signed-out Plex server signs in by linking, and a standalone app with no server starts by
   // adding one: both are Connect.
   if (auth.phase === 'signed-out' && (auth.serverKind === 'plex' || auth.serverKind === '')) {
@@ -79,10 +87,10 @@ export function SignedOut(props: SignedOutProps) {
       </HostContext.Provider>
     );
   }
-  return <DocumentSignIn {...props} />;
+  return <DocumentSignIn {...props} onConnect={() => { void props.actions.cancelQuick(); setConnecting(true); }} />;
 }
 
-function DocumentSignIn({ host, route, auth, actions, art }: SignedOutProps) {
+function DocumentSignIn({ host, route, auth, actions, art, onConnect }: SignedOutProps & { onConnect(): void }) {
   const fields = useAuthFields();
   const [busy, setBusy] = useState(false);
   const [secure, setSecure] = useState({ busy: false, error: '' });
@@ -153,6 +161,11 @@ function DocumentSignIn({ host, route, auth, actions, art }: SignedOutProps) {
     <AuthFormProvider values={fields.values} edit={fields.edit} submit={signIn}>
       <View style={{ flex: 1 }}>
         <SkinRoute host={signedOutHost} node={route} />
+        {auth.phase === 'signed-out' ? <HostContext.Provider value={signedOutHost}>
+          <View style={{ paddingHorizontal: 16, paddingBottom: Math.max(16, host.viewport.insets.bottom) }}>
+            <Pill label={msg('connect.otherServer')} testID="signin-other-server" onPress={onConnect} />
+          </View>
+        </HostContext.Provider> : null}
       </View>
     </AuthFormProvider>
   );
