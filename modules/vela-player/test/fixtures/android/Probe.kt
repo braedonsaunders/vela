@@ -17,6 +17,8 @@ fun main() {
   val hdrDecoder = VideoDecoderFacts("hevc", "hevc", "video/hevc", 3840, 2160, 30.0, listOf(2 to 16384), setOf("hdr10", "hlg"))
   check(playableHdr(listOf("hdr10", "hlg", "dv"), listOf(sdrDecoder)).isEmpty())
   check(playableHdr(emptyList(), listOf(hdrDecoder)).isEmpty())
+  check(playableHdr(listOf("hdr10"), listOf(hdrDecoder.copy(hardware = false))).isEmpty())
+  check(sdrDecoder.copy(hardware = false).snapshot["hardware"] == false)
   check(playableHdr(listOf("hdr10", "dv", "hlg"), listOf(hdrDecoder)) == listOf("hdr10", "hlg"))
   check(maximumVideoSize(listOf(sdrDecoder, hdrDecoder)) == (3840 to 2160))
   check(maximumVideoSize(emptyList()) == null)

@@ -60,16 +60,28 @@ internal object PlayerCapabilities {
     ) + (size?.let { mapOf("maxWidth" to it.first, "maxHeight" to it.second) } ?: emptyMap())
   }
 
-  private fun probeDecoders(): List<VideoDecoderFacts> =
-    MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder && hardware(it) }.flatMap { decoder ->
+  private fun probeDecoders(): List<VideoDecoderFacts> {
+    val all = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter {
+      !it.isEncoder && (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !it.isAlias)
+    }
+    val accelerated = all.filter(::hardware)
+    // An emulator may expose only a software AVC codec. Permit bounded SDR playback there,
+    // without representing it as hardware or advertising software HEVC/HDR originals.
+    val softwareAvc = if (accelerated.any { it.supportedTypes.any { mime -> mime.equals("video/avc", true) } }) null
+      else all.firstOrNull { it.supportedTypes.any { mime -> mime.equals("video/avc", true) } }
+    return (accelerated + listOfNotNull(softwareAvc)).distinctBy { it.name }.flatMap { decoder ->
+      val acceleratedDecoder = hardware(decoder)
       videoTypes.mapNotNull { (mime, codec) ->
+        if (!acceleratedDecoder && codec != "h264") return@mapNotNull null
         if (decoder.supportedTypes.none { it.equals(mime, true) }) return@mapNotNull null
         runCatching {
           val caps = decoder.getCapabilitiesForType(mime)
           val video = caps.videoCapabilities ?: return@runCatching null
           // Check pairs: independent width/height range maxima can describe an impossible frame size.
           val sizes = listOf(7680 to 4320, 4096 to 2160, 3840 to 2160, 2560 to 1440, 1920 to 1080, 1280 to 720, 720 to 480, 640 to 360, 320 to 240, 160 to 120)
-          val size = sizes.firstOrNull { (width, height) -> video.isSizeSupported(width, height) } ?: return@runCatching null
+          val size = sizes.firstOrNull { (width, height) ->
+            (acceleratedDecoder || (width <= 1920 && height <= 1080)) && video.isSizeSupported(width, height)
+          } ?: return@runCatching null
           val profiles = caps.profileLevels.map { it.profile to it.level }
           val main10 = profiles.any { (profile, _) -> when (codec) {
             "hevc" -> profile in listOf(2, 4096, 8192) // HEVC Main10, Main10 HDR10 and HDR10+.
@@ -79,10 +91,11 @@ internal object PlayerCapabilities {
           } }
           val modes = if (codec == "dv" && profiles.isNotEmpty()) setOf("dv") else if (main10) setOf("hdr10", "hlg") else emptySet()
           val rate = runCatching { video.getSupportedFrameRatesFor(size.first, size.second).upper.takeIf { it.isFinite() && it > 0 } }.getOrNull()
-          VideoDecoderFacts(decoder.name, codec, mime, size.first, size.second, rate, profiles, modes)
+          VideoDecoderFacts(decoder.name, codec, mime, size.first, size.second, rate, profiles, modes, acceleratedDecoder)
         }.getOrNull()
       }
     }
+  }
 
   /** A hardware decoder; before Android 10 the platform's software codecs are known by name. */
   private fun hardware(codec: MediaCodecInfo): Boolean {
