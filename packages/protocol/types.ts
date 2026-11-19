@@ -29,6 +29,7 @@ export interface ServerCapabilities {
   /** Trusted advertised HTTPS base origins; no path, query or fragment. */
   secureOrigins?: string[];
   protocolVersion: 0; compatibleClientBuilds?: { minInclusive: string; maxExclusive: string }; server: { id: ID; name: string; version: string };
+  plexAccountSignIn?: boolean;
   features: { passwordSignIn: Feature; deviceGrant: Feature; quickConnect: Feature;
     descriptiveSearch: Feature; aiSearch: Feature; proactiveFallback: Feature; liveTV: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature };
   skins: { id: ID; name: string }[]; defaultSkinId: ID;
@@ -266,7 +267,9 @@ export interface SkinPack {
   /** Up to five colours the picker shows. */
   swatches: PackColor[];
 }
+export interface Branding { name?: string; wordmark?: { url: string; width: number; height: number; dark?: string } }
 export interface Appearance {
+  branding?: Branding;
   /** Monotonic; a client applies only a newer revision. */
   revision: number;
   /** An engine id or an installed pack id. */
