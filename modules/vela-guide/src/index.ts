@@ -23,11 +23,13 @@ export const GuideRowDrawing: ComponentType<GuideRowDrawingProps> | undefined = 
 
 import type { NativeGuideProps } from '@vela/skin/src/widgets/guide/native-grid';
 const NativeSurface = Platform.OS === 'ios' && Platform.isTV
-  ? requireNativeViewManager<NativeGuideProps>('VelaGuide', 'VelaGuideCollectionView') : undefined;
+  ? requireNativeViewManager<Omit<NativeGuideProps, 'channels' | 'data'> & { lineup: string; data: string }>('VelaGuide', 'VelaGuideCollectionView') : undefined;
 export const GuideSurface: ComponentType<NativeGuideProps> | undefined = NativeSurface ? memo(function AppleGuide(props: NativeGuideProps) {
-  const data = useMemo(() => ({ ...props.data, chrome: Object.fromEntries(Object.entries(props.data.chrome).map(([key, value]) => [key, processColor(value)])), drawings: props.data.drawings.map(drawing => ({ ...drawing,
+  const lineup = useMemo(() => JSON.stringify(props.channels), [props.channels]);
+  const data = useMemo(() => JSON.stringify({ ...props.data, chrome: Object.fromEntries(Object.entries(props.data.chrome).map(([key, value]) => [key, processColor(value)])), drawings: props.data.drawings.map(drawing => ({ ...drawing,
     colours: Object.fromEntries(Object.entries(drawing.colours).map(([key, value]) => [key, processColor(value)])),
     cells: drawing.cells.map(cell => ({ ...cell, tone: processColor(cell.tone || 'transparent') })),
   })) }), [props.data]);
-  return createElement(NativeSurface, { ...props, data: data as unknown as NativeGuideProps['data'] });
+  const { channels: _channels, ...surface } = props;
+  return createElement(NativeSurface, { ...surface, lineup, data });
 }) : undefined;

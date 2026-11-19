@@ -10,6 +10,7 @@ import { findNodeHandle, Platform, Text, View, type StyleProp, type TextStyle, t
 import Svg, { Path } from 'react-native-svg';
 import { msg } from '@vela/core';
 import { SYMBOLS } from '../../icons';
+import { useLiveContext } from './live';
 import { logoIdentity } from './logo';
 import { monogram } from './geometry';
 import type { GuideLook } from './look';
@@ -88,6 +89,7 @@ interface PressProps {
 export function Press(props: PressProps) {
   const { onPress, onFocus, label, style, children, nativeID, testID, selected, role = 'button', onKey } = props;
   const navigation = useGuideNavigation();
+  const nativeGuide = useLiveContext()?.GuideSurface !== undefined;
   const region = useContext(GuideRegion);
   const generatedId = useId();
   const id = nativeID ?? generatedId;
@@ -119,7 +121,7 @@ export function Press(props: PressProps) {
         target.current = value;
         if (value && Platform.isTV && navigation && props.focusable !== false) setNode(findNodeHandle(value) ?? undefined);
       }}
-      nextFocusDown={!props.containedFocus && navigation && (onKey || region === 'toolbar') ? node : undefined}
+      nextFocusDown={!nativeGuide && !props.containedFocus && navigation && (onKey || region === 'toolbar') ? node : undefined}
       nextFocusUp={!props.containedFocus && navigation && onKey ? node : undefined}
       nextFocusLeft={!props.containedFocus && navigation && onKey ? node : undefined}
       nextFocusRight={!props.containedFocus && navigation && onKey ? node : undefined}

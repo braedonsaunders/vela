@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { GuideChannel } from '@vela/core';
-import { nativeGuideChannels } from '../src/widgets/guide/native-data';
+import { nativeGuideChannels, nativeGuideLineup } from '../src/widgets/guide/native-data';
 import { logoIdentity } from '../src/widgets/guide/logo';
 
 test('native and RN logo identities agree when a recycled row changes channel or URL', () => {
@@ -22,4 +22,14 @@ test('10,000 native channel descriptors keep only intersecting programme geometr
   expect(projected.every(row => row.cells.length === 1 && row.cells[0]!.id === 'overlap')).toBe(true);
   expect(projected[0]!.cells[0]).toEqual({ id: 'overlap', at: 60, span: 180 });
   expect(nativeGuideChannels(rows.slice(0, 1), 240, 270)[0]!.cells).toEqual([{ id: 'after', at: 240, span: 30 }]);
+});
+
+test('native lineup keeps its identity across programme loads and changes image identity on replacement', () => {
+  const a = [{ id: 'fox', name: 'Fox', number: '1', logo: '/fox', programmes: [] }] as unknown as GuideChannel[];
+  const first = nativeGuideLineup(a);
+  const updated = [{ ...a[0]!, programmes: [{ id: 'programme' }] }] as unknown as GuideChannel[];
+  expect(nativeGuideLineup(updated, first)).toBe(first);
+  const changed = nativeGuideLineup([{ ...a[0]!, logo: '/new' }], first);
+  expect(changed).not.toBe(first);
+  expect(changed[0]!.logoKey).not.toBe(first[0]!.logoKey);
 });

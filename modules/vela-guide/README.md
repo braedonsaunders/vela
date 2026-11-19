@@ -1,27 +1,36 @@
 # Apple TV guide
 
 The optional `GuideSurface` hosts a two-axis UICollectionView on tvOS. UIKit owns
-focus, touch-surface momentum, directional holds, scrolling and cell reuse. A
-custom layout queries intersecting channel rows; hourly gap focus targets are
-computed on demand rather than allocated for every channel and hour. Cells reuse
-the existing asynchronous row renderer. Channel rail and time ruler positions
-follow native scrolling without a JS callback on each display frame.
+focus, touch momentum, directional holds, scrolling and cell reuse. Focus targets
+use a stable minute coordinate: vertical targets align across channel rows and
+horizontal targets follow programme boundaries. Programme widths do not make an
+edge click skip channels. Only eligible targets in the requested rectangle have
+views; minute coordinates are virtual indices, not a view for every minute.
 
-The shared widget owns programme geometry, selection, actions, cache, prefetch and
-playback. Native focus reports channel/time back to that widget. Visible windows
-are reported in four-row/half-hour buckets with shared lookahead. Drawings are
-limited to the visible channel/time window plus a margin. Android and web retain
-the shared RN grid and its existing navigation.
+The existing asynchronous row renderer paints once per visible channel. Its
+layers are composed behind the focus cells without placing passive Expo views
+in UIKit's focus hierarchy (those views otherwise obscure focus candidates).
+The native rail and ruler follow scrolling without per-frame JS callbacks.
+Recycled rail views clear images, cancel old requests and check channel/URL
+identity before accepting a completion. That identity also keys RN Expo Image.
 
-Recycled rail views clear their image immediately, cancel the old request, and
-accept a completion only when its channel/URL identity still matches. That key
-comes from the same pure helper as Expo Image's RN recycling key. Asynchronous
-programme drawings independently reject stale generations.
+Shared TypeScript owns programme facts, selection, cache, prefetch and playback.
+Native focus and four-row/half-hour viewport buckets report back to it. Detail
+updates settle after 250 ms; activation always uses the current native target.
+Stable lineup metadata crosses the bridge once, independently of programme
+updates. Visible row drawings and geometry use an opaque JSON prop decoded off
+main, with generations rejecting stale decodes. Presentation updates coalesce
+until a gesture settles. Native geometry retention is bounded to 256 channels.
+Android and web retain the shared RN guide.
 
-For device measurements, opt in with `EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS=1` and
-optionally `EXPO_PUBLIC_VELA_GUIDE_REPORT_URL`. Normal Release builds leave these
-unset. The existing display-link probe reports UI intervals and missed display
-opportunities separately from JS RAF timing; it does not measure GPU/compositor
-presentation. Native scrolling, focus restoration, time/day controls, logo reuse,
-and preview retuning must be inspected on the physical Apple TV before claiming
-runtime verification.
+The react-native-tvos hosting root retains an explicit preferred focus target.
+Crossing into UIKit uses that root's public preferred-focus contract after view
+attachment; initial props may precede attachment. Native focus restoration keeps
+the selected time coordinate when listings arrive or the timeline origin moves.
+
+Device diagnostics opt in with `EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS=1`. Normal
+Release builds leave this unset. The existing native display-link probe reports
+UI callback intervals and missed opportunities, not GPU presentation timings.
+Optional focus, motion, layout-query and drawing-update logs contain coordinates
+and counts only. Apple player logs separately record display-criteria policy,
+criteria changes, system mode-switch events and retained/first preview frames.

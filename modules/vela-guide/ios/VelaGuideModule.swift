@@ -12,8 +12,14 @@ public final class VelaGuideModule: Module {
         }
         View(VelaGuideCollectionView.self) {
             Events("onWindow", "onProgramme", "onExit")
-            Prop("data") { (view: VelaGuideCollectionView, data: [String: Any]) in view.setData(data) }
+            // Keep the large, stable lineup opaque to Expo's recursive per-update prop conversion.
+            Prop("lineup") { (view: VelaGuideCollectionView, json: String) in
+                guard let data = json.data(using: .utf8), let channels = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
+                view.setChannels(channels)
+            }
+            Prop("data") { (view: VelaGuideCollectionView, json: String) in view.setDataJSON(json) }
             Prop("command") { (view: VelaGuideCollectionView, command: [String: Any]) in view.navigate(command) }
+            Prop("diagnostics") { (view: VelaGuideCollectionView, enabled: Bool) in view.diagnostics = enabled }
             Prop("active") { (view: VelaGuideCollectionView, active: Bool) in view.setActive(active) }
         }
     }
@@ -81,6 +87,7 @@ final class VelaGuideRowView: ExpoView {
     private var cells: [Cell] = []
     private var generation = 0
     private var selected = "", channel = ""
+    private var externalScrollX: CGFloat?
     private var originX: CGFloat = 0
     private var radius: CGFloat = 0
     private weak var scroll: UIScrollView?
@@ -234,8 +241,10 @@ final class VelaGuideRowView: ExpoView {
         DispatchQueue.global(qos: .userInitiated).async(execute: job)
     }
 
+    func setVisibleOffset(_ x: CGFloat) { externalScrollX = x; positionLabels() }
+
     private func positionLabels() {
-        let left = (scroll?.contentOffset.x ?? originX) - originX
+        let left = (externalScrollX ?? scroll?.contentOffset.x ?? originX) - originX
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for entry in labels {
             let shift = min(max(0, left - entry.cell.rect.minX), max(0, entry.cell.rect.width - 120))

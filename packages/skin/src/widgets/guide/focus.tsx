@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Platform } from 'react-native';
+import { useLiveContext } from './live';
 import { remoteDirection } from './navigation';
 import type { Focusable } from '../../escape';
 import { useRemote, pressed } from '../player/remote';
@@ -22,6 +23,7 @@ export const useGuideNavigation = () => useContext(GuideNavigation);
 
 /** Native and DOM targets share one pending destination. Mounting it fulfils the request. */
 export function GuideFocusScope({ children, enter, onHold, leave, active = true }: { children: ReactNode; enter(): void; leave(): void; onHold(holding: boolean): void; active?: boolean }) {
+  const nativeGuide = useLiveContext()?.GuideSurface !== undefined;
   const enabled = useRef(active); enabled.current = active;
   const latest = useRef(enter); latest.current = enter;
   const holding = useRef(onHold); holding.current = onHold;
@@ -83,7 +85,7 @@ export function GuideFocusScope({ children, enter, onHold, leave, active = true 
     return () => document.removeEventListener('focusin', focus);
   }, [state]);
   useRemote(event => {
-    if (!enabled.current) return;
+    if (!enabled.current || nativeGuide) return;
     const key = remoteDirection(event.eventType);
     if (!key) return;
     const android = Platform.OS === 'android';
