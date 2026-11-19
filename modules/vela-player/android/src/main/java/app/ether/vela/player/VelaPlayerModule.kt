@@ -16,7 +16,7 @@ class VelaPlayerModule : Module() {
 
     // What this device plays, for the client's negotiation request (probed once per process).
     Function("capabilities") {
-      PlayerCapabilities.probed
+      PlayerCapabilities.capabilities(appContext.reactContext)
     }
 
     // The viewer left the app: playing views pause, previews stop with their windows.

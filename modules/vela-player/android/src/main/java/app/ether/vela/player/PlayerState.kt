@@ -18,7 +18,6 @@ internal class PlayerState {
   var paused = true
   var pausedForCache = false
   var seeking = false
-  var endReached = false
   /** The view ended playback itself (a preview whose grant expired). */
   var finished = false
   /** Seconds of media read ahead of the position. */
@@ -40,21 +39,12 @@ internal class PlayerState {
       failure != null -> Phase.FAILED
       finished -> Phase.ENDED
       !loaded -> Phase.LOADING
-      endReached && atEnd -> Phase.ENDED
       pausedForCache || seeking -> Phase.BUFFERING
       paused -> Phase.PAUSED
       else -> Phase.PLAYING
     }
 
-  /** The position is at the file's end. mpv also raises `eof-reached` for a moment while it switches
-   * tracks on a network stream; reporting that as `ended` makes Ether end the session. */
-  private val atEnd: Boolean
-    get() {
-      val length = duration ?: return false
-      return position >= length - 1.5
-    }
-
-  /** The engine track id of a source stream (FFmpeg stream index), for `aid` and `sid`. */
+  /** The engine track id of a source stream (the plan stream index). */
   fun trackId(type: String, streamIndex: Int): Long? {
     val track = tracks.firstOrNull { it["type"] == type && (it["ff-index"] as? Long)?.toInt() == streamIndex }
     return track?.get("id") as? Long

@@ -18,7 +18,21 @@ internal object PlayerCapabilities {
     "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_bluray", "pcm_dvd",
   )
 
-  val probed: Map<String, Any> by lazy { probe() }
+  fun capabilities(context: android.content.Context?): Map<String, Any> {
+    val display = context?.getSystemService(android.hardware.display.DisplayManager::class.java)
+      ?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
+    val hdr = (display?.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()).mapNotNull {
+      when (it) {
+        android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 -> "hdr10"
+        android.view.Display.HdrCapabilities.HDR_TYPE_HLG -> "hlg"
+        android.view.Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> "dv"
+        else -> null
+      }
+    }
+    return probed + mapOf("hdr" to hdr)
+  }
+
+  private val probed: Map<String, Any> by lazy { probe() }
 
   private fun probe(): Map<String, Any> {
     val decoders = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder && hardware(it) }

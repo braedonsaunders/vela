@@ -254,6 +254,9 @@ internal class PlayerController(
       return
     }
     refreshAsked = activeSource
+    activeSource = ""
+    engine?.play(false)
+    host.keepScreenOn(false)
     Log.i("vela-media3", "session refresh: $reason")
     report.sessionRefresh()
   }
