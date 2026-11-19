@@ -12,7 +12,7 @@ import { failPlayback } from './recovery';
 import { requestSwitch, sendQueuedSeek } from './authorizations';
 import { applySubtitle } from './subtitles';
 import { applyNativeAudio } from './platform';
-import { playMedia } from './transport';
+import { playMedia, pauseMedia, retirePlayIntent } from './transport';
 export function retireMediaAuthorization(context: HostContext) {
   context.recovery.history.clear();
   context.session.controller.stop();
@@ -279,8 +279,7 @@ export function applyServerState(
   context.playback.wantsPlay = state === 'playing';
   if (!touchVideo) return;
   if (state === 'paused') {
-    context.media.runtime?.pause();
-    context.surface.video.pause();
+    pauseMedia(context);
     context.playback.status = 'paused';
     publishHostState(context);
   } else if (context.surface.video.paused) void playMedia(context);
@@ -306,6 +305,7 @@ export function endPlayback(context: HostContext, position?: number) {
   context.tracks.nativeTrack = undefined;
   if (context.lifecycle.timer) clearInterval(context.lifecycle.timer);
   context.lifecycle.timer = undefined;
+  retirePlayIntent(context);
   context.surface.video.pause();
   context.surface.video.removeAttribute('src');
   context.surface.video.load();

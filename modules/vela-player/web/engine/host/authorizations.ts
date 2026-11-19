@@ -1,3 +1,4 @@
+import { pauseMedia } from './transport';
 import type { Source } from '../model';
 import { type Generation } from '../session';
 import { randomId } from '@vela/core';
@@ -58,8 +59,7 @@ export function requestSeek(context: HostContext, seconds: number) {
   }
   context.session.pendingSeek = { position: seconds, startedAt: performance.now(), authorized: false };
   context.playback.status = 'buffering';
-  context.media.runtime?.pause();
-  context.surface.video.pause();
+  pauseMedia(context);
   context.telemetry.lastObservation = -Infinity;
   publishHostState(context);
   sendSeek(context, seconds, context.session.controller.source, context.session.controller.seek);

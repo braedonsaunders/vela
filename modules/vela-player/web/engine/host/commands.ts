@@ -4,7 +4,7 @@ import { selectQualityFromCommand, switchPathFromCommand } from './command-selec
 import { updateSubtitlePreference } from '../universal/subtitles/preferences';
 import type { Command, Failure } from '../model';
 import type { HostContext } from './state';
-import { playMedia } from './transport';
+import { playMedia, pauseMedia } from './transport';
 import { loadSession } from './session';
 import { readPosition, readDuration } from './position';
 import { publishHostState, emitHostEvent } from './events';
@@ -20,13 +20,13 @@ export async function executeCommand(context: HostContext, command: Command) {
       case 'play':
         context.playback.localIntent = 'playing';
         context.playback.wantsPlay = true;
-        await playMedia(context);
+        // Startup applies the latest intent after metadata and the resume seek.
+        if (context.media.runtime || context.surface.video.readyState > 0) await playMedia(context);
         break;
       case 'pause':
         context.playback.localIntent = 'paused';
         context.playback.wantsPlay = false;
-        context.media.runtime?.pause();
-        context.surface.video.pause();
+        pauseMedia(context);
         break;
       case 'retry':
         if (context.session.current)

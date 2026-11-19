@@ -1,6 +1,26 @@
 import type { HostContext } from './state';
 import { publishHostState } from './events';
 import { failPlayback } from './recovery';
+import { PlayIntent, playErrorKind } from '../play-intent';
+
+const intents = new WeakMap<HostContext, PlayIntent>();
+function transport(context: HostContext) {
+  let intent = intents.get(context);
+  if (!intent) {
+    intent = new PlayIntent(() => context.surface.video.play(), () => context.surface.video.pause());
+    intents.set(context, intent);
+  }
+  return intent;
+}
+// Source retirement must invalidate queued work before pause/load replaces media.
+export function retirePlayIntent(context: HostContext) {
+  intents.get(context)?.retire();
+  intents.delete(context);
+}
+export function pauseMedia(context: HostContext) {
+  context.media.runtime?.pause();
+  void transport(context).set(false);
+}
 export async function playMedia(context: HostContext) {
   if (context.media.runtime) {
     context.media.runtime.resume();
@@ -8,37 +28,29 @@ export async function playMedia(context: HostContext) {
   }
   const token = context.session.controller.token();
   try {
-    await context.surface.video.play();
-    if (context.session.controller.current(token)) {
-      if (['failed', 'ended'].includes(context.playback.status) || context.surface.video.error) return;
-      context.playback.status = 'playing';
-      context.playback.failure = null;
-      if (context.session.pendingSeek?.authorized) context.session.pendingSeek = undefined;
-      context.telemetry.lastObservation = -Infinity;
-      publishHostState(context);
-    }
-  } catch (e) {
+    const played = await transport(context).set(true);
+    if (!played || !context.playback.wantsPlay || !context.session.controller.current(token)) return;
+    if (['failed', 'ended'].includes(context.playback.status) || context.surface.video.error) return;
+    context.playback.status = 'playing';
+    context.playback.failure = null;
+    if (context.session.pendingSeek?.authorized) context.session.pendingSeek = undefined;
+    context.telemetry.lastObservation = -Infinity;
+    publishHostState(context);
+  } catch (error) {
     if (!context.session.controller.current(token)) return;
-    if (e instanceof DOMException && e.name === 'NotAllowedError' && !context.surface.video.muted) {
-      context.surface.video.muted = true;
-      try {
-        await context.surface.video.play();
-        if (!context.session.controller.current(token)) return;
-        context.playback.status = 'playing';
-        context.playback.failure = null;
-        if (context.session.pendingSeek?.authorized) context.session.pendingSeek = undefined;
-        context.telemetry.lastObservation = -Infinity;
-        publishHostState(context);
-        return;
-      } catch (retryError) {
-        e = retryError;
-      }
+    const kind = playErrorKind(error);
+    if (kind === 'cancelled') return;
+    if (kind === 'blocked') {
+      context.playback.wantsPlay = false;
+      context.playback.localIntent = 'paused';
+      pauseMedia(context);
+      context.playback.status = 'paused';
+      context.playback.failure = null;
+      publishHostState(context);
+      return;
     }
-    if (context.session.controller.current(token))
-      failPlayback(context, {
-        kind: 'action',
-        message: e instanceof Error ? e.message : String(e),
-        recoverable: true,
-      });
+    failPlayback(context, {
+      kind: 'action', message: error instanceof Error ? error.message : String(error), recoverable: true,
+    });
   }
 }

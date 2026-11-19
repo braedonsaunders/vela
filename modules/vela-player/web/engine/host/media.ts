@@ -14,7 +14,7 @@ import { publishHostState, emitHostEvent } from './events';
 import { usesPacketRuntime, useNativeHls } from './quality';
 import { recoverPlayback } from './recovery';
 import { applyNativeAudio } from './platform';
-import { playMedia } from './transport';
+import { playMedia, retirePlayIntent } from './transport';
 export function releaseOriginal(context: HostContext) {
   releaseOverlay(context);
   if (context.watchdog.startTimer) clearTimeout(context.watchdog.startTimer);
@@ -27,6 +27,7 @@ export function releaseOriginal(context: HostContext) {
   if (original) context.media.closingRuntime = original.dispose().catch(() => {});
 }
 export function resetMedia(context: HostContext) {
+  retirePlayIntent(context);
   if (context.watchdog.videoCallback !== undefined)
     context.surface.video.cancelVideoFrameCallback?.(context.watchdog.videoCallback);
   context.watchdog.videoCallback = undefined;
