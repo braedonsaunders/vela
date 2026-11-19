@@ -25,13 +25,14 @@ const packaged: { doc: SkinDocument; assets?: URL }[] = [{ doc: cinematicDoc }];
 for (const entry of readdirSync(skinsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)))
   if (entry.isDirectory() && existsSync(new URL(`${entry.name}/document.ts`, skinsDir)))
     packaged.push({ doc: (await import(new URL(`${entry.name}/document.ts`, skinsDir).href)).default as SkinDocument, assets: new URL(`${entry.name}/assets/`, skinsDir) });
+packaged.push({ doc: { ...cinematicDoc, id: 'harbor-document', name: 'Harbor Document', tagline: 'An owner-installed full skin.', ui: { accent: '#7fd6cb', page: '#06121a' }, preview: undefined } });
 const docUrl = (d: SkinDocument) => `/vela/v0/appearance/skins/${d.id}/${d.version}.json`;
 const documents: V.SkinDocumentRef[] = packaged.map(({ doc }) => ({ id: doc.id, name: doc.name, version: doc.version, tagline: doc.tagline, url: docUrl(doc), preview: doc.preview, swatches: doc.swatches }));
 // `VELA_MOCK_SKIN=<id>` starts the mock with that engine, pack or document as the server default.
 const startSkin = process.env.VELA_MOCK_SKIN ?? 'cinematic';
 const startDoc = documents.find(d => d.id === startSkin), startPack = packs.find(p => p.id === startSkin);
 let state: V.Appearance = { branding: process.env.VELA_MOCK_BRANDING === 'name' ? { name: 'Harbor Family' } : process.env.VELA_MOCK_BRANDING === 'image' ? {name: 'Harbor Family', wordmark: {url: harbor.images!.wordmark!, width: 360, height: 80}} : undefined, revision: 1, defaultSkinId: startDoc || startPack || engines.includes(startSkin) ? startSkin : 'cinematic',
-  defaultEngineId: startDoc ? 'doc' : startPack ? startPack.engine : engines.includes(startSkin) ? startSkin : 'cinematic', force: false, packs, documents };
+  defaultEngineId: startDoc ? 'doc' : startPack ? startPack.engine : engines.includes(startSkin) ? startSkin : 'cinematic', force: process.env.VELA_MOCK_FORCE === '1', packs, documents };
 const listeners = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const encode = (a: V.Appearance) => new TextEncoder().encode(`id: ${a.revision}\ndata: ${JSON.stringify({ type: 'appearance', cursor: String(a.revision), appearance: a } satisfies V.ServerEvent)}\n\n`);
 

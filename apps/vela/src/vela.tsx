@@ -1,10 +1,12 @@
+import { appearanceAsset, installedDocument, chosenSkin, packDocument } from '@vela/skin/src/installed';
+import type { SkinDocument } from '../../../packages/protocol/skin';
 // The app's state for its routes: the core store (sessions, servers, catalogue, search, playback,
 // live TV) under core's provider, the built-in skin documents, and the host each route draws
 // with (the active document, the view state documents read, and what presses do). A signed-out
 // server sends the viewer to /sign-in.
 import { router, usePathname } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Platform, useWindowDimensions } from 'react-native';
+import { AppState, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createVela, type Vela as Store, type VelaState } from '@vela/core';
 import { VelaProvider as StoreProvider, useVelaState } from '@vela/core/react';
@@ -196,32 +198,90 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   useEffect(() => {
     if (Platform.OS === 'web') document.title = state.appearance.value?.branding?.name || 'Vela';
   }, [state.appearance.value?.branding?.name]);
-  const raw = DOCUMENTS[docIndex % DOCUMENTS.length]!;
+  const appearance = state.appearance.value;
+  const [assetData, setAssetData] = useState<Record<string, string>>({});
+  const [installed, setInstalled] = useState<SkinDocument[]>([]);
+  const preferenceKey = `${SKIN_PREFERENCE}.${origin}.${state.auth.viewer}`;
+  const [choice, setChoice] = useState(() => preferences.get(preferenceKey) || preferences.get(SKIN_PREFERENCE) || (picked ? DOCUMENTS[docIndex]!.id : ''));
+  useEffect(() => { setChoice(preferences.get(preferenceKey) || preferences.get(SKIN_PREFERENCE) || ''); }, [preferenceKey]);
+  useEffect(() => {
+    void store.appearance.load();
+    const subscription = AppState.addEventListener('change', next => { if (next === 'active') void store.appearance.load(); });
+    return () => subscription.remove();
+  }, [store, session]);
+  useEffect(() => {
+    let cancelled = false;
+    setInstalled([]);
+    void Promise.all((appearance?.docs ?? []).filter(ref => !DOCUMENTS.some(d => d.id === ref.id)).map(async ref => {
+      try {
+        const doc = installedDocument(await store.appearance.document(ref.url), origin);
+        if (doc.id !== ref.id) throw new Error('Skin id mismatch');
+        return doc;
+      } catch { console.info('Ignored invalid installed skin', ref.id); return null; }
+    })).then(docs => { if (!cancelled) setInstalled(docs.filter((d): d is SkinDocument => d !== null)); });
+    return () => { cancelled = true; };
+  }, [appearance, origin, store]);
+  const documents = useMemo(() => [...DOCUMENTS, ...installed, ...(appearance?.packs ?? []).flatMap(pack => {
+    const base = DOCUMENTS.find(d => d.id === pack.engine || (pack.engine === 'cinematic' && d === DOCUMENTS[0]));
+    return base && !DOCUMENTS.some(d => d.id === pack.id) ? [packDocument(base, pack)] : [];
+  })], [installed, appearance]);
+  useEffect(() => {
+    let cancelled = false;
+    setAssetData({});
+    const urls = new Set<string>();
+    const visit = (value: unknown) => {
+      if (typeof value === 'string') { try { urls.add(appearanceAsset(value, origin)); } catch {} }
+      else if (Array.isArray(value)) value.forEach(visit);
+      else if (value && typeof value === 'object') Object.values(value).forEach(visit);
+    };
+    visit(installed); visit(appearance?.packs);
+    void Promise.all([...urls].map(async url => {
+      try {
+        const headers = await store.appearance.assetHeaders(url);
+        const response = await fetch(url, { headers, redirect: 'error' });
+        if (!response.ok) return;
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.length > 8 * 1024 * 1024) return;
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        const type = response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream';
+        if (!cancelled) setAssetData(data => ({ ...data, [url]: `data:${type};base64,${btoa(binary)}` }));
+      } catch { /* Unavailable artwork does not prevent the skin from drawing. */ }
+    }));
+    return () => { cancelled = true; };
+  }, [installed, appearance, origin, store]);
+  const selectedId = chosenSkin(documents.map(d => d.id), choice, appearance);
+  const selectedIndex = documents.findIndex(d => d.id === selectedId);
+  const raw = documents[selectedIndex]!;
+  const packMark = appearance?.packs.find(pack => pack.id === raw.id)?.wordmark;
+  const branding = useMemo(() => packMark ? { ...appearance?.branding, wordmark: { url: packMark, width: 240, height: 60 } } : appearance?.branding, [packMark, appearance?.branding]);
   const resolved = useMemo(() => {
     try {
-      return { doc: resolveDocument(raw, width, 'en', state.appearance.value?.branding), error: null };
+      return { doc: resolveDocument(raw, width, 'en', branding), error: null };
     } catch (error) {
       return { doc: null, error: String(error) };
     }
-  }, [raw, width, state.appearance.value?.branding]);
+  }, [raw, width, branding]);
 
   useEffect(() => {
     setFontsReady(false);
-    const source = (path: string) => assetSource(path, origin);
+    const source = (path: string) => assetData[path] ?? assetSource(path, origin);
     void Promise.all([loadFonts(APP_FONTS, source), loadFonts(raw.fonts, source)]).finally(() => setFontsReady(true));
-  }, [raw, origin]);
+  }, [raw, origin, assetData]);
 
   // The appearance picker: the viewer's choice applies at once and is remembered on this device.
   const [pickerOpen, setPickerOpen] = useState(false);
   const openPicker = useCallback(() => setPickerOpen(true), []);
   const closePicker = useCallback(() => setPickerOpen(false), []);
   const pickDocument = useCallback((index: number) => {
+    if (appearance?.force) return;
+    setChoice(documents[index]!.id);
     setDocIndex(index);
     setPicked(true);
     setPickerOpen(false);
     resetFlags();
-    void preferences.set(SKIN_PREFERENCE, DOCUMENTS[index]!.id);
-  }, [resetFlags]);
+    void preferences.set(preferenceKey, documents[index]!.id);
+  }, [resetFlags, documents, appearance?.force, preferenceKey]);
   useEffect(() => {
     if (picked) return;
     const index = DOCUMENTS.findIndex(doc => doc.id === preferences.get(SKIN_PREFERENCE));
@@ -248,11 +308,11 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     ? { ...viewport, height: height - insets.top - insets.bottom, insets: NO_INSETS }
     : viewport, [viewport, height, insets]);
   const image = useCallback<SkinHost['image']>(path => {
-    const source = assetSource(path, origin);
+    const source = assetData[path] ?? assetSource(path, origin);
     if (source === undefined) return undefined;
     // A URL; or a bundled asset, which is a module id natively and an asset object on the web.
     return typeof source === 'string' ? { uri: source } : source;
-  }, [origin]);
+  }, [origin, assetData]);
   const setQuery = useCallback((query: string) => store.search.setQuery(query), [store]);
   // On TV, Back (Menu) with a search open clears the search, as it closes a menu, rather than
   // leaving the app. Only while home (where the results are) is the screen showing: held over a
@@ -278,7 +338,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       route,
       entry,
       width,
-      skinCount: DOCUMENTS.length,
+      skinCount: documents.length,
       skinName: resolved.doc.name,
     });
     const key = `${route}:${entry}:${library ?? ''}`;
@@ -322,7 +382,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
         <Previews store={store} state={state} onHome={pathname === '/'} heroIndex={view.heroIndex} still={view.still}>
           {children}
         </Previews>
-        {pickerOpen ? <AppearancePicker documents={DOCUMENTS} current={docIndex % DOCUMENTS.length} image={image} onPick={pickDocument} onClose={closePicker} /> : null}
+        {pickerOpen ? <AppearancePicker documents={documents} current={selectedIndex} locked={appearance?.force} image={image} onPick={pickDocument} onClose={closePicker} /> : null}
       </LaunchGate>
     </VelaContext.Provider>
   );

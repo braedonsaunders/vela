@@ -28,7 +28,7 @@ export class Appearance {
     private readonly appOrigin?: string,
   ) {
     session.onReset(kind => {
-      if (kind === 'server') void this.load();
+      void this.load();
     });
   }
 
@@ -88,12 +88,22 @@ export class Appearance {
     return () => controller.abort();
   }
 
+  /** Credentials are returned only for this server's appearance assets. */
+  async assetHeaders(url: string): Promise<Record<string, string>> {
+    const parsed = new URL(url, `${this.origin}/`);
+    if (parsed.origin !== this.origin || !parsed.pathname.startsWith('/vela/v0/appearance/') || parsed.search || parsed.hash) return {};
+    const tokens = await this.session.selected().credentials.get();
+    return tokens?.accessToken ? { Authorization: `Bearer ${tokens.accessToken}` } : {};
+  }
+
   /**
    * A skin document as the server serves it, unresolved: a built-in under /vela/skins/, or the
    * server's own under its appearance tree. Anything else is refused.
    */
   async document(url: string): Promise<unknown> {
-    const path = new URL(url, `${this.builtInOrigin}/`).pathname;
+    const parsed = new URL(url, `${this.origin}/`);
+    if (parsed.origin !== this.origin && parsed.origin !== this.builtInOrigin) throw new Error('Foreign skin origin');
+    const path = parsed.pathname;
     if (path.startsWith('/vela/skins/') && path.endsWith('/document.json')) {
       const response = await fetch(`${this.builtInOrigin}${path}`);
       if (!response.ok) throw new Error(`Built-in skin document ${path}: ${response.status}`);

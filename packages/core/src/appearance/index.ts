@@ -5,7 +5,7 @@ import type { Appearance, PackFont, ServerEvent, SkinDocumentRef, SkinPack } fro
 import type { EventHandler } from '../protocol/sse';
 
 /** Compiled engines a pack may style. A pack for any other engine is not offered. */
-const ENGINES = ['cinematic'];
+const ENGINES = ['cinematic', 'mochi', 'marquee', 'jellytwin', 'index', 'lounge', 'latenight', 'kids', 'broadcast'];
 const COLOUR = /^#[0-9a-f]{6}([0-9a-f]{2})?$/;
 const NAME = /^[a-z][a-z0-9-]{0,31}$/;
 const TOKEN = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$/;
@@ -56,7 +56,7 @@ function pack(p: SkinPack, origin: string): PackEntryModel | undefined {
   if (JSON.stringify(p).length > MAX_PACK_BYTES) return undefined;
   const name = text(p.name, 40);
   const palette = colours(p.palette, 32, /^[a-zA-Z]{1,24}$/);
-  if (!name || !Object.keys(palette).length) return undefined;
+  if (!name) return undefined;
   const radius = { card: length(p.radius?.card, 48), panel: length(p.radius?.panel, 48), pill: length(p.radius?.pill, 999) };
   const fonts = { display: font(p.fonts?.display, origin), text: font(p.fonts?.text, origin) };
   const image = /\.(svg|png|jpe?g|webp|avif)$/;
@@ -91,7 +91,7 @@ export function appearanceModel(a: Appearance, origin: string, builtInDocs: Skin
   const server = Array.isArray(a.documents) ? a.documents.slice(0, 32) : [];
   const docs = [...server, ...builtInDocs.filter(b => !server.some(d => d?.id === b.id))].flatMap(d => {
     const url = asset(d?.url, origin, /\.json$/) || builtInAsset(d?.url, builtInOrigin, /\/document\.json$/);
-    return d && typeof d.id === 'string' && NAME.test(d.id) && !ENGINES.includes(d.id) && url ? [{ id: d.id, name: text(d.name, 40), tagline: text(d.tagline, 120), url,
+    return d && typeof d.id === 'string' && NAME.test(d.id) && url ? [{ id: d.id, name: text(d.name, 40), tagline: text(d.tagline, 120), url,
       preview: asset(d.preview, origin, /\.(svg|png|jpe?g|webp|avif)$/) || builtInAsset(d.preview, builtInOrigin, /\.(svg|png|jpe?g|webp|avif)$/), swatches: (Array.isArray(d.swatches) ? d.swatches : []).slice(0, 5).flatMap(c => colour(c) ?? []) }] : [];
   });
   return { branding: brandingModel(a.branding, origin), revision: a.revision, defaultSkinId: text(a.defaultSkinId, 64), defaultEngineId: text(a.defaultEngineId, 64), force: a.force === true, packs, docs };

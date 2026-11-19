@@ -23,12 +23,13 @@ import { useFocusClaim } from '@vela/skin/src/widgets/common/focus-claim';
 interface Props {
   documents: SkinDocument[];
   current: number;
+  locked?: boolean;
   image(path: string): ImageSource | number | undefined;
   onPick(index: number): void;
   onClose(): void;
 }
 
-export function AppearancePicker({ documents, current, image, onPick, onClose }: Props) {
+export function AppearancePicker({ documents, current, locked, image, onPick, onClose }: Props) {
   const { width } = useWindowDimensions();
   // Over the whole window (outside the screens, which pad by the safe area): clear of it too.
   const insets = useSafeAreaInsets();
@@ -55,6 +56,7 @@ export function AppearancePicker({ documents, current, image, onPick, onClose }:
             <Text style={styles.closeText}>✕</Text>
           </Choice>
         </View>
+        {locked ? <Text style={styles.tagline}>Appearance is set by the server owner.</Text> : null}
         <ScrollView contentContainerStyle={styles.grid}>
           {documents.map((doc, index) => (
             <DocumentCard
@@ -63,7 +65,7 @@ export function AppearancePicker({ documents, current, image, onPick, onClose }:
               preview={doc.preview ? image(doc.preview) : undefined}
               selected={index === current}
               small={small}
-              onPress={() => onPick(index)}
+              onPress={() => { if (!locked) onPick(index); }}
             />
           ))}
         </ScrollView>
