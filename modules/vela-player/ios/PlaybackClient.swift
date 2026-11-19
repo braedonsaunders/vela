@@ -227,12 +227,12 @@ final class PlaybackClient {
                 #if os(tvOS)
                 let manager = host.window?.avDisplayManager
                 self.displayObservers.forEach(NotificationCenter.default.removeObserver)
-                self.displayObservers = [AVDisplayManagerModeSwitchStartNotification, AVDisplayManagerModeSwitchEndNotification].map { name in
-                    NotificationCenter.default.addObserver(forName: name, object: manager, queue: .main) { _ in
+                self.displayObservers = [NSNotification.Name.AVDisplayManagerModeSwitchStart, NSNotification.Name.AVDisplayManagerModeSwitchEnd].map { name in
+                    NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
                         print("[vela-display] event=\(name.rawValue) preview=\(preview)")
                     }
                 }
-                print("[vela-display] load preview=\(preview) match=\(opts.matchContentEnabled) owner=\(preview ? "host" : "engine") criteria=\(manager?.preferredDisplayCriteria != nil) switching=\(manager?.isDisplayModeSwitchInProgress ?? false)")
+                print("[vela-display] load preview=\(preview) match=\(opts.matchContentEnabled) owner=\(preview ? "host" : "engine") matching=\(manager?.isDisplayCriteriaMatchingEnabled ?? false) criteria=\(manager?.preferredDisplayCriteria != nil) switching=\(manager?.isDisplayModeSwitchInProgress ?? false)")
                 #endif
                 _ = try await engine.load(source: source, startPosition: self.start, options: opts,
                                           audioSourceStreamIndex: self.audio.map(Int32.init))

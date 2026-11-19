@@ -32,8 +32,13 @@ Tests exercise real redirects, seeks, clones, size probes, bounded responses,
 cancellation, attachment lifetime and credential-free diagnostics. Cancellation
 interrupts the active I/O epoch; retained readers can rewind for track reloads.
 
-Aether owns display matching. Main and muted hero preview sessions use separate
-reusable engine instances. Detaching stops playback and removes subscriptions.
+Aether owns full-screen display matching, subject to tvOS Match Content settings.
+Guide ambient and hero previews both use the preview engine, disable matching,
+and set `displayCriteriaOwner = .host` so the engine never writes or resets
+display criteria for a preview load. Main and preview sessions use separate
+reusable engine instances. Safe `[vela-display]` logs include the load policy,
+current matching setting, criteria presence and system mode-switch start/end
+notifications; they contain no media addresses or credentials. Detaching stops playback and removes subscriptions.
 Upstream free-form logs are suppressed because they may contain grant URLs;
 Vela logs route, video format, audio delivery and cache counters without URLs.
 
