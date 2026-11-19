@@ -213,7 +213,12 @@ export class LiveController {
   preview(channelId: string): void {
     this.tile.retune(channelId);
     if (!this.guideIds.includes(channelId)) this.scheduleFetch();
-    if (this.surfaces.has('home')) this.remember(channelId);
+    this.remember(channelId);
+  }
+
+  /** Seed the guide once; subsequent focus changes never call preview. */
+  initializePreview(channelId: string): void {
+    if (channelId && !this.options.memory.get(this.rememberKey)) this.preview(channelId);
   }
 
   /** Show the owned live session full screen. */
@@ -244,16 +249,19 @@ export class LiveController {
     this.tile.toggleMute();
   }
 
-  retryStop(): void {
+  retryPreview(): void {
     this.tile.retryStop();
+    this.tile.retune(this.tile.target);
+    this.tile.tuneIn();
   }
 
   tileSnapshot(snapshot: Snapshot): void {
     this.tile.snapshot(snapshot);
+    if (this.tile.view().state === 'playing') this.remember(this.tile.target);
   }
 
-  tileFailed(): void {
-    this.tile.fail();
+  tileFailed(sessionId?: string): void {
+    if (!sessionId || this.tile.view().plan?.sessionId === sessionId) this.tile.fail();
   }
 
   // ---- Flicking ----

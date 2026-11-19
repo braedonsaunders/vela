@@ -26,13 +26,9 @@ interface TileProps {
   small: boolean;
   still: boolean;
   controller: LiveController;
-  focusedChannel?: { id: string; name: string };
 }
 
-export function GuideTile({ look, tile, channelName, height, small, still, controller, focusedChannel }: TileProps) {
-  const pending = focusedChannel && focusedChannel.id !== tile.channelId;
-  const displayTile: TileView = pending ? { ...tile, channelId: focusedChannel.id, state: tile.state === 'stuck' ? 'stuck' : 'connecting', plan: null } : tile;
-  const displayName = pending ? focusedChannel.name : channelName;
+export function GuideTile({ look, tile, channelName, height, small, still, controller }: TileProps) {
   const radius = small ? 10 : look.radiusTile;
   return (
     <View
@@ -48,21 +44,9 @@ export function GuideTile({ look, tile, channelName, height, small, still, contr
         boxShadow: `0px 18px 50px ${look.shadow}`,
       }}
     >
-      <View style={[StyleSheet.absoluteFill, { opacity: pending ? 0 : 1 }]}><TilePicture suppressed={Boolean(pending)} /></View>
-      {pending ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: look.media }]} /> : null}
-      {displayTile.state === 'connecting' ? <Tuning look={look} still={still} channelName={displayName} /> : null}
-      {displayTile.state === 'unavailable' ? (
-        <View
-          style={[StyleSheet.absoluteFill, styles.centre, { padding: 10 }]}
-          accessibilityRole="text"
-          accessibilityLiveRegion="polite"
-        >
-          <Line look={look} size={12} color={look.inkSecondary} lines={3} style={{ textAlign: 'center' }}>
-            {msg('live.previewUnavailable')}
-          </Line>
-        </View>
-      ) : null}
-      <TileAction look={look} tile={displayTile} channelName={displayName} controller={controller} />
+      <TilePicture />
+      {tile.state === 'connecting' ? <Tuning look={look} still={still} channelName={channelName} /> : null}
+      <TileAction look={look} tile={tile} channelName={channelName} controller={controller} />
       <LinearGradient
         colors={['rgba(0, 0, 0, 0.85)', 'rgba(0, 0, 0, 0)']}
         style={[styles.top, { paddingVertical: small ? 5 : 8, paddingHorizontal: small ? 6 : 10 }]}
@@ -76,11 +60,11 @@ export function GuideTile({ look, tile, channelName, height, small, still, contr
             weight={650}
             style={{ flexShrink: 1, textShadowColor: look.shadow, textShadowRadius: 4 }}
           >
-            {displayName}
+            {channelName}
           </Line>
         ) : null}
       </LinearGradient>
-      {displayTile.state === 'playing' ? (
+      {tile.state === 'playing' ? (
         <Speaker look={look} muted={tile.muted} small={small} onPress={() => controller.toggleMute()} />
       ) : null}
     </View>
@@ -100,11 +84,11 @@ function TileAction({
   controller: LiveController;
 }) {
   const inset = (focused: boolean) => (focused ? `inset 0px 0px 0px 2px ${look.accent}` : undefined);
-  if (tile.state === 'stuck') {
+  if (tile.state === 'stuck' || tile.state === 'unavailable') {
     return (
       <Press
         label={msg('live.previewStuck')}
-        onPress={() => controller.retryStop()}
+        onPress={() => controller.retryPreview()}
         style={({ hovered, focused }) => [
           StyleSheet.absoluteFill,
           styles.centre,

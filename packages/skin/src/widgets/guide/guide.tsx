@@ -1,6 +1,6 @@
 import { guideSelection } from './diagnostics';
 import { GuideFocusScope, GuideToolbar } from './focus';
-import { PreviewDebounce } from './navigation';
+import { programmeSelection } from './selection';
 import { hasFlowHeader } from '../../resolve/inherit';
 // The channel guide as an app (widget `guide`, and the Live TV route): a half-height header with
 // the selected programme beside the live preview tile, a toolbar of days, time and filters, the
@@ -93,6 +93,8 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
     const channel = model.channels.find(c => c.id === (focus?.channelId || view.tunedId)) ?? model.channels[0];
     return { channel: channel?.id ?? '', programme: focus?.programmeId || channel?.nowId || '' };
   });
+  const initialChannel = useRef(selected.channel);
+  useEffect(() => controller.initializePreview(initialChannel.current), [controller]);
   const [filter, setFilter] = useState<ChannelFilter>('all');
   const [tab, setTab] = useState('');
   const [mode, setMode] = useState<'now' | 'guide'>('now');
@@ -100,20 +102,17 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   const [expanded, setExpanded] = useState(false);
   const [holding, setHolding] = useState(false);
   const grid = useRef<GridHandle>(null);
-  const preview = useMemo(() => new PreviewDebounce(id => controller.preview(id)), [controller]);
-  useEffect(() => () => preview.cancel(), [preview]);
   const visible = active && !view.tile.fullscreen;
-  useEffect(() => { preview.select(!visible || holding || view.zapping ? '' : selected.channel); }, [preview, selected.channel, holding, view.zapping, visible]);
   const wasVisible = useRef(visible);
   useEffect(() => {
     const returning = visible && !wasVisible.current;
     wasVisible.current = visible;
-    if (!visible) { preview.cancel(); grid.current?.leaveGrid(); return; }
+    if (!visible) { grid.current?.leaveGrid(); return; }
     if (!returning) return;
     if (!focus) { controller.chooseDay(0); grid.current?.jumpNow(); }
     const frame = requestAnimationFrame(() => grid.current?.focusGrid(focus?.channelId || controller.view().tunedId));
     return () => cancelAnimationFrame(frame);
-  }, [visible, controller, preview, focus?.channelId, focus?.minute]);
+  }, [visible, controller, focus?.channelId, focus?.minute]);
 
   const tabOn = model.guides.some(g => g.id === tab) ? tab : '';
   // A hand-off shows its channel whatever the filter, on its own day.
@@ -143,10 +142,10 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   // Pressing what is airing puts it on the tile; pressing it again once it is there watches it.
   const press = useCallback((channel: GuideChannel, programme: GuideProgramme) => {
     select(channel, programme);
-    if (!currentlyAiring(controller.view().guide, channel.id, programme.id)) return;
     const tile = controller.view().tile;
-    if (tile.channelId === channel.id && tile.plan !== null) controller.watch(channel.id);
-    else controller.preview(channel.id);
+    const action = programmeSelection(currentlyAiring(controller.view().guide, channel.id, programme.id), channel.id, tile.channelId);
+    if (action === 'watch') controller.watch(channel.id);
+    if (action === 'preview') controller.preview(channel.id);
   }, [controller, select]);
   const watch = useCallback((channelId: string) => controller.watch(channelId), [controller]);
   useEffect(() => {
@@ -221,7 +220,6 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
               <GuideTile
                 look={look}
                 tile={view.tile}
-                focusedChannel={picked ? { id: picked.channel.id, name: picked.channel.name } : undefined}
                 channelName={tunedName}
                 height={tileHeight}
                 small={small}
@@ -416,7 +414,7 @@ function GuideBody(props: BodyProps) {
   );
 }
 
-/** The preview follows selection; with none it shows the hand-off's channel, else the first airing. */
+/** The details follow selection; with none it shows the hand-off's channel, else the first airing. */
 function pickHero(model: GuideModel, selected: { channel: string; programme: string }, handOff?: GuideFocus) {
   const id = selected.channel || handOff?.channelId || model.channels.find(c => c.nowId)?.id || model.channels[0]?.id;
   const channel = model.channels.find(c => c.id === id);

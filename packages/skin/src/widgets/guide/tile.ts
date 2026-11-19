@@ -1,11 +1,12 @@
 // The preview tile: one muted ambient channel session shared by the guide's header and a live
 // home's monitor. It tunes to the viewer's remembered channel or the first that plays in server
-// order, moves on when one cannot play (three tries, or none for a channel the viewer chose), and
+// order, keeps that channel selected if it cannot play, and
 // holds at most one session. Every session it was granted is stopped at the server, and full
 // watch opens only after the server confirmed that stop, so the viewer never holds two streams.
 import type { Command, Snapshot } from '@vela/player-api';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { LiveSource } from './source';
+import { previewFailure } from './diagnostics';
 
 export type TileState = 'off' | 'tune-in' | 'connecting' | 'playing' | 'unavailable' | 'stuck';
 
@@ -35,7 +36,6 @@ export interface TileInputs {
 
 /** Waits before re-sending a stop the server did not confirm; after these the tile says so. */
 const STOP_RETRIES = [1000, 3000, 8000];
-const AUTOMATIC_TRIES = 3;
 
 interface Stopping {
   plan: PlaybackPlan;
@@ -47,7 +47,6 @@ interface Stopping {
 export class Tile {
   private inputs: TileInputs = { open: false, order: [], remembered: '', quiet: false, canPreview: false };
   private chosen = '';
-  private attempt = 0;
   private manual = false;
   private givenUp = false;
   private generation = 0;
@@ -72,7 +71,7 @@ export class Tile {
     const { order, remembered } = this.inputs;
     const candidates =
       remembered && order.includes(remembered) ? [remembered, ...order.filter(id => id !== remembered)] : order;
-    return candidates[this.attempt] ?? '';
+    return candidates[0] ?? '';
   }
 
   private get allowed(): boolean {
@@ -96,7 +95,7 @@ export class Tile {
   }
 
   private state(): TileState {
-    if ([...this.stopping.values()].some(s => s.failed)) return 'stuck';
+    if (!this.held && [...this.stopping.values()].some(s => s.failed && s.tries >= STOP_RETRIES.length)) return 'stuck';
     if (this.target === '' || !this.inputs.canPreview) return 'off';
     if (!this.allowed) return 'tune-in';
     if (this.givenUp) return 'unavailable';
@@ -106,7 +105,7 @@ export class Tile {
   /** Re-decide after the controller's inputs changed: tune when wanted, release when not. */
   update(inputs: TileInputs): void {
     this.inputs = { ...inputs, open: inputs.open || this.fullscreen };
-    if (!inputs.open && !this.fullscreen && (this.givenUp || this.attempt > 0 || this.chosen || this.manual)) this.forget();
+    if (!inputs.open && !this.fullscreen && (this.givenUp || this.chosen || this.manual)) this.forget();
     this.settle();
   }
 
@@ -129,17 +128,17 @@ export class Tile {
         this.playing = false;
         this.changed();
       },
-      () => {
+      error => {
+        previewFailure('tune', error);
         if (generation === this.generation) this.fail();
       },
     );
   }
 
-  /** The preview could not play this channel: an automatic tile tries the next in order. */
+  /** A failed channel stays selected until the viewer retries or explicitly changes it. */
   fail(): void {
     this.drop();
-    if (!this.chosen && this.attempt < AUTOMATIC_TRIES - 1) this.attempt += 1;
-    else this.givenUp = true;
+    this.givenUp = true;
     this.settle();
     this.changed();
   }
@@ -151,14 +150,15 @@ export class Tile {
       this.fail();
       return;
     }
-    const playing = snapshot.state === 'playing' && !snapshot.waiting;
+    const playing = snapshot.state === 'playing' && !snapshot.waiting && snapshot.totalFrames !== 0;
     if (playing === this.playing) return;
     this.playing = playing;
     this.changed();
   }
 
-  /** Put a channel on the tile (the guide's selection, a live home's favourites, flicking). */
+  /** An explicit tune from Select, favourites or channel controls. */
   retune(channelId: string): void {
+    this.manual = true;
     if (channelId === this.target && !this.givenUp) {
       // Focusing the automatic candidate is still an explicit choice. A later playback
       // failure must not silently switch the preview to another channel.
@@ -167,7 +167,6 @@ export class Tile {
     }
     this.drop();
     this.chosen = channelId;
-    this.attempt = 0;
     this.givenUp = false;
     this.settle();
     this.changed();
@@ -228,7 +227,6 @@ export class Tile {
 
   private forget(): void {
     this.givenUp = false;
-    this.attempt = 0;
     this.chosen = '';
     this.manual = false;
   }
@@ -257,7 +255,7 @@ export class Tile {
   private send(entry: Stopping): void {
     this.source.stop(entry.plan).then(
       () => this.stopped(entry),
-      () => this.stopFailed(entry),
+      error => { previewFailure('stop', error); this.stopFailed(entry); },
     );
   }
 
