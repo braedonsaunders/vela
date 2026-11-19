@@ -5,12 +5,14 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Surface
 import androidx.media3.common.*
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 
@@ -63,6 +65,14 @@ internal class Media3Engine(context: Context, private val preview: Boolean) : Pl
       .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, preview)
       .setTunnelingEnabled(!preview && context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION)
       .build()
+    player.addAnalyticsListener(object : AnalyticsListener {
+      override fun onAudioDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
+        if (!preview) Log.i("vela-media3", "audio decoder $decoderName")
+      }
+      override fun onVideoDecoderInitialized(eventTime: AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
+        if (!preview) Log.i("vela-media3", "video decoder $decoderName")
+      }
+    })
     player.addListener(object : Player.Listener {
       override fun onEvents(player: Player, events: Player.Events) { update() }
       override fun onRenderedFirstFrame() { state.hasFrame = true; update() }
