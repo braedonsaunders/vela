@@ -101,6 +101,7 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
       {quick?.expiresLabel ? <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }}>{quick.expiresLabel}</Words> : null}
     </View> : auth?.phase === 'starting' || auth?.phase === 'redeeming' ? <Waiting>{auth.phase === 'redeeming' ? 'Signing in…' : 'Connecting…'}</Waiting>
     : auth?.phase === 'offline' ? <Alert>Cannot reach this server. Check the connection or choose another server.</Alert>
+    : target === auth?.serverId && auth.plexAvailable && !auth.passwordAvailable && !auth.quickAvailable ? null
     : <Credentials busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.landscape || layout?.minimal}
       onSignIn={(username, password) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, password) : actions.jellyfinSignIn(target, username, password))}
       onQuick={() => void run(async () => { if (kind === 'ether' && authActions) await authActions.startQuick(); else await actions.jellyfinQuickStart(target); send({type: 'code'}); })} />}
