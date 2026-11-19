@@ -18,6 +18,7 @@ export interface SkinHost {
   dispatch(action: Action, arg: string): void;
   /** An image source for a document path: an app asset, the document's own asset, or a URL. */
   image(src: string): ImageSource | number | undefined;
+  openRow?(row: import('@vela/core').Row): void;
   refreshHeroArtwork?(id: string): Promise<{ backdrop: string; poster: string } | undefined>;
   setQuery(query: string): void;
   setFlag(flag: string, on: boolean): void;

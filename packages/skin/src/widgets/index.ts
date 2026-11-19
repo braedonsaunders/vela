@@ -15,7 +15,10 @@ import { Sentinel } from './common/sentinel';
 import { LibraryTabs, LibraryFacets, LibraryToolbar } from './library/presentation';
 import { YearInput } from './library/year-input';
 
+import { RowLink } from './row-link';
+
 export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
+  rowLink: RowLink,
   searchInput: SearchInput,
   textInput: TextInput,
   serverSwitcher: ServerSwitcher,
@@ -36,6 +39,7 @@ export const WIDGETS: Record<string, ComponentType<WidgetProps>> = {
 /** The widgets that take focus themselves. The rest (sentinel, previews, the live tile) only draw,
  * so a TV focus guide around nothing but them would be an empty destination (render.tsx). */
 export const FOCUSABLE_WIDGETS = new Set([
+  'rowLink',
   'searchInput',
   'textInput',
   'serverSwitcher',

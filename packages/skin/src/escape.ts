@@ -89,7 +89,6 @@ function drawn(pressed: Pressed): Focusable | undefined {
 export function useReturnFocus(focused: boolean): void {
   const opener = useRef<Pressed | null>(null);
   useEffect(() => {
-    if (!Platform.isTV) return;
     if (!focused) {
       opener.current = lastPressed;
       return;

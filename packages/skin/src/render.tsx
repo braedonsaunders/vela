@@ -1,3 +1,4 @@
+import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
@@ -191,8 +192,10 @@ function SkinNodeView({ node, ctx, route, after, hero }: { node: RNode; ctx: Ctx
   if (node.kind === 'repeat') {
     return (
       <>
-        {collection(node.over, ctx, env, node.limit).map(c =>
-          holds(node.when, c, env) ? <SkinNode key={itemKey(c, node.over)} node={node.item} ctx={c} hero={node.over === 'home.hero'} /> : null)}
+        {collection(node.over, ctx, env, node.limit).map(c => {
+          const context = c.row && c.row !== ctx.row ? { ...c, rowVisibleCount: visibleRowItems(node.item, c, env) } : c;
+          return holds(node.when, c, env) ? <SkinNode key={itemKey(c, node.over)} node={node.item} ctx={context} hero={node.over === 'home.hero'} /> : null;
+        })}
       </>
     );
   }

@@ -283,6 +283,11 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       viewport,
       dispatch: (action, arg) => dispatch({ route, entry, library }, action, arg),
       image,
+      openRow: row => {
+        if (row.items.some(item => item.kind === 'channel')) { router.push('/live'); return; }
+        store.rows.seed(row);
+        router.push({ pathname: '/row/[id]', params: { id: row.id } });
+      },
       refreshHeroArtwork: id => store.home.refreshArtwork(id),
       setQuery,
       setFlag: view.setFlag,

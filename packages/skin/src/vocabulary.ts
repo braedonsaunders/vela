@@ -72,6 +72,7 @@ export interface Ctx {
   hero?: Card;
   heroAct?: HeroAction;
   row?: Row;
+  rowVisibleCount?: number;
   dest?: Destination;
   extra?: Extra;
   person?: Person;

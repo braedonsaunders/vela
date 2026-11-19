@@ -25,6 +25,7 @@ export interface LibraryPage {
 }
 
 export interface CollectionPage {
+  card?: 'poster' | 'landscape' | 'square';
   model?: CollectionModel;
   moreLoading: boolean;
 }

@@ -1,3 +1,4 @@
+import { withRowLinks } from './resolve/row-links';
 import { withLibraryPresentation } from './resolve/library-presentation';
 import { withHeroArtwork } from './resolve/hero-artwork';
 // A skin document resolved for the React renderer: inherited over the Vela base, templates
@@ -213,6 +214,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
       when: [...(template.when ?? []), ...(node.when ?? [])],
       motion: node.motion ?? template.motion, stagger: node.stagger ?? template.stagger } as Node, depth, r);
   }
+  node = withRowLinks(node);
   node = withLibraryPresentation(node, r.width);
   const n = node as Node & { below?: Record<string, Style>; above?: Record<string, Style> };
   const style = variant(n, r, node.style);
@@ -274,6 +276,19 @@ function convert(node: Node, depth: number, r: Context): RNode {
   }
 }
 
+/** Older collection documents omitted continuation; row grids must always scroll through all pages. */
+function collectionContinuation(tree: RNode, r: Context): RNode {
+  const contains = (node: RNode): boolean => node.kind === 'widget' && node.widget === 'sentinel' && node.params.on === 'collection'
+    || node.kind === 'box' && node.children.some(contains) || node.kind === 'repeat' && contains(node.item);
+  if (contains(tree)) return tree;
+  const sentinel = convert({ type: 'widget', widget: 'sentinel', params: { on: 'collection' },
+    when: [{ test: 'collection.more' }, { test: 'env.collectionMoreLoading', not: true }], style: { height: '1px', width: '100%' } }, 1, r);
+  const add = (node: RNode): RNode => node.kind !== 'box' ? node : { ...node, children:
+    node.children.some(child => child.kind === 'repeat' && child.over === 'collection.items')
+      ? [...node.children, sentinel] : node.children.map(add) };
+  return add(tree);
+}
+
 /** Resolve a document for a viewport width and locale. A document that needs a newer renderer
  * is refused on its version, never half-drawn. */
 export function resolveDocument(own: SkinDocument, width: number, locale = 'en'): ResolvedDocument {
@@ -293,7 +308,7 @@ export function resolveDocument(own: SkinDocument, width: number, locale = 'en')
     libraryViews: doc.templates?.velaLibraryViews && convert({ type: 'use', template: 'velaLibraryViews' }, 1, r),
     routes: Object.fromEntries([
       ...(home ? [['home', convert(withHeroArtwork(home), 1, r)]] : []),
-      ...Object.entries(doc.routes ?? {}).filter(([name, tree]) => name !== 'home' && tree).map(([name, tree]) => [name, convert(tree as Node, 1, r)]),
+      ...Object.entries(doc.routes ?? {}).filter(([name, tree]) => name !== 'home' && tree).map(([name, tree]) => { const resolved = convert(tree as Node, 1, r); return [name, name === 'collection' ? collectionContinuation(resolved, r) : resolved]; }),
     ]) as ResolvedDocument['routes'],
     motion: (doc.motion ?? {}) as Record<string, Motion>,
     keyframes: documentKeyframes(doc.keyframes),
