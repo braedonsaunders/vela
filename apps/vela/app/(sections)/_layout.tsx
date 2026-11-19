@@ -12,8 +12,7 @@ import { FocusBoundary } from '../../src/focus-boundary';
 import { SectionFocusContext, SectionShellHostContext } from '../../src/section-focus';
 import { SECTION_SLIDE_MS, slideInForward, slideInBackward, slideOutForward, slideOutBackward } from '../../src/section-motion';
 import { trimSectionCache } from '../../src/section-cache';
-
-type Section = { route: 'home' | 'library' | 'live'; entry: string };
+import { sectionRoute, type SectionRoute as Section } from '../../src/section-route';
 
 function sectionForPath(path: string): Section | null {
   if (path === '/') return { route: 'home', entry: 'home' };
@@ -25,11 +24,18 @@ function sectionForPath(path: string): Section | null {
 }
 
 export default function SectionsLayout() {
+  // A skin change or host update must not replace the navigator that owns section history.
+  return <Navigator><SectionsContent /></Navigator>;
+}
+
+function SectionsContent() {
+  const { state } = Navigator.useContext();
+  const activeRoute = state.routes[state.index];
   const pathname = usePathname();
   const navigationFocused = useIsFocused();
   const focused = navigationFocused && (!(Platform.isTV && Platform.OS === 'android') || sectionForPath(pathname) !== null);
   const section = useRef<Section>({ route: 'home', entry: 'home' });
-  section.current = sectionForPath(pathname) ?? section.current;
+  section.current = sectionRoute(activeRoute?.name, (activeRoute?.params as { id?: unknown } | undefined)?.id) ?? section.current;
   const vela = useVela();
   const routeHost = vela.host(section.current.route, section.current.entry);
   const [pageHost, setPageHost] = useState<SkinHost | null>(null);
@@ -86,9 +92,7 @@ export default function SectionsLayout() {
   const session = useVelaState(state => state.auth.revision);
   const content = (
     <View style={{ flex: 1, overflow: 'hidden' }}>
-      <Navigator>
-        <SectionScenes key={session} focused={focused} sectionKey={key} offset={offset} outgoingOffset={outgoingOffset} reducedMotion={reducedMotion} transition={transition.current} />
-      </Navigator>
+      <SectionScenes key={session} focused={focused} sectionKey={key} offset={offset} outgoingOffset={outgoingOffset} reducedMotion={reducedMotion} transition={transition.current} />
     </View>
   );
   if (!host || !shell) return content;
